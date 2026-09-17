@@ -19,6 +19,7 @@ use crate::v2::group_recording::*;
 use crate::v2::internal_audio::*;
 use crate::v2::live_action::*;
 use crate::v2::macros::*;
+use crate::v2::network_endpoints::*;
 use crate::v2::output_control::*;
 use crate::v2::output_runtime::*;
 use crate::v2::patch::*;
@@ -390,6 +391,11 @@ fn output_control(config: &Config) -> Vec<String> {
         DiscoveredMediaOutput::decl(config),
         DiscoveredMediaServer::decl(config),
         MediaServerDiscovery::decl(config),
+        NetworkEndpointDirection::decl(config),
+        NetworkEndpointOrigin::decl(config),
+        NetworkEndpointStatus::decl(config),
+        NetworkEndpoint::decl(config),
+        NetworkEndpointsSnapshot::decl(config),
     ]
 }
 

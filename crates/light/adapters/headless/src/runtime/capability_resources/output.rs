@@ -854,6 +854,13 @@ impl OutputResource {
             .unwrap_or_default()
     }
 
+    /// What the network output sent and heard, or `None` without a network output.
+    pub(in crate::runtime) fn network_activity(&self) -> Option<light_output::NetworkActivity> {
+        self.network
+            .as_ref()
+            .map(|output| output.network_activity())
+    }
+
     pub(in crate::runtime) fn usb_diagnostics(&self) -> Vec<light_output::UsbEndpointDiagnostic> {
         self.usb.diagnostics()
     }

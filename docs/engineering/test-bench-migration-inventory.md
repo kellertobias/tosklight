@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **211 root cases across 83 files**.
+Default catalog: **213 root cases across 84 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -224,6 +224,8 @@ Default catalog: **211 root cases across 83 files**.
 | 96-fixture-library-editor-layout.spec.ts | TL-447 @ui › the wide color wheel shows and edits each slot's display color | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 96-fixture-library-editor-layout.spec.ts | TL-447 @ui › the narrow color wheel shows and edits each slot's display color | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 96-fixture-library-editor-layout.spec.ts | TL-447 @ui › the Sun Strip configures the color of each of its ten pixels | repository contract | @ui | fixture-library-editor-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 97-dmx-network-nodes.spec.ts | DMX-NODES-001 @api network endpoints report Art-Net and sACN sends and receives with actionable status | repository contract | @api | dmx-network-nodes | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 97-dmx-network-nodes.spec.ts | DMX-NODES-002 @ui the DMX window's Nodes tab lists Art-Net and sACN send and receive endpoints | repository contract | @ui | dmx-network-nodes | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 

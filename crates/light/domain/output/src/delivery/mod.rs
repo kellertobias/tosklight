@@ -3,7 +3,12 @@
 mod driver;
 mod network;
 mod packet;
+mod peers;
 
 pub use driver::{ArtNetDriver, OutputDriver, SacnDriver};
 pub use network::{NetworkOutput, RouteDiagnostic, RouteSendError};
 pub use packet::{EncodedPacket, encode_routes, next_sequence};
+pub use peers::{
+    NetworkActivity, ObservedArtNetSender, ObservedArtPoller, ObservedSacnSource, PEER_TIMEOUT,
+    RouteActivity,
+};

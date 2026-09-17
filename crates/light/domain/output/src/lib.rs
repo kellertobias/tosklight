@@ -11,12 +11,13 @@ pub mod scheduler;
 pub mod usb;
 
 pub use codec::{
-    ARTNET_PORT, SACN_PORT, artdmx_packet, artnet_broadcast_destination, sacn_data_packet,
-    sacn_multicast_destination,
+    ARTNET_PORT, SACN_DISCOVERY_UNIVERSE, SACN_PORT, artdmx_packet, artnet_broadcast_destination,
+    sacn_data_packet, sacn_multicast_destination,
 };
 pub use delivery::{
-    ArtNetDriver, EncodedPacket, NetworkOutput, OutputDriver, RouteDiagnostic, RouteSendError,
-    SacnDriver, encode_routes, next_sequence,
+    ArtNetDriver, EncodedPacket, NetworkActivity, NetworkOutput, ObservedArtNetSender,
+    ObservedArtPoller, ObservedSacnSource, OutputDriver, PEER_TIMEOUT, RouteActivity,
+    RouteDiagnostic, RouteSendError, SacnDriver, encode_routes, next_sequence,
 };
 pub use external::{
     ExternalAdapterError, ExternalAdapterId, ExternalBindingId, ExternalDeviceAdapter,

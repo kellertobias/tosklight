@@ -21,6 +21,8 @@ import { WindowHeader, WindowScrollArea, WindowSettings } from "@tosklight/ui/wi
 import { TouchValueButton } from "@tosklight/ui/faders";
 import { channelSplit, derivePrimarySlots } from "../components/setup/fixtureProfileModel";
 import { usePollingResource } from "../hooks/usePollingResource";
+import type { NetworkEndpointsSnapshot } from "../api/generated/light-wire";
+import { DmxNodesView } from "./DmxNodesView";
 
 function hz(value: number | undefined): string {
   return value === undefined || !Number.isFinite(value) || value <= 0 ? "—" : value.toFixed(1);
@@ -220,6 +222,23 @@ export function DmxWindow({ active = true, compact }: WindowProps) {
   });
 
   const patchedFixtures = usePatchedFixturesView(active);
+  const [view, setView] = useState<DmxView>("values");
+  const [endpoints, setEndpoints] = useState<NetworkEndpointsSnapshot | null>(null);
+  const [endpointsError, setEndpointsError] = useState<string | null>(null);
+
+  // The Nodes tab reads the server's network state only while it is on screen. The desk's DMX
+  // diagnostics are read the same way; there is no pushed network-state stream yet.
+  usePollingResource({
+    enabled: active && view === "nodes" && connectionStatus === "connected" && Boolean(dmx?.readNetworkEndpoints),
+    intervalMillis: 1_000,
+    load: dmx?.readNetworkEndpoints ?? (async () => null),
+    onValue: (value) => {
+      setEndpoints(value);
+      setEndpointsError(null);
+    },
+    onError: (reason) => setEndpointsError(reason instanceof Error ? reason.message : String(reason)),
+  });
+  const disconnected = view === "nodes" && connectionStatus !== "connected";
 
   return <DmxWindowView
     compact={compact}
@@ -230,8 +249,15 @@ export function DmxWindow({ active = true, compact }: WindowProps) {
     outputRoutes={dmx?.outputRoutes ?? []}
     patchedFixtures={patchedFixtures}
     snapshot={snapshot}
+    view={view}
+    onViewChange={setView}
+    networkEndpoints={endpoints}
+    networkEndpointsError={disconnected ? "The desk server is not connected." : endpointsError}
+    networkEndpointsSupported={Boolean(dmx?.readNetworkEndpoints)}
   />;
 }
+
+export type DmxView = "values" | "sources" | "nodes";
 
 export interface DmxWindowViewProps {
   compact?: boolean;
@@ -242,8 +268,14 @@ export interface DmxWindowViewProps {
   dotSize: "small" | "large";
   onDotSizeChange: (value: "small" | "large") => void;
   onSetDmxOverride: (universe: number, address: number, value: number | null) => void | Promise<void>;
-  defaultView?: "values" | "sources";
+  defaultView?: DmxView;
   defaultSelection?: DmxSelection | null;
+  /** Controlled tab; the window owns it so the Nodes tab reads the network only while shown. */
+  view?: DmxView;
+  onViewChange?: (view: DmxView) => void;
+  networkEndpoints?: NetworkEndpointsSnapshot | null;
+  networkEndpointsError?: string | null;
+  networkEndpointsSupported?: boolean;
 }
 
 export function DmxWindowView({
@@ -257,12 +289,22 @@ export function DmxWindowView({
   onSetDmxOverride,
   defaultView = "values",
   defaultSelection = null,
+  view: controlledView,
+  onViewChange,
+  networkEndpoints = null,
+  networkEndpointsError = null,
+  networkEndpointsSupported = false,
 }: DmxWindowViewProps) {
   const initialValue = defaultSelection
     ? snapshot?.universes.find((frame) => frame.universe === defaultSelection.universe)?.slots[defaultSelection.address - 1] ?? 0
     : 0;
   const [slot, setSlot] = useState<Slot | null>(() => defaultSelection ? { ...defaultSelection, value: initialValue } : null);
-  const [view, setView] = useState<"values" | "sources">(defaultView);
+  const [localView, setLocalView] = useState<DmxView>(defaultView);
+  const view = controlledView ?? localView;
+  const setView = (next: DmxView) => {
+    setLocalView(next);
+    onViewChange?.(next);
+  };
   const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
   const valuesHost = useRef<HTMLElement>(null);
   const [valuesWidth, setValuesWidth] = useState(900);
@@ -299,9 +341,9 @@ export function DmxWindowView({
   };
 
   return <div className="dmx-window">
-    {!compact && <WindowHeader title="DMX Output" info={{ primary: "Live", secondary: "Diagnostic override" }} groups={[{ id: "dmx-view", kind: "tabs", activeId: view, onActiveChange: (id) => setView(id as "values" | "sources"), actions: [{ id: "values", label: "Values" }, { id: "sources", label: "Sources" }] }]} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
+    {!compact && <WindowHeader title="DMX Output" info={{ primary: "Live", secondary: "Diagnostic override" }} groups={[{ id: "dmx-view", kind: "tabs", activeId: view, onActiveChange: (id) => setView(id as DmxView), actions: [{ id: "values", label: "Values" }, { id: "sources", label: "Sources" }, { id: "nodes", label: "Nodes" }] }]} settings onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())} />}
     {settingsAnchor && <WindowSettings modal={false} anchor={settingsAnchor} title="DMX Settings" onClose={() => setSettingsAnchor(null)} tabs={[{ id: "display", label: "Display", content: <><h3>DMX dot size</h3><div className="button-group"><Button className={dotSize === "small" ? "active" : ""} onClick={() => onDotSizeChange("small")}>Small</Button><Button className={dotSize === "large" ? "active" : ""} onClick={() => onDotSizeChange("large")}>Large</Button></div><small>{channelsPerRow} values per row at this window size</small></> }]} />}
-    <div className="dmx-content"><WindowScrollArea><main ref={valuesHost} style={{ "--dmx-columns": channelsPerRow, "--dmx-dot-size": `${targetDot}px` } as CSSProperties}>{view === "values" && universeNumbers.map((universe) => {
+    {view === "nodes" ? <DmxNodesView snapshot={networkEndpoints} error={networkEndpointsError} supported={networkEndpointsSupported}/> : <div className="dmx-content"><WindowScrollArea><main ref={valuesHost} style={{ "--dmx-columns": channelsPerRow, "--dmx-dot-size": `${targetDot}px` } as CSSProperties}>{view === "values" && universeNumbers.map((universe) => {
       const frame = snapshot?.universes.find((item) => item.universe === universe);
       return <section className={`dmx-universe dots-${dotSize}`} key={universe}>
         <header><b>Logical universe {universe} · channels 1–512</b><small>{channelsPerRow} per row</small></header>
@@ -312,6 +354,6 @@ export function DmxWindowView({
           return <Button key={address} aria-label={`Universe ${universe}, address ${address}, value ${value}`} className={`${value > 210 ? "high" : value > 90 ? "mid" : value > 20 ? "low" : ""} ${slot?.universe === universe && slot.address === address ? "selected" : ""}`} onClick={() => setSlot({ universe, address, value })}/>;
         })}</div></div>)}
       </section>;
-    })}{view === "sources" && <div className="dmx-detail-list"><h2>Diagnostic overrides</h2>{snapshot?.overrides.length ? snapshot.overrides.map((item) => <article key={`${item.universe}-${item.address}`}><b>Universe {item.universe} · Address {item.address}</b><span>{item.value}</span><Button onClick={() => void onSetDmxOverride(item.universe, item.address, null)}>Release</Button></article>) : <div className="empty-window-message">No raw DMX overrides are active.</div>}</div>}</main></WindowScrollArea><aside className="dmx-info-pane">{slot ? <><header className="dmx-info-header"><b>Selected channel</b><Button size="compact" onClick={() => setSlot(null)}>Deselect</Button></header><section className="dmx-address-card"><strong>Universe {slot.universe} · Channel {slot.address}</strong><small>DMX address {slot.address} · 0x{slot.address.toString(16).toUpperCase().padStart(3, "0")}</small><div className="dmx-dip-switches" aria-label={`DIP switches for DMX address ${slot.address}`}>{dipWeights.map((weight) => <span className={slot.address & weight ? "on" : ""} key={weight}><i aria-hidden="true"/><small>{weight}</small></span>)}</div></section><section className="dmx-fixture-card"><b>Fixture</b>{selectedFixtureChannel ? <dl><dt>Fixture ID</dt><dd>{selectedFixtureChannel.fixture.fixture_number ?? selectedFixtureChannel.fixture.fixture_id}</dd><dt>Name</dt><dd>{selectedFixtureChannel.fixture.name || selectedFixtureChannel.fixture.definition.name || "—"}</dd><dt>Type</dt><dd>{selectedFixtureChannel.fixture.definition.device_type || "—"}</dd><dt>Patch owner</dt><dd>{selectedFixtureChannel.patchOwner.name}</dd><dt>Patch range</dt><dd>{selectedFixtureChannel.patchRange.universe}.{selectedFixtureChannel.patchRange.start}–{selectedFixtureChannel.patchRange.end}</dd><dt>Split</dt><dd>{selectedFixtureChannel.split}</dd><dt>Fixture channel</dt><dd>{selectedFixtureChannel.fixtureChannel} of {selectedFixtureChannel.splitFootprint}</dd><dt>Attribute</dt><dd>{selectedFixtureChannel.attribute}{selectedFixtureChannel.component ? ` · ${selectedFixtureChannel.component}` : ""}</dd></dl> : <p>Fixture: Empty</p>}</section><div className="dmx-raw-value"><TouchValueButton label="Raw value" value={slot.value} maximum={255} display={String(Math.round(slot.value))} onChange={(value) => override(Math.round(value))}/></div><Button fullWidth onClick={() => override(null)}>Release override</Button></> : <OutputSummary health={outputHealth}/>}</aside></div>
+    })}{view === "sources" && <div className="dmx-detail-list"><h2>Diagnostic overrides</h2>{snapshot?.overrides.length ? snapshot.overrides.map((item) => <article key={`${item.universe}-${item.address}`}><b>Universe {item.universe} · Address {item.address}</b><span>{item.value}</span><Button onClick={() => void onSetDmxOverride(item.universe, item.address, null)}>Release</Button></article>) : <div className="empty-window-message">No raw DMX overrides are active.</div>}</div>}</main></WindowScrollArea><aside className="dmx-info-pane">{slot ? <><header className="dmx-info-header"><b>Selected channel</b><Button size="compact" onClick={() => setSlot(null)}>Deselect</Button></header><section className="dmx-address-card"><strong>Universe {slot.universe} · Channel {slot.address}</strong><small>DMX address {slot.address} · 0x{slot.address.toString(16).toUpperCase().padStart(3, "0")}</small><div className="dmx-dip-switches" aria-label={`DIP switches for DMX address ${slot.address}`}>{dipWeights.map((weight) => <span className={slot.address & weight ? "on" : ""} key={weight}><i aria-hidden="true"/><small>{weight}</small></span>)}</div></section><section className="dmx-fixture-card"><b>Fixture</b>{selectedFixtureChannel ? <dl><dt>Fixture ID</dt><dd>{selectedFixtureChannel.fixture.fixture_number ?? selectedFixtureChannel.fixture.fixture_id}</dd><dt>Name</dt><dd>{selectedFixtureChannel.fixture.name || selectedFixtureChannel.fixture.definition.name || "—"}</dd><dt>Type</dt><dd>{selectedFixtureChannel.fixture.definition.device_type || "—"}</dd><dt>Patch owner</dt><dd>{selectedFixtureChannel.patchOwner.name}</dd><dt>Patch range</dt><dd>{selectedFixtureChannel.patchRange.universe}.{selectedFixtureChannel.patchRange.start}–{selectedFixtureChannel.patchRange.end}</dd><dt>Split</dt><dd>{selectedFixtureChannel.split}</dd><dt>Fixture channel</dt><dd>{selectedFixtureChannel.fixtureChannel} of {selectedFixtureChannel.splitFootprint}</dd><dt>Attribute</dt><dd>{selectedFixtureChannel.attribute}{selectedFixtureChannel.component ? ` · ${selectedFixtureChannel.component}` : ""}</dd></dl> : <p>Fixture: Empty</p>}</section><div className="dmx-raw-value"><TouchValueButton label="Raw value" value={slot.value} maximum={255} display={String(Math.round(slot.value))} onChange={(value) => override(Math.round(value))}/></div><Button fullWidth onClick={() => override(null)}>Release override</Button></> : <OutputSummary health={outputHealth}/>}</aside></div>}
   </div>;
 }

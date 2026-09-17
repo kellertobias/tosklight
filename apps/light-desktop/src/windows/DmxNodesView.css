@@ -1,0 +1,116 @@
+/* The DMX screen's Nodes tab. */
+.dmx-nodes {
+	display: grid;
+	align-content: start;
+	gap: 8px;
+}
+.dmx-nodes-error {
+	display: grid;
+	gap: 3px;
+	padding: 9px;
+	border: 1px solid var(--red);
+	border-radius: 6px;
+	color: var(--red);
+}
+.dmx-nodes-error small {
+	color: var(--muted);
+}
+.dmx-nodes-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+}
+.dmx-nodes-table th,
+.dmx-nodes-table td {
+	padding: 7px;
+	border-bottom: 1px solid var(--line);
+	text-align: left;
+	vertical-align: top;
+}
+.dmx-nodes-table th {
+	color: var(--muted);
+	font-weight: 500;
+	white-space: nowrap;
+}
+.dmx-nodes-table td > small {
+	display: block;
+	margin-top: 3px;
+	color: var(--muted);
+}
+.dmx-nodes-table td:last-child > small {
+	max-width: 46ch;
+}
+.dmx-nodes-table td > button {
+	min-height: 32px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.dmx-nodes-table code {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.dmx-nodes-table tr.selected > td {
+	background: color-mix(in srgb, var(--cyan) 14%, transparent);
+}
+.dmx-nodes-direction.send {
+	color: var(--cyan);
+}
+.dmx-nodes-direction.receive {
+	color: var(--amber);
+}
+.dmx-nodes-status {
+	display: inline-block;
+	padding: 1px 6px;
+	border: 1px solid currentColor;
+	border-radius: 4px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.dmx-content > aside.dmx-nodes-pane span.dmx-nodes-status {
+	display: inline-block;
+}
+.status-active,
+.status-listening,
+.dmx-content > aside.dmx-nodes-pane .status-active,
+.dmx-content > aside.dmx-nodes-pane .status-listening {
+	color: var(--green);
+}
+.status-idle,
+.status-disabled,
+.dmx-content > aside.dmx-nodes-pane .status-idle,
+.dmx-content > aside.dmx-nodes-pane .status-disabled {
+	color: var(--muted);
+}
+.status-conflict,
+.dmx-content > aside.dmx-nodes-pane .status-conflict {
+	color: var(--amber);
+}
+.status-error,
+.status-unavailable,
+.dmx-content > aside.dmx-nodes-pane .status-error,
+.dmx-content > aside.dmx-nodes-pane .status-unavailable {
+	color: var(--red);
+}
+.dmx-nodes-counts {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 4px 8px;
+	margin: 0;
+}
+.dmx-nodes-counts dd {
+	margin: 0;
+	font-variant-numeric: tabular-nums;
+}
+.dmx-nodes-attention {
+	display: grid;
+	gap: 5px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	overflow-wrap: anywhere;
+}

@@ -96,6 +96,65 @@ pub fn sacn_discovery_packets(
         .collect()
 }
 
+/// What an sACN packet from another source says about that source.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SacnSourcePacket {
+    pub cid: [u8; 16],
+    pub source_name: String,
+    pub kind: SacnSourcePacketKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SacnSourcePacketKind {
+    /// A data packet for one universe.
+    Data { universe: Universe, priority: u8 },
+    /// One page of a universe-discovery announcement.
+    Discovery {
+        page: u8,
+        last_page: u8,
+        universes: Vec<Universe>,
+    },
+}
+
+/// Decodes an E1.31 data or universe-discovery packet; anything else is `None`.
+pub fn decode_sacn_source_packet(bytes: &[u8]) -> Option<SacnSourcePacket> {
+    if bytes.len() < 112 || &bytes[4..16] != b"ASC-E1.17\0\0\0" {
+        return None;
+    }
+    let cid: [u8; 16] = bytes[22..38].try_into().ok()?;
+    let name = &bytes[44..108];
+    let end = name
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(name.len());
+    let source_name = String::from_utf8_lossy(&name[..end]).into_owned();
+    let root_vector = u32::from_be_bytes(bytes[18..22].try_into().ok()?);
+    let kind = match root_vector {
+        0x0000_0004 if bytes.len() >= 126 => SacnSourcePacketKind::Data {
+            universe: u16::from_be_bytes([bytes[113], bytes[114]]),
+            priority: bytes[108],
+        },
+        0x0000_0008 if bytes.len() >= 120 && bytes[114..118] == 1_u32.to_be_bytes() => {
+            SacnSourcePacketKind::Discovery {
+                page: bytes[118],
+                last_page: bytes[119],
+                universes: bytes[120..]
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|pair| u16::from_be_bytes(*pair))
+                    .collect(),
+            }
+        }
+        _ => return None,
+    };
+    Some(SacnSourcePacket {
+        cid,
+        source_name,
+        kind,
+    })
+}
+
 fn set_flags_and_length(target: &mut [u8], length: usize) {
     target.copy_from_slice(&(0x7000_u16 | length as u16).to_be_bytes());
 }
@@ -129,6 +188,36 @@ mod tests {
             sacn_multicast_destination(SACN_DISCOVERY_UNIVERSE).ip(),
             IpAddr::V4(Ipv4Addr::new(239, 255, 250, 214))
         );
+    }
+
+    #[test]
+    fn data_and_discovery_packets_decode_their_source() {
+        let data = decode_sacn_source_packet(&sacn_data_packet(
+            9, 1, &[0; 4], [5; 16], "Other", 120, false,
+        ))
+        .unwrap();
+        assert_eq!(data.cid, [5; 16]);
+        assert_eq!(data.source_name, "Other");
+        assert_eq!(
+            data.kind,
+            SacnSourcePacketKind::Data {
+                universe: 9,
+                priority: 120
+            }
+        );
+        let discovery = &sacn_discovery_packets([6; 16], "Console", &[3, 1])[0];
+        let decoded = decode_sacn_source_packet(discovery).unwrap();
+        assert_eq!(decoded.source_name, "Console");
+        assert_eq!(
+            decoded.kind,
+            SacnSourcePacketKind::Discovery {
+                page: 0,
+                last_page: 0,
+                universes: vec![1, 3]
+            }
+        );
+        assert_eq!(decode_sacn_source_packet(&discovery[..100]), None);
+        assert_eq!(decode_sacn_source_packet(&[0; 130]), None);
     }
 
     #[test]

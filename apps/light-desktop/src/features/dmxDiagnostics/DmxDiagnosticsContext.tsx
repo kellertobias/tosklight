@@ -1,4 +1,5 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
+import type { NetworkEndpointsSnapshot } from "../../api/generated/light-wire";
 import type {
 	DmxSnapshot,
 	OutputHealth,
@@ -14,6 +15,8 @@ import type {
 export interface DmxDiagnostics {
 	readDmx: () => Promise<DmxSnapshot>;
 	readOutputHealth: () => Promise<OutputHealth>;
+	/** The Nodes tab's endpoint snapshot; absent on surfaces without a live server. */
+	readNetworkEndpoints?: () => Promise<NetworkEndpointsSnapshot>;
 	setDmxOverride: (
 		universe: number,
 		address: number,

@@ -19,6 +19,7 @@ pub mod group_recording;
 pub mod internal_audio;
 pub mod live_action;
 pub mod macros;
+pub mod network_endpoints;
 pub mod output_control;
 pub mod output_runtime;
 pub mod patch;

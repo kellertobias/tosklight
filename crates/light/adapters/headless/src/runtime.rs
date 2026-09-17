@@ -151,6 +151,7 @@ mod media_fixture_heads;
 mod mvr_apply;
 mod mvr_apply_store;
 mod mvr_import;
+mod network_endpoints_api;
 mod object_api;
 mod object_normalization;
 mod operator_api;

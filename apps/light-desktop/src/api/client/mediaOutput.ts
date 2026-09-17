@@ -3,10 +3,10 @@ import type {
 	OutputRuntimeActionRequest,
 } from "../../features/outputRuntime/contracts";
 import type {
-	DmxOverrideRequest,
 	DiscoveredMediaAddressUpdateRequest,
 	DiscoveredMediaOutput,
 	DiscoveredMediaServer,
+	DmxOverrideRequest,
 	HighlightActionRequest,
 	MediaLibrarySelectionOutcome,
 	MediaLibrarySelectionRequest,
@@ -18,13 +18,16 @@ import type {
 	NativeMediaSnapshot as NativeMediaSnapshotWire,
 	NativeMediaTextSlot as NativeMediaTextSlotWire,
 	NativeMediaTextUpdateRequest,
+	NetworkEndpointsSnapshot,
 	PatchPreviewHighlightRequest,
 } from "../generated/light-wire";
+
 export type {
 	DiscoveredMediaOutput,
 	DiscoveredMediaServer,
 	MediaServerDiscovery,
 } from "../generated/light-wire";
+
 import {
 	decodeOutputRuntimeActionOutcome,
 	encodeOutputRuntimeActionRequest,
@@ -146,6 +149,11 @@ export class MediaOutputApiClient {
 
 	dmx(): Promise<DmxSnapshot> {
 		return this.transport.request("/api/v2/output/dmx", {}, false);
+	}
+
+	/** Every Art-Net and sACN endpoint the desk sends to or hears from, with its status. */
+	networkEndpoints(): Promise<NetworkEndpointsSnapshot> {
+		return this.transport.request("/api/v2/output/network-endpoints");
 	}
 
 	mediaServers(): Promise<{ fixtures: MediaServerFixture[] }> {

@@ -143,9 +143,19 @@ pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {
     Ok(resources.scheduler(start, task))
 }
 
-async fn bind_output(bind_ip: IpAddr) -> anyhow::Result<Arc<NetworkOutput>> {
+async fn bind_output(bind_ip: IpAddr, test_bench: bool) -> anyhow::Result<Arc<NetworkOutput>> {
     let cid = *Uuid::new_v4().as_bytes();
-    Ok(Arc::new(NetworkOutput::bind(bind_ip, cid, "Light").await?))
+    let mut output = NetworkOutput::bind(bind_ip, cid, "Light").await?;
+    if test_bench {
+        // Loopback has no broadcast or multicast, so the bench hears peers on loopback listeners.
+        // The desk's reply address is a documentation address, so bench peers on loopback are
+        // never mistaken for the desk's own frames.
+        let loopback = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
+        output = output
+            .listen_for_art_polls(loopback, std::net::Ipv4Addr::new(192, 0, 2, 1))?
+            .listen_for_sacn(loopback)?;
+    }
+    Ok(Arc::new(output))
 }
 
 fn create_control(runtime: &PersistedOutputRuntime) -> Arc<Mutex<OutputControl>> {
@@ -878,7 +888,7 @@ impl SharedResources {
         )));
         usb.configure(&usb_document).map_err(anyhow::Error::msg)?;
         Ok(Self {
-            output: bind_output(config.bind_ip).await?,
+            output: bind_output(config.bind_ip, config.test_bench).await?,
             sequences: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             control: create_control(&config.persisted_runtime),
             usb,

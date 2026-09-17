@@ -14,10 +14,12 @@ mod artnet;
 mod sacn;
 
 pub use artnet::{
-    ARTNET_PORT, artdmx_packet, artnet_broadcast_destination, artpollreply_packets, is_artpoll,
+    ARTNET_PORT, artdmx_packet, artdmx_universe, artnet_broadcast_destination,
+    artpollreply_packets, is_artpoll,
 };
 pub use sacn::{
-    SACN_DISCOVERY_UNIVERSE, SACN_PORT, sacn_data_packet, sacn_discovery_packets,
+    SACN_DISCOVERY_UNIVERSE, SACN_PORT, SacnSourcePacket, SacnSourcePacketKind,
+    decode_sacn_source_packet, sacn_data_packet, sacn_discovery_packets,
     sacn_multicast_destination,
 };
 

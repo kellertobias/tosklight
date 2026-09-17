@@ -25,6 +25,8 @@ The desk announces itself on the lighting network, so node-management tools, oth
 * It answers Art-Net polls with ArtPollReply packets that name the desk and list every Art-Net universe an enabled route sends, each as an input port, four to a reply, grouped by net and sub-net. A desk without Art-Net routes still answers, with no ports.
 * It sends E1.31 universe discovery to `239.255.250.214:5568` listing every sACN universe an enabled route sends: at once when that set changes, and every ten seconds.
 
+The **Nodes** tab of the DMX built-in shows what the desk sends and hears on the lighting network: each route with its live status, the announcements above, the controllers that polled the desk, and other Art-Net or sACN sources. A source that sends a universe one of your routes also sends is flagged as a **Conflict** on both rows, so a second console or a forgotten media server on the same universe is visible before it fights your output.
+
 Polls are answered within one output frame on every network the output bind address allows. The desk listens on each network's broadcast address, so Art-Net sent directly to this computer — for a Visualizer running beside the desk — still reaches that Visualizer. A consequence is that only broadcast polls are answered: a poll sent to the desk's own address or to `255.255.255.255` is not. Announcing changes no route and adds no output.
 
 ## Configure USB DMX

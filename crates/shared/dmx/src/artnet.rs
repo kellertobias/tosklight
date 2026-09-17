@@ -5,6 +5,7 @@ pub const ARTNET_PORT: u16 = 6454;
 
 const OP_POLL: u16 = 0x2000;
 const OP_POLL_REPLY: u16 = 0x2100;
+const OP_DMX: u16 = 0x5000;
 /// Ports one ArtPollReply describes. A device with more answers once per four, by BindIndex.
 const PORTS_PER_REPLY: usize = 4;
 const POLL_REPLY_LENGTH: usize = 239;
@@ -97,6 +98,15 @@ fn write_text(target: &mut [u8], value: &str) {
     target[..length].copy_from_slice(&bytes[..length]);
 }
 
+/// The Art-Net universe (15-bit port-address) an ArtDmx packet carries, or `None` for any other
+/// packet.
+pub fn artdmx_universe(bytes: &[u8]) -> Option<Universe> {
+    (bytes.len() >= 18
+        && &bytes[..8] == b"Art-Net\0"
+        && u16::from_le_bytes([bytes[8], bytes[9]]) == OP_DMX)
+        .then(|| u16::from_le_bytes([bytes[14], bytes[15]]) & 0x7fff)
+}
+
 pub fn artnet_broadcast_destination() -> SocketAddr {
     SocketAddr::from((Ipv4Addr::BROADCAST, ARTNET_PORT))
 }
@@ -104,7 +114,7 @@ pub fn artnet_broadcast_destination() -> SocketAddr {
 pub fn artdmx_packet(universe: Universe, sequence: u8, frame: &[u8]) -> Vec<u8> {
     let mut packet = Vec::with_capacity(18 + frame.len());
     packet.extend_from_slice(b"Art-Net\0");
-    packet.extend_from_slice(&0x5000_u16.to_le_bytes());
+    packet.extend_from_slice(&OP_DMX.to_le_bytes());
     packet.extend_from_slice(&14_u16.to_be_bytes());
     packet.push(sequence);
     packet.push(0);
@@ -128,6 +138,19 @@ mod tests {
         assert!(is_artpoll(&poll));
         assert!(!is_artpoll(&artdmx_packet(1, 1, &[0; 2])));
         assert!(!is_artpoll(&poll[..10]));
+    }
+
+    #[test]
+    fn an_artdmx_names_its_universe() {
+        assert_eq!(
+            artdmx_universe(&artdmx_packet(0x0123, 1, &[0; 2])),
+            Some(0x0123)
+        );
+        let mut poll = [0_u8; 18];
+        poll[..8].copy_from_slice(b"Art-Net\0");
+        poll[8..10].copy_from_slice(&OP_POLL.to_le_bytes());
+        assert_eq!(artdmx_universe(&poll), None);
+        assert_eq!(artdmx_universe(&artdmx_packet(1, 1, &[])[..17]), None);
     }
 
     #[test]

@@ -506,6 +506,43 @@ export type DiscoveredMediaAddressUpdateRequest = { requestId: string, host: str
 export type DiscoveredMediaOutput = { id: string, name: string, personality: string, protocol: string, universe: number, startAddress: number, dmxPendingRestart: boolean, };
 export type DiscoveredMediaServer = { key: string, name: string, host: string, citpPort: number, status: string, instance: string | null, outputs: Array<DiscoveredMediaOutput>, error: string | null, };
 export type MediaServerDiscovery = { servers: Array<DiscoveredMediaServer>, discoveryError: string | null, };
+export type NetworkEndpointDirection = "send" | "receive";
+export type NetworkEndpointOrigin = "configured" | "observed";
+export type NetworkEndpointStatus = "active" | "listening" | "idle" | "disabled" | "conflict" | "error" | "unavailable";
+export type NetworkEndpoint = {
+/**
+ * Stable within one snapshot and between snapshots while the endpoint exists.
+ */
+id: string, protocol: OutputProtocol, direction: NetworkEndpointDirection, origin: NetworkEndpointOrigin,
+/**
+ * What the endpoint is for, e.g. "DMX output" or "Universe discovery".
+ */
+role: string,
+/**
+ * The address and port packets go to or arrive at.
+ */
+endpoint: string,
+/**
+ * The peer's name, when it announces one.
+ */
+name: string | null, delivery_mode: OutputDeliveryMode | null,
+/**
+ * The show's logical universe a send route carries.
+ */
+logical_universe: number | null,
+/**
+ * Protocol universes on the wire, ascending.
+ */
+universes: Array<number>, status: NetworkEndpointStatus,
+/**
+ * What the status means and what to do about it.
+ */
+detail: string, errors: number, last_activity_millis_ago: number | null, };
+export type NetworkEndpointsSnapshot = { output_bind_ip: string,
+/**
+ * False when the network output could not start; every send endpoint is then unavailable.
+ */
+network_output_available: boolean, endpoints: Array<NetworkEndpoint>, };
 export type SpeedGroupId = "A" | "B" | "C" | "D" | "E";
 export type SpeedGroupProjection = { group: SpeedGroupId, manual_bpm: number, paused: boolean, speed_master_scale: number, synchronized_with?: SpeedGroupId | null, phase_origin_millis: number, };
 export type SpeedGroupAuthorityProjection = { authority_id: string, revision: number, groups: Array<SpeedGroupProjection>, };

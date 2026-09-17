@@ -1,8 +1,10 @@
+use super::peers::{NetworkActivity, PeerRegistry};
 use super::{EncodedPacket, encode_routes, next_sequence};
 use crate::{DMX_SLOTS, DeliveryMode, DmxFrame, OutputRoute, Protocol, sacn_data_packet};
 use light_core::Universe;
 use light_dmx_wire::{
-    ARTNET_PORT, SACN_DISCOVERY_UNIVERSE, artpollreply_packets, is_artpoll, sacn_discovery_packets,
+    ARTNET_PORT, SACN_DISCOVERY_UNIVERSE, SacnSourcePacketKind, artdmx_universe,
+    artpollreply_packets, decode_sacn_source_packet, is_artpoll, sacn_discovery_packets,
     sacn_multicast_destination,
 };
 use serde::Serialize;
@@ -22,6 +24,8 @@ use tokio::net::UdpSocket;
 const SACN_DISCOVERY_INTERVAL: Duration = Duration::from_secs(10);
 /// Polls answered per listener per output frame, so a flood cannot stall the frame.
 const POLLS_PER_FRAME: usize = 16;
+/// sACN datagrams read per frame from the discovery listener.
+const SACN_PACKETS_PER_FRAME: usize = 16;
 const LONG_NAME: &str = "ToskLight lighting desk";
 
 /// Shared UDP transport for a dynamically reloadable set of show routes.
@@ -33,10 +37,12 @@ pub struct NetworkOutput {
     sacn_priority: u8,
     injected_failures: Mutex<HashSet<SocketAddr>>,
     send_errors: AtomicU64,
-    route_send_errors: Mutex<HashMap<(Protocol, Universe, SocketAddr), u64>>,
+    peers: Mutex<PeerRegistry>,
     /// Where controllers' ArtPolls arrive: one socket per lighting network, bound to its broadcast
     /// address so unicast Art-Net meant for another receiver on this computer never lands here.
     poll_listeners: Vec<PollListener>,
+    /// Where other sources' sACN universe discovery arrives, when the group could be joined.
+    sacn_listener: Option<StdUdpSocket>,
     announcements: Mutex<Announcements>,
 }
 
@@ -87,8 +93,9 @@ impl NetworkOutput {
             sacn_priority: 100,
             injected_failures: Mutex::new(HashSet::new()),
             send_errors: AtomicU64::new(0),
-            route_send_errors: Mutex::new(HashMap::new()),
+            peers: Mutex::new(PeerRegistry::default()),
             poll_listeners: broadcast_poll_listeners(bind_ip),
+            sacn_listener: sacn_discovery_listener(bind_ip).ok(),
             announcements: Mutex::new(Announcements::default()),
         })
     }
@@ -99,6 +106,29 @@ impl NetworkOutput {
     pub fn listen_for_art_polls(mut self, bind: SocketAddr, address: Ipv4Addr) -> io::Result<Self> {
         self.poll_listeners.push(poll_listener(bind, address)?);
         Ok(self)
+    }
+
+    /// Also hear sACN from other sources arriving at `bind`, instead of the discovery group.
+    ///
+    /// Test-bench seam: loopback carries no multicast.
+    pub fn listen_for_sacn(mut self, bind: SocketAddr) -> io::Result<Self> {
+        self.sacn_listener = Some(reusable_udp_socket(bind)?.into());
+        Ok(self)
+    }
+
+    /// What the output sent, and which Art-Net and sACN peers it heard.
+    pub fn network_activity(&self) -> NetworkActivity {
+        let mut activity = self
+            .peers
+            .lock()
+            .expect("network peer mutex poisoned")
+            .snapshot(Instant::now());
+        activity.art_poll_listeners = self.art_poll_addresses();
+        activity.sacn_discovery_listener = self
+            .sacn_listener
+            .as_ref()
+            .and_then(|socket| socket.local_addr().ok());
+        activity
     }
 
     /// The addresses ArtPolls are answered on.
@@ -192,6 +222,47 @@ impl NetworkOutput {
             .await;
         self.announce_sacn(sent_universes(routes, Protocol::Sacn))
             .await;
+        self.hear_sacn_sources();
+    }
+
+    /// Record every other sACN source heard since the last frame. The desk's own packets, looped
+    /// back by the multicast group, carry its CID and are skipped.
+    fn hear_sacn_sources(&self) {
+        let Some(socket) = &self.sacn_listener else {
+            return;
+        };
+        let mut buffer = [0_u8; 1_200];
+        for _ in 0..SACN_PACKETS_PER_FRAME {
+            let Ok((length, from)) = socket.recv_from(&mut buffer) else {
+                break;
+            };
+            let Some(packet) = decode_sacn_source_packet(&buffer[..length]) else {
+                continue;
+            };
+            if packet.cid == self.cid {
+                continue;
+            }
+            let now = Instant::now();
+            let mut peers = self.peers.lock().expect("network peer mutex poisoned");
+            match packet.kind {
+                SacnSourcePacketKind::Data { universe, .. } => {
+                    peers.record_sacn_data(packet.cid, packet.source_name, from.ip(), universe, now)
+                }
+                SacnSourcePacketKind::Discovery {
+                    page,
+                    last_page,
+                    universes,
+                } => peers.record_sacn_discovery(
+                    packet.cid,
+                    packet.source_name,
+                    from.ip(),
+                    page,
+                    last_page,
+                    &universes,
+                    now,
+                ),
+            }
+        }
     }
 
     async fn answer_art_polls(&self, universes: &[Universe]) {
@@ -201,7 +272,7 @@ impl NetworkOutput {
                 let Ok((length, from)) = listener.socket.recv_from(&mut buffer) else {
                     break;
                 };
-                if !is_artpoll(&buffer[..length]) {
+                if !self.heard_art_net(&buffer[..length], from, listener.address) {
                     continue;
                 }
                 let report = {
@@ -235,6 +306,28 @@ impl NetworkOutput {
         }
     }
 
+    /// Records what arrived on a poll listener; whether it was an ArtPoll that needs an answer.
+    fn heard_art_net(&self, packet: &[u8], from: SocketAddr, own: Ipv4Addr) -> bool {
+        let now = Instant::now();
+        if is_artpoll(packet) {
+            self.peers
+                .lock()
+                .expect("network peer mutex poisoned")
+                .record_art_poll(from, now);
+            return true;
+        }
+        // The desk's own broadcasts come back on its broadcast listener; they are not a peer.
+        if let Some(universe) = artdmx_universe(packet)
+            && from.ip() != IpAddr::V4(own)
+        {
+            self.peers
+                .lock()
+                .expect("network peer mutex poisoned")
+                .record_art_dmx(from.ip(), universe, now);
+        }
+        false
+    }
+
     async fn announce_sacn(&self, universes: Vec<Universe>) {
         let destination = {
             let mut announcements = self
@@ -264,15 +357,19 @@ impl NetworkOutput {
 
     async fn send_packets(&self, packets: &[EncodedPacket]) -> io::Result<u64> {
         let mut outcome = SendOutcome::default();
+        let mut results = Vec::with_capacity(packets.len());
         for packet in packets {
-            match self.send_packet(packet).await {
+            let result = self.send_packet(packet).await;
+            results.push((
+                packet_key(packet),
+                result.as_ref().err().map(ToString::to_string),
+            ));
+            match result {
                 Ok(()) => outcome.sent += 1,
-                Err(error) => {
-                    self.record_send_error(packet);
-                    outcome.record_error(error);
-                }
+                Err(error) => outcome.record_error(error),
             }
         }
+        self.record_sends(results);
         outcome.finish()
     }
 
@@ -328,23 +425,29 @@ impl NetworkOutput {
             .contains(&destination)
     }
 
-    fn record_send_error(&self, packet: &EncodedPacket) {
-        self.send_errors.fetch_add(1, Ordering::Relaxed);
-        *self
-            .route_send_errors
-            .lock()
-            .expect("route output failure mutex poisoned")
-            .entry((packet.protocol, packet.universe, packet.destination))
-            .or_default() += 1;
+    /// One lock per frame, not per packet: the output thread must not contend with every read.
+    fn record_sends(&self, results: Vec<(RouteKey, Option<String>)>) {
+        let now = Instant::now();
+        let mut peers = self.peers.lock().expect("network peer mutex poisoned");
+        for (key, error) in results {
+            match error {
+                None => peers.record_sent(key, now),
+                Some(error) => {
+                    self.send_errors.fetch_add(1, Ordering::Relaxed);
+                    peers.record_send_error(key, error, now);
+                }
+            }
+        }
     }
 
     fn route_error_snapshot(&self) -> Vec<RouteSendError> {
-        self.route_send_errors
+        self.peers
             .lock()
-            .expect("route output failure mutex poisoned")
-            .iter()
+            .expect("network peer mutex poisoned")
+            .route_errors()
+            .into_iter()
             .map(
-                |(&(protocol, universe, destination), &errors)| RouteSendError {
+                |((protocol, universe, destination), errors)| RouteSendError {
                     protocol,
                     universe,
                     destination,
@@ -353,6 +456,12 @@ impl NetworkOutput {
             )
             .collect()
     }
+}
+
+type RouteKey = (Protocol, Universe, SocketAddr);
+
+fn packet_key(packet: &EncodedPacket) -> RouteKey {
+    (packet.protocol, packet.universe, packet.destination)
 }
 
 #[derive(Default)]
@@ -413,6 +522,13 @@ fn broadcast_poll_listeners(bind_ip: IpAddr) -> Vec<PollListener> {
 }
 
 fn poll_listener(bind: SocketAddr, address: Ipv4Addr) -> io::Result<PollListener> {
+    Ok(PollListener {
+        socket: reusable_udp_socket(bind)?.into(),
+        address,
+    })
+}
+
+fn reusable_udp_socket(bind: SocketAddr) -> io::Result<socket2::Socket> {
     let socket = socket2::Socket::new(
         socket2::Domain::IPV4,
         socket2::Type::DGRAM,
@@ -423,10 +539,28 @@ fn poll_listener(bind: SocketAddr, address: Ipv4Addr) -> io::Result<PollListener
     socket.set_reuse_port(true)?;
     socket.set_nonblocking(true)?;
     socket.bind(&bind.into())?;
-    Ok(PollListener {
-        socket: socket.into(),
-        address,
-    })
+    Ok(socket)
+}
+
+/// A listener on the sACN universe-discovery group, on the interface the output sends from.
+///
+/// Bound to the group address rather than the wildcard, like the poll listeners, so it never takes
+/// unicast sACN meant for a Visualizer or Media Server on this computer.
+fn sacn_discovery_listener(bind_ip: IpAddr) -> io::Result<StdUdpSocket> {
+    let group = sacn_multicast_destination(SACN_DISCOVERY_UNIVERSE);
+    let IpAddr::V4(group_ip) = group.ip() else {
+        return Err(io::Error::other("sACN discovery group is not IPv4"));
+    };
+    let interface = match bind_ip {
+        IpAddr::V4(address) => address,
+        IpAddr::V6(_) => Ipv4Addr::UNSPECIFIED,
+    };
+    #[cfg(unix)]
+    let socket = reusable_udp_socket(group)?;
+    #[cfg(not(unix))]
+    let socket = reusable_udp_socket(SocketAddr::from((Ipv4Addr::UNSPECIFIED, group.port())))?;
+    socket.join_multicast_v4(&group_ip, &interface)?;
+    Ok(socket.into())
 }
 
 fn route_diagnostic(route: &OutputRoute) -> Option<RouteDiagnostic> {

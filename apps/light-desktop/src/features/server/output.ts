@@ -8,6 +8,7 @@ export function createOutputActions(
 	ServerCapabilities,
 	| "readDmx"
 	| "readOutputHealth"
+	| "readNetworkEndpoints"
 	| "readVisualization"
 	| "setDmxOverride"
 	| "saveOutputRoute"
@@ -18,6 +19,7 @@ export function createOutputActions(
 	return {
 		readDmx: () => api.mediaOutput.dmx(),
 		readOutputHealth: () => api.runtime.outputHealth(),
+		readNetworkEndpoints: () => api.mediaOutput.networkEndpoints(),
 		readVisualization: (preload = false) =>
 			api.mediaOutput.visualization(preload),
 		setDmxOverride: async (universe, address, rawValue) => {

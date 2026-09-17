@@ -1,14 +1,16 @@
+import type { NetworkEndpointsSnapshot } from "../../api/generated/light-wire";
 import type {
 	DmxSnapshot,
+	OutputHealth,
 	OutputRoute,
 	OutputRouteRangeIntent,
-	OutputHealth,
 	VisualizationSnapshot,
 } from "../../api/types";
 
 export interface ServerPlaybackContext {
 	readDmx: () => Promise<DmxSnapshot>;
 	readOutputHealth: () => Promise<OutputHealth>;
+	readNetworkEndpoints: () => Promise<NetworkEndpointsSnapshot>;
 	readVisualization: (preload?: boolean) => Promise<VisualizationSnapshot>;
 	setDmxOverride: (
 		universe: number,

@@ -107,6 +107,10 @@ fn media_and_output_routes() -> Router<AppState> {
         )
         .route("/api/v2/output/dmx", get(dmx_snapshot))
         .route("/api/v2/output/dmx-overrides", post(update_dmx_override))
+        .route(
+            "/api/v2/output/network-endpoints",
+            get(network_endpoints_api::network_endpoints),
+        )
         .route("/api/v2/output/highlight", get(highlight_status))
         .route("/api/v2/output/highlight/actions", post(highlight_action))
         .route(
