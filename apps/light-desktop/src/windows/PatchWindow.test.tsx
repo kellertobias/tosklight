@@ -39,6 +39,18 @@ vi.mock("../components/setup/MediaServerSetup", () => ({
 	MediaServerSetup: () => <div>Media setup</div>,
 }));
 
+vi.mock("../components/setup/PsnSetup", () => ({
+	PsnSetup: () => <div>Tracking setup</div>,
+}));
+
+vi.mock("../components/setup/fixturePatch/ShowPatchSettings", () => ({
+	ShowPatchSettings: ({ initialTab }: { initialTab?: string }) => (
+		<div role="dialog" aria-label="Show Patch">
+			{`Settings on ${initialTab}`}
+		</div>
+	),
+}));
+
 vi.mock("../platform/desktop", () => ({
 	useDesktopBridge: () => desktop,
 }));
@@ -83,5 +95,69 @@ describe("Patch window Stage renderer", () => {
 
 		expect(screen.getByTestId("patch-boundary")).toBeInTheDocument();
 		expect(screen.getByText("Media setup")).toBeInTheDocument();
+	});
+});
+
+describe("Show Patch Media Servers and Tracking header", () => {
+	const header = () =>
+		screen.getByText("Show Patch").closest("header") as HTMLElement;
+	const tabs = () =>
+		[...header().querySelectorAll('[role="tab"]')].map((tab) => [
+			tab.textContent,
+			tab.getAttribute("aria-selected"),
+		]);
+
+	it("keeps the same tab strip and top-right Settings on both views", () => {
+		render(<PatchWindow patchView="media" />);
+		expect(tabs()).toEqual([
+			["Fixtures", "false"],
+			["Media Servers", "true"],
+			["Tracking", "false"],
+		]);
+		expect(screen.getByRole("button", { name: "Settings" })).toBeEnabled();
+		// The Settings button is the header's last control, after the tab strip.
+		const controls = [...header().querySelectorAll("button")];
+		expect(controls.at(-1)).toHaveAccessibleName("Settings");
+		expect(screen.getByText("Media setup")).toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("tab", { name: "Tracking" }));
+		expect(tabs()).toEqual([
+			["Fixtures", "false"],
+			["Media Servers", "false"],
+			["Tracking", "true"],
+		]);
+		expect(screen.getByText("Tracking setup")).toBeInTheDocument();
+		expect(
+			[...header().querySelectorAll("button")].at(-1),
+		).toHaveAccessibleName("Settings");
+	});
+
+	it("opens Tracking Settings from the Tracking view and Columns elsewhere", () => {
+		render(<PatchWindow patchView="media" />);
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		expect(screen.getByRole("dialog")).toHaveTextContent("Settings on columns");
+		cleanup();
+		render(<PatchWindow patchView="media" />);
+		fireEvent.click(screen.getByRole("tab", { name: "Tracking" }));
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		expect(screen.getByRole("dialog")).toHaveTextContent(
+			"Settings on tracking",
+		);
+	});
+
+	it("scrolls the view in one area filling the window", () => {
+		const { container } = render(<PatchWindow patchView="media" />);
+		const window = container.querySelector(".patch-configuration-window");
+		expect(
+			window?.querySelector(
+				":scope > .ui-window-scroll-area .patch-configuration-content",
+			),
+		).not.toBeNull();
+	});
+
+	it("leaves Settings to the pane when the Show Patch is a pane", () => {
+		render(<PatchWindow patchView="media" compact />);
+		expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
+		expect(tabs()).toHaveLength(3);
 	});
 });

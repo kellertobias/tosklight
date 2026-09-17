@@ -1,11 +1,3 @@
-import {
-	Button,
-	FormLayout,
-	NumberField,
-	SelectField,
-	SwitchField,
-	TextField,
-} from "@tosklight/ui";
 import { useCallback, useEffect, useState } from "react";
 import type {
 	PsnBinding,
@@ -16,7 +8,7 @@ import type {
 import { usePsn } from "../../features/psn/PsnContext";
 import { PsnBindingList } from "./PsnBindingList";
 import { PsnCalibrationForm } from "./PsnCalibrationForm";
-import { PsnSourceForm } from "./PsnSourceForm";
+import { PsnReceiveSwitch } from "./PsnSourceForm";
 import { PsnTrackerTable } from "./PsnTrackerTable";
 import { PsnZoneEditor } from "./PsnZoneEditor";
 
@@ -108,7 +100,15 @@ export function PsnSetup({ active = true }: { active?: boolean }) {
 				</p>
 			)}
 
-			<PsnSourceForm configuration={configuration} busy={busy} onEdit={edit} />
+			<PsnReceiveSwitch
+				configuration={configuration}
+				busy={busy}
+				onEdit={(change) => void edit(change)}
+			/>
+			<p className="psn-settings-hint">
+				Multicast group, port and Stale after are in Settings (⚙, top right)
+				under Tracking.
+			</p>
 
 			<h3>Trackers</h3>
 			<PsnTrackerTable
@@ -160,4 +160,3 @@ function describeStatus(snapshot: PsnSnapshot): string {
 			return `Listening on ${where}. Nothing has arrived yet — the sender may be off, or on another network.`;
 	}
 }
-

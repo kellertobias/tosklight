@@ -54,6 +54,10 @@ Cell rules:
 
 Rows with an unusable cell are listed as **Not imported** with the reason and never block the other rows. Closing after choosing a file asks for confirmation.
 
+## Show Patch views
+
+**Fixtures**, **Media Servers**, and **Tracking** are tabs at the top right of Show Patch, next to **⚙** Settings. The tabs and **⚙** stay in the same place on all three views; a narrow window shortens the Fixtures actions instead. Media Servers and Tracking each scroll as one page with the same inner margins as Settings, so their last controls stay reachable on a short display. **⚙** opens the Show Patch Settings: **Columns** for the Fixtures table and **Tracking** for the PosiStageNet source.
+
 ## Discovering a ToskLight Pixel Media Server
 
 Open **Show Patch > Media Servers** to discover ToskLight Pixel Media servers on the local network. **Refresh discovery** repeats the search without restarting either application. Each output is shown by its Media Server and output name, network address, and reachability, followed by its current configuration: the suggested DMX `universe.address`, the **2 layers** or **8 layers** personality, the protocol (Art-Net or sACN), and whether its tempo follows the Playback BPM channel or a desk Speed Group. A discovered output remains explicitly **Not patched** until you choose an action; discovery alone never changes the show.

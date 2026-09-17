@@ -42,13 +42,14 @@ import {
 } from "../../windows/fixtureSheetCuelistAuthority";
 import { StageVizSettings } from "../../windows/stageWindow/StageVizSettings";
 import { useVirtualPlaybackSurfaceZones } from "../control/virtualPlayback/useVirtualPlaybackSurfaceZones";
+import { PatchColumnSwitches } from "../setup/fixturePatch/ShowPatchSettings";
+import { TrackingSettingsForm } from "../setup/PsnSourceForm";
 import { PoolColorSettings } from "../shared/PoolColorSettings";
 import { requestPaneRemoval } from "../shell/paneRemovalGuard";
 import {
 	type CuePaneCuelistPlayback,
 	useCuePaneCuelistPlaybacks,
 } from "./cuePaneCuelistAuthority";
-import { PatchColumnSwitches } from "../setup/fixturePatch/PatchColumnSettings";
 import { VisualizationPaneSettings } from "./VisualizationPaneSettings";
 
 function VirtualPlaybackZoneEditor({
@@ -803,6 +804,8 @@ export function PatchPaneSettings({ pane }: { pane: PaneModel }) {
 					})
 				}
 			/>
+			<h3>Tracking</h3>
+			<TrackingSettingsForm />
 		</section>
 	);
 }

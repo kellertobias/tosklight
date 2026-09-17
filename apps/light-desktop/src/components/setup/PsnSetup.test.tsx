@@ -70,6 +70,20 @@ function mount(initial: PsnSnapshot, update = vi.fn().mockResolvedValue({})) {
 afterEach(cleanup);
 
 describe("the Tracking tab", () => {
+	it("leaves the source settings to Tracking Settings", async () => {
+		mount(snapshot());
+
+		expect(
+			await screen.findByRole("switch", { name: /Receive PosiStageNet/ }),
+		).toBeInTheDocument();
+		expect(screen.queryByLabelText("Multicast group")).toBeNull();
+		expect(screen.queryByLabelText("Port")).toBeNull();
+		expect(screen.queryByLabelText("Stale after (ms)")).toBeNull();
+		expect(
+			screen.getByText(/Multicast group, port and Stale after are in Settings/),
+		).toBeInTheDocument();
+	});
+
 	it("says what is arriving, and from whom", async () => {
 		mount(snapshot());
 

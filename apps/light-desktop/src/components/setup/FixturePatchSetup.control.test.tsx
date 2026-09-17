@@ -1454,7 +1454,7 @@ describe("selected split selection and SET editing", () => {
 		expect(
 			within(actions)
 				.getAllByRole("button")
-				.slice(0, 8)
+				.slice(0, 6)
 				.map((button) => button.textContent),
 		).toEqual([
 			"Open Stage Renderer",
@@ -1463,8 +1463,15 @@ describe("selected split selection and SET editing", () => {
 			"Import CSV",
 			"+ Add multi-patch",
 			"Delete",
-			"Fixtures",
-			"Media Servers",
+		]);
+		// The view switch is the same tab strip Media Servers and Tracking show, so it keeps its place.
+		expect(
+			within(actions)
+				.getAllByRole("tab")
+				.map((tab) => [tab.textContent, tab.getAttribute("aria-selected")]),
+		).toEqual([
+			["Fixtures", "true"],
+			["Media Servers", "false"],
 		]);
 		expect(
 			[
@@ -1487,7 +1494,7 @@ describe("selected split selection and SET editing", () => {
 		expect(
 			within(actions)
 				.getAllByRole("button")
-				.slice(0, 8)
+				.slice(0, 6)
 				.map((button) => button.textContent),
 		).toEqual([
 			"Open Stage Renderer",
@@ -1496,8 +1503,6 @@ describe("selected split selection and SET editing", () => {
 			"Import CSV",
 			"+ Add multi-patch",
 			"Delete",
-			"Fixtures",
-			"Media Servers",
 		]);
 
 		fireEvent.click(screen.getByRole("row", { name: /17 Split Wash 17/ }));

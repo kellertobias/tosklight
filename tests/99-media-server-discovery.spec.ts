@@ -116,9 +116,7 @@ test("MEDIA-006 @ui Show Patch tells a configured, outdated, and unavailable Med
 	await desk.open(api.baseUrl);
 	await page.getByRole("button", { name: /Open show menu/ }).click();
 	await page.getByRole("button", { name: "Show Patch", exact: true }).click();
-	await page
-		.getByRole("button", { name: "Media Servers", exact: true })
-		.click();
+	await page.getByRole("tab", { name: "Media Servers", exact: true }).click();
 
 	const configured = page
 		.locator(".media-server-card")

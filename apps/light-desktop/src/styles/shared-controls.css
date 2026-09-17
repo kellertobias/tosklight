@@ -1387,9 +1387,6 @@ button:not(:disabled):active {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 	gap: 8px;
-	padding: 8px;
-	max-height: calc(100% - 40px);
-	overflow: auto;
 }
 .media-discovery {
 	display: grid;
@@ -2233,6 +2230,45 @@ button:not(:disabled):active {
 	min-height: 0;
 	padding: 10px;
 	overflow: auto;
+}
+/* The Fixtures / Media Servers / Tracking switch and the Settings button keep their size on every
+   view, so a narrow window squeezes the Fixtures actions instead of moving the switch. */
+.patch-window .ui-window-header .ui-title-chrome-tabs,
+.patch-window .ui-window-header .ui-title-chrome-tabs > .ui-title-chrome-action,
+.patch-window .ui-window-header .ui-window-terminal-actions {
+	flex-shrink: 0;
+}
+/* Media Servers and Tracking: one scroller fills the window below the shared header, and the
+   content keeps the same inner margins as the Settings window's pages. */
+.patch-configuration-window > .patch-configuration-scroll {
+	flex: 1;
+	min-height: 0;
+}
+.patch-configuration-content {
+	box-sizing: border-box;
+	min-width: 0;
+	padding: 12px;
+}
+.patch-configuration-content .psn-setup > h2:first-child {
+	margin-top: 0;
+}
+.tracking-settings {
+	display: grid;
+	gap: 12px;
+}
+.tracking-settings > h3 {
+	margin: 0;
+}
+.tracking-settings-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+}
+.tracking-settings-actions > [role="status"] {
+	margin-right: auto;
+	color: var(--muted);
 }
 .numeric-pad button.store {
 	border-color: #b8363d;

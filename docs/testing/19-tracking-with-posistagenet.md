@@ -57,6 +57,19 @@ once per crossing rather than once per frame.
 3. Configure a port already in use by another program. Confirm the tab shows an actionable error and
    the rest of the desk keeps working.
 
+## Settings stay in reach
+
+1. In a short window, open **Show Patch** and switch between **Fixtures**, **Media Servers**, and
+   **Tracking**. Confirm the tabs and **⚙** stay in exactly the same place, and that Media Servers
+   and Tracking each scroll to their last control with Settings-sized inner margins.
+2. On the Tracking tab, press **⚙**. Confirm Settings opens on **Tracking** with **Multicast
+   group**, **Port**, and **Stale after (ms)** holding the stored values, and that these fields are
+   no longer on the Tracking tab itself.
+3. Enter a group outside `224.0.0.0`–`239.255.255.255` and apply. Confirm the field names the
+   problem and nothing is stored.
+4. Enter a valid group, port, and Stale after, apply, close and reopen Settings. Confirm the values
+   came back and the desk reports them.
+
 ## Compatibility
 
 1. Open a show saved before tracking existed. Confirm it loads, the tab reads as off, and nothing is

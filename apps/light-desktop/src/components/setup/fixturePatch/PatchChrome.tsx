@@ -5,7 +5,8 @@ import { isVisualOnly } from "../patchUtils";
 import { usePatchController } from "./controller";
 import { selectLayer, setFixtureNumber } from "./fixtureActions";
 import { addMultipatch } from "./multipatchActions";
-import { PatchColumnSettings } from "./PatchColumnSettings";
+import { ShowPatchSettings } from "./ShowPatchSettings";
+import { type ShowPatchView, showPatchViewGroup } from "./showPatchHeader";
 
 export function PatchHeader() {
 	const controller = usePatchController();
@@ -14,108 +15,108 @@ export function PatchHeader() {
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	return (
 		<>
-		<WindowHeader
-			title="Show Patch"
-			settings={!props.compact}
-			onSettings={(anchor) =>
-				setSettingsAnchor(anchor.getBoundingClientRect())
-			}
-			info={{
-				primary: `${data.all.length} fixtures · ${data.layers.length} layers`,
-				secondary:
-					controller.patch.error ??
-					(server?.unresolvedMvrFixtures.length
-						? `${server.unresolvedMvrFixtures.length} unresolved MVR fixtures excluded from output`
-						: undefined),
-			}}
-			groups={[
-				{ id: "stage-renderer", actions: [
-					...(props.onOpenStageWindow
+			<WindowHeader
+				title="Show Patch"
+				settings={!props.compact}
+				onSettings={(anchor) =>
+					setSettingsAnchor(anchor.getBoundingClientRect())
+				}
+				info={{
+					primary: `${data.all.length} fixtures · ${data.layers.length} layers`,
+					secondary:
+						controller.patch.error ??
+						(server?.unresolvedMvrFixtures.length
+							? `${server.unresolvedMvrFixtures.length} unresolved MVR fixtures excluded from output`
+							: undefined),
+				}}
+				groups={[
+					{
+						id: "stage-renderer",
+						actions: [
+							...(props.onOpenStageWindow
+								? [
+										{
+											id: "open-stage-renderer",
+											label: "Open Stage Renderer",
+											onPress: props.onOpenStageWindow,
+										},
+									]
+								: []),
+						],
+					},
+					{
+						id: "patch-create",
+						actions: [
+							{
+								id: "layer",
+								label: "+ Add layer",
+								onPress: () => ui.setLayerModal("add"),
+							},
+							{
+								id: "fixture",
+								label: "+ Add fixture",
+								onPress: () => ui.setBrowserOpen(true),
+							},
+							{
+								id: "csv-import",
+								label: "Import CSV",
+								onPress: () => ui.setCsvImportOpen(true),
+							},
+							{
+								id: "multipatch",
+								label: "+ Add multi-patch",
+								// A Venue object is placed one object at a time; it has no copies.
+								disabled: !selected || isVisualOnly(selected.definition),
+								onPress: () => void addMultipatch(controller),
+							},
+						],
+					},
+					{
+						id: "patch-edit",
+						actions: [
+							{
+								id: "delete",
+								label: "Delete",
+								active: ui.deleteArmed,
+								disabled: data.visible.length === 0,
+								onPress: () => ui.setDeleteArmed((armed) => !armed),
+							},
+							...(selected && appState.patchSetArmed
+								? [
+										{
+											id: "fixture-number",
+											label: "Set fixture ID",
+											onPress: () =>
+												void setFixtureNumber(controller, selected),
+										},
+									]
+								: []),
+						],
+					},
+					...(props.onMedia || props.onTracking
 						? [
-								{
-									id: "open-stage-renderer",
-									label: "Open Stage Renderer",
-									onPress: props.onOpenStageWindow,
-								},
+								showPatchViewGroup(
+									"fixtures",
+									[
+										"fixtures",
+										...(props.onMedia ? (["media"] as const) : []),
+										...(props.onTracking ? (["tracking"] as const) : []),
+									] satisfies ShowPatchView[],
+									(view) => {
+										if (view === "media") props.onMedia?.();
+										if (view === "tracking") props.onTracking?.();
+									},
+								),
 							]
 						: []),
-				] },
-				{ id: "patch-create", actions: [
-					{
-						id: "layer",
-						label: "+ Add layer",
-						onPress: () => ui.setLayerModal("add"),
-					},
-					{
-						id: "fixture",
-						label: "+ Add fixture",
-						onPress: () => ui.setBrowserOpen(true),
-					},
-					{
-						id: "csv-import",
-						label: "Import CSV",
-						onPress: () => ui.setCsvImportOpen(true),
-					},
-					{
-						id: "multipatch",
-						label: "+ Add multi-patch",
-						// A Venue object is placed one object at a time; it has no copies.
-						disabled: !selected || isVisualOnly(selected.definition),
-						onPress: () => void addMultipatch(controller),
-					},
-				] },
-				{ id: "patch-edit", actions: [
-					{
-						id: "delete",
-						label: "Delete",
-						active: ui.deleteArmed,
-						disabled: data.visible.length === 0,
-						onPress: () => ui.setDeleteArmed((armed) => !armed),
-					},
-					...(selected && appState.patchSetArmed
-						? [
-								{
-									id: "fixture-number",
-									label: "Set fixture ID",
-									onPress: () => void setFixtureNumber(controller, selected),
-								},
-							]
-						: []),
-				] },
-				{ id: "patch-kind", actions: [
-					...(props.onMedia
-						? [
-								{
-									id: "fixtures",
-									label: "Fixtures",
-									active: true,
-									onPress: () => undefined,
-								},
-								{
-									id: "media",
-									label: "Media Servers",
-									onPress: props.onMedia,
-								},
-							]
-						: []),
-					...(props.onTracking
-						? [
-								{
-									id: "tracking",
-									label: "Tracking",
-									onPress: props.onTracking,
-								},
-							]
-						: []),
-				] },
-			]}
-		/>
-		{settingsAnchor ? (
-			<PatchColumnSettings
-				anchor={settingsAnchor}
-				onClose={() => setSettingsAnchor(null)}
+				]}
 			/>
-		) : null}
+			{settingsAnchor ? (
+				<ShowPatchSettings
+					anchor={settingsAnchor}
+					onClose={() => setSettingsAnchor(null)}
+				/>
+			) : null}
 		</>
 	);
 }

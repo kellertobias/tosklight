@@ -1,6 +1,10 @@
-import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
+import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useState } from "react";
 import { FixturePatchSetupContent } from "../components/setup/FixturePatchSetup";
+import {
+	type ShowPatchView,
+	ShowPatchViewHeader,
+} from "../components/setup/fixturePatch/showPatchHeader";
 import { MediaServerSetup } from "../components/setup/MediaServerSetup";
 import { PsnSetup } from "../components/setup/PsnSetup";
 import { PatchFeatureBoundary } from "../features/patch/PatchFeatureBoundary";
@@ -13,21 +17,15 @@ export function PatchWindow({
 	patchView = "fixtures",
 	patchHiddenColumns,
 }: WindowProps) {
-	const [tab, setTab] = useState<"fixtures" | "media" | "tracking">(patchView);
+	const [tab, setTab] = useState<ShowPatchView>(patchView);
 	return (
 		<PatchFeatureBoundary>
-			{tab === "media" && (
-				<PatchMediaWindow
+			{tab !== "fixtures" && (
+				<PatchConfigurationWindow
+					view={tab}
 					active={active}
-					onFixtures={() => setTab("fixtures")}
-					onTracking={() => setTab("tracking")}
-				/>
-			)}
-			{tab === "tracking" && (
-				<PatchTrackingWindow
-					active={active}
-					onFixtures={() => setTab("fixtures")}
-					onMedia={() => setTab("media")}
+					compact={compact}
+					onView={setTab}
 				/>
 			)}
 			{tab === "fixtures" && (
@@ -85,88 +83,36 @@ function PatchWindowContent({
 	);
 }
 
-function PatchMediaWindow({
-	active,
-	onFixtures,
-	onTracking,
-}: {
-	active: boolean;
-	onFixtures: () => void;
-	onTracking: () => void;
-}) {
-	return (
-		<>
-			<WindowHeader
-				title="Show Patch"
-				info={{ primary: "Media Servers" }}
-				groups={[
-					{
-						id: "patch-kind",
-						kind: "tabs",
-						activeId: "media",
-						onActiveChange: (id) => {
-							if (id === "fixtures") onFixtures();
-							if (id === "tracking") onTracking();
-						},
-						actions: [
-							{ id: "fixtures", label: "Fixtures" },
-							{ id: "media", label: "Media Servers" },
-							{ id: "tracking", label: "Tracking" },
-						],
-					},
-				]}
-			/>
-			<WindowScrollArea>
-				<main>
-					<MediaServerSetup active={active} />
-				</main>
-			</WindowScrollArea>
-		</>
-	);
-}
-
 /**
- * Tracking as a screen of the Show Patch.
+ * Media Servers and Tracking as screens of the Show Patch.
  *
- * It sits beside Fixtures and Media Servers because that is what it is: part of setting the show
- * up, done once with the rig, not something reached for while a show is running.
+ * They sit beside Fixtures because that is what they are: part of setting the show up, done once
+ * with the rig. Each gets the same header shape as Fixtures and one scroller filling the window,
+ * with the same inner margins as Settings, so the last control is always reachable.
  */
-function PatchTrackingWindow({
+function PatchConfigurationWindow({
+	view,
 	active,
-	onFixtures,
-	onMedia,
+	compact,
+	onView,
 }: {
+	view: "media" | "tracking";
 	active: boolean;
-	onFixtures: () => void;
-	onMedia: () => void;
+	compact: boolean;
+	onView: (view: ShowPatchView) => void;
 }) {
 	return (
-		<>
-			<WindowHeader
-				title="Show Patch"
-				info={{ primary: "Tracking" }}
-				groups={[
-					{
-						id: "patch-kind",
-						kind: "tabs",
-						activeId: "tracking",
-						onActiveChange: (id) => {
-							if (id === "fixtures") onFixtures();
-							if (id === "media") onMedia();
-						},
-						actions: [
-							{ id: "fixtures", label: "Fixtures" },
-							{ id: "media", label: "Media Servers" },
-							{ id: "tracking", label: "Tracking" },
-						],
-					},
-				]}
-			/>
-			<WindowScrollArea>
-				<main>
-					<PsnSetup active={active} />
+		<div className="patch-window patch-configuration-window" data-view={view}>
+			<ShowPatchViewHeader view={view} compact={compact} onView={onView} />
+			<WindowScrollArea className="patch-configuration-scroll">
+				<main className="patch-configuration-content">
+					{view === "media" ? (
+						<MediaServerSetup active={active} />
+					) : (
+						<PsnSetup active={active} />
+					)}
 				</main>
 			</WindowScrollArea>
-		</>
+		</div>
 	);
 }

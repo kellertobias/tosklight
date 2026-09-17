@@ -20,14 +20,25 @@ binding off — both are on this tab, and both take effect immediately.
 
 PosiStageNet is multicast, so the desk joins a group and listens; there is nothing to connect to.
 
+**Receive PosiStageNet** stays on the Tracking tab. Off means nothing is received and no point is
+held.
+
+Where the desk listens is part of **Tracking Settings**: press **⚙** at the top right of Show Patch
+and choose **Tracking** (the Tracking tab opens it there directly). When Show Patch is a pane, the
+same settings are in the pane's settings.
+
 | Setting | What it is |
 | --- | --- |
-| **Receive PosiStageNet** | Off means nothing is received and no point is held. |
-| **Multicast group** | Where the tracking system transmits. `236.10.10.10` unless it has been moved. |
-| **Port** | `56565` unless it has been moved. |
-| **Stale after** | How long without a packet before a tracker is reported stale. |
+| **Multicast group** | Where the tracking system transmits. `236.10.10.10` unless it has been moved. It must be a multicast group, `224.0.0.0` to `239.255.255.255`. |
+| **Port** | `56565` unless it has been moved. `1` to `65535`. |
+| **Stale after (ms)** | How long without a packet before a tracker is reported stale, `50` to `60000`. |
 
-The line above the settings says what is happening in plain words:
+Change the values and press **Apply tracking settings**; **Revert** returns to the stored values.
+A value the desk cannot use is named beside its field and nothing is sent. If the desk refuses the
+change, the message says why, and the desk keeps listening where it was. The values are saved with
+the show.
+
+The status line on the Tracking tab says what is happening in plain words:
 
 - **Listening … Nothing has arrived yet** — the sender may be off, or the desk may be on another
   network. PosiStageNet cannot tell those apart, so the desk does not guess.

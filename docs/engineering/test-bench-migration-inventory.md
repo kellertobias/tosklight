@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **223 root cases across 86 files**.
+Default catalog: **227 root cases across 87 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -42,6 +42,10 @@ Default catalog: **223 root cases across 86 files**.
 | 07-playback-configuration.spec.ts | PBK-001 @ui › OFF makes the whole Playback target use its internal Off action | docs/testing/07-playback-configuration.md | @ui | playback-configuration | standard failure evidence | parallel | pending-semantic-migration |
 | 08-file-manager-and-text-editor.spec.ts | FILE-001 @api › default root is confined and supports revision-safe UTF-8 text | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager-and-text-editor | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 09-desk-lock.spec.ts | LOCK-001 @api @failure-mode › PIN lock covers every screen and control surface and drops every input without changing output | docs/testing/10-desk-lock-and-operator-ui.md | @api @failure-mode | desk-lock | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 100-show-patch-configuration-layout.spec.ts | TL-467 @ui › Show Patch views keep the header still and scroll to their end (wide) | repository contract | @ui | show-patch-configuration-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 100-show-patch-configuration-layout.spec.ts | TL-467 @ui › Show Patch views keep the header still and scroll to their end (short) | repository contract | @ui | show-patch-configuration-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 100-show-patch-configuration-layout.spec.ts | TL-467 @ui › Show Patch views keep the header still and scroll to their end (small and short) | repository contract | @ui | show-patch-configuration-layout | standard failure evidence | parallel | pending-semantic-migration |
+| 100-show-patch-configuration-layout.spec.ts | TL-467 @ui › Tracking Settings keep, validate, and explain the source values | repository contract | @ui | show-patch-configuration-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface shares it | repository contract | @api | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | FIXTURE-002 @ui @restart › focused assets and physical metadata remain immutable across edit, patch, and restart | repository contract | @ui @restart | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |

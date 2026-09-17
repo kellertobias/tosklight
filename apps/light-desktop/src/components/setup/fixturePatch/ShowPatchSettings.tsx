@@ -2,6 +2,7 @@ import { SwitchField } from "@tosklight/ui";
 import { WindowSettings } from "@tosklight/ui/window-kit";
 import { useApp } from "../../../state/AppContext";
 import { PATCH_COLUMNS, type PatchColumn } from "../../../types";
+import { TrackingSettingsForm } from "../PsnSourceForm";
 
 /**
  * One switch per Show Patch column. The last column still shown cannot be switched off, so the
@@ -41,12 +42,20 @@ export function PatchColumnSwitches({
 	);
 }
 
-/** The Show Patch window's own settings, opened from its header when it is not a pane. */
-export function PatchColumnSettings({
+export type ShowPatchSettingsTab = "columns" | "tracking";
+
+/**
+ * The Show Patch window's own settings, opened from the same top-right ⚙ on Fixtures, Media
+ * Servers and Tracking so the header never changes shape between them. A pane reaches the same
+ * pages through its pane settings instead.
+ */
+export function ShowPatchSettings({
 	anchor,
+	initialTab = "columns",
 	onClose,
 }: {
 	anchor: DOMRect;
+	initialTab?: ShowPatchSettingsTab;
 	onClose: () => void;
 }) {
 	const { state, dispatch } = useApp();
@@ -55,6 +64,7 @@ export function PatchColumnSettings({
 			modal={false}
 			anchor={anchor}
 			title="Show Patch"
+			initialTab={initialTab}
 			onClose={onClose}
 			tabs={[
 				{
@@ -71,6 +81,11 @@ export function PatchColumnSettings({
 							/>
 						</section>
 					),
+				},
+				{
+					id: "tracking",
+					label: "Tracking",
+					content: <TrackingSettingsForm />,
 				},
 			]}
 		/>
