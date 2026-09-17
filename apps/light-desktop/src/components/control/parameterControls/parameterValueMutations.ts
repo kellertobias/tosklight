@@ -262,7 +262,7 @@ function normalizePercentage(value: number) {
 }
 
 /** Mirrors the core anchor rule for the Preload protocol's fixture-only writes. */
-function resolveSpread(points: readonly number[], count: number) {
+export function resolveSpread(points: readonly number[], count: number) {
 	if (count === 0) return [];
 	const first = points[0] ?? 0;
 	if (points.length <= 1 || count === 1)

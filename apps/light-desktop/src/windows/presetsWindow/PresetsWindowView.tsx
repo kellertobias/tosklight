@@ -29,6 +29,10 @@ import {
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
 import type { PresetCard } from "../../features/presetRecording/presetCards";
 import {
+	type PresetFixtureCounts,
+	presetFixtureCountLabel,
+} from "../../features/presetRecording/presetFixtureCounts";
+import {
 	type PoolMutationTarget,
 	poolMutationTargetState,
 } from "../../features/controlSurfaceInteraction/poolCommandTarget";
@@ -102,6 +106,8 @@ interface PresetCardGridProps {
 	updateArmed: boolean;
 	setArmed: boolean;
 	mutationTarget?: PoolMutationTarget | null;
+	/** Active / defined fixture counts per stored Preset id. */
+	fixtureCounts?: ReadonlyMap<string, PresetFixtureCounts>;
 	onActivate(index: number): void;
 	onConfigure?(index: number): void;
 }
@@ -120,6 +126,7 @@ export function PresetCardGrid({
 	updateArmed,
 	setArmed,
 	mutationTarget = null,
+	fixtureCounts,
 	onActivate,
 	onConfigure,
 }: PresetCardGridProps) {
@@ -222,7 +229,12 @@ export function PresetCardGrid({
 								secondary: preset
 									? filtered
 										? storedFamily
-										: `${storedFamily} · ${Object.keys(preset.body.values).length} fixtures`
+										: presetFixtureCountLabel(
+												fixtureCounts?.get(preset.id) ?? {
+													active: 0,
+													defined: Object.keys(preset.body.values).length,
+												},
+											)
 									: updateArmed
 										? "Touch to check Update eligibility"
 										: selectionCount

@@ -56,6 +56,14 @@ Preset families are Mixed, Intensity, Color, Position, and Beam. Intensity store
 
 Each family is a separate pool with its own local preset numbers. The command-line address combines type and number: `0.1` is Mixed 1, `1.1` is Intensity 1, `2.1` is Color 1, `3.1` is Position 1, and `4.1` is Beam 1. The dotted address is not a global preset ID, so all five presets numbered 1 can coexist.
 
+Each stored Preset tile shows its fixture count as `active / defined`, for example `3 / 8`. The
+second number counts every fixture the Preset defines, including the members of any Group it
+stores and fixtures that are currently unpatched. The first number counts the fixtures whose
+current effective values, after the Programmer and every Playback have been merged, match every
+value the Preset stores for them; a Preset that is only stored, or whose values another source
+has overridden, is not active. The count follows the live output state while the pane is open. A
+Preset that defines no fixtures shows `0 / 0`.
+
 Use pane settings to choose the displayed family and whether tiles use type colors or individual colors. The desk defaults are pale orange-yellow for Groups, lime for Cuelists and Sequences, cyan for Dynamics, dark red for future Macros, and grey for every Preset family. Desktop settings can customize or reset each default. Selection, focus, Store/Record/Update, disabled, and empty states also use borders, outlines, markers, labels, or dashed geometry so color is never their only indication. Test Presets on representative fixture modes before building Cues from them.
 
 ![Preset pool and family-specific tiles](../../assets/screenshots/panes/presets.png)

@@ -25,10 +25,19 @@ import {
 	type PresetCard,
 	resolvePresetCards,
 } from "../features/presetRecording/presetCards";
+import {
+	presetFixtureCounts,
+	resolvedValueIndex,
+} from "../features/presetRecording/presetFixtureCounts";
 import { submitPresetRecording } from "../features/presetRecording/submitRecording";
 import { useProgrammerActions } from "../features/programmerActions/ProgrammerActionsContext";
 import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
-import { usePresets } from "../features/showObjects/ShowObjectsState";
+import { resolveGroupMembership } from "../features/showObjects/groupProjection";
+import {
+	usePortableGroups,
+	usePresets,
+} from "../features/showObjects/ShowObjectsState";
+import { useVisualizationRuntimeSnapshot } from "../features/visualizationRuntime/VisualizationRuntimeView";
 import {
 	normalizePresetFamily,
 	presetAddress,
@@ -143,6 +152,51 @@ function activatePreset(options: PresetActivationOptions) {
 		});
 }
 
+/** Live active / defined fixture counts for the Presets currently shown. */
+function usePresetFixtureCounts(
+	active: boolean,
+	cards: readonly (PresetCard | null)[],
+) {
+	const visualization = useVisualizationRuntimeSnapshot({
+		enabled: active,
+		intervalMillis: 250,
+		consumerId: "preset-pool",
+	});
+	const groups = usePortableGroups(active);
+	const groupMembers = useMemo(() => resolveGroupMembership(groups), [groups]);
+	const resolved = useMemo(
+		() => resolvedValueIndex(visualization),
+		[visualization],
+	);
+	return useMemo(() => {
+		const counts = new Map<string, ReturnType<typeof presetFixtureCounts>>();
+		for (const card of cards)
+			if (card)
+				counts.set(card.id, presetFixtureCounts(card.body, resolved, groupMembers));
+		return counts;
+	}, [cards, groupMembers, resolved]);
+}
+
+/** The family's 200 slots, falling back to demo Presets before a Show is active. */
+function usePresetPoolCards(
+	active: boolean,
+	family: ReturnType<typeof presetAddress>["family"],
+	showActive: boolean,
+	bootstrapReady: boolean,
+) {
+	const storedPresets = usePresets(active);
+	const fallback = useMemo(
+		() => fallbackPresets(!bootstrapReady),
+		[bootstrapReady],
+	);
+	const stored = showActive ? storedPresets : fallback;
+	const cards = useMemo(
+		() => resolvePresetCards(stored, family),
+		[stored, family],
+	);
+	return { cards, fixtureCounts: usePresetFixtureCounts(active, cards) };
+}
+
 function usePresetsWindowModel({
 	active = true,
 	compact,
@@ -156,7 +210,6 @@ function usePresetsWindowModel({
 	const programmerActions = useProgrammerActions();
 	const presetRecall = usePresetRecall(active);
 	const selection = presetRecall.selection;
-	const storedPresets = usePresets(active);
 	const presetRecording = usePresetRecording();
 	const preload = useProgrammerPreloadLifecycleView(active);
 	const command = useCommandLineSurface({
@@ -199,9 +252,12 @@ function usePresetsWindowModel({
 	const groupsVisible = compact
 		? Boolean(showGroupShortcuts)
 		: state.presetGroupsVisible;
-	const fallback = fallbackPresets(!bootstrapReady);
-	const stored = activeShowId !== null ? storedPresets : fallback;
-	const cards = resolvePresetCards(stored, family);
+	const { cards, fixtureCounts } = usePresetPoolCards(
+		active,
+		family,
+		activeShowId !== null,
+		bootstrapReady,
+	);
 	const mutationTarget = poolMutationTarget(command.text);
 	const cancelRecording = () => {
 		setRecordPresetIndex(null);
@@ -266,6 +322,7 @@ function usePresetsWindowModel({
 		paneId,
 		legacyColorsEnabled,
 		cards,
+		fixtureCounts,
 		customizations,
 		groupsVisible,
 		selectionCount: selection?.selected.length ?? 0,
@@ -319,6 +376,7 @@ export function PresetsWindow(props: WindowProps) {
 				updateArmed={model.updateArmed}
 				setArmed={model.setArmed}
 				mutationTarget={model.mutationTarget}
+				fixtureCounts={model.fixtureCounts}
 				onActivate={model.activate}
 				onConfigure={model.configure}
 			/>

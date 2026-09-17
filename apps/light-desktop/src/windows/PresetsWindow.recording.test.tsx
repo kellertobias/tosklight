@@ -8,6 +8,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PresetsWindow } from "./PresetsWindow";
 
+const NO_GROUPS: never[] = [];
+
 const mocks = vi.hoisted(() => ({
 	state: {
 		presetFamily: "Color",
@@ -27,6 +29,13 @@ const mocks = vi.hoisted(() => ({
 	storePreload: vi.fn(async () => true),
 	recall: vi.fn(async () => null),
 	updateTarget: vi.fn(),
+	visualization: null as null | {
+		revision: number;
+		generated_at: string;
+		grand_master: number;
+		blackout: boolean;
+		values: Array<Record<string, unknown>>;
+	},
 	preload: {
 		ready: true,
 		armed: false,
@@ -54,6 +63,7 @@ vi.mock("../state/AppContext", () => ({
 }));
 vi.mock("../features/showObjects/ShowObjectsState", () => ({
 	usePresets: () => mocks.presets,
+	usePortableGroups: () => NO_GROUPS,
 }));
 vi.mock("../features/presetRecall/PresetRecallProvider", () => ({
 	usePresetRecall: () => ({
@@ -79,6 +89,10 @@ vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
 vi.mock("../components/control/updateWorkflow", () => ({
 	requestUpdateTarget: mocks.updateTarget,
 }));
+vi.mock(
+	"../features/visualizationRuntime/VisualizationRuntimeView",
+	() => ({ useVisualizationRuntimeSnapshot: () => mocks.visualization }),
+);
 vi.mock("../components/shared/GroupStrip", () => ({ GroupStrip: () => null }));
 
 function firstPresetCell() {
@@ -94,6 +108,8 @@ beforeEach(() => {
 	mocks.state.updateArmed = false;
 	mocks.state.presetSetArmed = false;
 	mocks.presets = [];
+	mocks.visualization = null;
+	mocks.state.presetFamily = "Color";
 	mocks.dispatch.mockClear();
 	mocks.record.mockReset();
 	mocks.record.mockResolvedValue(null);
@@ -391,5 +407,65 @@ describe("PresetsWindow normal recording boundary", () => {
 			0,
 		);
 		expect(mocks.commandReset).not.toHaveBeenCalled();
+	});
+});
+
+describe("PresetsWindow active / defined fixture counts", () => {
+	function zoomSnapshot(revision: number, zoom: number) {
+		return {
+			revision,
+			generated_at: "",
+			grand_master: 1,
+			blackout: false,
+			values: [
+				{
+					fixture_id: "fixture-a",
+					attribute: "zoom",
+					value: { kind: "normalized", value: zoom },
+				},
+			],
+		};
+	}
+
+	it("shows a compact active / defined label that follows the effective state", () => {
+		mocks.state.storeArmed = false;
+		mocks.state.presetFamily = "Beam";
+		mocks.presets = [
+			{
+				kind: "preset",
+				id: "4.1",
+				revision: 1,
+				updated_at: "",
+				body: {
+					name: "Wide",
+					number: 1,
+					family: "Beam",
+					values: {
+						"fixture-a": { zoom: { kind: "normalized", value: 1 } },
+						"fixture-b": { zoom: { kind: "normalized", value: 1 } },
+					},
+				},
+			},
+			{
+				kind: "preset",
+				id: "4.2",
+				revision: 1,
+				updated_at: "",
+				body: { name: "Empty look", number: 2, family: "Beam", values: {} },
+			},
+		];
+		mocks.visualization = zoomSnapshot(1, 0.2);
+		const { container, rerender } = render(<PresetsWindow compact />);
+		const cards = () =>
+			container.querySelectorAll<HTMLButtonElement>(".preset-card");
+
+		expect(cards()[0]).toHaveTextContent("0 / 2");
+		expect(cards()[0]).not.toHaveTextContent(/fixtures/);
+		expect(cards()[0]).not.toHaveTextContent(/Beam ·/);
+		expect(cards()[1]).toHaveTextContent("0 / 0");
+
+		mocks.visualization = zoomSnapshot(2, 1);
+		rerender(<PresetsWindow compact />);
+		expect(cards()[0]).toHaveTextContent("1 / 2");
 	});
 });
