@@ -82,8 +82,10 @@ fn active_playback_target_operation(
 
 fn playback_target_operation(command: &str) -> Option<PlaybackTargetOperation> {
     let normalized = command.trim().to_ascii_uppercase();
+    if super::record_update_option::armed_record_option(&normalized).is_some() {
+        return Some(PlaybackTargetOperation::Record);
+    }
     match normalized.as_str() {
-        "RECORD" | "REC" => Some(PlaybackTargetOperation::Record),
         "OFF" => Some(PlaybackTargetOperation::Off),
         _ if supported_pending_set(&normalized) => Some(PlaybackTargetOperation::Set),
         // COPY, MOVE, and DELETE have no whole-Playback mutation in the authoritative command

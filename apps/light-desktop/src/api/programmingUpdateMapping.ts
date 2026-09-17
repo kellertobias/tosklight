@@ -80,6 +80,8 @@ export function wireSettings(settings: UpdateSettings): WireSettings {
 		preset_mode: settings.preset_mode,
 		group_mode: settings.group_mode,
 		show_update_modal_on_touch: settings.show_update_modal_on_touch,
+		record_default: settings.record_default,
+		update_default: settings.update_default,
 	};
 }
 

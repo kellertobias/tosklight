@@ -111,6 +111,8 @@ mod programmer_priority_routes;
 mod programmer_priority_wire;
 #[path = "command_http/programming_ports.rs"]
 mod programming_ports;
+#[path = "command_http/record_update_option.rs"]
+pub(crate) mod record_update_option;
 #[path = "command_http/routes.rs"]
 mod routes;
 #[path = "command_http/selection_environment.rs"]
@@ -129,6 +131,8 @@ mod speed_group_command;
 mod speed_group_programming_ports;
 #[path = "command_http/state_event.rs"]
 mod state_event;
+#[path = "command_http/update_add_cue_ports.rs"]
+mod update_add_cue_ports;
 #[path = "command_http/values_environment.rs"]
 mod values_environment;
 #[path = "command_http/values_routes.rs"]

@@ -238,6 +238,12 @@ fn apply_record_gesture(state: &AppState, session: &Session, gesture: OscRecordG
     }
 }
 
+fn record_already_armed(state: &AppState, session: &Session) -> bool {
+    state.programming.get(session.id).is_some_and(|programmer| {
+        command_http::record_update_option::armed_record_option(&programmer.command_line).is_some()
+    })
+}
+
 fn handle_record_osc(
     state: &AppState,
     session: &Session,
@@ -260,6 +266,15 @@ fn handle_record_osc(
             .map(|source| state.integrations.record_gesture(source, pressed))
             .unwrap_or(OscRecordGesture::None);
         if matches!(gesture, OscRecordGesture::Record) {
+            if record_already_armed(state, session) {
+                // RECORD RECORD asks how this Record stores the programmer.
+                emit(
+                    state,
+                    "desk_action",
+                    serde_json::json!({"path":subscriber.path,"desk_id":session.desk.id,"session_id":session.id,"action":"record-choice","source":"osc"}),
+                );
+                return RecordOutcome::Handled(true);
+            }
             return RecordOutcome::RouteRecord;
         }
         if matches!(gesture, OscRecordGesture::RecordSettings) {

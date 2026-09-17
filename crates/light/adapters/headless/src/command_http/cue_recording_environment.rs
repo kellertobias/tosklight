@@ -1,7 +1,7 @@
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, PlaybackCueReference, ProgrammingCuePageSlot,
-    ProgrammingCueRecordOperation, ProgrammingCueRecordRequest, ProgrammingCueRecordTarget,
-    ProgrammingCueRecordingEnvironment, ProgrammingCueResolvedTarget,
+    ProgrammingCueRecordRequest, ProgrammingCueRecordTarget, ProgrammingCueRecordingEnvironment,
+    ProgrammingCueResolvedTarget,
 };
 
 use super::super::AppState;
@@ -29,7 +29,7 @@ pub(super) fn environment(
 }
 
 fn needs_active_cue(request: &ProgrammingCueRecordRequest) -> bool {
-    request.operation == ProgrammingCueRecordOperation::Merge && request.cue_number.is_none()
+    request.operation.targets_active_cue() && request.cue_number.is_none()
 }
 
 fn resolve_target(

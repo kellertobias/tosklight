@@ -7,6 +7,9 @@ enum CommandUpdateMode {
     Tracked,
     Known,
     All,
+    /// Add Existing: Cues gain values for attributes the Cuelist already knows; Presets and
+    /// Groups change only what they already store.
+    AddExisting,
 }
 
 impl CommandUpdateMode {
@@ -16,12 +19,13 @@ impl CommandUpdateMode {
             Self::Tracked => update::CueUpdateMode::ExistingOnly,
             Self::Known => update::CueUpdateMode::AddToCurrentCue,
             Self::All => update::CueUpdateMode::AddNew,
+            Self::AddExisting => update::CueUpdateMode::AddToCurrentCue,
         }
     }
 
     fn existing_content(self) -> Result<update::ExistingContentMode, String> {
         match self {
-            Self::Update => Ok(update::ExistingContentMode::UpdateExisting),
+            Self::Update | Self::AddExisting => Ok(update::ExistingContentMode::UpdateExisting),
             Self::All => Ok(update::ExistingContentMode::AddNew),
             Self::Tracked | Self::Known => Err(
                 "UPDATE TRACKED and UPDATE KNOWN apply only to Cues; use UPDATE or UPDATE ALL for this target"
@@ -31,14 +35,33 @@ impl CommandUpdateMode {
     }
 }
 
-fn parse_mode(body: &[String]) -> (CommandUpdateMode, &[String]) {
+/// The mode a Record/Update option stands for. Add Cue is carried out as a Cue recording before
+/// an Update is planned, so a target that still reaches here (a Preset or Group) is updated as
+/// Smart would update it.
+const fn option_mode(option: update::RecordUpdateOption) -> CommandUpdateMode {
+    match option {
+        update::RecordUpdateOption::Smart | update::RecordUpdateOption::AddCue => {
+            CommandUpdateMode::Update
+        }
+        update::RecordUpdateOption::Merge => CommandUpdateMode::All,
+        update::RecordUpdateOption::AddExisting => CommandUpdateMode::AddExisting,
+    }
+}
+
+fn parse_mode(
+    body: &[String],
+    default: update::RecordUpdateOption,
+) -> (CommandUpdateMode, &[String]) {
     match body.first().map(String::as_str) {
         Some("TRACKED") => (CommandUpdateMode::Tracked, &body[1..]),
         Some("KNOWN") => (CommandUpdateMode::Known, &body[1..]),
         Some("ALL") if body.get(1).is_none_or(|token| token != "PRESET") => {
             (CommandUpdateMode::All, &body[1..])
         }
-        _ => (CommandUpdateMode::Update, body),
+        _ => {
+            let (option, body) = super::command_http::record_update_option::parse_option(body);
+            (option_mode(option.unwrap_or(default)), body)
+        }
     }
 }
 
@@ -291,7 +314,8 @@ pub(super) fn update_request(
     body: &[String],
     snapshot: &EngineSnapshot,
 ) -> Result<UpdateApiRequest, String> {
-    let (mode, target) = parse_mode(body);
+    let default = super::command_http::record_update_option::update_default(state);
+    let (mode, target) = parse_mode(body, default);
     match target.first().map(String::as_str) {
         None => Err("UPDATE requires CUE, CUELIST, PBK, VPBK, GROUP, or a Preset address".into()),
         Some("CUE") => selected_cue_request(state, session, snapshot, &target[1..], mode),
@@ -317,6 +341,48 @@ pub(super) fn execute_update_show_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tokens(value: &str) -> Vec<String> {
+        value.split_whitespace().map(str::to_owned).collect()
+    }
+
+    #[test]
+    fn plain_update_follows_the_desk_default_and_named_options_override_it() {
+        use update::RecordUpdateOption as Option;
+        let body = tokens("PBK 1");
+        assert_eq!(
+            parse_mode(&body, Option::Smart).0,
+            CommandUpdateMode::Update
+        );
+        assert_eq!(parse_mode(&body, Option::Merge).0, CommandUpdateMode::All);
+        assert_eq!(
+            parse_mode(&body, Option::AddExisting).0,
+            CommandUpdateMode::AddExisting
+        );
+        let smart = tokens("SMART PBK 1");
+        assert_eq!(
+            parse_mode(&smart, Option::Merge),
+            (CommandUpdateMode::Update, &smart[1..])
+        );
+        let existing = tokens("ADD EXISTING GROUP 2");
+        assert_eq!(
+            parse_mode(&existing, Option::Smart),
+            (CommandUpdateMode::AddExisting, &existing[2..])
+        );
+        assert_eq!(
+            CommandUpdateMode::AddExisting.cue(),
+            update::CueUpdateMode::AddToCurrentCue
+        );
+        assert_eq!(
+            CommandUpdateMode::AddExisting.existing_content(),
+            Ok(update::ExistingContentMode::UpdateExisting)
+        );
+        let tracked = tokens("TRACKED PBK 1");
+        assert_eq!(
+            parse_mode(&tracked, Option::Merge).0,
+            CommandUpdateMode::Tracked
+        );
+    }
 
     #[test]
     fn maps_manual_cue_modes_to_the_existing_typed_service() {
@@ -344,10 +410,13 @@ mod tests {
         );
         assert!(preset_address(&["2".into(), ".".into(), "22".into()]).is_err());
         let mixed = ["ALL".into(), "PRESET".into(), "3".into()];
-        assert_eq!(parse_mode(&mixed), (CommandUpdateMode::Update, &mixed[..]));
+        assert_eq!(
+            parse_mode(&mixed, update::RecordUpdateOption::Smart),
+            (CommandUpdateMode::Update, &mixed[..])
+        );
         let add_mixed = ["ALL".into(), "ALL".into(), "PRESET".into(), "3".into()];
         assert_eq!(
-            parse_mode(&add_mixed),
+            parse_mode(&add_mixed, update::RecordUpdateOption::Smart),
             (CommandUpdateMode::All, &add_mixed[1..])
         );
         assert!(CommandUpdateMode::Tracked.existing_content().is_err());

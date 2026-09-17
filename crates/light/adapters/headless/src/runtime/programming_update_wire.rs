@@ -84,6 +84,8 @@ pub(super) fn wire_settings(
             preset_mode: wire_existing_mode(settings.preset_mode),
             group_mode: wire_existing_mode(settings.group_mode),
             show_update_modal_on_touch: settings.show_update_modal_on_touch,
+            record_default: wire_option(settings.record_default),
+            update_default: wire_option(settings.update_default),
         },
     }
 }
@@ -96,6 +98,34 @@ pub(super) fn apply_settings(
     current.preset_mode = application_existing_mode(settings.preset_mode);
     current.group_mode = application_existing_mode(settings.group_mode);
     current.show_update_modal_on_touch = settings.show_update_modal_on_touch;
+    current.record_default = application_option(settings.record_default);
+    current.update_default = application_option(settings.update_default);
+}
+
+const fn wire_option(
+    option: application::RecordUpdateOption,
+) -> wire::ProgrammingRecordUpdateOption {
+    match option {
+        application::RecordUpdateOption::Smart => wire::ProgrammingRecordUpdateOption::Smart,
+        application::RecordUpdateOption::Merge => wire::ProgrammingRecordUpdateOption::Merge,
+        application::RecordUpdateOption::AddExisting => {
+            wire::ProgrammingRecordUpdateOption::AddExisting
+        }
+        application::RecordUpdateOption::AddCue => wire::ProgrammingRecordUpdateOption::AddCue,
+    }
+}
+
+const fn application_option(
+    option: wire::ProgrammingRecordUpdateOption,
+) -> application::RecordUpdateOption {
+    match option {
+        wire::ProgrammingRecordUpdateOption::Smart => application::RecordUpdateOption::Smart,
+        wire::ProgrammingRecordUpdateOption::Merge => application::RecordUpdateOption::Merge,
+        wire::ProgrammingRecordUpdateOption::AddExisting => {
+            application::RecordUpdateOption::AddExisting
+        }
+        wire::ProgrammingRecordUpdateOption::AddCue => application::RecordUpdateOption::AddCue,
+    }
 }
 
 fn application_target(

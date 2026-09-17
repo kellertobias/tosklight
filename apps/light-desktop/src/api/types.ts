@@ -69,11 +69,16 @@ export interface UpdateTargetRequest {
 	validate_active_context?: boolean;
 }
 
+/** How a plain RECORD or UPDATE stores the programmer when the operator names no mode. */
+export type RecordUpdateOption = "smart" | "merge" | "add_existing" | "add_cue";
+
 export interface UpdateSettings {
 	cue_mode: CueUpdateMode;
 	preset_mode: ExistingContentMode;
 	group_mode: ExistingContentMode;
 	show_update_modal_on_touch: boolean;
+	record_default: RecordUpdateOption;
+	update_default: RecordUpdateOption;
 }
 
 export interface UpdateCueIdentity {

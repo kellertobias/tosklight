@@ -333,5 +333,7 @@ function settings() {
 		preset_mode: "update_existing",
 		group_mode: "add_new",
 		show_update_modal_on_touch: true,
+		record_default: "smart",
+		update_default: "smart",
 	};
 }

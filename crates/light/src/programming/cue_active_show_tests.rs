@@ -175,6 +175,52 @@ fn merge_active_without_existing_topology_creates_the_first_pool_cue() {
 }
 
 #[test]
+fn record_options_on_an_inactive_one_cue_list_store_as_documented() {
+    let run = |operation, cue_number, level| {
+        let rig = TestRig::new();
+        let cue_list_id = CueListId::new();
+        rig.seed(
+            "cue_list",
+            &cue_list_id.0.to_string(),
+            cue_list(cue_list_id, Uuid::new_v4(), 0.5),
+        );
+        let commit = rig.commit(
+            ProgrammingCueRecordTarget::CueList { cue_list_id },
+            ProgrammingCueResolvedTarget::CueList { cue_list_id },
+            operation,
+            cue_number,
+            capture(level),
+        );
+        let result = rig
+            .service
+            .commit_programming_cue(&rig.context(), &commit, &rig.ports);
+        result.map(|result| {
+            let body = result.projections.cue_list.raw_body.as_ref().clone();
+            let cues = body["cues"].as_array().unwrap().clone();
+            (result.changed, cues)
+        })
+    };
+    let level = |cue: &Value| cue["changes"][0]["value"]["value"].as_f64().unwrap();
+
+    let (changed, cues) = run(ProgrammingCueRecordOperation::Merge, None, 0.8).unwrap();
+    assert!(changed);
+    assert_eq!(cues.len(), 1, "Merge stores into the only Cue");
+    assert!((level(&cues[0]) - 0.8).abs() < 1e-6);
+
+    let (changed, cues) = run(ProgrammingCueRecordOperation::AddMissing, None, 0.8).unwrap();
+    assert!(!changed, "Add Existing never changes a stored value");
+    assert_eq!(cues.len(), 1);
+    assert!((level(&cues[0]) - 0.5).abs() < 1e-6);
+
+    let (changed, cues) = run(ProgrammingCueRecordOperation::AddCue, None, 0.8).unwrap();
+    assert!(changed);
+    assert_eq!(cues.len(), 2, "Add Cue always stores a new Cue");
+
+    let error = run(ProgrammingCueRecordOperation::AddCue, Some(1.0), 0.8).unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Conflict);
+}
+
+#[test]
 fn frozen_cuelist_defaults_apply_only_when_recording_creates_topology() {
     let new_rig = TestRig::new();
     let new_commit = new_rig.commit_with_defaults(

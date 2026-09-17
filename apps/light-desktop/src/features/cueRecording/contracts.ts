@@ -8,7 +8,12 @@ export type CueRecordTarget =
 	| { kind: "cue_list"; cueListId: string }
 	| { kind: "virtual"; page: number; playbackNumber: number };
 
-export type CueRecordOperation = "overwrite" | "merge" | "subtract";
+export type CueRecordOperation =
+	| "overwrite"
+	| "merge"
+	| "subtract"
+	| "add_missing"
+	| "add_cue";
 export type CueRecordCapturePolicy =
 	| "current_capture"
 	| "pending_or_active_preload";

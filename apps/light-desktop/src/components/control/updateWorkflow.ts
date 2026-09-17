@@ -28,6 +28,8 @@ export const defaultUpdateSettings: UpdateSettings = {
 	preset_mode: "update_existing",
 	group_mode: "update_existing",
 	show_update_modal_on_touch: true,
+	record_default: "smart",
+	update_default: "smart",
 };
 
 export function configuredUpdateMode(

@@ -391,7 +391,9 @@ async fn put_settings_request(scenario: &UpdateRouteScenario, path: &str) -> Res
                             "cue_mode":"existing_only",
                             "preset_mode":"add_new",
                             "group_mode":"add_new",
-                            "show_update_modal_on_touch":false
+                            "show_update_modal_on_touch":false,
+                            "record_default":"smart",
+                            "update_default":"smart"
                         }
                     })
                     .to_string(),

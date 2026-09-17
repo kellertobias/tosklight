@@ -42,6 +42,18 @@ pub enum UpdateTargetFamily {
     Other { kind: String },
 }
 
+/// How a plain RECORD or UPDATE stores the programmer when the operator names no mode.
+/// `Smart` is today's behaviour and the default for every installation that predates it.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordUpdateOption {
+    #[default]
+    Smart,
+    Merge,
+    AddExisting,
+    AddCue,
+}
+
 /// Desk/operator workflow preferences. This is not show programming data and should be persisted
 /// in the established desk settings scope. `serde(default)` gives old settings deterministic
 /// migration values.
@@ -53,6 +65,8 @@ pub struct UpdateSettings {
     pub group_mode: ExistingContentMode,
     pub other_target_modes: HashMap<String, ExistingContentMode>,
     pub show_update_modal_on_touch: bool,
+    pub record_default: RecordUpdateOption,
+    pub update_default: RecordUpdateOption,
 }
 
 impl Default for UpdateSettings {
@@ -63,6 +77,8 @@ impl Default for UpdateSettings {
             group_mode: ExistingContentMode::UpdateExisting,
             other_target_modes: HashMap::new(),
             show_update_modal_on_touch: true,
+            record_default: RecordUpdateOption::Smart,
+            update_default: RecordUpdateOption::Smart,
         }
     }
 }

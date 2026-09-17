@@ -11,7 +11,8 @@ pub(super) enum CueRecordCommandTarget {
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct CueRecordCommand {
     pub target: CueRecordCommandTarget,
-    pub operation: ProgrammingCueRecordOperation,
+    /// `None` when the command names no operation, so the desk's Record default applies.
+    pub operation: Option<ProgrammingCueRecordOperation>,
     pub cue_number: Option<CueNumber>,
     pub timing: ProgrammingCueRecordTiming,
 }
@@ -43,11 +44,17 @@ pub(super) fn parse(command: &str) -> Result<Option<CueRecordCommand>, String> {
     }))
 }
 
-fn operation(body: &[String]) -> (ProgrammingCueRecordOperation, &[String]) {
+fn operation(body: &[String]) -> (Option<ProgrammingCueRecordOperation>, &[String]) {
     match body.first().map(String::as_str) {
-        Some("+") => (ProgrammingCueRecordOperation::Merge, &body[1..]),
-        Some("-") => (ProgrammingCueRecordOperation::Subtract, &body[1..]),
-        _ => (ProgrammingCueRecordOperation::Overwrite, body),
+        Some("+") => (Some(ProgrammingCueRecordOperation::Merge), &body[1..]),
+        Some("-") => (Some(ProgrammingCueRecordOperation::Subtract), &body[1..]),
+        _ => {
+            let (option, body) = super::record_update_option::parse_option(body);
+            (
+                option.map(super::record_update_option::record_operation),
+                body,
+            )
+        }
     }
 }
 
@@ -142,9 +149,34 @@ mod tests {
         let parsed = parse("RECORD + CUELIST 4 CUE 2.5 TIME 3 DELAY 1.25")
             .unwrap()
             .unwrap();
-        assert_eq!(parsed.operation, ProgrammingCueRecordOperation::Merge);
+        assert_eq!(parsed.operation, Some(ProgrammingCueRecordOperation::Merge));
         assert_eq!(parsed.timing.fade_millis, Some(3_000));
         assert_eq!(parsed.timing.delay_millis, Some(1_250));
+    }
+
+    #[test]
+    fn parses_named_options_and_leaves_plain_record_to_the_desk_default() {
+        assert_eq!(parse("RECORD PBK 6").unwrap().unwrap().operation, None);
+        assert_eq!(
+            parse("RECORD SMART PBK 6").unwrap().unwrap().operation,
+            Some(ProgrammingCueRecordOperation::Overwrite)
+        );
+        assert_eq!(
+            parse("RECORD MERGE CUE").unwrap().unwrap().operation,
+            Some(ProgrammingCueRecordOperation::Merge)
+        );
+        let existing = parse("RECORD ADD EXISTING CUELIST 4 CUE 2")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            existing.operation,
+            Some(ProgrammingCueRecordOperation::AddMissing)
+        );
+        assert_eq!(existing.cue_number.unwrap().to_string(), "2");
+        let add = parse("RECORD ADD CUE CUE 3").unwrap().unwrap();
+        assert_eq!(add.operation, Some(ProgrammingCueRecordOperation::AddCue));
+        assert_eq!(add.target, CueRecordCommandTarget::SelectedCuelist);
+        assert_eq!(add.cue_number.unwrap().to_string(), "3");
     }
 
     #[test]

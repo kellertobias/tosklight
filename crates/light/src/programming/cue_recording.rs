@@ -50,9 +50,21 @@ pub enum ProgrammingCueRecordTarget {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProgrammingCueRecordOperation {
+    /// Smart: append without a Cue number, otherwise replace or insert that Cue.
     Overwrite,
     Merge,
     Subtract,
+    /// Add Existing: add only what the target Cue does not store yet.
+    AddMissing,
+    /// Add Cue: always store a new Cue.
+    AddCue,
+}
+
+impl ProgrammingCueRecordOperation {
+    /// Whether the operation targets the active Cue when no Cue number is given.
+    pub const fn targets_active_cue(self) -> bool {
+        matches!(self, Self::Merge | Self::AddMissing)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -156,7 +168,7 @@ impl ProgrammingCueCommit {
         &self,
         cue_list: &CueList,
     ) -> Result<CueListRecordingPlan, CueRecordingPlanError> {
-        cue_list.plan_recording(self.content(), self.domain_operation())
+        cue_list.plan_recording(self.content(), self.domain_operation(cue_list))
     }
 
     pub(crate) fn plan_new(
@@ -164,9 +176,11 @@ impl ProgrammingCueCommit {
         cue_list_id: CueListId,
         name: String,
     ) -> Result<CueListRecordingPlan, CueRecordingPlanError> {
-        let creates_first_cue = self.request.operation == ProgrammingCueRecordOperation::Overwrite
-            || (self.request.operation == ProgrammingCueRecordOperation::Merge
-                && self.request.cue_number.is_none());
+        let creates_first_cue = matches!(
+            self.request.operation,
+            ProgrammingCueRecordOperation::Overwrite | ProgrammingCueRecordOperation::AddCue
+        ) || (self.request.operation.targets_active_cue()
+            && self.request.cue_number.is_none());
         if !creates_first_cue {
             return Err(CueRecordingPlanError::CueDoesNotExist {
                 cue_number: self
@@ -186,7 +200,20 @@ impl ProgrammingCueCommit {
         )
     }
 
-    fn domain_operation(&self) -> CueRecordOperation {
+    /// The Cue an operation without a Cue number stores into: the playback's active Cue, or the
+    /// only Cue of a Cuelist that is not running. `None` means a new Cue is appended.
+    fn active_or_only_cue(&self, cue_list: &CueList) -> Option<Uuid> {
+        self.environment
+            .active_cue
+            .as_ref()
+            .map(|cue| cue.id)
+            .or_else(|| match cue_list.cues.as_slice() {
+                [only] => Some(only.id),
+                _ => None,
+            })
+    }
+
+    fn domain_operation(&self, cue_list: &CueList) -> CueRecordOperation {
         let cue_number = self.request.cue_number.clone();
         match (self.request.operation, cue_number) {
             (ProgrammingCueRecordOperation::Overwrite, None) => CueRecordOperation::Append,
@@ -197,8 +224,20 @@ impl ProgrammingCueCommit {
                 CueRecordOperation::Merge { cue_number }
             }
             (ProgrammingCueRecordOperation::Merge, None) => CueRecordOperation::MergeActive {
-                active_cue_id: self.environment.active_cue.as_ref().map(|cue| cue.id),
+                active_cue_id: self.active_or_only_cue(cue_list),
             },
+            (ProgrammingCueRecordOperation::AddMissing, Some(cue_number)) => {
+                CueRecordOperation::AddMissing { cue_number }
+            }
+            (ProgrammingCueRecordOperation::AddMissing, None) => {
+                CueRecordOperation::AddMissingActive {
+                    active_cue_id: self.active_or_only_cue(cue_list),
+                }
+            }
+            (ProgrammingCueRecordOperation::AddCue, Some(cue_number)) => {
+                CueRecordOperation::Insert { cue_number }
+            }
+            (ProgrammingCueRecordOperation::AddCue, None) => CueRecordOperation::Append,
             (ProgrammingCueRecordOperation::Subtract, Some(cue_number)) => {
                 CueRecordOperation::Subtract { cue_number }
             }

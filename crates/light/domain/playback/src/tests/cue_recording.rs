@@ -729,3 +729,115 @@ fn authored_release_records_both_ordinary_and_scalar_track_removal_without_zero(
             .contains_key(&(fixture, attribute))
     );
 }
+
+#[test]
+fn add_missing_adds_only_addresses_the_cue_does_not_store() {
+    let fixtures = [FixtureId::new(), FixtureId::new()];
+    let mut target = cue(1.0, "Look", vec![fixture_change(fixtures[0], "pan", 0.1)]);
+    target.group_changes = vec![group_change("7", "dimmer", 0.2)];
+    target.dynamic_changes = vec![fixed_at(fixtures[0], 0.3)];
+    let target_id = target.id;
+    let list = cue_list(vec![target]);
+    let recorded = CueRecordingContent {
+        changes: vec![
+            fixture_change(fixtures[0], "pan", 0.9),
+            fixture_change(fixtures[1], "tilt", 0.5),
+        ],
+        group_changes: vec![
+            group_change("7", "dimmer", 0.9),
+            group_change("8", "dimmer", 0.4),
+        ],
+        dynamic_changes: vec![fixed_at(fixtures[0], 0.9), fixed_at(fixtures[1], 0.6)],
+        ..Default::default()
+    };
+
+    let numbered = list
+        .plan_recording(
+            recorded.clone(),
+            CueRecordOperation::AddMissing {
+                cue_number: cue_number(1.0),
+            },
+        )
+        .unwrap();
+    let stored = &numbered.cue_list.cues[0];
+    assert_eq!(stored.id, target_id);
+    assert_eq!(stored.changes.len(), 2);
+    assert_eq!(
+        stored.changes[0].value,
+        Some(AttributeValue::Normalized(0.1))
+    );
+    assert_eq!(stored.changes[1].fixture_id, fixtures[1]);
+    assert_eq!(stored.group_changes.len(), 2);
+    assert_eq!(
+        stored.group_changes[0].value,
+        Some(AttributeValue::Normalized(0.2))
+    );
+    assert_eq!(stored.dynamic_changes.len(), 2);
+    assert_eq!(stored.dynamic_changes[0], fixed_at(fixtures[0], 0.3));
+
+    let active = list
+        .plan_recording(
+            recorded.clone(),
+            CueRecordOperation::AddMissingActive {
+                active_cue_id: Some(target_id),
+            },
+        )
+        .unwrap();
+    assert_eq!(active.cue_list, numbered.cue_list);
+
+    let inactive = list
+        .plan_recording(
+            recorded.clone(),
+            CueRecordOperation::AddMissingActive {
+                active_cue_id: None,
+            },
+        )
+        .unwrap();
+    assert_eq!(inactive.cue_list.cues.len(), 2);
+    assert_eq!(inactive.cue_number, cue_number(2.0));
+
+    assert_eq!(
+        list.plan_recording(
+            recorded,
+            CueRecordOperation::AddMissing {
+                cue_number: cue_number(4.0)
+            },
+        ),
+        Err(CueRecordingPlanError::CueDoesNotExist {
+            cue_number: cue_number(4.0)
+        })
+    );
+}
+
+#[test]
+fn insert_stores_a_new_cue_and_never_replaces_one() {
+    let fixture = FixtureId::new();
+    let list = cue_list(vec![cue(
+        1.0,
+        "Only",
+        vec![fixture_change(fixture, "pan", 0.1)],
+    )]);
+    let recorded = content(vec![fixture_change(fixture, "pan", 0.4)]);
+
+    let inserted = list
+        .plan_recording(
+            recorded.clone(),
+            CueRecordOperation::Insert {
+                cue_number: cue_number(1.5),
+            },
+        )
+        .unwrap();
+    assert_eq!(inserted.cue_list.cues.len(), 2);
+    assert_eq!(inserted.cue_list.cues[1].number, cue_number(1.5));
+    assert_eq!(
+        list.plan_recording(
+            recorded,
+            CueRecordOperation::Insert {
+                cue_number: cue_number(1.0)
+            },
+        ),
+        Err(CueRecordingPlanError::CueAlreadyExists {
+            cue_number: cue_number(1.0)
+        })
+    );
+}

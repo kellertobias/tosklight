@@ -29,7 +29,7 @@ pub use cue::{plan_cue_update, preview_cue_update};
 pub use error::UpdateError;
 pub use group::{plan_group_update, preview_group_update};
 pub use model::{
-    CueIdentity, CueSource, CueUpdateMode, ExistingContentMode, UpdateAddress,
+    CueIdentity, CueSource, CueUpdateMode, ExistingContentMode, RecordUpdateOption, UpdateAddress,
     UpdateConfirmationBehavior, UpdateConfirmationPath, UpdateIgnoreReason, UpdateItemOutcome,
     UpdateMenuEntry, UpdateMode, UpdatePreview, UpdatePreviewItem, UpdateSettings,
     UpdateTargetFamily, UpdateTargetFilter, UpdateTargetIdentity, filter_update_menu,

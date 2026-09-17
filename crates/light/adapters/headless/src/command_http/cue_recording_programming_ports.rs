@@ -30,7 +30,7 @@ impl ServerProgrammingPorts<'_> {
         ))
     }
 
-    fn execute_cue_recording(
+    pub(super) fn execute_cue_recording(
         &self,
         programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
@@ -42,7 +42,11 @@ impl ServerProgrammingPorts<'_> {
         let command = light_application::ProgrammingCueRecordRequest {
             show_id: self.active_show_id()?,
             target,
-            operation: parsed.operation,
+            operation: parsed.operation.unwrap_or_else(|| {
+                super::record_update_option::record_operation(
+                    super::record_update_option::record_default(self.state()),
+                )
+            }),
             cue_number: parsed.cue_number,
             timing: parsed.timing,
             cue_only: false,
@@ -100,10 +104,20 @@ impl ServerProgrammingPorts<'_> {
         &self,
         target: light_application::ProgrammingCueRecordTarget,
     ) -> Result<light_application::ProgrammingCueRecordRequest, String> {
+        let named = self
+            .state()
+            .programming
+            .get(self.session().id)
+            .and_then(|programmer| {
+                super::record_update_option::armed_record_option(&programmer.command_line)
+            })
+            .flatten();
+        let option =
+            named.unwrap_or_else(|| super::record_update_option::record_default(self.state()));
         Ok(light_application::ProgrammingCueRecordRequest {
             show_id: self.active_show_id()?,
             target,
-            operation: light_application::ProgrammingCueRecordOperation::Overwrite,
+            operation: super::record_update_option::record_operation(option),
             cue_number: None,
             timing: light_application::ProgrammingCueRecordTiming::default(),
             cue_only: false,

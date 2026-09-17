@@ -28,6 +28,8 @@ async fn update_settings_endpoint_persists_and_survives_a_reload() {
         group_mode: update::ExistingContentMode::AddNew,
         other_target_modes: HashMap::new(),
         show_update_modal_on_touch: false,
+        record_default: update::RecordUpdateOption::Merge,
+        update_default: update::RecordUpdateOption::AddCue,
     };
 
     let saved = app
@@ -43,7 +45,9 @@ async fn update_settings_endpoint_persists_and_survives_a_reload() {
                             "cue_mode":"existing_only",
                             "preset_mode":"add_new",
                             "group_mode":"add_new",
-                            "show_update_modal_on_touch":false
+                            "show_update_modal_on_touch":false,
+                            "record_default":"merge",
+                            "update_default":"add_cue"
                         }
                     })
                     .to_string(),
@@ -61,7 +65,9 @@ async fn update_settings_endpoint_persists_and_survives_a_reload() {
             "cue_mode":"existing_only",
             "preset_mode":"add_new",
             "group_mode":"add_new",
-            "show_update_modal_on_touch":false
+            "show_update_modal_on_touch":false,
+                            "record_default":"merge",
+                            "update_default":"add_cue"
         })
     );
 
@@ -96,7 +102,9 @@ async fn update_settings_endpoint_persists_and_survives_a_reload() {
             "cue_mode":"existing_only",
             "preset_mode":"add_new",
             "group_mode":"add_new",
-            "show_update_modal_on_touch":false
+            "show_update_modal_on_touch":false,
+                            "record_default":"merge",
+                            "update_default":"add_cue"
         })
     );
     let _ = std::fs::remove_dir_all(data_dir);
@@ -131,6 +139,8 @@ fn per_desk_update_settings_migrate_to_the_desks_own() {
             group_mode: update::ExistingContentMode::AddNew,
             other_target_modes: HashMap::new(),
             show_update_modal_on_touch: false,
+            record_default: update::RecordUpdateOption::Smart,
+            update_default: update::RecordUpdateOption::Smart,
         }
     );
     assert!(

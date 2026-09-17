@@ -225,6 +225,10 @@ const fn operation(value: wire::CueRecordOperation) -> application::ProgrammingC
         }
         wire::CueRecordOperation::Merge => application::ProgrammingCueRecordOperation::Merge,
         wire::CueRecordOperation::Subtract => application::ProgrammingCueRecordOperation::Subtract,
+        wire::CueRecordOperation::AddMissing => {
+            application::ProgrammingCueRecordOperation::AddMissing
+        }
+        wire::CueRecordOperation::AddCue => application::ProgrammingCueRecordOperation::AddCue,
     }
 }
 

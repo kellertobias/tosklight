@@ -201,10 +201,14 @@ fn settings_exclude_legacy_other_target_modes() {
         preset_mode: ProgrammingUpdateExistingContentMode::UpdateExisting,
         group_mode: ProgrammingUpdateExistingContentMode::AddNew,
         show_update_modal_on_touch: true,
+        record_default: ProgrammingRecordUpdateOption::AddExisting,
+        update_default: ProgrammingRecordUpdateOption::Smart,
     };
     let projection = ProgrammingUpdateSettingsProjection { settings };
     let encoded = serde_json::to_value(projection).unwrap();
     assert!(encoded["settings"].get("other_target_modes").is_none());
+    assert_eq!(encoded["settings"]["record_default"], "add_existing");
+    assert_eq!(encoded["settings"]["update_default"], "smart");
 
     let mut legacy = encoded["settings"].clone();
     legacy["other_target_modes"] = json!({"future":"add_new"});

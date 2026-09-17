@@ -42,6 +42,8 @@ fn missing_settings_receive_documented_defaults_and_confirmation_paths_are_disti
     assert_eq!(settings.cue_mode, CueUpdateMode::ExistingInCurrentCue);
     assert_eq!(settings.preset_mode, ExistingContentMode::UpdateExisting);
     assert!(settings.show_update_modal_on_touch);
+    assert_eq!(settings.record_default, RecordUpdateOption::Smart);
+    assert_eq!(settings.update_default, RecordUpdateOption::Smart);
     assert_eq!(
         settings.confirmation_behavior(&UpdateTargetFamily::Cue, UpdateConfirmationPath::Touch),
         UpdateConfirmationBehavior::OpenModal

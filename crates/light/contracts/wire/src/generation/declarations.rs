@@ -597,6 +597,7 @@ fn programming_update(config: &Config) -> Vec<String> {
         ProgrammingUpdateActionOutcome::decl(config),
         ProgrammingUpdateErrorKind::decl(config),
         ProgrammingUpdateErrorResponse::decl(config),
+        ProgrammingRecordUpdateOption::decl(config),
         ProgrammingUpdateSettings::decl(config),
         ProgrammingUpdateSettingsProjection::decl(config),
         ProgrammingUpdateSettingsUpdateRequest::decl(config),

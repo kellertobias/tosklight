@@ -39,6 +39,8 @@ pub enum CueRecordOperation {
     Overwrite,
     Merge,
     Subtract,
+    AddMissing,
+    AddCue,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

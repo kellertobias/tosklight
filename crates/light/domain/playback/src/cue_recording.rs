@@ -31,10 +31,30 @@ impl CueRecordingContent {
 #[derive(Clone, Debug, PartialEq)]
 pub enum CueRecordOperation {
     Append,
-    Overwrite { cue_number: CueNumber },
-    Merge { cue_number: CueNumber },
-    Subtract { cue_number: CueNumber },
-    MergeActive { active_cue_id: Option<Uuid> },
+    Overwrite {
+        cue_number: CueNumber,
+    },
+    Merge {
+        cue_number: CueNumber,
+    },
+    Subtract {
+        cue_number: CueNumber,
+    },
+    MergeActive {
+        active_cue_id: Option<Uuid>,
+    },
+    /// Adds only the addresses the Cue does not store yet; stored values never change.
+    AddMissing {
+        cue_number: CueNumber,
+    },
+    /// Adds missing addresses to the active Cue, or appends a new Cue when none is active.
+    AddMissingActive {
+        active_cue_id: Option<Uuid>,
+    },
+    /// Always stores a new Cue at this number and never replaces an existing one.
+    Insert {
+        cue_number: CueNumber,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -51,6 +71,7 @@ pub enum CueRecordingPlanError {
     EmptySource,
     InvalidCueNumber,
     CueDoesNotExist { cue_number: CueNumber },
+    CueAlreadyExists { cue_number: CueNumber },
     ActiveCueDoesNotExist { cue_id: Uuid },
     CannotDeleteOnlyCue,
     SourceContainsAutomaticRestore,
@@ -65,6 +86,12 @@ impl Display for CueRecordingPlanError {
             Self::InvalidCueNumber => formatter.write_str("Cue number must be a canonical path"),
             Self::CueDoesNotExist { cue_number } => {
                 write!(formatter, "Cue {cue_number} does not exist")
+            }
+            Self::CueAlreadyExists { cue_number } => {
+                write!(
+                    formatter,
+                    "Cue {cue_number} already exists; Add Cue never replaces a Cue"
+                )
             }
             Self::ActiveCueDoesNotExist { cue_id } => {
                 write!(formatter, "active Cue {cue_id} does not exist")
@@ -139,8 +166,15 @@ fn apply_operation(
         CueRecordOperation::Merge { cue_number } => merge_numbered(cue_list, content, cue_number),
         CueRecordOperation::Subtract { cue_number } => subtract(cue_list, content, cue_number),
         CueRecordOperation::MergeActive { active_cue_id } => {
-            merge_active(cue_list, content, active_cue_id)
+            merge_active(cue_list, content, active_cue_id, merge_at)
         }
+        CueRecordOperation::AddMissing { cue_number } => {
+            add_missing_numbered(cue_list, content, cue_number)
+        }
+        CueRecordOperation::AddMissingActive { active_cue_id } => {
+            merge_active(cue_list, content, active_cue_id, add_missing_at)
+        }
+        CueRecordOperation::Insert { cue_number } => insert(cue_list, content, cue_number),
     }
 }
 
@@ -193,10 +227,35 @@ fn merge_numbered(
     Ok(merge_at(&mut cue_list.cues[index], content))
 }
 
+fn add_missing_numbered(
+    cue_list: &mut CueList,
+    content: CueRecordingContent,
+    cue_number: CueNumber,
+) -> Result<AppliedTarget, CueRecordingPlanError> {
+    require_values(&content)?;
+    let index =
+        cue_index(cue_list, &cue_number).ok_or_else(|| CueRecordingPlanError::CueDoesNotExist {
+            cue_number: cue_number.clone(),
+        })?;
+    Ok(add_missing_at(&mut cue_list.cues[index], content))
+}
+
+fn insert(
+    cue_list: &mut CueList,
+    content: CueRecordingContent,
+    cue_number: CueNumber,
+) -> Result<AppliedTarget, CueRecordingPlanError> {
+    if cue_index(cue_list, &cue_number).is_some() {
+        return Err(CueRecordingPlanError::CueAlreadyExists { cue_number });
+    }
+    append(cue_list, content, cue_number)
+}
+
 fn merge_active(
     cue_list: &mut CueList,
     content: CueRecordingContent,
     cue_id: Option<Uuid>,
+    apply: fn(&mut Cue, CueRecordingContent) -> AppliedTarget,
 ) -> Result<AppliedTarget, CueRecordingPlanError> {
     require_values(&content)?;
     let Some(cue_id) = cue_id else {
@@ -207,13 +266,49 @@ fn merge_active(
         .iter_mut()
         .find(|cue| cue.id == cue_id)
         .ok_or(CueRecordingPlanError::ActiveCueDoesNotExist { cue_id })?;
-    Ok(merge_at(cue, content))
+    Ok(apply(cue, content))
 }
 
 fn merge_at(cue: &mut Cue, content: CueRecordingContent) -> AppliedTarget {
     merge_fixture_changes(&mut cue.changes, content.changes);
     merge_group_changes(&mut cue.group_changes, content.group_changes);
     merge_dynamic_changes(&mut cue.dynamic_changes, content.dynamic_changes);
+    stored_target(cue, false)
+}
+
+fn add_missing_at(cue: &mut Cue, content: CueRecordingContent) -> AppliedTarget {
+    let fixtures = cue
+        .changes
+        .iter()
+        .map(|change| (change.fixture_id, change.attribute.clone()))
+        .collect::<HashSet<_>>();
+    cue.changes.extend(
+        content
+            .changes
+            .into_iter()
+            .filter(|change| !fixtures.contains(&(change.fixture_id, change.attribute.clone()))),
+    );
+    let groups = cue
+        .group_changes
+        .iter()
+        .map(|change| (change.group_id.clone(), change.attribute.clone()))
+        .collect::<HashSet<_>>();
+    cue.group_changes.extend(
+        content.group_changes.into_iter().filter(|change| {
+            !groups.contains(&(change.group_id.clone(), change.attribute.clone()))
+        }),
+    );
+    let dynamics = cue
+        .dynamic_changes
+        .iter()
+        .map(dynamic_change_key)
+        .collect::<HashSet<_>>();
+    cue.dynamic_changes.extend(
+        content
+            .dynamic_changes
+            .into_iter()
+            .filter(|change| !dynamics.contains(&dynamic_change_key(change))),
+    );
     stored_target(cue, false)
 }
 

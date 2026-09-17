@@ -300,6 +300,28 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
             && event.payload["action"] == "record"
             && event.payload["session_id"] == serde_json::json!(session.id)
     }));
+    // RECORD RECORD keeps Record armed and asks how to store the programmer.
+    handle_programmer_osc(
+        &state,
+        "/light/main/programmer/record",
+        &pressed,
+        Some("127.0.0.1:9010"),
+    );
+    handle_programmer_osc(
+        &state,
+        "/light/main/programmer/record",
+        &[OscArgument::Bool(false)],
+        Some("127.0.0.1:9010"),
+    );
+    assert_eq!(
+        state.programming.get(session.id).unwrap().command_line,
+        "RECORD "
+    );
+    assert!(state.events.audit_events().iter().any(|event| {
+        event.kind == "desk_action"
+            && event.payload["action"] == "record-choice"
+            && event.payload["session_id"] == serde_json::json!(session.id)
+    }));
 	handle_programmer_osc(
 		&state,
 		"/light/main/programmer/record",

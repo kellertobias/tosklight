@@ -71,7 +71,9 @@
       "enum": [
         "overwrite",
         "merge",
-        "subtract"
+        "subtract",
+        "add_missing",
+        "add_cue"
       ]
     },
     "CueRecordTarget": {

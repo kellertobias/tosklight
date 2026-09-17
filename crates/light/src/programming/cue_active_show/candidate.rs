@@ -322,7 +322,10 @@ fn plan_error(error: light_playback::CueRecordingPlanError) -> ActionError {
         | light_playback::CueRecordingPlanError::ActiveCueDoesNotExist { .. } => {
             ActionErrorKind::NotFound
         }
-        light_playback::CueRecordingPlanError::CannotDeleteOnlyCue => ActionErrorKind::Conflict,
+        light_playback::CueRecordingPlanError::CannotDeleteOnlyCue
+        | light_playback::CueRecordingPlanError::CueAlreadyExists { .. } => {
+            ActionErrorKind::Conflict
+        }
         _ => ActionErrorKind::Invalid,
     };
     ActionError::new(kind, error.to_string())

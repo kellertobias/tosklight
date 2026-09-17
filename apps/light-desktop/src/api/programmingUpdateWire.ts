@@ -59,6 +59,12 @@ const CUE_MODES = [
 	"add_new",
 ] as const;
 const EXISTING_MODES = ["update_existing", "add_new"] as const;
+const RECORD_UPDATE_OPTIONS = [
+	"smart",
+	"merge",
+	"add_existing",
+	"add_cue",
+] as const;
 
 export type DecodedProgrammingUpdateProjection = {
 	[K in ProgrammingUpdateProjection["kind"]]: Omit<
@@ -280,6 +286,8 @@ function decodeSettings(
 		"preset_mode",
 		"group_mode",
 		"show_update_modal_on_touch",
+		"record_default",
+		"update_default",
 	]);
 	enumAt(settings.cue_mode, `${path}.cue_mode`, CUE_MODES);
 	enumAt(settings.preset_mode, `${path}.preset_mode`, EXISTING_MODES);
@@ -288,6 +296,8 @@ function decodeSettings(
 		settings.show_update_modal_on_touch,
 		`${path}.show_update_modal_on_touch`,
 	);
+	enumAt(settings.record_default, `${path}.record_default`, RECORD_UPDATE_OPTIONS);
+	enumAt(settings.update_default, `${path}.update_default`, RECORD_UPDATE_OPTIONS);
 	return value as ProgrammingUpdateSettings;
 }
 
