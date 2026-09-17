@@ -36,7 +36,8 @@ export function showPatchViewGroup(
 
 /** Which Settings page the ⚙ opens first on a view. */
 export function settingsTabFor(view: ShowPatchView): ShowPatchSettingsTab {
-	return view === "tracking" ? "tracking" : "columns";
+	if (view === "tracking") return "tracking";
+	return view === "media" ? "media" : "columns";
 }
 
 /** Header for the Media Servers and Tracking views; Fixtures adds its own actions to the same shape. */
@@ -44,10 +45,13 @@ export function ShowPatchViewHeader({
 	view,
 	compact,
 	onView,
+	groups = [],
 }: {
 	view: Exclude<ShowPatchView, "fixtures">;
 	compact: boolean;
 	onView: (view: ShowPatchView) => void;
+	/** The view's own action groups; they sit before the view switch so it never moves. */
+	groups?: TitleActionGroup[];
 }) {
 	const [anchor, setAnchor] = useState<DOMRect | null>(null);
 	return (
@@ -58,6 +62,7 @@ export function ShowPatchViewHeader({
 				onSettings={(button) => setAnchor(button.getBoundingClientRect())}
 				info={{ primary: VIEW_LABELS[view] }}
 				groups={[
+					...groups,
 					showPatchViewGroup(view, ["fixtures", "media", "tracking"], onView),
 				]}
 			/>

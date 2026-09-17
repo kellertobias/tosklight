@@ -147,8 +147,11 @@ function refreshShows(event: RuntimeCapabilityEvent, state: ServerState) {
 }
 
 function refreshMedia(event: RuntimeCapabilityEvent, state: ServerState) {
+	// A patch change resets the affected servers' connection state on the desk, so the rows
+	// re-read it instead of showing the previous endpoint's status.
 	if (
 		event.type !== "media_changed" &&
+		event.type !== "show_patch_changed" &&
 		!isShowLibraryEvent(event, ["show_opened"])
 	)
 		return;

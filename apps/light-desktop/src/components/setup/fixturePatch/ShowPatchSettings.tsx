@@ -2,6 +2,7 @@ import { SwitchField } from "@tosklight/ui";
 import { WindowSettings } from "@tosklight/ui/window-kit";
 import { useApp } from "../../../state/AppContext";
 import { PATCH_COLUMNS, type PatchColumn } from "../../../types";
+import { MediaServerCacheSettings } from "../MediaServerCacheSettings";
 import { TrackingSettingsForm } from "../PsnSourceForm";
 
 /**
@@ -42,7 +43,7 @@ export function PatchColumnSwitches({
 	);
 }
 
-export type ShowPatchSettingsTab = "columns" | "tracking";
+export type ShowPatchSettingsTab = "columns" | "media" | "tracking";
 
 /**
  * The Show Patch window's own settings, opened from the same top-right ⚙ on Fixtures, Media
@@ -81,6 +82,11 @@ export function ShowPatchSettings({
 							/>
 						</section>
 					),
+				},
+				{
+					id: "media",
+					label: "Media Servers",
+					content: <MediaServerCacheSettings />,
 				},
 				{
 					id: "tracking",

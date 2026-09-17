@@ -506,6 +506,12 @@ fn wire_media_notification(change: application::MediaNotification) -> wire::Medi
             application::MediaNotificationKind::ServerOffline => {
                 wire::MediaNotificationKind::ServerOffline
             }
+            application::MediaNotificationKind::ServerOnline => {
+                wire::MediaNotificationKind::ServerOnline
+            }
+            application::MediaNotificationKind::ThumbnailCacheCleared => {
+                wire::MediaNotificationKind::ThumbnailCacheCleared
+            }
         },
     }
 }

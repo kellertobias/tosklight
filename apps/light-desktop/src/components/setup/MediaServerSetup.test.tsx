@@ -4,6 +4,7 @@ import {
 	render,
 	screen,
 	waitFor,
+	within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MediaServerDiscovery } from "../../api/client/mediaOutput";
@@ -27,6 +28,7 @@ const mocks = vi.hoisted(() => ({
 	refresh: vi.fn(),
 	refreshMediaPreview: vi.fn(),
 	refreshMediaThumbnails: vi.fn(),
+	clearMediaThumbnailCache: vi.fn(),
 	inspectMediaServer: vi.fn(),
 	discoverMediaServers: vi.fn(),
 	updateDiscoveredMediaAddress: vi.fn(),
@@ -41,6 +43,7 @@ const server = {
 	mediaPreviewUrls: {},
 	refreshMediaPreview: mocks.refreshMediaPreview,
 	refreshMediaThumbnails: mocks.refreshMediaThumbnails,
+	clearMediaThumbnailCache: mocks.clearMediaThumbnailCache,
 	inspectMediaServer: mocks.inspectMediaServer,
 	discoverMediaServers: mocks.discoverMediaServers,
 	updateDiscoveredMediaAddress: mocks.updateDiscoveredMediaAddress,
@@ -108,6 +111,7 @@ beforeEach(() => {
 		capabilities: { provider: "citp_msex", native_action: null, layers: [] },
 	});
 	mocks.refreshMediaPreview.mockResolvedValue(true);
+	mocks.refreshMediaThumbnails.mockResolvedValue(true);
 	mocks.discoverMediaServers.mockResolvedValue({
 		servers: [],
 		discoveryError: null,
@@ -143,17 +147,56 @@ describe("Media server Patch authority", () => {
 		render(<MediaServerSetup />);
 
 		expect(screen.getByText("Patch authority loading…")).toBeInTheDocument();
-		expect(screen.queryByRole("button", { name: "Disable CITP" })).toBeNull();
+		expect(screen.queryByRole("table")).toBeNull();
 		expect(mocks.updateFixture).not.toHaveBeenCalled();
 		expect(mocks.usePatchView).toHaveBeenCalledWith(true);
 	});
 
+	it("lists every patched server as one table row with its type", () => {
+		patchFixtures = [
+			fixture,
+			{
+				...mediaFixture(),
+				fixture_id: "fixture-tosk",
+				fixture_number: 2,
+				name: "Pixel Rack",
+				definition: toskMediaDefinition(),
+			},
+		];
+		render(<MediaServerSetup />);
+
+		const table = screen.getByRole("table", { name: "Patched Media Servers" });
+		const headers = within(table)
+			.getAllByRole("columnheader")
+			.map((cell) => cell.textContent);
+		expect(headers).toEqual([
+			"#",
+			"Name",
+			"Type",
+			"Protocol",
+			"IP address",
+			"Port",
+			"Status",
+			"Actions",
+		]);
+		const generic = rowFor("Media One");
+		const tosk = rowFor("Pixel Rack");
+		expect(generic).toHaveAttribute("data-server-type", "citp");
+		expect(within(generic).getByText("CITP media server")).toBeInTheDocument();
+		expect(tosk).toHaveAttribute("data-server-type", "tosklight");
+		expect(within(tosk).getByText("ToskLight Media")).toBeInTheDocument();
+		expect(within(generic).getByText("● Off")).toBeInTheDocument();
+	});
+
 	it("saves an endpoint through one typed Patch action and no generic mutation", async () => {
 		render(<MediaServerSetup />);
-		fireEvent.change(screen.getByLabelText("Acme Media One CITP IP address"), {
+		chooseProtocol("Media One", "CITP");
+		fireEvent.change(screen.getByLabelText("Media One IP address"), {
 			target: { value: "192.168.1.50" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Save endpoint" }));
+		fireEvent.click(
+			within(rowFor("Media One")).getByRole("button", { name: "Apply" }),
+		);
 
 		await waitFor(() =>
 			expect(mocks.updateFixture).toHaveBeenCalledWith("fixture-media", {
@@ -168,23 +211,59 @@ describe("Media server Patch authority", () => {
 		expect(mocks.putObject).not.toHaveBeenCalled();
 		expect(mocks.deleteObject).not.toHaveBeenCalled();
 		expect(mocks.refresh).not.toHaveBeenCalled();
+		expect(
+			await within(rowFor("Media One")).findByText(
+				"Now using 192.168.1.50:4809.",
+			),
+		).toBeInTheDocument();
 	});
 
-	it("disables CITP through one typed Patch action", async () => {
-		fixture = {
-			...fixture,
-			direct_control: {
-				protocol: "citp",
-				ip_address: "192.168.1.60",
-				port: 4809,
-			},
-		};
+	it("validates the IP address and port before a row can apply", () => {
+		render(<MediaServerSetup />);
+		const row = rowFor("Media One");
+		const apply = within(row).getByRole("button", { name: "Apply" });
+		chooseProtocol("Media One", "CITP");
+		expect(within(row).getByRole("alert")).toHaveTextContent(
+			"Enter the server's IP address, or set Protocol to Off.",
+		);
+		expect(apply).toBeDisabled();
+
+		for (const invalid of ["300.1.1.1", "media-rack.local", "10.0.0"]) {
+			fireEvent.change(screen.getByLabelText("Media One IP address"), {
+				target: { value: invalid },
+			});
+			expect(within(row).getByRole("alert")).toHaveTextContent(
+				"Enter an IPv4 or IPv6 address",
+			);
+			expect(apply).toBeDisabled();
+		}
+		fireEvent.change(screen.getByLabelText("Media One IP address"), {
+			target: { value: "fe80::1" },
+		});
+		fireEvent.change(screen.getByLabelText("Media One port"), {
+			target: { value: "70000" },
+		});
+		expect(within(row).getByRole("alert")).toHaveTextContent(
+			"Choose a port from 1 to 65535.",
+		);
+		expect(apply).toBeDisabled();
+		fireEvent.change(screen.getByLabelText("Media One port"), {
+			target: { value: "4811" },
+		});
+		expect(within(row).queryByRole("alert")).toBeNull();
+		expect(apply).toBeEnabled();
+		expect(mocks.updateFixture).not.toHaveBeenCalled();
+	});
+
+	it("turns network control off through one typed Patch action", async () => {
+		fixture = withEndpoint("192.168.1.60");
 		patchFixtures = [fixture];
 		render(<MediaServerSetup />);
-		fireEvent.change(screen.getByLabelText("Acme Media One CITP IP address"), {
-			target: { value: "" },
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Disable CITP" }));
+		chooseProtocol("Media One", "Off");
+		expect(screen.getByLabelText("Media One IP address")).toBeDisabled();
+		fireEvent.click(
+			within(rowFor("Media One")).getByRole("button", { name: "Apply" }),
+		);
 
 		await waitFor(() =>
 			expect(mocks.updateFixture).toHaveBeenCalledWith("fixture-media", {
@@ -194,53 +273,107 @@ describe("Media server Patch authority", () => {
 		expect(mocks.updateFixture).toHaveBeenCalledOnce();
 	});
 
+	it("shows the desk's refusal on the row it belongs to", async () => {
+		mocks.updateFixture.mockResolvedValue(false);
+		mocks.patchError =
+			"Fixture 1 profile does not support Citp direct control.";
+		render(<MediaServerSetup />);
+		chooseProtocol("Media One", "CITP");
+		fireEvent.change(screen.getByLabelText("Media One IP address"), {
+			target: { value: "10.0.0.9" },
+		});
+		fireEvent.click(
+			within(rowFor("Media One")).getByRole("button", { name: "Apply" }),
+		);
+
+		expect(
+			await within(rowFor("Media One")).findByText(
+				/does not support Citp direct control\. Check the address and retry\./,
+			),
+		).toBeInTheDocument();
+	});
+
 	it("does not show stale online status for a replaced endpoint", () => {
-		fixture = {
-			...fixture,
-			direct_control: {
-				protocol: "citp",
-				ip_address: "192.168.1.70",
-				port: 4809,
-			},
-		};
+		fixture = withEndpoint("192.168.1.70");
+		patchFixtures = [fixture];
+		mocks.inspectMediaServer.mockReturnValue(new Promise(() => undefined));
+		server.mediaServers = [status("192.168.1.60", true, null)];
+
+		render(<MediaServerSetup />);
+
+		expect(
+			within(rowFor("Media One")).getByText("● Checking…"),
+		).toBeInTheDocument();
+		expect(screen.queryByText("● Connected")).toBeNull();
+	});
+
+	it("follows the desk's connection state from unchecked to connected to offline", async () => {
+		fixture = withEndpoint("192.168.1.80");
 		patchFixtures = [fixture];
 		server.mediaServers = [
 			{
-				fixture_id: fixture.fixture_id,
-				name: "Media One",
-				endpoint: {
-					protocol: "citp",
-					ip_address: "192.168.1.60",
-					port: 4809,
-				},
-				layers: [],
-				status: {
-					online: true,
-					last_success: "2026-07-21T00:00:00Z",
-					last_error: null,
-				},
+				...status("192.168.1.80", false, null),
+				status: { online: false, last_success: null, last_error: null },
 			},
 		];
+		const view = render(<MediaServerSetup />);
 
+		// The desk had nothing to report, so the row asks the server once.
+		await waitFor(() =>
+			expect(mocks.inspectMediaServer).toHaveBeenCalledWith("fixture-media"),
+		);
+		expect(
+			await within(rowFor("Media One")).findByText("● Not checked"),
+		).toBeInTheDocument();
+
+		server.mediaServers = [status("192.168.1.80", true, null)];
+		view.rerender(<MediaServerSetup />);
+		expect(
+			within(rowFor("Media One")).getByText("● Connected"),
+		).toBeInTheDocument();
+
+		server.mediaServers = [
+			status("192.168.1.80", false, "CITP connection refused"),
+		];
+		view.rerender(<MediaServerSetup />);
+		const row = rowFor("Media One");
+		expect(within(row).getByText("● Offline")).toBeInTheDocument();
+		expect(within(row).getByRole("alert")).toHaveTextContent(
+			"CITP connection refused Check the IP address, port, and that the server is running, then Refresh Thumbnails to retry.",
+		);
+		expect(mocks.inspectMediaServer).toHaveBeenCalledOnce();
+	});
+
+	it("says whether discovery found the row's address", async () => {
+		mocks.discoverMediaServers.mockResolvedValue(discoveredServer());
+		fixture = withEndpoint("192.168.1.40");
+		patchFixtures = [
+			fixture,
+			{
+				...withEndpoint("192.168.1.99"),
+				fixture_id: "fixture-b",
+				name: "Media Two",
+			},
+		];
 		render(<MediaServerSetup />);
 
-		expect(screen.getByText("● Offline")).toBeInTheDocument();
-		expect(screen.queryByText("● Online")).toBeNull();
-		expect(screen.getByText(/No successful response yet/)).toBeInTheDocument();
+		expect(
+			await within(rowFor("Media One")).findByText("Found on network"),
+		).toBeInTheDocument();
+		expect(
+			within(rowFor("Media Two")).getByText("Not found by discovery"),
+		).toBeInTheDocument();
 	});
 
 	it("uses the server-advertised Program source for live preview", async () => {
-		fixture = {
-			...fixture,
-			direct_control: {
-				protocol: "citp",
-				ip_address: "127.0.0.1",
-				port: 4809,
-			},
-		};
+		fixture = withEndpoint("127.0.0.1");
 		patchFixtures = [fixture];
 		render(<MediaServerSetup />);
-		fireEvent.click(screen.getByRole("button", { name: "Start live preview" }));
+		const start = within(rowFor("Media One")).getByRole("button", {
+			name: "Start live preview",
+		});
+		await waitFor(() => expect(start).toBeEnabled());
+		fireEvent.click(start);
 
 		await waitFor(() =>
 			expect(mocks.refreshMediaPreview).toHaveBeenCalledWith(
@@ -250,20 +383,30 @@ describe("Media server Patch authority", () => {
 		);
 	});
 
-	it("refreshes real advertised files instead of invalid zero addresses", async () => {
-		fixture = {
-			...fixture,
-			direct_control: {
-				protocol: "citp",
-				ip_address: "127.0.0.1",
-				port: 4809,
+	it("refreshes one row's advertised thumbnails without holding up another row", async () => {
+		fixture = withEndpoint("127.0.0.1");
+		patchFixtures = [
+			fixture,
+			{
+				...withEndpoint("127.0.0.2"),
+				fixture_id: "fixture-b",
+				name: "Media Two",
 			},
-		};
-		patchFixtures = [fixture];
-		render(<MediaServerSetup />);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Refresh thumbnails 1–16" }),
+		];
+		let finish: (value: boolean) => void = () => undefined;
+		mocks.refreshMediaThumbnails.mockReturnValue(
+			new Promise<boolean>((resolve) => {
+				finish = resolve;
+			}),
 		);
+		render(<MediaServerSetup />);
+		const one = rowFor("Media One");
+		const two = rowFor("Media Two");
+		const refresh = within(one).getByRole("button", {
+			name: "Refresh Thumbnails",
+		});
+		await waitFor(() => expect(refresh).toBeEnabled());
+		fireEvent.click(refresh);
 
 		await waitFor(() =>
 			expect(mocks.refreshMediaThumbnails).toHaveBeenCalledWith(
@@ -272,6 +415,39 @@ describe("Media server Patch authority", () => {
 				[1],
 			),
 		);
+		expect(
+			within(one).getByRole("button", { name: "Refreshing…" }),
+		).toBeDisabled();
+		expect(
+			within(two).getByRole("button", { name: "Refresh Thumbnails" }),
+		).toBeEnabled();
+		expect(mocks.refreshMediaThumbnails).not.toHaveBeenCalledWith(
+			"fixture-b",
+			expect.anything(),
+			expect.anything(),
+		);
+		finish(true);
+		expect(
+			await within(one).findByText("Refreshed 1 thumbnails."),
+		).toBeInTheDocument();
+	});
+
+	it("reports a thumbnail refresh the server stopped answering", async () => {
+		fixture = withEndpoint("127.0.0.1");
+		patchFixtures = [fixture];
+		mocks.refreshMediaThumbnails.mockResolvedValue(false);
+		render(<MediaServerSetup />);
+		const refresh = within(rowFor("Media One")).getByRole("button", {
+			name: "Refresh Thumbnails",
+		});
+		await waitFor(() => expect(refresh).toBeEnabled());
+		fireEvent.click(refresh);
+
+		expect(
+			await within(rowFor("Media One")).findByText(
+				/the server stopped answering\. Refresh Thumbnails to retry\./,
+			),
+		).toBeInTheDocument();
 	});
 
 	it("discovers an unpatched ToskLight server and applies its suggested address", async () => {
@@ -508,6 +684,41 @@ describe("Media server Patch authority", () => {
 		expect(mocks.deleteFixture).toHaveBeenCalledOnce();
 	});
 });
+
+function rowFor(name: string): HTMLElement {
+	const header = screen.getByRole("rowheader", { name });
+	return header.closest("tr") as HTMLElement;
+}
+
+function chooseProtocol(name: string, protocol: "Off" | "CITP") {
+	fireEvent.click(screen.getByRole("button", { name: `${name} protocol` }));
+	fireEvent.click(screen.getByRole("option", { name: protocol }));
+}
+
+function withEndpoint(ip: string): PatchedFixture {
+	return {
+		...mediaFixture(),
+		direct_control: { protocol: "citp", ip_address: ip, port: 4809 },
+	};
+}
+
+function status(
+	ip: string,
+	online: boolean,
+	lastError: string | null,
+): MediaServerFixture {
+	return {
+		fixture_id: "fixture-media",
+		name: "Media One",
+		endpoint: { protocol: "citp", ip_address: ip, port: 4809 },
+		layers: [],
+		status: {
+			online,
+			last_success: online ? "2026-07-21T00:00:00Z" : null,
+			last_error: lastError,
+		},
+	};
+}
 
 function discoveredServer(): MediaServerDiscovery {
 	return {

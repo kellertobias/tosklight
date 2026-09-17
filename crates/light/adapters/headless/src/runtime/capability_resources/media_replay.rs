@@ -126,6 +126,10 @@ impl MediaResource {
         self.cache.lock().thumbnail(key)
     }
 
+    pub(in crate::runtime) fn clear_thumbnails(&self) -> usize {
+        self.cache.lock().clear_thumbnails()
+    }
+
     pub(in crate::runtime) fn put_preview(
         &self,
         key: PreviewKey,

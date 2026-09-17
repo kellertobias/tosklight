@@ -51,6 +51,14 @@ vi.mock("../components/setup/fixturePatch/ShowPatchSettings", () => ({
 	),
 }));
 
+const discovery = vi.hoisted(() => ({
+	discoverMediaServers: vi.fn(),
+}));
+
+vi.mock("../features/mediaServers/MediaServersContext", () => ({
+	useMediaServers: () => discovery,
+}));
+
 vi.mock("../platform/desktop", () => ({
 	useDesktopBridge: () => desktop,
 }));
@@ -132,10 +140,10 @@ describe("Show Patch Media Servers and Tracking header", () => {
 		).toHaveAccessibleName("Settings");
 	});
 
-	it("opens Tracking Settings from the Tracking view and Columns elsewhere", () => {
+	it("opens each view's own Settings page", () => {
 		render(<PatchWindow patchView="media" />);
 		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-		expect(screen.getByRole("dialog")).toHaveTextContent("Settings on columns");
+		expect(screen.getByRole("dialog")).toHaveTextContent("Settings on media");
 		cleanup();
 		render(<PatchWindow patchView="media" />);
 		fireEvent.click(screen.getByRole("tab", { name: "Tracking" }));
@@ -143,6 +151,33 @@ describe("Show Patch Media Servers and Tracking header", () => {
 		expect(screen.getByRole("dialog")).toHaveTextContent(
 			"Settings on tracking",
 		);
+	});
+
+	it("puts Refresh Discovery in its own title group before the view switch, on Media Servers only", async () => {
+		discovery.discoverMediaServers.mockReset();
+		discovery.discoverMediaServers.mockResolvedValue({
+			servers: [],
+			discoveryError: null,
+		});
+		render(<PatchWindow patchView="media" />);
+		const refresh = await screen.findByRole("button", {
+			name: "Refresh Discovery",
+		});
+		const group = refresh.closest(".ui-title-chrome-group");
+		expect(group).not.toBeNull();
+		expect(group?.querySelectorAll("button")).toHaveLength(1);
+		const controls = [...header().querySelectorAll("button, [role='tab']")];
+		expect(controls.indexOf(refresh)).toBeLessThan(
+			controls.indexOf(screen.getByRole("tab", { name: "Fixtures" })),
+		);
+		expect(discovery.discoverMediaServers).toHaveBeenCalledOnce();
+		fireEvent.click(refresh);
+		expect(discovery.discoverMediaServers).toHaveBeenCalledTimes(2);
+
+		fireEvent.click(screen.getByRole("tab", { name: "Tracking" }));
+		expect(
+			screen.queryByRole("button", { name: /Refresh Discovery|Discovering/ }),
+		).toBeNull();
 	});
 
 	it("scrolls the view in one area filling the window", () => {

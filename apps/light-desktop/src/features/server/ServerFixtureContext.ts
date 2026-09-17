@@ -7,16 +7,16 @@ import type {
 	GelCatalogImportTarget,
 } from "../../api/client/fixtures";
 import type {
+	DiscoveredMediaOutput,
+	MediaServerDiscovery,
 	MediaServerInspection,
 	NativeMediaEffectSlot,
 	NativeMediaSnapshot,
 	NativeMediaTextSlot,
-	MediaServerDiscovery,
-	DiscoveredMediaOutput,
 } from "../../api/client/mediaOutput";
 import type {
-	FixtureDefinition,
 	FixtureBodyModel,
+	FixtureDefinition,
 	FixtureProfile,
 	PatchLayer,
 } from "../../api/types";
@@ -30,11 +30,14 @@ export interface ServerFixtureContext {
 		startAddress: number;
 	}) => Promise<DiscoveredMediaOutput>;
 	refreshMediaPreview: (fixtureId: string, source?: number) => Promise<boolean>;
+	/** Resolves true when the server returned fresh thumbnails; a failure is recorded on the row. */
 	refreshMediaThumbnails: (
 		fixtureId: string,
 		folder: number,
 		elements: number[],
-	) => Promise<void>;
+	) => Promise<boolean>;
+	/** Discards every cached Media Server thumbnail and reports how many were dropped. */
+	clearMediaThumbnailCache: () => Promise<number>;
 	inspectMediaServer: (fixtureId: string) => Promise<MediaServerInspection>;
 	nativeMedia: (fixtureId: string) => Promise<NativeMediaSnapshot>;
 	updateNativeMediaText: (

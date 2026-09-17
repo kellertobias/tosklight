@@ -70,6 +70,10 @@ fn media_and_output_routes() -> Router<AppState> {
             post(update_discovered_media_server_address),
         )
         .route(
+            "/api/v2/media-servers/thumbnail-cache/clear",
+            post(clear_media_thumbnail_cache),
+        )
+        .route(
             "/api/v2/media-servers/{fixture_id}/inspect",
             get(inspect_media_server),
         )

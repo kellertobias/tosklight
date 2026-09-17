@@ -355,6 +355,10 @@ pub enum MediaNotificationKind {
     ThumbnailsRefreshed,
     PreviewRefreshed,
     ServerOffline,
+    /// A Media Server answered the desk, so its row is connected again.
+    ServerOnline,
+    /// The desk's cached Media Server thumbnails were discarded.
+    ThumbnailCacheCleared,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

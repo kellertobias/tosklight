@@ -7,6 +7,7 @@ export function createMediaActions(
 	ServerCapabilities,
 	| "refreshMediaPreview"
 	| "refreshMediaThumbnails"
+	| "clearMediaThumbnailCache"
 	| "inspectMediaServer"
 	| "nativeMedia"
 	| "updateNativeMediaText"
@@ -121,12 +122,16 @@ export function createMediaActions(
 				);
 				recordStatus(fixtureId, true, null);
 				setError(null);
+				return true;
 			} catch (reason) {
 				const message =
 					reason instanceof Error ? reason.message : String(reason);
 				recordStatus(fixtureId, false, message);
 				setError(message);
+				return false;
 			}
 		},
+		clearMediaThumbnailCache: async () =>
+			(await api.mediaOutput.clearMediaThumbnailCache()).cleared,
 	};
 }

@@ -1414,6 +1414,78 @@ button:not(:disabled):active {
 	grid-column: 1 / -1;
 	color: var(--muted);
 }
+.media-server-patched {
+	display: grid;
+	grid-column: 1 / -1;
+	gap: 6px;
+	min-width: 0;
+	overflow-x: auto;
+}
+.media-server-patched > p {
+	margin: 0;
+	color: var(--muted);
+}
+.media-server-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+.media-server-table th,
+.media-server-table td {
+	padding: 4px 6px;
+	border-bottom: 1px solid var(--line);
+	text-align: left;
+	vertical-align: top;
+}
+.media-server-table thead th {
+	color: var(--muted);
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.media-server-table td:nth-child(4) {
+	min-width: 160px;
+}
+.media-server-table td:nth-child(5) {
+	min-width: 170px;
+}
+.media-server-table td:nth-child(6) {
+	min-width: 170px;
+}
+.media-server-row-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.media-server-row-actions button {
+	min-height: 38px;
+	white-space: nowrap;
+}
+.media-server-status {
+	display: grid;
+	gap: 2px;
+	min-width: 140px;
+	max-width: 280px;
+}
+.media-server-status .online {
+	color: var(--green);
+}
+.media-server-status .offline {
+	color: var(--amber);
+}
+.media-server-status small {
+	color: var(--muted);
+}
+.media-server-status small[role="alert"] {
+	color: var(--amber);
+}
+.media-server-preview-row .media-preview {
+	max-width: 420px;
+}
+.media-server-cache-settings {
+	display: grid;
+	gap: 8px;
+	justify-items: start;
+}
 .media-server-card {
 	display: grid;
 	gap: 8px;

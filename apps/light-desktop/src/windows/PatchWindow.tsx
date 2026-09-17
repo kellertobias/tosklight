@@ -7,6 +7,10 @@ import {
 } from "../components/setup/fixturePatch/showPatchHeader";
 import { MediaServerSetup } from "../components/setup/MediaServerSetup";
 import { PsnSetup } from "../components/setup/PsnSetup";
+import {
+	mediaDiscoveryGroup,
+	useMediaServerDiscovery,
+} from "../components/setup/useMediaServerDiscovery";
 import { PatchFeatureBoundary } from "../features/patch/PatchFeatureBoundary";
 import { useDesktopBridge } from "../platform/desktop";
 import type { WindowProps } from "./windowTypes";
@@ -101,13 +105,20 @@ function PatchConfigurationWindow({
 	compact: boolean;
 	onView: (view: ShowPatchView) => void;
 }) {
+	// Discovery belongs to the window so Refresh Discovery can sit in the title.
+	const discovery = useMediaServerDiscovery(active && view === "media");
 	return (
 		<div className="patch-window patch-configuration-window" data-view={view}>
-			<ShowPatchViewHeader view={view} compact={compact} onView={onView} />
+			<ShowPatchViewHeader
+				view={view}
+				compact={compact}
+				onView={onView}
+				groups={view === "media" ? [mediaDiscoveryGroup(discovery)] : []}
+			/>
 			<WindowScrollArea className="patch-configuration-scroll">
 				<main className="patch-configuration-content">
 					{view === "media" ? (
-						<MediaServerSetup active={active} />
+						<MediaServerSetup active={active} discovery={discovery} />
 					) : (
 						<PsnSetup active={active} />
 					)}

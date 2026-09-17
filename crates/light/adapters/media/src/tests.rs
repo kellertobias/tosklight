@@ -347,6 +347,38 @@ fn cache_is_bounded_and_fixture_scoped() {
 }
 
 #[test]
+fn clearing_thumbnails_keeps_previews() {
+    let image = || MediaImage {
+        format: ImageFormat::Jpeg,
+        width: 1,
+        height: 1,
+        bytes: vec![1],
+    };
+    let mut cache = MediaCache::new(8, 8);
+    for (fixture, element) in [("a", 1), ("b", 2)] {
+        cache
+            .put_thumbnail(
+                ThumbnailKey {
+                    fixture: fixture.into(),
+                    library_type: 1,
+                    library: LibraryId::ROOT,
+                    element,
+                },
+                image(),
+            )
+            .unwrap();
+    }
+    let preview = PreviewKey {
+        fixture: "a".into(),
+        source: 1,
+    };
+    cache.put_preview(preview.clone(), image()).unwrap();
+    assert_eq!(cache.clear_thumbnails(), 2);
+    assert_eq!(cache.clear_thumbnails(), 0);
+    assert!(cache.preview(&preview).is_some());
+}
+
+#[test]
 fn rejects_malformed_image_lengths() {
     let mut payload = vec![1, 0, 0, 0, 0, 7];
     payload.extend_from_slice(b"JPEG");

@@ -289,6 +289,32 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
         "image/jpeg"
     );
     assert!(thumbnail.headers().contains_key("x-light-received-at-millis"));
+    let cleared = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/media-servers/thumbnail-cache/clear")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cleared.status(), StatusCode::OK);
+    assert_eq!(json(cleared).await["cleared"], 1);
+    let evicted = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v2/media-servers/{}/thumbnails/2/7",
+                fixture_id.0
+            ))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(evicted.status(), StatusCode::NOT_FOUND);
     let status = app
         .clone()
         .oneshot(

@@ -3269,11 +3269,25 @@
       ]
     },
     "MediaNotificationKind": {
-      "type": "string",
-      "enum": [
-        "thumbnails_refreshed",
-        "preview_refreshed",
-        "server_offline"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "thumbnails_refreshed",
+            "preview_refreshed",
+            "server_offline"
+          ]
+        },
+        {
+          "description": "A Media Server answered the desk, so its row is connected again.",
+          "type": "string",
+          "const": "server_online"
+        },
+        {
+          "description": "The desk's cached Media Server thumbnails were discarded.",
+          "type": "string",
+          "const": "thumbnail_cache_cleared"
+        }
       ]
     },
     "NotificationRevision": {

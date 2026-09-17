@@ -152,6 +152,11 @@ pub(super) async fn inspect_media_server(
             state
                 .media
                 .record_status(fixture_id, Some(error.to_string()));
+            emit(
+                &state,
+                "media_server_offline",
+                serde_json::json!({"fixture_id":fixture_id,"error":error.to_string()}),
+            );
             Err(ApiError::unavailable(error.to_string()))
         }
     }
@@ -903,6 +908,24 @@ pub(super) async fn refresh_media_thumbnails(
             Err(ApiError::unavailable(error.to_string()))
         }
     }
+}
+
+/// Discards every cached Media Server thumbnail so the next Refresh Thumbnails fetches fresh
+/// artwork. Clearing is idempotent, so a resent request needs no replay window.
+pub(super) async fn clear_media_thumbnail_cache(
+    State(state): State<AppState>,
+    show: ShowContext,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
+    let cleared = state.media.clear_thumbnails();
+    emit(
+        &state,
+        "media_thumbnail_cache_cleared",
+        serde_json::json!({"session_id":session.id,"cleared":cleared}),
+    );
+    Ok(Json(serde_json::json!({ "cleared": cleared })))
 }
 
 pub(super) async fn refresh_media_preview(

@@ -282,6 +282,14 @@ export class MediaOutputApiClient {
 		);
 	}
 
+	/** Clearing is idempotent, so the request carries no request identity. */
+	clearMediaThumbnailCache(): Promise<{ cleared: number }> {
+		return this.transport.request(
+			"/api/v2/media-servers/thumbnail-cache/clear",
+			{ method: "POST" },
+		);
+	}
+
 	refreshMediaThumbnails(
 		fixtureId: string,
 		folder: number,

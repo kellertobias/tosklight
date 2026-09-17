@@ -56,17 +56,33 @@ Rows with an unusable cell are listed as **Not imported** with the reason and ne
 
 ## Show Patch views
 
-**Fixtures**, **Media Servers**, and **Tracking** are tabs at the top right of Show Patch, next to **⚙** Settings. The tabs and **⚙** stay in the same place on all three views; a narrow window shortens the Fixtures actions instead. Media Servers and Tracking each scroll as one page with the same inner margins as Settings, so their last controls stay reachable on a short display. **⚙** opens the Show Patch Settings: **Columns** for the Fixtures table and **Tracking** for the PosiStageNet source.
+**Fixtures**, **Media Servers**, and **Tracking** are tabs at the top right of Show Patch, next to **⚙** Settings. The tabs and **⚙** stay in the same place on all three views; a narrow window shortens the Fixtures actions instead. Media Servers and Tracking each scroll as one page with the same inner margins as Settings, so their last controls stay reachable on a short display. **⚙** opens the Show Patch Settings on the page for the current view: **Columns** for the Fixtures table, **Media Servers** for the thumbnail cache, and **Tracking** for the PosiStageNet source.
+
+## Patched Media Servers
+
+**Show Patch > Media Servers** opens with a table of every patched Media Server, one row each, ordered by fixture number. A server stays in the table while its network control is off; only its connection is paused.
+
+| Column | Meaning |
+| --- | --- |
+| **Type** | **ToskLight Media** for a ToskLight Pixel Media Server, **CITP media server** for any other CITP-capable media server, or **No network control** when the profile offers none. |
+| **Protocol** | **CITP** connects the desk to the server; **Off** stops the desk from talking to it. Only protocols the fixture profile supports are offered. |
+| **IP address** and **Port** | Where the server listens for CITP. The address must be a literal IPv4 or IPv6 address, and the port must be 1–65535; the row explains a wrong value and keeps **Apply** disabled until it is fixed. |
+| **Status** | The desk's own connection state: **Connected**, **Offline**, **Not checked**, **Checking…**, or **Off**. Below it, whether the last discovery **Found** the address on the network. An offline row shows the server's reason and what to check. |
+| **Actions** | **Apply** stores the row's protocol and address. **Refresh Thumbnails** reconnects and fetches that server's media thumbnails. **Start live preview** shows the server's output under the row. |
+
+The status follows the desk as it changes: when a connection attempt succeeds or fails, every open Show Patch updates without refreshing. When you apply a new address, the row checks the server once at that address. Each row works on its own; refreshing or applying one server never disables another row or clears its message.
+
+**⚙ > Media Servers > Clear Thumbnail Cache** drops every Media Server thumbnail the desk has cached, for example after replacing media on a server. Live previews and the patch stay as they are; use **Refresh Thumbnails** on a row to fetch its thumbnails again.
 
 ## Discovering a ToskLight Pixel Media Server
 
-Open **Show Patch > Media Servers** to discover ToskLight Pixel Media servers on the local network. **Refresh discovery** repeats the search without restarting either application. Each output is shown by its Media Server and output name, network address, and reachability, followed by its current configuration: the suggested DMX `universe.address`, the **2 layers** or **8 layers** personality, the protocol (Art-Net or sACN), and whether its tempo follows the Playback BPM channel or a desk Speed Group. A discovered output remains explicitly **Not patched** until you choose an action; discovery alone never changes the show.
+Open **Show Patch > Media Servers** to discover ToskLight Pixel Media servers on the local network. **Refresh Discovery**, in its own group at the top right of the window beside the view tabs, repeats the search without restarting either application. Each output is shown by its Media Server and output name, network address, and reachability, followed by its current configuration: the suggested DMX `universe.address`, the **2 layers** or **8 layers** personality, the protocol (Art-Net or sACN), and whether its tempo follows the Playback BPM channel or a desk Speed Group. A discovered output remains explicitly **Not patched** until you choose an action; discovery alone never changes the show.
 
 The status beside each output tells you what to do next:
 
 - **Patched** – a desk fixture already controls this output with the matching personality.
 - **Mode differs** – the desk fixture uses the other personality. Every layer after the first would be misaddressed, so the card explains the difference, and **Patch suggested** switches the desk fixture to the output's personality.
-- **Needs update** – the Media Server reports a personality the desk cannot patch, or is too old to describe its outputs in the current format (for example, it still offers the retired channel layouts). The patch actions stay disabled. Update ToskLight Media, or choose 2 or 8 layers under its **Settings > Network & DMX**, then **Refresh discovery**.
+- **Needs update** – the Media Server reports a personality the desk cannot patch, or is too old to describe its outputs in the current format (for example, it still offers the retired channel layouts). The patch actions stay disabled. Update ToskLight Media, or choose 2 or 8 layers under its **Settings > Network & DMX**, then **Refresh Discovery**.
 - **Unavailable** – the server answered discovery but not its configuration API. Check that it is running and reachable on port 8080, then refresh.
 
 **Patch suggested** creates the matching ToskLight Pixel fixture at the address proposed by that output. The normal Patch footprint and collision checks run before the desk accepts it. **Patch address** lets you choose another universe and address. On confirmation the desk patch is validated first, then the selected Media Server output is updated. If the remote update fails, the desk restores its previous patch (or removes the newly created fixture) and reports whether recovery succeeded. It never silently reports mismatched addresses as patched. When the Media Server refuses the change, the message says why and what to do: a value it rejected (such as an 8-layer block that no longer fits the universe) names that value, a change it could not save asks you to check free space and write access for its configuration folder, and an output it no longer has asks you to refresh discovery.

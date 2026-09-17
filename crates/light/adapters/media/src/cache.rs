@@ -71,6 +71,15 @@ impl MediaCache {
         Some(value)
     }
 
+    /// Discards every cached thumbnail and reports how many were dropped. Previews stay: they are
+    /// live output frames, not library artwork.
+    pub fn clear_thumbnails(&mut self) -> usize {
+        let cleared = self.thumbnails.len();
+        self.thumbnails.clear();
+        self.thumbnail_order.clear();
+        cleared
+    }
+
     pub fn clear_fixture(&mut self, fixture: &str) {
         self.thumbnails.retain(|key, _| key.fixture != fixture);
         self.previews.retain(|key, _| key.fixture != fixture);

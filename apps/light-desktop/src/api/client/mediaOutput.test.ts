@@ -3,6 +3,21 @@ import { MediaOutputApiClient } from "./mediaOutput";
 import type { LiveClientTransport } from "./transport";
 
 describe("Media output advertised-resource client", () => {
+	it("clears the desk's thumbnail cache with one POST", async () => {
+		const request = vi.fn(async () => ({ cleared: 3 }));
+		const client = new MediaOutputApiClient({
+			request,
+		} as unknown as LiveClientTransport);
+
+		await expect(client.clearMediaThumbnailCache()).resolves.toEqual({
+			cleared: 3,
+		});
+		expect(request).toHaveBeenCalledWith(
+			"/api/v2/media-servers/thumbnail-cache/clear",
+			{ method: "POST" },
+		);
+	});
+
 	it("keeps advertised source and library IDs in typed routes", async () => {
 		const request = vi.fn(async () => ({}));
 		const blob = vi.fn(async () => new Blob());

@@ -319,6 +319,14 @@ fn typed_capability_event(
             revision,
             kind: MediaNotificationKind::ServerOffline,
         }),
+        "media_inspected" => EventDraft::media_changed(MediaNotification {
+            revision,
+            kind: MediaNotificationKind::ServerOnline,
+        }),
+        "media_thumbnail_cache_cleared" => EventDraft::media_changed(MediaNotification {
+            revision,
+            kind: MediaNotificationKind::ThumbnailCacheCleared,
+        }),
         "hardware_connection_changed" => {
             #[derive(serde::Deserialize)]
             struct HardwarePayload {
