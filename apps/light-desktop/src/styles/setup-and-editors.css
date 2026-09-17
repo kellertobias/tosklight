@@ -229,6 +229,16 @@
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 8px;
 }
+/* The fields' own block margins already separate stacked rows, so the explained Record and
+   Update defaults stay on one screen beside the programmer. */
+.defaults-record-update .ui-form-layout {
+	row-gap: 2px;
+}
+/* Cue only carries the longest explanation: it takes the right column beside Record mode and
+   Merge into active Cue, so the short fields stack instead of leaving a gap under Record mode. */
+.defaults-record-update > article:first-child > .ui-form-layout > .ui-form-field:nth-child(2) {
+	grid-row: span 2;
+}
 /* The attribute tabs render several sibling cards, so the panel itself must not become a box. */
 .attribute-tabpanel {
 	display: contents;
