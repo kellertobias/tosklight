@@ -40,15 +40,13 @@
 .dmx-nodes-table td:last-child > small {
 	max-width: 46ch;
 }
-.dmx-nodes-table td > button {
+.dmx-nodes-table .ui-button.dmx-nodes-endpoint {
 	min-height: 32px;
 	padding: 0;
 	border: 0;
 	background: none;
 	color: inherit;
 	font: inherit;
-	text-align: left;
-	cursor: pointer;
 }
 .dmx-nodes-table code {
 	font-variant-numeric: tabular-nums;

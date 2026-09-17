@@ -187,13 +187,16 @@ function NodesTable({
 								</small>
 							</td>
 							<td>
-								<button
-									type="button"
+								<Button
+									variant="ghost"
+									contentAlign="left"
+									className="dmx-nodes-endpoint"
+									active={isSelected}
 									aria-pressed={isSelected}
 									onClick={() => onSelect(isSelected ? null : endpoint.id)}
 								>
 									<code>{endpoint.endpoint}</code>
-								</button>
+								</Button>
 								<small>
 									{endpoint.name
 										? `${endpoint.role} · ${endpoint.name}`
