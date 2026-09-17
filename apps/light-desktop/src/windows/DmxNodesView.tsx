@@ -5,7 +5,7 @@ import type {
 	NetworkEndpoint,
 	NetworkEndpointStatus,
 	NetworkEndpointsSnapshot,
-} from "../api/generated/light-wire";
+} from "../features/dmxDiagnostics/networkEndpoints";
 import "./DmxNodesView.css";
 
 const STATUS_LABEL: Record<NetworkEndpointStatus, string> = {
@@ -30,7 +30,7 @@ function protocolLabel(endpoint: NetworkEndpoint): string {
 }
 
 function deliveryLabel(endpoint: NetworkEndpoint): string | null {
-	switch (endpoint.delivery_mode) {
+	switch (endpoint.deliveryMode) {
 		case "broadcast":
 			return "Broadcast";
 		case "multicast":
@@ -65,9 +65,9 @@ export function universeRanges(universes: readonly number[]): string {
 function universeCell(endpoint: NetworkEndpoint): string {
 	if (!endpoint.universes.length) return "—";
 	const wire = universeRanges(endpoint.universes);
-	return endpoint.logical_universe == null
+	return endpoint.logicalUniverse == null
 		? wire
-		: `${endpoint.logical_universe} → ${wire}`;
+		: `${endpoint.logicalUniverse} → ${wire}`;
 }
 
 function lastActivity(millis: number | null): string {
@@ -255,7 +255,7 @@ function EndpointInfo({
 					<dt>Delivery</dt>
 					<dd>{deliveryLabel(endpoint) ?? "—"}</dd>
 					<dt>Logical universe</dt>
-					<dd>{endpoint.logical_universe ?? "—"}</dd>
+					<dd>{endpoint.logicalUniverse ?? "—"}</dd>
 					<dt>Wire universes</dt>
 					<dd>
 						{endpoint.universes.length
@@ -263,7 +263,7 @@ function EndpointInfo({
 							: "—"}
 					</dd>
 					<dt>Last activity</dt>
-					<dd>{lastActivity(endpoint.last_activity_millis_ago)}</dd>
+					<dd>{lastActivity(endpoint.lastActivityMillisAgo)}</dd>
 					<dt>Send errors</dt>
 					<dd>{endpoint.errors}</dd>
 				</dl>
@@ -296,8 +296,8 @@ function NodesSummary({
 				<b>Output interface</b>
 				<p>
 					{snapshot
-						? `${snapshot.output_bind_ip} · ${
-								snapshot.network_output_available
+						? `${snapshot.outputBindIp} · ${
+								snapshot.networkOutputAvailable
 									? "network output running"
 									: "network output not running"
 							}`

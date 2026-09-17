@@ -31,13 +31,7 @@ afterEach(() => {
 
 describe("Programmer Align feedback", () => {
 	it("reports a no-selection activation as a quiet notice, never as a desk error", async () => {
-		const { actions, setError, notices } = setup(async () => ({
-			request_id: "align",
-			mode: "off",
-			revision: null,
-			bound_attribute: null,
-			fixture_count: 0,
-		}));
+		const { actions, setError, notices } = setup(async () => "off");
 
 		await expect(actions.alignSelection("left")).resolves.toBe("off");
 
@@ -47,15 +41,9 @@ describe("Programmer Align feedback", () => {
 	});
 
 	it("stays silent when Align actually changes", async () => {
-		const { actions, notices } = setup(async () => ({
-			request_id: "align",
-			mode: "left",
-			revision: 3,
-			bound_attribute: null,
-			fixture_count: 2,
-		}));
+		const { actions, notices } = setup(async () => "left");
 		await expect(actions.alignSelection("left")).resolves.toBe("left");
-		const off = setup(async () => ({ mode: "off", fixture_count: 0 }));
+		const off = setup(async () => "off");
 		await expect(off.actions.alignSelection("off")).resolves.toBe("off");
 		expect(notices).toEqual([]);
 		expect(off.notices).toEqual([]);

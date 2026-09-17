@@ -14,7 +14,7 @@ import {
 import type {
 	NetworkEndpoint,
 	NetworkEndpointsSnapshot,
-} from "../api/generated/light-wire";
+} from "../features/dmxDiagnostics/networkEndpoints";
 import { universeRanges } from "./DmxNodesView";
 import { DmxWindowView } from "./DmxWindow";
 
@@ -38,35 +38,35 @@ function endpoint(overrides: Partial<NetworkEndpoint>): NetworkEndpoint {
 		role: "DMX output",
 		endpoint: "255.255.255.255:6454",
 		name: null,
-		delivery_mode: null,
-		logical_universe: null,
+		deliveryMode: null,
+		logicalUniverse: null,
 		universes: [],
 		status: "active",
 		detail: "",
 		errors: 0,
-		last_activity_millis_ago: null,
+		lastActivityMillisAgo: null,
 		...overrides,
 	};
 }
 
 const snapshot: NetworkEndpointsSnapshot = {
-	output_bind_ip: "0.0.0.0",
-	network_output_available: true,
+	outputBindIp: "0.0.0.0",
+	networkOutputAvailable: true,
 	endpoints: [
 		endpoint({
 			id: "send:artnet:1:4:255.255.255.255:6454",
-			delivery_mode: "broadcast",
-			logical_universe: 1,
+			deliveryMode: "broadcast",
+			logicalUniverse: 1,
 			universes: [4],
 			detail: "Sending logical universe 1 as Art-Net universe 4.",
-			last_activity_millis_ago: 20,
+			lastActivityMillisAgo: 20,
 		}),
 		endpoint({
 			id: "send:sacn:2:9:239.255.0.9:5568",
 			protocol: "sacn",
 			endpoint: "239.255.0.9:5568",
-			delivery_mode: "multicast",
-			logical_universe: 2,
+			deliveryMode: "multicast",
+			logicalUniverse: 2,
 			universes: [9],
 			status: "conflict",
 			detail:

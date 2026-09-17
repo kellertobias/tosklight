@@ -1,4 +1,4 @@
-import type { NetworkEndpointsSnapshot } from "../../api/generated/light-wire";
+import type { NetworkEndpointsSnapshot } from "../dmxDiagnostics/networkEndpoints";
 import type {
 	DmxSnapshot,
 	OutputHealth,

@@ -30,6 +30,8 @@ import type {
 	GenerateFixturePresetsOutcome,
 	GenerateFixturePresetsRequest,
 	LiveAction,
+	ProgrammingAlignMode,
+	ProgrammingAlignOutcome,
 } from "../generated/light-wire";
 import {
 	decodePresetRecallOutcome,
@@ -176,9 +178,13 @@ export class ProgrammingApiClient {
 		);
 	}
 
-	align(mode: "off" | "left" | "right" | "out" | "in") {
+	/**
+	 * Requests an Align mode and resolves with the mode the desk actually holds.
+	 * The server reports an activation that changed nothing (no selection) as Off.
+	 */
+	async align(mode: ProgrammingAlignMode): Promise<ProgrammingAlignMode> {
 		const requestId = crypto.randomUUID();
-		return this.transport.sendAction(
+		const outcome = (await this.transport.sendAction(
 			{
 				type: "programming_align",
 				request: {
@@ -187,7 +193,8 @@ export class ProgrammingApiClient {
 				},
 			},
 			requestId,
-		);
+		)) as Partial<ProgrammingAlignOutcome> | undefined;
+		return outcome?.mode ?? mode;
 	}
 
 	controlFixtureAction(fixtureId: string, actionId: string, active: boolean) {

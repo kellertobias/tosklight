@@ -1,3 +1,4 @@
+import type { NetworkEndpointsSnapshot } from "../../features/dmxDiagnostics/networkEndpoints";
 import type {
 	OutputRuntimeActionOutcome,
 	OutputRuntimeActionRequest,
@@ -18,9 +19,10 @@ import type {
 	NativeMediaSnapshot as NativeMediaSnapshotWire,
 	NativeMediaTextSlot as NativeMediaTextSlotWire,
 	NativeMediaTextUpdateRequest,
-	NetworkEndpointsSnapshot,
+	NetworkEndpointsSnapshot as NetworkEndpointsSnapshotWire,
 	PatchPreviewHighlightRequest,
 } from "../generated/light-wire";
+import { decodeNetworkEndpointsSnapshot } from "../networkEndpointsWire";
 
 export type {
 	DiscoveredMediaOutput,
@@ -178,8 +180,12 @@ export class MediaOutputApiClient {
 	}
 
 	/** Every Art-Net and sACN endpoint the desk sends to or hears from, with its status. */
-	networkEndpoints(): Promise<NetworkEndpointsSnapshot> {
-		return this.transport.request("/api/v2/output/network-endpoints");
+	async networkEndpoints(): Promise<NetworkEndpointsSnapshot> {
+		return decodeNetworkEndpointsSnapshot(
+			await this.transport.request<NetworkEndpointsSnapshotWire>(
+				"/api/v2/output/network-endpoints",
+			),
+		);
 	}
 
 	mediaServers(): Promise<{ fixtures: MediaServerFixture[] }> {

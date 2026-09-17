@@ -21,7 +21,7 @@ import { WindowHeader, WindowScrollArea, WindowSettings } from "@tosklight/ui/wi
 import { TouchValueButton } from "@tosklight/ui/faders";
 import { channelSplit, derivePrimarySlots } from "../components/setup/fixtureProfileModel";
 import { usePollingResource } from "../hooks/usePollingResource";
-import type { NetworkEndpointsSnapshot } from "../api/generated/light-wire";
+import type { NetworkEndpointsSnapshot } from "../features/dmxDiagnostics/networkEndpoints";
 import { DmxNodesView } from "./DmxNodesView";
 
 function hz(value: number | undefined): string {

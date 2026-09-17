@@ -1,5 +1,5 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
-import type { NetworkEndpointsSnapshot } from "../../api/generated/light-wire";
+import type { NetworkEndpointsSnapshot } from "./networkEndpoints";
 import type {
 	DmxSnapshot,
 	OutputHealth,
