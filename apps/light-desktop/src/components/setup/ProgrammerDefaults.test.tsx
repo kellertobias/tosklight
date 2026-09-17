@@ -58,6 +58,40 @@ describe("Programmer defaults", () => {
 		});
 	});
 
+	it("labels the Merge and Cue only defaults briefly and explains their effect", () => {
+		const change = vi.fn();
+		render(
+			<RecordDefaultsFields
+				settings={{ mode: "merge", cueOnly: false, mergeActiveCue: false }}
+				onChange={change}
+			/>,
+		);
+		expect(
+			screen.queryByText(/Merge current values into/),
+		).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("switch", { name: "Merge into active Cue" }),
+		);
+		expect(change).toHaveBeenCalledWith({
+			mode: "merge",
+			cueOnly: false,
+			mergeActiveCue: true,
+		});
+		expect(
+			screen.getByText(
+				"Recording onto a playback adds the programmer values to the Cue that playback is on. Fixture attributes in both are replaced; all other values stored in that Cue stay.",
+			),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(/the recorded values last for this Cue only/),
+		).toHaveTextContent(
+			"The next Cue returns those fixture attributes to their earlier values, or releases them. Everything else keeps tracking.",
+		);
+		expect(
+			screen.getByText(/Overwrite replaces the stored values/),
+		).toBeInTheDocument();
+	});
+
 	it("exposes the Update defaults shared with the hold dialog", () => {
 		const change = vi.fn();
 		render(

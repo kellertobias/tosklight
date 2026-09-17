@@ -89,7 +89,9 @@ describe("Update workflow integration", () => {
 			type: "update_target_menu",
 			source: "touch",
 		});
-		const dialog = await screen.findByRole("dialog", { name: "Update Update" });
+		const dialog = await screen.findByRole("dialog", {
+			name: "Update Targets",
+		});
 		expect(workflow.update.targets).toHaveBeenCalledWith(
 			"eligible_for_update_existing",
 		);
@@ -261,9 +263,7 @@ describe("Update workflow integration", () => {
 				name: "Show Update modal on touch",
 			}),
 		);
-		fireEvent.click(
-			within(dialog).getByRole("button", { name: "Save Update Settings" }),
-		);
+		fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
 
 		await waitFor(() =>
 			expect(workflow.update.saveSettings).toHaveBeenCalledWith({
@@ -283,7 +283,9 @@ describe("Update workflow integration", () => {
 			type: "update_target_menu",
 			source: "touch",
 		});
-		const dialog = await screen.findByRole("dialog", { name: "Update Update" });
+		const dialog = await screen.findByRole("dialog", {
+			name: "Update Targets",
+		});
 		expect(await within(dialog).findByRole("alert")).toHaveTextContent(
 			"target query rejected",
 		);
@@ -298,12 +300,12 @@ describe("Update workflow integration", () => {
 			type: "update_target_menu",
 			source: "touch",
 		});
-		await screen.findByRole("dialog", { name: "Update Update" });
+		await screen.findByRole("dialog", { name: "Update Targets" });
 		workflow.update.scopeKey = "authority-b";
 		view.rerender(<UpdateWorkflow />);
 		await waitFor(() =>
 			expect(
-				screen.queryByRole("dialog", { name: "Update Update" }),
+				screen.queryByRole("dialog", { name: "Update Targets" }),
 			).not.toBeInTheDocument(),
 		);
 

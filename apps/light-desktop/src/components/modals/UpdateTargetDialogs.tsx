@@ -1,3 +1,9 @@
+import {
+	Button,
+	ModalRegistration,
+	ModalTitleBar,
+	SelectField,
+} from "@tosklight/ui";
 import type {
 	UpdateMenuEntry,
 	UpdateMode,
@@ -6,7 +12,6 @@ import type {
 	UpdateSettings,
 	UpdateTargetFilter,
 } from "../../api/types";
-import { Button, ModalRegistration, ModalTitleBar, SelectField } from "@tosklight/ui";
 import {
 	modeLabel,
 	targetFamilyLabel,
@@ -43,32 +48,53 @@ export function UpdateSettingsDialog({
 					event.target === event.currentTarget && onCancel()
 				}
 			>
-			<section
-				className="modal-card update-settings-modal workflow-theme update-workflow"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Update Settings"
-			>
-				<ModalTitleBar title={<><span className="workflow-badge">UPDATE</span> Update Settings</>} closeLabel="Close Update Settings" onClose={onCancel}/>
-				<p>
-					Desk workflow preferences for Update. These settings do not change
-					show programming.
-				</p>
-				<UpdateDefaultsFields settings={settings} onChange={onChange} />
-				{error && (
-					<p className="modal-error" role="alert">
-						{error}
+				<section
+					className="modal-card update-settings-modal workflow-theme update-workflow"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Update Settings"
+				>
+					<ModalTitleBar
+						title={
+							<>
+								<span className="workflow-badge">UPDATE</span> Settings
+							</>
+						}
+						groups={[
+							{
+								id: "update-settings-actions",
+								actions: [
+									{
+										id: "cancel",
+										label: "Cancel",
+										disabled: busy,
+										onPress: onCancel,
+									},
+								],
+							},
+						]}
+						accept={{
+							id: "done",
+							label: busy ? "Saving…" : "Done",
+							variant: "primary",
+							disabled: busy,
+							onPress: onSave,
+						}}
+						closeLabel="Close Update Settings"
+						closeDisabled={busy}
+						onClose={onCancel}
+					/>
+					<p>
+						Which Update mode the desk uses for each kind of target. Saved for
+						this desk; show programming does not change.
 					</p>
-				)}
-				<div className="modal-actions">
-					<Button disabled={busy} onClick={onCancel}>
-						Cancel
-					</Button>
-					<Button className="primary" disabled={busy} onClick={onSave}>
-						{busy ? "Saving…" : "Save Update Settings"}
-					</Button>
-				</div>
-			</section>
+					<UpdateDefaultsFields settings={settings} onChange={onChange} />
+					{error && (
+						<p className="modal-error" role="alert">
+							{error}
+						</p>
+					)}
+				</section>
 			</div>
 		</ModalRegistration>
 	);
@@ -183,64 +209,83 @@ export function UpdateTargetMenu<T extends UpdateMenuEntry>({
 					event.target === event.currentTarget && onCancel()
 				}
 			>
-			<section
-				className="modal-card update-target-menu workflow-theme update-workflow"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Update Update"
-			>
-				<ModalTitleBar title={<><span className="workflow-badge">UPDATE</span> Update Update</>} closeLabel="Close Update Update" onClose={onCancel}/>
-				<p>
-					Choose an active or referenced target related to the current
-					programmer changes.
-				</p>
 				<section
-					className="segmented-control"
-					aria-label="Eligible target filter"
+					className="modal-card update-target-menu workflow-theme update-workflow"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Update Targets"
 				>
-					<Button
-						className={
-							filter === "eligible_for_update_existing" ? "active" : ""
+					<ModalTitleBar
+						title={
+							<>
+								<span className="workflow-badge">UPDATE</span> Targets
+							</>
 						}
-						onClick={() => onFilter("eligible_for_update_existing")}
-					>
-						Eligible for Update Existing
-					</Button>
-					<Button
-						className={filter === "show_all_active" ? "active" : ""}
-						onClick={() => onFilter("show_all_active")}
-					>
-						Show All Active
-					</Button>
-				</section>
-				<div className="update-target-list">
-					{entries.length === 0 && (
-						<p className="update-no-op">No targets match this filter.</p>
-					)}
-					{entries.map((entry) => {
-						const key = updateTargetKey(entry.target);
-						return (
-							<UpdateTargetRow
-								key={key}
-								entry={entry}
-								filter={filter}
-								mode={modes[key] ?? entry.existing_preview.mode}
-								busyKey={busyKey}
-								onMode={onMode}
-								onApply={onApply}
-							/>
-						);
-					})}
-				</div>
-				{error && (
-					<p className="modal-error" role="alert">
-						{error}
+						groups={[
+							{
+								id: "update-targets-actions",
+								actions: [
+									{
+										id: "cancel",
+										label: "Cancel",
+										disabled: busyKey != null,
+										onPress: onCancel,
+									},
+								],
+							},
+						]}
+						closeLabel="Close Update Targets"
+						closeDisabled={busyKey != null}
+						onClose={onCancel}
+					/>
+					<p>
+						Pick the Cue, Preset, or Group that should receive the current
+						programmer values. Nothing changes until you press its Update.
 					</p>
-				)}
-				<div className="modal-actions">
-					<Button onClick={onCancel}>Cancel</Button>
-				</div>
-			</section>
+					<section
+						className="segmented-control"
+						aria-label="Eligible target filter"
+					>
+						<Button
+							className={
+								filter === "eligible_for_update_existing" ? "active" : ""
+							}
+							onClick={() => onFilter("eligible_for_update_existing")}
+						>
+							Eligible for Update Existing
+						</Button>
+						<Button
+							className={filter === "show_all_active" ? "active" : ""}
+							onClick={() => onFilter("show_all_active")}
+						>
+							Show All Active
+						</Button>
+					</section>
+					<div className="update-target-list">
+						{entries.length === 0 && (
+							<p className="update-no-op">No targets match this filter.</p>
+						)}
+						{entries.map((entry) => {
+							const key = updateTargetKey(entry.target);
+							return (
+								<UpdateTargetRow
+									key={key}
+									entry={entry}
+									filter={filter}
+									mode={modes[key] ?? entry.existing_preview.mode}
+									busyKey={busyKey}
+									onMode={onMode}
+									onApply={onApply}
+								/>
+							);
+						})}
+					</div>
+					{error && (
+						<p className="modal-error" role="alert">
+							{error}
+						</p>
+					)}
+				</section>
 			</div>
 		</ModalRegistration>
 	);
@@ -256,47 +301,56 @@ export function UpdateResultDialog({
 	return (
 		<ModalRegistration onClose={onClose}>
 			<div className="modal-backdrop update-workflow-layer">
-			<section
-				className="modal-card update-result-modal workflow-theme update-workflow"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Update complete"
-			>
-				<ModalTitleBar title={<><span className="workflow-badge">UPDATE</span> Update complete</>} onClose={onClose}/>
-				<p>
-					<b>
-						{targetFamilyLabel(result.target)} · {result.target.name}
-					</b>
-				</p>
-				<p>{updateTargetContext(result.target)}</p>
-				<div className="update-preview-summary">
-					<span>Changed {result.changed_count}</span>
-					<span>Added {result.added_count}</span>
-					<span>Ineligible {result.ignored_count}</span>
-					<span>
-						Revision {result.revision_before} → {result.revision_after}
-					</span>
-				</div>
-				{result.changed_cues.length > 0 && (
+				<section
+					className="modal-card update-result-modal workflow-theme update-workflow"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Update complete"
+				>
+					<ModalTitleBar
+						title={
+							<>
+								<span className="workflow-badge">UPDATE</span> Complete
+							</>
+						}
+						accept={{
+							id: "done",
+							label: "Done",
+							variant: "primary",
+							onPress: onClose,
+						}}
+						closeLabel="Close Update result"
+						onClose={onClose}
+					/>
 					<p>
-						Changed Cue/source events:{" "}
-						{result.changed_cues
-							.map((cue) => `Cue ${cue.cue_number}`)
-							.join(", ")}
-						.
+						<b>
+							{targetFamilyLabel(result.target)} · {result.target.name}
+						</b>
 					</p>
-				)}
-				<p>
-					{result.programmer_values_retained
-						? "Programmer values were retained."
-						: "Eligible programmer values were cleared."}
-				</p>
-				<div className="modal-actions">
-					<Button className="primary" onClick={onClose}>
-						Close
-					</Button>
-				</div>
-			</section>
+					<p>{updateTargetContext(result.target)}</p>
+					<div className="update-preview-summary">
+						<span>Changed {result.changed_count}</span>
+						<span>Added {result.added_count}</span>
+						<span>Ineligible {result.ignored_count}</span>
+						<span>
+							Revision {result.revision_before} → {result.revision_after}
+						</span>
+					</div>
+					{result.changed_cues.length > 0 && (
+						<p>
+							Changed Cue/source events:{" "}
+							{result.changed_cues
+								.map((cue) => `Cue ${cue.cue_number}`)
+								.join(", ")}
+							.
+						</p>
+					)}
+					<p>
+						{result.programmer_values_retained
+							? "Programmer values were retained."
+							: "Eligible programmer values were cleared."}
+					</p>
+				</section>
 			</div>
 		</ModalRegistration>
 	);

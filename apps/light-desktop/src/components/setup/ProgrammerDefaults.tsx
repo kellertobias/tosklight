@@ -71,6 +71,7 @@ export function RecordDefaultsFields({
 					{ value: "merge", label: "Merge" },
 					{ value: "overwrite", label: "Overwrite" },
 				]}
+				description="Merge keeps what the target already stores and adds the programmer values. Overwrite replaces the stored values with the programmer values."
 			/>
 			<SwitchField
 				label="Cue only"
@@ -80,16 +81,17 @@ export function RecordDefaultsFields({
 				onChange={(event) =>
 					onChange({ ...settings, cueOnly: event.target.checked })
 				}
-				description="Restores the recorded addresses in the following Cue while unrelated values keep tracking."
+				description="On: the recorded values last for this Cue only. The next Cue returns those fixture attributes to their earlier values, or releases them. Everything else keeps tracking. Off: values track into later Cues as usual."
 			/>
 			<SwitchField
-				label="Merge current values into the active Cue when recording to its playback"
-				offLabel="Keep cue"
-				onLabel="Merge values"
+				label="Merge into active Cue"
+				offLabel="Off"
+				onLabel="Merge"
 				checked={settings.mergeActiveCue}
 				onChange={(event) =>
 					onChange({ ...settings, mergeActiveCue: event.target.checked })
 				}
+				description="Recording onto a playback adds the programmer values to the Cue that playback is on. Fixture attributes in both are replaced; all other values stored in that Cue stay."
 			/>
 		</FormLayout>
 	);

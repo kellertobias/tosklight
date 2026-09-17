@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	UpdateMode,
 	UpdatePreview,
@@ -61,6 +67,14 @@ const preview: UpdatePreview = {
 	],
 };
 
+function titleBarOf(dialog: HTMLElement) {
+	const header = dialog.querySelector<HTMLElement>("header.ui-modal-titlebar");
+	if (!header) throw new Error("dialog has no modal title bar");
+	return header;
+}
+
+afterEach(cleanup);
+
 describe("Update workflow", () => {
 	it("shows the four literal Cue modes and authoritative source/ignored preview before applying", () => {
 		const onMode = vi.fn();
@@ -105,12 +119,57 @@ describe("Update workflow", () => {
 			target_type: "cue",
 			mode: "add_to_current_cue",
 		});
-		fireEvent.click(
-			within(dialog).getByRole("button", { name: "Update Cuelist" }),
+		const titleBar = within(titleBarOf(dialog));
+		expect(titleBar.getByRole("heading")).toHaveTextContent(
+			"UPDATE Main Cuelist",
 		);
+		expect(
+			within(dialog).getByText(/nothing is stored until you press Update/),
+		).toBeInTheDocument();
+		expect(dialog.querySelector(".modal-actions")).toBeNull();
+		fireEvent.click(titleBar.getByRole("button", { name: "Update Cuelist" }));
 		expect(onApply).toHaveBeenCalledTimes(1);
-		fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+		fireEvent.click(titleBar.getByRole("button", { name: "Cancel" }));
 		expect(onCancel).toHaveBeenCalledTimes(1);
+	});
+
+	it("disables the title Update action when nothing would change and while busy", () => {
+		const noChange: UpdatePreview = {
+			...preview,
+			items: [preview.items[1]],
+		};
+		const { rerender } = render(
+			<UpdateOperationDialog
+				operation={{ request, preview: noChange }}
+				busy={false}
+				error={null}
+				onMode={vi.fn()}
+				onApply={vi.fn()}
+				onCancel={vi.fn()}
+			/>,
+		);
+		let titleBar = within(
+			titleBarOf(screen.getByRole("dialog", { name: "Update Main Cuelist" })),
+		);
+		expect(
+			titleBar.getByRole("button", { name: "Update Cuelist" }),
+		).toBeDisabled();
+		expect(titleBar.getByRole("button", { name: "Cancel" })).toBeEnabled();
+		rerender(
+			<UpdateOperationDialog
+				operation={{ request, preview }}
+				busy
+				error={null}
+				onMode={vi.fn()}
+				onApply={vi.fn()}
+				onCancel={vi.fn()}
+			/>,
+		);
+		titleBar = within(
+			titleBarOf(screen.getByRole("dialog", { name: "Update Main Cuelist" })),
+		);
+		expect(titleBar.getByRole("button", { name: "Updating…" })).toBeDisabled();
+		expect(titleBar.getByRole("button", { name: "Cancel" })).toBeDisabled();
 	});
 
 	it("keeps deterministic desk defaults separate from show programming", () => {
@@ -129,11 +188,14 @@ describe("Update workflow", () => {
 		const dialog = screen.getByRole("dialog", { name: "Update Settings" });
 		expect(dialog).toHaveClass("workflow-theme", "update-workflow");
 		expect(within(dialog).getByText("UPDATE")).toHaveClass("workflow-badge");
+		const titleBar = within(titleBarOf(dialog));
+		expect(titleBar.getByRole("heading")).toHaveTextContent("UPDATE Settings");
 		expect(
 			within(dialog).getByText(
-				"Desk workflow preferences for Update. These settings do not change show programming.",
+				"Which Update mode the desk uses for each kind of target. Saved for this desk; show programming does not change.",
 			),
 		).toBeInTheDocument();
+		expect(dialog.querySelector(".modal-actions")).toBeNull();
 		expect(
 			within(dialog).getByRole("button", { name: "Update" }),
 		).toBeInTheDocument();
@@ -148,10 +210,41 @@ describe("Update workflow", () => {
 		expect(onChange).toHaveBeenCalledWith(
 			expect.objectContaining({ show_update_modal_on_touch: false }),
 		);
-		fireEvent.click(
-			within(dialog).getByRole("button", { name: "Save Update Settings" }),
-		);
+		fireEvent.click(titleBar.getByRole("button", { name: "Done" }));
 		expect(onSave).toHaveBeenCalledTimes(1);
+	});
+
+	it("cancels Update Settings from the title bar and locks it while saving", () => {
+		const onCancel = vi.fn();
+		const { rerender } = render(
+			<UpdateSettingsDialog
+				settings={defaultUpdateSettings}
+				busy={false}
+				error={null}
+				onChange={vi.fn()}
+				onSave={vi.fn()}
+				onCancel={onCancel}
+			/>,
+		);
+		const dialog = () =>
+			screen.getByRole("dialog", { name: "Update Settings" });
+		fireEvent.click(
+			within(titleBarOf(dialog())).getByRole("button", { name: "Cancel" }),
+		);
+		expect(onCancel).toHaveBeenCalledTimes(1);
+		rerender(
+			<UpdateSettingsDialog
+				settings={defaultUpdateSettings}
+				busy
+				error={null}
+				onChange={vi.fn()}
+				onSave={vi.fn()}
+				onCancel={onCancel}
+			/>,
+		);
+		const titleBar = within(titleBarOf(dialog()));
+		expect(titleBar.getByRole("button", { name: "Saving…" })).toBeDisabled();
+		expect(titleBar.getByRole("button", { name: "Cancel" })).toBeDisabled();
 	});
 
 	it("distinguishes eligible targets from visible no-ops and applies the shown concrete context", () => {
@@ -201,7 +294,11 @@ describe("Update workflow", () => {
 				onCancel={vi.fn()}
 			/>,
 		);
-		const dialog = screen.getByRole("dialog", { name: "Update Update" });
+		const dialog = screen.getByRole("dialog", { name: "Update Targets" });
+		const titleBar = within(titleBarOf(dialog));
+		expect(titleBar.getByRole("heading")).toHaveTextContent("UPDATE Targets");
+		expect(titleBar.getByRole("button", { name: "Cancel" })).toBeEnabled();
+		expect(dialog.querySelector(".modal-actions")).toBeNull();
 		expect(
 			within(dialog).getByText("Cuelist · Playback 7 · Current Cue 2"),
 		).toBeInTheDocument();

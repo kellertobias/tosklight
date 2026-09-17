@@ -390,7 +390,7 @@ The Cue master fade behaves like a Programmer Fade that belongs only to that Cue
 
 ## Updating Existing Programming
 
-Hold `[^]`, press `[REC]` twice, and then release `[^]`. This is written as `[^REC][^REC]` in this manual. It opens the **Update Update** modal with everything that can currently be updated from the programmer. Opening the modal does not update anything by itself; choose the target and Update mode there, or close it without making a change.
+Hold `[^]`, press `[REC]` twice, and then release `[^]`. This is written as `[^REC][^REC]` in this manual. It opens the **Update Targets** modal with everything that can currently be updated from the programmer. Opening the modal does not update anything by itself; press **Update** on a target row to apply it, or press title-bar **Cancel** to close without making a change. In the single-target Update modal, the title bar holds **Cancel** and the **Update** confirmation, which stays disabled while the selected mode would change nothing. **Update Settings** likewise keeps **Cancel** and **Done** in its title bar.
 
 ### Updating Cues
 
