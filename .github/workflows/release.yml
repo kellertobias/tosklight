@@ -944,7 +944,7 @@ jobs:
           esac
           ls -la "$out"
 
-      # Unpack the portable desk the way an operator does, somewhere unrelated to the build and
+      # Unpack the portable desk the way an operator does, into a separate scratch folder and
       # with a space in the path, and start it without any data-directory override: the marker
       # alone must keep the database, log, extensions and WebView2 profile inside that folder.
       - name: Smoke-test the portable Windows desk from another folder
@@ -953,7 +953,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$LIGHT_RELEASE_VERSION"
-          unpack="$(cygpath -u "$RUNNER_TEMP")/portable desk"
+          unpack="$(npm run --silent artifact-path -- tmp)/portable desk"
           rm -rf -- "$unpack"
           mkdir -p "$unpack"
           7z x -y -o"$(cygpath -w "$unpack")" \
