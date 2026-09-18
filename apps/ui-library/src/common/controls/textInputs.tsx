@@ -408,6 +408,27 @@ function commitNumberModal(
 	onKeyboardCommit?.(committed);
 }
 
+/** NumberInput's own options, read from its props directly; none of them is a DOM attribute. */
+const NUMBER_INPUT_OPTIONS = [
+	"allowThrough",
+	"keyboardLabel",
+	"onStepCommit",
+	"onKeyboardCommit",
+	"onRangeCommit",
+	"modalFader",
+	"modalPresets",
+	"onModalRelease",
+	"modalReleaseLabel",
+	"unit",
+] as const;
+
+/** The props left for the `<input>` once NumberInput's own options are taken out. */
+function domInputProps<T extends object>(props: T) {
+	const dom = { ...props } as Record<string, unknown>;
+	for (const option of NUMBER_INPUT_OPTIONS) delete dom[option];
+	return dom as Omit<T, (typeof NUMBER_INPUT_OPTIONS)[number]>;
+}
+
 export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 	function NumberInput(inputProps, ref) {
 		const {
@@ -426,8 +447,9 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 			min,
 			max,
 			step = 1,
-			...props
+			...rest
 		} = inputProps;
+		const props = domInputProps(rest);
 		const [open, setOpen] = useState(false);
 		const lastKeyboardRequest = useRef(keyboardRequest);
 		const [modalValue, setModalValue] = useState("");
