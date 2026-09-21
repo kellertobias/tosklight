@@ -19,9 +19,11 @@ import {
 	closestOnSegment,
 	curtainRail,
 	isStageElement,
+	mountingVolume,
 	stageCorners,
 	trussAxis,
 	trussConnectors,
+	trussPipeRadius,
 	trussPipes,
 	type Vec3,
 } from "./venueShapes";
@@ -124,10 +126,57 @@ function nearestFit(
 				);
 			}
 		}
-		if (mover.kind !== "venue") {
-			const mount = moved(mover.positionMillimetres);
-			for (const pipe of pipes)
-				consider(pointCandidate(mount, closestOnSegment(mount, pipe), free, threshold, reach));
+	}
+	return best;
+}
+
+/**
+ * A lamp hanging from a truss pipe its clamp has reached across on the page.
+ *
+ * This is the rigging gesture: drag a lamp over a truss seen from above and it goes up onto the
+ * pipe, however far below it started. So the test is an overlap in the plane the drag is happening
+ * on — the clamp's footprint against the pipe's — and not a distance in the show, which would put
+ * a truss at five metres permanently out of reach of a lamp on the floor. The correction then
+ * carries every axis, including the one the drag itself cannot move, so the clamp meets the pipe
+ * rather than the lamp's origin landing on the pipe's centre line.
+ */
+function nearestMount(
+	movers: readonly CadEntity[],
+	still: readonly CadEntity[],
+	delta: Vec3,
+	free: FreeAxes,
+): Candidate | null {
+	const pipes = still.flatMap((entity) => {
+		const radius = trussPipeRadius(entity);
+		return trussPipes(entity).map((segment) => ({ segment, radius }));
+	});
+	if (!pipes.length) return null;
+	let best: Candidate | null = null;
+	for (const mover of movers) {
+		if (mover.kind === "venue") continue;
+		const mount = mountingVolume(mover);
+		if (!mount) continue;
+		const centre = addVec(mount.centre, delta);
+		const top = addVec(mount.top, delta);
+		// How far the clamp reaches across the page, taking its widest side: a lamp turned on the
+		// plan must not lose its grip because its narrow side happens to face the pipe.
+		const reach = Math.max(
+			...([0, 1, 2] as const).filter((axis) => free[axis]).map((axis) => mount.halfExtent[axis]),
+			0,
+		);
+		for (const { segment, radius } of pipes) {
+			const on = closestOnSegment(centre, segment);
+			let squared = 0;
+			for (const axis of [0, 1, 2] as const)
+				if (free[axis]) squared += (on[axis] - centre[axis]) ** 2;
+			const distance = Math.sqrt(squared);
+			if (distance > reach + radius) continue;
+			if (best && distance >= best.distance) continue;
+			best = {
+				correction: [on[0] - top[0], on[1] - top[1], on[2] - top[2]],
+				distance,
+				target: on,
+			};
 		}
 	}
 	return best;
@@ -182,6 +231,14 @@ export function snapMove(
 	const movers = entities.filter((entity) => moving.has(entity.logicalFixtureId));
 	const still = entities.filter((entity) => !moving.has(entity.logicalFixtureId));
 	const start: Vec3 = [...delta];
+	// Hanging a lamp on a pipe beats every other fit: it is the one the operator is reaching for,
+	// and it is the only one that may move an axis the drag itself cannot.
+	const mount = nearestMount(movers, still, start, free);
+	if (mount)
+		return {
+			delta: addVec(start, mount.correction),
+			targets: [mount.target],
+		};
 	const fit = nearestFit(movers, still, start, free, threshold);
 	const landing = free[2] ? nearestLanding(movers, still, start, threshold) : null;
 	const chosen = [fit, landing].filter((candidate): candidate is Candidate =>

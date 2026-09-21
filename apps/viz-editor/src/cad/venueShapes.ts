@@ -145,6 +145,39 @@ export function trussPipes(entity: Shape): Segment[] {
 	});
 }
 
+/** Half the thickness of a truss's chords: what a clamp closes around. */
+export function trussPipeRadius(entity: Shape): number {
+	if (!isTruss(entity)) return 0;
+	const { section } = trussRun(entity);
+	return trussParts(section, entity.scenery?.chords ?? 1).chord / 2;
+}
+
+/**
+ * Where a lamp is held: the part of it a clamp or hook occupies, in plan axes.
+ *
+ * Returned as the centre of that region, its half-extents, and the point at the top of it that
+ * meets a pipe. Until profiles declare their real mounting hardware this is taken as the top slice
+ * of the lamp's own box, which is where a clamp sits on nearly everything that hangs.
+ */
+export function mountingVolume(
+	entity: Shape,
+): { centre: Vec3; halfExtent: Vec3; top: Vec3 } | null {
+	const [width, depth, height] = entity.sizeMillimetres;
+	if (!(width > 0 && depth > 0 && height > 0)) return null;
+	const slice = Math.max(Math.min(height * MOUNT_SHARE, MOUNT_CAP), MOUNT_FLOOR);
+	const rise = Math.max(0, height / 2 - slice / 2);
+	return {
+		centre: placedPoint(entity, [0, 0, rise]),
+		halfExtent: [width / 2, depth / 2, slice / 2],
+		top: placedPoint(entity, [0, 0, height / 2]),
+	};
+}
+
+/** How much of a lamp's height the clamp is taken to occupy, and the bounds of that. */
+const MOUNT_SHARE = 0.25;
+const MOUNT_FLOOR = 40;
+const MOUNT_CAP = 300;
+
 /** A straight truss's centre line and half its outside section: a curtain's rail hangs just under it. */
 export function trussAxis(entity: Shape): (Segment & { halfSection: number }) | null {
 	if (!isTruss(entity)) return null;

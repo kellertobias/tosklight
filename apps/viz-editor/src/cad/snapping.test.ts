@@ -112,13 +112,36 @@ describe("CAD snapping", () => {
 		expectVector(snapMove([neighbour, next], ["m"], [0, 10, 0], PLAN, 150).delta, [-40, 0, 0]);
 	});
 
-	it("clamps a lamp onto the nearest truss pipe, but not onto one far above it", () => {
+	it("hangs a lamp on the pipe its clamp reaches across, however far below it started", () => {
 		const box = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
 		const half = trussParts(290, 4).spacing / 2;
+		// The lamp is a metre square, so its clamp reaches the near chord from 100 mm away.
 		const lamp = base("l", { kind: "profile", positionMillimetres: [500, 100, 4800] });
-		expectVector(snapMove([box, lamp], ["l"], [0, 5, 0], PLAN, 150).delta, [0, half - 100, 0]);
+		const near = snapMove([box, lamp], ["l"], [0, 5, 0], PLAN, 150).delta;
+		expectVector([near[0], near[1]], [0, half - 100]);
+		// The whole point: a lamp on the floor goes up onto the truss rather than staying put.
 		const floor = { ...lamp, positionMillimetres: [500, 100, 0] as V3 };
-		expectVector(snapMove([box, floor], ["l"], [0, 5, 0], PLAN, 150).delta, [0, 5, 0]);
+		const risen = snapMove([box, floor], ["l"], [0, 5, 0], PLAN, 150).delta;
+		expectVector([risen[0], risen[1]], [0, half - 100]);
+		expect(risen[2]).toBeGreaterThan(4000);
+	});
+
+	it("leaves a lamp alone when its clamp is nowhere near a pipe on the page", () => {
+		const box = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
+		const away = base("l", { kind: "profile", positionMillimetres: [500, 4000, 0] });
+		expectVector(snapMove([box, away], ["l"], [0, 5, 0], PLAN, 150).delta, [0, 5, 0]);
+	});
+
+	it("moves several lamps rigidly onto a pipe, keeping the spacing between them", () => {
+		const box = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
+		const one = base("a", { kind: "profile", positionMillimetres: [0, 100, 0] });
+		const two = base("b", { kind: "profile", positionMillimetres: [1500, 100, 0] });
+		const { delta } = snapMove([box, one, two], ["a", "b"], [0, 5, 0], PLAN, 150);
+		// One correction for the pair: whatever it is, both move by it and stay 1500 apart.
+		expect(delta[2]).toBeGreaterThan(4000);
+		const movedOne = one.positionMillimetres[0] + delta[0];
+		const movedTwo = two.positionMillimetres[0] + delta[0];
+		expect(movedTwo - movedOne).toBe(1500);
 	});
 
 	it("snaps a measurement's point onto a truss connector", () => {
