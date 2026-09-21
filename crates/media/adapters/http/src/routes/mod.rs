@@ -101,6 +101,11 @@ pub struct ApiState {
     pub active_configuration: Arc<MediaConfiguration>,
     /// The literal, usable administration endpoint selected for this running process.
     pub administration_endpoint: String,
+    /// The address the administration interface is actually bound to for this run.
+    ///
+    /// Separate from the configured address, because a run whose configured port was taken moved
+    /// to a free one. Settings must show the port that answers, not the one that did not bind.
+    pub administration_listen: std::net::SocketAddr,
     /// The configuration file and its copyable parent are process-owned filesystem facts.
     pub configuration_path: PathBuf,
     pub data_directory: Option<PathBuf>,

@@ -10,10 +10,19 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use ts_rs::TS;
 
+/// The value `Health::product` always carries.
+///
+/// A positive identity marker, not a version: a second Pixel that finds the administration port
+/// taken has to be able to tell a running ToskLight Pixel from any other process that happens to
+/// answer on that port. An occupied socket alone says nothing about who owns it.
+pub const PRODUCT: &str = "tosklight-pixel";
+
 /// Whether the process is up and what it is running.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Health {
+    /// Always [`PRODUCT`]. Identifies the answering process as a ToskLight Pixel.
+    pub product: String,
     pub status: String,
     pub instance: String,
     pub outputs: usize,

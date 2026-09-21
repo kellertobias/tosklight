@@ -15,6 +15,7 @@ pub(super) async fn network(State(state): State<ApiState>) -> impl IntoResponse 
     axum::Json(NetworkView::of(
         &state.configuration.load().network,
         &state.active_configuration.network,
+        state.administration_listen,
         (state.diagnostics.network_warnings)(),
     ))
 }
@@ -45,6 +46,7 @@ pub(super) async fn update_network(
     let view = NetworkView::of(
         &state.configuration.load().network,
         &state.active_configuration.network,
+        state.administration_listen,
         (state.diagnostics.network_warnings)(),
     );
     Ok(edit::respond(&state, &body.request_id, &view))

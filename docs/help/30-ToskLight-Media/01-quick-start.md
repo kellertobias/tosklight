@@ -12,6 +12,8 @@ To keep the configuration and media somewhere else, such as a show drive, choose
 
 Open the administration address shown by the server. On the server machine the usual address is `http://127.0.0.1:8080`. If another computer is administering it, use the Media Server machine's permitted network address and allow the configured HTTP port through the firewall.
 
+Always read the address off the standby picture, the menu-bar item, or **Settings > Network** rather than assuming port 8080. When another program on the computer already holds port 8080, Pixel starts on a free port instead of refusing to start, and says so under **Settings > Network**; the next start returns to 8080 once the port is free. A port you chose yourself is never substituted: if it is taken, Pixel stops and names it, so free the port or choose another one under **Settings > Network**. If a second ToskLight Pixel is already running on the computer, Pixel stops and tells you where the running one is instead of starting a second server; open that one, or stop it first.
+
 In a short browser window, the Pixel dock on the left scrolls as one piece, so **Settings**, **Take over playback**, and the connection state stay reachable, and the dock keeps the open destination in view. Each Settings tab scrolls on its own below the window title with the mouse wheel, a trackpad, or touch. Click or tab into the tab's content, then use the arrow keys, **Page Up**/**Page Down**, or **Home**/**End**. Choosing another Settings tab opens it at its top.
 
 ## Development launch

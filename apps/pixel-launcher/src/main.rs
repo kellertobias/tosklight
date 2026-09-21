@@ -138,6 +138,14 @@ fn administration_url(port: u16) -> String {
     format!("http://127.0.0.1:{port}/")
 }
 
+/// The product marker a ToskLight Pixel's health document always carries.
+///
+/// The launcher decides whether to start a server from what is on the port. A healthy answer from
+/// something that is not a Pixel is not a reason to skip starting one, so the answer has to name
+/// the product rather than merely being well-formed.
+#[cfg(any(target_os = "windows", test))]
+const PRODUCT: &str = "tosklight-pixel";
+
 #[cfg(any(target_os = "windows", test))]
 fn healthy_response(response: &str) -> bool {
     let Some((headers, body)) = response.split_once("\r\n\r\n") else {
@@ -147,16 +155,18 @@ fn healthy_response(response: &str) -> bool {
         .lines()
         .next()
         .is_some_and(|line| line.starts_with("HTTP/1.1 200 ") || line.starts_with("HTTP/1.0 200 "));
+    let Ok(document) = serde_json::from_str::<serde_json::Value>(body) else {
+        return false;
+    };
+    let named = |field: &str| {
+        document
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
     status_ok
-        && serde_json::from_str::<serde_json::Value>(body)
-            .ok()
-            .and_then(|value| {
-                value
-                    .get("status")
-                    .and_then(|status| status.as_str())
-                    .map(str::to_owned)
-            })
-            .is_some_and(|status| status == "ok")
+        && named("product").as_deref() == Some(PRODUCT)
+        && named("status").as_deref() == Some("ok")
 }
 
 #[cfg(target_os = "windows")]
@@ -180,10 +190,16 @@ mod tests {
     #[test]
     fn only_a_successful_pixel_health_document_is_ready() {
         assert!(healthy_response(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"status\":\"ok\"}"
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"product\":\"tosklight-pixel\",\"status\":\"ok\"}"
         ));
+        assert!(
+            !healthy_response(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"status\":\"ok\"}"
+            ),
+            "a health document that does not name Pixel could be any other server on the port"
+        );
         assert!(!healthy_response(
-            "HTTP/1.1 503 Service Unavailable\r\n\r\n{\"status\":\"ok\"}"
+            "HTTP/1.1 503 Service Unavailable\r\n\r\n{\"product\":\"tosklight-pixel\",\"status\":\"ok\"}"
         ));
         assert!(!healthy_response(
             "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nnot json"

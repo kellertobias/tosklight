@@ -46,7 +46,9 @@ pub use dmx::{
     DmxResolutionView, DmxValueSetView,
 };
 pub use effect::{EffectParameterView, EffectPresetView, EffectSlotView, UpdateEffectPreset};
-pub use health::{AddressView, Health, RunningOutputView, RunningServerView, SourceStatusView};
+pub use health::{
+    AddressView, Health, PRODUCT, RunningOutputView, RunningServerView, SourceStatusView,
+};
 pub use library::{
     DeleteLibraryItem, DeleteLibraryItems, FolderPresentationView, FolderPresentationsView,
     ImportJobView, ImportsView, LibraryNoteTargetView, PendingImportView, RemoveFolderPicture,

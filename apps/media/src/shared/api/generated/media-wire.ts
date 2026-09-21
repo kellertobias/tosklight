@@ -6,7 +6,11 @@ export type ApiErrorBody = {
  * Stable across releases. Clients branch on this, never on the message.
  */
 code: string, message: string, };
-export type Health = { status: string, instance: string, outputs: number,
+export type Health = {
+/**
+ * Always [`PRODUCT`]. Identifies the answering process as a ToskLight Pixel.
+ */
+product: string, status: string, instance: string, outputs: number,
 /**
  * A revision counter, not an identifier. It stays inside the range a browser can hold in a
  * number, so the client is not forced into `bigint` arithmetic to compare two snapshots.

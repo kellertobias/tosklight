@@ -91,18 +91,33 @@ pub struct NetworkView {
 }
 
 impl NetworkView {
+    /// `administration_listen` is the socket the administration interface actually bound. It is
+    /// passed in rather than derived, because a run that found its configured port taken moved to
+    /// a free one, and the settings panel has to show the port that answers. The stored and
+    /// active-stored addresses stay untouched: they are what the operator configured, which is
+    /// also what the next start will try again.
     pub fn of(
         network: &NetworkConfiguration,
         active: &NetworkConfiguration,
-        warnings: Vec<String>,
+        administration_listen: SocketAddr,
+        mut warnings: Vec<String>,
     ) -> Self {
         let startup = active.resolved();
         let next = network.resolved();
+        // A run whose configured administration port was taken moved to a free one rather than
+        // refusing to start. That is not visible anywhere else in this view — stored and resolved
+        // differ for the preset too — so it is said in words.
+        if administration_listen != startup.http_listen {
+            warnings.insert(
+                0,
+                administration_moved_warning(startup.http_listen, administration_listen),
+            );
+        }
         // The UDP listeners already follow the stored settings; CITP and HTTP still run on what
         // this process started with.
         let running = ResolvedNetwork {
             citp_listen: startup.citp_listen,
-            http_listen: startup.http_listen,
+            http_listen: administration_listen,
             citp_advertised_port: startup.citp_advertised_port,
             ..next.clone()
         };
@@ -123,6 +138,17 @@ impl NetworkView {
             warnings,
         }
     }
+}
+
+/// What an operator is told about a run that could not have its configured administration port.
+fn administration_moved_warning(configured: SocketAddr, bound: SocketAddr) -> String {
+    format!(
+        "Port {} is held by another program, so the administration interface is on port {} for \
+         this run. It returns to port {} on the next start once the port is free.",
+        configured.port(),
+        bound.port(),
+        configured.port()
+    )
 }
 
 /// An intent-shaped network edit: only the fields being changed.
@@ -295,6 +321,11 @@ mod tests {
         serde_json::from_str(body).expect("a network edit")
     }
 
+    /// The administration socket an ordinary run binds: exactly the configured default.
+    fn bound() -> SocketAddr {
+        "127.0.0.1:8080".parse().expect("a listen address")
+    }
+
     #[test]
     fn the_view_reports_what_was_typed_and_what_was_bound_separately() {
         let network = NetworkConfiguration {
@@ -302,7 +333,7 @@ mod tests {
             art_net_listen: "192.168.1.40:6454".parse().unwrap(),
             ..Default::default()
         };
-        let view = NetworkView::of(&network, &network, Vec::new());
+        let view = NetworkView::of(&network, &network, bound(), Vec::new());
 
         assert_eq!(view.stored.art_net_listen, "192.168.1.40:6454");
         assert_eq!(
@@ -323,7 +354,7 @@ mod tests {
             speed_group_endpoint: Some("10.0.0.5:4810".parse().unwrap()),
             ..active.clone()
         };
-        let view = NetworkView::of(&live, &active, Vec::new());
+        let view = NetworkView::of(&live, &active, bound(), Vec::new());
         assert_eq!(view.resolved.art_net_listen, "10.0.0.5:6454");
         assert_eq!(view.resolved.sacn_listen, "10.0.0.5:5568");
         assert_eq!(
@@ -337,7 +368,7 @@ mod tests {
             citp_listen: "10.0.0.5:4809".parse().unwrap(),
             ..live.clone()
         };
-        let view = NetworkView::of(&moved, &active, Vec::new());
+        let view = NetworkView::of(&moved, &active, bound(), Vec::new());
         assert!(view.pending_restart);
         assert_eq!(
             view.resolved.citp_listen, "0.0.0.0:4809",
@@ -348,11 +379,38 @@ mod tests {
             same_computer_preset: true,
             ..live
         };
-        let view = NetworkView::of(&preset, &active, Vec::new());
+        let view = NetworkView::of(&preset, &active, bound(), Vec::new());
         assert_eq!(view.resolved.art_net_listen, "127.0.0.1:6454");
         assert!(
             view.pending_restart,
             "the preset moves CITP and HTTP only on the next start"
+        );
+    }
+
+    #[test]
+    fn a_run_that_had_to_move_reports_the_port_that_answers() {
+        let configured = NetworkConfiguration::default();
+        let moved: SocketAddr = "127.0.0.1:53124".parse().unwrap();
+
+        let view = NetworkView::of(&configured, &configured, moved, Vec::new());
+
+        assert_eq!(
+            view.resolved.http_listen, "127.0.0.1:53124",
+            "settings must name the port the browser can actually reach"
+        );
+        assert_eq!(
+            view.stored.http_listen, "127.0.0.1:8080",
+            "the configured port is what the operator typed and what the next start tries"
+        );
+        assert_eq!(view.active_stored.http_listen, "127.0.0.1:8080");
+        assert!(
+            !view.pending_restart,
+            "a port this run could not have is not an unsaved edit waiting for a restart"
+        );
+        assert!(
+            view.warnings[0].contains("port 53124"),
+            "an operator has to be told where the interface actually is: {:?}",
+            view.warnings
         );
     }
 

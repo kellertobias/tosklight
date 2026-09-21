@@ -7,6 +7,7 @@
 //! so an unusable configuration stops the process with an actionable error instead of bringing
 //! half a server up.
 
+mod admin_listener;
 mod beat_form_flash;
 mod beat_grid_wave;
 mod beat_move;
@@ -123,6 +124,12 @@ fn run_inner() -> anyhow::Result<()> {
     let (audio, analysis) = start_audio(&configuration);
     let dmx_diagnostics = dmx::diagnostics();
     let network_warnings = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    // Bound before any output opens a window, so a port that cannot be had stops the process with
+    // its reason instead of a window appearing and vanishing.
+    let administration = runtime.block_on(admin_listener::bind(
+        configuration.network.resolved().http_listen,
+    ))?;
+    let administration_address = administration.address;
     let universe_inputs = dmx::universe_inputs();
     let console_identity = citp::ConsoleIdentity::default();
     let available_monitors = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
@@ -184,6 +191,7 @@ fn run_inner() -> anyhow::Result<()> {
     let services = Services {
         configuration: shared.configuration.clone(),
         shutdown: shutdown.clone(),
+        administration,
         state: Some(shared.state.clone()),
         catalog: Some(shared.catalog.clone()),
         diagnostics,
@@ -220,7 +228,7 @@ fn run_inner() -> anyhow::Result<()> {
         diagnostics_arguments,
         available_monitors,
         started,
-        administration_endpoint(&configuration),
+        administration_endpoint(administration_address),
         importer.clone(),
     );
     shutdown.request(ShutdownReason::Requested);
@@ -834,9 +842,11 @@ pub fn initial_state(configuration: &MediaConfiguration) -> MediaState {
 /// structured path rather than by dropping the process. The caller owns the [`Shutdown`] handle
 /// so an administrative request and an operating-system signal reach the same path.
 pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> anyhow::Result<()> {
+    let administration = admin_listener::bind(configuration.network.resolved().http_listen).await?;
     serve_with(Services {
         configuration: std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(configuration)),
         shutdown,
+        administration,
         state: None,
         catalog: None,
         diagnostics: media_http::Diagnostics::default(),
@@ -853,10 +863,13 @@ pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> any
 /// A value rather than a parameter list, because the outputs, the API, and the diagnostics all
 /// share the same handles and adding a sixth argument to a function nobody can read is not an
 /// improvement.
-pub struct Services {
+pub(crate) struct Services {
     /// The live configuration document, shared with the outputs.
     pub configuration: SharedConfiguration,
     pub shutdown: Shutdown,
+    /// The administration socket, already bound. See [`admin_listener`] for why it arrives bound
+    /// rather than as an address.
+    administration: admin_listener::Administration,
     /// The state the outputs present, when this process has any.
     pub state: Option<dmx::SharedState>,
     pub catalog: Option<presentation::SharedCatalog>,
@@ -876,10 +889,11 @@ pub struct Services {
 ///
 /// The API reads and writes exactly the state the renderer presents and the configuration the
 /// outputs read; there is no second copy for the web to diverge from.
-pub async fn serve_with(services: Services) -> anyhow::Result<()> {
+pub(crate) async fn serve_with(services: Services) -> anyhow::Result<()> {
     let Services {
         configuration: live,
         shutdown,
+        administration,
         state,
         catalog,
         diagnostics,
@@ -889,12 +903,11 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
         snapshot,
     } = services;
     let configuration = live.load_full();
-    let resolved = configuration.network.resolved();
     let outputs = configuration.outputs.len();
     tracing::info!(
         instance = configuration.instance_id.as_str(),
         outputs,
-        http = %resolved.http_listen,
+        http = %administration.address,
         "media server starting"
     );
 
@@ -925,7 +938,8 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
     let api = media_http::ApiState {
         configuration: live,
         active_configuration: Arc::clone(&configuration),
-        administration_endpoint: administration_endpoint(&configuration),
+        administration_endpoint: administration_endpoint(administration.address),
+        administration_listen: administration.address,
         configuration_path: configuration_path_for_view,
         data_directory,
         data_folders: data_folder::access(&configuration, shutdown.clone()),
@@ -970,23 +984,10 @@ pub async fn serve_with(services: Services) -> anyhow::Result<()> {
         upload_body_limit: media_library::MAX_UPLOAD_BYTES as usize + 1024 * 1024,
     };
 
-    let listener = tokio::net::TcpListener::bind(resolved.http_listen)
-        .await
-        .map_err(|error| {
-            let hint = if error.kind() == std::io::ErrorKind::AddrInUse {
-                " Another process already holds it."
-            } else {
-                " Check the listen address and operating-system network permissions."
-            };
-            anyhow::anyhow!(
-                "cannot bind the administration interface to {}: {error}.{hint}",
-                resolved.http_listen
-            )
-        })?;
-    tracing::info!(address = %resolved.http_listen, "administration interface listening");
+    tracing::info!(address = %administration.address, "administration interface listening");
 
     let serving = shutdown.clone();
-    axum::serve(listener, media_http::router(api))
+    axum::serve(administration.listener, media_http::router(api))
         .with_graceful_shutdown(async move {
             let _ = serving.wait_for_signal().await;
         })
@@ -1137,7 +1138,10 @@ mod tests {
         let mut configuration = MediaConfiguration::default();
         configuration.network.http_listen = "10.42.0.8:9090".parse().unwrap();
 
-        assert_eq!(administration_endpoint(&configuration), "10.42.0.8:9090");
+        assert_eq!(
+            administration_endpoint(configuration.network.resolved().http_listen),
+            "10.42.0.8:9090"
+        );
     }
 
     #[test]

@@ -69,6 +69,7 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
         configuration: Arc::clone(&configuration),
         active_configuration,
         administration_endpoint: "127.0.0.1:18080".to_owned(),
+        administration_listen: "127.0.0.1:8080".parse().unwrap(),
         configuration_path: "/tmp/tosklight-media/media-server.json".into(),
         data_directory: Some("/tmp/tosklight-media".into()),
         open_data_directory: Arc::new(|| Ok(())),

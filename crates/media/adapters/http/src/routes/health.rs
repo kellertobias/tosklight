@@ -10,6 +10,7 @@ use crate::wire::{CatalogView, Health, RunningServerView};
 pub(super) async fn health(State(state): State<ApiState>) -> impl IntoResponse {
     let catalog = state.catalog.load();
     axum::Json(Health {
+        product: crate::wire::PRODUCT.to_owned(),
         status: "ok".to_owned(),
         instance: state.configuration.load().instance_id.as_str().to_owned(),
         outputs: state.state.load().outputs.len(),
@@ -57,6 +58,7 @@ mod tests {
         let bench = bench();
         let (status, body) = send(&bench.router, get("/api/v2/health".into())).await;
         assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["product"], "tosklight-pixel");
         assert_eq!(body["status"], "ok");
         assert_eq!(body["outputs"], 1);
     }

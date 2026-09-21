@@ -119,6 +119,7 @@ export function stubServer(
 		serverLogLevel: { level: "info", resetsOnRestart: true },
 		imports: anImportState(),
 		health: {
+			product: "tosklight-pixel",
 			status: "ok",
 			instance: "test-instance",
 			outputs: 1,

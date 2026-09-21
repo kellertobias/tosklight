@@ -374,8 +374,10 @@ fn read_file(path: &Path, required: bool) -> Result<MediaConfiguration, StartupE
 }
 
 /// The literal administration address an operator can reach this run on.
-pub(crate) fn administration_endpoint(configuration: &MediaConfiguration) -> String {
-    let listen = configuration.network.resolved().http_listen;
+///
+/// Derived from the socket this run actually bound, never from the configured address: when the
+/// configured port was taken, the printed and drawn endpoints have to name the port that answers.
+pub(crate) fn administration_endpoint(listen: std::net::SocketAddr) -> String {
     let ip = if listen.ip().is_unspecified() {
         primary_ipv4().unwrap_or(media_application::configuration::LOOPBACK)
     } else {
