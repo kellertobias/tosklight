@@ -3,8 +3,9 @@
  *
  * A copy is a new element of the show with its own fixture ID, so it is selected, moved and deleted
  * on its own. It keeps everything the original is — profile, mode, size, rotation, name — and
- * stands a fixed step to the right of it on the view it was duplicated in, so it is never hidden
- * under the original. Its fixture and virtual numbers are the next free ones above the original's,
+ * stands beside it, edges touching, on the view it was duplicated in, so it is never hidden under
+ * the original; `duplicateStep` measures that step. Its fixture and virtual numbers are the next
+ * free ones above the original's,
  * and it is unpatched: two elements on one DMX address would conflict, and an unpatched element is
  * still fully part of the show until it is given an address.
  */
@@ -13,9 +14,6 @@ import { documentSession } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
 
 const transport = new TauriPatchTransport();
-
-/** How far a copy stands from its original, in millimetres along the view's right. */
-export const DUPLICATE_OFFSET_MILLIMETRES = 500;
 
 type Location = PatchFixtureProjection["location"];
 

@@ -6,7 +6,7 @@
  * needs to draw — the axis guide and the marquee rectangle — is state, and nothing else is.
  */
 import { useEffect, useRef, useState } from "react";
-import { DUPLICATE_OFFSET_MILLIMETRES } from "./cadDuplicate";
+import { duplicateStep, rememberMoveAxis } from "./duplicateStep";
 import type { CadObjectMenuRequest } from "./CadObjectMenu";
 import type { SelectionBox } from "./lineRenderer";
 import {
@@ -295,7 +295,12 @@ function openObjectMenu(context: CadViewportContext, event: React.MouseEvent<HTM
 	context.onObjectMenu({
 		x: event.clientX,
 		y: event.clientY,
-		duplicateOffset: planeDelta([DUPLICATE_OFFSET_MILLIMETRES, 0], context.view, context.rotationQuarterTurns),
+		duplicateOffset: duplicateStep(
+			context.entities,
+			entityIds,
+			context.view,
+			context.rotationQuarterTurns,
+		),
 		entityIds,
 	});
 }
@@ -424,12 +429,9 @@ export function useCadViewportInteraction(
 		}
 		// The preview stays where the operator let go: the move clears it once the show has answered,
 		// in the same render that draws the committed positions.
-		await context.onMove(
-			current,
-			active.entityIds ?? context.selectedIds,
-			active.spread ?? false,
-			!event.shiftKey,
-		);
+		const moved = active.entityIds ?? context.selectedIds;
+		rememberMoveAxis(moved, current, context.view, context.rotationQuarterTurns);
+		await context.onMove(current, moved, active.spread ?? false, !event.shiftKey);
 	}
 
 	function cancel() {

@@ -18,7 +18,7 @@ const MENU_HEIGHT = 96;
 export interface CadObjectMenuRequest {
 	x: number;
 	y: number;
-	/** Show millimetres: the view's right, `DUPLICATE_OFFSET_MILLIMETRES` long. */
+	/** Show millimetres: the step a copy stands from its original, from `duplicateStep`. */
 	duplicateOffset: [number, number, number];
 	/**
 	 * The logical fixtures the menu's actions apply to, known when it opens.

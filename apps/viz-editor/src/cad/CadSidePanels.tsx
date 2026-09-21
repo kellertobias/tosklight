@@ -258,6 +258,7 @@ function SelectionMenu({
 	onSelect,
 	onFocusEntity,
 	onError,
+	onNotice,
 }: {
 	objectMenu: ObjectMenuState | undefined;
 	entities: readonly CadEntity[];
@@ -265,6 +266,7 @@ function SelectionMenu({
 	onSelect(ids: string[]): void;
 	onFocusEntity(entityId: string | null): void;
 	onError(reason: unknown): void;
+	onNotice(message: string): void;
 }) {
 	const request = objectMenu?.request;
 	// The request names its own elements, so the menu paints in the frame the right-click is in
@@ -281,6 +283,7 @@ function SelectionMenu({
 				// The copies become the selection, so the next move or delete is theirs alone.
 				onFocusEntity(ids[0]);
 				onSelect(ids);
+				onNotice(ids.length === 1 ? "Duplicated 1 element" : `Duplicated ${ids.length} elements`);
 			})
 			.catch(onError);
 	return (
@@ -314,6 +317,7 @@ export function CadSidePanels({
 	onFocusEntity,
 	objectMenu,
 	onError,
+	onNotice,
 }: {
 	panel: CadPanel;
 	scene: CadSceneSnapshot | null;
@@ -331,6 +335,8 @@ export function CadSidePanels({
 	/** The right-click menu of the selection, which runs its Delete through the same confirmation. */
 	objectMenu?: ObjectMenuState;
 	onError(reason: unknown): void;
+	/** A short confirmation that an action did something. */
+	onNotice(message: string): void;
 }) {
 	const [width, setWidth] = useStoredWidth();
 	const [tab, setTab] = useState<ElementsTab>("drawings");
@@ -353,7 +359,7 @@ export function CadSidePanels({
 		<>
 			{deletion.dialog}
 			<SelectionMenu
-				{...{ objectMenu, onSelect, onFocusEntity, onError }}
+				{...{ objectMenu, onSelect, onFocusEntity, onError, onNotice }}
 				entities={scene?.entities ?? []}
 				onDelete={(targets) => deletion.request(undefined, targets)}
 			/>

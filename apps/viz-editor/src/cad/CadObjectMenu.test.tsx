@@ -99,7 +99,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("right-clicking an element in a CAD viewport", () => {
-	it("selects an unselected element and opens the menu there, with the view's right as the copy's step", () => {
+	it("selects an unselected element and opens the menu there, stepping a copy by the element's own width", () => {
 		const { rightClick, onSelection, onObjectMenu, onFocusEntity } = setup();
 		expect(rightClick(505, 402)).toBe(false);
 		expect(onFocusEntity).toHaveBeenCalledWith(lamp.id);
@@ -108,7 +108,9 @@ describe("right-clicking an element in a CAD viewport", () => {
 		expect(onObjectMenu).toHaveBeenCalledWith({
 			x: 505,
 			y: 402,
-			duplicateOffset: [500, 0, 0],
+			// The lamp is 400 mm across, so its copy stands exactly beside it rather than a fixed
+			// 500 mm away, which would overlap a wider element and barely move a longer one.
+			duplicateOffset: [400, 0, 0],
 			// The menu carries what it acts on, so it paints without waiting for the selection.
 			entityIds: [lamp.id],
 		});

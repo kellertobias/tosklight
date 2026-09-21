@@ -108,8 +108,12 @@ function fitTileCamera(
  * to their copies — writes the pre-mutation `sceneRevision` back over the fresh one, and the next
  * move is rejected with "The rig changed at revision N+1; refresh before committing revision N".
  */
-/** A stable empty selection, so the menu's key listener is not rebound on every render. */
+/** How long a confirmation stays on screen. */
+const NOTICE_MILLISECONDS = 2500;
+
+/** Stable empties, so the menu's key listener is not rebound on every render. */
 const EMPTY_SELECTION: readonly string[] = [];
+const EMPTY_ENTITIES: readonly CadEntity[] = [];
 
 export function keepNewerHalves(
 	current: CadSceneSnapshot,
@@ -148,6 +152,13 @@ export function CadApp() {
 	const [exporting, setExporting] = useState(false);
 	const [activeTileId, setActiveTileId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	// A short confirmation that an action did something, so a copy is not a silent change.
+	const [notice, setNotice] = useState<string | null>(null);
+	useEffect(() => {
+		if (!notice) return;
+		const clear = setTimeout(() => setNotice(null), NOTICE_MILLISECONDS);
+		return () => clearTimeout(clear);
+	}, [notice]);
 	const [documentInfo, setDocumentInfo] = useState<DocumentSummary | null>(
 		null,
 	);
@@ -257,6 +268,7 @@ export function CadApp() {
 	const objectMenu = useCadObjectMenu({
 		enabled: !printMode && tools.tool === "select",
 		selectedIds: scene?.selectedIds ?? EMPTY_SELECTION,
+		entities: scene?.entities ?? EMPTY_ENTITIES,
 		activeView: {
 			view: shownTile?.view ?? "top_down",
 			rotationQuarterTurns: shownTile?.rotationQuarterTurns ?? 0,
@@ -440,6 +452,7 @@ export function CadApp() {
 			/>
 			<CadToolError tools={tools} />
 			{error ? <output className="cad-error">{error}</output> : null}
+			{!error && notice ? <output className="cad-notice">{notice}</output> : null}
 			<div className={`cad-print-layout ${panelOpen ? "is-printing" : ""}`}>
 				<section className="cad-workspace">
 					{scene ? (
@@ -492,6 +505,7 @@ export function CadApp() {
 					onFocusEntity={setFocusedEntityId}
 					objectMenu={objectMenu}
 					onError={(reason) => setError(String(reason))}
+					onNotice={setNotice}
 				/>
 			</div>
 			{settingsOpen ? (

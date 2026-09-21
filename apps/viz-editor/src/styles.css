@@ -2049,6 +2049,21 @@ body {
 	cursor: pointer;
 }
 
+/* A short confirmation that an action did something, in the same corner as an error. */
+.cad-notice {
+	position: absolute;
+	z-index: 30;
+	top: 40px;
+	right: 8px;
+	max-width: min(480px, calc(100% - 16px));
+	padding: 8px 14px;
+	border: 1px solid #2f5f45;
+	border-radius: 3px;
+	background: #16341f;
+	color: #d7f3e0;
+	pointer-events: none;
+}
+
 .cad-workspace,
 .cad-split,
 .cad-tile {

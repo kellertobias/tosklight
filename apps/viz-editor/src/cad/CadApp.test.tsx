@@ -577,7 +577,7 @@ describe("the CAD planning screen", () => {
 		);
 	});
 
-	it("duplicates the selection from its menu as a new, unpatched element a step to the right, and selects it", async () => {
+	it("duplicates the selection from its menu as a new, unpatched element beside it, and selects it", async () => {
 		documentMocks.patchSnapshot.mockResolvedValue({
 			showId: snapshot.showId,
 			patchRevision: 3,
@@ -615,7 +615,7 @@ describe("the CAD planning screen", () => {
 		expect(written).toMatchObject({
 			fixtureNumber: 102,
 			splitPatches: [{ split: 1, universe: null, address: null }],
-			location: { x: 500, y: 0, z: 4000 },
+			location: { x: 400, y: 0, z: 4000 },
 		});
 		await waitFor(() => expect(mocks.replaceSelection).toHaveBeenCalledWith(4, [written.fixtureId]));
 	});

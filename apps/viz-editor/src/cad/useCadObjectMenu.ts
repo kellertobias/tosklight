@@ -6,9 +6,9 @@
  * is in hand and nothing else has the keys.
  */
 import { useCallback, useEffect, useState } from "react";
-import { DUPLICATE_OFFSET_MILLIMETRES } from "./cadDuplicate";
+import { duplicateStep } from "./duplicateStep";
 import { type CadObjectMenuRequest, isMenuKey } from "./CadObjectMenu";
-import { type CadViewDirection, planeDelta } from "./types";
+import type { CadEntity, CadViewDirection } from "./types";
 
 /** Keys typed into a field, a dialog or a menu belong to it, as with the CAD shortcuts. */
 function keysAreTaken(target: EventTarget | null) {
@@ -21,12 +21,15 @@ function keysAreTaken(target: EventTarget | null) {
 export function useCadObjectMenu({
 	enabled,
 	selectedIds,
+	entities,
 	activeView,
 }: {
 	/** Select is in hand and the print pages are closed. */
 	enabled: boolean;
 	/** What the keyboard's menu acts on: the current selection. */
 	selectedIds: readonly string[];
+	/** The drawing, so a copy's step can be measured from what it copies. */
+	entities: readonly CadEntity[];
 	/** The view the keyboard's menu duplicates along: the viewport last used. */
 	activeView: { view: CadViewDirection; rotationQuarterTurns: number };
 }) {
@@ -49,13 +52,13 @@ export function useCadObjectMenu({
 			setRequest({
 				x: box ? Math.round(box.left + box.width / 2) : Math.round(window.innerWidth / 2),
 				y: box ? Math.round(box.top + box.height / 2) : Math.round(window.innerHeight / 2),
-				duplicateOffset: planeDelta([DUPLICATE_OFFSET_MILLIMETRES, 0], view, rotationQuarterTurns),
+				duplicateOffset: duplicateStep(entities, selectedIds, view, rotationQuarterTurns),
 				entityIds: selectedIds,
 			});
 		};
 		window.addEventListener("keydown", keyDown);
 		return () => window.removeEventListener("keydown", keyDown);
-	}, [enabled, selectedIds, view, rotationQuarterTurns]);
+	}, [enabled, selectedIds, entities, view, rotationQuarterTurns]);
 
 	return { request: enabled ? request : null, open: setRequest, close };
 }
