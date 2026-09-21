@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **252 root cases across 99 files**.
+Default catalog: **253 root cases across 100 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -66,6 +66,7 @@ Default catalog: **252 root cases across 99 files**.
 | 108-media-server-coordinated-patch.spec.ts | MEDIA-008 @ui › Show Patch coordinates discovered Media Servers with the desk routes | docs/testing/14-media-and-running-panes.md | @ui | media-server-coordinated-patch | standard failure evidence | parallel | pending-semantic-migration |
 | 108-media-server-coordinated-patch.spec.ts | MEDIA-008 @api › a coordinated address update validates the protocol universe | docs/testing/14-media-and-running-panes.md | @api | media-server-coordinated-patch | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 108-preset-grid-scaling.spec.ts | PRESET-GRID-001 @ui › the preset grid fills its pane at any width | repository contract | @ui | preset-grid-scaling | standard failure evidence | parallel | pending-semantic-migration |
+| 109-dynamics-phase-grid-distribution.spec.ts | PHASE-GRID-001 @api › a grid gives every fixture on one line the same rank, and keeps it across a restart | docs/testing: Dynamics Phase Grid distribution | @api | dynamics-phase-grid-distribution | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 109-media-point-time.spec.ts | TL-429 @ui › the layer page types In and Out points as mm:ss.ff at the server's frame rate | repository contract | @ui | media-point-time | standard failure evidence | parallel | pending-semantic-migration |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | HIGHLIGHT-004 @api › Highlight belongs to the desk and every surface shares it | repository contract | @api | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 11-update-highlight-fixture-profiles-and-matter.spec.ts | FIXTURE-002 @ui @restart › focused assets and physical metadata remain immutable across edit, patch, and restart | repository contract | @ui @restart | update-highlight-fixture-profiles-and-matter | standard failure evidence | parallel | pending-semantic-migration |
