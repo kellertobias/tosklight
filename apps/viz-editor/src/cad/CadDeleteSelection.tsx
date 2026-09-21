@@ -169,10 +169,18 @@ export function useDeleteSelection({
 		}
 	}
 
-	function request(event?: { shiftKey?: boolean }) {
-		if (!elements.length) return;
-		if (event?.shiftKey && elements.length === 1) void remove(elements);
-		else setConfirming(elements);
+	/**
+	 * Deletes `targets`, defaulting to the selection. The object menu passes its own, because it
+	 * opens in the frame of the right-click that made them the selection, before that selection has
+	 * come back from the desk.
+	 */
+	function request(
+		event?: { shiftKey?: boolean },
+		targets: readonly SelectedElement[] = elements,
+	) {
+		if (!targets.length) return;
+		if (event?.shiftKey && targets.length === 1) void remove(targets);
+		else setConfirming(targets);
 	}
 
 	const dialog = confirming ? (

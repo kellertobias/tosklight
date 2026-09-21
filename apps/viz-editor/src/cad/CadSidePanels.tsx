@@ -250,23 +250,26 @@ function titleGroups({
 	return [infoTabs];
 }
 
-/** The right-click menu of the selection, while it is open and something is selected. */
+/** The right-click menu, while it is open and names something to act on. */
 function SelectionMenu({
 	objectMenu,
-	elements,
+	entities,
 	onDelete,
 	onSelect,
 	onFocusEntity,
 	onError,
 }: {
 	objectMenu: ObjectMenuState | undefined;
-	elements: readonly SelectedElement[];
-	onDelete(): void;
+	entities: readonly CadEntity[];
+	onDelete(targets: readonly SelectedElement[]): void;
 	onSelect(ids: string[]): void;
 	onFocusEntity(entityId: string | null): void;
 	onError(reason: unknown): void;
 }) {
 	const request = objectMenu?.request;
+	// The request names its own elements, so the menu paints in the frame the right-click is in
+	// rather than waiting for that click's selection to round-trip through the desk.
+	const elements = request ? selectedElements(entities, request.entityIds) : [];
 	if (!objectMenu || !request || !elements.length) return null;
 	const duplicate = () =>
 		duplicateSelection(
@@ -285,7 +288,7 @@ function SelectionMenu({
 			request={request}
 			count={elements.length}
 			onClose={objectMenu.close}
-			onDelete={onDelete}
+			onDelete={() => onDelete(elements)}
 			onDuplicate={() => void duplicate()}
 		/>
 	);
@@ -349,7 +352,11 @@ export function CadSidePanels({
 	const overlays = (
 		<>
 			{deletion.dialog}
-			<SelectionMenu {...{ objectMenu, elements, onSelect, onFocusEntity, onError }} onDelete={deletion.request} />
+			<SelectionMenu
+				{...{ objectMenu, onSelect, onFocusEntity, onError }}
+				entities={scene?.entities ?? []}
+				onDelete={(targets) => deletion.request(undefined, targets)}
+			/>
 		</>
 	);
 	if (!panel && selectionCount === 0) return overlays;

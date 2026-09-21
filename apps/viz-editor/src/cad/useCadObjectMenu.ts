@@ -20,12 +20,13 @@ function keysAreTaken(target: EventTarget | null) {
 
 export function useCadObjectMenu({
 	enabled,
-	hasSelection,
+	selectedIds,
 	activeView,
 }: {
 	/** Select is in hand and the print pages are closed. */
 	enabled: boolean;
-	hasSelection: boolean;
+	/** What the keyboard's menu acts on: the current selection. */
+	selectedIds: readonly string[];
 	/** The view the keyboard's menu duplicates along: the viewport last used. */
 	activeView: { view: CadViewDirection; rotationQuarterTurns: number };
 }) {
@@ -39,7 +40,8 @@ export function useCadObjectMenu({
 
 	useEffect(() => {
 		const keyDown = (event: KeyboardEvent) => {
-			if (!enabled || !hasSelection || !isMenuKey(event) || keysAreTaken(event.target)) return;
+			if (!enabled || !selectedIds.length || !isMenuKey(event) || keysAreTaken(event.target))
+				return;
 			event.preventDefault();
 			const tile =
 				document.querySelector(".cad-tile.is-active") ?? document.querySelector(".cad-tile");
@@ -48,11 +50,12 @@ export function useCadObjectMenu({
 				x: box ? Math.round(box.left + box.width / 2) : Math.round(window.innerWidth / 2),
 				y: box ? Math.round(box.top + box.height / 2) : Math.round(window.innerHeight / 2),
 				duplicateOffset: planeDelta([DUPLICATE_OFFSET_MILLIMETRES, 0], view, rotationQuarterTurns),
+				entityIds: selectedIds,
 			});
 		};
 		window.addEventListener("keydown", keyDown);
 		return () => window.removeEventListener("keydown", keyDown);
-	}, [enabled, hasSelection, view, rotationQuarterTurns]);
+	}, [enabled, selectedIds, view, rotationQuarterTurns]);
 
 	return { request: enabled ? request : null, open: setRequest, close };
 }

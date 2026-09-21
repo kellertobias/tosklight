@@ -105,7 +105,13 @@ describe("right-clicking an element in a CAD viewport", () => {
 		expect(onFocusEntity).toHaveBeenCalledWith(lamp.id);
 		expect(onSelection).toHaveBeenCalledTimes(1);
 		expect(onSelection).toHaveBeenCalledWith({ type: "replace", ids: [lamp.id] });
-		expect(onObjectMenu).toHaveBeenCalledWith({ x: 505, y: 402, duplicateOffset: [500, 0, 0] });
+		expect(onObjectMenu).toHaveBeenCalledWith({
+			x: 505,
+			y: 402,
+			duplicateOffset: [500, 0, 0],
+			// The menu carries what it acts on, so it paints without waiting for the selection.
+			entityIds: [lamp.id],
+		});
 	});
 
 	it("keeps a selection the element already belongs to", () => {
@@ -147,7 +153,7 @@ describe("the CAD object menu", () => {
 		const actions = { onDuplicate: vi.fn(), onDelete: vi.fn(), onClose: vi.fn() };
 		render(
 			<CadObjectMenu
-				request={{ x: 10, y: 20, duplicateOffset: [500, 0, 0] }}
+				request={{ x: 10, y: 20, duplicateOffset: [500, 0, 0], entityIds: ["a"] }}
 				count={count}
 				{...actions}
 			/>,

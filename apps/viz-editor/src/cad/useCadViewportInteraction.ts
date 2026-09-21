@@ -284,18 +284,19 @@ function openObjectMenu(context: CadViewportContext, event: React.MouseEvent<HTM
 		context.camera,
 	);
 	if (!hit) return;
+	let entityIds: readonly string[] = context.selectedIds;
 	if (!context.selected.has(hit.logicalFixtureId)) {
 		const ids = [hit.logicalFixtureId];
+		entityIds =
+			event.shiftKey || !context.expandSelection ? ids : context.expandSelection(ids);
 		context.onFocusEntity?.(hit.id);
-		context.onSelection({
-			type: "replace",
-			ids: event.shiftKey || !context.expandSelection ? ids : context.expandSelection(ids),
-		});
+		context.onSelection({ type: "replace", ids: [...entityIds] });
 	}
 	context.onObjectMenu({
 		x: event.clientX,
 		y: event.clientY,
 		duplicateOffset: planeDelta([DUPLICATE_OFFSET_MILLIMETRES, 0], context.view, context.rotationQuarterTurns),
+		entityIds,
 	});
 }
 

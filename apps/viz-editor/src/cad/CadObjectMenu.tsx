@@ -20,6 +20,14 @@ export interface CadObjectMenuRequest {
 	y: number;
 	/** Show millimetres: the view's right, `DUPLICATE_OFFSET_MILLIMETRES` long. */
 	duplicateOffset: [number, number, number];
+	/**
+	 * The logical fixtures the menu's actions apply to, known when it opens.
+	 *
+	 * A right-click also makes them the selection, but that round-trips through the desk. The menu
+	 * carries them so it can paint in the same frame as the click rather than waiting for the
+	 * selection to come back.
+	 */
+	entityIds: readonly string[];
 }
 
 /** Whether a key press asks for the context menu: the Menu key, or Shift+F10. */
