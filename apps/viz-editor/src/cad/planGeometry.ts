@@ -6,14 +6,19 @@
  * viewport renderer that draws the plan, and the picking that decides what an operator just
  * clicked on.
  */
-import { entityPlanGeometry, type PlanGeometry, type PlanPoint } from "./projection";
+import {
+	entityPlanGeometry,
+	type PlanGeometry,
+	type PlanPoint,
+	rotateDeskPoint,
+} from "./projection";
 import type {
 	CadDrawing,
 	CadEntity,
 	CadViewDirection,
 	TileCamera,
 } from "./types";
-import { projectPoint } from "./types";
+import { planeDelta, projectPoint } from "./types";
 
 /** The axis a move is constrained to while a drag is in flight. */
 export type MoveAxis = "plane" | "horizontal" | "vertical";
@@ -70,6 +75,59 @@ export function fitCadOverview(
 	};
 }
 
+/**
+ * Where the two axes of an entity's own drawing end up on the page, once the entity is turned.
+ *
+ * A drawing is a flat slice: its points are `[across, up]` in the unturned axes of the view it was
+ * built for. Turning it therefore means turning that slice's two axes in the show and projecting
+ * each — not spinning the points about the page, which can only express yaw seen from above. Read
+ * this way a lamp rolled 180 degrees about X hangs upside down in an elevation, and a truss yawed
+ * away from the viewer foreshortens, both of which a single page angle cannot say.
+ *
+ * `live_model` geometry has already been turned in three dimensions when it was projected, so its
+ * axes are taken as they are.
+ */
+function planBasis(
+	entity: CadEntity,
+	geometry: PlanGeometry,
+	view: CadViewDirection,
+	rotationQuarterTurns: number,
+): [PlanPoint, PlanPoint] {
+	const rotation: readonly [number, number, number] =
+		geometry.source === "live_model" ? [0, 0, 0] : entity.rotationDegrees;
+	const axis = (local: [number, number]): PlanPoint =>
+		projectPoint(
+			rotateDeskPoint(planeDelta(local, view), rotation),
+			view,
+			rotationQuarterTurns,
+		);
+	return [axis([1, 0]), axis([0, 1])];
+}
+
+/**
+ * Where a point of an entity's own drawing lands on the page.
+ *
+ * Shared by the screen and the printed plan so the two cannot drift apart.
+ */
+export function planTransform(
+	entity: CadEntity,
+	geometry: PlanGeometry,
+	view: CadViewDirection,
+	rotationQuarterTurns: number,
+	offset: readonly [number, number] = [0, 0],
+): (point: PlanPoint) => PlanPoint {
+	const centre = projectPoint(
+		entity.positionMillimetres,
+		view,
+		rotationQuarterTurns,
+	);
+	const [across, up] = planBasis(entity, geometry, view, rotationQuarterTurns);
+	return (point) => [
+		centre[0] + point[0] * across[0] + point[1] * up[0] + offset[0],
+		centre[1] + point[0] * across[1] + point[1] * up[1] + offset[1],
+	];
+}
+
 /** An entity's own drawing, moved and turned into the plan the view shows. */
 export function worldGeometry(
 	entity: CadEntity,
@@ -78,24 +136,13 @@ export function worldGeometry(
 	rotationQuarterTurns: number,
 	offset: readonly [number, number] = [0, 0],
 ): PlanGeometry {
-	const centre = projectPoint(
-		entity.positionMillimetres,
+	const transform = planTransform(
+		entity,
+		geometry,
 		view,
 		rotationQuarterTurns,
+		offset,
 	);
-	const angle =
-		view === "top_down"
-			? (((geometry.source === "live_model" ? 0 : entity.rotationDegrees[2]) +
-					rotationQuarterTurns * 90) *
-					Math.PI) /
-				180
-			: 0;
-	const cosine = Math.cos(angle);
-	const sine = Math.sin(angle);
-	const transform = (point: PlanPoint): PlanPoint => [
-		centre[0] + point[0] * cosine - point[1] * sine + offset[0],
-		centre[1] + point[0] * sine + point[1] * cosine + offset[1],
-	];
 	return {
 		...geometry,
 		triangles: geometry.triangles.map((triangle) => ({

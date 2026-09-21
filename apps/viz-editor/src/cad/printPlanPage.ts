@@ -31,6 +31,7 @@ import {
 	annotationsForView,
 } from "./annotationGeometry";
 import type { CadAnnotation } from "./annotations";
+import { planTransform } from "./planGeometry";
 import { placedPolylines, underlaysForPage } from "./underlayGeometry";
 import type { CadUnderlay } from "./underlays";
 import {
@@ -184,22 +185,15 @@ function entityCommands(
 	const geometry = entityPlanGeometry(entity, drawing, page.view, {
 		mountingHardware: page.showMountingHardware !== false,
 	});
-	const centre = projectPoint(
-		entity.positionMillimetres,
+	// The same transform the screen draws with, so a printed plan cannot drift from the view.
+	const transform = planTransform(
+		entity,
+		geometry,
 		page.view,
 		page.rotationQuarterTurns,
 	);
-	const angle =
-		page.view === "top_down"
-			? (((geometry.source === "live_model" ? 0 : entity.rotationDegrees[2]) +
-					page.rotationQuarterTurns * 90) *
-					Math.PI) /
-				180
-			: 0;
-	const transform = (local: PlanPoint): PlanPoint => [
-		centre[0] + local[0] * Math.cos(angle) - local[1] * Math.sin(angle),
-		centre[1] + local[0] * Math.sin(angle) + local[1] * Math.cos(angle),
-	];
+	// The drawing's own origin: where the entity stands on the page.
+	const centre = transform([0, 0]);
 	const commands = [entity.kind === "venue" ? "0.38 G" : "0.12 G", "0.65 w"];
 	for (const outline of geometry.outlines)
 		commands.push(
