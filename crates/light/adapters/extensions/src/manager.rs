@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -19,6 +19,7 @@ pub struct ManagedInstanceSnapshot {
     pub extension_id: String,
     pub package_digest: String,
     pub executable: PathBuf,
+    pub capabilities: BTreeSet<light_extensions_contract::ExtensionCapability>,
     #[serde(skip)]
     pub health: Option<HostHealth>,
 }
@@ -39,6 +40,7 @@ struct ManagedProcess {
     fingerprint: String,
     extension_id: String,
     executable: PathBuf,
+    capabilities: BTreeSet<light_extensions_contract::ExtensionCapability>,
     process: RunningExtension,
 }
 
@@ -115,6 +117,7 @@ impl<P: ExtensionApplicationPorts> ExtensionManager<P> {
                 continue;
             }
             let fingerprint = wanted[&instance.instance_id].clone();
+            let capabilities = instance.capabilities.clone();
             let mut environment = BTreeMap::new();
             if let Some(identity) = &instance.device_identity {
                 environment.insert(
@@ -147,6 +150,7 @@ impl<P: ExtensionApplicationPorts> ExtensionManager<P> {
                     fingerprint,
                     extension_id: instance.extension_id,
                     executable: instance.executable,
+                    capabilities,
                     process,
                 },
             );
@@ -187,12 +191,28 @@ impl<P: ExtensionApplicationPorts> ExtensionManager<P> {
         }
     }
 
+    /// Whether an attached control-surface process has completed its authenticated handshake.
+    /// Telemetry- and timecode-only extensions never make the desk enter hardware-connected mode.
+    pub fn control_surface_connected(&self) -> bool {
+        self.running.values().any(|process| {
+            connected_control_surface(&process.capabilities, &process.process.health().state)
+        })
+    }
+
     pub fn stop(&mut self) {
         for (_, mut process) in std::mem::take(&mut self.running) {
             process.process.stop();
         }
         self.snapshot.instances.clear();
     }
+}
+
+fn connected_control_surface(
+    capabilities: &BTreeSet<light_extensions_contract::ExtensionCapability>,
+    state: &crate::supervisor::ExtensionState,
+) -> bool {
+    capabilities.contains(&light_extensions_contract::ExtensionCapability::ControlSurface)
+        && matches!(state, crate::supervisor::ExtensionState::Running)
 }
 
 impl<P: ExtensionApplicationPorts> Drop for ExtensionManager<P> {
@@ -227,8 +247,46 @@ fn snapshot(
                     .unwrap_or_default()
                     .into(),
                 executable: process.executable.clone(),
+                capabilities: process.capabilities.clone(),
                 health: Some(process.process.health()),
             })
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use light_extensions_contract::ExtensionCapability;
+
+    #[test]
+    fn only_a_running_control_surface_counts_as_connected_hardware() {
+        let control_surface = BTreeSet::from([ExtensionCapability::ControlSurface]);
+        let telemetry = BTreeSet::from([ExtensionCapability::TelemetrySource]);
+        let timecode = BTreeSet::from([ExtensionCapability::TimecodeSource]);
+
+        assert!(connected_control_surface(
+            &control_surface,
+            &crate::supervisor::ExtensionState::Running,
+        ));
+        assert!(!connected_control_surface(
+            &control_surface,
+            &crate::supervisor::ExtensionState::Handshaking,
+        ));
+        assert!(!connected_control_surface(
+            &control_surface,
+            &crate::supervisor::ExtensionState::Restarting {
+                failures: 1,
+                delay: std::time::Duration::from_millis(250),
+            },
+        ));
+        assert!(!connected_control_surface(
+            &telemetry,
+            &crate::supervisor::ExtensionState::Running,
+        ));
+        assert!(!connected_control_surface(
+            &timecode,
+            &crate::supervisor::ExtensionState::Running,
+        ));
     }
 }

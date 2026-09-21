@@ -28,6 +28,7 @@ pub struct ExtensionInstanceSnapshot {
     pub extension_id: String,
     pub package_digest: String,
     pub executable: String,
+    pub capabilities: Vec<String>,
     pub state: String,
     pub last_error: Option<String>,
     pub launches: u64,

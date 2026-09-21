@@ -29,6 +29,19 @@ pub(super) struct AppState {
     pub(super) discovery: discovery_http::DiscoveryResource,
 }
 
+impl AppState {
+    pub(super) fn hardware_connected(&self) -> bool {
+        self.integrations.osc_hardware_connected() || self.extensions.control_surface_connected()
+    }
+
+    pub(super) fn hardware_connected_with(
+        &self,
+        extensions: &extensions_runtime::ExtensionResource,
+    ) -> bool {
+        self.integrations.osc_hardware_connected() || extensions.control_surface_connected()
+    }
+}
+
 #[cfg(test)]
 pub(super) type CapturedOscMessage = (SocketAddr, String, Vec<OscArgument>);
 

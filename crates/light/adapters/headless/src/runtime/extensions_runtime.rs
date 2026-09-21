@@ -403,6 +403,7 @@ impl ExtensionResource {
         *self.ports.state.write() = Some(state.clone());
 
         let resource = self.clone();
+        let mut native_connected = resource.control_surface_connected();
         let mut events = state.events.subscribe(
             light_application::EventFilter::default(),
             light_application::SubscriptionOptions::default(),
@@ -411,9 +412,25 @@ impl ExtensionResource {
         let task_lifecycle = lifecycle.clone();
         lifecycle
             .schedule(async move {
+                let mut connectivity_poll =
+                    tokio::time::interval(std::time::Duration::from_millis(100));
+                connectivity_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 loop {
                     tokio::select! {
                         _ = task_lifecycle.cancelled() => break,
+                        _ = connectivity_poll.tick() => {
+                            let next_native_connected = resource.control_surface_connected();
+                            if next_native_connected != native_connected {
+                                native_connected = next_native_connected;
+                                emit(
+                                    &state,
+                                    "hardware_connection_changed",
+                                    serde_json::json!({
+                                        "connected": state.hardware_connected_with(&resource),
+                                    }),
+                                );
+                            }
+                        }
                         delivery = events.next() => {
                             if delivery.is_none() {
                                 break;
@@ -468,6 +485,10 @@ impl ExtensionResource {
     }
     pub(super) fn snapshot(&self) -> ExtensionRuntimeSnapshot {
         project(self.manager.lock().snapshot())
+    }
+
+    pub(super) fn control_surface_connected(&self) -> bool {
+        self.manager.lock().control_surface_connected()
     }
 
     pub(super) fn refresh_feedback_snapshots(&self) {
@@ -1188,6 +1209,22 @@ fn project(snapshot: &light_extensions_host::ExtensionManagerSnapshot) -> Extens
                     extension_id: instance.extension_id.clone(),
                     package_digest: instance.package_digest.clone(),
                     executable: instance.executable.display().to_string(),
+                    capabilities: instance
+                        .capabilities
+                        .iter()
+                        .map(|capability| match capability {
+                            light_extensions_contract::ExtensionCapability::ControlSurface => {
+                                "control_surface"
+                            }
+                            light_extensions_contract::ExtensionCapability::TelemetrySource => {
+                                "telemetry_source"
+                            }
+                            light_extensions_contract::ExtensionCapability::TimecodeSource => {
+                                "timecode_source"
+                            }
+                        })
+                        .map(str::to_owned)
+                        .collect(),
                     state: health.as_ref().map_or_else(
                         || "starting".into(),
                         |health| format!("{:?}", health.state).to_ascii_lowercase(),

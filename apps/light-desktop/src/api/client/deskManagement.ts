@@ -62,6 +62,7 @@ export interface ExtensionInstanceSnapshot {
 	extension_id: string;
 	package_digest: string;
 	executable: string;
+	capabilities: string[];
 	state: string;
 	last_error: string | null;
 	launches: number;

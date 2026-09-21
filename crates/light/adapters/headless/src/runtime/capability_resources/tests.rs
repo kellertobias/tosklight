@@ -215,7 +215,7 @@ mod tests {
             },
         );
 
-        assert!(integrations.hardware_connected());
+        assert!(integrations.osc_hardware_connected());
         assert_eq!(
             integrations
                 .osc_subscriber_for_source(source)
@@ -234,7 +234,7 @@ mod tests {
                 .session_id,
             session_id
         );
-        assert!(!integrations.hardware_connected());
+        assert!(!integrations.osc_hardware_connected());
     }
 
     #[test]

@@ -38,7 +38,7 @@ impl IntegrationResource {
         self.matter_transport.as_deref()
     }
 
-    pub(in crate::runtime) fn hardware_connected(&self) -> bool {
+    pub(in crate::runtime) fn osc_hardware_connected(&self) -> bool {
         !self.osc_subscribers.lock().is_empty()
     }
 

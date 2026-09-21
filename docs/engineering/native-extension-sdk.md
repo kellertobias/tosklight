@@ -135,6 +135,44 @@ control and telemetry, malformed and oversized frames, stale/lost/excess-rate sa
 restart recovery, bounded queues/logs, and graceful or forced shutdown. External repositories
 should port these cases against their codec and run them on every supported OS/architecture.
 
+For the production Hardware Controls simulator, the host package also builds
+`tl-hardware-simulator-extension`. Once supervised and configured, it listens only on loopback at
+`127.0.0.1:49152`. Override that endpoint with the instance setting `relay_address` or the
+`TOSKLIGHT_HARDWARE_SIMULATOR_RELAY_ADDR` environment variable. Non-loopback addresses are
+rejected. The TCP relay is UTF-8 JSON Lines and accepts typed inputs, never OSC paths:
+
+```json
+{"type":"control_input","control":{"kind":"button","control_id":"go","pressed":true}}
+{"type":"control_input","control":{"kind":"absolute","control_id":"master","value":0.75}}
+{"type":"control_input","control":{"kind":"relative","control_id":"encoder-1","delta":-1},"occurred_at_micros":123456}
+```
+
+The child assigns monotonic `input_id` and native-protocol frame sequence values. It rejects
+unbound controls and values that do not match their configured canonical intent. Each relay client
+first receives `{"type":"ready"}` followed by the current
+`{"type":"feedback_snapshot","body":...}`. Later authoritative host messages are published as
+`feedback_snapshot` or `feedback_delta` envelopes with the protocol payload in `body`; parse or
+validation failures use `{"type":"error","detail":"..."}`. Relay lines and queues are bounded.
+
+Install a locally built simulator into an installation with:
+
+```sh
+tl-hardware-simulator-extension --install <extensions-directory> <extensions.json>
+```
+
+This self-packages the current platform executable, validates and atomically swaps it through the
+normal staged-package installer, records the exact package digest as locally approved, and adds or
+replaces the stable enabled `hardware-simulator` instance. Existing simulator settings and its desk
+binding survive an update; a first install binds to the installation's conventional `main` desk.
+The installed declarations and bindings cover the programmer keypad where the native contract has
+a corresponding key, Shift, encoders 1–6, navigation directions, Highlight, current-page Playback
+slots 1–96, and Speed Groups A–E (shown as 1–5 by Hardware Controls).
+
+The current native intent vocabulary has no faithful intent for the simulator's Delay, Diff, Link,
+or Select programmer buttons, the three Programmer/Cue/Release fade-time faders, or a navigation
+encoder click. Those UI controls must remain unavailable in Native Simulator mode until the native
+contract gains equivalent intents; they must not be mapped to an adjacent command.
+
 ToskLight Hardware Controls has a **Native Hardware** mode for that physical acceptance. It
 observes this host through a read-only `visualizer` session and `GET /api/v2/extensions` and never
 relays device input itself; the host only routes extension input through operator sessions. The

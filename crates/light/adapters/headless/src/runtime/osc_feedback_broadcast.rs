@@ -15,7 +15,7 @@ fn active_osc_subscribers(state: &AppState) -> Vec<OscSubscriber> {
         emit(
             state,
             "hardware_connection_changed",
-            serde_json::json!({"connected":state.integrations.hardware_connected()}),
+            serde_json::json!({"connected":state.hardware_connected()}),
         );
     }
     active

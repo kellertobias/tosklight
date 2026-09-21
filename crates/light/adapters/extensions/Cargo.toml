@@ -19,5 +19,11 @@ path = "tests/support/synthetic_extension.rs"
 test = false
 bench = false
 
+[[bin]]
+name = "tl-hardware-simulator-extension"
+path = "src/bin/hardware_simulator_extension.rs"
+test = false
+bench = false
+
 [lints]
 workspace = true

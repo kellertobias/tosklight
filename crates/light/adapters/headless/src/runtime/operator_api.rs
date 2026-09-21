@@ -230,7 +230,7 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
         active_timecode_source,
         active_timecode,
         active_show_error: state.active_show.error(),
-        hardware_connected: state.integrations.hardware_connected(),
+        hardware_connected: state.hardware_connected(),
     }
 }
 pub(super) async fn visualization_snapshot(

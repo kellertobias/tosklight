@@ -53,7 +53,7 @@ fn unsubscribe_osc_client(state: &AppState, client_id: &str) {
     emit(
         state,
         "hardware_connection_changed",
-        serde_json::json!({"connected":state.integrations.hardware_connected()}),
+        serde_json::json!({"connected":state.hardware_connected()}),
     );
 }
 
@@ -98,7 +98,7 @@ fn subscribe_osc_client(
     emit(
         state,
         "hardware_connection_changed",
-        serde_json::json!({"connected":true}),
+        serde_json::json!({"connected":state.hardware_connected()}),
     );
     send_osc_feedback(state, true);
 }
