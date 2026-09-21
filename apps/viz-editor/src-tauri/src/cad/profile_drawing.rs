@@ -124,6 +124,41 @@ pub(super) fn drawings(snapshot: &PatchSnapshot, cad: &CadState) -> Vec<CadDrawi
         .collect()
 }
 
+/// The model drawings this snapshot needs that the cache did not already hold.
+///
+/// A fixture added to the show arrives in a scene delta carrying a `drawing_id` the UI has never
+/// seen. Without that drawing the plan cannot find a model projection and falls back to typed
+/// geometry, so the lamp is drawn as a plain box until something re-snapshots — a move, or the
+/// window regaining focus. Only genuine cache misses are built and sent, so a delta still does not
+/// rebuild every model projection on the action's critical path.
+pub(super) fn new_drawings(snapshot: &PatchSnapshot, cad: &CadState) -> Vec<CadDrawing> {
+    let mut cache = cad.drawings.lock();
+    let profiles = snapshot
+        .profile_revisions
+        .iter()
+        .map(|profile| ((profile.profile_id.0, profile.profile_revision), profile))
+        .collect::<HashMap<_, _>>();
+    let mut fresh = Vec::new();
+    for fixture in &snapshot.fixtures {
+        let Some(stored) = profiles.get(&(
+            fixture.profile.profile_id.0,
+            fixture.profile.profile_revision,
+        )) else {
+            continue;
+        };
+        let id = drawing_id(stored, fixture.profile.mode_id);
+        if cache.contains_key(&id) {
+            continue;
+        }
+        let built = drawing(&id, &stored.profile_snapshot, Some(fixture.profile.mode_id));
+        cache.insert(id, built.clone());
+        if let Some(built) = built {
+            fresh.push(built);
+        }
+    }
+    fresh
+}
+
 pub(super) fn drawing(
     id: &str,
     snapshot: &serde_json::Value,

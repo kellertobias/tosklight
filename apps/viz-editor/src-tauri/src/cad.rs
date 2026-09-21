@@ -15,7 +15,7 @@ use aim::{CadAim, aim_lamps};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use light_application::PatchSnapshot;
 use parking_lot::Mutex;
-use profile_drawing::{CadDrawing, drawing_id, drawings};
+use profile_drawing::{CadDrawing, drawing_id, drawings, new_drawings};
 use scenery::{CadScenery, cad_scenery, connect_chains, entity_size, profile_label};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -440,7 +440,10 @@ pub fn emit_scene_state_delta(
                         && !hidden_layers.contains(&entity.layer_id)
                 })
                 .collect(),
-            drawings: Vec::new(),
+            // A fixture this delta adds needs its model drawing with it; without it the plan
+            // draws a plain box until a later snapshot arrives. `new_drawings` sends only what
+            // the cache did not already hold.
+            drawings: new_drawings(&patch, cad),
             removed_ids,
             attachments: attachments(session)?,
         },
