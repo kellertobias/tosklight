@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CadApp } from "./CadApp";
+import { CadApp, keepNewerHalves } from "./CadApp";
 
 const fixtureId = "11111111-1111-4111-8111-111111111111";
 const secondFixtureId = "33333333-3333-4333-8333-333333333333";
@@ -229,6 +229,52 @@ beforeEach(() => {
 	documentMocks.updateFixtureProfile.mockReset().mockResolvedValue(undefined);
 	transportMocks.patchFixtures.mockReset().mockResolvedValue(undefined);
 	for (const action of Object.values(nativeWindow)) action.mockClear();
+});
+
+describe("a scene write that lost the race", () => {
+	const base = {
+		sceneRevision: 7,
+		selectionRevision: 3,
+		selectedIds: ["a"],
+		entities: [{ id: "a" }],
+		drawings: [],
+		attachments: [],
+	} as unknown as Parameters<typeof keepNewerHalves>[0];
+
+	it("keeps the newer rig when a selection carries the revision the mutation replaced", () => {
+		// What duplicate-then-move used to do: the delta lands at 8, then `select` writes back the
+		// pre-duplicate snapshot it captured at 7 and the next drag commits against a stale rig.
+		const afterDelta = { ...base, sceneRevision: 8, entities: [{ id: "a" }, { id: "copy" }] };
+		const staleSelection = { ...base, selectedIds: ["copy"] };
+		const merged = keepNewerHalves(
+			afterDelta as typeof base,
+			staleSelection as typeof base,
+		);
+		expect(merged.sceneRevision).toBe(8);
+		expect(merged.entities).toHaveLength(2);
+		// The selection half of the write is still applied.
+		expect(merged.selectedIds).toEqual(["copy"]);
+	});
+
+	it("takes a newer rig, and a newer selection, when the write carries one", () => {
+		const newer = {
+			...base,
+			sceneRevision: 9,
+			selectionRevision: 4,
+			selectedIds: ["b"],
+		};
+		const merged = keepNewerHalves(base, newer as typeof base);
+		expect(merged.sceneRevision).toBe(9);
+		expect(merged.selectionRevision).toBe(4);
+		expect(merged.selectedIds).toEqual(["b"]);
+	});
+
+	it("keeps a newer selection when the write carries an older one", () => {
+		const afterSelectionDelta = { ...base, selectionRevision: 5, selectedIds: ["b"] };
+		const merged = keepNewerHalves(afterSelectionDelta as typeof base, base);
+		expect(merged.selectionRevision).toBe(5);
+		expect(merged.selectedIds).toEqual(["b"]);
+	});
 });
 
 describe("the CAD planning screen", () => {

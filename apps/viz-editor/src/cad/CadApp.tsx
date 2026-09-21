@@ -98,6 +98,37 @@ function fitTileCamera(
 		: null;
 }
 
+/**
+ * A scene write that carries an older rig or selection revision than the one already held keeps
+ * the newer half of each.
+ *
+ * The rig's revision reaches the app two ways: the `cad-scene-delta` broadcast a mutation emits,
+ * and the plain snapshots `select` writes around its own IPC. Those race. Without this guard a
+ * selection made straight after a duplicate or a delete — which is exactly what those actions do
+ * to their copies — writes the pre-mutation `sceneRevision` back over the fresh one, and the next
+ * move is rejected with "The rig changed at revision N+1; refresh before committing revision N".
+ */
+/** A stable empty selection, so the menu's key listener is not rebound on every render. */
+const EMPTY_SELECTION: readonly string[] = [];
+
+export function keepNewerHalves(
+	current: CadSceneSnapshot,
+	next: CadSceneSnapshot,
+): CadSceneSnapshot {
+	const rig = next.sceneRevision >= current.sceneRevision ? next : current;
+	const selection =
+		next.selectionRevision >= current.selectionRevision ? next : current;
+	return {
+		...next,
+		sceneRevision: rig.sceneRevision,
+		entities: rig.entities,
+		drawings: rig.drawings,
+		attachments: rig.attachments,
+		selectionRevision: selection.selectionRevision,
+		selectedIds: selection.selectedIds,
+	};
+}
+
 export function CadApp() {
 	const [scene, setScene] = useState<CadSceneSnapshot | null>(null);
 	const [layout, setLayout] = useState<TileNode>(restoreLayout);
@@ -127,8 +158,9 @@ export function CadApp() {
 	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
 
 	function applyScene(next: CadSceneSnapshot | null) {
-		sceneRef.current = next;
-		setScene(next);
+		const merged = next && sceneRef.current ? keepNewerHalves(sceneRef.current, next) : next;
+		sceneRef.current = merged;
+		setScene(merged);
 	}
 
 	useEffect(() => {
@@ -141,25 +173,23 @@ export function CadApp() {
 			.catch((reason) => !disposed && setError(String(reason)));
 		cadSession
 			.onSceneDelta((delta) => {
-				setScene((current) => {
-					if (!current || delta.sceneRevision < current.sceneRevision)
-						return current;
-					const drawings = new Map(
-						current.drawings.map((drawing) => [drawing.id, drawing]),
-					);
-					for (const drawing of delta.drawings)
-						drawings.set(drawing.id, drawing);
-					const next = {
-						...current,
-						sceneRevision: delta.sceneRevision,
-						// Native CAD deltas carry the complete physical-instance snapshot. Replacing
-						// it also removes deleted multi-patches whose instance IDs are not root IDs.
-						entities: delta.upserted,
-						drawings: [...drawings.values()],
-						attachments: delta.attachments,
-					};
-					sceneRef.current = next;
-					return next;
+				// Applied straight away rather than inside a `setScene` updater, so that a selection
+				// made in the same tick reads the revision this delta carries instead of the one it
+				// replaces. See `keepNewerHalves`.
+				const current = sceneRef.current;
+				if (!current || delta.sceneRevision < current.sceneRevision) return;
+				const drawings = new Map(
+					current.drawings.map((drawing) => [drawing.id, drawing]),
+				);
+				for (const drawing of delta.drawings) drawings.set(drawing.id, drawing);
+				applyScene({
+					...current,
+					sceneRevision: delta.sceneRevision,
+					// Native CAD deltas carry the complete physical-instance snapshot. Replacing
+					// it also removes deleted multi-patches whose instance IDs are not root IDs.
+					entities: delta.upserted,
+					drawings: [...drawings.values()],
+					attachments: delta.attachments,
 				});
 			})
 			.then((unlisten) => {
@@ -168,16 +198,12 @@ export function CadApp() {
 			.catch(() => undefined);
 		cadSession
 			.onSelectionDelta((delta) => {
-				setScene((current) => {
-					if (!current || delta.revision < current.selectionRevision)
-						return current;
-					const next = {
-						...current,
-						selectionRevision: delta.revision,
-						selectedIds: delta.selectedIds,
-					};
-					sceneRef.current = next;
-					return next;
+				const current = sceneRef.current;
+				if (!current || delta.revision < current.selectionRevision) return;
+				applyScene({
+					...current,
+					selectionRevision: delta.revision,
+					selectedIds: delta.selectedIds,
 				});
 			})
 			.then((unlisten) => {
@@ -230,7 +256,7 @@ export function CadApp() {
 	const shownTile = activeTile(layout, activeTileId);
 	const objectMenu = useCadObjectMenu({
 		enabled: !printMode && tools.tool === "select",
-		hasSelection: Boolean(scene?.selectedIds.length),
+		selectedIds: scene?.selectedIds ?? EMPTY_SELECTION,
 		activeView: {
 			view: shownTile?.view ?? "top_down",
 			rotationQuarterTurns: shownTile?.rotationQuarterTurns ?? 0,
