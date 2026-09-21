@@ -27,8 +27,7 @@ pub fn project_phase(
     match distribution.ordering {
         PhaseOrdering::Selection => {}
         PhaseOrdering::GridLinear { angle_degrees } => {
-            let radians = angle_degrees.to_radians();
-            let direction = (radians.cos(), radians.sin());
+            let direction = direction_cosines(angle_degrees);
             ordered.sort_by(|left, right| {
                 projected(positions.get(&left.1), direction)
                     .total_cmp(&projected(positions.get(&right.1), direction))
@@ -153,18 +152,36 @@ fn spatial_ranks(
         ordering,
         PhaseOrdering::Selection | PhaseOrdering::RandomEachLoop { .. }
     );
+    if !spatial {
+        return ordered
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(ordered_index, item)| (item, ordered_index))
+            .collect();
+    }
+    let keys = ordered
+        .iter()
+        .map(|item| spatial_key(ordering, positions.get(&item.1)))
+        .collect::<Vec<_>>();
+    // One grid line, one rank. Compared with a tolerance rather than for exact equality: the keys
+    // come from floating-point positions, so two fixtures on the same line agree to within
+    // rounding rather than bit for bit.
+    let tolerance = key_tolerance(keys.iter().copied().flatten());
     let mut rank = 0usize;
-    let mut previous_key = None;
+    let mut previous_key: Option<f32> = None;
     ordered
         .iter()
         .copied()
+        .zip(keys)
         .enumerate()
-        .map(|(ordered_index, item)| {
-            if !spatial {
-                return (item, ordered_index);
-            }
-            let key = spatial_key(ordering, positions.get(&item.1));
-            if ordered_index > 0 && (key.is_none() || key != previous_key) {
+        .map(|(ordered_index, (item, key))| {
+            let apart = match (key, previous_key) {
+                (Some(key), Some(previous)) => (key - previous).abs() > tolerance,
+                // A fixture with no position stands on no line, and neither does the next one.
+                _ => true,
+            };
+            if ordered_index > 0 && apart {
                 rank += 1;
             }
             previous_key = key;
@@ -173,12 +190,32 @@ fn spatial_ranks(
         .collect()
 }
 
-fn spatial_key(ordering: &PhaseOrdering, position: Option<&SpatialPosition>) -> Option<(u32, u32)> {
+/// How far apart two keys must be to count as different grid lines; see `spatial::key_tolerance`.
+fn key_tolerance(keys: impl Iterator<Item = f32>) -> f32 {
+    let mut low = f32::INFINITY;
+    let mut high = f32::NEG_INFINITY;
+    for key in keys {
+        if key < low {
+            low = key;
+        }
+        if key > high {
+            high = key;
+        }
+    }
+    let spread = if low.is_finite() && high.is_finite() {
+        high - low
+    } else {
+        0.0
+    };
+    (spread * 1e-4).max(1e-6)
+}
+
+fn spatial_key(ordering: &PhaseOrdering, position: Option<&SpatialPosition>) -> Option<f32> {
     let position = position?;
     let value = match *ordering {
         PhaseOrdering::GridLinear { angle_degrees } => {
-            let radians = angle_degrees.to_radians();
-            position.x * radians.cos() + position.z * radians.sin()
+            let (cosine, sine) = direction_cosines(angle_degrees);
+            position.x * cosine + position.z * sine
         }
         PhaseOrdering::RadialOut { center_x, center_z }
         | PhaseOrdering::RadialIn { center_x, center_z } => {
@@ -189,7 +226,24 @@ fn spatial_key(ordering: &PhaseOrdering, position: Option<&SpatialPosition>) -> 
         }
         PhaseOrdering::Selection | PhaseOrdering::RandomEachLoop { .. } => return None,
     };
-    Some((value.to_bits(), 0))
+    Some(value)
+}
+
+/// The cosine and sine of an angle in degrees, exact on the quarter turns.
+///
+/// `90f32.to_radians().cos()` is -4.4e-8, not zero, which is enough to split a row that should
+/// share one phase. See `spatial::direction_cosines`.
+fn direction_cosines(angle_degrees: f32) -> (f32, f32) {
+    match angle_degrees.rem_euclid(360.0) {
+        a if a == 0.0 => (1.0, 0.0),
+        a if a == 90.0 => (0.0, 1.0),
+        a if a == 180.0 => (-1.0, 0.0),
+        a if a == 270.0 => (0.0, -1.0),
+        a => {
+            let radians = a.to_radians();
+            (radians.cos(), radians.sin())
+        }
+    }
 }
 
 fn projected(position: Option<&SpatialPosition>, direction: (f32, f32)) -> f32 {

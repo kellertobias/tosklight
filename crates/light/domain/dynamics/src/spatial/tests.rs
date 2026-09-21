@@ -817,3 +817,80 @@ fn decoding_clears_a_stale_preset_hint_and_defaults_dynamic_override_to_inherit(
         serde_json::from_value(serde_json::json!({})).unwrap();
     assert_eq!(override_state, DynamicSpatialMappingOverride::default());
 }
+
+/// A ten-by-ten grid in the Top projection's own plane, one metre apart each way.
+fn ten_by_ten() -> Vec<SpatialTarget> {
+    let mut targets = Vec::with_capacity(100);
+    for row in 0..10u128 {
+        for column in 0..10u128 {
+            targets.push(target(
+                row * 10 + column + 1,
+                column as f64,
+                row as f64,
+                0.0,
+            ));
+        }
+    }
+    targets
+}
+
+/// Every fixture's rank, grouped by the grid row it stands in.
+fn ranks_by_row(ranked: &RankedSelection) -> Vec<Vec<usize>> {
+    (0..10)
+        .map(|row| {
+            (0..10)
+                .map(|column| ranked.rank_by_fixture[&fixture((row * 10 + column + 1) as u128)])
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn a_grid_gives_every_fixture_on_one_line_the_same_rank() {
+    // The operator's case: at 90 degrees a ten-by-ten grid runs row by row. Every lamp in a row
+    // shares one rank, and the rank only advances from row to row. This used to give a row 27
+    // ranks between its ten lamps, because `cos(90 degrees)` is 6.1e-17 rather than zero and the
+    // keys were then compared bit for bit.
+    let targets = ten_by_ten();
+    for (angle, description) in [(90.0, "rows"), (0.0, "columns")] {
+        let ranked = evaluate_spatial_mapping(
+            &mapping(
+                ProjectionPreset::Top,
+                SpatialSelectionShape::Grid {
+                    angle_degrees: angle,
+                    direction: RankDirection::Ascending,
+                },
+            ),
+            &targets,
+        )
+        .unwrap();
+        assert_eq!(
+            ranked.rank_count, 10,
+            "a ten-by-ten grid at {angle} degrees runs in ten {description}"
+        );
+        let rows = ranks_by_row(&ranked);
+        for (index, row) in rows.iter().enumerate() {
+            if angle == 90.0 {
+                assert!(
+                    row.iter().all(|rank| *rank == row[0]),
+                    "row {index} shares one rank at {angle} degrees: {row:?}"
+                );
+            } else {
+                // At 0 degrees the run is across the rows instead, so one row holds every rank.
+                assert_eq!(
+                    row,
+                    &(0..10).collect::<Vec<_>>(),
+                    "row {index} spans every rank at {angle} degrees"
+                );
+            }
+        }
+        if angle == 90.0 {
+            let first: Vec<usize> = rows.iter().map(|row| row[0]).collect();
+            assert_eq!(
+                first,
+                (0..10).collect::<Vec<_>>(),
+                "the rank advances one step from row to row"
+            );
+        }
+    }
+}

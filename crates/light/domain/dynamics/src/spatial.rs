@@ -441,9 +441,13 @@ pub fn evaluate_spatial_mapping(
     let mut ordered_fixture_ids = Vec::with_capacity(positioned.len() + missing.len());
     let mut rank_by_fixture = HashMap::with_capacity(positioned.len() + missing.len());
     let mut rank_count = 0usize;
-    let mut previous_key = None;
+    let mut previous_key: Option<f64> = None;
+    let tolerance = key_tolerance(positioned.iter().map(|target| target.key));
     for target in positioned {
-        if previous_key.is_none_or(|key| key != target.key) {
+        // One grid line, one rank. Compared with a tolerance rather than for exact equality: the
+        // keys come from projected floating-point positions, so two fixtures standing on the same
+        // line agree to within rounding rather than bit for bit.
+        if previous_key.is_none_or(|key| (target.key - key).abs() > tolerance) {
             rank_count += 1;
         }
         previous_key = Some(target.key);
@@ -842,11 +846,30 @@ fn projected_coordinates(
     (canonical_zero(u), canonical_zero(v))
 }
 
+/// The cosine and sine of an angle in degrees, exact on the quarter turns.
+///
+/// `90f64.to_radians().cos()` is 6.1e-17, not zero. Left as it comes, a grid at 90 degrees keeps a
+/// trace of the axis it is supposed to ignore, every fixture along a row gets its own key in the
+/// last bits, and the row that should share one phase is spread across ten of them.
+fn direction_cosines(angle_degrees: f64) -> (f64, f64) {
+    let angle = normalize_degrees(angle_degrees);
+    match angle {
+        a if a == 0.0 => (1.0, 0.0),
+        a if a == 90.0 => (0.0, 1.0),
+        a if a == 180.0 => (-1.0, 0.0),
+        a if a == 270.0 => (0.0, -1.0),
+        a => {
+            let radians = a.to_radians();
+            (radians.cos(), radians.sin())
+        }
+    }
+}
+
 fn shape_key(shape: &SpatialSelectionShape, u: f64, v: f64) -> f64 {
     match *shape {
         SpatialSelectionShape::Grid { angle_degrees, .. } => {
-            let radians = normalize_degrees(angle_degrees).to_radians();
-            u * radians.cos() + v * radians.sin()
+            let (cosine, sine) = direction_cosines(angle_degrees);
+            u * cosine + v * sine
         }
         SpatialSelectionShape::Radial {
             center_u, center_v, ..
@@ -865,6 +888,34 @@ fn shape_key(shape: &SpatialSelectionShape, u: f64, v: f64) -> f64 {
         }
     }
 }
+
+/// How far apart two keys must be to count as different grid lines.
+///
+/// Relative to the spread the keys cover, so it means the same thing for a stage measured in
+/// millimetres as for one measured in metres, and it is never zero for a selection that is all on
+/// one line.
+fn key_tolerance(keys: impl Iterator<Item = f64>) -> f64 {
+    let mut low = f64::INFINITY;
+    let mut high = f64::NEG_INFINITY;
+    for key in keys {
+        if key < low {
+            low = key;
+        }
+        if key > high {
+            high = key;
+        }
+    }
+    let spread = if low.is_finite() && high.is_finite() {
+        high - low
+    } else {
+        0.0
+    };
+    (spread * KEY_TOLERANCE_SHARE).max(MIN_KEY_TOLERANCE)
+}
+
+/// The share of a selection's spread that still counts as one grid line, and the floor under it.
+const KEY_TOLERANCE_SHARE: f64 = 1e-6;
+const MIN_KEY_TOLERANCE: f64 = 1e-9;
 
 fn shape_ordering(shape: &SpatialSelectionShape, left: f64, right: f64) -> std::cmp::Ordering {
     let ordering = left.total_cmp(&right);
