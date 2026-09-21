@@ -5,9 +5,11 @@ edition.workspace = true
 license-file.workspace = true
 
 [dependencies]
+if-addrs.workspace = true
 light-dmx-wire = { path = "../../../shared/dmx" }
 media-application = { path = "../../application" }
 media-domain = { path = "../../domain" }
+socket2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 

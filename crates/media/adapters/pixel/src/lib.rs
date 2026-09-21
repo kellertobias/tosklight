@@ -8,4 +8,6 @@
 
 mod sender;
 
-pub use sender::{PixelSendError, PixelSender, RouteDestination, route_destination};
+pub use sender::{
+    PixelSendError, PixelSender, RouteDestination, route_destination, sacn_source_name,
+};

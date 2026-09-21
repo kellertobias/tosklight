@@ -24,6 +24,11 @@ export interface NetworkEndpoint {
 	endpoint: string;
 	/** The peer's name, when it announces one. */
 	name: string | null;
+	/**
+	 * Which ToskLight application this endpoint is, when it is one of the desk's own — "Media
+	 * Server", "Visualizer" or "Desk". `null` for third-party hardware.
+	 */
+	software: string | null;
 	deliveryMode: NetworkEndpointDeliveryMode | null;
 	/** The show's logical universe a send route carries. */
 	logicalUniverse: number | null;

@@ -12,7 +12,7 @@ pub mod usb;
 
 pub use codec::{
     ARTNET_PORT, SACN_DISCOVERY_UNIVERSE, SACN_PORT, artdmx_packet, artnet_broadcast_destination,
-    sacn_data_packet, sacn_multicast_destination,
+    sacn_data_packet, sacn_multicast_destination, tosklight_software,
 };
 pub use delivery::{
     ArtNetDriver, EncodedPacket, NetworkActivity, NetworkOutput, ObservedArtNetSender,

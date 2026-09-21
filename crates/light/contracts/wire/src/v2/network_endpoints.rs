@@ -53,6 +53,9 @@ pub struct NetworkEndpoint {
     pub endpoint: String,
     /// The peer's name, when it announces one.
     pub name: Option<String>,
+    /// Which ToskLight application this endpoint is, when it is one of the desk's own — "Media
+    /// Server", "Visualizer" or "Desk". `None` for third-party hardware.
+    pub software: Option<String>,
     pub delivery_mode: Option<OutputDeliveryMode>,
     /// The show's logical universe a send route carries.
     pub logical_universe: Option<u16>,

@@ -16,6 +16,7 @@ function decodeNetworkEndpoint(endpoint: NetworkEndpointWire): NetworkEndpoint {
 		role: endpoint.role,
 		endpoint: endpoint.endpoint,
 		name: endpoint.name ?? null,
+		software: endpoint.software ?? null,
 		deliveryMode: endpoint.delivery_mode ?? null,
 		logicalUniverse: endpoint.logical_universe ?? null,
 		universes: endpoint.universes ?? [],

@@ -38,6 +38,8 @@ pub struct ObservedArtPoller {
     pub address: SocketAddr,
     pub polls: u64,
     pub last_seen_millis_ago: u64,
+    /// The long name it answered a poll with, when it has answered one.
+    pub announced_name: Option<String>,
 }
 
 /// Another device broadcasting ArtDmx on the desk's network.
@@ -46,6 +48,8 @@ pub struct ObservedArtNetSender {
     pub address: IpAddr,
     pub universes: Vec<Universe>,
     pub last_seen_millis_ago: u64,
+    /// The long name it answered a poll with, when it has answered one.
+    pub announced_name: Option<String>,
 }
 
 /// Another sACN source heard on the desk's network.
@@ -106,6 +110,10 @@ pub(crate) struct PeerRegistry {
     pollers: HashMap<SocketAddr, PollerRecord>,
     senders: HashMap<IpAddr, SenderRecord>,
     sources: HashMap<[u8; 16], SourceRecord>,
+    /// The long name each address last answered a poll with. ArtDmx carries no identity at all,
+    /// so this is the only way an Art-Net peer can say who it is — and the only way the Nodes
+    /// view can tell the desk's own Media Server and Visualizer from third-party hardware.
+    announced: HashMap<IpAddr, String>,
 }
 
 fn millis(since: Instant, now: Instant) -> u64 {
@@ -144,6 +152,13 @@ impl PeerRegistry {
         });
         record.polls += 1;
         record.last_seen = at;
+    }
+
+    pub(crate) fn record_art_poll_reply(&mut self, from: IpAddr, long_name: String) {
+        if long_name.is_empty() {
+            return;
+        }
+        self.announced.insert(from, long_name);
     }
 
     pub(crate) fn record_art_dmx(&mut self, from: IpAddr, universe: Universe, at: Instant) {
@@ -261,6 +276,7 @@ impl PeerRegistry {
                 address: *address,
                 polls: record.polls,
                 last_seen_millis_ago: millis(record.last_seen, now),
+                announced_name: self.announced.get(&address.ip()).cloned(),
             })
             .collect();
         pollers.sort_by_key(|poller| poller.address);
@@ -278,6 +294,7 @@ impl PeerRegistry {
                     address: *address,
                     universes,
                     last_seen_millis_ago: millis(record.last_seen, now),
+                    announced_name: self.announced.get(address).cloned(),
                 }
             })
             .collect();

@@ -6,6 +6,7 @@ license-file.workspace = true
 
 [dependencies]
 if-addrs.workspace = true
+light-dmx-wire.workspace = true
 socket2.workspace = true
 viz-scene.workspace = true
 

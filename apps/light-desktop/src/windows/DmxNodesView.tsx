@@ -198,6 +198,12 @@ function NodesTable({
 									<code>{endpoint.endpoint}</code>
 								</Button>
 								<small>
+									{/* Own software is marked so it is not mistaken for hardware on the network. */}
+									{endpoint.software ? (
+										<span className="dmx-nodes-software">
+											ToskLight {endpoint.software}
+										</span>
+									) : null}
 									{endpoint.name
 										? `${endpoint.role} · ${endpoint.name}`
 										: endpoint.role}

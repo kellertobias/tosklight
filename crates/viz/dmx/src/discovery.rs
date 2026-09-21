@@ -11,9 +11,10 @@ use crate::mapping::Protocol;
 use crate::packet::{
     ARTNET_PORT, SACN_ACN_IDENTIFIER, SACN_PORT, decode_artdmx, decode_sacn, sacn_multicast_group,
 };
+use light_dmx_wire::{artpollreply_packets, is_artpoll};
 use socket2::{Domain, Protocol as SocketProtocol, Socket, Type};
 use std::collections::{BTreeMap, HashMap};
-use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -32,6 +33,16 @@ const ART_NET_NODE_TIMEOUT: Duration = Duration::from_secs(10);
 const SACN_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(25);
 /// Data not seen for this long is no longer being sent, as the receiver's source loss rules.
 const DATA_TIMEOUT: Duration = Duration::from_millis(2_500);
+
+/// How the Visualizer names itself when something else polls the network.
+///
+/// The desk's Nodes view marks an endpoint as ToskLight's own software by matching the long name,
+/// so it has to stay exactly the one the shared wire contract lists. Without a reply the
+/// Visualizer is only ever seen asking, never answering, and appears as an anonymous poller.
+const LONG_NAME: &str = "ToskLight Visualizer";
+/// The 17 characters an ArtPollReply's short name holds.
+const SHORT_NAME: &str = "Visualizer";
+const REPORT: &str = "#0001 [0000] Visualizer receiving";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum PortDirection {
@@ -422,10 +433,38 @@ fn directed_broadcast(interface: &NetworkInterface) -> Ipv4Addr {
 
 /// Whether `address` is on one of `networks`: a choice of interface narrows what is listed.
 fn on_networks(networks: &[NetworkInterface], address: Ipv4Addr) -> bool {
-    networks.iter().any(|network| {
-        let mask = u32::from(network.netmask);
-        u32::from(network.address) & mask == u32::from(address) & mask
-    })
+    own_address(networks, address).is_some()
+}
+
+/// This machine's own address on the network `address` is on, which is how a reply to it names
+/// this Visualizer.
+fn own_address(networks: &[NetworkInterface], address: Ipv4Addr) -> Option<Ipv4Addr> {
+    networks
+        .iter()
+        .find(|network| {
+            let mask = u32::from(network.netmask);
+            u32::from(network.address) & mask == u32::from(address) & mask
+        })
+        .map(|network| network.address)
+}
+
+/// The ArtPollReply packets answering a poll from `from`, or `None` when it needs no answer.
+///
+/// The reply names no ports: the Visualizer receives universes, it never puts one onto the
+/// network. A poll from one of this machine's own addresses is the Visualizer's own broadcast
+/// coming back, and answering it would list the Visualizer as a node in its own Sources tab.
+fn poll_answer(networks: &[NetworkInterface], from: Ipv4Addr) -> Option<Vec<Vec<u8>>> {
+    if networks.iter().any(|network| network.address == from) {
+        return None;
+    }
+    let address = own_address(networks, from)?;
+    Some(artpollreply_packets(
+        address,
+        SHORT_NAME,
+        LONG_NAME,
+        REPORT,
+        &[],
+    ))
 }
 
 struct Task {
@@ -436,12 +475,30 @@ struct Task {
 }
 
 impl Task {
-    fn next(&self, buffer: &mut [u8]) -> Option<(usize, Ipv4Addr)> {
+    fn next(&self, buffer: &mut [u8]) -> Option<(usize, SocketAddrV4)> {
         match self.socket.recv_from(buffer) {
             Ok((length, SocketAddr::V4(from))) if on_networks(&self.networks, *from.ip()) => {
-                Some((length, *from.ip()))
+                Some((length, from))
             }
             _ => None,
+        }
+    }
+
+    /// Answers a controller's ArtPoll, so the Visualizer is a named endpoint instead of an
+    /// anonymous poller. A lost reply is asked for again by the next poll, so nothing is reported.
+    fn answer_art_poll(&self, from: SocketAddrV4, port: u16) {
+        let Some(replies) = poll_answer(&self.networks, *from.ip()) else {
+            return;
+        };
+        // Replies belong on the Art-Net port; a poller asking from another port hears it there too.
+        let mut destinations = vec![SocketAddrV4::new(*from.ip(), port)];
+        if from.port() != port {
+            destinations.push(from);
+        }
+        for destination in destinations {
+            for reply in &replies {
+                let _ = self.socket.send_to(reply, destination);
+            }
         }
     }
 
@@ -465,10 +522,12 @@ impl Task {
                 self.seen
                     .lock()
                     .expect("discovered nodes")
-                    .art_net_reply(reply, from, now);
+                    .art_net_reply(reply, *from.ip(), now);
+            } else if is_artpoll(bytes) {
+                self.answer_art_poll(from, port);
             } else if let Ok(Some(frame)) = decode_artdmx(bytes) {
                 self.seen.lock().expect("discovered nodes").art_net_data(
-                    from,
+                    *from.ip(),
                     frame.destination_universe,
                     now,
                 );
@@ -485,15 +544,16 @@ impl Task {
             let bytes = &buffer[..length];
             let now = Instant::now();
             if let Some(discovery) = decode_sacn_discovery(bytes) {
-                self.seen
-                    .lock()
-                    .expect("discovered nodes")
-                    .sacn_discovery(discovery, from, now);
+                self.seen.lock().expect("discovered nodes").sacn_discovery(
+                    discovery,
+                    *from.ip(),
+                    now,
+                );
             } else if let Ok(Some(frame)) = decode_sacn(bytes) {
                 self.seen.lock().expect("discovered nodes").sacn_data(
                     frame.cid,
                     &frame.source_name,
-                    from,
+                    *from.ip(),
                     frame.destination_universe,
                     frame.terminated,
                     now,
@@ -888,6 +948,65 @@ mod tests {
         assert!(
             names.contains(&"Loopback node".to_owned()),
             "found {names:?}"
+        );
+    }
+
+    #[test]
+    fn a_poll_is_answered_as_the_visualizer_and_never_by_this_machine_to_itself() {
+        let networks = [NetworkInterface {
+            name: "en0".into(),
+            address: Ipv4Addr::new(10, 0, 0, 9),
+            netmask: Ipv4Addr::new(255, 255, 255, 0),
+            index: None,
+            loopback: false,
+        }];
+        let replies = poll_answer(&networks, NODE).expect("an answer");
+        let reply = decode_artpollreply(&replies[0]).expect("a reply");
+        assert_eq!(reply.long_name, "ToskLight Visualizer");
+        assert_eq!(reply.short_name, "Visualizer");
+        assert_eq!(reply.address, Ipv4Addr::new(10, 0, 0, 9));
+        // The Visualizer only receives, so it announces no port it sends.
+        assert!(reply.ports.is_empty());
+        // Its own poll comes back from the broadcast; answering would list it in its own tab.
+        assert_eq!(poll_answer(&networks, Ipv4Addr::new(10, 0, 0, 9)), None);
+        // A poll from another network is not this Visualizer's to answer.
+        assert_eq!(poll_answer(&networks, Ipv4Addr::new(10, 0, 1, 4)), None);
+    }
+
+    #[test]
+    fn a_polling_controller_hears_the_visualizer_answer() {
+        // A second loopback address, so the poll does not appear to come from this Visualizer.
+        let loopback = NetworkInterface {
+            name: "lo0".into(),
+            address: Ipv4Addr::new(127, 0, 0, 2),
+            netmask: Ipv4Addr::new(255, 0, 0, 0),
+            index: None,
+            loopback: true,
+        };
+        let mut plan = DiscoveryPlan::new(vec![loopback.clone()], vec![loopback], Vec::new());
+        plan.art_net_port = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
+            .and_then(|socket| socket.local_addr())
+            .map(|address| address.port())
+            .expect("a free UDP port");
+        let mut discovery = SourceDiscovery::start(plan.clone());
+
+        let poller = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).expect("poller socket");
+        poller
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .expect("a timeout");
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut buffer = [0_u8; 2048];
+        let mut heard = None;
+        while heard.is_none() && Instant::now() < deadline {
+            let _ = poller.send_to(&artpoll(), (Ipv4Addr::LOCALHOST, plan.art_net_port));
+            if let Ok((length, _)) = poller.recv_from(&mut buffer) {
+                heard = decode_artpollreply(&buffer[..length]);
+            }
+        }
+        discovery.shutdown();
+        assert_eq!(
+            heard.expect("a reply to the poll").long_name,
+            "ToskLight Visualizer"
         );
     }
 }

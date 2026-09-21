@@ -3999,9 +3999,11 @@ dependencies = [
 name = "media-pixel"
 version = "0.1.0"
 dependencies = [
+ "if-addrs",
  "light-dmx-wire",
  "media-application",
  "media-domain",
+ "socket2 0.6.5",
  "thiserror 2.0.20",
  "tracing",
 ]
@@ -8207,6 +8209,7 @@ name = "viz-dmx"
 version = "0.1.0"
 dependencies = [
  "if-addrs",
+ "light-dmx-wire",
  "nix 0.30.1",
  "socket2 0.6.5",
  "viz-scene",

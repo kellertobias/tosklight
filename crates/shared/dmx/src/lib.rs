@@ -14,8 +14,9 @@ mod artnet;
 mod sacn;
 
 pub use artnet::{
-    ARTNET_PORT, artdmx_packet, artdmx_universe, artnet_broadcast_destination,
-    artpollreply_packets, is_artpoll,
+    ARTNET_PORT, TOSKLIGHT_SOFTWARE_NAMES, artdmx_packet, artdmx_universe,
+    artnet_broadcast_destination, artpollreply_names, artpollreply_packets, is_artpoll,
+    tosklight_software,
 };
 pub use sacn::{
     SACN_DISCOVERY_UNIVERSE, SACN_PORT, SacnSourcePacket, SacnSourcePacketKind,

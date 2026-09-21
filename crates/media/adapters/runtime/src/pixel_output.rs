@@ -220,6 +220,8 @@ impl PixelOutputs {
         let sender = match self.senders.entry(configuration.id) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => {
+                // The operator's label for the output; the sender announces it behind the
+                // ToskLight identity, so the desk can tell its own Media Server from a node.
                 match PixelSender::bind(instance, configuration.name.to_string()) {
                     Ok(sender) => entry.insert(sender),
                     Err(error) => {

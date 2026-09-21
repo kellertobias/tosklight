@@ -112,3 +112,17 @@
 	list-style: none;
 	overflow-wrap: anywhere;
 }
+
+/* A node that is one of ToskLight's own applications rather than hardware on the network. */
+.dmx-nodes-software {
+	display: inline-block;
+	margin-right: 6px;
+	padding: 0 5px;
+	border: 1px solid var(--cyan);
+	border-radius: 3px;
+	color: var(--cyan);
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	white-space: nowrap;
+}

@@ -162,11 +162,13 @@ fn heard_art_net_and_sacn_peers_are_received_endpoints_and_flag_universe_conflic
             address: poller,
             polls: 2,
             last_seen_millis_ago: 100,
+            announced_name: None,
         }],
         art_net_senders: vec![ObservedArtNetSender {
             address: peer_ip(),
             universes: vec![4, 8],
             last_seen_millis_ago: 30,
+            announced_name: None,
         }],
         sacn_sources: vec![
             ObservedSacnSource {
@@ -237,4 +239,53 @@ fn heard_art_net_and_sacn_peers_are_received_endpoints_and_flag_universe_conflic
     assert_eq!(timecode.endpoint, "0.0.0.0:6454");
     assert_eq!(timecode.status, Status::Active);
     assert_eq!(timecode.name.as_deref(), Some("10.0.0.70"));
+}
+
+#[test]
+fn the_desks_own_software_is_named_and_third_party_nodes_are_not() {
+    let activity = NetworkActivity {
+        art_net_senders: vec![
+            ObservedArtNetSender {
+                address: peer_ip(),
+                universes: vec![1],
+                last_seen_millis_ago: 30,
+                announced_name: Some("ToskLight Media Server".into()),
+            },
+            ObservedArtNetSender {
+                address: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 61)),
+                universes: vec![2],
+                last_seen_millis_ago: 30,
+                announced_name: Some("MA Lighting grandMA3".into()),
+            },
+        ],
+        sacn_sources: vec![ObservedSacnSource {
+            cid: "ef".repeat(16),
+            // An sACN source keeps the operator's own label after the identity.
+            name: "ToskLight Media Server — Stage Left".into(),
+            address: peer_ip(),
+            universes: vec![3],
+            last_seen_millis_ago: 30,
+        }],
+        ..NetworkActivity::default()
+    };
+    let endpoints = project(&inputs(&[], Some(activity))).endpoints;
+    let software = |endpoint: &str| {
+        endpoints
+            .iter()
+            .find(|item| item.endpoint.starts_with(endpoint))
+            .and_then(|item| item.software.clone())
+    };
+    assert_eq!(software("10.0.0.50"), Some("Media Server".into()));
+    assert_eq!(
+        software("10.0.0.61"),
+        None,
+        "a third-party node is not ours"
+    );
+    assert!(
+        endpoints
+            .iter()
+            .any(|item| item.software.as_deref() == Some("Media Server")
+                && item.name.as_deref() == Some("ToskLight Media Server — Stage Left")),
+        "the sACN source keeps its announced name as well as its marking"
+    );
 }

@@ -104,6 +104,7 @@ fn endpoint(
         role: role.into(),
         endpoint: address,
         name: None,
+        software: None,
         delivery_mode: None,
         logical_universe: None,
         universes: Vec::new(),
@@ -460,6 +461,14 @@ fn peer_status(
     }
 }
 
+/// Which ToskLight application announced itself under `announced`, if any.
+///
+/// The desk's own Media Server and Visualizer name themselves on the network so an operator can
+/// tell them apart from third-party hardware; see `light_dmx_wire::TOSKLIGHT_SOFTWARE_NAMES`.
+fn own_software(announced: &str) -> Option<String> {
+    light_output::tosklight_software(announced).map(str::to_owned)
+}
+
 fn peer_endpoints(routes: &[OutputRoute], activity: &NetworkActivity) -> Vec<NetworkEndpoint> {
     let mut endpoints = Vec::new();
     for poller in &activity.art_pollers {
@@ -471,6 +480,8 @@ fn peer_endpoints(routes: &[OutputRoute], activity: &NetworkActivity) -> Vec<Net
             "Controller polling the desk",
             poller.address.to_string(),
         );
+        item.name.clone_from(&poller.announced_name);
+        item.software = poller.announced_name.as_deref().and_then(own_software);
         item.last_activity_millis_ago = Some(poller.last_seen_millis_ago);
         (item.status, item.detail) = if poller.last_seen_millis_ago <= 10_000 {
             (
@@ -495,6 +506,8 @@ fn peer_endpoints(routes: &[OutputRoute], activity: &NetworkActivity) -> Vec<Net
             "Art-Net sender",
             format!("{}:{}", sender.address, light_output::ARTNET_PORT),
         );
+        item.name.clone_from(&sender.announced_name);
+        item.software = sender.announced_name.as_deref().and_then(own_software);
         item.universes.clone_from(&sender.universes);
         item.last_activity_millis_ago = Some(sender.last_seen_millis_ago);
         (item.status, item.detail) = peer_status(
@@ -520,6 +533,7 @@ fn peer_endpoints(routes: &[OutputRoute], activity: &NetworkActivity) -> Vec<Net
             format!("{}:{}", source.address, light_output::SACN_PORT),
         );
         item.name = (!source.name.trim().is_empty()).then(|| source.name.clone());
+        item.software = own_software(&source.name);
         item.universes.clone_from(&source.universes);
         item.last_activity_millis_ago = Some(source.last_seen_millis_ago);
         (item.status, item.detail) = peer_status(

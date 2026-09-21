@@ -4,8 +4,8 @@ use crate::{DMX_SLOTS, DeliveryMode, DmxFrame, OutputRoute, Protocol, sacn_data_
 use light_core::Universe;
 use light_dmx_wire::{
     ARTNET_PORT, SACN_DISCOVERY_UNIVERSE, SacnSourcePacketKind, artdmx_universe,
-    artpollreply_packets, decode_sacn_source_packet, is_artpoll, sacn_discovery_packets,
-    sacn_multicast_destination,
+    artpollreply_names, artpollreply_packets, decode_sacn_source_packet, is_artpoll,
+    sacn_discovery_packets, sacn_multicast_destination,
 };
 use serde::Serialize;
 use std::{
@@ -315,6 +315,16 @@ impl NetworkOutput {
                 .expect("network peer mutex poisoned")
                 .record_art_poll(from, now);
             return true;
+        }
+        // A reply is how an Art-Net peer says who it is: ArtDmx carries no name at all.
+        if let Some((_, long_name)) = artpollreply_names(packet)
+            && from.ip() != IpAddr::V4(own)
+        {
+            self.peers
+                .lock()
+                .expect("network peer mutex poisoned")
+                .record_art_poll_reply(from.ip(), long_name);
+            return false;
         }
         // The desk's own broadcasts come back on its broadcast listener; they are not a peer.
         if let Some(universe) = artdmx_universe(packet)

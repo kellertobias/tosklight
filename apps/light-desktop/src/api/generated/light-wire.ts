@@ -606,7 +606,12 @@ endpoint: string,
 /**
  * The peer's name, when it announces one.
  */
-name: string | null, delivery_mode: OutputDeliveryMode | null,
+name: string | null,
+/**
+ * Which ToskLight application this endpoint is, when it is one of the desk's own — "Media
+ * Server", "Visualizer" or "Desk". `None` for third-party hardware.
+ */
+software: string | null, delivery_mode: OutputDeliveryMode | null,
 /**
  * The show's logical universe a send route carries.
  */

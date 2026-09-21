@@ -10,6 +10,49 @@ const OP_DMX: u16 = 0x5000;
 const PORTS_PER_REPLY: usize = 4;
 const POLL_REPLY_LENGTH: usize = 239;
 
+/// How ToskLight's own applications name themselves on the network.
+///
+/// The Nodes view marks an endpoint as ToskLight's own software by matching these, so an operator
+/// can tell the desk's own Media Server and Visualizer apart from third-party hardware. Art-Net
+/// carries the name in an ArtPollReply's long name; sACN carries it as the source name's prefix,
+/// because an sACN source name is also the operator's own label for that output.
+pub const TOSKLIGHT_SOFTWARE_NAMES: [(&str, &str); 3] = [
+    ("ToskLight Media Server", "Media Server"),
+    ("ToskLight Visualizer", "Visualizer"),
+    ("ToskLight lighting desk", "Desk"),
+];
+
+/// Which ToskLight application announced itself under `announced`, if any.
+///
+/// Matched as a prefix so an sACN source may carry the operator's own label after it, as in
+/// "ToskLight Media Server — Stage Left".
+pub fn tosklight_software(announced: &str) -> Option<&'static str> {
+    let announced = announced.trim();
+    TOSKLIGHT_SOFTWARE_NAMES
+        .iter()
+        .find(|(full, _)| announced.starts_with(full))
+        .map(|(_, short)| *short)
+}
+
+/// The short and long name an ArtPollReply announces, or `None` for any other packet.
+///
+/// Only the names: what the desk needs is who is on the other end, not their port table.
+pub fn artpollreply_names(bytes: &[u8]) -> Option<(String, String)> {
+    (bytes.len() >= 108
+        && &bytes[..8] == b"Art-Net\0"
+        && u16::from_le_bytes([bytes[8], bytes[9]]) == OP_POLL_REPLY)
+        .then(|| (read_text(&bytes[26..44]), read_text(&bytes[44..108])))
+}
+
+/// A NUL-terminated text field, as far as its terminator.
+fn read_text(bytes: &[u8]) -> String {
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    String::from_utf8_lossy(&bytes[..end]).trim().to_owned()
+}
+
 /// Whether `bytes` is an ArtPoll: a controller asking everything on the network to identify itself.
 pub fn is_artpoll(bytes: &[u8]) -> bool {
     bytes.len() >= 12
@@ -198,5 +241,48 @@ mod tests {
         let reply = &artpollreply_packets(DESK, &"x".repeat(40), "", "", &[])[0];
         assert_eq!(&reply[26..43], "x".repeat(17).as_bytes());
         assert_eq!(reply[43], 0);
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+
+    #[test]
+    fn a_reply_gives_up_the_names_it_announces() {
+        let packets = artpollreply_packets(
+            Ipv4Addr::new(10, 0, 0, 7),
+            "Light",
+            "ToskLight Media Server",
+            "#0001 [0000] Output running",
+            &[1],
+        );
+        let (short, long) = artpollreply_names(&packets[0]).expect("an ArtPollReply");
+        assert_eq!(short, "Light");
+        assert_eq!(long, "ToskLight Media Server");
+        // Anything that is not a reply gives nothing, so a poll is never read as an identity.
+        assert_eq!(artpollreply_names(&[0_u8; 16]), None);
+    }
+
+    #[test]
+    fn own_software_is_named_and_everything_else_is_left_alone() {
+        assert_eq!(
+            tosklight_software("ToskLight Media Server"),
+            Some("Media Server")
+        );
+        // An sACN source keeps the operator's own label after the identity.
+        assert_eq!(
+            tosklight_software("ToskLight Media Server — Stage Left"),
+            Some("Media Server")
+        );
+        assert_eq!(
+            tosklight_software("ToskLight Visualizer"),
+            Some("Visualizer")
+        );
+        assert_eq!(tosklight_software("ToskLight lighting desk"), Some("Desk"));
+        // A third-party node is not ours, however it is named.
+        assert_eq!(tosklight_software("MA Lighting grandMA3"), None);
+        assert_eq!(tosklight_software("Tosk"), None);
+        assert_eq!(tosklight_software(""), None);
     }
 }

@@ -38,6 +38,7 @@ function endpoint(overrides: Partial<NetworkEndpoint>): NetworkEndpoint {
 		role: "DMX output",
 		endpoint: "255.255.255.255:6454",
 		name: null,
+		software: null,
 		deliveryMode: null,
 		logicalUniverse: null,
 		universes: [],
@@ -210,6 +211,44 @@ describe("DMX Nodes tab", () => {
 		expect(within(pane).getByText("Status · Conflict")).toBeTruthy();
 		fireEvent.click(within(pane).getByRole("button", { name: "Deselect" }));
 		expect(within(pane).getByText("Network summary")).toBeTruthy();
+	});
+
+	it("marks the desk's own software and leaves third-party nodes alone", () => {
+		renderNodes({
+			networkEndpoints: {
+				outputBindIp: "10.0.0.2",
+				networkOutputAvailable: true,
+				endpoints: [
+					endpoint({
+						id: "receive:artnet:sender:10.0.0.30",
+						direction: "receive",
+						origin: "observed",
+						role: "Art-Net sender",
+						endpoint: "10.0.0.30:6454",
+						name: "ToskLight Media Server",
+						software: "Media Server",
+					}),
+					endpoint({
+						id: "receive:artnet:sender:10.0.0.31",
+						direction: "receive",
+						origin: "observed",
+						role: "Art-Net sender",
+						endpoint: "10.0.0.31:6454",
+						name: "MA Lighting grandMA3",
+						software: null,
+					}),
+				],
+			},
+		});
+
+		const own = within(row("receive:artnet:sender:10.0.0.30"));
+		expect(own.getByText("ToskLight Media Server")).toBeTruthy();
+		// The row still says what it is and what it announced.
+		expect(own.getByText(/Art-Net sender · ToskLight Media Server/)).toBeTruthy();
+
+		const other = within(row("receive:artnet:sender:10.0.0.31"));
+		expect(other.queryByText(/^ToskLight /)).toBeNull();
+		expect(other.getByText(/Art-Net sender · MA Lighting grandMA3/)).toBeTruthy();
 	});
 
 	it("explains empty, loading, unsupported and failed reads", () => {
