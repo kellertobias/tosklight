@@ -179,12 +179,23 @@ use truss::push_truss;
 // A chain reads by its links and what hangs at its ends; a stage element by the lift under it.
 mod chain;
 #[cfg(test)]
+mod curtain_tests;
+#[cfg(test)]
 mod primitive_tests;
 mod riser;
 #[cfg(test)]
 mod selection_tests;
 #[cfg(test)]
 pub(super) use chain::link_count as chain_link_count;
+
+/// How wide a curtain fold is built, as a share of the pitch between fold centres.
+///
+/// Above 1.0 on purpose: the folds have to overlap rather than abut. A fold is a cylinder, so its
+/// cross-section is an ellipse — two of them spaced exactly one pitch apart meet at a single
+/// tangent point at best, and the drape is see-through between every pair. Neighbouring folds sit
+/// at alternating depths but share a centre in Z, so once their widths overlap the pair is solid
+/// from a grazing angle as well as head-on.
+const FOLD_OVERLAP: f32 = 1.15;
 
 /// A drape, drawn as folds rather than a slab so it reads as fabric.
 fn push_curtain(
@@ -204,7 +215,7 @@ fn push_curtain(
         // Alternating depth is what makes a drape read as gathered rather than painted on.
         let bulge = if index % 2 == 0 { depth } else { depth * 0.45 };
         let model = Mat4::from_scale_rotation_translation(
-            Vec3::new(fold_width * 0.92, size.y, bulge),
+            Vec3::new(fold_width * FOLD_OVERLAP, size.y, bulge),
             orientation,
             object.position + across * offset,
         );
