@@ -894,3 +894,36 @@ fn a_grid_gives_every_fixture_on_one_line_the_same_rank() {
         }
     }
 }
+
+#[test]
+fn a_grid_on_the_diagonal_ranks_by_the_lines_that_angle_makes() {
+    // A direction between the axes has grid lines that run across the grid at that angle, so an
+    // anti-diagonal shares a rank and a ten-by-ten grid holds nineteen of them, corner to corner.
+    // The rank still only advances from line to line; nothing is spread along one.
+    let targets = ten_by_ten();
+    let ranked = evaluate_spatial_mapping(
+        &mapping(
+            ProjectionPreset::Top,
+            SpatialSelectionShape::Grid {
+                angle_degrees: 45.0,
+                direction: RankDirection::Ascending,
+            },
+        ),
+        &targets,
+    )
+    .unwrap();
+    assert_eq!(
+        ranked.rank_count, 19,
+        "nineteen diagonals across a ten-by-ten grid"
+    );
+    for row in 0..10usize {
+        for column in 0..10usize {
+            let rank = ranked.rank_by_fixture[&fixture((row * 10 + column + 1) as u128)];
+            assert_eq!(
+                rank,
+                row + column,
+                "the lamp at row {row}, column {column} stands on the diagonal it names"
+            );
+        }
+    }
+}

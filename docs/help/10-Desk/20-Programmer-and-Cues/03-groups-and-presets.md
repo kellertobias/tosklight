@@ -17,6 +17,14 @@ each fixture takes its phase from, as Grid, Radial, or Radar. Fixtures that shar
 same point of a `THRU` spread; members without a valid Stage position remain visible and receive
 individual fallback ranks.
 
+A **Grid** ranks by the lines its direction makes across the plane, and every fixture standing on
+one of those lines shares a rank, so the phase advances from line to line and never along one. At
+0° the lines are the columns and a ten-by-ten grid runs in ten steps across it; at 90° they are the
+rows and it runs in ten steps down it. A direction between the axes makes diagonal lines the same
+way, so the same grid at 45° runs corner to corner in nineteen steps, each anti-diagonal moving as
+one. Fixtures standing close enough together to be on one line are treated as being on it, so a rig
+measured to the millimetre still ranks by the rows and columns it was built as.
+
 Every projection is placed by one position and one direction, whichever kind it is. **Planar** looks
 along the direction and ranks across the plane at right angles to it; Rotation turns that plane, the
 position is not read, and the named Top/Front/Back/Left/Right presets remain. **Cylindrical** runs
