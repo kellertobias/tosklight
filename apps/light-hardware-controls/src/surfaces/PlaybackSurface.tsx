@@ -12,6 +12,7 @@ interface PlaybackSurfaceProps {
   levels: Record<number, number>;
   lamps: Record<string, Lamp>;
   send: SendControl;
+  nativeSimulator?: boolean;
 }
 
 export function PlaybackSurface({
@@ -19,6 +20,7 @@ export function PlaybackSurface({
   levels,
   lamps,
   send,
+  nativeSimulator = false,
 }: PlaybackSurfaceProps) {
   return (
     <section
@@ -32,6 +34,7 @@ export function PlaybackSurface({
           number={attachedPlaybackLayout.navigationEncoder}
           nav
           send={send}
+          clickDisabled={nativeSimulator}
         />
       </div>
       <div className="top-row">

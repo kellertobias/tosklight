@@ -9,6 +9,7 @@ export const defaultControllerSettings: ControllerSettings = {
   top: true,
   mode: "osc",
   serverPort: 5000,
+  simulatorPort: 49152,
 };
 
 export interface SettingsStorage {
@@ -35,11 +36,16 @@ function parseSavedSettings(value: string | null): Partial<ControllerSettings> {
       ...(typeof candidate.desk === "string" ? { desk: candidate.desk } : {}),
       ...(typeof candidate.top === "boolean" ? { top: candidate.top } : {}),
       // Settings saved before the mode switch existed have no mode and stay on OSC.
-      ...(candidate.mode === "osc" || candidate.mode === "native"
+      ...(candidate.mode === "osc" ||
+      candidate.mode === "native" ||
+      candidate.mode === "native-simulator"
         ? { mode: candidate.mode }
         : {}),
       ...(typeof candidate.serverPort === "number"
         ? { serverPort: candidate.serverPort }
+        : {}),
+      ...(typeof candidate.simulatorPort === "number"
+        ? { simulatorPort: candidate.simulatorPort }
         : {}),
     };
   } catch {

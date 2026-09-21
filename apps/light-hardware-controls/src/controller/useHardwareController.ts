@@ -3,14 +3,16 @@ import {
   createHttpNativeHardwareBridge,
   type NativeHardwareBridge,
 } from "../transport/nativeBridge";
+import type { NativeSimulatorBridge } from "../transport/nativeSimulatorBridge";
+import { tauriNativeSimulatorBridge } from "../transport/nativeSimulatorBridge";
 import type { OscBridge } from "../transport/oscBridge";
 import { tauriOscBridge } from "../transport/oscBridge";
 import { feedbackReducer } from "./feedbackReducer";
 import { nativeStatusIntervalMs, openLink } from "./linkLifecycle";
 import {
   loadControllerSettings,
-  saveControllerSettings,
   type SettingsStorage,
+  saveControllerSettings,
 } from "./settings";
 import type {
   ControllerSettings,
@@ -43,6 +45,7 @@ export interface HardwareController {
 interface ControllerDependencies {
   bridge?: OscBridge;
   nativeBridge?: NativeHardwareBridge;
+  simulatorBridge?: NativeSimulatorBridge;
   storage?: SettingsStorage;
 }
 
@@ -54,6 +57,8 @@ export function useHardwareController(
 ): HardwareController {
   const bridge = dependencies.bridge ?? tauriOscBridge;
   const nativeBridge = dependencies.nativeBridge ?? defaultNativeBridge;
+  const simulatorBridge =
+    dependencies.simulatorBridge ?? tauriNativeSimulatorBridge;
   const storage = dependencies.storage ?? window.localStorage;
   const [feedback, dispatch] = useReducer(
     feedbackReducer,
@@ -76,12 +81,14 @@ export function useHardwareController(
   useEffect(() => {
     let disposed = false;
     let disposeListener: (() => void) | undefined;
-    void bridge.listenFeedback((message) => {
-      dispatch({ type: "feedback-received", feedback: message });
-    }).then((dispose) => {
-      if (disposed) dispose();
-      else disposeListener = dispose;
-    });
+    void bridge
+      .listenFeedback((message) => {
+        dispatch({ type: "feedback-received", feedback: message });
+      })
+      .then((dispose) => {
+        if (disposed) dispose();
+        else disposeListener = dispose;
+      });
     return () => {
       disposed = true;
       disposeListener?.();
@@ -101,21 +108,28 @@ export function useHardwareController(
       setActiveMode(target.mode);
       setLastInput(null);
       setLinkError(null);
-      setDevice(target.mode === "native" ? { state: "starting" } : inactiveDevice);
+      setDevice(
+        target.mode === "native" ? { state: "starting" } : inactiveDevice,
+      );
       dispatch({ type: "connection-requested" });
-      await openLink(target, { bridge, nativeBridge, storage }, {
-        isCurrent,
-        setLinkError,
-        setDevice,
-        stopPolling: stopStatusPolling,
-        startPolling: (refresh) => {
-          statusTimer.current = setInterval(() => {
-            void refresh();
-          }, nativeStatusIntervalMs);
+      await openLink(
+        target,
+        { bridge, nativeBridge, simulatorBridge, storage },
+        {
+          isCurrent,
+          setLinkError,
+          setDevice,
+          setConnected: () => dispatch({ type: "connection-established" }),
+          stopPolling: stopStatusPolling,
+          startPolling: (refresh) => {
+            statusTimer.current = setInterval(() => {
+              void refresh();
+            }, nativeStatusIntervalMs);
+          },
         },
-      });
+      );
     },
-    [bridge, nativeBridge, storage, stopStatusPolling],
+    [bridge, nativeBridge, simulatorBridge, storage, stopStatusPolling],
   );
 
   const connect = useCallback(
@@ -142,28 +156,42 @@ export function useHardwareController(
       generation.current += 1;
       stopStatusPolling();
       void nativeBridge.close();
+      void simulatorBridge.close();
     };
-  }, [nativeBridge, stopStatusPolling]);
+  }, [nativeBridge, simulatorBridge, stopStatusPolling]);
 
-  const setTopRowVisible = useCallback((visible: boolean) => {
-    setSettings((current) => {
-      const next = { ...current, top: visible };
-      saveControllerSettings(storage, next);
-      return next;
-    });
-  }, [storage]);
+  const setTopRowVisible = useCallback(
+    (visible: boolean) => {
+      setSettings((current) => {
+        const next = { ...current, top: visible };
+        saveControllerSettings(storage, next);
+        return next;
+      });
+    },
+    [storage],
+  );
 
   const updateSettings = useCallback((changes: Partial<ControllerSettings>) => {
     setSettings((current) => ({ ...current, ...changes }));
   }, []);
 
-  const send = useCallback<SendControl>((path, arguments_) => {
-    // In Native Hardware mode the attached device is the only input path; an
-    // on-screen press would be a second, competing source.
-    if (activeModeRef.current !== "osc") return;
-    setLastInput((shown) => (shown?.path === path ? shown : { path }));
-    void bridge.send(path, arguments_);
-  }, [bridge]);
+  const send = useCallback<SendControl>(
+    (path, arguments_) => {
+      // In Native Hardware mode the attached device is the only input path; an
+      // on-screen press would be a second, competing source.
+      const mode = activeModeRef.current;
+      if (mode === "native") return;
+      setLastInput((shown) => (shown?.path === path ? shown : { path }));
+      void (
+        mode === "native-simulator"
+          ? simulatorBridge.send(path, arguments_)
+          : bridge.send(path, arguments_)
+      ).catch((error: unknown) => {
+        setLinkError(error instanceof Error ? error.message : String(error));
+      });
+    },
+    [bridge, simulatorBridge],
+  );
 
   return {
     feedback,

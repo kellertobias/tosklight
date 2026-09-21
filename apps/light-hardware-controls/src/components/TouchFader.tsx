@@ -26,6 +26,7 @@ interface TouchFaderProps {
   display: string;
   onChange: (value: number) => void;
   className?: string;
+  disabled?: boolean;
 }
 
 export function TouchFader({
@@ -34,6 +35,7 @@ export function TouchFader({
   display,
   onChange,
   className = "",
+  disabled = false,
 }: TouchFaderProps) {
   return (
     <label
@@ -43,6 +45,7 @@ export function TouchFader({
       <span>{label}</span>
       <strong>{display}</strong>
       <WheelSafeRange
+        disabled={disabled}
         min="0"
         max="1"
         step=".001"

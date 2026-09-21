@@ -14,6 +14,7 @@ import { hardwareSettingsKey } from "./controller/settings";
 import type { DeviceStatus, FeedbackMessage } from "./controller/types";
 import { nativeStatusIntervalMs } from "./controller/useHardwareController";
 import type { NativeHardwareBridge } from "./transport/nativeBridge";
+import type { NativeSimulatorBridge } from "./transport/nativeSimulatorBridge";
 import type { OscBridge } from "./transport/oscBridge";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -90,6 +91,19 @@ function stubNative(initial: DeviceStatus) {
 	};
 }
 
+function stubSimulator() {
+	const bridge = {
+		open: vi.fn(async () => {
+			order.push("simulator:open");
+		}),
+		send: vi.fn().mockResolvedValue(undefined),
+		close: vi.fn(async () => {
+			order.push("simulator:close");
+		}),
+	} satisfies NativeSimulatorBridge;
+	return bridge;
+}
+
 const linkStatus = () =>
 	screen.getByRole("status", { name: "Link status" }).textContent ?? "";
 const modeButton = (name: string) => screen.getByRole("button", { name });
@@ -130,12 +144,7 @@ describe("hardware test application input modes", () => {
 		await waitFor(() =>
 			expect(linkStatus()).toContain("Device connected · Test Wing"),
 		);
-		expect(order).toEqual([
-			"native:close",
-			"osc:disconnect",
-			"osc:connect",
-			"native:open",
-		]);
+		expect(order).toEqual(["native:close", "osc:disconnect", "native:open"]);
 		expect(native.bridge.open).toHaveBeenCalledWith(
 			expect.objectContaining({ host: "127.0.0.1", serverPort: 5000 }),
 		);
@@ -195,7 +204,7 @@ describe("hardware test application input modes", () => {
 		expect(native.bridge.status).not.toHaveBeenCalled();
 	});
 
-	it("reports a failed OSC link in either mode instead of connecting forever", async () => {
+	it("keeps Native Hardware independent from a failed OSC link", async () => {
 		const osc = stubOsc();
 		osc.bridge.connect.mockRejectedValueOnce(
 			new Error("invalid socket address"),
@@ -208,16 +217,10 @@ describe("hardware test application input modes", () => {
 			),
 		);
 
-		osc.bridge.connect.mockRejectedValueOnce(
-			new Error("invalid socket address"),
-		);
 		fireEvent.click(modeButton("Native Hardware"));
-		await waitFor(() =>
-			expect(linkStatus()).toContain(
-				"Device error · no desk link✕ cannot open the OSC link to 127.0.0.1:9000",
-			),
-		);
-		expect(native.bridge.open).not.toHaveBeenCalled();
+		await waitFor(() => expect(linkStatus()).toContain("Device connected"));
+		expect(native.bridge.open).toHaveBeenCalled();
+		expect(osc.bridge.connect).toHaveBeenCalledTimes(1);
 		expect(JSON.parse(saved ?? "{}")).toMatchObject({ mode: "native" });
 	});
 
@@ -233,7 +236,7 @@ describe("hardware test application input modes", () => {
 		order = [];
 
 		fireEvent.click(modeButton("OSC"));
-		await waitFor(() => expect(osc.bridge.connect).toHaveBeenCalledTimes(2));
+		await waitFor(() => expect(osc.bridge.connect).toHaveBeenCalledTimes(1));
 		expect(order).toEqual(["native:close", "osc:disconnect", "osc:connect"]);
 		const polls = native.bridge.status.mock.calls.length;
 		await act(() => vi.advanceTimersByTimeAsync(nativeStatusIntervalMs * 3));
@@ -262,10 +265,48 @@ describe("hardware test application input modes", () => {
 		render(<App bridge={osc.bridge} nativeBridge={native.bridge} />);
 		await waitFor(() => expect(release).toBeDefined());
 		fireEvent.click(modeButton("OSC"));
-		await waitFor(() => expect(osc.bridge.connect).toHaveBeenCalledTimes(2));
+		await waitFor(() => expect(osc.bridge.connect).toHaveBeenCalledTimes(1));
 		await act(async () => release?.());
 		expect(linkStatus()).not.toContain("Late");
 		expect(linkStatus()).toContain("OSC");
+	});
+
+	it("drives the supervised native simulator relay without opening OSC", async () => {
+		saved = JSON.stringify({ mode: "native-simulator" });
+		const osc = stubOsc();
+		const native = stubNative({ state: "unavailable" });
+		const simulator = stubSimulator();
+		render(
+			<App
+				bridge={osc.bridge}
+				nativeBridge={native.bridge}
+				simulatorBridge={simulator}
+			/>,
+		);
+		await waitFor(() => expect(simulator.open).toHaveBeenCalledTimes(1));
+		expect(osc.bridge.connect).not.toHaveBeenCalled();
+		expect(
+			screen.getByRole("button", { name: "DIFF" }).hasAttribute("disabled"),
+		).toBe(true);
+		expect(
+			screen
+				.getByRole("button", { name: "Navigation click" })
+				.hasAttribute("disabled"),
+		).toBe(true);
+		const progFade = screen
+			.getByText("Prog Fade")
+			.closest("label")
+			?.querySelector("input");
+		expect(progFade?.hasAttribute("disabled")).toBe(true);
+		fireEvent.click(screen.getByRole("button", { name: "Encoder 2 up" }));
+		await waitFor(() =>
+			expect(simulator.send).toHaveBeenCalledWith(
+				"encode/2",
+				expect.arrayContaining(["up"]),
+			),
+		);
+		expect(linkStatus()).toContain("Native Simulator");
+		expect(linkStatus()).toContain("● Desk connected");
 	});
 
 	it("offers the desk HTTP port in Settings and names the active mode", async () => {

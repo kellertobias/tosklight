@@ -10,9 +10,14 @@ import type { SendControl } from "../../controller/types";
 interface NavigationRailProps {
 	page: number;
 	send: SendControl;
+	nativePageControls?: boolean;
 }
 
-export function NavigationRail({ page, send }: NavigationRailProps) {
+export function NavigationRail({
+	page,
+	send,
+	nativePageControls = false,
+}: NavigationRailProps) {
 	const programmerActionIds = useRef(
 		new Map<ProgrammerControlAction, string>(),
 	);
@@ -38,6 +43,14 @@ export function NavigationRail({ page, send }: NavigationRailProps) {
 			/>
 		);
 	};
+	const changePage = (action: "page-up" | "page-down", nextPage: number) => {
+		if (!nativePageControls) {
+			send(controlSurfaceOscPaths.page, [nextPage]);
+			return;
+		}
+		sendProgrammerAction(action, true);
+		sendProgrammerAction(action, false);
+	};
 
 	return (
 		<aside className="left-rail">
@@ -54,17 +67,12 @@ export function NavigationRail({ page, send }: NavigationRailProps) {
 			<span className="button-spacer" />
 			<button
 				type="button"
-				onClick={() =>
-					send(controlSurfaceOscPaths.page, [Math.max(1, page - 1)])
-				}
+				onClick={() => changePage("page-up", Math.max(1, page - 1))}
 			>
 				PAGE UP
 			</button>
 			<strong>{page}</strong>
-			<button
-				type="button"
-				onClick={() => send(controlSurfaceOscPaths.page, [page + 1])}
-			>
+			<button type="button" onClick={() => changePage("page-down", page + 1)}>
 				PAGE DOWN
 			</button>
 		</aside>

@@ -1,23 +1,29 @@
 import { useState } from "react";
 import { useHardwareController } from "./controller/useHardwareController";
-import type { NativeHardwareBridge } from "./transport/nativeBridge";
-import type { OscBridge } from "./transport/oscBridge";
 import { GridSurface } from "./surfaces/GridSurface";
+import { LinkStatus, ModeSelector } from "./surfaces/ModeSelector";
 import { PlaybackSurface } from "./surfaces/PlaybackSurface";
 import { ProgrammerSurface } from "./surfaces/ProgrammerSurface";
-import { SettingsSurface } from "./surfaces/SettingsSurface";
-import { LinkStatus, ModeSelector } from "./surfaces/ModeSelector";
 import { NavigationRail } from "./surfaces/playback/NavigationRail";
+import { SettingsSurface } from "./surfaces/SettingsSurface";
+import type { NativeHardwareBridge } from "./transport/nativeBridge";
+import type { NativeSimulatorBridge } from "./transport/nativeSimulatorBridge";
+import type { OscBridge } from "./transport/oscBridge";
 
 type ControllerTab = "console" | "grid" | "settings";
 
 interface AppProps {
   bridge?: OscBridge;
   nativeBridge?: NativeHardwareBridge;
+  simulatorBridge?: NativeSimulatorBridge;
 }
 
-export function App({ bridge, nativeBridge }: AppProps = {}) {
-  const controller = useHardwareController({ bridge, nativeBridge });
+export function App({ bridge, nativeBridge, simulatorBridge }: AppProps = {}) {
+  const controller = useHardwareController({
+    bridge,
+    nativeBridge,
+    simulatorBridge,
+  });
   const [tab, setTab] = useState<ControllerTab>("console");
   const { feedback, settings, send } = controller;
 
@@ -31,7 +37,9 @@ export function App({ bridge, nativeBridge }: AppProps = {}) {
         .join(" ")}
     >
       <header>
-        <h1>ToskLight <span>Hardware Controls</span></h1>
+        <h1>
+          ToskLight <span>Hardware Controls</span>
+        </h1>
         {feedback.updateArmed && (
           <strong className="hardware-update-state" role="status">
             UPDATE ARMED · touch an assigned playback
@@ -58,18 +66,24 @@ export function App({ bridge, nativeBridge }: AppProps = {}) {
       />
       {tab === "console" ? (
         <section className="console-layout">
-          <NavigationRail page={feedback.page} send={send} />
+          <NavigationRail
+            page={feedback.page}
+            send={send}
+            nativePageControls={controller.activeMode === "native-simulator"}
+          />
           <PlaybackSurface
             topRowVisible={settings.top}
             levels={feedback.levels}
             lamps={feedback.lamps}
             send={send}
+            nativeSimulator={controller.activeMode === "native-simulator"}
           />
           <ProgrammerSurface
             updateArmed={feedback.updateArmed}
             lamps={feedback.lamps}
             highlight={feedback.highlight}
             send={send}
+            nativeSimulator={controller.activeMode === "native-simulator"}
           />
         </section>
       ) : tab === "grid" ? (
@@ -108,18 +122,21 @@ function ControllerNavigation({
   return (
     <nav>
       <button
+        type="button"
         className={tab === "console" ? "active" : ""}
         onClick={() => setTab("console")}
       >
         Playback Console
       </button>
       <button
+        type="button"
         className={tab === "grid" ? "active" : ""}
         onClick={() => setTab("grid")}
       >
         Button Grid 41–90
       </button>
       <button
+        type="button"
         className={tab === "settings" ? "active" : ""}
         onClick={() => setTab("settings")}
       >

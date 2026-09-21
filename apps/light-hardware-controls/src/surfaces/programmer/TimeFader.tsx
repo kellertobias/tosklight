@@ -7,9 +7,16 @@ interface TimeFaderProps {
   path: string;
   maximum: number;
   send: SendControl;
+  disabled?: boolean;
 }
 
-export function TimeFader({ label, path, maximum, send }: TimeFaderProps) {
+export function TimeFader({
+  label,
+  path,
+  maximum,
+  send,
+  disabled = false,
+}: TimeFaderProps) {
   const [value, setValue] = useState(0.15);
   return (
     <TouchFader
@@ -17,6 +24,7 @@ export function TimeFader({ label, path, maximum, send }: TimeFaderProps) {
       label={label}
       value={value}
       display={`${(value * maximum).toFixed(1)}s`}
+      disabled={disabled}
       onChange={(next) => {
         setValue(next);
         send(path, [next]);

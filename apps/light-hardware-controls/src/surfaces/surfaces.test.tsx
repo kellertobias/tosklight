@@ -62,6 +62,7 @@ describe("hardware controller surfaces", () => {
 					top: true,
 					mode: "osc",
 					serverPort: 5000,
+					simulatorPort: 49152,
 				}}
 				updateSettings={() => undefined}
 				connect={async () => undefined}
@@ -130,5 +131,22 @@ describe("hardware controller surfaces", () => {
 		expect(sendControl.mock.calls[1]?.[1]?.[1]).toBe(
 			sendControl.mock.calls[0]?.[1]?.[1],
 		);
+	});
+
+	it("uses native page key gestures for the native simulator", () => {
+		const sendControl = vi.fn();
+		render(<NavigationRail page={3} send={sendControl} nativePageControls />);
+
+		fireEvent.click(screen.getByRole("button", { name: "PAGE UP" }));
+		fireEvent.click(screen.getByRole("button", { name: "PAGE DOWN" }));
+
+		expect(
+			sendControl.mock.calls.map(([path, [pressed]]) => [path, pressed]),
+		).toEqual([
+			["programmer/page-up", true],
+			["programmer/page-up", false],
+			["programmer/page-down", true],
+			["programmer/page-down", false],
+		]);
 	});
 });

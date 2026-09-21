@@ -27,6 +27,7 @@ interface ProgrammerSurfaceProps {
 	lamps: Record<string, Lamp>;
 	highlight: HighlightFeedback;
 	send: SendControl;
+	nativeSimulator?: boolean;
 }
 
 export function ProgrammerSurface({
@@ -34,6 +35,7 @@ export function ProgrammerSurface({
 	lamps,
 	highlight,
 	send,
+	nativeSimulator = false,
 }: ProgrammerSurfaceProps) {
 	const actionIds = useRef(new Map<ProgrammerControlAction, string>());
 	const action = (name: ProgrammerControlAction, down: boolean) => {
@@ -58,6 +60,7 @@ export function ProgrammerSurface({
 						keypadKey={key}
 						className={`key-${actionName} ${key === "ENT" ? "key-enter" : ""}`}
 						label={softwareKeyLabel(key)}
+						disabled={nativeSimulator && actionName === "diff"}
 						style={{
 							gridColumn: sectionColumn,
 							gridRow: `${displayRow} / span ${rowSpan}`,
@@ -133,18 +136,21 @@ export function ProgrammerSurface({
 					path={controlSurfaceOscPaths.programmerFade("programmer")}
 					maximum={20}
 					send={send}
+					disabled={nativeSimulator}
 				/>
 				<TimeFader
 					label="Cue Fade"
 					path={controlSurfaceOscPaths.programmerFade("cue")}
 					maximum={60}
 					send={send}
+					disabled={nativeSimulator}
 				/>
 				<TimeFader
 					label="Release"
 					path={controlSurfaceOscPaths.programmerFade("release")}
 					maximum={60}
 					send={send}
+					disabled={nativeSimulator}
 				/>
 			</div>
 		</aside>

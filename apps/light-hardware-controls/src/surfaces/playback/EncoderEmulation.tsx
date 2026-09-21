@@ -10,12 +10,14 @@ interface EncoderEmulationProps {
   number: number;
   nav?: boolean;
   send: SendControl;
+  clickDisabled?: boolean;
 }
 
 export function EncoderEmulation({
   number,
   nav = false,
   send,
+  clickDisabled = false,
 }: EncoderEmulationProps) {
   const [held, setHeld] = useState(false);
   const path = nav
@@ -40,6 +42,7 @@ export function EncoderEmulation({
       <div>
         <button
           type="button"
+          disabled={clickDisabled}
           aria-label={`${name} click`}
           onClick={() =>
             send(path, [

@@ -34,7 +34,9 @@ export function SettingsSurface({
         <input
           type="number"
           value={settings.port}
-          onChange={(event) => updateSettings({ port: Number(event.target.value) })}
+          onChange={(event) =>
+            updateSettings({ port: Number(event.target.value) })
+          }
         />
       </label>
       <label>
@@ -61,11 +63,33 @@ export function SettingsSurface({
           }
         />
       </label>
-      <button onClick={() => void connect()}>
+      <h2>Native Simulator</h2>
+      <p>
+        The supervised simulator extension exposes a loopback typed-control
+        relay. This mode sends native extension inputs and never opens an OSC
+        subscription.
+      </p>
+      <label>
+        Simulator relay port
+        <input
+          type="number"
+          min="1"
+          max="65535"
+          value={settings.simulatorPort}
+          onChange={(event) =>
+            updateSettings({ simulatorPort: Number(event.target.value) })
+          }
+        />
+      </label>
+      <button type="button" onClick={() => void connect()}>
         {connected ? "Save and reconnect" : "Connect"}
       </button>
       <small>
-        {activeMode === "native" ? "Native Hardware mode · " : "OSC mode · "}
+        {activeMode === "native"
+          ? "Native Hardware mode · "
+          : activeMode === "native-simulator"
+            ? "Native Simulator mode · "
+            : "OSC mode · "}
         {connected
           ? `Connected to ${settings.desk} on ${settings.host}:${settings.port}`
           : `Connecting to ${settings.host}:${settings.port}…`}

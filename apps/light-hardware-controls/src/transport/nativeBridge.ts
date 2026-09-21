@@ -25,6 +25,7 @@ export interface ExtensionRuntimeSnapshot {
 	instances: Array<{
 		id: string;
 		extension_id: string;
+		capabilities: string[];
 		state: string;
 		last_error: string | null;
 		protocol_errors: number;
@@ -119,7 +120,9 @@ export function summarizeExtensions(
 		),
 	);
 	const label = (extensionId: string) => names.get(extensionId) ?? extensionId;
-	const instances = snapshot.instances;
+	const instances = snapshot.instances.filter((entry) =>
+		entry.capabilities.includes("control_surface"),
+	);
 	if (instances.length === 0) {
 		const detail =
 			snapshot.configuration_diagnostic ??

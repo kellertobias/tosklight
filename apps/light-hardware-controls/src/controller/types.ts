@@ -28,7 +28,7 @@ export interface FeedbackState {
 }
 
 /** Which input path the test application exercises. */
-export type HardwareMode = "osc" | "native";
+export type HardwareMode = "osc" | "native" | "native-simulator";
 
 export interface ControllerSettings {
   host: string;
@@ -38,6 +38,8 @@ export interface ControllerSettings {
   mode: HardwareMode;
   /** Desk HTTP port, read in Native Hardware mode for native-extension health. */
   serverPort: number;
+  /** Loopback relay exposed by the supervised native simulator extension. */
+  simulatorPort: number;
 }
 
 export type DeviceState =

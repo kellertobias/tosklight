@@ -4,6 +4,7 @@ import { initialFeedbackState } from "./types";
 
 export type FeedbackAction =
   | { type: "connection-requested" }
+  | { type: "connection-established" }
   | { type: "feedback-received"; feedback: FeedbackMessage };
 
 function unwrapArgument(value: unknown): unknown {
@@ -107,10 +108,10 @@ function reduceSpeedGroup(
   };
   const currentLamp = state.lamps[`speed/${number}`];
   if (
-    state.speedBpms[number] === bpm
-    && currentLamp?.color === lamp.color
-    && currentLamp.state === lamp.state
-    && currentLamp.bpm === lamp.bpm
+    state.speedBpms[number] === bpm &&
+    currentLamp?.color === lamp.color &&
+    currentLamp.state === lamp.state &&
+    currentLamp.bpm === lamp.bpm
   ) {
     return state;
   }
@@ -160,6 +161,9 @@ export function feedbackReducer(
 ): FeedbackState {
   if (action.type === "connection-requested") {
     return state.connected ? { ...state, connected: false } : state;
+  }
+  if (action.type === "connection-established") {
+    return state.connected ? state : { ...state, connected: true };
   }
   return reduceFeedback(state, action.feedback);
 }

@@ -26,6 +26,7 @@ function instance(
 	return {
 		id: "wing-1",
 		extension_id: "com.example.wing",
+		capabilities: ["control_surface"],
 		state,
 		last_error: null,
 		protocol_errors: 0,
@@ -57,6 +58,20 @@ describe("native extension health summary", () => {
 				}),
 			).message,
 		).toBe("extensions.json is malformed");
+	});
+
+	it("ignores running telemetry and timecode extensions", () => {
+		expect(
+			summarizeExtensions(
+				snapshot([
+					instance("running", { capabilities: ["telemetry_source"] }),
+					instance("running", { capabilities: ["timecode_source"] }),
+				]),
+			),
+		).toEqual({
+			state: "unavailable",
+			message: "no native hardware extension is configured on this desk",
+		});
 	});
 
 	it("reports restarting and terminal instances with their last error", () => {

@@ -8,6 +8,7 @@ import { describeDevice } from "../transport/nativeBridge";
 const modes: Array<{ mode: HardwareMode; label: string }> = [
 	{ mode: "osc", label: "OSC" },
 	{ mode: "native", label: "Native Hardware" },
+	{ mode: "native-simulator", label: "Native Simulator" },
 ];
 
 interface ModeSelectorProps {
@@ -58,15 +59,23 @@ export function LinkStatus({
 	const input =
 		activeMode === "native"
 			? "Input from the attached device · on-screen controls mirror only"
-			: lastInput
-				? `Last OSC input: ${lastInput.path}`
-				: "No OSC input yet";
+			: activeMode === "native-simulator"
+				? lastInput
+					? `Last native input: ${lastInput.path}`
+					: "No native input yet"
+				: lastInput
+					? `Last OSC input: ${lastInput.path}`
+					: "No OSC input yet";
 	return (
 		<div className="link-status" role="status" aria-label="Link status">
 			<strong className="link-mode">
-				{activeMode === "native" ? "Native Hardware" : "OSC"}
+				{activeMode === "native"
+					? "Native Hardware"
+					: activeMode === "native-simulator"
+						? "Native Simulator"
+						: "OSC"}
 			</strong>
-			{activeMode === "native" && (
+			{activeMode !== "osc" && (
 				<span className={`device-state-${device.state}`}>
 					{describeDevice(device)}
 				</span>

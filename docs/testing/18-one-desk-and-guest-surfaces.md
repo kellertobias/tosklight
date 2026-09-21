@@ -73,6 +73,20 @@ run a playback while the operator is recording, without either disturbing the ot
    device, the desk sees one Hardware Controls subscription, and an on-screen press arrives once.
 5. Quit and relaunch. Confirm the last chosen mode is restored.
 
+### Native simulator protocol
+
+1. Install and enable `tl-hardware-simulator-extension`, then rescan extensions. Confirm the main
+   desk switches to hardware-connected layout when the supervised child completes its handshake,
+   without any OSC subscriber.
+2. Select **Native Simulator** in Hardware Controls. Confirm its relay connects and the desk still
+   has no OSC subscriber.
+3. Exercise a Programmer key, encoder, navigation control, Playback button, and Playback fader.
+   Confirm each arrives once with action source `extension` and the desk mirrors the result.
+4. Stop or fault the simulator extension. Confirm the main desk returns to software-only layout
+   within a few seconds unless another OSC or native control surface remains connected.
+5. Run a telemetry-only or timecode-only extension. Confirm neither one switches the desk into
+   hardware-connected layout.
+
 ### Real-device check (manual)
 
 With an approved control-surface extension package and its device attached to the desk:
