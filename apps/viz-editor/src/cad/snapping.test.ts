@@ -84,6 +84,18 @@ describe("CAD snapping", () => {
 		expectVector(trussConnectors(block("Cross 4-Way", [1068, 1068, 290]))[0], [-534, 0, 0]);
 	});
 
+	it("joins a corner block onto the end of a straight truss", () => {
+		// Corners are not mountable, but they must still couple to the run they turn.
+		const run = truss("a", [0, 0, 5000]);
+		const corner = base("c", {
+			fixtureProfile: "Venue Four-Point Truss Corner 2-Way",
+			sizeMillimetres: [500, 500, 290],
+			positionMillimetres: [2375, 20, 5000],
+		});
+		// Its left arm reaches 355 mm back, so it couples at 2355 against the run's end at 2000.
+		expectVector(snapMove([run, corner], ["c"], [0, 0, 0], PLAN, 150).delta, [-20, -20, 0]);
+	});
+
 	it("puts two stage elements corner to corner", () => {
 		const still = riser("a", [0, 0, 0], [2000, 1000, 400]);
 		const moving = riser("b", [2050, 20, 0], [2000, 1000, 400]);
