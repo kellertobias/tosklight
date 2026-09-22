@@ -879,7 +879,12 @@
 		grid-auto-rows: minmax(72px, 1fr);
 	}
 	.media-layer-tile.ui-button {
-		--media-layer-thumbnail-limit: clamp(100px, 68%, 160px);
+		/*
+		 * Two columns halve the tile, and a picture sized for a full-width tile then left the
+		 * name about one character wide. The picture gives up the room: a layer nobody can name
+		 * is worth less than a larger thumbnail of it.
+		 */
+		--media-layer-thumbnail-limit: clamp(48px, 45%, 120px);
 	}
 }
 

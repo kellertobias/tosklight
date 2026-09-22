@@ -367,8 +367,10 @@ test("Media desk preview uses the regular Media encoders", async ({ page }) => {
 	const headerTitleBounds = await header
 		.locator(".ui-window-title")
 		.boundingBox();
+	// The pane's own tools live in the title chrome now, which keeps them at the far end of the
+	// header rather than beside the title.
 	const headerToolsBounds = await header
-		.locator(".media-pane-header-tools")
+		.locator(".ui-title-chrome")
 		.boundingBox();
 	expect(headerToolsBounds?.x ?? 0).toBeGreaterThan(
 		(headerTitleBounds?.x ?? 0) + (headerTitleBounds?.width ?? 0) + 100,
@@ -3195,9 +3197,11 @@ test("modal close policies, title configuration, and programmatic close are inte
 	);
 	const policyDialog = page.getByRole("dialog", { name: "Policy modal" });
 	await expect(policyDialog).toBeVisible();
-	await expect(page.getByRole("button", { name: "Close modal" })).toHaveCount(
-		0,
-	);
+	// A modal nobody may close explicitly still shows its close control, disabled, rather than
+	// leaving the corner empty — the same contract ModalStack.test.tsx pins.
+	await expect(
+		page.getByRole("button", { name: "Close modal" }),
+	).toBeDisabled();
 	await page.keyboard.press("Escape");
 	await expect(policyDialog).toBeVisible();
 	await page
@@ -3319,50 +3323,43 @@ test("configured search children share stack order, focus, form geometry, and di
 		await expect(keyboardTrigger).toBeFocused();
 	}
 
-	const dividers = owner.locator(".ui-titlebar-search-divider");
+	// The separator is drawn on the boundary between two chrome groups rather than by an element
+	// of its own, so it is counted and measured through that boundary's ::before. Two of them
+	// bracket the search: one before the tabs, one before the close terminal.
+	const dividers = owner.locator(
+		".ui-title-chrome-search ~ .ui-title-chrome-groups > .ui-title-chrome-group:first-child, .ui-title-chrome-terminals",
+	);
 	await expect(dividers).toHaveCount(2);
 	for (const divider of await dividers.all()) {
 		const geometry = await divider.evaluate((element) => {
-			const bar = getComputedStyle(element);
-			const line = getComputedStyle(element, "::after");
+			const line = getComputedStyle(element, "::before");
 			return {
-				width: Math.round(element.getBoundingClientRect().width),
-				background: bar.backgroundColor,
-				lineWidth: Number.parseFloat(line.width),
-				lineColor: line.backgroundColor,
+				width: Number.parseFloat(line.width),
+				image: line.backgroundImage,
 			};
 		});
-		expect(geometry.width).toBe(6);
-		expect(geometry.background).not.toBe("rgba(0, 0, 0, 0)");
-		expect(geometry.lineWidth).toBe(2);
-		expect(geometry.lineColor).toContain("27");
-		expect(geometry.lineColor).toContain("214");
-		expect(geometry.lineColor).toContain("236");
+		expect(geometry.width).toBe(5);
+		expect(geometry.image).toContain("27, 214, 236");
+		expect(geometry.image).toContain("41, 49, 58");
 	}
-
-	await page.goto(
-		"/iframe.html?id=tosklight-window-system-modal-layer--search-without-adjacent-buttons&viewMode=story",
-	);
-	await expect(page.locator(".ui-titlebar-search-divider")).toHaveCount(0);
 
 	await page.goto(
 		"/iframe.html?id=tosklight-window-system-modal-layer--window-title-bar-search&viewMode=story",
 	);
-	await expect(page.locator(".ui-titlebar-search-divider")).toHaveCount(1);
+	await expect(page.locator(".ui-window-action-group")).toHaveCount(1);
+	// A title bar too narrow for both keeps the actions and collapses the search behind its own
+	// button, rather than wrapping it onto a second row and taking height from the window.
+	await expect(page.locator(".ui-window-header-search")).toBeVisible();
+	await expect(page.locator(".ui-title-chrome-search-toggle")).toBeHidden();
 	await page.setViewportSize({ width: 620, height: 760 });
-	await expect(page.locator(".ui-titlebar-search-divider")).toBeHidden();
-	const searchBox = await page
-		.locator(".ui-window-header-search")
-		.boundingBox();
-	const actionBox = await page
-		.getByRole("button", { name: "Add fixture" })
-		.boundingBox();
-	expect(searchBox).not.toBeNull();
-	expect(actionBox).not.toBeNull();
-	expect(searchBox!.y).toBeGreaterThanOrEqual(actionBox!.y + actionBox!.height);
+	await expect(page.locator(".ui-window-header-search")).toBeHidden();
+	await expect(page.locator(".ui-title-chrome-search-toggle")).toBeVisible();
+	await expect(
+		page.getByRole("button", { name: "Add fixture" }),
+	).toBeVisible();
 });
 
-test("title-bar search dividers remain prominently two CSS pixels at DPR 1 and 2", async ({
+test("title-bar search dividers remain prominently five CSS pixels at DPR 1 and 2", async ({
 	browser,
 }) => {
 	for (const deviceScaleFactor of [1, 2]) {
@@ -3374,12 +3371,14 @@ test("title-bar search dividers remain prominently two CSS pixels at DPR 1 and 2
 		await dprPage.goto(
 			"/iframe.html?id=tosklight-window-system-modal-layer--title-bar-configuration&viewMode=story",
 		);
-		const divider = dprPage.locator(".ui-titlebar-search-divider").first();
+		// The boundary keeps its own width whatever the device pixel ratio does, which is the
+		// point: a hairline that thins with the ratio stops parting the groups.
+		const divider = dprPage.locator(".ui-title-chrome-terminals").first();
 		await expect(divider).toBeVisible();
 		const cssWidth = await divider.evaluate((element) =>
-			Number.parseFloat(getComputedStyle(element, "::after").width),
+			Number.parseFloat(getComputedStyle(element, "::before").width),
 		);
-		expect(cssWidth).toBeCloseTo(2, 5);
+		expect(cssWidth).toBeCloseTo(5, 5);
 		await context.close();
 	}
 });
