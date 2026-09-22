@@ -202,8 +202,10 @@ test("Media pane follows the three-column pool and settings contract", async ({
 	await expect(
 		page.getByRole("button", { name: "Master output" }),
 	).toBeVisible();
+	// The output ratio belongs to the picture, not to the button around it: the button also
+	// carries the caption beneath the picture, so its own box is taller than the output.
 	const masterBounds = await page
-		.getByRole("button", { name: "Master output" })
+		.locator('[data-testid="master-output-picture"]')
 		.boundingBox();
 	expect((masterBounds?.width ?? 0) / (masterBounds?.height ?? 1)).toBeCloseTo(
 		16 / 9,
@@ -222,6 +224,11 @@ test("Media pane follows the three-column pool and settings contract", async ({
 	).toHaveAttribute("aria-pressed", "true");
 
 	const folderPool = page.getByRole("region", { name: "Media folders" });
+	// Media belongs to a layer, so the Master selection takes the library away rather than
+	// offering a choice that cannot be stored. Browsing resumes on the next layer selected.
+	await expect(folderPool.locator(".pool-card[disabled]")).toHaveCount(10);
+	await layers.getByRole("button").first().click();
+	await expect(folderPool.locator(".pool-card[disabled]")).toHaveCount(0);
 	await expect(folderPool.locator(".pool-window-grid")).toHaveCount(1);
 	await expect(folderPool.locator(".pool-card")).toHaveCount(10);
 	await expect(folderPool.locator(".pool-card.selected")).toHaveAttribute(
@@ -252,24 +259,34 @@ test("Media pane follows the three-column pool and settings contract", async ({
 	await expect(files.locator(".pool-window-grid")).toHaveCount(1);
 	await expect(page.getByText("Media File", { exact: true })).toBeVisible();
 	await expect(files.locator(".pool-card")).toHaveCount(40);
-	await expect(files.locator(".pool-card.empty")).toHaveCount(38);
+	// Slot 000 clears the current file rather than choosing one, so it is filled without being
+	// an asset: the folder's own two assets follow it.
+	await expect(files.locator('.pool-card[data-pool-slot-id="0"]')).toHaveText(
+		/No file selected/u,
+	);
+	await expect(files.locator(".pool-card.empty")).toHaveCount(37);
 	await expect(files.locator(".pool-card.selected")).toHaveAttribute(
 		"data-pool-slot-id",
 		"file-tour-titles",
 	);
-	await expect(files.getByText("001", { exact: true })).toBeVisible();
+	// The clear slot takes 000, so the folder's first asset is numbered from the slot it lands
+	// in rather than from one. Its own card carries both the number and the name.
+	await expect(
+		files.locator('.pool-card[data-pool-slot-id="file-tour-titles"]'),
+	).toHaveText(/002/u);
 	await expect(files.getByText("Tour Titles", { exact: true })).toBeVisible();
 	await expect(files.locator("img").first()).toHaveCSS(
 		"object-position",
 		"50% 100%",
 	);
-	const mediaCardBounds = await files
-		.locator(".pool-card")
-		.first()
-		.boundingBox();
-	const mediaImageBounds = await files
+	// One card, measured against its own picture: the clear slot carries no media, so the first
+	// card and the first picture are no longer the same card.
+	const mediaCard = files.locator(
+		'.pool-card[data-pool-slot-id="file-tour-titles"]',
+	);
+	const mediaCardBounds = await mediaCard.boundingBox();
+	const mediaImageBounds = await mediaCard
 		.locator(".pool-card-media")
-		.first()
 		.boundingBox();
 	expect(
 		(mediaImageBounds?.x ?? 0) - (mediaCardBounds?.x ?? 0),
@@ -284,13 +301,13 @@ test("Media pane follows the three-column pool and settings contract", async ({
 	);
 
 	await expect(
-		page.getByRole("radiogroup", { name: "Media control section" }),
+		page.getByRole("tablist", { name: "Media control section" }),
 	).toBeVisible();
-	await page.getByRole("radio", { name: "Position" }).click();
+	await page.getByRole("tab", { name: "Position" }).click();
 	await expect(page.getByRole("slider", { name: "X position" })).toBeVisible();
-	await page.getByRole("radio", { name: "Frame" }).click();
+	await page.getByRole("tab", { name: "Frame" }).click();
 	await expect(page.getByRole("slider", { name: "Keystone" })).toBeVisible();
-	await page.getByRole("radio", { name: "Effects" }).click();
+	await page.getByRole("tab", { name: "Effects" }).click();
 	await expect(page.getByRole("slider", { name: "Amount" })).toBeVisible();
 
 	await page.getByRole("button", { name: "Settings" }).click();
@@ -301,21 +318,21 @@ test("Media pane follows the three-column pool and settings contract", async ({
 		page.getByRole("region", { name: "Media secondary controls" }),
 	).toHaveCount(0);
 	await expect(
-		page.getByRole("radiogroup", { name: "Media control section" }),
+		page.getByRole("tablist", { name: "Media control section" }),
 	).toHaveCount(0);
 	await expect(
-		page.getByRole("radiogroup", { name: "Content or Mask browser" }),
+		page.getByRole("tablist", { name: "Content or Mask browser" }),
 	).toHaveCount(0);
-	const unifiedSections = page.getByRole("radiogroup", {
+	const unifiedSections = page.getByRole("tablist", {
 		name: "Media window section",
 	});
 	await expect(unifiedSections).toBeVisible();
-	await expect(unifiedSections.getByRole("radio")).toHaveCount(6);
+	await expect(unifiedSections.getByRole("tab")).toHaveCount(6);
 	await expect(
 		page.getByRole("button", { name: "Settings", exact: true }),
 	).toBeVisible();
 	await page.getByRole("button", { name: "Close settings" }).click();
-	await unifiedSections.getByRole("radio", { name: "Position" }).click();
+	await unifiedSections.getByRole("tab", { name: "Position" }).click();
 	await expect(
 		page.getByRole("region", { name: "Media library browser" }),
 	).toHaveCount(0);
@@ -323,7 +340,7 @@ test("Media pane follows the three-column pool and settings contract", async ({
 		page.getByRole("region", { name: "Media secondary controls" }),
 	).toBeVisible();
 	await expect(page.getByRole("slider", { name: "X position" })).toBeVisible();
-	await unifiedSections.getByRole("radio", { name: "Content" }).click();
+	await unifiedSections.getByRole("tab", { name: "Content" }).click();
 	await expect(
 		page.getByRole("region", { name: "Media library browser" }),
 	).toBeVisible();
@@ -2558,21 +2575,26 @@ test("playback group controls enforce row action rules and touch or hardware hei
 	}
 });
 
-test("application Stage stories render deterministic 2D fixtures and the real 3D canvas", async ({
+// The Stage is drawn by the out-of-process renderer, not by the web view: a browser has no
+// fixture elements to count and no canvas of its own. What a story can still show is that each
+// view mounts its renderer host, which is all this checks. The 2D fixture and 3D canvas
+// assertions this test used to carry went out with Stage3dCanvas.
+test("application Stage stories mount the renderer host for each view", async ({
 	page,
 }) => {
 	await page.setViewportSize({ width: 1496, height: 761 });
-	await page.goto(
-		"/iframe.html?id=tosklight-windows-stage--stage-2-d&viewMode=story",
-	);
-	await expect(page.locator(".stage-fixture")).toHaveCount(5);
-	await expect(page.locator(".stage-fixture.selected")).toHaveCount(1);
-
-	await page.goto(
-		"/iframe.html?id=tosklight-windows-stage--stage-3-d&viewMode=story",
-	);
-	await expect(page.locator(".stage-3d-canvas")).toBeVisible();
-	await expect(page.locator(".stage-3d-canvas canvas")).toBeVisible();
+	for (const [story, view] of [
+		["stage-2-d", "2d"],
+		["stage-3-d", "3d"],
+	] as const) {
+		await page.goto(
+			`/iframe.html?id=tosklight-windows-stage--${story}&viewMode=story`,
+		);
+		await expect(
+			page.locator(`.stage-canvas[data-stage-view="${view}"]`),
+		).toHaveCount(1);
+		await expect(page.locator(".stage-native-pane")).toBeVisible();
+	}
 });
 
 test("generic and application-owned pool stories preserve their slot contracts", async ({
@@ -2595,8 +2617,10 @@ test("generic and application-owned pool stories preserve their slot contracts",
 	);
 	await expect(page.locator(".group-card").nth(3)).toHaveClass(/selected/u);
 	await page.locator(".group-card").nth(3).click({ button: "right" });
+	// A right press on a group card opens that group's settings; the story reports the slot it
+	// was given, which is what this checks.
 	await expect(page.getByLabel("Group pool interaction")).toHaveText(
-		"Context Group 4",
+		"Settings Group 4",
 	);
 
 	await page.goto(
