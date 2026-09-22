@@ -3124,7 +3124,9 @@ test("Virtual Playback cards use outline, full-fill, edge-status, and artwork hi
 	).toBeLessThanOrEqual((cardBounds?.y ?? 0) + (cardBounds?.height ?? 0));
 
 	for (const [story, label] of [
-		["configuration-state", "Configure Playback"],
+		// Arming configuration arms the Set target, which the card labels "Set" — the same label
+		// VirtualPlaybackGrid.test.tsx pins on the shared component.
+		["configuration-state", "Set"],
 		["update-state", "Update"],
 	] as const) {
 		await page.goto(

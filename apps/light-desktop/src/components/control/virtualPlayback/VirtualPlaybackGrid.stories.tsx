@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Button } from "@tosklight/ui/controls";
 import { useMemo, useState } from "react";
+import { StoryShowObjectsProvider } from "../../../../../ui-library/storybook/providers/StoryShowObjectsProvider";
 import type {
 	CueList,
 	PlaybackDefinition,
@@ -28,6 +29,16 @@ interface VirtualPlaybackStoryArgs {
 const meta = {
 	title: "ToskLight/Virtual Playbacks",
 	tags: ["autodocs"],
+	// The grid reads single-Cue previews through the show-object store. Every story in this file
+	// needs that provider, including ones added later, so it is supplied once here rather than
+	// per story.
+	decorators: [
+		(Story) => (
+			<StoryShowObjectsProvider>
+				<Story />
+			</StoryShowObjectsProvider>
+		),
+	],
 	parameters: { layout: "fullscreen" },
 	args: { rows: 3, columns: 4, width: 920 },
 	argTypes: {
