@@ -26,6 +26,8 @@ import { SelectedElementList, SeveralPlacement } from "./CadInfoSeveral";
 import type { CadTools } from "./cadTools";
 import { CAD_VIEW_LABELS, type CadEntity, type CadSceneSnapshot, type CadViewDirection } from "./types";
 import type { CadUnderlays } from "./useCadUnderlays";
+import type { useCadVenueGroups } from "./useCadVenueGroups";
+import { venueGroupAction } from "./venueGroups";
 import type { useCadPrintPages } from "./useCadPrintPages";
 import "./cadSidebar.css";
 
@@ -254,6 +256,7 @@ function titleGroups({
 function SelectionMenu({
 	objectMenu,
 	entities,
+	venueGroups,
 	onDelete,
 	onSelect,
 	onFocusEntity,
@@ -262,6 +265,7 @@ function SelectionMenu({
 }: {
 	objectMenu: ObjectMenuState | undefined;
 	entities: readonly CadEntity[];
+	venueGroups: VenueGroupsState | undefined;
 	onDelete(targets: readonly SelectedElement[]): void;
 	onSelect(ids: string[]): void;
 	onFocusEntity(entityId: string | null): void;
@@ -273,6 +277,19 @@ function SelectionMenu({
 	// rather than waiting for that click's selection to round-trip through the desk.
 	const elements = request ? selectedElements(entities, request.entityIds) : [];
 	if (!objectMenu || !request || !elements.length) return null;
+	// Group and Ungroup are the menu's only entries that can have nothing to do, and then they stay
+	// away rather than sitting there greyed out; the stored groups say which of the two that is.
+	const ids = request.entityIds;
+	const groupAction = (action: "group" | "ungroup") => {
+		if (!venueGroups) return null;
+		const next = venueGroupAction(venueGroups.groups, entities, ids, action);
+		if (!next) return null;
+		return () => {
+			venueGroups.change(next);
+			const noun = ids.length === 1 ? "1 element" : `${ids.length} elements`;
+			onNotice(action === "group" ? `Grouped ${noun}` : `Ungrouped ${noun}`);
+		};
+	};
 	const duplicate = () =>
 		duplicateSelection(
 			elements.map((element) => element.id),
@@ -290,6 +307,8 @@ function SelectionMenu({
 		<CadObjectMenu
 			request={request}
 			count={elements.length}
+			onGroup={groupAction("group")}
+			onUngroup={groupAction("ungroup")}
 			onClose={objectMenu.close}
 			onDelete={() => onDelete(elements)}
 			onDuplicate={() => void duplicate()}
@@ -301,6 +320,9 @@ interface ObjectMenuState {
 	request: CadObjectMenuRequest | null;
 	close(): void;
 }
+
+/** The show's Venue groups as the right-click menu needs them: what is stored, and how to store. */
+type VenueGroupsState = Pick<ReturnType<typeof useCadVenueGroups>, "groups" | "change">;
 
 export function CadSidePanels({
 	panel,
@@ -316,6 +338,7 @@ export function CadSidePanels({
 	focusedEntityId,
 	onFocusEntity,
 	objectMenu,
+	venueGroups,
 	onError,
 	onNotice,
 }: {
@@ -334,6 +357,8 @@ export function CadSidePanels({
 	onFocusEntity(entityId: string | null): void;
 	/** The right-click menu of the selection, which runs its Delete through the same confirmation. */
 	objectMenu?: ObjectMenuState;
+	/** The show's Venue groups, so that menu can Group and Ungroup what it names. */
+	venueGroups?: VenueGroupsState;
 	onError(reason: unknown): void;
 	/** A short confirmation that an action did something. */
 	onNotice(message: string): void;
@@ -359,7 +384,7 @@ export function CadSidePanels({
 		<>
 			{deletion.dialog}
 			<SelectionMenu
-				{...{ objectMenu, onSelect, onFocusEntity, onError, onNotice }}
+				{...{ objectMenu, venueGroups, onSelect, onFocusEntity, onError, onNotice }}
 				entities={scene?.entities ?? []}
 				onDelete={(targets) => deletion.request(undefined, targets)}
 			/>

@@ -151,19 +151,27 @@ describe("right-clicking an element in a CAD viewport", () => {
 });
 
 describe("the CAD object menu", () => {
-	function renderMenu(count = 1) {
-		const actions = { onDuplicate: vi.fn(), onDelete: vi.fn(), onClose: vi.fn() };
+	function renderMenu(count = 1, grouping: { group?: boolean; ungroup?: boolean } = {}) {
+		const actions = {
+			onDuplicate: vi.fn(),
+			onDelete: vi.fn(),
+			onClose: vi.fn(),
+			onGroup: vi.fn(),
+			onUngroup: vi.fn(),
+		};
 		render(
 			<CadObjectMenu
 				request={{ x: 10, y: 20, duplicateOffset: [500, 0, 0], entityIds: ["a"] }}
 				count={count}
 				{...actions}
+				onGroup={grouping.group ? actions.onGroup : null}
+				onUngroup={grouping.ungroup ? actions.onUngroup : null}
 			/>,
 		);
 		return actions;
 	}
 
-	it("offers exactly Duplicate and Delete, for a lamp as for anything else", () => {
+	it("offers exactly Duplicate and Delete when there is nothing to group or ungroup", () => {
 		renderMenu();
 		const menu = screen.getByRole("menu", { name: "Actions for the selected element" });
 		expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
@@ -196,6 +204,37 @@ describe("the CAD object menu", () => {
 		expect(actions.onClose).toHaveBeenCalledTimes(1);
 		fireEvent.pointerDown(document.body);
 		expect(actions.onClose).toHaveBeenCalledTimes(2);
+	});
+
+	it("offers Group above Duplicate when the selection can be grouped", () => {
+		const actions = renderMenu(2, { group: true });
+		expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+			"Group",
+			"Duplicate",
+			"Delete",
+		]);
+		fireEvent.click(screen.getByRole("menuitem", { name: "Group" }));
+		expect(actions.onClose).toHaveBeenCalled();
+		expect(actions.onGroup).toHaveBeenCalledTimes(1);
+	});
+
+	it("offers Ungroup for a grouped selection and keeps both entries when both apply", () => {
+		const actions = renderMenu(3, { ungroup: true });
+		expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+			"Ungroup",
+			"Duplicate",
+			"Delete",
+		]);
+		fireEvent.click(screen.getByRole("menuitem", { name: "Ungroup" }));
+		expect(actions.onUngroup).toHaveBeenCalledTimes(1);
+		cleanup();
+		renderMenu(3, { group: true, ungroup: true });
+		expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+			"Group",
+			"Ungroup",
+			"Duplicate",
+			"Delete",
+		]);
 	});
 
 	it("opens from the Menu key or Shift+F10 only", () => {

@@ -1,8 +1,12 @@
 /**
- * The menu a right-click on a selected element opens in a CAD viewport: **Duplicate** and **Delete**.
+ * The menu a right-click on a selected element opens in a CAD viewport: **Group**, **Ungroup**,
+ * **Duplicate** and **Delete**.
  *
- * Every element — lamp, truss, stage part, imported model — offers the same two actions; nothing
- * about a lamp needs an action of its own here. The menu opens only while Select is in hand; with
+ * Every element — lamp, truss, stage part, imported model — offers Duplicate and Delete; nothing
+ * about a lamp needs an action of its own here. Group and Ungroup stand above them and show only
+ * when they would do something: Group with two Venue elements that are not already exactly one
+ * group, Ungroup with a grouped element among the selection. They are the same actions as ⌘G and
+ * ⇧⌘G and as the buttons in Elements › Objects. The menu opens only while Select is in hand; with
  * a drawing tool a right-click finishes the line instead. The keyboard reaches it too: the Menu key
  * or Shift+F10 opens it for the selection, the arrow keys move between its entries, Enter or Space
  * runs one, and Escape closes it. A press anywhere outside it closes it as well.
@@ -10,9 +14,10 @@
 import { useEffect, useRef } from "react";
 import "./cadObjectMenu.css";
 
-/** The menu's room at the window's edge, in pixels. */
+/** The menu's room at the window's edge, in pixels: its width, and one entry's height. */
 const MENU_WIDTH = 180;
-const MENU_HEIGHT = 96;
+const MENU_ITEM_HEIGHT = 40;
+const MENU_PADDING = 8;
 
 /** Where the menu opens, in window pixels, and the step a copy stands from its original there. */
 export interface CadObjectMenuRequest {
@@ -39,6 +44,8 @@ export function isMenuKey(event: Pick<KeyboardEvent, "key" | "shiftKey" | "ctrlK
 export function CadObjectMenu({
 	request,
 	count,
+	onGroup,
+	onUngroup,
 	onDuplicate,
 	onDelete,
 	onClose,
@@ -46,6 +53,10 @@ export function CadObjectMenu({
 	request: CadObjectMenuRequest;
 	/** How many elements the actions apply to. */
 	count: number;
+	/** Group the selection, or null when grouping it would do nothing; then the entry stays away. */
+	onGroup?: (() => void) | null;
+	/** Ungroup the selection, or null when none of it is grouped. */
+	onUngroup?: (() => void) | null;
 	onDuplicate(): void;
 	onDelete(): void;
 	onClose(): void;
@@ -91,9 +102,10 @@ export function CadObjectMenu({
 	};
 	const noun = count > 1 ? `${count} elements` : "element";
 	// Kept inside the window, so a click near the right or bottom edge still shows every entry.
+	const height = MENU_PADDING + (2 + (onGroup ? 1 : 0) + (onUngroup ? 1 : 0)) * MENU_ITEM_HEIGHT;
 	const style = {
 		left: `${Math.max(0, Math.min(request.x, window.innerWidth - MENU_WIDTH))}px`,
-		top: `${Math.max(0, Math.min(request.y, window.innerHeight - MENU_HEIGHT))}px`,
+		top: `${Math.max(0, Math.min(request.y, window.innerHeight - height))}px`,
 	};
 
 	return (
@@ -106,6 +118,16 @@ export function CadObjectMenu({
 			onKeyDown={keyDown}
 			onContextMenu={(event) => event.preventDefault()}
 		>
+			{onGroup ? (
+				<button type="button" role="menuitem" className="cad-object-menu-item" onClick={run(onGroup)}>
+					Group
+				</button>
+			) : null}
+			{onUngroup ? (
+				<button type="button" role="menuitem" className="cad-object-menu-item" onClick={run(onUngroup)}>
+					Ungroup
+				</button>
+			) : null}
 			<button type="button" role="menuitem" className="cad-object-menu-item" onClick={run(onDuplicate)}>
 				Duplicate
 			</button>
