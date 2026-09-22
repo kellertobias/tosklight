@@ -9,6 +9,7 @@ import {
 	modelDrawingGeometry,
 	parseModelDrawing,
 } from "./modelDrawing";
+import { planTransform } from "./planGeometry";
 import { bracketTurnedPoint, entityPlanGeometry, type PlanPoint } from "./projection";
 import type { CadDrawing, CadEntity, CadViewDirection } from "./types";
 import FRONT from "../../../../assets/models/2d/lamps/fresnel-barn-doors/front.svg?raw";
@@ -139,6 +140,41 @@ describe("a Fresnel at a 45° bracket angle in CAD", () => {
 		expect(lampRelativeView("left_to_right", 30)).toBe("left_to_right");
 		expect(lampRelativeView("left_to_right", 60)).toBe("back_to_front");
 		expect(lampRelativeView("top_down", 90)).toBe("top_down");
+	});
+
+	it("draws that side at its real width on the page, not edge-on", () => {
+		// The operator's case: a lamp yawed a quarter turn read its side drawing, and turning that
+		// drawing by the same yaw again would foreshorten it to a bare vertical line.
+		const width = (view: CadViewDirection, yaw: number) => {
+			const entity = { ...lamp, bracketAngle: 45, rotationDegrees: [0, 0, yaw] };
+			const drawing = geometry(45, view, yaw);
+			const place = planTransform(entity as CadEntity, drawing, view, 0);
+			const x = drawing.triangles.flatMap((triangle) =>
+				triangle.points.map((point) => place(point)[0]),
+			);
+			return Math.max(...x) - Math.min(...x);
+		};
+		const side = width("left_to_right", 0);
+		expect(side).toBeGreaterThan(100);
+		for (const [view, yaw] of [
+			["front_to_back", 90],
+			["front_to_back", -90],
+			["back_to_front", 90],
+			["left_to_right", 180],
+			["right_to_left", 180],
+		] as const) {
+			expect(width(view, yaw)).toBeCloseTo(side, 6);
+		}
+		// And a quarter turn that brings the lamp's front or back round measures that instead.
+		const front = width("front_to_back", 0);
+		expect(front).toBeLessThan(side);
+		for (const [view, yaw] of [
+			["front_to_back", 180],
+			["left_to_right", 90],
+			["right_to_left", 270],
+		] as const) {
+			expect(width(view, yaw)).toBeCloseTo(front, 6);
+		}
 	});
 
 	it("draws a saved 45° angle the same after the plan reloads, and an older plan level", () => {

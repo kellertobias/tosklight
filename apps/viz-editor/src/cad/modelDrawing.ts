@@ -105,9 +105,24 @@ export function lampRelativeView(
 	yawDegrees = 0,
 ): CadViewDirection {
 	const index = ELEVATION_RING.indexOf(view);
-	if (index < 0 || !Number.isFinite(yawDegrees)) return view;
-	const quarters = Math.round(yawDegrees / 90);
+	if (index < 0) return view;
+	const quarters = bakedYawQuarterTurns(view, yawDegrees);
 	return ELEVATION_RING[(((index + quarters) % 4) + 4) % 4];
+}
+
+/**
+ * How much of a lamp's yaw reading another side's drawing has already answered, in quarter turns:
+ * an elevation bakes the nearest quarter turn into which drawing it reads, so whatever turns that
+ * drawing on the page afterwards must turn it only by the yaw that is left, or the quarter turn is
+ * counted twice and a lamp yawed square to the view is foreshortened away to a line. A top view
+ * bakes nothing; it turns its one drawing by the whole yaw.
+ */
+export function bakedYawQuarterTurns(
+	view: CadViewDirection,
+	yawDegrees = 0,
+): number {
+	if (!ELEVATION_RING.includes(view) || !Number.isFinite(yawDegrees)) return 0;
+	return Math.round(yawDegrees / 90);
 }
 
 /**
@@ -309,6 +324,7 @@ export function modelDrawingGeometry(
 	];
 	return {
 		source: "model_drawing",
+		yawQuarterTurnsShown: bakedYawQuarterTurns(view, yawDegrees),
 		triangles: posed.triangles.map(
 			(points): PlanTriangle => ({
 				points: points.map(place) as PlanTriangle["points"],

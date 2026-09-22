@@ -85,7 +85,11 @@ export function fitCadOverview(
  * away from the viewer foreshortens, both of which a single page angle cannot say.
  *
  * `live_model` geometry has already been turned in three dimensions when it was projected, so its
- * axes are taken as they are.
+ * axes are taken as they are. A drawing read per side answers part of the yaw the same way, by
+ * reading whichever side a quarter turn brings toward an elevation, and says so in
+ * `yawQuarterTurnsShown`; only the yaw left over turns its slice. Otherwise a lamp yawed 90, 180
+ * or 270 degrees would be turned twice and an elevation would foreshorten the correct side view it
+ * just read away to a line.
  */
 function planBasis(
 	entity: CadEntity,
@@ -93,8 +97,15 @@ function planBasis(
 	view: CadViewDirection,
 	rotationQuarterTurns: number,
 ): [PlanPoint, PlanPoint] {
+	const shown = geometry.yawQuarterTurnsShown ?? 0;
 	const rotation: readonly [number, number, number] =
-		geometry.source === "live_model" ? [0, 0, 0] : entity.rotationDegrees;
+		geometry.source === "live_model"
+			? [0, 0, 0]
+			: [
+					entity.rotationDegrees[0],
+					entity.rotationDegrees[1],
+					entity.rotationDegrees[2] - 90 * shown,
+				];
 	const axis = (local: [number, number]): PlanPoint =>
 		projectPoint(
 			rotateDeskPoint(planeDelta(local, view), rotation),

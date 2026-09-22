@@ -114,3 +114,59 @@ describe("an imported model", () => {
 		});
 	});
 });
+
+describe("a lamp whose drawing is read per side", () => {
+	// What `modelDrawingGeometry` and the projection-sheet path report for a quarter-turned lamp:
+	// the drawing is already the side the yaw turns toward the view.
+	const drawn = (yawDegrees: number): PlanGeometry =>
+		({
+			...UNTURNED,
+			source: "model_drawing",
+			yawQuarterTurnsShown: Math.round(yawDegrees / 90),
+		}) as unknown as PlanGeometry;
+
+	it("shows that side at full width in the elevation each quarter turn brings it to", () => {
+		// The operator's case: a lamp yawed 90 degrees is side-on to the front elevation, and the
+		// drawing read there is already its side view, so turning it again would leave a bare line.
+		const quarters: [number, Parameters<typeof planTransform>[2]][] = [
+			[90, "front_to_back"],
+			[180, "front_to_back"],
+			[270, "front_to_back"],
+			[-90, "front_to_back"],
+			[90, "left_to_right"],
+			[180, "left_to_right"],
+			[270, "left_to_right"],
+			[90, "right_to_left"],
+			[180, "back_to_front"],
+		];
+		for (const [yaw, view] of quarters) {
+			expect(axes([0, 0, yaw], view, 0, drawn(yaw))).toEqual({
+				across: [1, 0],
+				up: [0, 1],
+			});
+		}
+	});
+
+	it("still turns the whole yaw looking down, where one drawing serves every heading", () => {
+		// A top view reads no other side, so it reports none shown and turns by the yaw itself.
+		expect(
+			axes([0, 0, 90], "top_down", 0, {
+				...UNTURNED,
+				source: "model_drawing",
+			} as unknown as PlanGeometry),
+		).toEqual({ across: [0, 1], up: [-1, 0] });
+	});
+
+	it("foreshortens only the yaw no side's drawing could answer", () => {
+		// 45 degrees reads the side drawing, leaving half a quarter turn to foreshorten.
+		expect(axes([0, 0, 45], "front_to_back", 0, drawn(45)).across).toEqual([
+			0.707, 0,
+		]);
+	});
+
+	it("keeps carrying roll, which no choice of drawing can express", () => {
+		expect(axes([180, 0, 90], "front_to_back", 0, drawn(90)).up).toEqual([
+			0, -1,
+		]);
+	});
+});
