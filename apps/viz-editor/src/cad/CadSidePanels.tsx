@@ -11,7 +11,7 @@ import {
 	type TitleActionGroup,
 	type TitleDropdownItem,
 } from "@tosklight/ui";
-import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react";
+import { type KeyboardEvent, type PointerEvent, type ReactNode, useRef, useState } from "react";
 import { CadElementsPanel, type ElementsRequests, type ElementsTab, elementsAddItems } from "./CadElementsPanel";
 import { duplicateSelection } from "./cadDuplicate";
 import { CadObjectMenu, type CadObjectMenuRequest } from "./CadObjectMenu";
@@ -324,6 +324,79 @@ interface ObjectMenuState {
 /** The show's Venue groups as the right-click menu needs them: what is stored, and how to store. */
 type VenueGroupsState = Pick<ReturnType<typeof useCadVenueGroups>, "groups" | "change">;
 
+/**
+ * Info at the foot of the side panel: the selected element's fields, and what the rest of the
+ * selection is when more than one element is selected.
+ *
+ * Info's tabs and its trash button belong to whichever title row Info currently sits under. With a
+ * panel open that row is Info's own header, so both are handed down here; with no panel open the
+ * side panel's title row already is Info's, and both stay up there instead.
+ */
+function InfoSection({
+	scene,
+	placements,
+	elements,
+	focusedEntityId,
+	onFocusEntity,
+	selectionCount,
+	tab,
+	tabs,
+	deleteButton,
+	onSelect,
+	onError,
+}: {
+	scene: CadSceneSnapshot;
+	placements: CadEntity[];
+	elements: SelectedElement[];
+	focusedEntityId: string | null;
+	onFocusEntity(entityId: string | null): void;
+	selectionCount: number;
+	tab: InfoTab;
+	tabs: TitleActionGroup;
+	/** The trash button, while Info carries its own header; null when the panel's title row has it. */
+	deleteButton: ReactNode;
+	onSelect(ids: string[]): void;
+	onError(reason: unknown): void;
+}) {
+	return (
+		<div className="cad-sidebar-info">
+			<CadInfoPanel
+				entity={selectedEntity(placements, focusedEntityId)}
+				placements={placements}
+				onChoosePlacement={onFocusEntity}
+				selectionCount={selectionCount}
+				sceneRevision={scene.sceneRevision}
+				onError={onError}
+				tab={tab}
+				action={
+					deleteButton ? (
+						<>
+							<TitleChrome
+								className="ui-window-action-groups"
+								groupClassName="ui-window-action-group"
+								terminalActions={[]}
+								groups={[tabs]}
+							/>
+							{deleteButton}
+						</>
+					) : null
+				}
+				several={
+					elements.length < 2 ? undefined : tab === "generic" ? (
+						<SelectedElementList elements={elements} onSelect={(id) => onSelect([id])} />
+					) : (
+						<SeveralPlacement
+							elements={elements}
+							sceneRevision={scene.sceneRevision}
+							onError={onError}
+						/>
+					)
+				}
+			/>
+		</div>
+	);
+}
+
 export function CadSidePanels({
 	panel,
 	scene,
@@ -442,41 +515,19 @@ export function CadSidePanels({
 				</div>
 			) : null}
 			{selectionCount > 0 && scene ? (
-				<div className="cad-sidebar-info">
-					<CadInfoPanel
-						entity={selectedEntity(placements, focusedEntityId)}
-						placements={placements}
-						onChoosePlacement={onFocusEntity}
-						selectionCount={selectionCount}
-						sceneRevision={scene.sceneRevision}
-						onError={onError}
-						tab={infoTab}
-						action={
-							panel ? (
-								<>
-									<TitleChrome
-										className="ui-window-action-groups"
-										groupClassName="ui-window-action-group"
-										terminalActions={[]}
-										groups={[infoTabs]}
-									/>
-									{deleteButton}
-								</>
-							) : null
-						}
-						several={
-							elements.length < 2 ? undefined : infoTab === "generic" ? (
-								<SelectedElementList elements={elements} onSelect={(id) => onSelect([id])} />
-							) : (
-								<SeveralPlacement
-									elements={elements}
-									sceneRevision={scene.sceneRevision}
-									onError={onError}
-								/>
-							)
-						}
-					/>
-				</div>
+				<InfoSection
+					scene={scene}
+					placements={placements}
+					elements={elements}
+					focusedEntityId={focusedEntityId}
+					onFocusEntity={onFocusEntity}
+					selectionCount={selectionCount}
+					tab={infoTab}
+					tabs={infoTabs}
+					deleteButton={panel ? deleteButton : null}
+					onSelect={onSelect}
+					onError={onError}
+				/>
 			) : null}
 			{overlays}
 		</aside>

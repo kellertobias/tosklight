@@ -116,6 +116,13 @@ function planBasis(
 }
 
 /**
+ * Puts one point of an entity's own drawing where it belongs on the page. One entity's placement
+ * is worked out once and then asked this for every point it draws, so a symbol cannot end up with
+ * its parts laid out against different placements.
+ */
+export type PlanTransform = (point: PlanPoint) => PlanPoint;
+
+/**
  * Where a point of an entity's own drawing lands on the page.
  *
  * Shared by the screen and the printed plan so the two cannot drift apart.
@@ -126,7 +133,7 @@ export function planTransform(
 	view: CadViewDirection,
 	rotationQuarterTurns: number,
 	offset: readonly [number, number] = [0, 0],
-): (point: PlanPoint) => PlanPoint {
+): PlanTransform {
 	const centre = projectPoint(
 		entity.positionMillimetres,
 		view,

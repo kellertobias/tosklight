@@ -174,6 +174,102 @@ async function changeSessionLayers(
 	return true;
 }
 
+/**
+ * What a planning document knows about its own rig: the patch layers it was written with, and the
+ * visibility and notes recorded against each fixture, shaped as the Patch sheet's host expects.
+ *
+ * There is no desk behind this window, so every edit is drawn at once and read back from the
+ * session only when something outside the sheet — a reopened document, an MVR import — changed it.
+ */
+function useSessionLibrary(
+	profiles: readonly FixtureProfile[],
+	report: (reason: unknown) => void,
+) {
+	const [layers, setLayers] = useState<readonly PatchLayer[]>([DEFAULT_LAYER]);
+	const [fixtureVisibility, setFixtureVisibility] = useState<
+		ReadonlyMap<string, FixtureVisibility>
+	>(new Map());
+	const [fixtureNotes, setFixtureNotes] = useState<
+		ReadonlyMap<string, FixtureNote>
+	>(new Map());
+
+	/// A document written on a desk arrives with its own layers, and its fixtures belong to them.
+	const reload = useCallback(() => {
+		documentSession
+			.patchLayers()
+			.then((stored) => setLayers(stored.length ? stored : [DEFAULT_LAYER]))
+			.catch(report);
+		documentSession
+			.fixtureVisibility()
+			.then((stored) =>
+				setFixtureVisibility(
+					new Map(
+						stored.map((visibility) => [visibility.fixtureId, visibility]),
+					),
+				),
+			)
+			.catch(report);
+		documentSession
+			.fixtureNotes()
+			.then((stored) =>
+				setFixtureNotes(new Map(stored.map((note) => [note.fixtureId, note]))),
+			)
+			.catch(report);
+	}, [report]);
+
+	const library = useMemo<PatchHost["library"]>(
+		() => ({
+			fixtureProfiles: profiles,
+			// A planning document patches from transferable profiles only; the desk's legacy
+			// definitions exist for shows recorded before profiles did.
+			fixtureLibrary: [],
+			patchLayers: sessionPatchLayers(layers),
+			fixtureVisibility,
+			fixtureNotes,
+			unresolvedMvrFixtures: [],
+			savePatchLayer: (layer) =>
+				changeSessionLayers(layers, setLayers, report, { save: layer }),
+			deletePatchLayer: (layerId) =>
+				changeSessionLayers(layers, setLayers, report, { remove: layerId }),
+			saveFixtureVisibility: async (visibility) => {
+				const previous = fixtureVisibility;
+				setFixtureVisibility((current) => {
+					const next = new Map(current);
+					next.set(visibility.fixtureId, visibility);
+					return next;
+				});
+				try {
+					await documentSession.saveFixtureVisibility(visibility);
+					return true;
+				} catch (reason) {
+					setFixtureVisibility(previous);
+					report(reason);
+					return false;
+				}
+			},
+			saveFixtureNote: async (note) => {
+				const previous = fixtureNotes;
+				setFixtureNotes((current) => {
+					const next = new Map(current);
+					next.set(note.fixtureId, note);
+					return next;
+				});
+				try {
+					await documentSession.saveFixtureNote(note);
+					return true;
+				} catch (reason) {
+					setFixtureNotes(previous);
+					report(reason);
+					return false;
+				}
+			},
+		}),
+		[profiles, layers, fixtureVisibility, fixtureNotes, report],
+	);
+
+	return { library, reload };
+}
+
 /** The Patch title's Sheet and DMX tabs. */
 function patchPageTabs(
 	active: PatchPage,
@@ -207,13 +303,6 @@ function writeMovedPatch(
 export function App() {
 	const [document, setDocument] = useState<DocumentSummary | null>(null);
 	const [profiles, setProfiles] = useState<readonly FixtureProfile[]>([]);
-	const [layers, setLayers] = useState<readonly PatchLayer[]>([DEFAULT_LAYER]);
-	const [fixtureVisibility, setFixtureVisibility] = useState<
-		ReadonlyMap<string, FixtureVisibility>
-	>(new Map());
-	const [fixtureNotes, setFixtureNotes] = useState<
-		ReadonlyMap<string, FixtureNote>
-	>(new Map());
 	const [error, setError] = useState<string | null>(null);
 	const [workspace, setWorkspace] = useState<EditorWorkspace>("show");
 	const [settingsPage, setSettingsPage] = useState<SettingsPage>("visualizer");
@@ -296,9 +385,7 @@ export function App() {
 			.then((summary) => {
 				setDocument(summary);
 				if (summary) {
-					loadLayers();
-					loadFixtureVisibility();
-					loadFixtureNotes();
+					reloadLibrary();
 					loadFixtures();
 				}
 			})
@@ -408,36 +495,6 @@ export function App() {
 			.catch(report);
 	}
 
-	/// A document written on a desk arrives with its own layers, and its fixtures belong to them.
-	function loadLayers() {
-		documentSession
-			.patchLayers()
-			.then((stored) => setLayers(stored.length ? stored : [DEFAULT_LAYER]))
-			.catch(report);
-	}
-
-	function loadFixtureVisibility() {
-		documentSession
-			.fixtureVisibility()
-			.then((stored) =>
-				setFixtureVisibility(
-					new Map(
-						stored.map((visibility) => [visibility.fixtureId, visibility]),
-					),
-				),
-			)
-			.catch(report);
-	}
-
-	function loadFixtureNotes() {
-		documentSession
-			.fixtureNotes()
-			.then((stored) =>
-				setFixtureNotes(new Map(stored.map((note) => [note.fixtureId, note]))),
-			)
-			.catch(report);
-	}
-
 	/// Read the session again, from the top.
 	///
 	/// Whatever changed the document — this window's file bar, an MVR import, or another window
@@ -447,9 +504,7 @@ export function App() {
 		setReload((current) => current + 1);
 		documentSession.current().then(setDocument).catch(report);
 		documentSession.fixtureProfiles().then(setProfiles).catch(report);
-		loadLayers();
-		loadFixtureVisibility();
-		loadFixtureNotes();
+		reloadLibrary();
 		loadFixtures();
 		loadCadScene().catch(report);
 	}
@@ -461,6 +516,7 @@ export function App() {
 	const reloadProfiles = useCallback(() => {
 		documentSession.fixtureProfiles().then(setProfiles).catch(report);
 	}, [report]);
+	const { library, reload: reloadLibrary } = useSessionLibrary(profiles, report);
 	useEffect(() => {
 		if (!error) return;
 		const timeout = window.setTimeout(() => setError(null), 8000);
@@ -469,52 +525,7 @@ export function App() {
 
 	const host = useMemo<PatchHost>(
 		() => ({
-			library: {
-				fixtureProfiles: profiles,
-				// A planning document patches from transferable profiles only; the desk's legacy
-				// definitions exist for shows recorded before profiles did.
-				fixtureLibrary: [],
-				patchLayers: sessionPatchLayers(layers),
-				fixtureVisibility,
-				fixtureNotes,
-				unresolvedMvrFixtures: [],
-				savePatchLayer: (layer) =>
-					changeSessionLayers(layers, setLayers, report, { save: layer }),
-				deletePatchLayer: (layerId) =>
-					changeSessionLayers(layers, setLayers, report, { remove: layerId }),
-				saveFixtureVisibility: async (visibility) => {
-					const previous = fixtureVisibility;
-					setFixtureVisibility((current) => {
-						const next = new Map(current);
-						next.set(visibility.fixtureId, visibility);
-						return next;
-					});
-					try {
-						await documentSession.saveFixtureVisibility(visibility);
-						return true;
-					} catch (reason) {
-						setFixtureVisibility(previous);
-						report(reason);
-						return false;
-					}
-				},
-				saveFixtureNote: async (note) => {
-					const previous = fixtureNotes;
-					setFixtureNotes((current) => {
-						const next = new Map(current);
-						next.set(note.fixtureId, note);
-						return next;
-					});
-					try {
-						await documentSession.saveFixtureNote(note);
-						return true;
-					} catch (reason) {
-						setFixtureNotes(previous);
-						report(reason);
-						return false;
-					}
-				},
-			},
+			library,
 			// There is still no programmer here. What the sheet's selection drives is the preview
 			// controls and nothing else: no cues, no tracking, no arbitration.
 			selection: {
@@ -527,14 +538,7 @@ export function App() {
 			desktopEditing: true,
 			setEditArmed: () => undefined,
 		}),
-		[
-			profiles,
-			layers,
-			fixtureVisibility,
-			fixtureNotes,
-			selected,
-			selectionRevision,
-		],
+		[library, selected, selectionRevision],
 	);
 
 	const definitions = useMemo(

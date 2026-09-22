@@ -512,83 +512,79 @@ export function CadApp() {
 				/>
 			</div>
 			{settingsOpen ? (
-				<WindowSettings
-					title="Architect Settings"
+				<CadSettingsWindow
+					settings={settings}
+					onChange={(change) => setSettings((current) => ({ ...current, ...change }))}
 					onClose={() => setSettingsOpen(false)}
-					tabs={[
-						{
-							id: "general",
-							label: "General",
-							content: (
-								<div className="cad-settings-fields">
-									<SwitchField
-										label="Enable snapping"
-										offLabel={null}
-										onLabel={null}
-										checked={settings.snapToMounts}
-										onChange={(event) =>
-											setSettings((current) => ({
-												...current,
-												snapToMounts: event.currentTarget.checked,
-											}))
-										}
-									/>
-									<SwitchField
-										label="Show fixture IDs"
-										offLabel={null}
-										onLabel={null}
-										checked={settings.showFixtureIds}
-										onChange={(event) =>
-											setSettings((current) => ({
-												...current,
-												showFixtureIds: event.currentTarget.checked,
-											}))
-										}
-									/>
-									<SwitchField
-										label="Show DMX addresses"
-										offLabel={null}
-										onLabel={null}
-										checked={settings.showDmxAddresses}
-										onChange={(event) =>
-											setSettings((current) => ({
-												...current,
-												showDmxAddresses: event.currentTarget.checked,
-											}))
-										}
-									/>
-									<SwitchField
-										label="Show coordinate origins"
-										offLabel={null}
-										onLabel={null}
-										checked={settings.showCoordinateOrigins}
-										onChange={(event) => {
-											const checked = event.currentTarget.checked;
-											setSettings((current) => ({
-												...current,
-												showCoordinateOrigins: checked,
-											}));
-										}}
-									/>
-								</div>
-							),
-						},
-						{
-							id: "grid",
-							label: "Grid",
-							content: (
-								<GridSettings
-									settings={settings}
-									onChange={(change) =>
-										setSettings((current) => ({ ...current, ...change }))
-									}
-								/>
-							),
-						},
-					]}
 				/>
 			) : null}
 		</main>
+	);
+}
+
+/**
+ * The Architect's own settings window: what the drawing snaps to, what it labels, and the grid.
+ *
+ * These are this computer's preferences rather than anything the show carries, so every switch
+ * writes straight back to the stored settings as the operator flips it.
+ */
+function CadSettingsWindow({
+	settings,
+	onChange,
+	onClose,
+}: {
+	settings: CadSettings;
+	onChange(change: Partial<CadSettings>): void;
+	onClose(): void;
+}) {
+	return (
+		<WindowSettings
+			title="Architect Settings"
+			onClose={onClose}
+			tabs={[
+				{
+					id: "general",
+					label: "General",
+					content: (
+						<div className="cad-settings-fields">
+							<SwitchField
+								label="Enable snapping"
+								offLabel={null}
+								onLabel={null}
+								checked={settings.snapToMounts}
+								onChange={(event) => onChange({ snapToMounts: event.currentTarget.checked })}
+							/>
+							<SwitchField
+								label="Show fixture IDs"
+								offLabel={null}
+								onLabel={null}
+								checked={settings.showFixtureIds}
+								onChange={(event) => onChange({ showFixtureIds: event.currentTarget.checked })}
+							/>
+							<SwitchField
+								label="Show DMX addresses"
+								offLabel={null}
+								onLabel={null}
+								checked={settings.showDmxAddresses}
+								onChange={(event) => onChange({ showDmxAddresses: event.currentTarget.checked })}
+							/>
+							<SwitchField
+								label="Show coordinate origins"
+								offLabel={null}
+								onLabel={null}
+								checked={settings.showCoordinateOrigins}
+								onChange={(event) => onChange({ showCoordinateOrigins: event.currentTarget.checked })}
+							/>
+						</div>
+					),
+				},
+				{
+					id: "grid",
+					label: "Grid",
+					content: <GridSettings settings={settings} onChange={onChange} />,
+				},
+			]}
+		/>
 	);
 }
 
