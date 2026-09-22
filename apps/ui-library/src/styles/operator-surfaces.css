@@ -1059,7 +1059,14 @@
 	font-weight: 800;
 }
 
+/*
+ * The one column is written out because a grid that names only its rows gives itself a column as
+ * wide as whatever stands in it. An action that spells its own name — GO −, PAUSE — is then as
+ * wide as that name, and on a platform whose glyphs run wider it reached past the side of a card
+ * barely 150px across. Saying `minmax(0, 1fr)` lets the column be the card's width instead.
+ */
 .playback-fader-bank.touch-layout .touch-playback-card.playback-row-compact {
+	grid-template-columns: minmax(0, 1fr);
 	grid-template-rows: minmax(18px, auto) minmax(0, 1fr);
 	gap: 2px;
 	padding: 2px;
@@ -1092,6 +1099,7 @@
 .playback-fader-bank.touch-layout
 	.touch-playback-card.playback-row-compact
 	.faderless-playback-actions {
+	min-width: 0;
 	grid-auto-rows: minmax(0, 1fr);
 }
 
@@ -1106,6 +1114,7 @@
 	.touch-playback-card.playback-row-compact
 	.faderless-playback-actions
 	> .ui-button {
+	min-width: 0;
 	min-height: 0;
 	height: 100%;
 }
@@ -1118,6 +1127,7 @@
 .playback-fader-bank.touch-layout
 	.touch-playback-card.playback-row-compact
 	> .single-button-playback-action {
+	min-width: 0;
 	min-height: 0;
 	height: 100%;
 }

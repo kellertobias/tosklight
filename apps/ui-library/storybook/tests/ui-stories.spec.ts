@@ -2583,6 +2583,48 @@ test("playback group controls enforce row action rules and touch or hardware hei
 	}
 });
 
+/*
+ * The test above measures the cards as this machine's fonts happen to draw them, and a card only
+ * ever overflowed on a runner whose glyphs ran a little wider — which meant the desk it was drawn
+ * on decided whether the fault showed. Widening the glyphs deliberately asks the same question
+ * everywhere: a compact card is the envelope, and no action of it may reach past the card's side
+ * or bottom however much room its own label would like.
+ */
+test("a compact playback card holds its actions whatever width the labels draw", async ({
+	page,
+}) => {
+	for (const mode of ["touch", "hardware"] as const) {
+		for (const rows of [3, 4, 5, 6]) {
+			for (const spacing of [1.6, 5]) {
+				await page.goto(
+					`/iframe.html?id=controls-playbacks--eight-by-two-${mode}-bank&viewMode=story&args=playbacksWide:4;playbacksHigh:${rows};availableWidth:640`,
+				);
+				await page.addStyleTag({
+					content: `.playback-card .ui-button { letter-spacing: ${spacing}px !important; }`,
+				});
+				const worst = await page
+					.locator(`[data-playback-group-frame="${mode}"] .playback-card`)
+					.evaluateAll((cards) =>
+						Math.max(
+							0,
+							...cards.flatMap((card) => {
+								const bounds = card.getBoundingClientRect();
+								return [...card.querySelectorAll("button")].map((button) => {
+									const box = button.getBoundingClientRect();
+									return Math.max(
+										box.right - bounds.right,
+										box.bottom - bounds.bottom,
+									);
+								});
+							}),
+						),
+					);
+				expect(worst, `${mode}, ${rows} rows, ${spacing}px apart`).toBeLessThanOrEqual(1);
+			}
+		}
+	}
+});
+
 // The Stage is drawn by the out-of-process renderer, not by the web view: a browser has no
 // fixture elements to count and no canvas of its own. What a story can still show is that each
 // view mounts its renderer host, which is all this checks. The 2D fixture and 3D canvas
