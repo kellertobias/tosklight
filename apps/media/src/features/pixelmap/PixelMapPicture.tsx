@@ -65,15 +65,28 @@ function largestFirst<T extends Parameters<typeof box>[0]>(shapes: T[]): T[] {
 	return [...shapes].sort((left, right) => area(right) - area(left));
 }
 
-function useLivePreview(output: OutputConfigurationView): string {
+/**
+ * The Program picture behind the map, refreshed from the running Media Server.
+ *
+ * `pictureSrc` replaces it with a fixed picture and stops the refresh, for a surface rendered
+ * away from a server — an isolated story has none to ask, and reaching for one there produces a
+ * canvas that never paints.
+ */
+function useLivePreview(
+	output: OutputConfigurationView,
+	pictureSrc?: string,
+): string {
 	const [revision, setRevision] = useState(0);
+	const live = pictureSrc === undefined;
 	useEffect(() => {
+		if (!live) return;
 		const timer = window.setInterval(
 			() => setRevision((current) => current + 1),
 			PREVIEW_REFRESH_MS,
 		);
 		return () => window.clearInterval(timer);
-	}, []);
+	}, [live]);
+	if (pictureSrc !== undefined) return pictureSrc;
 	return api.outputPreviewUrl(output.id, revision, {
 		width: Math.max(output.width, 1),
 		height: Math.max(output.height, 1),
@@ -278,6 +291,7 @@ export function PixelMapPicture({
 	onSelectZone,
 	onChangeRegion,
 	onChangeZone,
+	pictureSrc,
 }: {
 	output: OutputConfigurationView;
 	map: PixelMapView;
@@ -288,8 +302,9 @@ export function PixelMapPicture({
 	onSelectZone: (id: string) => void;
 	onChangeRegion: (region: PixelMapView["regions"][number]) => void;
 	onChangeZone: (zone: PixelMapView["zones"][number]) => void;
+	pictureSrc?: string;
 }) {
-	const src = useLivePreview(output);
+	const src = useLivePreview(output, pictureSrc);
 	const canvas = useRef<HTMLDivElement>(null);
 	const [pictureFailed, setPictureFailed] = useState(false);
 	const { width, height } = output;

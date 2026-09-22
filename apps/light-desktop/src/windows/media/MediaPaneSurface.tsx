@@ -116,6 +116,7 @@ export function MediaPaneSurface({
 		model.showSourceFilters && model.sourceFilter && onSelectSourceFilter
 			? {
 					id: "media-source-filter",
+					ariaLabel: "Media source filter",
 					kind: "tabs" as const,
 					activeId: model.sourceFilter,
 					onActiveChange: (id: string) =>
@@ -134,6 +135,7 @@ export function MediaPaneSurface({
 					...(sourceFilterGroup ? [sourceFilterGroup] : []),
 					{
 						id: "media-browser-mode",
+						ariaLabel: "Content or Mask browser",
 						kind: "tabs" as const,
 						activeId: model.browserMode,
 						onActiveChange: (id: string) =>
@@ -146,6 +148,7 @@ export function MediaPaneSurface({
 					},
 					{
 						id: "media-control-section",
+						ariaLabel: "Media control section",
 						kind: "tabs" as const,
 						activeId: controlSectionId,
 						onActiveChange: onSelectControlSection,
@@ -161,6 +164,7 @@ export function MediaPaneSurface({
 						: []),
 					{
 						id: "media-window-section",
+						ariaLabel: "Media window section",
 						kind: "tabs" as const,
 						activeId: mainSectionId,
 						onActiveChange: (sectionId: string) => {

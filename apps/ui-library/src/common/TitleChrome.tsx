@@ -59,6 +59,8 @@ export type TitleActionGroup =
 	| {
 			id: string;
 			kind: "tabs";
+			/** What the tab list is called, for anyone who cannot see where it sits. */
+			ariaLabel?: string;
 			activeId: string;
 			onActiveChange: (id: string) => void;
 			actions: Array<
@@ -228,6 +230,7 @@ function TitleGroup({
 			<div
 				className={`ui-title-chrome-group ui-title-chrome-tabs ${className}`.trim()}
 				role="tablist"
+				aria-label={group.ariaLabel ?? group.id}
 			>
 				{group.actions.map((action) => (
 					<TitleActionControl

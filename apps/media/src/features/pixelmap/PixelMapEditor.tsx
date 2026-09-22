@@ -214,6 +214,7 @@ export function PixelMapEditor({
 	busy,
 	failed,
 	onSave,
+	pictureSrc,
 }: {
 	output: OutputConfigurationView;
 	outputs: OutputView[];
@@ -223,6 +224,8 @@ export function PixelMapEditor({
 	busy: boolean;
 	failed: boolean;
 	onSave: (map: PixelMapView) => void;
+	/** A fixed Program picture, for a surface rendered without a running Media Server. */
+	pictureSrc?: string;
 }) {
 	const draft = usePixelMapDraft(output.pixelMap);
 	const { map } = draft;
@@ -290,6 +293,7 @@ export function PixelMapEditor({
 						onSelectZone={draft.setSelectedZoneId}
 						onChangeRegion={draft.replaceRegion}
 						onChangeZone={draft.replaceZone}
+						pictureSrc={pictureSrc}
 					/>
 					<div className="media-pixel-map-tables">
 						{tab === "regions" ? (

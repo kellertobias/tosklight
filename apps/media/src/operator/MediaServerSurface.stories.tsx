@@ -307,6 +307,9 @@ function StatefulPixelMap() {
 				busy={false}
 				failed={false}
 				onSave={() => undefined}
+				// The story has no Media Server to ask for the live Program picture, and asking
+				// one that is not there leaves the canvas the map is drawn on empty.
+				pictureSrc={storyThumbnail(4)}
 			/>
 		</Frame>
 	);
