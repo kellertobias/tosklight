@@ -1552,11 +1552,12 @@ test("Command Section follows the global hardware context and production control
 			buttons.map((button) => button.getAttribute("data-keypad-key")),
 		);
 	expect(highlightKeys).toEqual(["HIGH", "PREV", "NEXT", "ALL"]);
+	// The touch software desk trades Copy for Shift in its command block.
 	for (const key of [
 		"DEL",
 		"MOV",
-		"CPY",
 		"SET",
+		"SHIFT",
 		"GRP",
 		"CUE",
 		"TIME",

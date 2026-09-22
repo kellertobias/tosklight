@@ -19,7 +19,10 @@ import {
 	PlaybackBankView,
 	type PlaybackCardViewModel,
 } from "../../src/playback";
-import type { SoftwareKey } from "../../src/programmerKeypad";
+import {
+	type SoftwareKey,
+	softwareDeskKeypadLayout,
+} from "../../src/programmerKeypad";
 import { ApplicationStateHarness } from "../providers/ApplicationStateHarness";
 import { StoryShowObjectsProvider } from "../providers/StoryShowObjectsProvider";
 import { StaticCommandLine } from "./command";
@@ -296,6 +299,10 @@ function ProgrammerToolsFixture({
 	return (
 		<>
 			<ProgrammerKeypadView
+				// The software desk's own geometry, which is what this surface is: the default is
+				// the attached desk's wider command block, and the two extra columns squeezed the
+				// first two into unclickable slivers inside the software grid.
+				layout={softwareDeskKeypadLayout("touch")}
 				programmerFade={
 					<div className="programmer-fade-fader compact">
 						<TouchValueButton
