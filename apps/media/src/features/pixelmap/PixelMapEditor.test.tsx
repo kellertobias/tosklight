@@ -177,6 +177,33 @@ describe("the Pixel Map dock", () => {
 		).toBeDisabled();
 	});
 
+	it("keeps the add action as wide as the longest label either tab needs", async () => {
+		renderEditor(output(storedMap));
+		const tabs = screen.getByRole("tablist");
+		const labels = (button: HTMLElement) =>
+			Array.from(button.querySelectorAll(".media-pixel-map-add-label > span")).map(
+				(span) => [span.textContent, span.classList.contains("is-sizer")],
+			);
+
+		// Both labels are laid out in the same grid cell, so the button is sized by the longer one
+		// and switching tabs cannot move the title bar around it.
+		expect(labels(screen.getByRole("button", { name: "Add display region" }))).toEqual(
+			[
+				["Add display region", false],
+				["Add pixel zone", true],
+			],
+		);
+
+		await userEvent.click(
+			within(tabs).getByRole("tab", { name: "Pixel Zones" }),
+		);
+
+		expect(labels(screen.getByRole("button", { name: "Add pixel zone" }))).toEqual([
+			["Add display region", true],
+			["Add pixel zone", false],
+		]);
+	});
+
 	it("shows the output picture beside the configuration", () => {
 		renderEditor(output(storedMap));
 		const picture = screen.getByRole("group", {

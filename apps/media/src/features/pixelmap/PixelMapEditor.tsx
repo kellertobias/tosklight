@@ -205,6 +205,30 @@ function ZonesPanel({ draft }: { draft: PixelMapDraft }) {
 	);
 }
 
+/** Every label the add action can carry, in tab order, so each one can size the button. */
+const PIXEL_MAP_ADD_LABELS = ["Add display region", "Add pixel zone"];
+
+/*
+ * The add action names the tab's own object, so its label changes with the tab. Both labels are
+ * always laid out in the same grid cell with only the current one visible, so the button — and the
+ * title bar around it — keeps the width of the longer label instead of resizing on every switch.
+ */
+function AddLabel({ text }: { text: string }) {
+	return (
+		<span className="media-pixel-map-add-label">
+			{PIXEL_MAP_ADD_LABELS.map((label) => (
+				<span
+					key={label}
+					aria-hidden="true"
+					className={label === text ? undefined : "is-sizer"}
+				>
+					{label}
+				</span>
+			))}
+		</span>
+	);
+}
+
 export function PixelMapEditor({
 	output,
 	outputs,
@@ -235,10 +259,16 @@ export function PixelMapEditor({
 		tab === "regions"
 			? {
 					id: "add-region",
-					label: "Add display region",
+					label: <AddLabel text="Add display region" />,
+					ariaLabel: "Add display region",
 					onPress: draft.addRegion,
 				}
-			: { id: "add-zone", label: "Add pixel zone", onPress: draft.addZone };
+			: {
+					id: "add-zone",
+					label: <AddLabel text="Add pixel zone" />,
+					ariaLabel: "Add pixel zone",
+					onPress: draft.addZone,
+				};
 
 	return (
 		<PixelMapFrame

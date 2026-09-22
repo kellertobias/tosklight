@@ -261,3 +261,22 @@
 	white-space: nowrap;
 	font-weight: 600;
 }
+
+/*
+ * The add action's label changes with the open tab. Stacking every label in one grid cell keeps
+ * the button as wide as the longest of them, so switching Display Regions to Pixel Zones leaves
+ * the title bar's width — and the Save button beside it — exactly where they were.
+ */
+.media-pixel-map-add-label {
+	display: grid;
+	justify-items: center;
+}
+
+.media-pixel-map-add-label > span {
+	grid-area: 1 / 1;
+	white-space: nowrap;
+}
+
+.media-pixel-map-add-label > span.is-sizer {
+	visibility: hidden;
+}
