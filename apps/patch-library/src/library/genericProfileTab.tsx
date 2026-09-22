@@ -12,6 +12,7 @@ import type {
 	FixtureBodyModel,
 	FixtureProfile,
 	FixtureProfileLightSource,
+	FixtureProfileMounting,
 	FixtureProfileOptics,
 } from "../wire";
 import {
@@ -210,6 +211,115 @@ function PhysicalSection({ draft, onChange }: GenericSectionProps) {
 					);
 				})}
 			</FormLayout>
+		</section>
+	);
+}
+
+/** What a fixture can be hung by, in the words a rigger would use. */
+const MOUNTING_HARDWARE = [
+	{ value: "clamp", label: "Hook clamp over a pipe" },
+	{ value: "yoke", label: "Yoke or bracket, bolted down" },
+	{ value: "none", label: "Nothing — it stands or sits" },
+] as const;
+
+/** The clip a fixture with nothing declared starts from: a hand's width above its own top. */
+const NEW_CLIP: FixtureProfileMounting = {
+	hardware: "clamp",
+	centre_millimetres: { x: 0, y: 0, z: 0 },
+	half_extent_millimetres: { x: 0, y: 0, z: 0 },
+	pipe_millimetres: { x: 0, y: 0, z: 0 },
+	body_millimetres: { x: 0, y: 0, z: 0 },
+};
+
+/**
+ * Where this fixture is held, so the plan can hang it on a pipe.
+ *
+ * The plan rigs a lamp by its clip: drag it near a truss and the pipe line of the clip lands on
+ * the chord it reaches. A shipped lantern is authored from the hardware it really carries; a
+ * model an operator imported is authored here, because only they know where its clamp is.
+ *
+ * Six figures say it, all in millimetres from the centre of the body — across, deep and up. The
+ * pipe is where the bar ends up; the clip is how big the hardware around it is, which decides how
+ * near a pipe has to come. The middle of the clip is taken to sit directly under the pipe, which
+ * is how a hook clamp hangs, and the body the figures were measured against is the fixture's own
+ * declared size, so a lamp drawn larger or smaller keeps its clamp in proportion.
+ */
+function MountingSection({ draft, onChange }: GenericSectionProps) {
+	const clip = draft.mounting ?? NEW_CLIP;
+	const body = draft.physical;
+	const setClip = (change: Partial<FixtureProfileMounting>) =>
+		onChange((current) => {
+			const base = current.mounting ?? NEW_CLIP;
+			const next = { ...base, ...change };
+			// The clamp hangs under the pipe it closes around, so its middle follows the two.
+			next.centre_millimetres = {
+				x: next.pipe_millimetres.x,
+				y: next.pipe_millimetres.y,
+				z: next.pipe_millimetres.z - next.half_extent_millimetres.z,
+			};
+			// The figures are read against the body the profile declares, so a fixture drawn at
+			// another size carries its clamp over in proportion.
+			next.body_millimetres = {
+				x: current.physical.width_millimetres ?? 0,
+				y: current.physical.depth_millimetres ?? 0,
+				z: current.physical.height_millimetres ?? 0,
+			};
+			return { ...current, mounting: next };
+		});
+	const vectorField = (
+		label: string,
+		key: "pipe_millimetres" | "half_extent_millimetres",
+		axis: "x" | "y" | "z",
+		scale = 1,
+	) => (
+		<NumberField
+			key={`${key}-${axis}`}
+			label={label}
+			allowDecimal
+			step={1}
+			value={clip[key][axis] * scale}
+			onChange={(event) =>
+				setClip({
+					[key]: {
+						...clip[key],
+						[axis]: (Number(event.target.value) || 0) / scale,
+					},
+				} as Partial<FixtureProfileMounting>)
+			}
+		/>
+	);
+	return (
+		<section>
+			<h3>Mounting</h3>
+			<p className="field-hint">
+				Where a pipe meets this fixture, measured in millimetres from the centre of its body:
+				across, deep and up. Leave it on <b>Nothing</b> for a fixture that is never flown.
+			</p>
+			<FormLayout columns={5} minColumnWidth={145}>
+				<SelectField
+					label="Hangs by"
+					value={clip.hardware}
+					options={MOUNTING_HARDWARE.map((option) => ({ ...option }))}
+					onChange={(hardware) => setClip({ hardware })}
+				/>
+				{clip.hardware === "none" ? null : (
+					<>
+						{vectorField("Pipe across (mm)", "pipe_millimetres", "x")}
+						{vectorField("Pipe deep (mm)", "pipe_millimetres", "y")}
+						{vectorField("Pipe up (mm)", "pipe_millimetres", "z")}
+						{vectorField("Clip width (mm)", "half_extent_millimetres", "x", 2)}
+						{vectorField("Clip depth (mm)", "half_extent_millimetres", "y", 2)}
+						{vectorField("Clip height (mm)", "half_extent_millimetres", "z", 2)}
+					</>
+				)}
+			</FormLayout>
+			{clip.hardware === "none" || body.height_millimetres ? null : (
+				<p className="field-hint">
+					This fixture declares no height, so the plan draws it at whatever its family of
+					bodies falls back to and the clip is taken as it stands. Fill in <b>Physical</b>
+					above to have it carried over in proportion.
+				</p>
+			)}
 		</section>
 	);
 }
@@ -424,8 +534,9 @@ export function IdentityProfileTab({
 /**
  * What the fixture is made of and what its light does — the two things the Stage needs to draw it.
  *
- * Physical is how the lantern is built; Optics is what comes out of it. Colour temperature,
- * luminous output, and beam angle are the light, not the lantern, so they belong on the right.
+ * Physical is how the lantern is built, Mounting is what holds it up, and Optics is what comes
+ * out of it. Colour temperature, luminous output, and beam angle are the light, not the lantern,
+ * so they belong on the right.
  */
 export function SimulationProfileTab({
 	draft,
@@ -440,6 +551,7 @@ export function SimulationProfileTab({
 				bodyCatalogue={bodyCatalogue}
 			/>
 			<PhysicalSection draft={draft} onChange={onChange} />
+			<MountingSection draft={draft} onChange={onChange} />
 			<OpticsSection draft={draft} onChange={onChange} />
 		</div>
 	);

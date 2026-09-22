@@ -39,6 +39,8 @@ export interface CadEntity {
 	bracketAngle?: number;
 	/** How a generated Venue object is built; absent for fixtures and modelled objects. */
 	scenery?: CadScenery;
+	/** The clip this fixture hangs by, at the size it is drawn; absent when it has no box. */
+	mounting?: CadMounting;
 	/** A 3D model imported into this show (manufacturer "Imported models"), not a shipped Venue object. */
 	importedModel?: boolean;
 }
@@ -50,11 +52,37 @@ export interface CadScenery {
 	chords: number;
 	/** A truss's bracing. */
 	pattern: "standard" | "deco" | string;
+	/** What a stage element stands on; only a riser carries it, and absent reads as a scissor lift. */
+	feet?: CadRiserFeet;
 	/** How a chain is rigged; only a chain carries it, and absent reads as a hoist at the top. */
 	chain?: CadChainMode;
 	/** What a rigged chain's end away from its hoist is fixed with; absent reads as a steelflex. */
 	anchor?: CadChainAnchor;
 }
+
+/** A deck raised on crossed scissor arms, or standing on one fixed leg under each corner. */
+export type CadRiserFeet = "scissor" | "fixed";
+
+/**
+ * Where a fixture is held: its mounting clip, as the desk resolved it for this placement.
+ *
+ * Every measurement is in the entity's own millimetres from the middle of its box — `x` across,
+ * `y` deep, `z` up — before the placement's rotation. The desk carries the profile's declared clip
+ * over to the size the entity is drawn at, so nothing here has to be scaled again.
+ */
+export interface CadMounting {
+	/** What the fixture hangs by; only a clamp is caught by a pipe. */
+	hardware: CadMountingHardware | string;
+	/** The middle of the clip. */
+	centre: [number, number, number];
+	/** Half the clip's reach across, deep and up. */
+	halfExtent: [number, number, number];
+	/** Where a pipe's axis lies once the fixture hangs from the clip. */
+	pipe: [number, number, number];
+}
+
+/** A hook clamp over a pipe, a yoke bolted to a surface, or nothing to hang the fixture by. */
+export type CadMountingHardware = "clamp" | "yoke" | "none";
 
 /** A steelflex round a three- or four-point truss, a flange on a pipe, or a shackle to the steel. */
 export type CadChainAnchor = "steelflex" | "flange" | "shackle";

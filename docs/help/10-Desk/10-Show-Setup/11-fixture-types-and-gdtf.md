@@ -4,7 +4,7 @@ The fixture library is desk-wide and persists independently of show files. Open 
 
 ![Fixture-library manufacturers, modes, footprint, heads, and revision](../../assets/screenshots/workflows/fixture-library.png)
 
-The shipped library includes separate conventional **Dimmer PAR Can**, **Dimmer Profile**, and **Dimmer Fresnel** fixture profiles, each with 8-bit and 16-bit dimmer modes. Shipped control fixtures leave body geometry to the renderer-owned default models, so the desk, demo show, Visualizer, and CAD all choose the same PAR, elongated profile, Fresnel with barn doors, moving-head, strip, laser, or effect body from fixture semantics. Portable visual-only Venue and Rigging objects keep their exact GLB geometry because a truss, stage deck, curtain, railing, or mirror ball cannot be represented by a generic lamp body. Choose the fixture profile for the physical lantern rather than treating these appearances as modes of one Dimmer profile.
+The shipped library includes separate conventional **Dimmer PAR Can**, **Dimmer Profile**, and **Dimmer Fresnel** fixture profiles, each with 8-bit and 16-bit dimmer modes. Shipped control fixtures leave body geometry to the renderer-owned default models, so the desk, demo show, Visualizer, and CAD all choose the same PAR, elongated profile, Fresnel with barn doors, moving-head, strip, laser, or effect body from fixture semantics. Portable visual-only Venue and Rigging objects are either generated at the size they are placed — a truss, a stage deck, a curtain — or keep their exact GLB geometry, because a railing or a mirror ball cannot be represented by a generic lamp body. Choose the fixture profile for the physical lantern rather than treating these appearances as modes of one Dimmer profile.
 
 ## Transferable fixture packages
 
@@ -89,11 +89,12 @@ a scissor arm behind the one crossing it — the way a technical drawing does, o
 waves per fold, and in a front or back elevation it is the rectangle it covers with a dotted line down
 each fold, its dashes leaning 10–20° off vertical, alternating sides.
 
-A stage element is the base it is built on: its width and depth are fixed, and only its rise is
+A stage element is the platform it is built on: its width and depth are fixed, and only its rise is
 set, from 0.1 to 1.2 m. A stage element already placed at another base size keeps it. It stands on
-a scissor lift — a deck on crossed arms over a base frame, with more stages of arms as it rises —
-in the Visualizer and in the PreViz elevations; stage stairs keep their own shape. A stage element
-and stage stairs are placed by their feet, as the decks on fixed legs are: the position is the middle
+what its profile is: a **Stage Element** on a scissor lift — a deck on crossed arms over a base
+frame, with more stages of arms as it rises — and a **Stage Deck** on regular feet, one leg under
+each corner carrying a 40 mm top, both in the Visualizer and in the PreViz elevations; stage stairs
+keep their own shape. All three are placed by their feet: the position is the middle
 of the footprint on the floor they stand on, so Z 0 stands on the stage floor, and changing the rise
 raises or lowers the deck while the feet stay put. The people in a
 Crowd Area differ in size, the same way every time the show is drawn.
@@ -196,6 +197,20 @@ the fixture keeps the behaviour it has always had: the body is inferred from the
 the channels the mode has, which is right for most fixtures and cannot tell a PAR 64 from a PAR 16
 or a two-cell blinder from an eight. A fixture that ships its own visualizer model is drawn with
 that model, whatever the body says.
+
+**Mounting** is what holds the lantern up, and it is what ToskLight Architect rigs it by: drag a
+lamp near a truss and the pipe line of its clip lands on the chord the clip reaches. **Hangs by**
+is a hook clamp over a pipe, a yoke or bracket bolted down, or nothing at all for a fixture that
+stands — a hazer, a floor can — which is then never picked up by a truss. The rest is six figures
+in whole millimetres from the centre of the body: **Pipe across**, **deep** and **up** put the bar
+where it ends up, and **Clip width**, **depth** and **height** say how big the hardware around it
+is, which is how near a pipe has to come to catch it. The clip is taken to hang directly under the
+pipe, as a hook clamp does.
+
+Every shipped lantern already carries the clip its real hardware has. Fill this in for a model you
+imported yourself, where only you know where the clamp is. The figures are read against the
+fixture's declared Physical size, so a lamp placed larger or smaller in the plan keeps its clamp in
+proportion; a fixture with no declared size takes the clip as it stands.
 
 ### Modes and heads
 

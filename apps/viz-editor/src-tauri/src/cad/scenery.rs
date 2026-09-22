@@ -18,6 +18,8 @@ pub struct CadScenery {
     pub chords: u8,
     /// A truss's bracing: `standard` or `deco`.
     pub pattern: String,
+    /// What a stage element stands on: `scissor` or `fixed`. Only a riser has one.
+    pub feet: String,
     /// How a chain is rigged: plain, a hoist at the top or a hoist at the bottom. Only a chain has
     /// one.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -25,6 +27,89 @@ pub struct CadScenery {
     /// What a rigged chain's end away from its hoist is fixed with. Only a chain has one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub anchor: Option<ChainAnchor>,
+}
+
+/// Where a fixture is held, as the plan reasons about it: the clip it hangs by.
+///
+/// Every measurement is in the entity's own millimetres from the middle of its box — `x` across,
+/// `y` deep, `z` up — so the plan can rotate and place it like any other part of the entity. The
+/// profile declares the clip against the body it was measured on; this carries it over to the box
+/// the entity is actually drawn at, so a fixture placed at another scale keeps its clamp.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CadMounting {
+    /// What the fixture hangs by: `clamp`, `yoke` or `none`.
+    pub hardware: String,
+    /// The middle of the clip.
+    pub centre: [f32; 3],
+    /// Half the clip's reach across, deep and up.
+    pub half_extent: [f32; 3],
+    /// Where a pipe's axis lies once the fixture hangs from the clip.
+    pub pipe: [f32; 3],
+}
+
+/// How much of a fixture's height a clamp takes when its profile declares none.
+///
+/// A profile written before clips could be declared still has to hang, and this is the guess the
+/// plan made for every fixture before it: a slice off the top of the body, which is where the
+/// hardware sits on nearly everything that flies. A declared clip replaces it.
+const GUESSED_SHARE: f32 = 0.25;
+const GUESSED_FLOOR: f32 = 40.0;
+const GUESSED_CAP: f32 = 300.0;
+
+/// The clip one placement hangs by, at the size that placement is drawn.
+pub fn cad_mounting(profile: Option<&serde_json::Value>, size: [f32; 3]) -> Option<CadMounting> {
+    let [width, depth, height] = size;
+    if !(width > 0.0 && depth > 0.0 && height > 0.0) {
+        return None;
+    }
+    let Some(declared) = profile.and_then(|profile| profile.get("mounting")) else {
+        let slice = (height * GUESSED_SHARE).clamp(GUESSED_FLOOR, GUESSED_CAP);
+        return Some(CadMounting {
+            hardware: "clamp".to_owned(),
+            centre: [0.0, 0.0, (height - slice) / 2.0],
+            half_extent: [width / 2.0, depth / 2.0, slice / 2.0],
+            pipe: [0.0, 0.0, height / 2.0],
+        });
+    };
+    let hardware = declared
+        .get("hardware")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("clamp")
+        .to_owned();
+    // The clip was authored against one body; the entity may be drawn at another, so each axis is
+    // carried over in the proportion it was measured in. A body of zero leaves it as it stands.
+    let body = vector(declared.get("body_millimetres"));
+    let ratio = [
+        if body[0] > 0.0 { width / body[0] } else { 1.0 },
+        if body[1] > 0.0 { depth / body[1] } else { 1.0 },
+        if body[2] > 0.0 { height / body[2] } else { 1.0 },
+    ];
+    let carried = |key: &str| {
+        let value = vector(declared.get(key));
+        [
+            value[0] * ratio[0],
+            value[1] * ratio[1],
+            value[2] * ratio[2],
+        ]
+    };
+    Some(CadMounting {
+        hardware,
+        centre: carried("centre_millimetres"),
+        half_extent: carried("half_extent_millimetres"),
+        pipe: carried("pipe_millimetres"),
+    })
+}
+
+/// A declared `{ x, y, z }` in millimetres, as the plan's across, deep and up.
+fn vector(value: Option<&serde_json::Value>) -> [f32; 3] {
+    let read = |key: &str| {
+        value
+            .and_then(|value| value.get(key))
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(0.0) as f32
+    };
+    [read("x"), read("y"), read("z")]
 }
 
 /// What the end of a chain away from its hoist is fixed with, decided by what hangs there.
@@ -151,6 +236,7 @@ fn profile_scenery(profile: &serde_json::Value) -> Option<CadScenery> {
             .and_then(serde_json::Value::as_u64)
             .map_or(0, |chords| chords.min(4) as u8),
         pattern: text("pattern", "standard"),
+        feet: text("feet", "scissor"),
         chain: None,
         anchor: None,
     })
@@ -245,12 +331,18 @@ mod tests {
                 kind: "truss".into(),
                 chords: 3,
                 pattern: "deco".into(),
+                feet: "scissor".into(),
                 chain: None,
                 anchor: None,
             })
         );
         let standard = json!({ "scenery": { "kind": "truss", "chords": 4 } });
         assert_eq!(profile_scenery(&standard).unwrap().pattern, "standard");
+        // A deck says what it stands on; a riser written before the choice existed is a lift.
+        let deck = json!({ "scenery": { "kind": "riser", "feet": "fixed" } });
+        assert_eq!(profile_scenery(&deck).unwrap().feet, "fixed");
+        let lift = json!({ "scenery": { "kind": "riser" } });
+        assert_eq!(profile_scenery(&lift).unwrap().feet, "scissor");
         assert_eq!(profile_scenery(&json!({ "name": "Spot" })), None);
     }
 
@@ -354,9 +446,11 @@ mod tests {
                 kind: kind.into(),
                 chords,
                 pattern: "standard".into(),
+                feet: "scissor".into(),
                 chain,
                 anchor: None,
             }),
+            mounting: None,
             imported_model: false,
         }
     }
@@ -403,5 +497,45 @@ mod tests {
             serde_json::to_value(ChainAnchor::Steelflex).unwrap(),
             "steelflex"
         );
+    }
+
+    /// A profile that says nothing about how it hangs still hangs: the plan guesses a clamp off
+    /// the top of the body, which is what every fixture got before clips were declared.
+    #[test]
+    fn a_fixture_with_no_declared_clip_keeps_the_clamp_the_plan_always_guessed() {
+        let clip = cad_mounting(None, [1000.0, 1000.0, 1000.0]).expect("a box has a clamp");
+        assert_eq!(clip.hardware, "clamp");
+        assert_eq!(clip.centre, [0.0, 0.0, 375.0]);
+        assert_eq!(clip.half_extent, [500.0, 500.0, 125.0]);
+        assert_eq!(clip.pipe, [0.0, 0.0, 500.0]);
+    }
+
+    /// A declared clip is carried over to the body the fixture is actually drawn at, so a lamp
+    /// placed at twice its size keeps its clamp on its own top rather than half way down.
+    #[test]
+    fn a_declared_clip_is_carried_over_to_the_size_the_fixture_is_drawn_at() {
+        let profile = serde_json::json!({
+            "mounting": {
+                "hardware": "clamp",
+                "centre_millimetres": { "x": 0.0, "y": 0.0, "z": 120.0 },
+                "half_extent_millimetres": { "x": 150.0, "y": 200.0, "z": 30.0 },
+                "pipe_millimetres": { "x": 0.0, "y": 0.0, "z": 150.0 },
+                "body_millimetres": { "x": 300.0, "y": 400.0, "z": 300.0 },
+            }
+        });
+        let same = cad_mounting(Some(&profile), [300.0, 400.0, 300.0]).unwrap();
+        assert_eq!(same.pipe, [0.0, 0.0, 150.0]);
+        assert_eq!(same.half_extent, [150.0, 200.0, 30.0]);
+        let doubled = cad_mounting(Some(&profile), [600.0, 800.0, 600.0]).unwrap();
+        assert_eq!(doubled.pipe, [0.0, 0.0, 300.0]);
+        assert_eq!(doubled.half_extent, [300.0, 400.0, 60.0]);
+    }
+
+    /// A fixture that hangs from nothing says so, and the plan reads it back as such.
+    #[test]
+    fn a_fixture_that_hangs_from_nothing_carries_that_answer_through() {
+        let profile = serde_json::json!({ "mounting": { "hardware": "none" } });
+        let clip = cad_mounting(Some(&profile), [500.0, 500.0, 500.0]).unwrap();
+        assert_eq!(clip.hardware, "none");
     }
 }

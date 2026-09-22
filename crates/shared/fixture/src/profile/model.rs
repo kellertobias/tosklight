@@ -166,6 +166,13 @@ pub struct FixtureProfile {
     /// placed, instead of being drawn from a model made for one size.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scenery: Option<ProfileScenery>,
+    /// How the fixture is hung: the clip it is held by, and where a pipe sits in it.
+    ///
+    /// Absent on a profile written before clips were declared. Such a fixture is still hung, from
+    /// a clip guessed at the top of its box, so old shows keep rigging as they always did; a
+    /// declared clip replaces the guess with the real hardware.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mounting: Option<ProfileMounting>,
     /// The fixture's gobo wheel, slot by slot, when the package carries one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gobos: Vec<ProfileGobo>,
@@ -278,6 +285,8 @@ struct FixtureProfileCanonical {
     physics: Option<ProfilePhysics>,
     #[serde(default)]
     scenery: Option<ProfileScenery>,
+    #[serde(default)]
+    mounting: Option<ProfileMounting>,
     #[serde(default)]
     gobos: Vec<ProfileGobo>,
     modes: Vec<FixtureMode>,
@@ -538,6 +547,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             effect: canonical.effect,
             physics: canonical.physics,
             scenery: canonical.scenery,
+            mounting: canonical.mounting,
             gobos: canonical.gobos,
             modes: canonical.modes,
             hazardous: canonical.hazardous,
@@ -548,6 +558,56 @@ impl<'de> Deserialize<'de> for FixtureProfile {
         lift_geometry_to_the_fixture(&mut profile);
         move_motion_attributes_to_the_modes(&mut profile);
         Ok(profile)
+    }
+}
+
+/// How a fixture is hung: its mounting clip, as a volume a pipe has to reach into.
+///
+/// Every measurement is in millimetres in the fixture's own axes, from the centre of its body:
+/// `x` across, `y` deep, `z` up, the same axes the plan places it in. A lantern is declared by the
+/// hardware it really carries — the hook clamp on its yoke, the half-coupler on its bracket —
+/// rather than by a slice of its bounding box, because that is what has to meet the pipe.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ProfileMounting {
+    /// What the fixture is hung by, and whether it can be hung at all.
+    #[serde(default)]
+    pub hardware: MountingHardware,
+    /// The middle of the clip.
+    #[serde(default)]
+    pub centre_millimetres: Vector3,
+    /// Half the clip's reach across, deep and up: how near a pipe must come to be caught.
+    #[serde(default)]
+    pub half_extent_millimetres: Vector3,
+    /// Where the pipe's axis lies once the fixture hangs from the clip.
+    #[serde(default)]
+    pub pipe_millimetres: Vector3,
+    /// The body these measurements were taken against.
+    ///
+    /// A fixture is drawn at whatever size the plan gives it — its declared physical size, a size
+    /// a family of bodies falls back to, or that again scaled by the operator — so the clip is
+    /// carried over to the body actually drawn in the same proportion it was authored in. Zero on
+    /// any axis means the clip is taken as it stands.
+    #[serde(default)]
+    pub body_millimetres: Vector3,
+}
+
+/// What a fixture is hung by.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MountingHardware {
+    /// A hook clamp or half-coupler that closes over a pipe: how a lantern usually hangs.
+    #[default]
+    Clamp,
+    /// A yoke, bracket or baseplate bolted to a surface. It carries the fixture but meets no pipe.
+    Yoke,
+    /// Nothing to hang the fixture by: a dimmer in a rack, a strip taped to a truss, a floor can.
+    None,
+}
+
+impl MountingHardware {
+    /// Whether the fixture can be caught by a pipe at all.
+    pub fn hangs_on_a_pipe(&self) -> bool {
+        matches!(self, Self::Clamp)
     }
 }
 
@@ -738,6 +798,28 @@ pub struct ProfileScenery {
     /// it, and every truss written before the choice existed reads as standard.
     #[serde(default, skip_serializing_if = "TrussPattern::is_standard")]
     pub pattern: TrussPattern,
+    /// What a stage element stands on: a scissor lift, or four fixed legs. Every other kind
+    /// ignores it, and every riser written before the choice existed reads as a scissor lift,
+    /// which is what the shipped stage elements were until fixed feet were generated too.
+    #[serde(default, skip_serializing_if = "RiserFeet::is_scissor")]
+    pub feet: RiserFeet,
+}
+
+/// What a stage element stands on between the floor and its deck.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RiserFeet {
+    /// Crossed arms over a base frame, as a lift deck is raised.
+    #[default]
+    Scissor,
+    /// Four fixed legs under the corners of the deck, as a staging deck is built.
+    Fixed,
+}
+
+impl RiserFeet {
+    pub fn is_scissor(&self) -> bool {
+        *self == Self::Scissor
+    }
 }
 
 /// The bracing of a truss section.

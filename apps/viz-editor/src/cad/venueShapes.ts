@@ -2,7 +2,7 @@
  * The shapes of Venue objects as the CAD reasons about them: where a box really sits, where a
  * truss's connectors and pipes are, a stage element's corners and a curtain's rail.
  *
- * A stage element — a deck on a scissor lift, stairs, or a shipped deck on fixed legs — is placed by
+ * A stage element — a deck on a scissor lift, a deck on regular feet, or stairs — is placed by
  * its feet: its position is the middle of its footprint on the floor it stands on, and its box
  * reaches `height` up from there. Every other object is placed by the centre of its box, except a
  * truss corner piece, which is placed by its corner node.
@@ -19,7 +19,7 @@ export interface Segment {
 }
 
 type Shape = Pick<CadEntity, "positionMillimetres" | "rotationDegrees" | "sizeMillimetres"> &
-	Partial<Pick<CadEntity, "scenery" | "fixtureProfile">>;
+	Partial<Pick<CadEntity, "scenery" | "fixtureProfile" | "mounting">>;
 
 /**
  * How far each arm of a shipped truss corner piece reaches, from its node to the coupler on the end.
@@ -39,10 +39,11 @@ export function trussCornerArmReach(size: Vec3, arms: readonly Vec3[], arm: Vec3
 	return size[axis] - (behind.length ? Math.min(...behind) : 0) / 2;
 }
 
-/** A deck on a scissor lift, stairs, or a shipped deck on fixed legs. */
+/** A deck on a scissor lift, a deck on regular feet, or stairs. */
 export function isStageElement(entity: Shape): boolean {
 	return (
 		entity.scenery?.kind === "riser" ||
+		// A show made before the decks were generated names its own profile; it has no scenery.
 		/^Venue Stage (Deck|Element|Stairs)\b/iu.test(entity.fixtureProfile ?? "")
 	);
 }
@@ -153,30 +154,25 @@ export function trussPipeRadius(entity: Shape): number {
 }
 
 /**
- * Where a lamp is held: the part of it a clamp or hook occupies, in plan axes.
+ * Where a lamp is held: the clip its profile declares, placed where the lamp stands.
  *
- * Returned as the centre of that region, its half-extents, and the point at the top of it that
- * meets a pipe. Until profiles declare their real mounting hardware this is taken as the top slice
- * of the lamp's own box, which is where a clamp sits on nearly everything that hangs.
+ * Returned as the centre of the clip, its half-extents in the lamp's own axes, and the point that
+ * meets the pipe — the line a clamp closes around. A fixture that hangs from nothing, and one with
+ * no clip at all, is not rigged: `null` keeps it where the operator put it.
  */
 export function mountingVolume(
 	entity: Shape,
 ): { centre: Vec3; halfExtent: Vec3; top: Vec3 } | null {
-	const [width, depth, height] = entity.sizeMillimetres;
+	const clip = entity.mounting;
+	if (!clip || clip.hardware !== "clamp") return null;
+	const [width, depth, height] = clip.halfExtent;
 	if (!(width > 0 && depth > 0 && height > 0)) return null;
-	const slice = Math.max(Math.min(height * MOUNT_SHARE, MOUNT_CAP), MOUNT_FLOOR);
-	const rise = Math.max(0, height / 2 - slice / 2);
 	return {
-		centre: placedPoint(entity, [0, 0, rise]),
-		halfExtent: [width / 2, depth / 2, slice / 2],
-		top: placedPoint(entity, [0, 0, height / 2]),
+		centre: placedPoint(entity, clip.centre),
+		halfExtent: [width, depth, height],
+		top: placedPoint(entity, clip.pipe),
 	};
 }
-
-/** How much of a lamp's height the clamp is taken to occupy, and the bounds of that. */
-const MOUNT_SHARE = 0.25;
-const MOUNT_FLOOR = 40;
-const MOUNT_CAP = 300;
 
 /** A straight truss's centre line and half its outside section: a curtain's rail hangs just under it. */
 export function trussAxis(entity: Shape): (Segment & { halfSection: number }) | null {

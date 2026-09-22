@@ -680,7 +680,11 @@ lands exactly on it, and a magenta diamond marks the fit while the drag holds it
 * **Curtains** hang their rail just under a truss or pipe, and line their ends up with the ends of
   the next curtain.
 * **Lamps** clamp onto the nearest pipe of a truss; with snapping on, a lamp dropped onto a truss is
-  also recorded as mounted on it.
+  also recorded as mounted on it. What reaches the pipe is the lamp's own **mounting clip**, which
+  its profile declares — the hook clamp on its yoke, the omega bracket under a moving head — so a
+  short lamp catches a pipe from the distance its real hardware reaches and no further. A fixture
+  whose profile says it hangs from nothing, such as a hazer or a floor can, is never picked up by a
+  truss. See **Mounting** in the fixture profile editor to set the clip on a model you imported.
 
 Only the axes the drag can move change, so a plan view never changes heights, and a truss, pipe or
 rail more than half a metre off the view's plane — a truss 6 m above a lamp on the floor, seen from

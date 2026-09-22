@@ -18,6 +18,9 @@ pub struct ProfileDefaultModel {
     pub model: &'static DefaultModel,
     /// Multiplies the model's own coordinates to the fixture's physical size.
     pub scale: f32,
+    /// The body the model is fitted to, in metres: the profile's own size, or what its family of
+    /// bodies falls back to when the profile declares none.
+    pub body_size_metres: Vec3,
 }
 
 /// The shipped model the Visualizer draws this profile with, or `None` when the profile brings its
@@ -52,7 +55,11 @@ pub fn profile_default_model(
         }
         .scale_to(body_size)
     });
-    Some(ProfileDefaultModel { model, scale })
+    Some(ProfileDefaultModel {
+        model,
+        scale,
+        body_size_metres: body_size,
+    })
 }
 
 /// What a mode has channels for, read the same way the scene compiler reads it.

@@ -36,6 +36,8 @@ export interface FixtureProfile {
 	physical: FixtureProfilePhysical;
 	optics?: FixtureProfileOptics;
 	crowd?: FixtureProfileCrowd | null;
+	/** How the fixture is hung; absent on a profile written before clips were declared. */
+	mounting?: FixtureProfileMounting | null;
 	/**
 	 * Present on a Venue or Rigging object whose geometry is generated at the size it is placed,
 	 * instead of being drawn from a model made for one size.
@@ -121,6 +123,26 @@ export interface FixtureProfileLightSource {
 	form: "round" | "oval" | "rectangular";
 	width_millimetres: number;
 	height_millimetres: number;
+}
+
+/**
+ * How a fixture is hung: its mounting clip, as a volume a pipe has to reach into.
+ *
+ * Every measurement is in millimetres in the fixture's own axes, from the centre of its body:
+ * `x` across, `y` deep, `z` up. A shipped lantern is authored from the hardware it really carries;
+ * an imported model is authored here, by the operator who knows where its clamp is.
+ */
+export interface FixtureProfileMounting {
+	/** What the fixture hangs by; only a clamp is caught by a pipe. */
+	hardware: "clamp" | "yoke" | "none";
+	/** The middle of the clip. */
+	centre_millimetres: Vector3Value;
+	/** Half the clip's reach across, deep and up. */
+	half_extent_millimetres: Vector3Value;
+	/** Where the pipe's axis lies once the fixture hangs from the clip. */
+	pipe_millimetres: Vector3Value;
+	/** The body these measurements were taken against; zero takes the clip as it stands. */
+	body_millimetres: Vector3Value;
 }
 
 export interface FixtureProfilePhysical {

@@ -37,6 +37,7 @@ impl FixtureProfile {
             effect: None,
             physics: None,
             scenery: None,
+            mounting: None,
             gobos: Vec::new(),
             modes: vec![FixtureMode {
                 id: mode_id,

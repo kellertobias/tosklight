@@ -2,7 +2,8 @@ use super::*;
 use crate::{
     CanonicalTransform, ChannelBehavior, ChannelResolution, ChannelScales, ColorSystem,
     EmitterLayout, FIXTURE_PROFILE_SCHEMA_VERSION, FixtureProfile, FixtureSplit, ModelUnits,
-    PatchPolicy, PositionMovementRepresentation, ProfileSceneryKind, TrussPattern,
+    MountingHardware, PatchPolicy, PositionMovementRepresentation, ProfileMounting,
+    ProfileSceneryKind, RiserFeet, TrussPattern, Vector3,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
@@ -445,6 +446,21 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
             0,
         ),
         (
+            "venue--stage-deck-1-1-m.toskfixture",
+            ProfileSceneryKind::Riser,
+            0,
+        ),
+        (
+            "venue--stage-deck-2-1-m.toskfixture",
+            ProfileSceneryKind::Riser,
+            0,
+        ),
+        (
+            "venue--stage-deck-1-0-5-m.toskfixture",
+            ProfileSceneryKind::Riser,
+            0,
+        ),
+        (
             "venue--stage-stairs.toskfixture",
             ProfileSceneryKind::Riser,
             0,
@@ -577,17 +593,28 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
         .expect("large truss");
     assert!(large.default_size_metres.y > 0.29 && large.default_size_metres.z > 0.29);
 
-    // A stage element is the base it is built on; only its rise is made to measure.
-    for filename in [
-        "venue--stage-element-1-1-m.toskfixture",
-        "venue--stage-element-2-1-m.toskfixture",
-        "venue--stage-element-1-0-5-m.toskfixture",
+    // A stage element is the platform it is built on; only its rise is made to measure, and it
+    // says whether that rise is a scissor lift or four regular feet.
+    for (filename, feet) in [
+        ("venue--stage-element-1-1-m.toskfixture", RiserFeet::Scissor),
+        ("venue--stage-element-2-1-m.toskfixture", RiserFeet::Scissor),
+        (
+            "venue--stage-element-1-0-5-m.toskfixture",
+            RiserFeet::Scissor,
+        ),
+        ("venue--stage-deck-1-1-m.toskfixture", RiserFeet::Fixed),
+        ("venue--stage-deck-2-1-m.toskfixture", RiserFeet::Fixed),
+        ("venue--stage-deck-1-0-5-m.toskfixture", RiserFeet::Fixed),
     ] {
         let scenery = shipped_profile(filename).scenery.expect(filename);
         assert!(
             !scenery.adjustable.width && scenery.adjustable.height && !scenery.adjustable.depth,
             "{filename}"
         );
+        assert_eq!(scenery.feet, feet, "{filename}");
+        // Every deck the fifteen retired packages stood at is still a height this one reaches.
+        assert!(scenery.minimum_size_metres.y <= 0.24, "{filename}");
+        assert!(scenery.maximum_size_metres.y >= 1.04, "{filename}");
     }
 
     // A chain is set by its length alone; its ends are chosen per placed chain.
@@ -598,9 +625,11 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
 }
 
 #[test]
-fn shipped_truss_corners_and_legged_decks_carry_their_catalogue_models() {
-    // A corner block and a deck on fixed legs are single parts, not made to measure, so each
-    // is its own visual-only profile with the shipped model and its catalogue render.
+fn shipped_truss_corners_carry_their_catalogue_models() {
+    // A corner block is a single part, not made to measure, so it is its own visual-only profile
+    // with the shipped model and its catalogue render. A stage deck was one of these too, one
+    // package per platform size and leg height, until it became a deck generated at the height it
+    // is placed; the fifteen packages are retired.
     let parts = [
         ("Corner 2-Way", "corner-2-way"),
         ("T-Piece 3-Way", "t-piece-3-way"),
@@ -620,26 +649,7 @@ fn shipped_truss_corners_and_legged_decks_carry_their_catalogue_models() {
             ));
         }
     }
-    for (size, size_slug) in [
-        ("1 × 0.5 m", "1-0-5-m"),
-        ("1 × 1 m", "1-1-m"),
-        ("2 × 1 m", "2-1-m"),
-    ] {
-        for (legs, legs_slug) in [
-            ("0.2 m", "0-2-m"),
-            ("0.4 m", "0-4-m"),
-            ("0.6 m", "0-6-m"),
-            ("0.8 m", "0-8-m"),
-            ("1 m", "1-m"),
-        ] {
-            expected.push((
-                format!("venue--stage-deck-{size_slug}-legs-{legs_slug}.toskfixture"),
-                format!("Stage Deck {size}, Legs {legs}"),
-                "venue",
-            ));
-        }
-    }
-    assert_eq!(expected.len(), 29);
+    assert_eq!(expected.len(), 14);
     let mut identities = std::collections::HashSet::new();
     for (filename, name, fixture_type) in &expected {
         let profile = shipped_profile(filename);
@@ -663,7 +673,7 @@ fn shipped_truss_corners_and_legged_decks_carry_their_catalogue_models() {
     }
     // Every corner block is 500 mm overall wherever it has arms, the way the real hardware is
     // sold, so adding arms makes a block busier and not bigger.
-    for (filename, ..) in expected.iter().filter(|(name, ..)| name.contains("truss")) {
+    for (filename, ..) in &expected {
         let corner = shipped_profile(filename);
         assert_eq!(corner.physical.width_millimetres, Some(500.0), "{filename}");
         assert_eq!(corner.physical.depth_millimetres, Some(500.0), "{filename}");
@@ -672,10 +682,6 @@ fn shipped_truss_corners_and_legged_decks_carry_their_catalogue_models() {
     assert_eq!(corner.physical.height_millimetres, Some(290.0));
     let node = shipped_profile("venue--four-point-truss-node-6-way.toskfixture");
     assert_eq!(node.physical.height_millimetres, Some(500.0));
-    let deck = shipped_profile("venue--stage-deck-2-1-m-legs-0-4-m.toskfixture");
-    assert_eq!(deck.physical.width_millimetres, Some(2000.0));
-    assert_eq!(deck.physical.height_millimetres, Some(440.0));
-    assert_eq!(deck.physical.depth_millimetres, Some(1000.0));
 }
 
 #[test]
@@ -769,7 +775,7 @@ fn stage_lamp_packages_leave_body_models_to_visualizer_defaults() {
 #[test]
 fn shipped_jbled_a7_uses_the_documented_safe_shutter_table_in_every_mode() {
     let profile = shipped_profile("jb-lighting--jbled-a7.toskfixture");
-    assert_eq!(profile.revision, 3);
+    assert_eq!(profile.revision, 4);
     assert!(profile.notes.contains("JBLED_A7_DMX_Protocol.pdf"));
     assert_eq!(profile.modes.len(), 4);
     for mode in &profile.modes {
@@ -1245,7 +1251,7 @@ fn assert_moving_lamp_geometry(filename: &str) {
 #[test]
 fn robe_dls_profile_exposes_canonical_framing_controls() {
     let profile = shipped_profile("robe--robin-dls-profile.toskfixture");
-    assert_eq!(profile.revision, 6);
+    assert_eq!(profile.revision, 7);
     assert!(profile.notes.contains("DMX protocol version 1.0"));
     assert!(profile.notes.contains("user manual version 1.3"));
     assert_eq!(
@@ -1503,7 +1509,7 @@ fn showtec_sunstrip_thirty_channel_mode_projects_one_virtual_dimmer_per_pixel() 
         );
     }
     assert_eq!(mode.color_systems.len(), 10);
-    assert_eq!(profile.revision, 2);
+    assert_eq!(profile.revision, 3);
 
     let definition = profile
         .resolved_definition(mode.id)
@@ -1640,9 +1646,9 @@ fn shipped_native_hsi_modes_bind_their_physical_coordinates_and_highlight_white(
         assert_eq!(
             profile.revision,
             if filename.starts_with("chauvet-") {
-                4
+                5
             } else {
-                3
+                4
             }
         );
         for (mode_name, hue_id, saturation_id, intensity_id) in modes {
@@ -2081,7 +2087,7 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
     let profile = shipped_profile("tosklight--media-server.toskfixture");
     assert_eq!(profile.manufacturer, "ToskLight");
     assert_eq!(profile.name, "Media Server");
-    assert_eq!(profile.revision, 9);
+    assert_eq!(profile.revision, 10);
     assert_eq!(
         profile.direct_control_protocols,
         vec![crate::DirectControlProtocol::Citp],
@@ -3770,4 +3776,88 @@ fn shipped_backline_case_and_figure_packages_carry_their_catalogue_models() {
             );
         }
     }
+}
+
+/// Every shipped lamp says how it is hung.
+///
+/// The plan rigs a lamp by its declared clip, so a package that declares none cannot be flown at
+/// all. A fixture that hangs from nothing says so as plainly as one that hangs from a clamp —
+/// `hardware: "none"` is an answer, silence is not. See
+/// `docs/engineering/fixture-mounting-audit.md` for what each package carries and why.
+#[test]
+fn every_shipped_lamp_declares_the_clip_it_hangs_by() {
+    for (name, profile) in shipped_profiles() {
+        if name.starts_with("venue--") {
+            continue;
+        }
+        let mounting = profile
+            .mounting
+            .unwrap_or_else(|| panic!("{name} declares no mounting clip"));
+        if !mounting.hardware.hangs_on_a_pipe() {
+            continue;
+        }
+        let half = mounting.half_extent_millimetres;
+        assert!(
+            half.x > 0.0 && half.y > 0.0 && half.z > 0.0,
+            "{name} hangs on a pipe but its clip has no volume: {half:?}"
+        );
+        let body = mounting.body_millimetres;
+        assert!(
+            body.x > 0.0 && body.y > 0.0 && body.z > 0.0,
+            "{name} declares a clip against no body: {body:?}"
+        );
+        // The clamp hangs under the line it closes around, so the two agree about where it is.
+        assert!(
+            (mounting.centre_millimetres.z + half.z - mounting.pipe_millimetres.z).abs() < 0.01,
+            "{name}: the clip's top and its pipe line disagree"
+        );
+    }
+}
+
+/// A declared clip survives the round trip through a package, like everything else in a profile.
+#[test]
+fn a_mounting_clip_round_trips_through_a_package() {
+    let mut profile = shipped_profile("generic--dimmer-par-can.toskfixture");
+    let clip = ProfileMounting {
+        hardware: MountingHardware::Yoke,
+        centre_millimetres: Vector3 {
+            x: 1.0,
+            y: 2.0,
+            z: 3.0,
+        },
+        half_extent_millimetres: Vector3 {
+            x: 30.0,
+            y: 40.0,
+            z: 50.0,
+        },
+        pipe_millimetres: Vector3 {
+            x: 0.0,
+            y: 0.0,
+            z: 53.0,
+        },
+        body_millimetres: Vector3 {
+            x: 300.0,
+            y: 620.0,
+            z: 300.0,
+        },
+    };
+    profile.mounting = Some(clip);
+    let written = write_fixture_package(&profile).unwrap();
+    assert_eq!(read_fixture_package(&written).unwrap().mounting, Some(clip));
+}
+
+/// A profile written before clips were declared still reads, and says nothing about mounting
+/// rather than inventing an answer; the plan falls back for it.
+#[test]
+fn a_profile_without_a_clip_reads_as_declaring_none() {
+    let mut profile = shipped_profile("generic--dimmer-par-can.toskfixture");
+    profile.mounting = None;
+    let written = write_fixture_package(&profile).unwrap();
+    let read = read_fixture_package(&written).unwrap();
+    assert_eq!(read.mounting, None);
+    let json = serde_json::to_value(&read).unwrap();
+    assert!(
+        json.get("mounting").is_none(),
+        "an absent clip is not written"
+    );
 }

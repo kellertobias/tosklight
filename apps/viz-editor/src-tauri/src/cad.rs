@@ -16,7 +16,9 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use light_application::PatchSnapshot;
 use parking_lot::Mutex;
 use profile_drawing::{CadDrawing, drawing_id, drawings, new_drawings};
-use scenery::{CadScenery, cad_scenery, connect_chains, entity_size, profile_label};
+use scenery::{
+    CadMounting, CadScenery, cad_mounting, cad_scenery, connect_chains, entity_size, profile_label,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -101,6 +103,9 @@ pub struct CadEntity {
     pub aim: CadAim,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scenery: Option<CadScenery>,
+    /// The clip this fixture hangs by, at the size it is drawn: what a pipe has to reach to rig it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mounting: Option<CadMounting>,
     /// A 3D model the operator imported into this show, rather than a shipped Venue object.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub imported_model: bool,
@@ -608,6 +613,7 @@ fn entities(
                 output_direction: output_direction(rotation),
                 aim: CadAim::default(),
                 scenery: cad_scenery(snapshot, &fixture.patch.scenery_options),
+                mounting: cad_mounting(snapshot, entity_size(snapshot, &fixture.patch, id)),
                 imported_model: snapshot.is_some_and(imported_model),
             };
             let visual_only = profile.is_some_and(|profile| {

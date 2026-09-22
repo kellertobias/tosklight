@@ -94,6 +94,7 @@ impl FixtureProfile {
             effect: self.effect.clone(),
             physics: self.physics.clone(),
             scenery: self.scenery,
+            mounting: self.mounting,
             gobos: self.gobos.clone(),
             modes,
             hazardous: self.hazardous,

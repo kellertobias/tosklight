@@ -78,6 +78,7 @@ impl FixtureProfile {
             effect: None,
             physics: None,
             scenery: None,
+            mounting: None,
             gobos: Vec::new(),
             modes,
             hazardous: first.hazardous,

@@ -41,6 +41,22 @@ const riser = (id: string, position: V3, size: V3) =>
 		sizeMillimetres: size,
 		scenery: { kind: "riser", chords: 0, pattern: "standard" },
 	});
+/**
+ * A metre-square lamp hanging from the clamp its profile declares: a quarter of its height as a
+ * band off the top, with the pipe line at the very top. That is the clamp the shipped packages
+ * carry, and the one the plan used to guess before they declared it.
+ */
+const lamp = (id: string, position: V3) =>
+	base(id, {
+		kind: "profile",
+		positionMillimetres: position,
+		mounting: {
+			hardware: "clamp",
+			centre: [0, 0, 375],
+			halfExtent: [500, 500, 125],
+			pipe: [0, 0, 500],
+		},
+	});
 const curtain = (id: string, position: V3, size: V3 = [3000, 60, 6000]) =>
 	base(id, {
 		positionMillimetres: position,
@@ -103,6 +119,7 @@ describe("CAD snapping", () => {
 	});
 
 	it("stands a stage element's feet on the top of another", () => {
+		// A deck from a show made before the decks were generated stands on its feet by its name.
 		const deck = base("a", {
 			fixtureProfile: "Venue Stage Deck 2 × 1 m, Legs 0.4 m",
 			sizeMillimetres: [2000, 1000, 440],
@@ -128,11 +145,11 @@ describe("CAD snapping", () => {
 		const box = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
 		const half = trussParts(290, 4).spacing / 2;
 		// The lamp is a metre square, so its clamp reaches the near chord from 100 mm away.
-		const lamp = base("l", { kind: "profile", positionMillimetres: [500, 100, 4800] });
-		const near = snapMove([box, lamp], ["l"], [0, 5, 0], PLAN, 150).delta;
+		const hung = lamp("l", [500, 100, 4800]);
+		const near = snapMove([box, hung], ["l"], [0, 5, 0], PLAN, 150).delta;
 		expectVector([near[0], near[1]], [0, half - 100]);
 		// The whole point: a lamp on the floor goes up onto the truss rather than staying put.
-		const floor = { ...lamp, positionMillimetres: [500, 100, 0] as V3 };
+		const floor = { ...hung, positionMillimetres: [500, 100, 0] as V3 };
 		const risen = snapMove([box, floor], ["l"], [0, 5, 0], PLAN, 150).delta;
 		expectVector([risen[0], risen[1]], [0, half - 100]);
 		expect(risen[2]).toBeGreaterThan(4000);
@@ -140,14 +157,30 @@ describe("CAD snapping", () => {
 
 	it("leaves a lamp alone when its clamp is nowhere near a pipe on the page", () => {
 		const box = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
-		const away = base("l", { kind: "profile", positionMillimetres: [500, 4000, 0] });
+		const away = lamp("l", [500, 4000, 0]);
 		expectVector(snapMove([box, away], ["l"], [0, 5, 0], PLAN, 150).delta, [0, 5, 0]);
+	});
+
+	it("leaves a fixture that hangs from nothing where the operator put it", () => {
+		const box = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
+		// A hazer stands on the floor: its profile says so, and no pipe picks it up.
+		const stands = {
+			...lamp("h", [500, 100, 4800]),
+			mounting: { hardware: "none" as const, centre: [0, 0, 0] as V3, halfExtent: [0, 0, 0] as V3, pipe: [0, 0, 0] as V3 },
+		};
+		expectVector(snapMove([box, stands], ["h"], [0, 5, 0], PLAN, 150).delta, [0, 5, 0]);
+	});
+
+	it("leaves a fixture whose profile declares no clip at all alone", () => {
+		const box = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
+		const undeclared = base("u", { kind: "profile", positionMillimetres: [500, 100, 4800] });
+		expectVector(snapMove([box, undeclared], ["u"], [0, 5, 0], PLAN, 150).delta, [0, 5, 0]);
 	});
 
 	it("moves several lamps rigidly onto a pipe, keeping the spacing between them", () => {
 		const box = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
-		const one = base("a", { kind: "profile", positionMillimetres: [0, 100, 0] });
-		const two = base("b", { kind: "profile", positionMillimetres: [1500, 100, 0] });
+		const one = lamp("a", [0, 100, 0]);
+		const two = lamp("b", [1500, 100, 0]);
 		const { delta } = snapMove([box, one, two], ["a", "b"], [0, 5, 0], PLAN, 150);
 		// One correction for the pair: whatever it is, both move by it and stay 1500 apart.
 		expect(delta[2]).toBeGreaterThan(4000);
