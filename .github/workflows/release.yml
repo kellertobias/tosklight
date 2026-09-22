@@ -704,12 +704,10 @@ jobs:
           done
           exit 1
 
-      # The same captures the nightly workflow runs, and the ones that have actually broken it.
-      # They are judged, not published, here: the nightly still owns the galleries. The wider
-      # `tools/test.sh storybook` suite is deliberately not run yet — it carries a backlog of
-      # stories that drifted while nothing gated them, and gating on it today blocks every push.
-      - name: Capture every Help and marketing screenshot
-        run: bash tools/test.sh documentation-screenshots
+      # Builds Storybook once, then runs the story contracts and both screenshot captures. The
+      # captures are judged, not published, here: the nightly workflow still owns the galleries.
+      - name: Render every Storybook story and screenshot candidate
+        run: bash tools/test.sh storybook
 
       - name: Build and verify the operator manual
         run: npm run manual
