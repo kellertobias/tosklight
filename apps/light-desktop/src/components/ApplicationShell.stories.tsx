@@ -21,6 +21,7 @@ import {
 } from "../../../ui-library/storybook/fixtures/dmx";
 import {
 	helpCatalog,
+	helpNestedFolderId,
 	helpQuickStartId,
 	helpQuickStartTopic,
 } from "../../../ui-library/storybook/fixtures/help";
@@ -337,7 +338,7 @@ function HelpPane() {
 	return (
 		<HelpWindowView
 			catalog={helpCatalog}
-			defaultExpanded={["30-Programmer/index.md"]}
+			defaultExpanded={[helpNestedFolderId]}
 			onQueryChange={setQuery}
 			onSelect={() => undefined}
 			query={query}

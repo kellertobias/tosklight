@@ -6,12 +6,14 @@ import type {
 
 export const helpQuickStartId = "00-Quick-Start/index.md";
 export const helpNestedTopicId = "10-Desk/20-Programmer-and-Cues/01-command-line.md";
+/** The folder holding the nested topic, for a story that needs it already open. */
+export const helpNestedFolderId = "10-Desk/20-Programmer-and-Cues/index.md";
 
 const topics: HelpCatalogEntry[] = [
   { id: helpQuickStartId, title: "Quick Start", kind: "topic", children: [] },
   { id: "10-application-layout.md", title: "Application Layout and Window Manager", kind: "topic", children: [] },
   {
-    id: "10-Desk/20-Programmer-and-Cues/index.md",
+    id: helpNestedFolderId,
     title: "Programmer and Cues",
     kind: "folder",
     children: [

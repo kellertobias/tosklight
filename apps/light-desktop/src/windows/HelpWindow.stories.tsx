@@ -2,13 +2,14 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import quickStartImage from "../../../../assets/branding/ToskLight Control.png?url";
 import {
-  emptyHelpCatalog,
-  helpCatalog,
-  helpCatalogWarning,
-  helpNestedTopic,
-  helpNestedTopicId,
-  helpQuickStartId,
-  helpQuickStartTopic,
+	emptyHelpCatalog,
+	helpCatalog,
+	helpCatalogWarning,
+	helpNestedFolderId,
+	helpNestedTopic,
+	helpNestedTopicId,
+	helpQuickStartId,
+	helpQuickStartTopic,
 } from "../../../ui-library/storybook/fixtures/help";
 import type { HelpCatalog, HelpTopic } from "../api/types";
 import {
@@ -67,12 +68,12 @@ function HelpStoryHarness({
 }
 
 export const QuickStart: Story = {
-  render: () => <HelpStoryHarness defaultExpanded={["30-Programmer/index.md", "folder:Running a Show"]} />,
+  render: () => <HelpStoryHarness defaultExpanded={[helpNestedFolderId, "folder:Running a Show"]} />,
 };
 
 export const NestedTopic: Story = {
   render: () => <HelpStoryHarness
-    defaultExpanded={["30-Programmer/index.md"]}
+    defaultExpanded={[helpNestedFolderId]}
     initialSelected={helpNestedTopicId}
     initialTopic={helpNestedTopic}
   />,
@@ -100,7 +101,7 @@ export const CatalogWarning: Story = {
 
 export const SearchResults: Story = {
   render: () => <HelpStoryHarness
-    defaultExpanded={["30-Programmer/index.md"]}
+    defaultExpanded={[helpNestedFolderId]}
     initialSelected={helpNestedTopicId}
     initialTopic={helpNestedTopic}
     query="Command Line"
@@ -112,5 +113,5 @@ export const SearchNoResults: Story = {
 };
 
 export const Compact: Story = {
-  render: () => <HelpStoryHarness compact defaultExpanded={["30-Programmer/index.md"]} />,
+  render: () => <HelpStoryHarness compact defaultExpanded={[helpNestedFolderId]} />,
 };

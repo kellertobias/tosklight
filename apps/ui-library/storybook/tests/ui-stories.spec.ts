@@ -841,7 +841,7 @@ test("Dynamics full application discussion keeps the selection preview across ta
 	).toBeGreaterThan(1);
 	expect(fixtureStyles.every(({ shadow }) => shadow === "none")).toBe(true);
 
-	await editor.getByRole("button", { name: "Speed", exact: true }).click();
+	await editor.getByRole("tab", { name: "Speed", exact: true }).click();
 	await expect(preview).toBeVisible();
 	const speedSourceFields = editor.locator(".dynamic-speed-source-fields");
 	const [speedSourceBox, speedGroupBox, beatsPerCycleBox] = await Promise.all([
@@ -910,7 +910,7 @@ test("Dynamics full application discussion keeps the selection preview across ta
 		expect(controlWidth).toBeCloseTo(fieldWidth, 0);
 	}
 
-	await editor.getByRole("button", { name: "Phase", exact: true }).click();
+	await editor.getByRole("tab", { name: "Phase", exact: true }).click();
 	await expect(preview).toBeVisible();
 	await expect(editor.getByText("2D phase distribution")).toHaveCount(0);
 	await expect(
@@ -1179,10 +1179,9 @@ test("DMX application stories render the production matrix, inspector, and sourc
 		"/iframe.html?id=tosklight-windows-dmx--values-output-summary&viewMode=story",
 	);
 	await expect(page.getByText("DMX Output", { exact: true })).toBeVisible();
-	await expect(
-		page.getByRole("button", { name: "Values as dots" }),
-	).toBeVisible();
-	await expect(page.getByRole("button", { name: "Sources" })).toBeVisible();
+	// The view switcher is a title tab group, and the dotted view is simply called Values.
+	await expect(page.getByRole("tab", { name: "Values" })).toBeVisible();
+	await expect(page.getByRole("tab", { name: "Sources" })).toBeVisible();
 	await expect(page.locator(".dmx-universe")).toHaveCount(4);
 	await expect(page.locator(".dmx-universe button")).toHaveCount(2_048);
 	await expect(page.locator(".dmx-info-pane")).toContainText("Output summary");
@@ -1247,6 +1246,8 @@ test("Help application stories render real navigation, Markdown, search, and sta
 	await expect(page.getByRole("button", { name: "Quick Start" })).toHaveCount(
 		0,
 	);
+	// Searching keeps a match's real place in the manual rather than flattening the tree, so the
+	// match shows under the folder that holds it, which this story has open.
 	await expect(
 		page.getByRole("button", { name: "Command Line" }),
 	).toBeVisible();
@@ -1523,8 +1524,9 @@ test("the serverless command line is interactive and used as the Storybook comma
 	await expect(page.getByRole("button", { name: "PRELOAD GO" })).toHaveText(
 		"PRELOAD GO",
 	);
+	// The status button states the desk's own condition before the action it offers.
 	await page
-		.getByRole("button", { name: /Open running and output controls/u })
+		.getByRole("button", { name: /Open Running & Output/u })
 		.click();
 	await expect(page.getByLabel("Command line event")).toHaveText(
 		"Opened running and output controls",
@@ -2053,9 +2055,8 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 	await expect(
 		configurableEditor.getByRole("button", { name: "THRU" }),
 	).toBeVisible();
-	await configurableEditor
-		.getByRole("button", { name: "Show presets" })
-		.click();
+	// Value and Presets are two tabs of the editor's own chrome, not one toggle between them.
+	await configurableEditor.getByRole("tab", { name: "Presets" }).click();
 	for (const preset of [
 		"Off",
 		"Quarter",
@@ -3886,7 +3887,11 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 	).toBeVisible();
 	await expect(page.getByRole("row")).toHaveCount(9);
 	await expect(page.getByText("Opening Look", { exact: true })).toBeVisible();
-	await expect(page.locator(".cue-properties")).toBeVisible();
+	// A cue property is edited from the cell that shows it, in a modal, rather than in a
+	// sidebar panel beside the table.
+	await page.getByRole("button", { name: "Cue Name" }).first().click();
+	await expect(page.getByRole("dialog", { name: "Cue Name" })).toBeVisible();
+	await page.keyboard.press("Escape");
 	await page.goto(
 		"/iframe.html?id=tosklight-windows-cuelists-and-cues--fixed-cues-unavailable&viewMode=story",
 	);
@@ -4148,14 +4153,14 @@ test("Form stories keep inputs, scrolling, fader, pickers, grouped selections, a
 		.getByRole("button", { name: "Open number pad" })
 		.click();
 	let presetDialog = page.getByRole("dialog", { name: "Value with presets" });
-	const modeToggle = presetDialog.getByRole("button", {
-		name: "Show presets",
-	});
-	await expect(modeToggle.locator('[data-active="true"]')).toHaveText("Value");
+	const modeToggle = presetDialog.getByRole("tablist", { name: "mode" });
+	await expect(modeToggle.getByRole("tab", { selected: true })).toHaveText(
+		"Value",
+	);
 	await expect(
 		presetDialog.getByRole("button", { name: "Release value" }),
 	).toBeVisible();
-	await modeToggle.click();
+	await modeToggle.getByRole("tab", { name: "Presets" }).click();
 	await expect(
 		presetDialog.getByText("Intensity", { exact: true }),
 	).toBeVisible();
@@ -4703,7 +4708,7 @@ test("production marketing and application modal stories preserve their real com
 		page.locator(".product-demo-application .left-dock"),
 	).toBeVisible();
 	await expect(
-		page.locator(".product-demo-stage .stage-3d-canvas"),
+		page.locator('.product-demo-stage .stage-canvas[data-stage-view="3d"]'),
 	).toBeVisible();
 	await expect(page.locator(".product-demo-dmx-cell")).toHaveCount(2_048);
 	await expect(page.locator(".product-demo-playback-strip")).toHaveCount(4);
