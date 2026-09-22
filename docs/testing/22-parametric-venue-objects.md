@@ -63,7 +63,33 @@ choices existed open unchanged.
    **Footprint height** can be set between 0.1 m and 1.2 m.
 2. Set the rise to 0.2 m and then 1.2 m. Confirm the Visualizer and the PreViz front and side
    elevations draw a deck on a scissor lift over a base frame, with more stages of arms at 1.2 m.
-3. Add **Stage Stairs** and confirm it has no scissor lift.
+3. Add **Stage Deck 2 × 1 m**. Confirm the same footprint fields, and that the Visualizer and the
+   PreViz front and side elevations draw a 40 mm top on one leg under each corner rather than a
+   scissor lift, with the top's surface at the height that was set and the legs standing on the
+   floor.
+4. Set the deck to 0.24 m and then 1.04 m — the lowest and highest the retired decks on fixed legs
+   stood at — and confirm both are accepted.
+5. Add **Stage Stairs**. Confirm it stands on neither a scissor lift nor legs, that its width,
+   height and depth can all be set, and that the Visualizer and the PreViz front and side
+   elevations draw a flight of steps climbing to the height that was set: a 200 mm rise per step,
+   so a 0.6 m flight has three and a 1.0 m flight five. Set it to a deck's height beside that deck
+   and confirm the top step meets the deck's surface.
+6. Add **Stage Stairs with Handrails**. Confirm the same footprint fields, and that the Visualizer
+   draws a rail up each side with a post on every nosing, following the climb. Confirm the plain
+   flight has none.
+7. Add **Stage Handrail**. Confirm **Footprint width** can be set between 0.4 m and 24 m and that
+   **Footprint height** and **Footprint depth** show a dash — a stage edge guard is 1 m high and no
+   deeper than its posts. Confirm the Visualizer and the PreViz elevations draw posts about 1.2 m
+   apart under a top rail and a knee rail, and that the plan draws the thin line of its run.
+8. With snapping on, drag the handrail towards the outside edge of a stage element in the plan.
+   Confirm its foot line lands on that edge with a magenta diamond, and that its ends line up with
+   the deck's corners so a run of rail closes the side. Drag it well clear and confirm it stays
+   where it is put.
+9. In **Add stage element**, confirm **Regular feet** and **Scissor feet** each list the three
+   platform sizes and nothing per leg height, that **Stairs** lists **Without** and **With**
+   handrails, and that **Handrail** is a part of its own.
+10. Confirm a stairs profile is told from a deck by its kind, not its name: rename **Stage Stairs**
+    to something without "stair" in it and confirm it still draws as a flight of steps.
 
 ## Crowds
 
@@ -85,3 +111,8 @@ choices existed open unchanged.
    opens at its stored size, draws in its default material, and that saving the show without
    touching them leaves them unchanged.
 2. Confirm a stage element placed at another base size before bases were fixed keeps that size.
+3. Open a show that patched one of the fifteen retired decks on fixed legs — `Stage Deck 2 × 1 m,
+   Legs 0.4 m` and its siblings. Confirm it still draws its own modelled deck at its own leg
+   height, in the Visualizer and in the PreViz plan and elevations, and that it still stands on
+   its feet and snaps like a stage element. The show carries its own copy of that profile; the
+   packages are withdrawn, so confirm the fixture library no longer offers the fifteen to patch.

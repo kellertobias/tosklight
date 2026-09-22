@@ -606,7 +606,7 @@ fn venue_objects_are_accepted_as_scenery() {
 }
 
 #[test]
-fn authored_disco_balls_curtains_and_railings_keep_their_scenery_kinds() {
+fn authored_disco_balls_curtains_railings_and_stairs_keep_their_scenery_kinds() {
     let mut models = models(
         shipped_profile("claypaky--sharpy"),
         StageLayoutBody::default(),
@@ -615,6 +615,7 @@ fn authored_disco_balls_curtains_and_railings_keep_their_scenery_kinds() {
         ("disco", "Dancefloor Disco Ball", "mirror_ball"),
         ("curtain", "Back Curtain", "curtain"),
         ("railing", "Stage Railing", "railing"),
+        ("stairs", "Stage Stairs", "stairs"),
     ] {
         models.venue_objects.push(ObjectRecord {
             id: id.into(),
@@ -632,6 +633,8 @@ fn authored_disco_balls_curtains_and_railings_keep_their_scenery_kinds() {
         ("Dancefloor Disco Ball", viz_scene::SceneryKind::MirrorBall),
         ("Back Curtain", viz_scene::SceneryKind::Curtain),
         ("Stage Railing", viz_scene::SceneryKind::Railing),
+        // Stage stairs are named for the stage, so they must be read before the deck heuristic.
+        ("Stage Stairs", viz_scene::SceneryKind::Stairs),
     ] {
         assert_eq!(
             plan.scene

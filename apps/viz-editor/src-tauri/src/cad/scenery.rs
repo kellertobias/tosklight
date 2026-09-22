@@ -20,6 +20,8 @@ pub struct CadScenery {
     pub pattern: String,
     /// What a stage element stands on: `scissor` or `fixed`. Only a riser has one.
     pub feet: String,
+    /// Whether the object carries a handrail of its own; a flight of stairs may up each side.
+    pub handrails: bool,
     /// How a chain is rigged: plain, a hoist at the top or a hoist at the bottom. Only a chain has
     /// one.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -237,6 +239,10 @@ fn profile_scenery(profile: &serde_json::Value) -> Option<CadScenery> {
             .map_or(0, |chords| chords.min(4) as u8),
         pattern: text("pattern", "standard"),
         feet: text("feet", "scissor"),
+        handrails: scenery
+            .get("handrails")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
         chain: None,
         anchor: None,
     })
@@ -332,6 +338,7 @@ mod tests {
                 chords: 3,
                 pattern: "deco".into(),
                 feet: "scissor".into(),
+                handrails: false,
                 chain: None,
                 anchor: None,
             })
@@ -343,6 +350,13 @@ mod tests {
         assert_eq!(profile_scenery(&deck).unwrap().feet, "fixed");
         let lift = json!({ "scenery": { "kind": "riser" } });
         assert_eq!(profile_scenery(&lift).unwrap().feet, "scissor");
+        // A flight of stairs is its own kind, and says whether it carries a rail up each side.
+        let railed = json!({ "scenery": { "kind": "stairs", "handrails": true } });
+        let flight = profile_scenery(&railed).unwrap();
+        assert_eq!(flight.kind, "stairs");
+        assert!(flight.handrails);
+        let plain = json!({ "scenery": { "kind": "stairs" } });
+        assert!(!profile_scenery(&plain).unwrap().handrails);
         assert_eq!(profile_scenery(&json!({ "name": "Spot" })), None);
     }
 
@@ -447,6 +461,7 @@ mod tests {
                 chords,
                 pattern: "standard".into(),
                 feet: "scissor".into(),
+                handrails: false,
                 chain,
                 anchor: None,
             }),

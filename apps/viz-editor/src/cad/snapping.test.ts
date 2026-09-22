@@ -57,6 +57,12 @@ const lamp = (id: string, position: V3) =>
 			pipe: [0, 0, 500],
 		},
 	});
+const railing = (id: string, position: V3, size: V3 = [2000, 40, 1000]) =>
+	base(id, {
+		positionMillimetres: position,
+		sizeMillimetres: size,
+		scenery: { kind: "railing", chords: 0, pattern: "standard" },
+	});
 const curtain = (id: string, position: V3, size: V3 = [3000, 60, 6000]) =>
 	base(id, {
 		positionMillimetres: position,
@@ -187,6 +193,21 @@ describe("CAD snapping", () => {
 		const movedOne = one.positionMillimetres[0] + delta[0];
 		const movedTwo = two.positionMillimetres[0] + delta[0];
 		expect(movedTwo - movedOne).toBe(1500);
+	});
+
+	it("lands a handrail on the outside edge of a stage element", () => {
+		// A 2 x 1 m deck 600 mm high, standing on its own feet at the origin: its top perimeter is
+		// 600 mm up, and its front edge runs along y = -500.
+		const deck = riser("d", [0, 0, 0], [2000, 1000, 600]);
+		const rail = railing("r", [0, -460, 600]);
+		// Dragged in a plan view, the rail's foot line lands on the deck's front edge.
+		expectVector(snapMove([deck, rail], ["r"], [0, -5, 0], PLAN, 150).delta, [0, -40, 0]);
+	});
+
+	it("leaves a handrail alone when no stage edge is within reach", () => {
+		const deck = riser("d", [0, 0, 0], [2000, 1000, 600]);
+		const away = railing("r", [0, -4000, 600]);
+		expectVector(snapMove([deck, away], ["r"], [0, -5, 0], PLAN, 150).delta, [0, -5, 0]);
 	});
 
 	it("snaps a measurement's point onto a truss connector", () => {

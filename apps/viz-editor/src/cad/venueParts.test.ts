@@ -58,7 +58,12 @@ describe("the CAD add dialogs' parts", () => {
 			"Regular feet",
 			"Scissor feet",
 			"Stairs",
+			"Handrail",
 		]);
+		// Stairs come with and without a rail up each side; the handrail is a part of its own.
+		expect(
+			STAGE_TYPES.find((type) => type.id === "stairs")?.parts.map((part) => part.label),
+		).toEqual(["Without", "With"]);
 		// The sections corner pieces are made for list them after the straight truss.
 		const partsOf = (id: string) =>
 			TRUSS_TYPES.find((type) => type.id === id)?.parts.map((part) => part.label);
@@ -74,16 +79,18 @@ describe("the CAD add dialogs' parts", () => {
 				"Node 6-way",
 			]);
 		expect(partsOf("two-point")).toEqual(["Straight truss"]);
-		// Regular feet come in every platform size at each leg height; every part names its own profile.
-		expect(STAGE_TYPES[0].parts).toHaveLength(15);
-		expect(STAGE_TYPES[0].parts[1]).toMatchObject({ label: "2 × 1 m", detail: "Legs 0.4 m" });
+		// Either kind of feet comes in every platform size and is raised to the height it is
+		// placed at, so no part is listed per leg height; every part names its own profile.
+		for (const group of [STAGE_TYPES[0], STAGE_TYPES[1]]) {
+			expect(group.parts.map((part) => part.label)).toEqual([
+				"2 × 1 m",
+				"1 × 1 m",
+				"1 × 0.5 m",
+			]);
+			expect(group.parts.every((part) => part.detail === undefined)).toBe(true);
+		}
 		const ids = [...TRUSS_TYPES, ...STAGE_TYPES].flatMap((type) => type.parts.map((part) => part.profileId));
 		expect(new Set(ids).size).toBe(ids.length);
-		expect(STAGE_TYPES[1].parts.map((part) => part.label)).toEqual([
-			"2 × 1 m",
-			"1 × 1 m",
-			"1 × 0.5 m",
-		]);
 	});
 
 	it("places a part from the newest revision of its profile, and nothing when it is missing", () => {

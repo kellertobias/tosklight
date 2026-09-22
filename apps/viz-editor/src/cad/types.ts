@@ -54,6 +54,8 @@ export interface CadScenery {
 	pattern: "standard" | "deco" | string;
 	/** What a stage element stands on; only a riser carries it, and absent reads as a scissor lift. */
 	feet?: CadRiserFeet;
+	/** Whether the object carries a handrail of its own, as a flight of stairs may up each side. */
+	handrails?: boolean;
 	/** How a chain is rigged; only a chain carries it, and absent reads as a hoist at the top. */
 	chain?: CadChainMode;
 	/** What a rigged chain's end away from its hoist is fixed with; absent reads as a steelflex. */

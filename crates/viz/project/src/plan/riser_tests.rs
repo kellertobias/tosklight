@@ -1,14 +1,28 @@
 //! A stage element is placed by its feet: its origin is the floor it stands on, and its height
-//! raises or lowers the deck rather than moving where the feet start.
+//! raises or lowers the deck rather than moving where the feet start. A flight of stairs and a
+//! handrail stand on their feet the same way.
 use super::model_tests::shipped_venue;
 use super::*;
 
-const STAGE_ELEMENTS: [&str; 4] = [
+const STAGE_ELEMENTS: [&str; 8] = [
     "venue--stage-element-2-1-m",
     "venue--stage-element-1-1-m",
     "venue--stage-element-1-0-5-m",
+    "venue--stage-deck-2-1-m",
+    "venue--stage-deck-1-1-m",
+    "venue--stage-deck-1-0-5-m",
     "venue--stage-stairs",
+    "venue--stage-stairs-with-handrails",
 ];
+
+/// What the plan builds an element as: a deck is a riser, a flight of stairs is its own kind.
+fn expected_kind(name: &str) -> viz_scene::SceneryKind {
+    if name.contains("stairs") {
+        viz_scene::SceneryKind::Stairs
+    } else {
+        viz_scene::SceneryKind::Riser
+    }
+}
 
 /// The lowest and highest the compiled box reaches.
 fn vertical_extent(object: &viz_scene::SceneryObject) -> (f32, f32) {
@@ -26,7 +40,7 @@ fn a_stage_element_placed_on_the_floor_spans_from_the_floor_up_its_height() {
         for height in [0.2, 0.5, 1.0] {
             fixture.instances[0].scenery_size_metres = Some(Vec3::new(2.0, height, 1.0));
             let object = compile(std::slice::from_ref(&fixture)).scene.scenery[0].clone();
-            assert_eq!(object.kind, viz_scene::SceneryKind::Riser, "{name}");
+            assert_eq!(object.kind, expected_kind(name), "{name}");
             let (bottom, top) = vertical_extent(&object);
             assert!(
                 bottom.abs() < 1e-5,
@@ -76,6 +90,18 @@ fn a_stage_elements_feet_stay_put_when_its_height_is_clamped_or_scaled() {
     assert!(bottom.abs() < 1e-5, "{bottom}");
     // 1.2 m is the tallest the profile builds, drawn at half scale.
     assert!((top - 0.6).abs() < 1e-5, "{top}");
+}
+
+/// A handrail stands on the floor it is placed on, like the deck it guards.
+#[test]
+fn a_handrail_stands_on_the_floor_it_is_placed_on() {
+    let mut fixture = shipped_venue("venue--stage-handrail");
+    fixture.instances[0].position = Vec3::new(0.0, 0.6, 0.0);
+    let object = &compile(std::slice::from_ref(&fixture)).scene.scenery[0];
+    let (bottom, top) = vertical_extent(object);
+    // Placed on a 0.6 m deck, a 1 m guard reaches 1.6 m off the floor.
+    assert!((bottom - 0.6).abs() < 1e-5, "{bottom}");
+    assert!((top - 1.6).abs() < 1e-5, "{top}");
 }
 
 /// Truss, curtains, chains and the primitive shapes keep their centre origin.

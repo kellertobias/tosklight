@@ -668,6 +668,8 @@ fn venue_kind(body: &serde_json::Value) -> SceneryKind {
         SceneryKind::Curtain
     } else if says("railing") || says("handrail") {
         SceneryKind::Railing
+    } else if says("stair") || says("steps") {
+        SceneryKind::Stairs
     } else if says("wall") || says("cyc") || says("backdrop") || says("screen") {
         SceneryKind::Wall
     } else if says("riser") || says("deck") || says("rostrum") || says("stage") {

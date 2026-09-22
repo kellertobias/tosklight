@@ -20,7 +20,9 @@ import {
 	curtainRail,
 	isStageElement,
 	mountingVolume,
+	railingFoot,
 	stageCorners,
+	stageEdges,
 	trussAxis,
 	trussConnectors,
 	trussPipeRadius,
@@ -102,6 +104,7 @@ function nearestFit(
 	const connectors = still.flatMap(trussConnectors);
 	const corners = still.filter(isStageElement).flatMap(stageCorners);
 	const railEnds = still.flatMap((entity) => curtainRail(entity)?.ends ?? []);
+	const edges = still.filter(isStageElement).flatMap(stageEdges);
 	const pipes = still.flatMap(trussPipes);
 	const axes = still.flatMap((entity) => trussAxis(entity) ?? []);
 	const reach = SNAP_REACH_MILLIMETRES;
@@ -113,6 +116,18 @@ function nearestFit(
 			for (const corner of stageCorners(mover))
 				for (const target of corners)
 					consider(pointCandidate(moved(corner), target, free, threshold, null));
+		// A handrail guards a deck's edge: its foot line lands on the top perimeter of a stage
+		// element, and its ends line up with the corners of it, so a run of rail closes the side.
+		const foot = railingFoot(mover);
+		if (foot) {
+			const centre = moved(foot.centre);
+			for (const edge of edges)
+				consider(pointCandidate(centre, closestOnSegment(centre, edge), free, threshold, reach));
+			for (const end of foot.ends)
+				for (const edge of edges)
+					for (const corner of [edge.start, edge.end])
+						consider(pointCandidate(moved(end), corner, free, threshold, reach));
+		}
 		const rail = curtainRail(mover);
 		if (rail) {
 			for (const end of rail.ends)

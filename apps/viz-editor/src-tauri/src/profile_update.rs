@@ -309,6 +309,8 @@ mod tests {
             minimum_size_metres: light_fixture::Vector3 { x: 0.25, ..across },
             maximum_size_metres: light_fixture::Vector3 { x: 24.0, ..across },
             pattern: Default::default(),
+            feet: Default::default(),
+            handrails: false,
         });
         profile
     }

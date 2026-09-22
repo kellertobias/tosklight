@@ -1,7 +1,7 @@
 //! Compile every physical instance of one selected fixture into the scene and its bindings.
 
 use super::*;
-use viz_scene::{ChainRig, SceneryDetail};
+use viz_scene::{ChainRig, RiserFeet, SceneryDetail};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn compile_instances(
@@ -261,6 +261,7 @@ impl EmitterMount {
 fn scenery_kind(kind: light_fixture::ProfileSceneryKind) -> SceneryKind {
     match kind {
         light_fixture::ProfileSceneryKind::Riser => SceneryKind::Riser,
+        light_fixture::ProfileSceneryKind::Stairs => SceneryKind::Stairs,
         light_fixture::ProfileSceneryKind::Truss => SceneryKind::Truss,
         light_fixture::ProfileSceneryKind::Curtain => SceneryKind::Curtain,
         light_fixture::ProfileSceneryKind::Railing => SceneryKind::Railing,
@@ -304,7 +305,6 @@ fn scenery_roughness(kind: light_fixture::ProfileSceneryKind) -> f32 {
 /// A chain placed before its ends could be chosen hangs from a hoist at its top, which is how a
 /// chain is most often rigged.
 fn scenery_detail(
-    profile_name: &str,
     declared: &light_fixture::ProfileScenery,
     options: &light_fixture::SceneryOptions,
 ) -> SceneryDetail {
@@ -320,27 +320,59 @@ fn scenery_detail(
     SceneryDetail {
         deco: declared.kind == Kind::Truss && declared.pattern == light_fixture::TrussPattern::Deco,
         chain,
-        // Stage stairs are declared as a riser too, because they occlude and are walked on the
-        // same way, but a flight of steps is not a deck raised on a scissor lift. The profile kind
-        // cannot tell the two apart, so the name does.
-        scissor_lift: declared.kind == Kind::Riser
-            && !profile_name.to_lowercase().contains("stair"),
+        // A flight of stairs stands on its own steps and is raised by nothing, so only a deck has
+        // feet. Stairs are their own kind now; a package that still declares them as a riser is
+        // read by its name, which is how every stair in an older show was told apart.
+        feet: match declared.kind {
+            Kind::Riser => match declared.feet {
+                light_fixture::RiserFeet::Scissor => RiserFeet::Scissor,
+                light_fixture::RiserFeet::Fixed => RiserFeet::Fixed,
+            },
+            _ => RiserFeet::None,
+        },
+        handrails: declared.handrails,
+    }
+}
+
+/// The scenery as the plan reads it, with a flight of stairs from an older show read as stairs.
+///
+/// Stairs are their own kind now. A show written before that holds a profile snapshot declaring
+/// itself a riser, with nothing but its name to tell it from a deck — which is exactly how the
+/// plan told them apart then — so a riser that calls itself stairs is still built as stairs. A
+/// package that declares the kind says so for itself and is never read by its name.
+fn declared_kind(
+    declared: &light_fixture::ProfileScenery,
+    profile_name: &str,
+) -> light_fixture::ProfileScenery {
+    use light_fixture::ProfileSceneryKind as Kind;
+    let named_stairs =
+        declared.kind == Kind::Riser && profile_name.to_lowercase().contains("stair");
+    light_fixture::ProfileScenery {
+        kind: if named_stairs {
+            Kind::Stairs
+        } else {
+            declared.kind
+        },
+        ..*declared
     }
 }
 
 /// Where a generated object's box is centred, from where it was placed.
 ///
-/// A stage element — a deck on a scissor lift, or a flight of stairs — is placed by its feet: the
-/// placement is the middle of its footprint on the floor it stands on, the same origin the shipped
-/// decks on fixed legs have in their models. Its height then raises or lowers the deck while the
-/// feet stay where they are. Every other generated kind is placed by the centre of its box.
+/// A stage element — a deck on a scissor lift, a deck on regular feet, or a flight of stairs — is
+/// placed by its feet: the placement is the middle of its footprint on the floor it stands on. Its
+/// height then raises or lowers the deck while the feet stay where they are. Every other generated
+/// kind is placed by the centre of its box.
 pub(super) fn scenery_centre(
     instance: &PhysicalInstance,
     kind: light_fixture::ProfileSceneryKind,
     size: Vec3,
 ) -> Vec3 {
     match kind {
-        light_fixture::ProfileSceneryKind::Riser => {
+        // A deck, a flight of stairs and a handrail all stand on the floor they are placed on.
+        light_fixture::ProfileSceneryKind::Riser
+        | light_fixture::ProfileSceneryKind::Stairs
+        | light_fixture::ProfileSceneryKind::Railing => {
             let up = viz_scene::euler_degrees(instance.rotation_degrees) * Vec3::Y;
             instance.position + up * (size.y * 0.5)
         }
@@ -355,6 +387,7 @@ fn generated_scenery(
     instance: &PhysicalInstance,
 ) -> Option<SceneryObject> {
     let declared = fixture.profile.scenery.as_ref()?;
+    let declared = &declared_kind(declared, &fixture.profile.name);
     let size = instance
         .scenery_size_metres
         .unwrap_or_else(|| vector(declared.default_size_metres));
@@ -375,6 +408,6 @@ fn generated_scenery(
         roughness: scenery_roughness(declared.kind),
         kind: scenery_kind(declared.kind),
         chords: declared.chords,
-        detail: scenery_detail(&fixture.profile.name, declared, &instance.scenery_options),
+        detail: scenery_detail(declared, &instance.scenery_options),
     })
 }

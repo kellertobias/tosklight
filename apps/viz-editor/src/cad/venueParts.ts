@@ -4,7 +4,7 @@
  *
  * A truss is listed by its section and then the part — the straight run at any length, or one of the
  * corner pieces made for that section. A stage element is listed by what it stands on and then its
- * platform size. A curtain is the parametric profile or one made at a fixed width. Each add button
+ * platform size, and is raised to the height it is placed at. A curtain is the parametric profile or one made at a fixed width. Each add button
  * places one of its parts at once, and its caret menu chooses which.
  *
  * Profiles are named by their fixed ids, so a renamed profile still lands in the right place. A part
@@ -34,16 +34,6 @@ function corners(section: "three" | "four", ids: readonly string[]): VenuePart[]
 	return names.map((label, index) => ({
 		id: `${section}-${index}`,
 		label,
-		profileId: ids[index],
-	}));
-}
-
-/** A stage deck on fixed legs, one profile per platform size and leg height. */
-function legged(size: string, ids: readonly string[]): VenuePart[] {
-	return ["0.2", "0.4", "0.6", "0.8", "1"].map((legs, index) => ({
-		id: `${size}-${legs}`,
-		label: `${size} m`,
-		detail: `Legs ${legs} m`,
 		profileId: ids[index],
 	}));
 }
@@ -123,27 +113,9 @@ export const STAGE_TYPES: readonly VenuePartGroup[] = [
 		label: "Regular feet",
 		partsLabel: "Platform size",
 		parts: [
-			...legged("2 × 1", [
-				"f5cb3a55-4e4f-5dfd-8c0e-43cf7924b096",
-				"3cf7a16e-95e8-5cf3-bd54-e65743883acf",
-				"9f510d06-6bb8-5dd1-bd7c-6774226d1586",
-				"a1b0a402-7953-562c-8c57-6346df823ce3",
-				"6541286a-f448-55c5-98ef-9e707b8e5a36",
-			]),
-			...legged("1 × 1", [
-				"bf818699-247f-5db9-b5b7-daad4137e57c",
-				"115d33ff-1189-5f89-a9eb-3c19993f491a",
-				"e3fdb557-e013-5c40-8efa-1d24cb1a7714",
-				"7edb68c9-efcc-547c-80f3-bdcb1fa03003",
-				"fe6992bc-9981-52e4-916d-9b1b8fb17c1e",
-			]),
-			...legged("1 × 0.5", [
-				"c1d26de5-4fe2-594d-99e2-812145650314",
-				"6476799e-fc6f-5ddc-b4f6-fa1325881aa2",
-				"64e0ee52-d22e-5073-991c-1c93272ea285",
-				"b2bf9af3-36f3-5bf4-8a19-0f58e9c034f1",
-				"811e02d4-82e0-5962-85a7-3efd81a226ff",
-			]),
+			{ id: "2x1", label: "2 × 1 m", profileId: "ae45dcb3-cd94-59db-b3b1-0e8a5adb9141" },
+			{ id: "1x1", label: "1 × 1 m", profileId: "b833bc89-b320-58df-946a-cd4728bd6421" },
+			{ id: "1x0.5", label: "1 × 0.5 m", profileId: "b0eb846a-c813-5596-bd2e-3f741f8437df" },
 		],
 	},
 	{
@@ -159,8 +131,28 @@ export const STAGE_TYPES: readonly VenuePartGroup[] = [
 	{
 		id: "stairs",
 		label: "Stairs",
-		partsLabel: "Platform size",
-		parts: [{ id: "stairs", label: "1 m wide", profileId: "d5982d33-9723-5749-ade6-7be0e6b4adf1" }],
+		partsLabel: "Handrails",
+		parts: [
+			{ id: "stairs", label: "Without", profileId: "d5982d33-9723-5749-ade6-7be0e6b4adf1" },
+			{
+				id: "stairs-handrails",
+				label: "With",
+				profileId: "47662838-33b1-5fcc-9323-bb5840c1783f",
+			},
+		],
+	},
+	{
+		id: "handrail",
+		label: "Handrail",
+		partsLabel: "Part",
+		parts: [
+			{
+				id: "handrail",
+				label: "Handrail",
+				detail: "Any length, 1 m high",
+				profileId: "4397aea8-6e20-520c-aca4-a67de52bee92",
+			},
+		],
 	},
 ];
 

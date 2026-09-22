@@ -900,7 +900,7 @@ fn a_placed_chain_is_drawn_with_the_ends_chosen_for_it() {
         viz_scene::SceneryKind::Chain
     );
     assert_eq!(unchosen.chain, viz_scene::ChainRig::MotorTop);
-    assert!(!unchosen.deco && !unchosen.scissor_lift);
+    assert!(!unchosen.deco && unchosen.feet == viz_scene::RiserFeet::None);
 
     for (mode, rig) in [
         (light_fixture::ChainMode::Plain, viz_scene::ChainRig::Plain),
@@ -919,15 +919,79 @@ fn a_placed_chain_is_drawn_with_the_ends_chosen_for_it() {
     }
 }
 
-/// A stage element stands on a scissor lift; stage stairs are a riser too but never do.
+/// A stage element stands on what its profile says: a scissor lift or four regular feet. Stage
+/// stairs are a riser too and stand on neither.
 #[test]
-fn a_stage_element_stands_on_a_scissor_lift_and_stairs_do_not() {
-    let stage = compile(&[shipped_venue("venue--stage-element-2-1-m")]);
-    assert_eq!(stage.scene.scenery[0].kind, viz_scene::SceneryKind::Riser);
-    assert!(stage.scene.scenery[0].detail.scissor_lift);
-    let stairs = compile(&[shipped_venue("venue--stage-stairs")]);
-    assert_eq!(stairs.scene.scenery[0].kind, viz_scene::SceneryKind::Riser);
-    assert!(!stairs.scene.scenery[0].detail.scissor_lift);
+fn a_stage_element_stands_on_the_feet_its_profile_gives_it() {
+    for (name, kind, feet) in [
+        (
+            "venue--stage-element-2-1-m",
+            viz_scene::SceneryKind::Riser,
+            viz_scene::RiserFeet::Scissor,
+        ),
+        (
+            "venue--stage-deck-2-1-m",
+            viz_scene::SceneryKind::Riser,
+            viz_scene::RiserFeet::Fixed,
+        ),
+        // A flight of stairs is its own kind and stands on nothing but its own steps.
+        (
+            "venue--stage-stairs",
+            viz_scene::SceneryKind::Stairs,
+            viz_scene::RiserFeet::None,
+        ),
+    ] {
+        let compiled = compile(&[shipped_venue(name)]);
+        assert_eq!(compiled.scene.scenery[0].kind, kind, "{name}");
+        assert_eq!(compiled.scene.scenery[0].detail.feet, feet, "{name}");
+    }
+}
+
+/// A flight of stairs is told from a deck by its kind, and a railed flight carries its rails.
+#[test]
+fn a_flight_of_stairs_says_whether_it_carries_handrails() {
+    let plain = compile(&[shipped_venue("venue--stage-stairs")]);
+    assert!(!plain.scene.scenery[0].detail.handrails);
+    let railed = compile(&[shipped_venue("venue--stage-stairs-with-handrails")]);
+    assert_eq!(railed.scene.scenery[0].kind, viz_scene::SceneryKind::Stairs);
+    assert!(railed.scene.scenery[0].detail.handrails);
+}
+
+/// A handrail is the one shipped part that uses the Railing kind the Visualizer already built.
+#[test]
+fn a_handrail_is_the_part_that_uses_the_railing_kind() {
+    let compiled = compile(&[shipped_venue("venue--stage-handrail")]);
+    assert_eq!(
+        compiled.scene.scenery[0].kind,
+        viz_scene::SceneryKind::Railing
+    );
+}
+
+/// A show written before stairs were their own kind keeps its stairs.
+///
+/// Such a show carries a profile snapshot declaring itself a riser, with nothing but the word
+/// "stair" in its name to tell it from a deck — which is exactly how the plan told them apart then.
+/// A rename would have broken it, which is why the kind exists; the name still answers for the
+/// snapshots that were written without one.
+#[test]
+fn a_riser_that_calls_itself_stairs_is_still_built_as_stairs() {
+    let mut fixture = shipped_venue("venue--stage-stairs");
+    let mut profile = (*fixture.profile).clone();
+    let scenery = profile.scenery.as_mut().expect("the stairs are generated");
+    scenery.kind = light_fixture::ProfileSceneryKind::Riser;
+    scenery.feet = light_fixture::RiserFeet::Fixed;
+    profile.name = "Stage Stairs".into();
+    fixture.profile = Arc::new(profile);
+    let compiled = compile(&[fixture]);
+    assert_eq!(
+        compiled.scene.scenery[0].kind,
+        viz_scene::SceneryKind::Stairs
+    );
+    // Stairs stand on their own steps, so the feet the old snapshot declared are ignored.
+    assert_eq!(
+        compiled.scene.scenery[0].detail.feet,
+        viz_scene::RiserFeet::None
+    );
 }
 
 /// A curtain is the colour chosen for it; one nobody chose a colour for stays black serge.

@@ -39,18 +39,24 @@ export function trussCornerArmReach(size: Vec3, arms: readonly Vec3[], arm: Vec3
 	return size[axis] - (behind.length ? Math.min(...behind) : 0) / 2;
 }
 
-/** A deck on a scissor lift, a deck on regular feet, or stairs. */
+/** A deck on a scissor lift, a deck on regular feet, or a flight of stairs. */
 export function isStageElement(entity: Shape): boolean {
 	return (
 		entity.scenery?.kind === "riser" ||
+		entity.scenery?.kind === "stairs" ||
 		// A show made before the decks were generated names its own profile; it has no scenery.
 		/^Venue Stage (Deck|Element|Stairs)\b/iu.test(entity.fixtureProfile ?? "")
 	);
 }
 
+/** A handrail along the edge of a stage, generated at the length it is placed. */
+export function isRailing(entity: Shape): boolean {
+	return entity.scenery?.kind === "railing";
+}
+
 /** Whether the object's position is the floor under it rather than the centre of its box. */
 export function standsOnItsFeet(entity: Shape): boolean {
-	return isStageElement(entity);
+	return isStageElement(entity) || isRailing(entity);
 }
 
 export function isTruss(entity: Shape): boolean {
@@ -195,6 +201,36 @@ export function stageCorners(entity: Shape): Vec3[] {
 		for (const x of [-width / 2, width / 2])
 			for (const y of [-depth / 2, depth / 2]) corners.push(placedPoint(entity, [x, y, z]));
 	return corners;
+}
+
+/**
+ * The four edges a stage element is walked off: its top perimeter, in the order front, right,
+ * back, left, each running the way the element itself is turned.
+ *
+ * A handrail guards an edge, so it needs the line rather than the corners: a rail is laid on it
+ * from end to end, and the guarded side is whichever way the edge faces out of the footprint.
+ */
+export function stageEdges(entity: Shape): Segment[] {
+	const [width, depth, height] = entity.sizeMillimetres;
+	const top = standsOnItsFeet(entity) ? height : height / 2;
+	const at = (x: number, y: number) => placedPoint(entity, [x, y, top]);
+	const [left, right, front, back] = [-width / 2, width / 2, -depth / 2, depth / 2];
+	return [
+		{ start: at(left, front), end: at(right, front) },
+		{ start: at(right, front), end: at(right, back) },
+		{ start: at(right, back), end: at(left, back) },
+		{ start: at(left, back), end: at(left, front) },
+	];
+}
+
+/** A handrail's foot line along the bottom of its run: the middle of it and both ends. */
+export function railingFoot(entity: Shape): { centre: Vec3; ends: [Vec3, Vec3] } | null {
+	if (!isRailing(entity)) return null;
+	const [width] = entity.sizeMillimetres;
+	return {
+		centre: placedPoint(entity, [0, 0, 0]),
+		ends: [placedPoint(entity, [-width / 2, 0, 0]), placedPoint(entity, [width / 2, 0, 0])],
+	};
 }
 
 /** A curtain's rail along its top edge: the middle of it and both ends. */

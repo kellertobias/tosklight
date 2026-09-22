@@ -701,6 +701,8 @@ pub enum SceneryKind {
     Floor,
     Wall,
     Riser,
+    /// A flight of steps up onto a deck: treads and risers, and a handrail when it carries one.
+    Stairs,
     Truss,
     /// A hanging drape, drawn with folds rather than as a flat slab.
     Curtain,
@@ -731,9 +733,26 @@ pub struct SceneryDetail {
     /// A snapshot written before the rig was carried reads as a plain chain.
     #[serde(default)]
     pub chain: ChainRig,
-    /// A stage element standing on a scissor lift rather than a solid block. Stairs never are.
+    /// What a stage element stands on between the floor and its deck. Stairs stand on their own
+    /// steps and every other kind on nothing, which is what a snapshot written before feet could
+    /// be chosen reads as.
     #[serde(default)]
-    pub scissor_lift: bool,
+    pub feet: RiserFeet,
+    /// Whether the object carries a handrail of its own, as a flight of stairs may up each side.
+    #[serde(default)]
+    pub handrails: bool,
+}
+
+/// What a generated stage element stands on.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum RiserFeet {
+    /// Not a deck raised off the floor: a flight of stairs, or an object that is not a riser.
+    #[default]
+    None,
+    /// Crossed arms over a base frame, as a lift deck is raised.
+    Scissor,
+    /// Four fixed legs under the corners of the deck, as a staging deck is built.
+    Fixed,
 }
 
 /// How one chain is rigged. A hoist hangs at one end and a steelflex wraps the truss at the other;

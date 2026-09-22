@@ -525,6 +525,8 @@ fn truss_scenery(section: f32) -> light_fixture::ProfileScenery {
             z: section,
         },
         pattern: Default::default(),
+        feet: Default::default(),
+        handrails: false,
     }
 }
 

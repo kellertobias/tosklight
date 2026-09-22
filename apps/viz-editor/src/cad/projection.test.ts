@@ -849,6 +849,138 @@ describe("CAD plan projections", () => {
 		expect(slanted(riser("Treppe", "left_to_right", 1200, "stage_stairs"))).toHaveLength(0);
 	});
 
+	it("stands a deck on regular feet on one leg under each corner", () => {
+		const deck = (view: CadViewDirection, height: number) =>
+			entityPlanGeometry(
+				{
+					...movingLight,
+					name: "Stage Deck 2 × 1 m",
+					kind: "venue",
+					fixtureType: "venue",
+					sizeMillimetres: [2000, 1000, height],
+					scenery: { kind: "riser", chords: 0, pattern: "standard", feet: "fixed" },
+				},
+				undefined,
+				view,
+			);
+		const front = deck("front_to_back", 600);
+		// Nothing is slanted: regular feet are legs, not scissor arms, and there is no pivot.
+		expect(
+			front.lines.filter(
+				({ points: [[ax, ay], [bx, by]] }) => Math.abs(by - ay) > 1 && Math.abs(bx - ax) > 1,
+			),
+		).toHaveLength(0);
+		expect(front.outlines.filter((outline) => outline.length === 10)).toHaveLength(0);
+		// The top is drawn whole, its surface at the placed height, 40 mm thick over the legs.
+		expect(front.outlines).toHaveLength(1);
+		const top = extent(front.outlines[0]);
+		expect([Math.round(top.width), Math.round(top.height)]).toEqual([2000, 40]);
+		expect(top.centre).toBeCloseTo(580, 3);
+		// A leg under each corner carries it from the floor, its outer face flush with the deck's
+		// edge. Each leg's own top edge is under the deck, so only its other three are drawn.
+		const legEdges = front.lines.flatMap(({ points }) => points);
+		expect(Math.min(...legEdges.map(([, y]) => y))).toBeCloseTo(0, 3);
+		expect(Math.max(...legEdges.map(([, y]) => y))).toBeCloseTo(560, 3);
+		expect([...new Set(legEdges.map(([x]) => Math.round(x)))].sort((a, b) => a - b)).toEqual([
+			-1000, -940, 940, 1000,
+		]);
+		// Seen from above a deck is its platform, the same as any other stage element.
+		expect(deck("top_down", 600).outlines).toHaveLength(2);
+	});
+
+	it("keeps drawing a withdrawn deck on fixed legs from a show that still holds one", () => {
+		// The fifteen decks on fixed legs were withdrawn from the library once the three generated
+		// ones could be built to any height. A show that patched one carries its own copy of that
+		// profile, which has no scenery at all, so its name is the only thing that says what it is.
+		const legged = entityPlanGeometry(
+			{
+				...movingLight,
+				name: "Stage Deck 2 × 1 m, Legs 0.4 m",
+				fixtureProfile: "Venue Stage Deck 2 × 1 m, Legs 0.4 m",
+				kind: "venue",
+				fixtureType: "venue",
+				sizeMillimetres: [2000, 1000, 440],
+			} as CadEntity,
+			undefined,
+			"front_to_back",
+		);
+		// It still stands on its feet and still draws its legs, not a scissor lift.
+		const ys = [...legged.outlines.flat(), ...legged.lines.flatMap(({ points }) => points)].map(
+			([, y]) => y,
+		);
+		expect(Math.min(...ys)).toBeCloseTo(0, 3);
+		expect(Math.max(...ys)).toBeCloseTo(440, 3);
+		expect(
+			legged.lines.filter(
+				({ points: [[ax, ay], [bx, by]] }) => Math.abs(by - ay) > 1 && Math.abs(bx - ax) > 1,
+			),
+		).toHaveLength(0);
+	});
+
+	it("builds a flight of stairs from the kind its profile declares, handrails and all", () => {
+		const flight = (handrails: boolean, view: CadViewDirection = "front_to_back") =>
+			entityPlanGeometry(
+				{
+					...movingLight,
+					name: "Stage Stairs",
+					kind: "venue",
+					fixtureType: "venue",
+					sizeMillimetres: [1000, 2800, 600],
+					scenery: { kind: "stairs", chords: 0, pattern: "standard", handrails },
+				},
+				undefined,
+				view,
+			);
+		const heights = (geometry: ReturnType<typeof flight>) =>
+			[
+				...geometry.triangles.flatMap(({ points }) => points),
+				...geometry.outlines.flat(),
+				...geometry.lines.flatMap(({ points }) => points),
+			].map(([, y]) => y);
+		// Three 200 mm rises to a 600 mm deck: the flight stands on the floor and meets the deck.
+		const plain = flight(false);
+		expect(Math.min(...heights(plain))).toBeCloseTo(0, 3);
+		expect(Math.max(...heights(plain))).toBeCloseTo(600, 3);
+		// Each step is a block from the floor to its own nosing, so a nosing sits at every rise.
+		const nosings = [...new Set(heights(plain).map((y) => Math.round(y)))].sort((a, b) => a - b);
+		expect(nosings).toEqual([0, 200, 400, 600]);
+		// A rail post stands on every nosing and the rail follows the climb above them.
+		const railed = flight(true);
+		expect(Math.max(...heights(railed))).toBeCloseTo(1200, 3);
+		expect(railed.lines.length).toBeGreaterThan(plain.lines.length);
+	});
+
+	it("draws a handrail as posts under a top rail and a knee rail, standing on its own feet", () => {
+		const rail = (view: CadViewDirection) =>
+			entityPlanGeometry(
+				{
+					...movingLight,
+					name: "Stage Handrail",
+					kind: "venue",
+					fixtureType: "venue",
+					sizeMillimetres: [4000, 40, 1000],
+					scenery: { kind: "railing", chords: 0, pattern: "standard" },
+				},
+				undefined,
+				view,
+			);
+		const front = rail("front_to_back");
+		const ys = [
+			...front.triangles.flatMap(({ points }) => points),
+			...front.outlines.flat(),
+			...front.lines.flatMap(({ points }) => points),
+		].map(([, y]) => y);
+		// It stands on the floor it is placed on and reaches its own height, like a stage element.
+		expect(Math.min(...ys)).toBeCloseTo(0, 3);
+		expect(Math.max(...ys)).toBeCloseTo(1000, 3);
+		// Two rails run the whole length: a top rail and a knee rail.
+		const bands = front.outlines.map(extent).filter(({ width }) => Math.round(width) === 4000);
+		expect(bands).toHaveLength(2);
+		// Seen from above it is the thin line of its own run.
+		const plan = extent(rail("top_down").outlines[0]);
+		expect([Math.round(plan.width), Math.round(plan.height)]).toEqual([4000, 40]);
+	});
+
 	it("stands a stage element and stairs on their origin and raises the deck with the height", () => {
 		const elevation = (name: string, view: CadViewDirection, height: number) => {
 			const geometry = entityPlanGeometry(
@@ -877,10 +1009,10 @@ describe("CAD plan projections", () => {
 				// The feet stay on the origin; only the deck moves.
 				expect(low.bottom, `${name} ${view}`).toBeCloseTo(0, 3);
 				expect(high.bottom, `${name} ${view}`).toBeCloseTo(0, 3);
-				if (name.startsWith("Stage element")) {
-					expect(low.top, `${name} ${view}`).toBeCloseTo(300, 3);
-					expect(high.top, `${name} ${view}`).toBeCloseTo(1100, 3);
-				} else expect(high.top - low.top, `${name} ${view}`).toBeCloseTo(800 * 0.97, 3);
+				// A flight of stairs climbs to the height it is placed at, as a deck's surface
+				// does, so a flight set to a deck's height meets that deck.
+				expect(low.top, `${name} ${view}`).toBeCloseTo(300, 3);
+				expect(high.top, `${name} ${view}`).toBeCloseTo(1100, 3);
 			}
 		// From above, the footprint stays centred on the origin.
 		const plan = elevation("Stage element 2x1", "top_down", 1100);

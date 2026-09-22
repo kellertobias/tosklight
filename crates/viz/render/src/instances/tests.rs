@@ -869,7 +869,8 @@ fn the_cells_of_a_bar_keep_their_own_lenses() {
 mod lines_view {
     use super::*;
     use viz_scene::{
-        ChainRig, FixtureModel, ModelPart, ModelPartKind, SceneryKind, SceneryObject, ViewMode,
+        ChainRig, FixtureModel, ModelPart, ModelPartKind, RiserFeet, SceneryKind, SceneryObject,
+        ViewMode,
     };
 
     fn lines_style() -> FrameStyle {
@@ -1218,12 +1219,13 @@ mod lines_view {
         }
     }
 
-    /// A stage element stands on a scissor lift; stairs, a riser without the flag, stay a block.
+    /// A stage element is built on what it stands on: a scissor lift, four regular feet, or — for
+    /// stairs, a riser that stands on neither — the plain block every other kind is.
     #[test]
-    fn a_stage_element_stands_on_a_scissor_lift_and_stairs_do_not() {
+    fn a_stage_element_is_built_on_the_feet_it_stands_on() {
         let mut stage = scenery(SceneryKind::Riser);
         stage.size = Vec3::new(2.0, 1.0, 1.0);
-        stage.detail.scissor_lift = true;
+        stage.detail.feet = RiserFeet::Scissor;
         let lifted = drawn(stage.clone());
         assert_eq!(
             mesh_count(&lifted, MeshKind::Cube),
@@ -1235,10 +1237,40 @@ mod lines_view {
             "arms and a pivot tube"
         );
 
-        stage.detail.scissor_lift = false;
-        let stairs = drawn(stage);
-        assert_eq!(mesh_count(&stairs, MeshKind::Cube), 1);
-        assert_eq!(mesh_count(&stairs, MeshKind::Cylinder), 0);
+        stage.detail.feet = RiserFeet::Fixed;
+        let legged = drawn(stage.clone());
+        assert_eq!(mesh_count(&legged, MeshKind::Cube), 5, "deck and four legs");
+        assert_eq!(
+            mesh_count(&legged, MeshKind::Cylinder),
+            0,
+            "regular feet are legs, not arms"
+        );
+
+        stage.detail.feet = RiserFeet::None;
+        let block = drawn(stage);
+        assert_eq!(mesh_count(&block, MeshKind::Cube), 1);
+        assert_eq!(mesh_count(&block, MeshKind::Cylinder), 0);
+    }
+
+    /// A flight of stairs climbs in fixed rises, and carries a rail up each side when it says so.
+    #[test]
+    fn a_flight_of_stairs_climbs_in_steps_and_carries_the_rails_it_declares() {
+        let mut stairs = scenery(SceneryKind::Stairs);
+        stairs.size = Vec3::new(1.0, 0.6, 2.8);
+        let plain = drawn(stairs.clone());
+        // 200 mm a step, so a 0.6 m flight is three blocks and nothing else.
+        assert_eq!(mesh_count(&plain, MeshKind::Cube), 3);
+        assert_eq!(mesh_count(&plain, MeshKind::Cylinder), 0);
+        // Twice as high is twice as many steps: the rise is fixed, the count is not.
+        stairs.size.y = 1.2;
+        assert_eq!(mesh_count(&drawn(stairs.clone()), MeshKind::Cube), 6);
+
+        stairs.size.y = 0.6;
+        stairs.detail.handrails = true;
+        let railed = drawn(stairs);
+        assert_eq!(mesh_count(&railed, MeshKind::Cube), 3, "the same steps");
+        // A post on every nosing up each side, and the rail over them: 2 x (4 posts + 1 rail).
+        assert_eq!(mesh_count(&railed, MeshKind::Cylinder), 10);
     }
 
     /// Deco truss crosses its diagonals, so the same length carries more bracing.

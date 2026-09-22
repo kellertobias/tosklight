@@ -462,7 +462,17 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
         ),
         (
             "venue--stage-stairs.toskfixture",
-            ProfileSceneryKind::Riser,
+            ProfileSceneryKind::Stairs,
+            0,
+        ),
+        (
+            "venue--stage-stairs-with-handrails.toskfixture",
+            ProfileSceneryKind::Stairs,
+            0,
+        ),
+        (
+            "venue--stage-handrail.toskfixture",
+            ProfileSceneryKind::Railing,
             0,
         ),
         (
@@ -3860,4 +3870,45 @@ fn a_profile_without_a_clip_reads_as_declaring_none() {
         json.get("mounting").is_none(),
         "an absent clip is not written"
     );
+}
+
+/// Stairs and handrails are generated parts of their own kind.
+///
+/// A flight of stairs used to declare itself a riser and was told from a deck only by having
+/// "stair" in its name, which a rename broke. It is its own kind now, in a plain and a railed
+/// variant, and the handrail — a kind the Visualizer has been able to build all along — finally
+/// has a profile pointing at it.
+#[test]
+fn shipped_stage_access_parts_declare_their_own_kinds() {
+    for (filename, handrails) in [
+        ("venue--stage-stairs.toskfixture", false),
+        ("venue--stage-stairs-with-handrails.toskfixture", true),
+    ] {
+        let profile = shipped_profile(filename);
+        let scenery = profile.scenery.expect(filename);
+        assert_eq!(scenery.kind, ProfileSceneryKind::Stairs, "{filename}");
+        assert_eq!(scenery.handrails, handrails, "{filename}");
+        // A flight is cut to the opening it serves, so all three of its measurements are set.
+        assert!(
+            scenery.adjustable.width && scenery.adjustable.height && scenery.adjustable.depth,
+            "{filename}"
+        );
+        assert_eq!(profile.patch_policy, PatchPolicy::VisualOnly, "{filename}");
+        // Nothing here is told apart by its name any more.
+        assert_eq!(scenery.feet, RiserFeet::Scissor, "{filename}");
+    }
+    // The two flights are separate parts, so they cannot share an identity.
+    assert_ne!(
+        shipped_profile("venue--stage-stairs.toskfixture").id,
+        shipped_profile("venue--stage-stairs-with-handrails.toskfixture").id
+    );
+
+    let rail = shipped_profile("venue--stage-handrail.toskfixture")
+        .scenery
+        .expect("the handrail ships");
+    assert_eq!(rail.kind, ProfileSceneryKind::Railing);
+    // A stage edge guard is a fixed height and no deeper than its posts; only its run is set.
+    assert!(rail.adjustable.width && !rail.adjustable.height && !rail.adjustable.depth);
+    assert_eq!(rail.default_size_metres.y, 1.0);
+    assert!(rail.minimum_size_metres.x <= 0.4 && rail.maximum_size_metres.x >= 24.0);
 }

@@ -1,8 +1,14 @@
-//! A stage element as it is built: a deck on top, a base frame on the floor and scissor lift arms
-//! between them.
+//! A stage element as it is built: a deck on top and what raises it under that.
 //!
-//! The arms cross in an X on both long sides with a cross tube through their pivot. A high deck
-//! gets more scissor stages stacked on each other, so no arm runs steeper than a real lift's.
+//! A deck on a scissor lift has a base frame on the floor and arms crossing in an X on both long
+//! sides with a cross tube through their pivot. A high deck gets more scissor stages stacked on
+//! each other, so no arm runs steeper than a real lift's.
+//!
+//! A deck on regular feet has one leg under each corner instead, the way a staging deck is built:
+//! the legs are the rise and the deck's top is its own thickness above them.
+//!
+//! A flight of stairs climbs to the same height in fixed rises, with a rail up each side when it
+//! carries them, and stands on its own steps rather than on anything under it.
 
 use super::super::{FrameInstances, MeshInstance, MeshKind};
 use super::push_tube;
@@ -17,14 +23,71 @@ const RAIL: f32 = 0.05;
 const ARM_RADIUS: f32 = 0.02;
 /// The steepest an arm runs from the horizontal.
 const MAX_ARM_DEGREES: f32 = 40.0;
-/// Painted steel for the lift and the frame.
+/// Painted steel for the lift, the frame and the legs.
 const STEEL: Vec3 = Vec3::new(0.05, 0.05, 0.055);
+/// The top a deck on fixed legs is built with; a very low deck gets a proportionally thinner one.
+const TOP: f32 = 0.04;
+/// Section of a fixed leg, as a staging leg is made.
+const LEG: f32 = 0.06;
 
 /// How many scissor stages lift a deck `rise` metres with arms running `run` metres, so no arm is
 /// steeper than [`MAX_ARM_DEGREES`].
 pub(super) fn scissor_stages(rise: f32, run: f32) -> usize {
     let per_stage = run.max(0.01) * MAX_ARM_DEGREES.to_radians().tan();
     ((rise / per_stage).ceil() as usize).clamp(1, 32)
+}
+
+/// A deck standing on one fixed leg under each corner, raised to the element's height.
+///
+/// A leg stands under a corner with its outer faces flush with the deck's edges, so it is under
+/// the deck rather than beside it, and it carries the top from the floor to its underside: the
+/// deck's surface is exactly the height the element is placed at.
+pub(super) fn push_fixed_legs(
+    frame: &mut FrameInstances,
+    object: &SceneryObject,
+    orientation: Quat,
+    colour: Vec3,
+) {
+    let size = object.size.max(Vec3::splat(0.02));
+    let height = size.y;
+    let up = orientation * Vec3::Y;
+    let along = orientation * Vec3::X;
+    let beside = orientation * Vec3::Z;
+    let floor = object.position - up * (height * 0.5);
+    let cube = |frame: &mut FrameInstances, scale: Vec3, centre: Vec3, colour, rough, metal| {
+        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+            Mat4::from_scale_rotation_translation(scale, orientation, centre),
+            colour,
+            rough,
+            Vec3::ZERO,
+            metal,
+        ));
+    };
+
+    let top = TOP.min(height * 0.4);
+    cube(
+        frame,
+        Vec3::new(size.x, top, size.z),
+        floor + up * (height - top * 0.5),
+        colour,
+        object.roughness,
+        0.0,
+    );
+
+    let leg = LEG.min(size.x * 0.4).min(size.z * 0.4);
+    let rise = height - top;
+    if rise <= 0.0 {
+        return;
+    }
+    for x in [1.0, -1.0] {
+        for z in [1.0, -1.0] {
+            let corner = floor
+                + along * ((size.x - leg) * 0.5 * x)
+                + beside * ((size.z - leg) * 0.5 * z)
+                + up * (rise * 0.5);
+            cube(frame, Vec3::new(leg, rise, leg), corner, STEEL, 0.5, 0.6);
+        }
+    }
 }
 
 pub(super) fn push_scissor_stage(
@@ -142,5 +205,91 @@ mod tests {
         }
         assert_eq!(scissor_stages(0.5, 1.8), 1);
         assert!(scissor_stages(2.5, 0.8) > 3);
+    }
+}
+
+/// A stair's tread depth and rise, as a set of stage steps is built: 200 mm up, 280 mm along.
+const STEP_RISE: f32 = 0.2;
+const STEP_RUN: f32 = 0.28;
+/// A handrail's post and rail sections, and how high the rail stands above the nosing.
+const RAIL_RADIUS: f32 = 0.02;
+const RAIL_HEIGHT: f32 = 0.9;
+
+/// A flight of stairs: treads climbing the run, and a rail up each side when it carries them.
+///
+/// The steps climb along the flight's longer horizontal side, from the floor at the low end to
+/// the top at the high end, so a flight set to a deck's height meets that deck's surface. The
+/// number of steps follows the height rather than the depth, because a set of stage steps is made
+/// in fixed rises and what changes is how many of them there are.
+pub(super) fn push_stairs(
+    frame: &mut FrameInstances,
+    object: &SceneryObject,
+    orientation: Quat,
+    colour: Vec3,
+) {
+    let size = object.size.max(Vec3::splat(0.02));
+    let height = size.y;
+    let long_x = size.x >= size.z;
+    let (run, width) = if long_x {
+        (size.x, size.z)
+    } else {
+        (size.z, size.x)
+    };
+    let up = orientation * Vec3::Y;
+    let along = orientation * if long_x { Vec3::X } else { Vec3::Z };
+    let beside = orientation * if long_x { Vec3::Z } else { Vec3::X };
+    let floor = object.position - up * (height * 0.5);
+    let steps = ((height / STEP_RISE).round() as usize).clamp(1, 24);
+    let rise = height / steps as f32;
+    // The treads share the run between them, however deep the flight was placed.
+    let tread = run / steps as f32;
+    for index in 0..steps {
+        // Each step is a block from the floor to its own nosing, so the flight reads as solid.
+        let top = rise * (index + 1) as f32;
+        let centre = floor + along * (-run * 0.5 + tread * (index as f32 + 0.5)) + up * (top * 0.5);
+        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+            Mat4::from_scale_rotation_translation(
+                Vec3::new(
+                    if long_x { tread } else { width },
+                    top,
+                    if long_x { width } else { tread },
+                ),
+                orientation,
+                centre,
+            ),
+            colour,
+            object.roughness,
+            Vec3::ZERO,
+            0.0,
+        ));
+    }
+    if !object.detail.handrails {
+        return;
+    }
+    // A rail up each side, its posts standing on the nosings and its rail following the climb.
+    for side in [1.0, -1.0] {
+        let edge = beside * (width * 0.5 - RAIL_RADIUS) * side;
+        let nosing = |index: usize| {
+            floor + edge + along * (-run * 0.5 + tread * index as f32) + up * (rise * index as f32)
+        };
+        for index in 0..=steps {
+            let foot = nosing(index);
+            push_tube(
+                frame,
+                foot,
+                foot + up * RAIL_HEIGHT,
+                RAIL_RADIUS,
+                STEEL,
+                0.45,
+            );
+        }
+        push_tube(
+            frame,
+            nosing(0) + up * RAIL_HEIGHT,
+            nosing(steps) + up * RAIL_HEIGHT,
+            RAIL_RADIUS,
+            STEEL,
+            0.45,
+        );
     }
 }

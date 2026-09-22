@@ -803,6 +803,10 @@ pub struct ProfileScenery {
     /// which is what the shipped stage elements were until fixed feet were generated too.
     #[serde(default, skip_serializing_if = "RiserFeet::is_scissor")]
     pub feet: RiserFeet,
+    /// Whether the object carries a handrail of its own: a flight of stairs with one up each side.
+    /// Every other kind ignores it, and everything written before the choice existed has none.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub handrails: bool,
 }
 
 /// What a stage element stands on between the floor and its deck.
@@ -854,6 +858,9 @@ pub struct SceneryAxes {
 #[serde(rename_all = "snake_case")]
 pub enum ProfileSceneryKind {
     Riser,
+    /// A flight of steps up onto a deck. It stands on its own steps rather than on feet, and is
+    /// walked on and occludes like a riser, but it is not one: nothing raises or lowers it.
+    Stairs,
     Truss,
     Curtain,
     Railing,

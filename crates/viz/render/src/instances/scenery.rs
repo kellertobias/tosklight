@@ -8,7 +8,9 @@
 use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind};
 use glam::{Mat4, Quat, Vec3};
 use std::collections::HashSet;
-use viz_scene::{Scene, SceneValues, SceneryKind, SceneryObject, euler_degrees, uuid::Uuid};
+use viz_scene::{
+    RiserFeet, Scene, SceneValues, SceneryKind, SceneryObject, euler_degrees, uuid::Uuid,
+};
 
 pub(super) fn push_scenery(
     frame: &mut FrameInstances,
@@ -94,9 +96,13 @@ fn push_object(
         SceneryKind::Railing => push_railing(frame, object, orientation, colour),
         SceneryKind::MirrorBall => push_mirror_ball(frame, object, orientation),
         SceneryKind::Chain => chain::push_chain(frame, object, orientation, colour, chords),
-        SceneryKind::Riser if object.detail.scissor_lift => {
+        SceneryKind::Riser if object.detail.feet == RiserFeet::Scissor => {
             riser::push_scissor_stage(frame, object, orientation, colour)
         }
+        SceneryKind::Riser if object.detail.feet == RiserFeet::Fixed => {
+            riser::push_fixed_legs(frame, object, orientation, colour)
+        }
+        SceneryKind::Stairs => riser::push_stairs(frame, object, orientation, colour),
         SceneryKind::Cylinder => push_primitive(frame, object, orientation, MeshKind::Cylinder),
         SceneryKind::Sphere => push_primitive(frame, object, orientation, MeshKind::Sphere),
         SceneryKind::Floor

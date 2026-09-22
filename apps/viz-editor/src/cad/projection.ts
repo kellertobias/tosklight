@@ -2,7 +2,11 @@ import { audienceOutlineFor, audienceStrokesFor } from "./audienceOutline";
 import { chainPlan } from "./chainPlan";
 import { curtainPlan } from "./curtainPlan";
 import { hideCoveredEdges } from "./hiddenLines";
-import { modelDrawingGeometry } from "./modelDrawing";
+import {
+	bakedYawQuarterTurns,
+	lampRelativeView,
+	modelDrawingGeometry,
+} from "./modelDrawing";
 import { trussPlan } from "./trussPlan";
 import type {
 	CadDrawing,
@@ -29,6 +33,12 @@ export interface PlanGeometry {
 	triangles: PlanTriangle[];
 	outlines: PlanPoint[][];
 	lines: PlanLine[];
+	/**
+	 * How much of the entity's yaw this geometry already shows, in quarter turns, because reading
+	 * the drawing of another side answered it. Whatever turns the geometry on the page afterwards
+	 * has that much less to turn; see `planBasis`.
+	 */
+	yawQuarterTurnsShown?: number;
 }
 
 interface Polygon {
@@ -125,15 +135,25 @@ function orientedPlanGeometry(
 				entity.rotationDegrees[2],
 			);
 	if (modelDrawing) return modelDrawing;
+	// A projection sheet keeps one drawing per side, so an elevation reads the side the lamp's yaw
+	// turns toward it, exactly as a model drawing does. Generated scenery is a volume rather than a
+	// body with sides, and keeps the sheet of the view asked for.
+	const quarters = entity.scenery
+		? 0
+		: bakedYawQuarterTurns(view, entity.rotationDegrees[2]);
+	const seen = entity.scenery
+		? view
+		: lampRelativeView(view, entity.rotationDegrees[2]);
 	const projection = drawing?.projections.find(
-		(candidate) => candidate.view === projectionViewForCad(view),
+		(candidate) => candidate.view === projectionViewForCad(seen),
 	);
 	if (projection) {
 		const parsed = parseProjection(
 			projection.svg,
 			projection.originMillimetres,
 		);
-		if (parsed.triangles.length) return parsed;
+		if (parsed.triangles.length)
+			return { ...parsed, yawQuarterTurnsShown: quarters };
 	}
 	return typedGeometry(entity, view, type);
 }
@@ -558,14 +578,27 @@ function typedGeometry(
 	) {
 		return chainPlan(entity.sizeMillimetres, view, scenery?.chain, scenery?.anchor);
 	} else if (
+		scenery?.kind === "railing" ||
+		(!scenery && /railing|handrail/.test(type))
+	) {
+		polygons = railing(horizontal, vertical, view === "top_down");
+	} else if (
 		scenery?.kind === "riser" ||
+		scenery?.kind === "stairs" ||
 		/stage element|riser|stage deck|stairs/.test(type)
 	) {
 		polygons = stage(
 			horizontal,
 			vertical,
 			view === "top_down",
-			/stair/.test(type),
+			// A flight of stairs is its own kind now. One from a show made before that declares
+			// itself a riser and says stairs only in its name, which is how every stair was told
+			// from a deck until the kind existed, so a riser that calls itself stairs still is.
+			scenery?.kind === "stairs" || /stair/.test(type),
+			// A deck from a show made before the decks were generated carries no scenery, and its
+			// name is the only thing that says it stands on regular feet.
+			scenery ? scenery.feet === "fixed" : /stage deck/.test(type),
+			Boolean(scenery?.handrails),
 		);
 	} else if (
 		scenery?.kind === "curtain" ||
@@ -763,6 +796,8 @@ function stage(
 	height: number,
 	top: boolean,
 	stairs: boolean,
+	fixedFeet: boolean,
+	handrails = false,
 ): Polygon[] {
 	const w = Math.max(300, width);
 	const h = Math.max(120, height);
@@ -773,13 +808,82 @@ function stage(
 		];
 	// In an elevation a stage element stands on its origin, the floor its feet are on, and rises
 	// its height from there, as it does in the Visualizer.
-	if (stairs)
-		return [
-			rect(-w / 2, h * 0.75, w, h * 0.22, DETAIL),
-			rect(-w * 0.44, 0, w * 0.08, h * 0.75, BODY),
-			rect(w * 0.36, 0, w * 0.08, h * 0.75, BODY),
-		];
-	return scissorStage(w, h);
+	if (stairs) return stairFlight(w, h, handrails);
+	return fixedFeet ? leggedStage(w, h) : scissorStage(w, h);
+}
+
+/** How high a handrail stands above what it guards, in millimetres, on stairs and along an edge. */
+const RAIL_HEIGHT = 900;
+/** The section a rail and its posts are drawn at. */
+const RAIL_SECTION = 40;
+
+/**
+ * A flight of stairs from the front or side: its steps climbing to the height it is placed at,
+ * and a rail over the nosings when it carries one, the way `push_stairs` builds it.
+ */
+function stairFlight(w: number, h: number, handrails: boolean): Polygon[] {
+	const steps = Math.min(24, Math.max(1, Math.round(h / 200)));
+	const rise = h / steps;
+	const tread = w / steps;
+	const polygons: Polygon[] = [];
+	for (let index = 0; index < steps; index += 1)
+		polygons.push(rect(-w / 2 + tread * index, 0, tread, rise * (index + 1), BODY));
+	if (!handrails) return polygons;
+	// The rail follows the nosings, so in elevation it is a band of the same climb one rail-height
+	// above the steps; the end posts stand from the first and last nosing up to it.
+	const rail = Math.min(RAIL_HEIGHT, Math.max(200, h));
+	for (let index = 0; index <= steps; index += 1)
+		polygons.push(
+			rect(
+				-w / 2 + tread * index - RAIL_SECTION / 2,
+				rise * index,
+				RAIL_SECTION,
+				rail,
+				DETAIL,
+			),
+		);
+	return polygons;
+}
+
+/**
+ * A handrail: posts along its run with a top rail and a knee rail, the way `push_railing` builds
+ * it. Seen from above it is the thin line of its own section.
+ */
+function railing(width: number, height: number, top: boolean): Polygon[] {
+	const w = Math.max(200, width);
+	const h = Math.max(200, height);
+	if (top) return [rect(-w / 2, -Math.max(RAIL_SECTION, height) / 2, w, Math.max(RAIL_SECTION, height), BODY)];
+	// A railing stands on the floor it is placed on, like a stage element, so its rails are
+	// measured up from the origin rather than from the middle of a box.
+	const posts = Math.min(40, Math.max(2, Math.round(w / 1200)));
+	const polygons: Polygon[] = [];
+	for (let index = 0; index <= posts; index += 1)
+		polygons.push(rect(-w / 2 + (w * index) / posts - RAIL_SECTION / 2, 0, RAIL_SECTION, h, BODY));
+	for (const at of [h - RAIL_SECTION, h * 0.55])
+		polygons.push(rect(-w / 2, at, w, RAIL_SECTION, DETAIL));
+	return polygons;
+}
+
+/** The top a deck on regular feet is drawn with, and the section of one leg, in millimetres. */
+const DECK_TOP = 40;
+const DECK_LEG = 60;
+
+/**
+ * A deck on regular feet from the front or side: its top at the height it is placed, carried by
+ * one leg under each corner, the way `push_fixed_legs` builds it in the Visualizer.
+ */
+function leggedStage(w: number, h: number): Polygon[] {
+	const top = Math.min(DECK_TOP, h * 0.4);
+	const leg = Math.min(DECK_LEG, w * 0.4);
+	const rise = h - top;
+	const polygons: Polygon[] = [];
+	// A leg stands under a corner with its outer face flush with the deck's edge, as the legs are
+	// built in the Visualizer.
+	if (rise > 0)
+		for (const left of [-w / 2, w / 2 - leg])
+			polygons.push(rect(left, 0, leg, rise, BODY));
+	polygons.push(rect(-w / 2, rise, w, top, DETAIL));
+	return polygons;
 }
 
 /** Steepest a scissor arm is drawn, from horizontal; a taller rise stacks another X. */
