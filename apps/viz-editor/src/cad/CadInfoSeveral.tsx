@@ -6,8 +6,13 @@
  * an even spread as `first THRU last`, and takes a single value for all or a range to spread over the
  * selection in the order it was made. **Placement Assistant** lays them out along a line, in a grid
  * or around a circle. Bracket angle and barn doors are a lamp's, so Venue objects keep theirs.
+ *
+ * When every selected element was patched from the same model, **Shared model** follows: that
+ * model's own controls — a stage element's height, a truss's length, a placed model's scale, the
+ * options it is built with — named so it is plain what they reach, and written to the whole
+ * selection at once. A selection of mixed models has no such section.
  */
-import type { PatchFixtureProjection } from "@tosklight/patch";
+import type { PatchFixtureProjection, PatchProfileRevision } from "@tosklight/patch";
 import { Button } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import { documentSession } from "../document/session";
@@ -15,6 +20,14 @@ import { TauriPatchTransport } from "../document/transport";
 import type { SelectedElement } from "./CadDeleteSelection";
 import { CommitText } from "./cadFields";
 import { CadPlacementAssistant } from "./CadPlacementAssistant";
+import { SceneryParameters } from "./CadInfoFields";
+import {
+	type SharedModel,
+	sharedModel,
+	sharedModelFields,
+	type ThruFieldSpec,
+	THRU_FIELDS,
+} from "./thruFields";
 import { describeRange, describeThru, parseThru, spreadThru } from "./thruValues";
 import "./cadInfo.css";
 
@@ -60,78 +73,13 @@ export function SelectedElementList({
 	);
 }
 
-interface ThruFieldSpec {
-	id: string;
-	label: string;
-	ariaLabel: string;
-	digits: number;
-	/** The unit a mixed field names its range in. */
-	unit: string;
-	/** Only a lamp has it; Venue objects in the selection are left out of the spread. */
-	lampsOnly?: boolean;
-	/** Empty is a value of its own — no barn doors fitted — rather than a refused edit. */
-	optional?: boolean;
-	read(fixture: PatchFixtureProjection): number | null;
-	write(fixture: PatchFixtureProjection, value: number | null): PatchFixtureProjection;
-}
-
-const AXES = ["x", "y", "z"] as const;
-
-const THRU_FIELDS: readonly ThruFieldSpec[] = [
-	...AXES.map(
-		(axis): ThruFieldSpec => ({
-			id: `position-${axis}`,
-			label: `${axis.toUpperCase()} (m)`,
-			ariaLabel: `Position ${axis.toUpperCase()}`,
-			digits: 3,
-			unit: "m",
-			read: (fixture) => fixture.location[axis] / 1000,
-			write: (fixture, metres) => ({
-				...fixture,
-				location: { ...fixture.location, [axis]: Math.round((metres ?? 0) * 1000) },
-			}),
-		}),
-	),
-	...AXES.map(
-		(axis): ThruFieldSpec => ({
-			id: `rotation-${axis}`,
-			label: `Rot ${axis.toUpperCase()} (°)`,
-			ariaLabel: `Rotation ${axis.toUpperCase()}`,
-			digits: 1,
-			unit: "°",
-			read: (fixture) => fixture.rotation[axis],
-			write: (fixture, degrees) => ({
-				...fixture,
-				rotation: { ...fixture.rotation, [axis]: degrees ?? 0 },
-			}),
-		}),
-	),
-	{
-		id: "bracket",
-		label: "Bracket angle (°)",
-		ariaLabel: "Bracket angle",
-		digits: 1,
-		unit: "°",
-		lampsOnly: true,
-		read: (fixture) => fixture.bracketAngle ?? 0,
-		write: (fixture, degrees) => ({ ...fixture, bracketAngle: degrees ?? 0 }),
-	},
-	{
-		id: "barndoors",
-		label: "Barndoors (°)",
-		ariaLabel: "Barndoors",
-		digits: 1,
-		unit: "°",
-		lampsOnly: true,
-		optional: true,
-		read: (fixture) => fixture.shaperAngle ?? null,
-		write: (fixture, degrees) => ({ ...fixture, shaperAngle: degrees }),
-	},
-];
-
-/** The selected fixtures as the patch holds them, in selection order. */
+/**
+ * The selected fixtures as the patch holds them, in selection order, with the profiles they were
+ * patched from — the same snapshot answers both, so the panel asks once.
+ */
 function useSelectedFixtures(ids: readonly string[], sceneRevision: number) {
 	const [fixtures, setFixtures] = useState<PatchFixtureProjection[]>([]);
+	const [revisions, setRevisions] = useState<readonly PatchProfileRevision[]>([]);
 	const key = ids.join(",");
 	useEffect(() => {
 		let current = true;
@@ -142,13 +90,18 @@ function useSelectedFixtures(ids: readonly string[], sceneRevision: number) {
 				if (!current) return;
 				const byId = new Map(snapshot.fixtures.map((each) => [each.fixtureId, each]));
 				setFixtures(wanted.flatMap((id) => byId.get(id) ?? []));
+				setRevisions(snapshot.profileRevisions ?? []);
 			})
-			.catch(() => current && setFixtures([]));
+			.catch(() => {
+				if (!current) return;
+				setFixtures([]);
+				setRevisions([]);
+			});
 		return () => {
 			current = false;
 		};
 	}, [key, sceneRevision]);
-	return [fixtures, setFixtures] as const;
+	return [fixtures, setFixtures, revisions] as const;
 }
 
 function ThruField({
@@ -180,6 +133,53 @@ function ThruField({
 	);
 }
 
+/**
+ * What the one model behind the whole selection lets the operator set, named so it is plain what
+ * the controls reach. A selection of mixed models has no such section and keeps the fields above.
+ */
+function SharedModelFields({
+	model,
+	count,
+	fallbackLabel,
+	fields,
+	fixtures,
+	onWrite,
+}: {
+	model: SharedModel;
+	count: number;
+	fallbackLabel: string;
+	fields: readonly ThruFieldSpec[];
+	fixtures: readonly PatchFixtureProjection[];
+	onWrite(next: PatchFixtureProjection[]): void;
+}) {
+	const parameters = model.scenery;
+	if (!fields.length && !parameters) return null;
+	// Every selected element carries the same options, so the first one's stand for the selection.
+	const options = fixtures[0]?.sceneryOptions ?? null;
+	return (
+		<section className="cad-shared-model" aria-label="Shared model">
+			<p className="cad-shared-model-name">
+				All {count} × {model.label || fallbackLabel}
+			</p>
+			<div className="cad-thru-fields">
+				{fields.map((spec) => (
+					<ThruField key={spec.id} spec={spec} targets={fixtures} onWrite={onWrite} />
+				))}
+			</div>
+			{parameters ? (
+				<SceneryParameters
+					scenery={parameters}
+					options={options}
+					shared=" (all selected)"
+					onCommit={(sceneryOptions) =>
+						onWrite(fixtures.map((fixture) => ({ ...fixture, sceneryOptions })))
+					}
+				/>
+			) : null}
+		</section>
+	);
+}
+
 export function SeveralPlacement({
 	elements,
 	sceneRevision,
@@ -189,12 +189,15 @@ export function SeveralPlacement({
 	sceneRevision: number;
 	onError(reason: unknown): void;
 }) {
-	const [fixtures, setFixtures] = useSelectedFixtures(
+	const [fixtures, setFixtures, revisions] = useSelectedFixtures(
 		elements.map((element) => element.id),
 		sceneRevision,
 	);
 	const [assisting, setAssisting] = useState(false);
 	const lamps = new Set(elements.filter((element) => element.isFixture).map((element) => element.id));
+	const model = sharedModel(fixtures, revisions);
+	const allVenue = elements.length > 0 && elements.every((element) => !element.isFixture);
+	const modelFields = model ? sharedModelFields(model, allVenue) : [];
 
 	async function write(next: PatchFixtureProjection[]) {
 		if (!next.length) return;
@@ -228,6 +231,16 @@ export function SeveralPlacement({
 			<p className="cad-thru-hint">
 				One value sets every element; <kbd>1 THRU 5</kbd> spreads from the first selected to the last.
 			</p>
+			{model ? (
+				<SharedModelFields
+					model={model}
+					count={fixtures.length}
+					fallbackLabel={elements[0]?.model ?? "the same model"}
+					fields={modelFields}
+					fixtures={fixtures}
+					onWrite={(next) => void write(next)}
+				/>
+			) : null}
 			<Button disabled={!fixtures.length} onClick={() => setAssisting(true)}>
 				Placement Assistant
 			</Button>

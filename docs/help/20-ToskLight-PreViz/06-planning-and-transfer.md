@@ -579,19 +579,22 @@ the key that picks it, such as **Draw line · L**. From left to right:
     **3-point regular**, **4-point** and **4-point large** — with the straight truss and, for
     **3-point regular** and **4-point**, the corner pieces made for that section. It places a
     **3-point regular** straight truss until you choose another.
-  * **Add stage element** (a deck on a scissor lift) lists the decks on **Regular feet** by platform
-    size and leg height, the decks on **Scissor feet** by platform size, and the **Stairs**. It places
-    a 2 × 1 m deck on scissor feet until you choose another.
+  * **Add stage element** (a deck raised off the floor) lists the decks on **Regular feet** and the
+    decks on **Scissor feet**, each by platform size, and the **Stairs**. Either kind of deck is
+    built to the height set in **Info**, so there is no part per leg height. It places a 2 × 1 m
+    deck on scissor feet until you choose another.
   * **Add curtain** (a drape on its rail) lists the parametric curtain, sized in **Info**, and the
     curtains made at a fixed width of 1, 2, 3, 5 and 6 m. It places the parametric curtain until you
     choose another.
   * **Add primitive** (a box, a ball and a cylinder) lists **Box**, **Cylinder** and **Ball**. Each
     fills the width, height and depth set in **Info** — a cylinder stands upright, so its height is its
     length — and takes the **Colour** set for it, neutral grey until you choose one.
-  * **Add venue element** (a box) opens a dialog listing every Venue object in this computer's fixture
-    library — trusses, decks, curtains, crowds, railings and imported venue models — each shown by its
-    picture on a dark ground. Type in the dialog's search to narrow the list by name or type, and
-    choose an object to place it.
+  * **Add venue element** (a box) opens a dialog listing the Venue objects in this computer's fixture
+    library that no button above places — railings, crowds, mirror balls, chain, PA and backline,
+    figures and imported venue models — each shown by its picture on a dark ground. The trusses,
+    decks, curtains and primitives are left out on purpose: place those from their own buttons and
+    part menus. Type in the dialog's search to narrow the list by name or type, and choose an object
+    to place it.
 
 A placed part goes to the stage origin with the next free virtual ID, the drawing shows it at once,
 and it is selected so **Info** opens to place it and set its size. A part whose profile is not in this
@@ -650,6 +653,15 @@ selected: along a **Line** from a start to an end, in a **Grid** from a start wi
 and a spacing across and deep, or around a **Circle** from its centre, radius, start angle and arc,
 where 360° spaces the elements evenly around the whole circle. Nothing moves until **Apply**.
 
+When every selected element was patched from the same model, **Shared model** follows the placement
+fields and names it — `All 4 × Generic Stage Element 2 × 1 m`. It carries that model's own controls:
+the measurements its profile lets you set, such as a stage element's **Height** or a truss's
+**Width**, or a placed model's **Scale**, and the **Parameters** it is built with. They read and
+spread like the fields above, one value for the whole selection or a range across it, and each
+measurement is held inside the range the profile allows. Sameness is the model itself: four 2 × 1 m
+stage elements share one, a 2 × 1 m beside a 1 × 1 m does not, and a mixed selection keeps the
+placement fields alone.
+
 The move gizmo stands on the selected element's own origin, or on the centre of a selected group.
 Drag an arrow to move along that axis, or the square to move freely. Holding Shift while dragging an
 arrow spreads the selection along it, from the first selected element to the last.
@@ -662,7 +674,7 @@ lands exactly on it, and a magenta diamond marks the fit while the drag holds it
 * **Trusses** join where their connectors meet: the ends of a straight truss, and the end of each
   arm of a corner, T-piece, cross or node, where the coupler egg sits. A corner block is 500 mm
   overall wherever it has arms, so adding arms makes it busier rather than bigger.
-* **Stage elements** — decks on scissor lifts, stairs and decks on fixed legs — put their corners
+* **Stage elements** — decks on scissor lifts, decks on regular feet and stairs — put their corners
   on another's corners, and in a side or front view their feet on another stage element's top. A
   stage element stands on its position: the position is the floor under the middle of its feet.
 * **Curtains** hang their rail just under a truss or pipe, and line their ends up with the ends of
@@ -681,14 +693,18 @@ of each fixture. It asks first. Shift-click it to delete a single selected eleme
 asked; several selected elements are always confirmed. **Undo** in the CAD title brings a deletion
 back.
 
-With **Select** in hand, right-click an element in a viewport for its menu: **Duplicate** and
-**Delete**. Lamps, trusses, stage parts and imported models all offer the same two. Right-clicking an
-element that belongs to the selection keeps the selection, so the menu acts on all of it; right-clicking
-another element selects it (with its group) first. A right-click on empty plan opens nothing, and while a
-drawing tool is in hand a right-click still finishes the line instead. From the keyboard, press the Menu
-key or Shift+F10 to open the menu for the selection, the arrow keys to move, Enter to choose and
+With **Select** in hand, right-click an element in a viewport for its menu: **Group**, **Ungroup**,
+**Duplicate** and **Delete**. Lamps, trusses, stage parts and imported models all offer Duplicate and
+Delete; **Group** and **Ungroup** stand above them and appear only when they would do something.
+Right-clicking an element that belongs to the selection keeps the selection, so the menu acts on all
+of it; right-clicking another element selects it (with its group) first. A right-click on empty plan
+opens nothing, and while a drawing tool is in hand a right-click still finishes the line instead.
+From the keyboard, press the Menu key or Shift+F10 to open the menu for the selection, the arrow keys to move, Enter to choose and
 Escape to close it.
 
+* **Group** and **Ungroup** are the same actions as ⌘G and ⇧⌘G and as the buttons at the top of
+  **Objects**, described under [Groups](#groups). **Group** shows when two or more selected Venue
+  elements are not already exactly one group, **Ungroup** when the selection touches a group.
 * **Duplicate** adds a copy of each selected element half a metre to the right of it, as the viewport
   you opened the menu in shows right. A copy is a new element with its own identity and the next free
   fixture (or virtual) number above its original's, keeps its profile, mode, size, rotation and name,
@@ -768,19 +784,20 @@ size in metres.
 ### Groups
 
 Select two or more Venue elements — the trusses of one rig, the decks of a stage — and press
-**Group** at the top of **Objects**, or ⌘G. The group is saved in the show as **Group 1**, **Group 2**
-and so on, and is listed under **Groups** above the other objects; its elements move there from the
-lists below. **▸** opens a group to show its members.
+**Group** at the top of **Objects**, ⌘G, or **Group** in the right-click menu of a viewport. The
+group is saved in the show as **Group 1**, **Group 2** and so on, and is listed under **Groups**
+above the other objects; its elements move there from the lists below. **▸** opens a group to show
+its members.
 
 A click selects the whole group: its row, one of its members in the list, or any of its elements in a
 view, and so does a selection rectangle that catches one of them. Hold **Shift** to take elements one
 at a time instead — Shift-click in a view adds or removes just that element, and Shift-click on a
 member in the list selects only that member. A selected group moves together with the gizmo, like any
-selection. **Ungroup**, or ⇧⌘G, dissolves every group the selection touches and leaves its elements
-where they are. An element is in one group at most: grouping it again takes it out of its old group. A
-deleted element leaves its group, and a group with no element left goes with it. **+** adds more: the same
-truss, stage element, curtain, primitive and venue element as the title, and **Import 3D model…**, which places a
-GLB, glTF, 3MF or OBJ file as described below and selects it. Select a row to select the object in the
+selection. **Ungroup** — at the top of **Objects**, in the right-click menu, or ⇧⌘G — dissolves
+every group the selection touches and leaves its elements where they are. An element is in one group
+at most: grouping it again takes it out of its old group. A deleted element leaves its group, and a
+group with no element left goes with it. **+** adds more: the same truss, stage element, curtain,
+primitive and venue element as the title, and **Import 3D model…**, which places a GLB, glTF, 3MF or OBJ file as described below and selects it. Select a row to select the object in the
 views; **Info** below then sets its position, rotation and scale.
 
 ## Place your own venue models

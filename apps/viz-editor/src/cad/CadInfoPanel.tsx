@@ -26,7 +26,7 @@ import { documentSession, type ProfileUpdate } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
 import { CommitNumber, CommitText, CommitTextArea } from "./cadFields";
 import { MountingFields, PatchFields, SceneryParameters } from "./CadInfoFields";
-import { SIZE_AXES } from "./sceneryAxes";
+import { hasAdjustableSize, placedSize, SIZE_AXES } from "./sceneryAxes";
 import type { CadEntity } from "./types";
 
 export type InfoTab = "generic" | "placement";
@@ -38,11 +38,6 @@ const AXES: readonly Axis[] = ["x", "y", "z"];
 /** Whether an element can be drawn at another size: placed Venue objects, except crowd areas. */
 export function supportsScale(entity: CadEntity): boolean {
 	return entity.kind === "venue" && entity.scenery?.kind !== "crowd";
-}
-
-/** Whether a generated object has any measurement the operator sets. */
-export function hasAdjustableSize(scenery: FixtureProfileScenery | null | undefined) {
-	return Boolean(scenery && SIZE_AXES.some(({ axis }) => scenery.adjustable[axis]));
 }
 
 type Placement = Pick<
@@ -63,19 +58,6 @@ export function withPlacement(
 			copy.id === copyId ? { ...copy, ...change } : copy,
 		),
 	};
-}
-
-/** The size an object is placed at in metres: what the patch stores, else its profile's default. */
-export function placedSize(
-	fixture: PatchFixtureProjection,
-	scenery: FixtureProfileScenery,
-): Record<Axis, number> {
-	const stored = fixture.scenerySizeMetres;
-	const axis = (key: Axis) =>
-		stored && Number.isFinite(stored[key]) && stored[key] > 0
-			? stored[key] / 1000
-			: scenery.default_size_metres[key];
-	return { x: axis("x"), y: axis("y"), z: axis("z") };
 }
 
 const transport = new TauriPatchTransport();
