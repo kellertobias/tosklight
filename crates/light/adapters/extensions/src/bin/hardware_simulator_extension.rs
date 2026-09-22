@@ -231,27 +231,39 @@ fn sha256_file(path: &Path) -> Result<String, String> {
         .collect())
 }
 
-fn simulator_controls() -> (
-    Vec<ControlDeclaration>,
-    BTreeMap<String, CanonicalControlIntent>,
-) {
-    let mut controls = Vec::new();
-    let mut bindings = BTreeMap::new();
-    let mut add = |id: String, kind: ControlKind, intent: CanonicalControlIntent| {
-        controls.push(ControlDeclaration {
+/// The control surface the simulator offers while it is being assembled. It
+/// carries both halves an extension has to declare: the controls the desk shows
+/// on the simulated panel, and the intent each one fires when an operator hits
+/// it.
+struct ControlSheet {
+    controls: Vec<ControlDeclaration>,
+    bindings: BTreeMap<String, CanonicalControlIntent>,
+}
+
+impl ControlSheet {
+    /// Records one control under an id and says what pressing or turning it
+    /// means to the desk.
+    fn add(&mut self, id: String, kind: ControlKind, intent: CanonicalControlIntent) {
+        self.controls.push(ControlDeclaration {
             id: id.clone(),
             kind,
         });
-        bindings.insert(id, intent);
-    };
-    add(
+        self.bindings.insert(id, intent);
+    }
+}
+
+/// Lays out the keypad half of the simulated desk: Record and Shift, the digits
+/// and operators an operator types on the command line, and the Menu key that
+/// leaves the command line for navigation.
+fn add_programmer_keys(sheet: &mut ControlSheet) {
+    sheet.add(
         "programmer-record".into(),
         ControlKind::Button,
         CanonicalControlIntent::ProgrammerKey {
             key: ProgrammerKey::Record,
         },
     );
-    add(
+    sheet.add(
         "programmer-shift".into(),
         ControlKind::Button,
         CanonicalControlIntent::Modifier {
@@ -295,27 +307,33 @@ fn simulator_controls() -> (
         ("page-down", ProgrammerKey::PageDown),
         ("align", ProgrammerKey::Align),
     ] {
-        add(
+        sheet.add(
             format!("programmer-{name}"),
             ControlKind::Button,
             CanonicalControlIntent::ProgrammerKey { key },
         );
     }
-    add(
+    sheet.add(
         "programmer-menu".into(),
         ControlKind::Button,
         CanonicalControlIntent::Navigation {
             action: NavigationAction::Menu,
         },
     );
+}
+
+/// Lays out the wheels and the movement keys beside them: the six encoders,
+/// each of which also presses, the four cursor keys, and the Highlight keys an
+/// operator uses to walk through the current selection.
+fn add_encoders_and_navigation(sheet: &mut ControlSheet) {
     for index in 1..=6 {
         let intent = CanonicalControlIntent::Encoder { index };
-        add(
+        sheet.add(
             format!("encoder-{index}-turn"),
             ControlKind::RelativeEncoder,
             intent.clone(),
         );
-        add(
+        sheet.add(
             format!("encoder-{index}-press"),
             ControlKind::Button,
             intent,
@@ -327,7 +345,7 @@ fn simulator_controls() -> (
         ("left", NavigationAction::Left),
         ("right", NavigationAction::Right),
     ] {
-        add(
+        sheet.add(
             format!("navigation-{name}"),
             ControlKind::Button,
             CanonicalControlIntent::Navigation { action },
@@ -339,25 +357,31 @@ fn simulator_controls() -> (
         ("next", HighlightControlAction::Next),
         ("all", HighlightControlAction::All),
     ] {
-        add(
+        sheet.add(
             format!("highlight-{name}"),
             ControlKind::Button,
             CanonicalControlIntent::Highlight { action },
         );
     }
+}
+
+/// Lays out the playback wing: ninety-six slots on the current page, each with
+/// three buttons and a motorised master fader, plus the five speed groups with
+/// their tap button and level encoder.
+fn add_playback_and_speed_groups(sheet: &mut ControlSheet) {
     for slot in 1..=96 {
         for (number, control) in [
             (1, PlaybackControl::ButtonOne),
             (2, PlaybackControl::ButtonTwo),
             (3, PlaybackControl::ButtonThree),
         ] {
-            add(
+            sheet.add(
                 format!("page-playback-{slot}-button-{number}"),
                 ControlKind::Button,
                 CanonicalControlIntent::PlaybackCurrent { slot, control },
             );
         }
-        add(
+        sheet.add(
             format!("page-playback-{slot}-fader"),
             ControlKind::MotorFader,
             CanonicalControlIntent::PlaybackCurrent {
@@ -368,7 +392,7 @@ fn simulator_controls() -> (
     }
     for (index, group) in ['A', 'B', 'C', 'D', 'E'].into_iter().enumerate() {
         let number = index + 1;
-        add(
+        sheet.add(
             format!("speed-group-{number}-button"),
             ControlKind::Button,
             CanonicalControlIntent::SpeedGroup {
@@ -376,7 +400,7 @@ fn simulator_controls() -> (
                 control: SpeedGroupControl::Tap,
             },
         );
-        add(
+        sheet.add(
             format!("speed-group-{number}-encoder"),
             ControlKind::AbsoluteEncoder,
             CanonicalControlIntent::SpeedGroup {
@@ -385,7 +409,22 @@ fn simulator_controls() -> (
             },
         );
     }
-    (controls, bindings)
+}
+
+/// Builds the full simulated control surface so the desk treats the simulator
+/// exactly like an attached hardware panel.
+fn simulator_controls() -> (
+    Vec<ControlDeclaration>,
+    BTreeMap<String, CanonicalControlIntent>,
+) {
+    let mut sheet = ControlSheet {
+        controls: Vec::new(),
+        bindings: BTreeMap::new(),
+    };
+    add_programmer_keys(&mut sheet);
+    add_encoders_and_navigation(&mut sheet);
+    add_playback_and_speed_groups(&mut sheet);
+    (sheet.controls, sheet.bindings)
 }
 
 fn run() -> Result<(), String> {

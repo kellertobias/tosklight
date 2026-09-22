@@ -6,6 +6,7 @@
 //! same scene, which is why the deltas below are broadcast rather than sent to one window.
 
 mod aim;
+mod layer_visibility;
 mod profile_drawing;
 mod scenery;
 
@@ -13,6 +14,9 @@ use crate::contract::{FixtureDto, MutationDto};
 use crate::session::Session;
 use aim::{CadAim, aim_lamps};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use layer_visibility::{
+    fixture_notes, hidden_fixture_ids, hidden_layers, locked_layers, selectable_ids,
+};
 use light_application::PatchSnapshot;
 use parking_lot::Mutex;
 use profile_drawing::{CadDrawing, drawing_id, drawings, new_drawings};
@@ -676,125 +680,6 @@ fn imported_model(profile: &serde_json::Value) -> bool {
         .get("manufacturer")
         .and_then(serde_json::Value::as_str)
         == Some(crate::venue_models::IMPORTED_MANUFACTURER)
-}
-
-fn locked_layers(session: &Session) -> Result<BTreeSet<String>, String> {
-    session.with(|document| {
-        document
-            .objects("patch_layer")
-            .map(|objects| {
-                objects
-                    .into_iter()
-                    .filter(|object| {
-                        object
-                            .body
-                            .get("locked")
-                            .and_then(serde_json::Value::as_bool)
-                            .unwrap_or(false)
-                    })
-                    .map(|object| object.id)
-                    .collect()
-            })
-            .map_err(|error| error.to_string())
-    })
-}
-
-fn hidden_layers(session: &Session, property: &str) -> Result<BTreeSet<String>, String> {
-    session.with(|document| {
-        document
-            .objects("patch_layer")
-            .map(|objects| {
-                objects
-                    .into_iter()
-                    .filter(|object| {
-                        !object
-                            .body
-                            .get(property)
-                            .and_then(serde_json::Value::as_bool)
-                            .unwrap_or(true)
-                    })
-                    .map(|object| object.id)
-                    .collect()
-            })
-            .map_err(|error| error.to_string())
-    })
-}
-
-fn hidden_fixture_ids(session: &Session, property: &str) -> Result<BTreeSet<Uuid>, String> {
-    session.with(|document| {
-        document
-            .objects("fixture_visibility")
-            .map(|objects| {
-                objects
-                    .into_iter()
-                    .filter(|object| {
-                        !object
-                            .body
-                            .get(property)
-                            .and_then(serde_json::Value::as_bool)
-                            .unwrap_or(true)
-                    })
-                    .filter_map(|object| {
-                        object
-                            .body
-                            .get("fixtureId")
-                            .and_then(serde_json::Value::as_str)
-                            .and_then(|id| Uuid::parse_str(id).ok())
-                    })
-                    .collect()
-            })
-            .map_err(|error| error.to_string())
-    })
-}
-
-fn fixture_notes(session: &Session) -> Result<HashMap<Uuid, String>, String> {
-    session.with(|document| {
-        document
-            .objects("fixture_note")
-            .map(|objects| {
-                objects
-                    .into_iter()
-                    .filter_map(|object| {
-                        let fixture_id = object
-                            .body
-                            .get("fixtureId")
-                            .and_then(serde_json::Value::as_str)
-                            .and_then(|id| Uuid::parse_str(id).ok())?;
-                        let note = object
-                            .body
-                            .get("note")
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or_default()
-                            .to_owned();
-                        Some((fixture_id, note))
-                    })
-                    .collect()
-            })
-            .map_err(|error| error.to_string())
-    })
-}
-
-fn selectable_ids(session: &Session) -> Result<BTreeSet<Uuid>, String> {
-    let locked = locked_layers(session)?;
-    let hidden_fixtures = hidden_fixture_ids(session, "visible2d")?;
-    let hidden_layers = hidden_layers(session, "visible2d")?;
-    session.with(|document| {
-        document
-            .patch_snapshot()
-            .map(|snapshot| {
-                snapshot
-                    .fixtures
-                    .into_iter()
-                    .filter(|fixture| {
-                        !locked.contains(&fixture.patch.layer_id)
-                            && !hidden_layers.contains(&fixture.patch.layer_id)
-                            && !hidden_fixtures.contains(&fixture.patch.fixture_id.0)
-                    })
-                    .map(|fixture| fixture.patch.fixture_id.0)
-                    .collect()
-            })
-            .map_err(|error| error.to_string())
-    })
 }
 
 fn output_direction(rotation: &light_fixture::FixtureVector) -> [f32; 3] {

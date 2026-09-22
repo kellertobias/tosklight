@@ -33,6 +33,13 @@ use super::{
 };
 use crate::tolerant_json::TolerantJson;
 
+/// The operator wording for keypad and cursor keys, kept apart from the runtime
+/// because it is the desk's own vocabulary rather than an implementation detail.
+#[path = "extensions_runtime/control_names.rs"]
+mod control_names;
+
+use control_names::{action_value, programmer_key_name};
+
 #[derive(Default)]
 struct HeadlessExtensionPorts {
     feedback_revision: AtomicU64,
@@ -343,6 +350,9 @@ pub(super) fn apply_highlight_feedback(
     };
 }
 
+/// The caption a control surface prints beside a control, so an operator glancing
+/// at a wing reads the same wording the desk uses for that key, wheel, playback or
+/// speed group.
 fn control_label(intent: &CanonicalControlIntent) -> String {
     match intent {
         CanonicalControlIntent::ProgrammerKey { key } => {
@@ -1101,67 +1111,8 @@ fn desk_action_notification(
     })
 }
 
-fn action_value(action: NavigationAction) -> Option<&'static str> {
-    match action {
-        NavigationAction::Up => Some("up"),
-        NavigationAction::Down => Some("down"),
-        NavigationAction::Left => Some("left"),
-        NavigationAction::Right => Some("right"),
-        NavigationAction::PageUp => Some("page-up"),
-        NavigationAction::PageDown => Some("page-down"),
-        NavigationAction::Menu | NavigationAction::Escape => None,
-    }
-}
-
 fn pressed(input: &ControlInput) -> bool {
     matches!(input, ControlInput::Button { pressed: true, .. })
-}
-
-fn programmer_key_name(key: ProgrammerKey) -> &'static str {
-    use ProgrammerKey::*;
-    match key {
-        Zero => "0",
-        One => "1",
-        Two => "2",
-        Three => "3",
-        Four => "4",
-        Five => "5",
-        Six => "6",
-        Seven => "7",
-        Eight => "8",
-        Nine => "9",
-        Plus => "plus",
-        Minus => "minus",
-        Point => "point",
-        At => "at",
-        Enter => "enter",
-        Clear => "clear",
-        Undo => "undo",
-        Group => "group",
-        Cue => "cue",
-        Playback => "playback",
-        Off => "off",
-        Record => "record",
-        Preload => "preload",
-        Delete => "delete",
-        Copy => "copy",
-        Move => "move",
-        Set => "set",
-        Time => "time",
-        Thru => "thru",
-        Divide => "divide",
-        Backspace => "backspace",
-        Escape => "escape",
-        Highlight => "highlight",
-        Previous => "previous",
-        Next => "next",
-        All => "all",
-        EncoderPlayback => "encoder_playback",
-        PageUp => "page_up",
-        PageDown => "page_down",
-        Align => "align",
-        Fade => "fade",
-    }
 }
 
 fn project(snapshot: &light_extensions_host::ExtensionManagerSnapshot) -> ExtensionRuntimeSnapshot {
