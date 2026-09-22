@@ -120,10 +120,10 @@ test("captures the complete help screenshot manifest from truthful sources", asy
 			`/iframe.html?id=${encodeURIComponent(storyId)}&viewMode=story&globals=mode:${entry.mode}`,
 		);
 		await page.evaluate(() => document.fonts.ready);
-		await expect(page.locator("[data-documentation-shot]")).toHaveAttribute(
-			"data-documentation-ready",
-			"true",
-		);
+		await expect(
+			page.locator("[data-documentation-shot]"),
+			`${entry.file} never became ready to shoot`,
+		).toHaveAttribute("data-documentation-ready", "true");
 		await page.addStyleTag({
 			content:
 				"*,*::before,*::after{animation:none!important;caret-color:transparent!important;transition:none!important}",

@@ -90,9 +90,26 @@ generate_attribute_reference() {
       "$ROOT/docs/help/99-Appendix/02-default-attributes.md"
 }
 
+# npx fetches the renderer from the registry on every run, and a single ECONNRESET there has
+# failed the whole documentation build. The download is retried on its own so that the renderer
+# itself still runs exactly once: a manual that genuinely fails to render must not be retried.
+prefetch_manual_renderer() {
+  local attempt
+  for attempt in 1 2 3; do
+    if npm cache add "$MANUAL_RENDERER_PACKAGE" >/dev/null 2>&1; then
+      return 0
+    fi
+    echo "manual renderer download attempt $attempt failed; retrying." >&2
+    sleep $((attempt * 5))
+  done
+  echo "warning: could not pre-fetch $MANUAL_RENDERER_PACKAGE; trying npx anyway." >&2
+}
+
 run_manual_renderer() {
   require npx
   require node
+  require npm
+  prefetch_manual_renderer
   LIGHT_MANUAL_VERSION="${LIGHT_MANUAL_VERSION:-$(node -p "require(process.argv[1]).version" "$ROOT/package.json")}" \
     npx --yes --package "$MANUAL_RENDERER_PACKAGE" markdown-manual "$@"
 }
