@@ -817,6 +817,43 @@ export const Audio: Story = {
 
 export const PixelMap: Story = { render: () => <StatefulPixelMap /> };
 
+/*
+ * The Network and Logs settings each hold two input families, and their own copy tells the
+ * operator to pick one "from the window title". These are those title tabs; each one opens the
+ * story for the family it names.
+ */
+function networkInputsTabs(active: "network" | "audio") {
+	return {
+		id: "media-network-inputs",
+		ariaLabel: "Network and input settings",
+		kind: "tabs" as const,
+		activeId: active,
+		onActiveChange: (id: string) =>
+			openStory(
+				id === "audio" ? "settings-audio-input" : "settings-network-and-inputs",
+			),
+		actions: [
+			{ id: "network", label: "Network & DMX" },
+			{ id: "audio", label: "Audio" },
+		],
+	};
+}
+
+function logsTabs(active: "logs" | "dmx-diagnostics") {
+	return {
+		id: "media-logs",
+		ariaLabel: "Logs and diagnostics",
+		kind: "tabs" as const,
+		activeId: active,
+		onActiveChange: (id: string) =>
+			openStory(id === "dmx-diagnostics" ? "dmx-diagnostics" : "settings-logs"),
+		actions: [
+			{ id: "logs", label: "Logs" },
+			{ id: "dmx-diagnostics", label: "Diagnostics" },
+		],
+	};
+}
+
 export const SettingsLibraries: Story = {
 	render: () => (
 		<Frame active="settings">
@@ -847,6 +884,7 @@ export const SettingsNetworkAndInputs: Story = {
 			<SettingsScreen
 				active="network"
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+				groups={[networkInputsTabs("network")]}
 			>
 				<NetworkInputsSettings active="network" />
 			</SettingsScreen>
@@ -859,6 +897,7 @@ export const SettingsAudioInput: Story = {
 			<SettingsScreen
 				active="network"
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+				groups={[networkInputsTabs("audio")]}
 			>
 				<NetworkInputsSettings
 					active="audio"
@@ -874,6 +913,7 @@ export const SettingsLogs: Story = {
 			<SettingsScreen
 				active="logs"
 				onSelect={(section) => openStory(SETTINGS_STORY_BY_SECTION[section])}
+				groups={[logsTabs("logs")]}
 			>
 				<LogsSettings active="logs" />
 			</SettingsScreen>
@@ -886,6 +926,7 @@ export const DmxDiagnostics: Story = {
 			<WindowFrame
 				title="Diagnostics"
 				info={{ primary: "DMX", secondary: "Input and channel diagnostics" }}
+				groups={[logsTabs("dmx-diagnostics")]}
 			>
 				<LogsSettings active="dmx-diagnostics" />
 			</WindowFrame>

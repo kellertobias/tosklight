@@ -9,7 +9,7 @@ test("Media Server dock and settings navigate between Storybook screens", async 
 	await expect(
 		story.getByRole("button", { name: "Visualizers", exact: true }),
 	).toHaveCount(0);
-	await story.getByRole("radio", { name: "Visualizers", exact: true }).click();
+	await story.getByRole("tab", { name: "Visualizers", exact: true }).click();
 	await expect(page).toHaveURL(
 		/\?path=\/story\/tosklight-media-server--visualizers$/u,
 	);
@@ -19,25 +19,31 @@ test("Media Server dock and settings navigate between Storybook screens", async 
 		/\?path=\/story\/tosklight-media-server--settings-libraries$/u,
 	);
 
-	await story.getByRole("radio", { name: "Network & DMX" }).click();
+	// The settings sections are one tab list in the window title; the two sections that hold
+	// more than one input family carry a second, named list of their own.
+	const sections = story.getByRole("tablist", { name: "Media settings section" });
+	await sections.getByRole("tab", { name: "Network & DMX" }).click();
 	await expect(page).toHaveURL(
 		/\?path=\/story\/tosklight-media-server--settings-network-and-inputs$/u,
 	);
-	await expect(story.getByRole("radio", { name: "DMX", exact: true })).toHaveCount(0);
-	await story.getByRole("radio", { name: "Audio", exact: true }).click();
+	const inputFamilies = story.getByRole("tablist", {
+		name: "Network and input settings",
+	});
+	await inputFamilies.getByRole("tab", { name: "Audio", exact: true }).click();
 	await expect(page).toHaveURL(
 		/\?path=\/story\/tosklight-media-server--settings-audio-input$/u,
 	);
 
-	await story.getByRole("radio", { name: "Logs", exact: true }).click();
+	await sections.getByRole("tab", { name: "Logs", exact: true }).click();
 	await expect(page).toHaveURL(
 		/\?path=\/story\/tosklight-media-server--settings-logs$/u,
 	);
 	await story
-		.getByRole("radio", { name: "DMX Diagnostics", exact: true })
+		.getByRole("tablist", { name: "Logs and diagnostics" })
+		.getByRole("tab", { name: "Diagnostics", exact: true })
 		.click();
 	await expect(page).toHaveURL(
-		/\?path=\/story\/tosklight-media-server--settings-dmx-diagnostics$/u,
+		/\?path=\/story\/tosklight-media-server--dmx-diagnostics$/u,
 	);
 
 	await story.getByRole("button", { name: "Audio", exact: true }).click();

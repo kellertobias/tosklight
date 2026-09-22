@@ -279,6 +279,7 @@ export function MediaSettingsLayout({
 			groups={[
 				{
 					id: "settings-sections",
+					ariaLabel: "Media settings section",
 					kind: "tabs",
 					activeId: active,
 					onActiveChange: (id) => onSelect?.(id as MediaSettingsSection),
