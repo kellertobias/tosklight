@@ -1031,8 +1031,12 @@ test("Dynamics full application discussion keeps the selection preview across ta
 	await expect(gridOrdering).toHaveAttribute("aria-checked", "false");
 	await expect(gridOrdering).not.toHaveClass(/is-active/);
 	await expect(editor.getByLabel("Direction", { exact: true })).toHaveCount(0);
-	await expect(editor.getByLabel("Center X", { exact: true })).toBeVisible();
-	await expect(editor.getByLabel("Center Z", { exact: true })).toBeVisible();
+	// This dynamic takes its ordering from the Group it is bound to, and an inherited ordering
+	// has no centre of its own to place: the radial centres stay away rather than offering an
+	// edit the Group would overrule. Choosing Radial here changes how the inherited order is
+	// read, not where it is centred.
+	await expect(editor.getByLabel("Center X", { exact: true })).toHaveCount(0);
+	await expect(editor.getByLabel("Center Z", { exact: true })).toHaveCount(0);
 	await expect(
 		phaseControls.getByRole("radio", { name: "Radial in", exact: true }),
 	).toHaveCount(0);
@@ -3921,11 +3925,13 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 	await expect(
 		page.getByText("Front Blinder 1", { exact: true }),
 	).toBeVisible();
+	// A multi-patch member is a cell of the fixture above it, so its name cell holds a dash and
+	// the member names itself through its row instead.
 	await expect(
-		page.getByText("Front Blinder 4", { exact: true }),
+		page.getByLabel("Multi-patch Front Blinder 4"),
 	).toBeVisible();
 	await expect(page.getByText("Stage ACL 1", { exact: true })).toBeVisible();
-	await expect(page.getByText("Stage ACL 8", { exact: true })).toBeVisible();
+	await expect(page.getByLabel("Multi-patch Stage ACL 8")).toBeVisible();
 	await expect(page.locator(".multipatch-row")).toHaveCount(10);
 	await expect(
 		page.locator(".multipatch-row").getByText("Unpatched", { exact: true }),
@@ -3958,9 +3964,16 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 	);
 	await expect(page.getByText("Desk Setup", { exact: true })).toBeVisible();
 	await expect(page.getByRole("heading", { name: "Timecode" })).toBeVisible();
-	await expect(page.getByText("ltc:", { exact: true })).toBeVisible();
+	// Timecode is configured by which source the desk obeys and what it does when that source
+	// stops, rather than by naming a source's transport and permitting a fallback.
 	await expect(
-		page.getByText("Fallback allowed", { exact: true }),
+		page.getByText("ArtTimeCode UDP bind", { exact: true }),
+	).toBeVisible();
+	await expect(
+		page.getByText("Authoritative source", { exact: true }),
+	).toBeVisible();
+	await expect(
+		page.getByText("External source loss", { exact: true }),
 	).toBeVisible();
 });
 
@@ -4589,16 +4602,21 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	await expect
 		.poll(() => multilineEditor.evaluate((editor) => editor.scrollTop))
 		.toBeGreaterThan(scrollBeforeCursorTravel);
-	const [scrolledEditorBox, scrolledCaretBox] = await Promise.all([
-		multilineEditor.boundingBox(),
-		multilineCaret.boundingBox(),
-	]);
-	expect(scrolledCaretBox?.y).toBeGreaterThanOrEqual(scrolledEditorBox?.y ?? 0);
-	expect(
-		(scrolledCaretBox?.y ?? 0) + (scrolledCaretBox?.height ?? 0),
-	).toBeLessThanOrEqual(
-		(scrolledEditorBox?.y ?? 0) + (scrolledEditorBox?.height ?? 0),
-	);
+	// The caret is drawn by a mirrored layer whose offset is React state, so it settles a frame
+	// after the textarea has scrolled. What matters is where it comes to rest: inside the editor.
+	await expect
+		.poll(async () => {
+			const [editorBox, caretBox] = await Promise.all([
+				multilineEditor.boundingBox(),
+				multilineCaret.boundingBox(),
+			]);
+			return (
+				(caretBox?.y ?? 0) >= (editorBox?.y ?? 0) &&
+				(caretBox?.y ?? 0) + (caretBox?.height ?? 0) <=
+					(editorBox?.y ?? 0) + (editorBox?.height ?? 0)
+			);
+		})
+		.toBe(true);
 	await expect(
 		multiline.getByRole("button", { name: "Enter · New line" }),
 	).toBeVisible();
@@ -4645,15 +4663,21 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 		return [styles.borderLeftColor, styles.borderRightColor];
 	});
 	expect(doneBorders).not.toContain("rgba(0, 0, 0, 0)");
-	const doneBackground = await done.evaluate(
-		(element) => getComputedStyle(element).backgroundColor,
-	);
+	// Hovering Done has to show, and in the title chrome it shows by lifting the whole control
+	// rather than by repainting its background.
+	const doneAppearance = await done.evaluate((element) => {
+		const styles = getComputedStyle(element);
+		return `${styles.backgroundColor}|${styles.filter}`;
+	});
 	await done.hover();
 	await expect
 		.poll(() =>
-			done.evaluate((element) => getComputedStyle(element).backgroundColor),
+			done.evaluate((element) => {
+				const styles = getComputedStyle(element);
+				return `${styles.backgroundColor}|${styles.filter}`;
+			}),
 		)
-		.not.toBe(doneBackground);
+		.not.toBe(doneAppearance);
 	const multilineShift = multiline.getByRole("button", { name: "Shift" });
 	const physicalZ = multiline.locator('[data-keyboard-code="KeyZ"]');
 	expect(

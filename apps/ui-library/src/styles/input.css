@@ -130,9 +130,22 @@
 	background: #151d24;
 }
 
-.ui-input-modal-layer .ui-modal-title-actions > button.ui-input-modal-done {
+/*
+ * Done accepts a multi-line edit, so it stays a wide, deliberate target rather than shrinking to
+ * its label. It moved into the title chrome, where the chrome wraps each terminal in its own
+ * span — so the width has to reach both. While this still named the old actions row as a direct
+ * parent it matched nothing, and the button silently narrowed to 64px.
+ */
+.ui-input-modal-layer
+	:is(.ui-modal-title-actions, .ui-modal-title-terminals)
+	:is(.ui-title-chrome-action:has(> .ui-input-modal-done), button.ui-input-modal-done) {
 	width: 96px;
 	min-width: 96px;
+}
+
+.ui-input-modal-layer
+	:is(.ui-modal-title-actions, .ui-modal-title-terminals)
+	button.ui-input-modal-done {
 	border-right: 1px solid var(--line2);
 	border-left: 1px solid var(--line2);
 }
