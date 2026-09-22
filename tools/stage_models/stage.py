@@ -1,8 +1,10 @@
 """Stage and venue elements of part 5 of the fixture and stage model brief.
 
-Decks, railings, curtains and mirror balls. None of these hangs from a clamp, so the
-origin is stated per model: floor level for decks, railings and the ground support, the
-hanging point for a curtain or a mirror ball.
+Railings, curtains and mirror balls. A stage deck was modelled here too, one model per
+platform size and leg height, until the deck became one profile the renderer builds at the
+height it is placed. None of these hangs from a clamp, so the origin is stated per model:
+floor level for railings and the ground support, the hanging point for a curtain or a
+mirror ball.
 """
 
 from __future__ import annotations
@@ -11,7 +13,6 @@ import math
 
 from .kit import (
     BASE,
-    CABLE_BLACK,
     COUPLER,
     FABRIC,
     HOUSING_BLACK,
@@ -21,14 +22,11 @@ from .kit import (
 )
 from .lamps import truss_coupler
 
-DECK_SIZES = ((1000, 500), (1000, 1000), (2000, 1000))
-LEG_HEIGHTS = (200, 400, 600, 800, 1000)
 CURTAIN_WIDTHS = (2000, 3000, 4000, 6000)
 CURTAIN_HEIGHTS = (3000, 4000, 6000, 8000)
 CURTAIN_FINISHES = (("black", "#141416"), ("grey", "#9AA0A6"))
 MIRROR_BALL_DIAMETERS = (200, 300, 400, 500)
 
-DECK_TOP = "#232326"
 FOLD_PITCH = 225.0
 # Fabric does not gather evenly. Six depths that do not repeat on any short cycle, so a
 # six-metre drape never shows the same pair of folds twice running; the back face reads
@@ -43,37 +41,6 @@ BACK_FULLNESS = 0.45
 # size a desk draws it the flash comes from having flat faces at all, not from their
 # count; 25 mm tiles cost six times the triangles for a difference nobody sees.
 TILE = 40.0
-
-
-def decks() -> list[Model]:
-    """5.1 — a 40 mm top with an aluminium edge, on four legs with adjustable feet.
-
-    Top and legs are separate objects so a show can stack a deck without its legs.
-    """
-
-    built: list[Model] = []
-    for width, depth in DECK_SIZES:
-        for height in LEG_HEIGHTS:
-            model = Model(
-                f"deck-{width}x{depth}-legs-{height:04d}",
-                "stage",
-                f"Stage deck {width} x {depth} at {height} mm leg height",
-                origin="floor level, centred under the deck",
-            )
-            top = model.part("deck-top", DECK_TOP)
-            top.box((width - 60, depth - 60, 34), (0, 0, height + 20))
-            edge = model.part("deck-edge", SILVER)
-            for side in (-1, 1):
-                edge.box((width, 30, 40), (0, side * (depth / 2 - 15), height + 20))
-                edge.box((30, depth - 60, 40), (side * (width / 2 - 15), 0, height + 20))
-            legs = model.part("deck-legs", SILVER)
-            feet = model.part("deck-feet", CABLE_BLACK)
-            for x in (-(width / 2 - 70), width / 2 - 70):
-                for y in (-(depth / 2 - 70), depth / 2 - 70):
-                    legs.cylinder(48, height - 24, (x, y, (height - 24) / 2 + 24), segments=10)
-                    feet.cylinder(70, 24, (x, y, 12), segments=10)
-            built.append(model)
-    return built
 
 
 def railings() -> list[Model]:
@@ -243,4 +210,4 @@ def mirror_ball_motor() -> Model:
 def models() -> list[Model]:
     """Every stage element of part 5."""
 
-    return [*decks(), *railings(), *curtains(), *mirror_balls(), mirror_ball_motor()]
+    return [*railings(), *curtains(), *mirror_balls(), mirror_ball_motor()]

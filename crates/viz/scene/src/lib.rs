@@ -52,8 +52,8 @@ pub use scene::{
     EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance,
     FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MediaCrop, MediaProjector,
     MediaSection, MediaSectionKind, MediaSourceBinding, MotionAxis, PhysicsBody,
-    PhysicsConstraints, PhysicsProgram, PhysicsSceneryObject, PlanArtwork, PlanFallback, Scene,
-    SceneryDetail, SceneryKind, SceneryObject, SourceForm, euler_degrees,
+    PhysicsConstraints, PhysicsProgram, PhysicsSceneryObject, PlanArtwork, PlanFallback, RiserFeet,
+    Scene, SceneryDetail, SceneryKind, SceneryObject, SourceForm, euler_degrees,
 };
 pub use uuid;
 pub use values::{

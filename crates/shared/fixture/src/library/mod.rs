@@ -21,6 +21,8 @@ pub struct FixturePackageLoadReport {
     pub updated: usize,
     pub unchanged: usize,
     pub preserved_operator_revisions: usize,
+    /// Profiles taken back out of the library because their shipped package was withdrawn.
+    pub retired: usize,
 }
 
 pub type LegacyFixtureProfileSource = (String, String, Option<Vec<u8>>);

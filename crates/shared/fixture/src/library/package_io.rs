@@ -8,6 +8,77 @@ use rusqlite::{OptionalExtension, params};
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path};
 
+/// Shipped packages that were withdrawn, each with the profile it installed.
+///
+/// Loading only looks at the packages that are there, so a package deleted from the shipped
+/// directory would otherwise leave its profile in every library that ever installed it. The
+/// fifteen decks on fixed legs — one package per platform size and leg height — were withdrawn
+/// when a deck on regular feet became one profile generated at the height it is placed, so each
+/// is taken out of the library it was installed into. A revision the operator made of one is
+/// theirs and stays, and no show is touched: a patched fixture carries its own profile snapshot.
+const WITHDRAWN_PACKAGES: &[(&str, &str)] = &[
+    (
+        "venue--stage-deck-1-0-5-m-legs-0-2-m.toskfixture",
+        "c1d26de5-4fe2-594d-99e2-812145650314",
+    ),
+    (
+        "venue--stage-deck-1-0-5-m-legs-0-4-m.toskfixture",
+        "6476799e-fc6f-5ddc-b4f6-fa1325881aa2",
+    ),
+    (
+        "venue--stage-deck-1-0-5-m-legs-0-6-m.toskfixture",
+        "64e0ee52-d22e-5073-991c-1c93272ea285",
+    ),
+    (
+        "venue--stage-deck-1-0-5-m-legs-0-8-m.toskfixture",
+        "b2bf9af3-36f3-5bf4-8a19-0f58e9c034f1",
+    ),
+    (
+        "venue--stage-deck-1-0-5-m-legs-1-m.toskfixture",
+        "811e02d4-82e0-5962-85a7-3efd81a226ff",
+    ),
+    (
+        "venue--stage-deck-1-1-m-legs-0-2-m.toskfixture",
+        "bf818699-247f-5db9-b5b7-daad4137e57c",
+    ),
+    (
+        "venue--stage-deck-1-1-m-legs-0-4-m.toskfixture",
+        "115d33ff-1189-5f89-a9eb-3c19993f491a",
+    ),
+    (
+        "venue--stage-deck-1-1-m-legs-0-6-m.toskfixture",
+        "e3fdb557-e013-5c40-8efa-1d24cb1a7714",
+    ),
+    (
+        "venue--stage-deck-1-1-m-legs-0-8-m.toskfixture",
+        "7edb68c9-efcc-547c-80f3-bdcb1fa03003",
+    ),
+    (
+        "venue--stage-deck-1-1-m-legs-1-m.toskfixture",
+        "fe6992bc-9981-52e4-916d-9b1b8fb17c1e",
+    ),
+    (
+        "venue--stage-deck-2-1-m-legs-0-2-m.toskfixture",
+        "f5cb3a55-4e4f-5dfd-8c0e-43cf7924b096",
+    ),
+    (
+        "venue--stage-deck-2-1-m-legs-0-4-m.toskfixture",
+        "3cf7a16e-95e8-5cf3-bd54-e65743883acf",
+    ),
+    (
+        "venue--stage-deck-2-1-m-legs-0-6-m.toskfixture",
+        "9f510d06-6bb8-5dd1-bd7c-6774226d1586",
+    ),
+    (
+        "venue--stage-deck-2-1-m-legs-0-8-m.toskfixture",
+        "a1b0a402-7953-562c-8c57-6346df823ce3",
+    ),
+    (
+        "venue--stage-deck-2-1-m-legs-1-m.toskfixture",
+        "6541286a-f448-55c5-98ef-9e707b8e5a36",
+    ),
+];
+
 impl FixtureLibrary {
     /// Imports the exact same portable archive used for desk-to-desk transfer. Stable profile IDs
     /// are retained; changed content becomes a new local revision of the same fixture family.
@@ -56,7 +127,10 @@ impl FixtureLibrary {
             })
             .collect::<Vec<_>>();
         paths.sort();
-        let mut report = FixturePackageLoadReport::default();
+        let mut report = FixturePackageLoadReport {
+            retired: self.retire_withdrawn_packages()?,
+            ..Default::default()
+        };
         for path in paths {
             let bytes = fs::read(&path)?;
             let digest = format!("{:x}", Sha256::digest(&bytes));
@@ -191,6 +265,48 @@ impl FixtureLibrary {
                 |row| row.get(0),
             )
             .map_err(FixtureError::from)
+    }
+
+    /// Takes every [`WITHDRAWN_PACKAGES`] profile this library installed back out of it.
+    ///
+    /// Only a profile still at the revision its package installed is retired; once an operator has
+    /// revised one it is their fixture, and it is left alone with its installation record.
+    fn retire_withdrawn_packages(&self) -> Result<usize, FixtureError> {
+        let mut retired = 0;
+        for (package, profile_id) in WITHDRAWN_PACKAGES {
+            let Some(installed_revision) = self
+                .conn
+                .query_row(
+                    "SELECT installed_revision FROM fixture_package_installations WHERE package_path=?1 AND profile_id=?2",
+                    params![package, profile_id],
+                    |row| row.get::<_, u32>(0),
+                )
+                .optional()?
+            else {
+                continue;
+            };
+            let newest: u32 = self.conn.query_row(
+                "SELECT COALESCE(MAX(revision),0) FROM fixture_profiles WHERE id=?1",
+                [profile_id],
+                |row| row.get(0),
+            )?;
+            if newest > installed_revision {
+                continue;
+            }
+            let transaction = self.conn.unchecked_transaction()?;
+            transaction.execute(
+                "DELETE FROM fixture_profile_sources WHERE profile_id=?1",
+                [profile_id],
+            )?;
+            transaction.execute("DELETE FROM fixture_profiles WHERE id=?1", [profile_id])?;
+            transaction.execute(
+                "DELETE FROM fixture_package_installations WHERE package_path=?1",
+                [package],
+            )?;
+            transaction.commit()?;
+            retired += 1;
+        }
+        Ok(retired)
     }
 
     fn retire_packaged_legacy_sources(&self, profile_id: FixtureId) -> Result<(), FixtureError> {

@@ -390,3 +390,129 @@ fn source_mapping_preferences_are_installation_local_and_replaceable() {
     drop(reopened);
     let _ = fs::remove_dir_all(root);
 }
+
+/// A machine that installed the fifteen decks on fixed legs must not keep offering them once the
+/// packages are withdrawn: nothing prunes a package that is simply gone from the shipped
+/// directory, so the withdrawal is carried in the loader.
+#[test]
+fn a_withdrawn_shipped_package_takes_its_profile_out_of_the_library() {
+    let root = std::env::temp_dir().join(format!("fixture-withdrawn-{}", Uuid::new_v4()));
+    fs::create_dir_all(&root).unwrap();
+    let retired_package = "venue--stage-deck-2-1-m-legs-0-4-m.toskfixture";
+    let retired_id = FixtureId("3cf7a16e-95e8-5cf3-bd54-e65743883acf".parse().unwrap());
+    let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library/venue--stage-deck-2-1-m.toskfixture");
+    let mut legs = read_fixture_package(&fs::read(shipped).unwrap()).unwrap();
+    legs.id = retired_id;
+    legs.name = "Stage Deck 2 × 1 m, Legs 0.4 m".into();
+    legs.scenery = None;
+    fs::write(
+        root.join(retired_package),
+        write_fixture_package(&legs).unwrap(),
+    )
+    .unwrap();
+
+    let library = FixtureLibrary::open(root.join("fixtures.sqlite")).unwrap();
+    assert_eq!(
+        library
+            .load_fixture_package_directory(&root)
+            .unwrap()
+            .installed,
+        1
+    );
+    assert_eq!(library.profiles().unwrap().len(), 1);
+
+    // The package is withdrawn: the next start takes the profile it installed with it.
+    fs::remove_file(root.join(retired_package)).unwrap();
+    let report = library.load_fixture_package_directory(&root).unwrap();
+    assert_eq!(report.retired, 1);
+    assert!(library.profiles().unwrap().is_empty());
+    assert!(library.profile(retired_id, 1).unwrap().is_none());
+    // Withdrawing is done once; a later start has nothing left to retire.
+    assert_eq!(
+        library
+            .load_fixture_package_directory(&root)
+            .unwrap()
+            .retired,
+        0
+    );
+
+    drop(library);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// A deck an operator revised is their fixture, not a shipped one, and survives the withdrawal.
+#[test]
+fn a_withdrawn_package_leaves_an_operator_revision_alone() {
+    let root = std::env::temp_dir().join(format!("fixture-withdrawn-edit-{}", Uuid::new_v4()));
+    fs::create_dir_all(&root).unwrap();
+    let retired_package = "venue--stage-deck-1-1-m-legs-1-m.toskfixture";
+    let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library/venue--stage-deck-1-1-m.toskfixture");
+    let mut legs = read_fixture_package(&fs::read(shipped).unwrap()).unwrap();
+    legs.id = FixtureId("fe6992bc-9981-52e4-916d-9b1b8fb17c1e".parse().unwrap());
+    legs.name = "Stage Deck 1 × 1 m, Legs 1 m".into();
+    legs.scenery = None;
+    fs::write(
+        root.join(retired_package),
+        write_fixture_package(&legs).unwrap(),
+    )
+    .unwrap();
+
+    let library = FixtureLibrary::open(root.join("fixtures.sqlite")).unwrap();
+    library.load_fixture_package_directory(&root).unwrap();
+    let installed = library.profiles().unwrap().remove(0);
+    let mut edited = installed.clone();
+    edited.notes = "operator edit".into();
+    let edited = library.save_profile(edited, installed.revision).unwrap();
+
+    fs::remove_file(root.join(retired_package)).unwrap();
+    assert_eq!(
+        library
+            .load_fixture_package_directory(&root)
+            .unwrap()
+            .retired,
+        0
+    );
+    assert_eq!(library.profiles().unwrap().remove(0).notes, edited.notes);
+
+    drop(library);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// The whole shipped directory installs on a fresh machine, and a stage deck is one profile per
+/// platform size now that it is generated at the height it is placed.
+#[test]
+fn the_shipped_directory_installs_and_offers_three_stage_decks() {
+    let root = std::env::temp_dir().join(format!("fixture-shipped-{}", Uuid::new_v4()));
+    fs::create_dir_all(&root).unwrap();
+    let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library");
+    let library = FixtureLibrary::open(root.join("fixtures.sqlite")).unwrap();
+    let report = library.load_fixture_package_directory(&shipped).unwrap();
+    assert_eq!(report.preserved_operator_revisions, 0);
+    assert_eq!(report.retired, 0, "nothing to retire on a fresh machine");
+
+    let mut decks = library
+        .profiles()
+        .unwrap()
+        .into_iter()
+        .filter(|profile| profile.name.starts_with("Stage Deck"))
+        .map(|profile| profile.name)
+        .collect::<Vec<_>>();
+    decks.sort();
+    assert_eq!(
+        decks,
+        [
+            "Stage Deck 1 × 0.5 m",
+            "Stage Deck 1 × 1 m",
+            "Stage Deck 2 × 1 m"
+        ]
+    );
+
+    drop(library);
+    let _ = fs::remove_dir_all(root);
+}

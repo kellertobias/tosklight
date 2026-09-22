@@ -81,6 +81,7 @@ describe("Elements › Objects", () => {
 			}),
 			// Model-backed shipped parts carry no generated scenery, yet they are Venue items.
 			venue("2", "Four-Point Truss Corner 2-Way"),
+			// A deck from a show made before the decks were generated: no scenery, still a Venue item.
 			venue("3", "Stage Deck 2 × 1 m, Legs 0.4 m"),
 			venue("4", "Disco Ball 50 cm"),
 			venue("5", "Hall", { fixtureProfile: "Imported models Hall", importedModel: true }),
