@@ -1083,11 +1083,31 @@
 	gap: 2px;
 }
 
+/*
+ * The wrapper is the card's lower row and stops where the card does, but its own rows were left
+ * to the buttons' own height, so on a platform whose fonts run a hair taller the row grew past
+ * the wrapper and the actions hung over the card's bottom edge. Giving the wrapper rows of its
+ * own share makes the actions fill the room the card has, whatever the labels measure.
+ */
+.playback-fader-bank.touch-layout
+	.touch-playback-card.playback-row-compact
+	.faderless-playback-actions {
+	grid-auto-rows: minmax(0, 1fr);
+}
+
+/* Three actions keep their two rows here; what goes is the 50px floor under each of them. */
+.playback-fader-bank.touch-layout
+	.touch-playback-card.playback-row-compact
+	.faderless-playback-actions.action-count-3 {
+	grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
 .playback-fader-bank.touch-layout
 	.touch-playback-card.playback-row-compact
 	.faderless-playback-actions
 	> .ui-button {
 	min-height: 0;
+	height: 100%;
 }
 
 /*
