@@ -17,6 +17,8 @@ import {
 } from "../components/setup/fixtureProfileModel";
 import { fixtureTypeIconAsset } from "../components/setup/fixtureTypeIconAssets";
 import type {
+	AttributeSettingsTab,
+	DefaultsSettingsTab,
 	NetworkSettingsTab,
 	OutputsSettingsTab,
 } from "./setupWindow/SetupChrome";
@@ -417,10 +419,15 @@ export function MarketingSetupWindow({
 	const [fixtureLibraryOpen, setFixtureLibraryOpen] = useState(
 		initialFixtureLibraryOpen,
 	);
-	// Outputs and Network carry their own tabs in the title chrome, which insists on an active one.
+	// Outputs, Network, Defaults and Attributes each carry their own tabs in the title chrome,
+	// which insists on an active one. A section whose tab is missing here throws on render.
 	const [outputsTab, setOutputsTab] = useState<OutputsSettingsTab>("engine");
 	const [networkTab, setNetworkTab] =
 		useState<NetworkSettingsTab>("control-server");
+	const [defaultsTab, setDefaultsTab] =
+		useState<DefaultsSettingsTab>("record-update");
+	const [attributeTab, setAttributeTab] =
+		useState<AttributeSettingsTab>("encoder-groups");
 	const controller = {
 		section,
 		setSection,
@@ -428,6 +435,10 @@ export function MarketingSetupWindow({
 		setOutputsTab,
 		networkTab,
 		setNetworkTab,
+		defaultsTab,
+		setDefaultsTab,
+		attributeTab,
+		setAttributeTab,
 		restartRequired: false,
 		draft,
 		editDraft: setDraft,

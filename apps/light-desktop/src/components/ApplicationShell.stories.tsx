@@ -195,6 +195,9 @@ function ParameterFamiliesExample({
 		programmerValues: [],
 		groupProgrammerValues: [],
 		encoderSlots: attributes[family],
+		// EncoderSurfaces indexes this alongside encoderSlots. An unconfigured family has no
+		// push-turn attribute on any encoder, which is what the projection itself produces.
+		encoderPushTurnSlots: attributes[family].map(() => null),
 		encoderPageCount: 1,
 		attributeLabels: new Map<string, string>(),
 		attributeUnits: new Map<string, string | null>(),
