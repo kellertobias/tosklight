@@ -57,13 +57,15 @@ test("Media Server Library title filters expose their own folder ranges", async 
 	await page.goto("/?path=/story/tosklight-media-server--library");
 	const story = page.frameLocator("#storybook-preview-iframe");
 
-	await story.getByRole("radio", { name: "Text", exact: true }).click();
+	// The Library's source filters live in the window title chrome, which draws them as a tab
+	// list rather than the radio group they used to be.
+	await story.getByRole("tab", { name: "Text", exact: true }).click();
 	await expect(page).toHaveURL(/tosklight-media-server--text$/u);
 	await expect(story.locator('[data-folder="200"]')).toBeVisible();
 	await expect(story.locator('[data-folder="249"]')).toBeAttached();
 	await expect(story.locator('[data-folder="250"]')).toHaveCount(0);
 
-	await story.getByRole("radio", { name: "Visualizers", exact: true }).click();
+	await story.getByRole("tab", { name: "Visualizers", exact: true }).click();
 	await expect(page).toHaveURL(/tosklight-media-server--visualizers$/u);
 	await expect(story.locator('[data-folder="250"]')).toBeVisible();
 	await expect(story.locator('[data-folder="255"]')).toBeAttached();

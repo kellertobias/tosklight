@@ -737,6 +737,7 @@ function StatefulText() {
 
 const meta = {
 	title: "ToskLight/Media Server",
+	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 } satisfies Meta;
 
