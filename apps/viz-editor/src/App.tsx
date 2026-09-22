@@ -625,8 +625,13 @@ export function App() {
 					{document && workspace === "cad" ? (
 						<CadToolProvider
 							documentKey={document.showId}
-							onAdd={(kind, profileId) =>
-								setCadAdd((current) => ({ kind, profileId, request: current.request + 1 }))
+							onAdd={(kind, profileId, several) =>
+								setCadAdd((current) => ({
+									kind,
+									profileId,
+									several,
+									request: current.request + 1,
+								}))
 							}
 						>
 							<CadApp />

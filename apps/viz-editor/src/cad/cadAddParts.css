@@ -176,3 +176,12 @@
 	color: #98a4b3;
 	font-size: 11px;
 }
+
+/* Place several… ends the menu, below a rule, with no picture to sit beside the parts' own. */
+.cad-part-menu-several {
+	grid-template-columns: minmax(0, 1fr);
+	margin-top: 4px;
+	padding-top: 8px;
+	border-top: 1px solid var(--border-subtle, #2a3340);
+	border-radius: 0 0 3px 3px;
+}

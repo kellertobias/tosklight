@@ -114,6 +114,14 @@ export function cadTitleGroups(
 															close();
 															onAdd(kind, profileId);
 														}}
+														onSeveral={
+															kind === "truss" || kind === "stage"
+																? (profileId) => {
+																		close();
+																		onAdd(kind, profileId, true);
+																	}
+																: undefined
+														}
 													/>
 												),
 											},

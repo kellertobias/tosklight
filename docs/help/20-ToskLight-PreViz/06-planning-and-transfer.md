@@ -589,6 +589,19 @@ the key that picks it, such as **Draw line · L**. From left to right:
   * **Add primitive** (a box, a ball and a cylinder) lists **Box**, **Cylinder** and **Ball**. Each
     fills the width, height and depth set in **Info** — a cylinder stands upright, so its height is its
     length — and takes the **Colour** set for it, neutral grey until you choose one.
+  * **Place several…** ends the **Add truss** and **Add stage element** menus. A rig is rarely one
+    of anything, so it opens a wizard that lays out a whole field of the part the button places now
+    and writes it in one go. Nothing is placed until **Place**; **Cancel** places nothing at all,
+    and everything the wizard does place is left selected so you can move, turn or size it as one.
+    * For a **stage element**, choose whether the elements lie **Long side across** or **Long side
+      deep**, then how many go **Across** and how many **Deep**. They butt against each other at
+      their own footprint, so the field has no gaps to close afterwards, and the wizard names the
+      size the field will cover. The first element lands where one placed on its own would.
+    * For a **truss**, type the **Heights** the run is flown at and the lines it stands on —
+      **Back** for runs that lie across the room, or **Across** once you turn them to **Runs
+      deep**. One run is placed per height and line: two heights over three lines is six trusses.
+      Both fields take a list such as `5 7`, or an evenly spaced run such as `4 THRU 8 BY 2`; a
+      comma is a decimal point, as everywhere else on the desk.
   * **Add venue element** (a box) opens a dialog listing the Venue objects in this computer's fixture
     library that no button above places — railings, crowds, mirror balls, chain, PA and backline,
     figures and imported venue models — each shown by its picture on a dark ground. The trusses,
@@ -597,7 +610,8 @@ the key that picks it, such as **Draw line · L**. From left to right:
     to place it.
 
 A placed part goes to the stage origin with the next free virtual ID, the drawing shows it at once,
-and it is selected so **Info** opens to place it and set its size. A part whose profile is not in this
+and it is selected so **Info** opens to place it and set its size. A wizard's field takes the next
+free virtual IDs one after another, in the order it lays the elements out. A part whose profile is not in this
 computer's fixture library is listed but cannot be chosen, and pressing a button whose part is missing
 says so instead of placing anything. When the show refuses a placement, the reason appears at the top
 right of the drawing.

@@ -280,10 +280,12 @@ export function CadApp() {
 	useEffect(() => {
 		const placed = tools.placed;
 		if (!placed || placed.request === handledPlacement.current || !scene) return;
-		if (!scene.entities.some((entity) => entity.logicalFixtureId === placed.fixtureId)) return;
+		// A wizard places a whole field at once, and the drawing shows it all together.
+		const drawn = new Set(scene.entities.map((entity) => entity.logicalFixtureId));
+		if (!placed.fixtureIds.every((id) => drawn.has(id))) return;
 		handledPlacement.current = placed.request;
-		setFocusedEntityId(placed.fixtureId);
-		select({ type: "replace", ids: [placed.fixtureId] });
+		setFocusedEntityId(placed.fixtureIds[0] ?? null);
+		select({ type: "replace", ids: [...placed.fixtureIds] });
 	});
 
 	function select(change: SelectionChange) {
@@ -504,6 +506,7 @@ export function CadApp() {
 					focusedEntityId={focusedEntityId}
 					onFocusEntity={setFocusedEntityId}
 					objectMenu={objectMenu}
+					venueGroups={venueGroups}
 					onError={(reason) => setError(String(reason))}
 					onNotice={setNotice}
 				/>

@@ -141,3 +141,8 @@
 	justify-content: flex-end;
 	gap: 8px;
 }
+
+/* The bulk wizards borrow the assistant's body; their orientation pair is two buttons, not three. */
+.cad-bulk-add .cad-placement-assistant-shapes {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}

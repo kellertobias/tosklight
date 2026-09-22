@@ -27,9 +27,10 @@ export type CadDrawTool = "select" | "polyline" | "box" | "text" | "measure" | "
 export interface CadTools {
 	/**
 	 * Adds a kind of object: the named profile, or else the part the button places now (a Venue
-	 * element opens its picture list). Null hides the toolbar.
+	 * element opens its picture list). With `several`, the part's bulk wizard opens instead of one
+	 * being placed. Null hides the toolbar.
 	 */
-	onAdd: ((kind: CadAddKind, profileId?: string) => void) | null;
+	onAdd: ((kind: CadAddKind, profileId?: string, several?: boolean) => void) | null;
 	tool: CadDrawTool;
 	setTool(tool: CadDrawTool): void;
 	annotations: readonly CadAnnotation[];
@@ -38,15 +39,20 @@ export interface CadTools {
 	/** Why the show refused the last drawn item, until the operator dismisses it. */
 	error: string | null;
 	clearError(): void;
-	/** The object an add button placed last, so the CAD screen can select it and open Info. */
+	/** What an add button placed last, so the CAD screen can select it and open Info. */
 	placed: CadPlaced | null;
-	/** Tells the CAD screen an add flow has just placed this object. */
-	announcePlaced(fixtureId: string): void;
+	/** Tells the CAD screen an add flow has just placed these objects. */
+	announcePlaced(fixtureIds: string | readonly string[]): void;
 }
 
-/** One placement from an add button; `request` tells two placements of the same object apart. */
+/**
+ * One press of an add button's worth of placement; `request` tells two of the same apart.
+ *
+ * A wizard places a whole field at once, so this carries every object placed rather than one: the
+ * CAD screen selects them all and opens Info on the first.
+ */
 export interface CadPlaced {
-	fixtureId: string;
+	fixtureIds: readonly string[];
 	request: number;
 }
 
@@ -76,7 +82,7 @@ export function CadToolProvider({
 	children,
 }: {
 	documentKey: string;
-	onAdd: (kind: CadAddKind, profileId?: string) => void;
+	onAdd: (kind: CadAddKind, profileId?: string, several?: boolean) => void;
 	children: ReactNode;
 }) {
 	const [placed, setPlaced] = useState<CadPlaced | null>(null);
@@ -113,8 +119,11 @@ export function CadToolProvider({
 			annotations,
 			error,
 			placed,
-			announcePlaced: (fixtureId) =>
-				setPlaced((current) => ({ fixtureId, request: (current?.request ?? 0) + 1 })),
+			announcePlaced: (fixtureIds) =>
+				setPlaced((current) => ({
+					fixtureIds: typeof fixtureIds === "string" ? [fixtureIds] : [...fixtureIds],
+					request: (current?.request ?? 0) + 1,
+				})),
 			clearError: () => setError(null),
 			save: (annotation) =>
 				annotationSession.save(annotation).then(() => undefined, report),

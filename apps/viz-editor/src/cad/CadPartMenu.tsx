@@ -6,6 +6,9 @@
  * by its name; a group with one part is that part. The part the button places now is checked.
  * Choosing a part makes it the button's part and places it. A part this computer's library does not
  * hold is listed but cannot be chosen.
+ *
+ * A truss and a stage element are rarely placed one at a time, so those two menus end with
+ * **Place several…**, which opens the wizard for the part the button places now.
  */
 import { chosenPart } from "./cadAddChoice";
 import { type FixtureLibrary, useFixtureLibrary } from "./cadPlacement";
@@ -65,9 +68,12 @@ function PartMenuItem({
 export function CadPartMenu({
 	kind,
 	onChoose,
+	onSeveral,
 }: {
 	kind: CadPartKind;
 	onChoose(profileId: string): void;
+	/** Opens the bulk wizard for the part the button places now; absent on kinds that have none. */
+	onSeveral?(profileId: string): void;
 }) {
 	const library = useFixtureLibrary();
 	const current = chosenPart(kind).part.profileId;
@@ -103,6 +109,19 @@ export function CadPartMenu({
 					</div>
 				);
 			})}
+			{onSeveral ? (
+				<button
+					type="button"
+					role="menuitem"
+					className="cad-part-menu-item cad-part-menu-several"
+					onClick={() => onSeveral(current)}
+				>
+					<span className="cad-part-menu-text">
+						<strong>Place several…</strong>
+						<small>A field of them, laid out at once</small>
+					</span>
+				</button>
+			) : null}
 		</div>
 	);
 }

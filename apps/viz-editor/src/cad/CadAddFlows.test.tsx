@@ -29,6 +29,8 @@ const STRAIGHT = "562e7947-8284-5ec8-9750-3cd3fe6c1c6d";
 const CROWD = "a0e75c30-92e5-4c20-bcd1-9a51ddbc6257";
 const RAILING = "9fc82162-c31c-4a34-bb2c-01fcc2254e37";
 const PAR = "par-profile";
+/** The 2 × 1 m stage element, which is the stage button's own default part. */
+const DECK = "ae45dcb3-cd94-59db-b3b1-0e8a5adb9141";
 
 /** The smallest profile the patch sheet can turn into a definition. */
 function profile(
@@ -75,6 +77,17 @@ beforeEach(() => {
 		profile(CROWD, "Crowd Area", { fixture_type: "venue" }),
 		profile(RAILING, "Stage Railing 2 m", { fixture_type: "venue" }),
 		profile(PAR, "LED Par", { manufacturer: "Generic", fixture_type: "par", patch_policy: "dmx" }),
+		{
+			...profile(DECK, "Stage Element 2 × 1 m", { fixture_type: "venue" }),
+			scenery: {
+				kind: "riser",
+				chords: 0,
+				default_size_metres: { x: 2, y: 0.6, z: 1 },
+				adjustable: { width: false, height: true, depth: false },
+				minimum_size_metres: { x: 2, y: 0.1, z: 1 },
+				maximum_size_metres: { x: 2, y: 1.2, z: 1 },
+			},
+		},
 	]);
 	mocks.patchSnapshot.mockReset().mockResolvedValue({
 		showId: "show",
@@ -97,8 +110,8 @@ function renderFlows() {
 	);
 	const { rerender } = render(view({ kind: "venue", request: 0 }));
 	let request = 0;
-	const press = (kind: CadAddRequest["kind"], profileId?: string) =>
-		rerender(view({ kind, profileId, request: ++request }));
+	const press = (kind: CadAddRequest["kind"], profileId?: string, several?: boolean) =>
+		rerender(view({ kind, profileId, several, request: ++request }));
 	return { announcePlaced, onError, press };
 }
 
@@ -110,7 +123,7 @@ describe("the CAD add buttons", () => {
 		press("truss");
 		await waitFor(() => expect(announcePlaced).toHaveBeenCalledTimes(1));
 		expect(placedFixture(0)).toMatchObject({ profileId: THREE_POINT, virtualFixtureNumber: 3 });
-		expect(announcePlaced).toHaveBeenCalledWith(placedFixture(0).fixtureId);
+		expect(announcePlaced).toHaveBeenCalledWith([placedFixture(0).fixtureId]);
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
 		// A part chosen from the menu is placed and becomes what a plain press places.
@@ -184,5 +197,93 @@ describe("a part button's caret menu", () => {
 
 		fireEvent.click(within(fourPoint).getByRole("menuitemradio", { name: /Straight truss/u }));
 		expect(onChoose).toHaveBeenCalledWith(STRAIGHT);
+	});
+});
+
+describe("the Place several wizards", () => {
+	/** The fixtures of one write, in the order the batch made them. */
+	const batch = (call = 0) => mocks.patchFixtures.mock.calls[call][2].fixtures;
+
+	it("butts a field of stage elements edge to edge and writes them in one go", async () => {
+		const { announcePlaced, press } = renderFlows();
+		press("stage", DECK, true);
+		const dialog = await screen.findByRole("dialog", {
+			name: "Place several stage elements",
+		});
+		// Two across and two deep is what the wizard opens on.
+		fireEvent.click(within(dialog).getByRole("button", { name: /^Place 4$/u }));
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(batch()).toHaveLength(4);
+		expect(batch().map((fixture: { location: unknown }) => fixture.location)).toEqual([
+			{ x: 0, y: 0, z: 0 },
+			{ x: 2000, y: 0, z: 0 },
+			{ x: 0, y: 1000, z: 0 },
+			{ x: 2000, y: 1000, z: 0 },
+		]);
+		// Every element takes its own free virtual number: 1 and 2 are already used.
+		expect(batch().map((fixture: { virtualFixtureNumber: number }) => fixture.virtualFixtureNumber)).toEqual([
+			3, 4, 5, 6,
+		]);
+		// The whole field is selected, so it can be moved or adjusted as one.
+		expect(announcePlaced).toHaveBeenCalledWith(
+			batch().map((fixture: { fixtureId: string }) => fixture.fixtureId),
+		);
+	});
+
+	it("flies a truss run again at every height, over every line", async () => {
+		const { press } = renderFlows();
+		press("truss", THREE_POINT, true);
+		const dialog = await screen.findByRole("dialog", { name: "Place several trusses" });
+		const heights = within(dialog).getByLabelText("Heights");
+		fireEvent.change(heights, { target: { value: "5 7" } });
+		fireEvent.blur(heights);
+		const back = within(dialog).getByLabelText("Positions back");
+		fireEvent.change(back, { target: { value: "0 4" } });
+		fireEvent.blur(back);
+		fireEvent.click(await within(dialog).findByRole("button", { name: /^Place 4$/u }));
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(batch().map((fixture: { location: unknown }) => fixture.location)).toEqual([
+			{ x: 0, y: 0, z: 5000 },
+			{ x: 0, y: 4000, z: 5000 },
+			{ x: 0, y: 0, z: 7000 },
+			{ x: 0, y: 4000, z: 7000 },
+		]);
+	});
+
+	it("crosses the heights with positions across the room when the runs are turned", async () => {
+		const { press } = renderFlows();
+		press("truss", THREE_POINT, true);
+		const dialog = await screen.findByRole("dialog", { name: "Place several trusses" });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Runs deep" }));
+		const across = within(dialog).getByLabelText("Positions across");
+		fireEvent.change(across, { target: { value: "-3 3" } });
+		fireEvent.blur(across);
+		fireEvent.click(await within(dialog).findByRole("button", { name: /^Place 2$/u }));
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(batch().map((fixture: { location: unknown }) => fixture.location)).toEqual([
+			{ x: -3000, y: 0, z: 5000 },
+			{ x: 3000, y: 0, z: 5000 },
+		]);
+		expect(batch().every((fixture: { rotation: { z: number } }) => fixture.rotation.z === 90)).toBe(true);
+	});
+
+	it("places nothing at all when the wizard is cancelled", async () => {
+		const { announcePlaced, press } = renderFlows();
+		press("stage", DECK, true);
+		const dialog = await screen.findByRole("dialog", {
+			name: "Place several stage elements",
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+		await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+		expect(mocks.patchFixtures).not.toHaveBeenCalled();
+		expect(announcePlaced).not.toHaveBeenCalled();
+	});
+
+	it("leaves a single press placing one element as it always did", async () => {
+		const { press } = renderFlows();
+		press("stage", DECK);
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledTimes(1));
+		expect(batch()).toHaveLength(1);
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 });
