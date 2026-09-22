@@ -23,6 +23,7 @@ import type {
 	MediaLibraryItem,
 	MediaPaneLayer,
 	MediaPaneModel,
+	MediaPaneServer,
 	MediaPaneSurfaceProps,
 	MediaPreviewState,
 	MediaSecondaryControl,
@@ -72,34 +73,10 @@ export function MediaPaneSurface({
 	const patchedServers = model.servers.filter(
 		(server) => server.id.trim() !== "" && !server.disabled,
 	);
-	const serverPoolSlots: PoolSlotViewModel<string>[] = [
-		...patchedServers.map<PoolSlotViewModel<string>>((server, position) => ({
-			id: server.id,
-			position,
-			card: {
-				number: server.fixtureLabel ?? "—",
-				primary: server.name,
-				kind: "preset" as const,
-				states: server.id === model.selectedServerId ? ["selected"] : [],
-			},
-		})),
-		...Array.from(
-			{ length: Math.max(0, 6 - patchedServers.length) },
-			(_, emptyIndex): PoolSlotViewModel<string> => {
-				const position = patchedServers.length + emptyIndex;
-				return {
-					id: `empty-server-${position}`,
-					position,
-					card: {
-						number: position + 1,
-						primary: "Empty",
-						kind: "preset" as const,
-						states: ["empty", "disabled"],
-					},
-				};
-			},
-		),
-	];
+	const serverPoolSlots = mediaServerPoolSlots(
+		patchedServers,
+		model.selectedServerId,
+	);
 	const mainShowsBrowser =
 		model.rightPaneVisible ||
 		model.mainSectionId === "content" ||
@@ -339,6 +316,43 @@ export function MediaPaneSurface({
 			)}
 		</WindowFrame>
 	);
+}
+
+// The server shortcuts keep a fixed six slots so the operator always sees the same
+// column of buttons and can tell at a glance how many servers the show still has room
+// for. Slots beyond the patched servers stay empty and unclickable.
+function mediaServerPoolSlots(
+	patchedServers: MediaPaneServer[],
+	selectedServerId: string,
+): PoolSlotViewModel<string>[] {
+	return [
+		...patchedServers.map<PoolSlotViewModel<string>>((server, position) => ({
+			id: server.id,
+			position,
+			card: {
+				number: server.fixtureLabel ?? "—",
+				primary: server.name,
+				kind: "preset" as const,
+				states: server.id === selectedServerId ? ["selected"] : [],
+			},
+		})),
+		...Array.from(
+			{ length: Math.max(0, 6 - patchedServers.length) },
+			(_, emptyIndex): PoolSlotViewModel<string> => {
+				const position = patchedServers.length + emptyIndex;
+				return {
+					id: `empty-server-${position}`,
+					position,
+					card: {
+						number: position + 1,
+						primary: "Empty",
+						kind: "preset" as const,
+						states: ["empty", "disabled"],
+					},
+				};
+			},
+		),
+	];
 }
 
 function validActiveId(activeId: string, ids: string[]) {

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import {
+  type Dispatch,
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   createHttpNativeHardwareBridge,
   type NativeHardwareBridge,
@@ -7,6 +14,7 @@ import type { NativeSimulatorBridge } from "../transport/nativeSimulatorBridge";
 import { tauriNativeSimulatorBridge } from "../transport/nativeSimulatorBridge";
 import type { OscBridge } from "../transport/oscBridge";
 import { tauriOscBridge } from "../transport/oscBridge";
+import type { FeedbackAction } from "./feedbackReducer";
 import { feedbackReducer } from "./feedbackReducer";
 import { nativeStatusIntervalMs, openLink } from "./linkLifecycle";
 import {
@@ -52,6 +60,34 @@ interface ControllerDependencies {
 const inactiveDevice: DeviceStatus = { state: "stopped" };
 const defaultNativeBridge = createHttpNativeHardwareBridge();
 
+/**
+ * Keeps the surface listening to what the desk sends back, so lamps and displays on the
+ * wing follow the desk without the operator touching anything. Swapping the transport
+ * drops the old subscription; a subscription that only arrives after the swap is closed
+ * immediately instead of leaking feedback from the previous link.
+ */
+function useFeedbackListener(
+  bridge: OscBridge,
+  dispatch: Dispatch<FeedbackAction>,
+): void {
+  useEffect(() => {
+    let disposed = false;
+    let disposeListener: (() => void) | undefined;
+    void bridge
+      .listenFeedback((message) => {
+        dispatch({ type: "feedback-received", feedback: message });
+      })
+      .then((dispose) => {
+        if (disposed) dispose();
+        else disposeListener = dispose;
+      });
+    return () => {
+      disposed = true;
+      disposeListener?.();
+    };
+  }, [bridge, dispatch]);
+}
+
 export function useHardwareController(
   dependencies: ControllerDependencies = {},
 ): HardwareController {
@@ -78,22 +114,7 @@ export function useHardwareController(
     undefined,
   );
 
-  useEffect(() => {
-    let disposed = false;
-    let disposeListener: (() => void) | undefined;
-    void bridge
-      .listenFeedback((message) => {
-        dispatch({ type: "feedback-received", feedback: message });
-      })
-      .then((dispose) => {
-        if (disposed) dispose();
-        else disposeListener = dispose;
-      });
-    return () => {
-      disposed = true;
-      disposeListener?.();
-    };
-  }, [bridge]);
+  useFeedbackListener(bridge, dispatch);
 
   const stopStatusPolling = useCallback(() => {
     clearInterval(statusTimer.current);
