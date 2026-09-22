@@ -234,6 +234,13 @@ export interface FoundPart {
 	part: VenuePart;
 }
 
+/** Every profile one of the add buttons already offers, so no other list has to repeat it. */
+export const PART_MENU_PROFILE_IDS: ReadonlySet<string> = new Set(
+	Object.values(CAD_PART_CATALOGUE).flatMap((groups) =>
+		groups.flatMap((group) => group.parts.map((part) => part.profileId)),
+	),
+);
+
 /** A button's part by its profile, or undefined when the button does not offer that profile. */
 export function findPart(kind: CadPartKind, profileId: string): FoundPart | undefined {
 	for (const group of CAD_PART_CATALOGUE[kind]) {
@@ -265,12 +272,18 @@ export interface VenueProfile {
 	definition: FixtureDefinition;
 }
 
-/** Every Venue profile in the library once, at its newest revision, in name order. */
+/**
+ * Every Venue profile the add buttons do not already offer, once, at its newest revision, in name
+ * order: the trusses, decks, curtains and primitives belong to their own buttons and their part
+ * menus, so this list holds what only it can place — railings, crowds, mirror balls, chain, PA and
+ * backline, figures, and imported venue models.
+ */
 export function venueProfiles(definitions: readonly FixtureDefinition[]): VenueProfile[] {
 	const newest = new Map<string, FixtureDefinition>();
 	for (const definition of definitions) {
 		if (!isVenueDefinition(definition)) continue;
 		const profileId = definition.profile_snapshot?.id ?? definition.id;
+		if (PART_MENU_PROFILE_IDS.has(profileId)) continue;
 		const current = newest.get(profileId);
 		if (!current || definition.revision > current.revision) newest.set(profileId, definition);
 	}

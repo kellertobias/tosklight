@@ -9,6 +9,7 @@ import {
 	findPart,
 	matchesVenueQuery,
 	nextVirtualNumber,
+	PART_MENU_PROFILE_IDS,
 	PARAMETRIC_CURTAIN_PROFILE_ID,
 	PRIMITIVE_TYPES,
 	partLabel,
@@ -187,5 +188,28 @@ describe("the Add venue element list", () => {
 		expect(matchesVenueQuery(listed[1].definition, "rigging")).toBe(true);
 		expect(matchesVenueQuery(listed[1].definition, "balcony")).toBe(false);
 		expect(matchesVenueQuery(listed[1].definition, "")).toBe(true);
+	});
+
+	it("leaves out every profile an add button and its part menu already offer", () => {
+		const shipped = Object.entries(CAD_PART_CATALOGUE).flatMap(([kind, groups]) =>
+			groups.flatMap((group) =>
+				group.parts.map((part) =>
+					profiled(part.profileId, `${kind} ${part.id}`, 1, {
+						manufacturer: "Venue",
+						fixture_type: "venue",
+					}),
+				),
+			),
+		);
+		const railing = profiled("railing", "Stage Railing 2 m", 1, {
+			manufacturer: "Venue",
+			fixture_type: "venue",
+		});
+		expect(venueProfiles([...shipped, railing]).map((entry) => entry.profileId)).toEqual([
+			"railing",
+		]);
+		for (const part of shipped) {
+			expect(PART_MENU_PROFILE_IDS.has(part.profile_snapshot?.id ?? "")).toBe(true);
+		}
 	});
 });

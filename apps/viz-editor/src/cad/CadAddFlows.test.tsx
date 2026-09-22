@@ -27,6 +27,7 @@ const THREE_POINT = "44097b39-11b4-5bd4-af61-8adb97d426b1";
 const CORNER = "3ea0f8ad-c38d-5ec6-a4f7-6d918a1e974e";
 const STRAIGHT = "562e7947-8284-5ec8-9750-3cd3fe6c1c6d";
 const CROWD = "a0e75c30-92e5-4c20-bcd1-9a51ddbc6257";
+const RAILING = "9fc82162-c31c-4a34-bb2c-01fcc2254e37";
 const PAR = "par-profile";
 
 /** The smallest profile the patch sheet can turn into a definition. */
@@ -72,6 +73,7 @@ beforeEach(() => {
 		profile(STRAIGHT, "Four-Point Truss", { revision: 3 }),
 		profile(CORNER, "Four-Point Truss Corner 2-Way"),
 		profile(CROWD, "Crowd Area", { fixture_type: "venue" }),
+		profile(RAILING, "Stage Railing 2 m", { fixture_type: "venue" }),
 		profile(PAR, "LED Par", { manufacturer: "Generic", fixture_type: "par", patch_policy: "dmx" }),
 	]);
 	mocks.patchSnapshot.mockReset().mockResolvedValue({
@@ -137,21 +139,17 @@ describe("the CAD add buttons", () => {
 		expect(announcePlaced).not.toHaveBeenCalled();
 	});
 
-	it("lists every Venue profile with its picture, narrows it by search and places the chosen one", async () => {
+	it("lists the Venue profiles no add button offers, narrows them by search and places the chosen one", async () => {
 		const { announcePlaced, press } = renderFlows();
 		press("venue");
 		const dialog = await screen.findByRole("dialog", { name: "Add venue element" });
 		const list = await within(dialog).findByRole("list", { name: "Venue elements" });
-		await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(4));
+		await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(2));
 		const names = within(list)
 			.getAllByRole("listitem")
 			.map((item) => item.querySelector("strong")?.textContent);
-		expect(names).toEqual([
-			"Crowd Area",
-			"Four-Point Truss",
-			"Four-Point Truss Corner 2-Way",
-			"Three-Point Truss",
-		]);
+		// The trusses, decks, curtains and primitives are placed from their own buttons, not here.
+		expect(names).toEqual(["Crowd Area", "Stage Railing 2 m"]);
 		expect(within(list).getAllByRole("listitem")[0].querySelector("img")).toHaveAttribute(
 			"src",
 			`data:image/png;base64,${CROWD.slice(0, 4)}`,

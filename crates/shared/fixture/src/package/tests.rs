@@ -3601,3 +3601,173 @@ fn generated_scenery_requires_a_visual_only_fixture() {
     profile.patch_policy = PatchPolicy::Dmx;
     assert!(profile.validate().is_err());
 }
+
+/// The backline, PA, flight cases and figures: the Visualizer shipped these models long before any
+/// profile pointed at one, so each is one visual-only Venue profile carrying that exact model, its
+/// Model-Catalogue render, and the size the model manifest measures. They are what **Add venue
+/// element** lists, so a missing or renamed one empties that dialog of everything but the railings
+/// and crowds.
+#[test]
+fn shipped_backline_case_and_figure_packages_carry_their_catalogue_models() {
+    let expected = [
+        ("venue--dj-mixer.toskfixture", "DJ Mixer", "dj-mixer"),
+        (
+            "venue--dj-media-player.toskfixture",
+            "DJ Media Player",
+            "dj-player",
+        ),
+        ("venue--drum-kit.toskfixture", "Drum Kit", "drum-kit"),
+        (
+            "venue--guitar-stack.toskfixture",
+            "Guitar Stack",
+            "guitar-amp",
+        ),
+        (
+            "venue--electric-guitar-on-a-stand.toskfixture",
+            "Electric Guitar on a Stand",
+            "guitar-in-stand",
+        ),
+        (
+            "venue--line-array-hang.toskfixture",
+            "Line Array Hang",
+            "line-array-hang",
+        ),
+        (
+            "venue--microphone-stand.toskfixture",
+            "Microphone Stand",
+            "microphone-stand",
+        ),
+        (
+            "venue--saxophone-on-a-stand.toskfixture",
+            "Saxophone on a Stand",
+            "saxophone-in-stand",
+        ),
+        (
+            "venue--pa-top-on-a-pole-stand.toskfixture",
+            "PA Top on a Pole Stand",
+            "speaker-on-pole",
+        ),
+        ("venue--pa-top.toskfixture", "PA Top", "speaker-top"),
+        (
+            "venue--stage-monitor-wedge.toskfixture",
+            "Stage Monitor Wedge",
+            "stage-monitor",
+        ),
+        (
+            "venue--stage-piano.toskfixture",
+            "Stage Piano",
+            "stage-piano",
+        ),
+        ("venue--subwoofer.toskfixture", "Subwoofer", "subwoofer"),
+        (
+            "venue--flight-case-rack-2u.toskfixture",
+            "Flight Case Rack 2U",
+            "rack-02u",
+        ),
+        (
+            "venue--flight-case-rack-4u.toskfixture",
+            "Flight Case Rack 4U",
+            "rack-04u",
+        ),
+        (
+            "venue--flight-case-rack-6u.toskfixture",
+            "Flight Case Rack 6U",
+            "rack-06u",
+        ),
+        (
+            "venue--flight-case-rack-8u-on-castors.toskfixture",
+            "Flight Case Rack 8U on Castors",
+            "rack-08u-wheels",
+        ),
+        (
+            "venue--flight-case-rack-14u-on-castors.toskfixture",
+            "Flight Case Rack 14U on Castors",
+            "rack-14u-wheels",
+        ),
+        (
+            "venue--flight-case-rack-18u-on-castors.toskfixture",
+            "Flight Case Rack 18U on Castors",
+            "rack-18u-wheels",
+        ),
+        (
+            "venue--figure-deejay.toskfixture",
+            "Figure, Deejay",
+            "figure-deejay",
+        ),
+        (
+            "venue--figure-guitarist.toskfixture",
+            "Figure, Guitarist",
+            "figure-guitarist",
+        ),
+        (
+            "venue--figure-pianist.toskfixture",
+            "Figure, Pianist",
+            "figure-pianist",
+        ),
+        (
+            "venue--figure-singer.toskfixture",
+            "Figure, Singer",
+            "figure-singer",
+        ),
+    ];
+    assert_eq!(expected.len(), 23);
+    let models = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/models");
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(models.join("manifest.json")).unwrap()).unwrap();
+    let mut identities = std::collections::HashSet::new();
+    for (filename, name, model) in expected {
+        let profile = shipped_profile(filename);
+        assert_eq!(profile.manufacturer, "Venue", "{filename}");
+        assert_eq!(profile.name, name, "{filename}");
+        assert_eq!(profile.fixture_type, "venue", "{filename}");
+        assert_eq!(profile.patch_policy, PatchPolicy::VisualOnly, "{filename}");
+        assert_eq!(profile.model_units, ModelUnits::Metres, "{filename}");
+        // Fixed geometry, not a generated object: nothing here is made to measure.
+        assert!(profile.scenery.is_none(), "{filename}");
+        assert!(profile.crowd.is_none(), "{filename}");
+        assert!(identities.insert(profile.id), "{filename}");
+        assert_eq!(profile.modes.len(), 1, "{filename}");
+        let mode = &profile.modes[0];
+        assert_eq!(mode.name, "Default", "{filename}");
+        assert_eq!(mode.splits.len(), 1, "{filename}");
+        assert_eq!(mode.splits[0].footprint, 0, "{filename}");
+        assert!(mode.channels.is_empty(), "{filename}");
+
+        let photograph = profile.photograph_asset.as_deref().expect(filename);
+        assert!(photograph.starts_with("data:image/png"), "{filename}");
+        // The package carries the shipped model itself, byte for byte, not a re-export of it.
+        let carried = profile
+            .model_asset
+            .as_deref()
+            .expect(filename)
+            .strip_prefix("data:model/gltf-binary;base64,")
+            .unwrap_or_else(|| panic!("{filename} carries a GLB data URL"));
+        let entry = manifest["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["model"] == model)
+            .unwrap_or_else(|| panic!("{model} is not in the model manifest"));
+        let shipped = fs::read(models.join(entry["file"].as_str().unwrap())).unwrap();
+        assert_eq!(
+            STANDARD.decode(carried).unwrap(),
+            shipped,
+            "{filename} should carry {model} unchanged"
+        );
+        // And it is placed at the size that model was measured at, to the whole millimetre the
+        // profile editor works in.
+        for (measured, authored) in [
+            ("width_millimetres", profile.physical.width_millimetres),
+            ("height_millimetres", profile.physical.height_millimetres),
+            ("depth_millimetres", profile.physical.depth_millimetres),
+        ] {
+            assert_eq!(
+                authored,
+                Some(entry[measured].as_f64().unwrap().round() as f32),
+                "{filename} {measured}"
+            );
+        }
+    }
+}

@@ -1,10 +1,12 @@
 /**
- * The dialog behind **Add venue element**: every Venue profile in this computer's fixture library,
- * each shown by its picture on a dark ground, in a scrolling grid the title's search narrows.
+ * The dialog behind **Add venue element**: the Venue profiles no add button of its own offers, each
+ * shown by its picture on a dark ground, in a scrolling grid the title's search narrows.
  *
  * A Venue profile is one from the Venue manufacturer or any profile placed without DMX, so imported
- * venue models are listed beside the shipped trusses, decks, curtains and crowds. Choosing one places
- * it; the dialog stays open with the show's reason when the show refuses it.
+ * venue models are listed beside the shipped railings, crowds, mirror balls, PA and figures. The
+ * trusses, decks, curtains and primitives are left out: they are placed from their own buttons and
+ * part menus. Choosing one places it; the dialog stays open with the show's reason when the show
+ * refuses it.
  */
 import { ModalFrame } from "@tosklight/ui";
 import { useState } from "react";
