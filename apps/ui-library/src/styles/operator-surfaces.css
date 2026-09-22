@@ -1090,6 +1090,18 @@
 	min-height: 0;
 }
 
+/*
+ * A single-action card has no actions wrapper, so the reset above never reached it: its button
+ * kept the 50px floor every button starts with and hung past the bottom edge of a card that is
+ * only ~44px tall at six touch rows. The card is the envelope; the action fills it.
+ */
+.playback-fader-bank.touch-layout
+	.touch-playback-card.playback-row-compact
+	> .single-button-playback-action {
+	min-height: 0;
+	height: 100%;
+}
+
 .playback-fader-bank.touch-layout
 	.touch-playback-card.playback-row-compact
 	.playback-empty-body {

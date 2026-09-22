@@ -264,7 +264,15 @@
 .media-layer-strip {
 	height: 100%;
 	display: grid;
-	grid-template-rows: repeat(auto-fit, minmax(72px, 1fr));
+	/*
+	 * One track per layer, never one per height the strip happens to have. `auto-fit` counts
+	 * tracks from the container, so a strip too short for every layer laid the last ones into
+	 * implicit rows that collapsed to their minimum: layer 7 and 8 became 10px slivers with
+	 * unreadable titles, and the strip reported nothing to scroll. `grid-auto-rows` gives each
+	 * layer the same floor and lets the strip overflow, which is what the scrollbar is for.
+	 */
+	grid-template-rows: none;
+	grid-auto-rows: minmax(72px, 1fr);
 	gap: 4px;
 	margin: 0;
 	padding: 0;
@@ -867,7 +875,8 @@
 	}
 	.media-layer-strip {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		grid-template-rows: repeat(auto-fit, minmax(72px, 1fr));
+		grid-template-rows: none;
+		grid-auto-rows: minmax(72px, 1fr);
 	}
 	.media-layer-tile.ui-button {
 		--media-layer-thumbnail-limit: clamp(100px, 68%, 160px);
