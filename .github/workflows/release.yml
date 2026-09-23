@@ -710,6 +710,12 @@ jobs:
         run: bash tools/test.sh storybook
 
       - name: Build and verify the operator manual
+        # The manual generates its attribute reference with cargo, and this job installs no
+        # sccache, so the wrapper the workflow sets for the Rust jobs would send rustc through a
+        # command that is not here.
+        env:
+          RUSTC_WRAPPER: ""
+          SCCACHE_GHA_ENABLED: "false"
         run: npm run manual
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
