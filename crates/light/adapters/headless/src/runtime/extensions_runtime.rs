@@ -38,7 +38,7 @@ use crate::tolerant_json::TolerantJson;
 #[path = "extensions_runtime/control_names.rs"]
 mod control_names;
 
-use control_names::{action_value, programmer_key_name};
+use control_names::{action_value, control_label, programmer_key_name};
 
 #[derive(Default)]
 struct HeadlessExtensionPorts {
@@ -348,42 +348,6 @@ pub(super) fn apply_highlight_feedback(
     } else {
         LampState::Off
     };
-}
-
-/// The caption a control surface prints beside a control, so an operator glancing
-/// at a wing reads the same wording the desk uses for that key, wheel, playback or
-/// speed group.
-fn control_label(intent: &CanonicalControlIntent) -> String {
-    match intent {
-        CanonicalControlIntent::ProgrammerKey { key } => {
-            programmer_key_name(*key).to_ascii_uppercase()
-        }
-        CanonicalControlIntent::Modifier { .. } => "SHIFT".into(),
-        CanonicalControlIntent::Navigation { action } => format!("{action:?}"),
-        CanonicalControlIntent::Highlight { action } => match action {
-            HighlightControlAction::Toggle => "HIGH".into(),
-            HighlightControlAction::Previous => "PREV".into(),
-            HighlightControlAction::Next => "NEXT".into(),
-            HighlightControlAction::All => "ALL".into(),
-        },
-        CanonicalControlIntent::Encoder { index } => format!("Encoder {index}"),
-        CanonicalControlIntent::PlaybackCurrent { slot, control } => {
-            format!("Playback {slot} {control:?}")
-        }
-        CanonicalControlIntent::PlaybackExplicit {
-            page,
-            slot,
-            control,
-        } => {
-            format!("Page {page} Playback {slot} {control:?}")
-        }
-        CanonicalControlIntent::SpeedGroup { group, control } => {
-            format!("Speed Group {} {control:?}", group.to_ascii_uppercase())
-        }
-        CanonicalControlIntent::GrandMaster => "Grand Master".into(),
-        CanonicalControlIntent::Blackout => "Blackout".into(),
-        CanonicalControlIntent::DeskCommand { command } => format!("{command:?}"),
-    }
 }
 
 #[derive(Clone)]

@@ -5,7 +5,9 @@
 //! these spellings. They are operator wording, not Rust wording, so they live apart from the
 //! runtime and change only when the desk's own vocabulary does.
 
-use light_extensions_contract::{NavigationAction, ProgrammerKey};
+use light_extensions_contract::{
+    CanonicalControlIntent, HighlightControlAction, NavigationAction, ProgrammerKey,
+};
 
 /// The wording the desk expects for a cursor key. Menu and Escape leave the
 /// navigation cross entirely, so they carry no direction and report nothing.
@@ -68,5 +70,41 @@ pub(super) fn programmer_key_name(key: ProgrammerKey) -> &'static str {
         PageDown => "page_down",
         Align => "align",
         Fade => "fade",
+    }
+}
+
+/// The caption a control surface prints beside a control, so an operator glancing
+/// at a wing reads the same wording the desk uses for that key, wheel, playback or
+/// speed group.
+pub(super) fn control_label(intent: &CanonicalControlIntent) -> String {
+    match intent {
+        CanonicalControlIntent::ProgrammerKey { key } => {
+            programmer_key_name(*key).to_ascii_uppercase()
+        }
+        CanonicalControlIntent::Modifier { .. } => "SHIFT".into(),
+        CanonicalControlIntent::Navigation { action } => format!("{action:?}"),
+        CanonicalControlIntent::Highlight { action } => match action {
+            HighlightControlAction::Toggle => "HIGH".into(),
+            HighlightControlAction::Previous => "PREV".into(),
+            HighlightControlAction::Next => "NEXT".into(),
+            HighlightControlAction::All => "ALL".into(),
+        },
+        CanonicalControlIntent::Encoder { index } => format!("Encoder {index}"),
+        CanonicalControlIntent::PlaybackCurrent { slot, control } => {
+            format!("Playback {slot} {control:?}")
+        }
+        CanonicalControlIntent::PlaybackExplicit {
+            page,
+            slot,
+            control,
+        } => {
+            format!("Page {page} Playback {slot} {control:?}")
+        }
+        CanonicalControlIntent::SpeedGroup { group, control } => {
+            format!("Speed Group {} {control:?}", group.to_ascii_uppercase())
+        }
+        CanonicalControlIntent::GrandMaster => "Grand Master".into(),
+        CanonicalControlIntent::Blackout => "Blackout".into(),
+        CanonicalControlIntent::DeskCommand { command } => format!("{command:?}"),
     }
 }
