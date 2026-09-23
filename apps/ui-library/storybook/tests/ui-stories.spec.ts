@@ -4626,9 +4626,22 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 		),
 	).toBe(true);
 	const xKey = multiline.getByRole("button", { name: "X", exact: true });
+	// A key lights for 140 ms and fades into the lit colour over 55 of them, so there are only
+	// some 85 ms in which it is that colour exactly. Asking for the attribute and then for the
+	// fill can spend all of them between the two questions. The fade goes, which makes the key
+	// that colour for the whole flash, and the two are read together as one instant.
+	await page.addStyleTag({
+		content: ".ui-button { transition: none !important }",
+	});
 	await xKey.click();
-	await expect(xKey).toHaveAttribute("data-keyboard-pressed", "true");
-	await expect(xKey).toHaveCSS("background-color", "rgb(8, 122, 140)");
+	await expect
+		.poll(() =>
+			xKey.evaluate((element) => ({
+				pressed: element.getAttribute("data-keyboard-pressed"),
+				fill: getComputedStyle(element).backgroundColor,
+			})),
+		)
+		.toEqual({ pressed: "true", fill: "rgb(8, 122, 140)" });
 	await expect(multilineEditor).toHaveValue(
 		"First line\nxSecond line\nThird line\nFourth line\nFifth line\nSixth line\nSeventh line\nEighth line",
 	);
