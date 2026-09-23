@@ -3172,9 +3172,13 @@ test("Virtual Playback cards use outline, full-fill, edge-status, and artwork hi
 	expect(running.border).toBe(inactive.top);
 	await page.getByRole("button", { name: "Toggle running" }).click();
 	await expect(card).not.toHaveClass(/running/u);
-	expect(
-		await card.evaluate((element) => getComputedStyle(element).backgroundColor),
-	).not.toBe(running.background);
+	// The card fades between the two fills, so the colour a moment after the class goes is still
+	// part way there. Settling on it is the same wait the other direction already makes.
+	await expect
+		.poll(() =>
+			card.evaluate((element) => getComputedStyle(element).backgroundColor),
+		)
+		.not.toBe(running.background);
 
 	await page.goto(
 		"/iframe.html?id=tosklight-virtual-playbacks--icon-and-image-artwork&viewMode=story",

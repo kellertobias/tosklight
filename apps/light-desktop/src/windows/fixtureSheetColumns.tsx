@@ -185,7 +185,12 @@ function dimmerColumn(compactMode: FixtureSheetCompactMode): Column {
 	return {
 		id: "intensity",
 		header: "Intensity",
-		width: compactMode === "off" ? "minmax(180px,.9fr)" : "minmax(144px,.7fr)",
+		// Intensity carries the most in the least room: a level, the level it is moving to, and a
+		// pill for every dynamic running on it. None of that may be cut, and the pills cannot wrap,
+		// so the minimum is the width that holds all of it with room to spare rather than the width
+		// it happens to need on the desk it was measured on. The sheet already scrolls sideways when
+		// it is this narrow; a wider column costs a little scrolling and nothing else.
+		width: compactMode === "off" ? "minmax(200px,.9fr)" : "minmax(168px,.7fr)",
 		render: (fixture) => {
 			const group = fixture.groupValues?.intensity;
 			const member = group?.members.find(
