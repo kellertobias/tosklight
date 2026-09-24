@@ -1293,6 +1293,46 @@ mod lines_view {
         }
     }
 
+    /// A flight rack shows a panel line per unit it holds, read off its height.
+    #[test]
+    fn a_flight_rack_shows_the_units_its_height_holds() {
+        let mut rack = scenery(SceneryKind::FlightRack);
+        rack.size = Vec3::new(0.6, 0.12 + 0.04445 * 6.0, 0.6);
+        // The case, and one panel line per unit.
+        assert_eq!(mesh_count(&drawn(rack.clone()), MeshKind::Cube), 1 + 6);
+        rack.size.y = 0.12 + 0.04445 * 12.0;
+        assert_eq!(mesh_count(&drawn(rack), MeshKind::Cube), 1 + 12);
+    }
+
+    /// A PA top stands on its cabinet, or on a pole and three feet when it is placed taller.
+    #[test]
+    fn a_pa_top_stands_on_a_pole_only_when_it_is_placed_taller_than_its_cabinet() {
+        let mut pa = scenery(SceneryKind::PaTop);
+        pa.size = Vec3::new(0.35, 0.6, 0.4);
+        let bare = drawn(pa.clone());
+        assert_eq!(mesh_count(&bare, MeshKind::Cube), 2, "cabinet and grille");
+        assert_eq!(mesh_count(&bare, MeshKind::Cylinder), 0);
+        pa.size.y = 1.8;
+        let poled = drawn(pa);
+        assert_eq!(mesh_count(&poled, MeshKind::Cube), 2);
+        assert_eq!(
+            mesh_count(&poled, MeshKind::Cylinder),
+            4,
+            "a pole and three legs"
+        );
+    }
+
+    /// A line array hangs as many elements as its height holds under its flying frame.
+    #[test]
+    fn a_line_array_hangs_the_elements_its_height_holds() {
+        let mut array = scenery(SceneryKind::LineArray);
+        array.size = Vec3::new(1.0, 0.1 + 0.25 * 8.0, 0.6);
+        // The frame, and a cabinet and a grille per element.
+        assert_eq!(mesh_count(&drawn(array.clone()), MeshKind::Cube), 1 + 2 * 8);
+        array.size.y = 0.1 + 0.25 * 3.0;
+        assert_eq!(mesh_count(&drawn(array), MeshKind::Cube), 1 + 2 * 3);
+    }
+
     /// Deco truss crosses its diagonals, so the same length carries more bracing.
     #[test]
     fn deco_truss_crosses_its_bracing_in_every_bay() {

@@ -26,7 +26,7 @@ import { documentSession, type ProfileUpdate } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
 import { CommitNumber, CommitText, CommitTextArea } from "./cadFields";
 import { MountingFields, PatchFields, SceneryParameters } from "./CadInfoFields";
-import { hasAdjustableSize, placedSize, SIZE_AXES, sizedScenery } from "./sceneryAxes";
+import { hasAdjustableSize, placedSize, sizedScenery, sizeMeasures, storedSize } from "./sceneryAxes";
 import type { CadEntity } from "./types";
 
 export type InfoTab = "generic" | "placement";
@@ -164,7 +164,10 @@ function VectorFields({
 	);
 }
 
-/** The measurements a generated object's profile lets the operator set, in metres within its range. */
+/**
+ * The measurements a generated object's profile lets the operator set, within its range: sides in
+ * metres, or the count equipment is bought by. A PA speaker also offers its pole stand on or off.
+ */
 function SizeFields({
 	fixture,
 	scenery,
@@ -177,32 +180,41 @@ function SizeFields({
 	onWrite(next: PatchFixtureProjection): void;
 }) {
 	const size = placedSize(fixture, scenery);
-	const axes = SIZE_AXES.filter(({ axis }) => scenery.adjustable[axis]);
+	const store = (next: typeof size) => onWrite({ ...fixture, scenerySizeMetres: storedSize(next) });
+	const measures = sizeMeasures(scenery);
+	const pole = scenery.kind === "pa_top" ? measures.find((measure) => measure.id === "size-y") : null;
 	return (
 		<div className="cad-info-vector" role="group" aria-label="Size">
 			<span>Size{shared}</span>
-			{axes.map(({ key, label }) => (
-				<CommitNumber
-					key={key}
-					label={label}
-					ariaLabel={label}
-					unit="m"
-					min={scenery.minimum_size_metres[key]}
-					max={scenery.maximum_size_metres[key]}
-					value={size[key]}
-					onCommit={(metres) => {
-						const next = { ...size, [key]: metres };
-						onWrite({
-							...fixture,
-							scenerySizeMetres: {
-								x: Math.round(next.x * 1000),
-								y: Math.round(next.y * 1000),
-								z: Math.round(next.z * 1000),
-							},
-						});
-					}}
-				/>
-			))}
+			{pole ? (
+				<label className="cad-field">
+					<input
+						type="checkbox"
+						aria-label="Pole stand"
+						checked={pole.read(size) > 0}
+						// A stand is put up at 1.2 m of pole, or as long as the speaker allows.
+						onChange={(event) =>
+							store(pole.write(size, event.currentTarget.checked ? Math.min(1.2, pole.max) : 0))
+						}
+					/>
+					<span>Pole stand</span>
+				</label>
+			) : null}
+			{measures
+				.filter((measure) => measure !== pole || measure.read(size) > 0)
+				.map((measure) => (
+					<CommitNumber
+						key={measure.id}
+						label={measure.label}
+						ariaLabel={measure.label}
+						unit={measure.unit}
+						digits={measure.digits}
+						min={measure.min}
+						max={measure.max}
+						value={measure.read(size)}
+						onCommit={(value) => store(measure.write(size, value))}
+					/>
+				))}
 		</div>
 	);
 }

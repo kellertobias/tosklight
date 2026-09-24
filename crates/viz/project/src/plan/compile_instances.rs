@@ -270,6 +270,9 @@ fn scenery_kind(kind: light_fixture::ProfileSceneryKind) -> SceneryKind {
         light_fixture::ProfileSceneryKind::Box => SceneryKind::Box,
         light_fixture::ProfileSceneryKind::Cylinder => SceneryKind::Cylinder,
         light_fixture::ProfileSceneryKind::Sphere => SceneryKind::Sphere,
+        light_fixture::ProfileSceneryKind::FlightRack => SceneryKind::FlightRack,
+        light_fixture::ProfileSceneryKind::PaTop => SceneryKind::PaTop,
+        light_fixture::ProfileSceneryKind::LineArray => SceneryKind::LineArray,
         light_fixture::ProfileSceneryKind::Prop => SceneryKind::Prop,
     }
 }
@@ -286,6 +289,10 @@ fn scenery_colour(kind: light_fixture::ProfileSceneryKind) -> [f32; 3] {
         light_fixture::ProfileSceneryKind::Box
         | light_fixture::ProfileSceneryKind::Cylinder
         | light_fixture::ProfileSceneryKind::Sphere => [0.3, 0.3, 0.3],
+        // Black road-case board and black speaker cabinets.
+        light_fixture::ProfileSceneryKind::FlightRack
+        | light_fixture::ProfileSceneryKind::PaTop
+        | light_fixture::ProfileSceneryKind::LineArray => [0.03, 0.03, 0.035],
         _ => [0.14, 0.14, 0.15],
     }
 }
@@ -376,10 +383,13 @@ pub(super) fn scenery_centre(
     size: Vec3,
 ) -> Vec3 {
     match kind {
-        // A deck, a flight of stairs and a handrail all stand on the floor they are placed on.
+        // A deck, a flight of stairs and a handrail all stand on the floor they are placed on, and
+        // so do a flight rack and a PA top, whose height grows upwards from where they stand.
         light_fixture::ProfileSceneryKind::Riser
         | light_fixture::ProfileSceneryKind::Stairs
-        | light_fixture::ProfileSceneryKind::Railing => {
+        | light_fixture::ProfileSceneryKind::Railing
+        | light_fixture::ProfileSceneryKind::FlightRack
+        | light_fixture::ProfileSceneryKind::PaTop => {
             let up = viz_scene::euler_degrees(instance.rotation_degrees) * Vec3::Y;
             instance.position + up * (size.y * 0.5)
         }

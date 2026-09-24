@@ -31,7 +31,7 @@ export const CAD_ADD_ACTIONS: readonly {
 }[] = [
 	{ kind: "truss", label: "Add truss", svg: trussSvg },
 	{ kind: "stage", label: "Add stage element", svg: stageElementSvg },
-	{ kind: "curtain", label: "Add curtain", svg: curtainSvg },
+	{ kind: "curtain", label: "Add scenery", svg: curtainSvg },
 	{ kind: "primitive", label: "Add primitive", svg: primitiveSvg },
 	{ kind: "venue", label: "Add venue element", svg: venueObjectSvg },
 ];

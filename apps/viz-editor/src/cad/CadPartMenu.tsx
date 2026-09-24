@@ -1,5 +1,5 @@
 /**
- * The menu behind the caret of **Add truss**, **Add stage element**, **Add curtain** and
+ * The menu behind the caret of **Add truss**, **Add stage element**, **Add scenery** and
  * **Add primitive**: the button's parts, each with its picture on a dark ground.
  *
  * A group with several parts — a truss section's corner pieces, a stage's platform sizes — is headed

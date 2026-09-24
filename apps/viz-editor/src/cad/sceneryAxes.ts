@@ -7,6 +7,14 @@
  * whole selection of the same model, so the reading lives here rather than in either panel.
  */
 import type { FixtureProfile, FixtureProfileScenery, PatchFixtureWrite } from "@tosklight/patch";
+import {
+	lineArrayElements,
+	lineArrayHeight,
+	PA_CABINET,
+	paPole,
+	rackHeight,
+	rackUnits,
+} from "./equipmentPlan";
 
 /** The measurements of a generated Venue object, with the key the patch stores each under. */
 export const SIZE_AXES = [
@@ -71,4 +79,75 @@ export function clampToRange(
 	metres: number,
 ): number {
 	return Math.min(Math.max(metres, scenery.minimum_size_metres[key]), scenery.maximum_size_metres[key]);
+}
+
+/**
+ * One measurement Info offers for a generated object, typed the way the object is bought.
+ *
+ * Most are a side in metres. Equipment reads its one count off its height instead: a flight rack
+ * by the rack units it holds, a line array by its elements, and a PA speaker by the pole under its
+ * cabinet (0 when it stands on the cabinet alone). Each still stores the height, so the patch, the
+ * desk and the Visualizer keep one size for it.
+ */
+export interface SizeMeasure {
+	id: string;
+	label: string;
+	unit: string;
+	digits: number;
+	min: number;
+	max: number;
+	read(size: Record<SizeAxisKey, number>): number;
+	/** The size with this measurement set, in metres. */
+	write(size: Record<SizeAxisKey, number>, value: number): Record<SizeAxisKey, number>;
+}
+
+/** The measurements Info offers for a generated object, in the order it lists them. */
+export function sizeMeasures(scenery: FixtureProfileScenery): SizeMeasure[] {
+	return SIZE_AXES.filter(({ axis }) => scenery.adjustable[axis]).map(({ key, label }) => {
+		const low = scenery.minimum_size_metres[key];
+		const high = scenery.maximum_size_metres[key];
+		const count =
+			key === "y" && (scenery.kind === "flight_rack" || scenery.kind === "line_array")
+				? scenery.kind === "flight_rack"
+					? { label: "Units", unit: "U", of: rackUnits, height: rackHeight }
+					: { label: "Elements", unit: "", of: lineArrayElements, height: lineArrayHeight }
+				: null;
+		if (count)
+			return {
+				id: `size-${key}`,
+				label: count.label,
+				unit: count.unit,
+				digits: 0,
+				min: count.of(low * 1000),
+				max: count.of(high * 1000),
+				read: (size) => count.of(size.y * 1000),
+				write: (size, value) => ({ ...size, y: count.height(Math.round(value)) / 1000 }),
+			};
+		if (key === "y" && scenery.kind === "pa_top")
+			return {
+				id: "size-y",
+				label: "Pole",
+				unit: "m",
+				digits: 2,
+				min: 0,
+				max: Math.max(0, high - PA_CABINET / 1000),
+				read: (size) => paPole(size.y * 1000) / 1000,
+				write: (size, pole) => ({ ...size, y: PA_CABINET / 1000 + (pole >= 0.05 ? pole : 0) }),
+			};
+		return {
+			id: `size-${key}`,
+			label,
+			unit: "m",
+			digits: 3,
+			min: low,
+			max: high,
+			read: (size) => size[key],
+			write: (size, metres) => ({ ...size, [key]: clampToRange(scenery, key, metres) }),
+		};
+	});
+}
+
+/** A size in metres as the patch stores it, in whole millimetres. */
+export function storedSize(size: Record<SizeAxisKey, number>): { x: number; y: number; z: number } {
+	return { x: Math.round(size.x * 1000), y: Math.round(size.y * 1000), z: Math.round(size.z * 1000) };
 }

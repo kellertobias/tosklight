@@ -56,7 +56,13 @@ export function isRailing(entity: Shape): boolean {
 
 /** Whether the object's position is the floor under it rather than the centre of its box. */
 export function standsOnItsFeet(entity: Shape): boolean {
-	return isStageElement(entity) || isRailing(entity);
+	return (
+		isStageElement(entity) ||
+		isRailing(entity) ||
+		// A flight rack and a PA speaker grow upwards from where they stand, as they are built.
+		entity.scenery?.kind === "flight_rack" ||
+		entity.scenery?.kind === "pa_top"
+	);
 }
 
 export function isTruss(entity: Shape): boolean {

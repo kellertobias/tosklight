@@ -57,10 +57,13 @@ export function useFixtureLibrary(): FixtureLibrary {
  * landing on the same number. The whole batch goes to the show as one mutation: either every
  * element is placed or none is, and the show's own reason comes back for the batch.
  */
+/** What a part is placed with beyond its profile: its options, and a size other than the default. */
+export type PlacedWith = Partial<Pick<PatchFixtureWrite, "sceneryOptions" | "scenerySizeMetres">>;
+
 async function placeDefinitions(
 	definition: FixtureDefinition,
 	placements: readonly PlanPlacement[],
-	sceneryOptions?: PatchFixtureWrite["sceneryOptions"],
+	extras: PlacedWith = {},
 ): Promise<string[]> {
 	const snapshot = await documentSession.patchSnapshot();
 	const taken = snapshot.fixtures.map((fixture) => fixture.virtualFixtureNumber);
@@ -82,7 +85,8 @@ async function placeDefinitions(
 			...candidate.input,
 			location: placement.position,
 			rotation: placement.rotation,
-			...(sceneryOptions ? { sceneryOptions } : {}),
+			...(extras.sceneryOptions ? { sceneryOptions: extras.sceneryOptions } : {}),
+			...(extras.scenerySizeMetres ? { scenerySizeMetres: extras.scenerySizeMetres } : {}),
 		};
 	});
 	if (!fixtures.length) return [];
@@ -106,15 +110,15 @@ export type PlaceResult =
 /**
  * Places a profile's newest revision, reading the library first unless a read one is given. `label`
  * names the object in the reason a placement fails. Without a layout it places one at the origin,
- * which is what a press of an add button does. `sceneryOptions` go with every placed object, such
- * as the handrails a flight of stairs was chosen with.
+ * which is what a press of an add button does. `extras` go with every placed object, such as the
+ * handrails a flight of stairs was chosen with or the rack units a flight rack was.
  */
 export async function placeProfile(
 	profileId: string,
 	label: string,
 	known?: FixtureLibrary,
 	placements: readonly PlanPlacement[] = AT_THE_ORIGIN,
-	sceneryOptions?: PatchFixtureWrite["sceneryOptions"],
+	extras?: PlacedWith,
 ): Promise<PlaceResult> {
 	const library = known?.state === "ready" ? known : await readLibrary();
 	if (library.state === "failed")
@@ -123,7 +127,7 @@ export async function placeProfile(
 	if (!definition)
 		return { ok: false, reason: `The ${label} is not in this computer's fixture library.` };
 	try {
-		return { ok: true, fixtureIds: await placeDefinitions(definition, placements, sceneryOptions) };
+		return { ok: true, fixtureIds: await placeDefinitions(definition, placements, extras) };
 	} catch (reason) {
 		return { ok: false, reason: `The show refused the ${label}: ${String(reason)}` };
 	}

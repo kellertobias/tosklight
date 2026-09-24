@@ -498,6 +498,9 @@ export interface FixtureProfileScenery {
 		| "box"
 		| "cylinder"
 		| "sphere"
+		| "flight_rack"
+		| "pa_top"
+		| "line_array"
 		| "prop";
 	/** Chords in a truss cross-section. Every other kind ignores it. */
 	chords: number;

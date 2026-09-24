@@ -539,6 +539,21 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
             0,
         ),
         ("venue--ball.toskfixture", ProfileSceneryKind::Sphere, 0),
+        (
+            "venue--flight-rack.toskfixture",
+            ProfileSceneryKind::FlightRack,
+            0,
+        ),
+        (
+            "venue--pa-speaker.toskfixture",
+            ProfileSceneryKind::PaTop,
+            0,
+        ),
+        (
+            "venue--line-array.toskfixture",
+            ProfileSceneryKind::LineArray,
+            0,
+        ),
     ];
     for (filename, kind, chords) in generated {
         let profile = shipped_profile(filename);

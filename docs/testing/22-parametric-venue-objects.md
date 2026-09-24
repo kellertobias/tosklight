@@ -97,6 +97,24 @@ choices existed open unchanged.
 10. Confirm a stairs profile is told from a deck by its kind, not its name: rename **Stage Stairs**
     to something without "stair" in it and confirm it still draws as a flight of steps.
 
+## Scenic elements and generated equipment
+
+1. Open **Add scenery**. Confirm it lists **Curtain**, **Chain**, **Disco ball**, **Stage railing**
+   and **Flight rack**, and that there is one curtain rather than curtains at fixed widths. Place
+   the curtain, set its width to 3 m in **Info** and confirm it draws 3 m wide in the plan and the
+   Visualizer.
+2. Choose **Flight rack → 12U**. Confirm the rack shows twelve panel lines on its front in the
+   Visualizer and in a front elevation, stands on the floor, and that **Info** shows **Units** 12
+   and **Depth** 0.6 m. Set **Units** to 4 and **Depth** to 0.8 m and confirm both views follow.
+3. From **Add venue element**, place the **PA Speaker**. Confirm it stands on its cabinet with
+   **Pole stand** off; turn it on and confirm a pole and three feet appear with the cabinet at the
+   top, and that **Pole** changes the pole's height.
+4. Place the **Line Array**. Confirm **Elements** is 8 and eight elements hang under the frame; set
+   it to 3 and confirm the array shortens to three.
+5. Confirm **Add venue element** still offers the musicians, DJ gear and other backline, but no
+   longer the curtains at fixed widths, the modelled racks, **PA Top**, **PA Top on a Pole Stand** or
+   **Line Array Hang**. Open a show that placed any of those and confirm each still draws.
+
 ## Snapping Venue geometry by dragging
 
 With snapping on and no key held, drag each object by its move gizmo in the plan.

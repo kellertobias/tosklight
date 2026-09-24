@@ -1,6 +1,7 @@
 import { chainPlan } from "./chainPlan";
 import { crowdPlan, seedOf } from "./crowdPlan";
 import { curtainPlan } from "./curtainPlan";
+import { flightRackPlan, lineArrayPlan, paSpeakerPlan } from "./equipmentPlan";
 import { hideCoveredEdges } from "./hiddenLines";
 import {
 	bakedYawQuarterTurns,
@@ -575,6 +576,12 @@ function typedGeometry(
 		scenery?.kind === "sphere"
 	) {
 		polygons = [primitive(scenery.kind, horizontal, vertical, view === "top_down")];
+	} else if (scenery?.kind === "flight_rack") {
+		polygons = flightRackPlan(horizontal, vertical, view);
+	} else if (scenery?.kind === "pa_top") {
+		polygons = paSpeakerPlan(horizontal, vertical, view);
+	} else if (scenery?.kind === "line_array") {
+		polygons = lineArrayPlan(horizontal, vertical, view);
 	} else if (
 		scenery?.kind === "truss" ||
 		(!scenery && /truss|pipe grid|pipe$/.test(type))

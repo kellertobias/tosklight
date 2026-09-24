@@ -28,6 +28,9 @@ const CORNER = "3ea0f8ad-c38d-5ec6-a4f7-6d918a1e974e";
 const STRAIGHT = "562e7947-8284-5ec8-9750-3cd3fe6c1c6d";
 const CROWD = "a0e75c30-92e5-4c20-bcd1-9a51ddbc6257";
 const RAILING = "9fc82162-c31c-4a34-bb2c-01fcc2254e37";
+const DRUMS = "d2a9d52d-0000-4000-8000-000000000001";
+/** The generated flight rack, chosen by the rack units it holds. */
+const RACK = "448af0db-7419-557e-a621-26eadcd05eed";
 const PAR = "par-profile";
 /** The one flight of stairs, placed with the handrails chosen for it. */
 const STAIRS = "d5982d33-9723-5749-ade6-7be0e6b4adf1";
@@ -78,6 +81,8 @@ beforeEach(() => {
 		profile(CORNER, "Four-Point Truss Corner 2-Way"),
 		profile(CROWD, "Crowd Area", { fixture_type: "venue" }),
 		profile(RAILING, "Stage Railing 2 m", { fixture_type: "venue" }),
+		profile(DRUMS, "Drum Kit", { fixture_type: "venue" }),
+		profile(RACK, "Flight Rack", { fixture_type: "venue" }),
 		profile(STAIRS, "Stage Stairs", { fixture_type: "venue" }),
 		profile(PAR, "LED Par", { manufacturer: "Generic", fixture_type: "par", patch_policy: "dmx" }),
 		{
@@ -165,8 +170,9 @@ describe("the CAD add buttons", () => {
 		const names = within(list)
 			.getAllByRole("listitem")
 			.map((item) => item.querySelector("strong")?.textContent);
-		// The trusses, decks, curtains and primitives are placed from their own buttons, not here.
-		expect(names).toEqual(["Crowd Area", "Stage Railing 2 m"]);
+		// The trusses, decks, scenic elements and primitives are placed from their own buttons, not
+		// here: the railing is a scenic element now, and the backline stays in this dialog.
+		expect(names).toEqual(["Crowd Area", "Drum Kit"]);
 		expect(within(list).getAllByRole("listitem")[0].querySelector("img")).toHaveAttribute(
 			"src",
 			`data:image/png;base64,${CROWD.slice(0, 4)}`,
@@ -199,9 +205,9 @@ describe("Add Several", () => {
 		const dialog = await screen.findByRole("dialog", { name: "Add venue element" });
 		const list = await within(dialog).findByRole("list", { name: "Venue elements" });
 		await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(2));
-		const railing = within(list).getAllByRole("listitem")[1];
-		const several = within(railing).getByRole("button", {
-			name: "Add Several Stage Railing 2 m",
+		const drums = within(list).getAllByRole("listitem")[1];
+		const several = within(drums).getByRole("button", {
+			name: "Add Several Drum Kit",
 		});
 		expect(several).toHaveAttribute("title", "Add Several");
 		expect(several).toHaveTextContent("++");
@@ -209,14 +215,27 @@ describe("Add Several", () => {
 		several.focus();
 		fireEvent.click(several);
 		expect(startPlacing).toHaveBeenCalledWith({
-			profileId: RAILING,
-			name: "Stage Railing 2 m",
+			profileId: DRUMS,
+			name: "Drum Kit",
 		});
 		expect(announcePlaced).not.toHaveBeenCalled();
 		expect(mocks.patchFixtures).not.toHaveBeenCalled();
 		await waitFor(() =>
 			expect(screen.queryByRole("dialog", { name: "Add venue element" })).not.toBeInTheDocument(),
 		);
+	});
+});
+
+describe("the scenery button's flight rack", () => {
+	it("places the rack at the height the chosen rack units need", async () => {
+		const { announcePlaced, press } = renderFlows();
+		press("curtain", `${RACK}:units-12`);
+		await waitFor(() => expect(announcePlaced).toHaveBeenCalledTimes(1));
+		// 120 mm of case and 44.45 mm a unit, stored in whole millimetres, 600 mm across and deep.
+		expect(placedFixture(0)).toMatchObject({
+			profileId: RACK,
+			scenerySizeMetres: { x: 600, y: 653, z: 600 },
+		});
 	});
 });
 

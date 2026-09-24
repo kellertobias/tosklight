@@ -167,6 +167,8 @@ impl ViewMode {
                 | SceneryKind::Box
                 | SceneryKind::Cylinder
                 | SceneryKind::Sphere
+                | SceneryKind::FlightRack
+                | SceneryKind::PaTop
         )
     }
 

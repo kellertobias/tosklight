@@ -15,7 +15,7 @@ import type {
 	PatchFixtureProjection,
 	PatchProfileRevision,
 } from "@tosklight/patch";
-import { clampToRange, hasAdjustableSize, placedSize, SIZE_AXES, sizedScenery } from "./sceneryAxes";
+import { hasAdjustableSize, placedSize, sizedScenery, sizeMeasures, storedSize } from "./sceneryAxes";
 
 export interface ThruFieldSpec {
 	id: string;
@@ -137,25 +137,18 @@ export function sharedModel(
 export function sharedModelFields(model: SharedModel, allVenue: boolean): ThruFieldSpec[] {
 	const { sizing: scenery } = model;
 	if (scenery && hasAdjustableSize(scenery))
-		return SIZE_AXES.filter(({ axis }) => scenery.adjustable[axis]).map(
-			({ key, label }): ThruFieldSpec => ({
-				id: `size-${key}`,
-				label: `${label} (m)`,
-				ariaLabel: label,
-				digits: 3,
-				unit: "m",
-				read: (fixture) => placedSize(fixture, scenery)[key],
-				write: (fixture, metres) => {
+		return sizeMeasures(scenery).map(
+			(measure): ThruFieldSpec => ({
+				id: measure.id,
+				label: measure.unit ? `${measure.label} (${measure.unit})` : measure.label,
+				ariaLabel: measure.label,
+				digits: measure.digits,
+				unit: measure.unit,
+				read: (fixture) => measure.read(placedSize(fixture, scenery)),
+				write: (fixture, value) => {
 					const size = placedSize(fixture, scenery);
-					const next = { ...size, [key]: clampToRange(scenery, key, metres ?? size[key]) };
-					return {
-						...fixture,
-						scenerySizeMetres: {
-							x: Math.round(next.x * 1000),
-							y: Math.round(next.y * 1000),
-							z: Math.round(next.z * 1000),
-						},
-					};
+					const next = measure.write(size, Math.min(Math.max(value ?? measure.read(size), measure.min), measure.max));
+					return { ...fixture, scenerySizeMetres: storedSize(next) };
 				},
 			}),
 		);

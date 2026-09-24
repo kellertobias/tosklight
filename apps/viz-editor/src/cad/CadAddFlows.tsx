@@ -1,7 +1,7 @@
 /**
  * What a press of a CAD add button does.
  *
- * **Add truss**, **Add stage element**, **Add curtain** and **Add primitive** place a part at once:
+ * **Add truss**, **Add stage element**, **Add scenery** and **Add primitive** place a part at once:
  * the part a press names — chosen from the button's caret menu, which the button then remembers — or
  * else the part the button last placed. **Add venue element** opens the picture list of every Venue
  * profile, where an element is selected and added, or held with **Add Several** so every press on a
@@ -15,7 +15,7 @@ import type { PlanPlacement } from "./bulkPlacement";
 import { type BulkShape, CadBulkAddModal } from "./CadBulkAddModal";
 import { CadVenueElementModal } from "./CadVenueElementModal";
 import { chosenPart, rememberPart } from "./cadAddChoice";
-import { type FixtureLibrary, placeProfile, readLibrary } from "./cadPlacement";
+import { type FixtureLibrary, type PlacedWith, placeProfile, readLibrary } from "./cadPlacement";
 import { type CadAddKind, useCadTools } from "./cadTools";
 import { definitionForProfile, findPart, partKey, partLabel, type VenuePart } from "./venueParts";
 
@@ -36,6 +36,17 @@ interface BulkFlow {
 	footprint?: { width: number; depth: number };
 }
 
+/** What a part is placed with: its options, and its size in the patch's millimetres. */
+function placedWith(part: VenuePart | undefined): PlacedWith {
+	const size = part?.sizeMetres;
+	return {
+		sceneryOptions: part?.sceneryOptions,
+		scenerySizeMetres: size
+			? { x: Math.round(size.x * 1000), y: Math.round(size.y * 1000), z: Math.round(size.z * 1000) }
+			: undefined,
+	};
+}
+
 export function CadAddFlows({
 	add,
 	onError,
@@ -54,10 +65,10 @@ export function CadAddFlows({
 		label: string,
 		known?: FixtureLibrary,
 		placements?: readonly PlanPlacement[],
-		sceneryOptions?: VenuePart["sceneryOptions"],
+		part?: VenuePart,
 	) {
 		setPlacing(true);
-		const result = await placeProfile(profileId, label, known, placements, sceneryOptions);
+		const result = await placeProfile(profileId, label, known, placements, placedWith(part));
 		setPlacing(false);
 		if (!result.ok) {
 			onError(result.reason);
@@ -99,7 +110,7 @@ export function CadAddFlows({
 			void openBulk(add.kind, found.part, partLabel(found));
 			return;
 		}
-		void place(found.part.profileId, partLabel(found), undefined, undefined, found.part.sceneryOptions);
+		void place(found.part.profileId, partLabel(found), undefined, undefined, found.part);
 	});
 
 	if (bulk)
@@ -116,7 +127,7 @@ export function CadAddFlows({
 						bulk.label,
 						undefined,
 						placements,
-						bulk.part.sceneryOptions,
+						bulk.part,
 					).then((placed) => {
 						if (placed) setBulk(null);
 					})

@@ -570,7 +570,7 @@ the key that picks it, such as **Draw line · L**. From left to right:
 
 * **Undo** and **Redo** step back and forward through moves and deletions in the drawing. ⌘Z
   (Ctrl+Z) undoes too, and ⇧⌘Z (Ctrl+Y) redoes.
-* The add group places venue objects. **Add truss**, **Add stage element**, **Add curtain** and
+* The add group places venue objects. **Add truss**, **Add stage element**, **Add scenery** and
   **Add primitive** each place their part at once when pressed. A small caret in the button's
   bottom-right corner opens a menu of the parts that button can place, each shown by its picture; the
   part the button places now is highlighted. Choosing a part places it and makes it the part the
@@ -591,9 +591,12 @@ the key that picks it, such as **Draw line · L**. From left to right:
     flight is drawn as stairs rather than a deck: a line across it at every nosing, an arrow pointing
     up the climb and its rails along the chosen sides. Stairs placed from the retired **Stairs with
     Handrails** part keep their rails up both sides until you choose otherwise.
-  * **Add curtain** (a drape on its rail) lists the parametric curtain, sized in **Info**, and the
-    curtains made at a fixed width of 1, 2, 3, 5 and 6 m. It places the parametric curtain until you
-    choose another.
+  * **Add scenery** (a drape on its rail) keeps the scenic elements together: the **Curtain** —
+    one, generated at any width and drop you set in **Info**, so a 3 m drape is this curtain at 3 m —
+    the **Chain**, the **Disco ball**, the **Stage railing** and the **Flight rack**, chosen by the
+    rack units it holds: 2U, 4U, 6U, 8U, 12U or 16U. A rack is 0.6 m deep until you set another
+    depth in **Info**, where **Units** (1 to 24) and **Depth** (0.4 to 1 m) change it at any time. It
+    places the curtain until you choose another.
   * **Add primitive** (a box, a ball and a cylinder) lists **Box**, **Cylinder** and **Ball**. Each
     fills the width, height and depth set in **Info** — a cylinder stands upright, so its height is its
     length — and takes the **Colour** set for it, neutral grey until you choose one.
@@ -611,10 +614,13 @@ the key that picks it, such as **Draw line · L**. From left to right:
       Both fields take a list such as `5 7`, or an evenly spaced run such as `4 THRU 8 BY 2`; a
       comma is a decimal point, as everywhere else on the desk.
   * **Add venue element** (a box) opens a dialog listing the Venue objects in this computer's fixture
-    library that no button above places — railings, crowds, mirror balls, chain, PA and backline,
-    figures and imported venue models — each shown by its picture on a dark ground. The trusses,
-    decks, curtains and primitives are left out on purpose: place those from their own buttons and
-    part menus. Type in the dialog's search to narrow the list by name or type. Choosing an object
+    library that no button above places — crowds, PA and backline, figures and imported venue
+    models — each shown by its picture on a dark ground. The trusses, decks, scenic elements and
+    primitives are left out on purpose: place those from their own buttons and part menus. The
+    **PA Speaker** is set in **Info**: **Pole stand** puts it up on a pole, and **Pole** sets the
+    pole's height up to 2 m under its 0.6 m cabinet. The **Line Array** is set by its **Elements**,
+    1 to 24 under its flying frame. The curtains made at one fixed width, and the racks, PA tops and
+    line array modelled at one size, are no longer offered; a show that placed one still draws it. Type in the dialog's search to narrow the list by name or type. Choosing an object
     only selects it; **Add** in the title bar (or a double-click on the object) places one. The
     small **++** button on each object — its tooltip reads **Add Several** — closes the dialog and
     holds that object instead: every click on a CAD view then places another copy where you click,

@@ -1649,8 +1649,8 @@ describe("the Viz editor window", () => {
 			"Add truss options",
 			"Add stage element",
 			"Add stage element options",
-			"Add curtain",
-			"Add curtain options",
+			"Add scenery",
+			"Add scenery options",
 			"Add primitive",
 			"Add primitive options",
 			"Add venue element",
@@ -1711,7 +1711,7 @@ describe("the Viz editor window", () => {
 		fireEvent.keyDown(window, { key: "Escape" });
 		await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
 		// Pressing the button places its part at once, so no dialog opens; a missing part says so.
-		fireEvent.click(within(toolbar).getByRole("button", { name: "Add curtain" }));
+		fireEvent.click(within(toolbar).getByRole("button", { name: "Add scenery" }));
 		expect(
 			await screen.findByText("The curtain is not in this computer's fixture library."),
 		).toBeInTheDocument();

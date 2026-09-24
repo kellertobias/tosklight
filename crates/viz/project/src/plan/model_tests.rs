@@ -981,6 +981,39 @@ fn a_flight_of_stairs_carries_the_handrails_chosen_for_it() {
     assert_eq!(rails(&bare), StairRails::NONE);
 }
 
+/// The generated rack, PA speaker and line array compile to their own kinds; the rack and the
+/// speaker stand on the floor they are placed on, and the line array hangs from its centre.
+#[test]
+fn generated_equipment_compiles_to_its_kind_standing_where_it_is_placed() {
+    for (name, kind, stands) in [
+        (
+            "venue--flight-rack",
+            viz_scene::SceneryKind::FlightRack,
+            true,
+        ),
+        ("venue--pa-speaker", viz_scene::SceneryKind::PaTop, true),
+        (
+            "venue--line-array",
+            viz_scene::SceneryKind::LineArray,
+            false,
+        ),
+    ] {
+        let fixture = shipped_venue(name);
+        let compiled = compile(std::slice::from_ref(&fixture));
+        let object = &compiled.scene.scenery[0];
+        assert_eq!(object.kind, kind, "{name}");
+        let lift = if stands { object.size.y * 0.5 } else { 0.0 };
+        let placed = compile(std::slice::from_ref(&fixture)).scene.scenery[0].position;
+        assert!((placed.y - object.position.y).abs() < 1e-6);
+        assert!(
+            (object.position.y - lift - fixture.instances[0].position.y).abs() < 1e-4,
+            "{name}: centre {} from {}",
+            object.position.y,
+            fixture.instances[0].position.y
+        );
+    }
+}
+
 /// A handrail is the one shipped part that uses the Railing kind the Visualizer already built.
 #[test]
 fn a_handrail_is_the_part_that_uses_the_railing_kind() {

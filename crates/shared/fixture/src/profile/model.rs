@@ -875,6 +875,14 @@ pub enum ProfileSceneryKind {
     Cylinder,
     /// A ball filling its width, height and depth, round when all three are equal.
     Sphere,
+    /// A 19-inch flight-case rack standing on the floor, its height the rack units it holds: a
+    /// case wall round a front of one panel line per unit.
+    FlightRack,
+    /// A PA top speaker, standing on the floor: a cabinet at the top of its height, on a pole stand
+    /// when it is placed taller than the cabinet itself.
+    PaTop,
+    /// A hanging line-array PA: a flying frame over as many elements as its height holds.
+    LineArray,
     #[default]
     Prop,
 }

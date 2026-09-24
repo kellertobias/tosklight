@@ -123,6 +123,9 @@ fn push_object(
         SceneryKind::Stairs => riser::push_stairs(frame, object, orientation, colour),
         SceneryKind::Cylinder => push_primitive(frame, object, orientation, MeshKind::Cylinder),
         SceneryKind::Sphere => push_primitive(frame, object, orientation, MeshKind::Sphere),
+        SceneryKind::FlightRack => equipment::push_flight_rack(frame, object, orientation, colour),
+        SceneryKind::PaTop => equipment::push_pa_top(frame, object, orientation, colour),
+        SceneryKind::LineArray => equipment::push_line_array(frame, object, orientation, colour),
         SceneryKind::Floor
         | SceneryKind::Wall
         | SceneryKind::Riser
@@ -204,6 +207,7 @@ use truss::push_truss;
 mod chain;
 #[cfg(test)]
 mod curtain_tests;
+mod equipment;
 #[cfg(test)]
 mod primitive_tests;
 mod riser;

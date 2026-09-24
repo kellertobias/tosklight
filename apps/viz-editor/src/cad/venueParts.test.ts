@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { chosenPart, rememberPart } from "./cadAddChoice";
 import {
 	CAD_PART_CATALOGUE,
-	CURTAIN_TYPES,
+	FLIGHT_RACK_PROFILE_ID,
+	rackHeightMetres,
+	SCENIC_TYPES,
 	DEFAULT_PART_PROFILE_IDS,
 	definitionForProfile,
 	findPart,
@@ -129,10 +131,34 @@ describe("the CAD add dialogs' parts", () => {
 });
 
 describe("the CAD part buttons' catalogue", () => {
-	it("offers the parametric curtain first, then the fixed widths", () => {
-		expect(CURTAIN_TYPES.map((type) => type.label)).toEqual(["Any width", "Fixed width"]);
-		expect(CURTAIN_TYPES[0].parts[0].profileId).toBe(PARAMETRIC_CURTAIN_PROFILE_ID);
-		expect(CURTAIN_TYPES[1].parts.map((part) => part.label)).toEqual(["1 m", "2 m", "3 m", "5 m", "6 m"]);
+	it("keeps the scenic elements together, with one configurable curtain and the rack by its units", () => {
+		expect(SCENIC_TYPES.map((type) => type.label)).toEqual([
+			"Curtain",
+			"Chain",
+			"Disco ball",
+			"Stage railing",
+			"Flight rack",
+		]);
+		// One curtain: a fixed width is the parametric curtain at that width.
+		expect(SCENIC_TYPES[0].parts.map((part) => part.profileId)).toEqual([PARAMETRIC_CURTAIN_PROFILE_ID]);
+		const racks = SCENIC_TYPES[4].parts;
+		expect(racks.map((part) => part.label)).toEqual(["2U", "4U", "6U", "8U", "12U", "16U"]);
+		expect(new Set(racks.map((part) => part.profileId))).toEqual(new Set([FLIGHT_RACK_PROFILE_ID]));
+		expect(racks[2].sizeMetres).toEqual({ x: 0.6, y: rackHeightMetres(6), z: 0.6 });
+		// Neither the fixed widths nor the racks, PA and line array modelled at one size are offered
+		// anywhere now; the generated PA Speaker and Line Array are, from the venue element dialog.
+		const retired = [
+			"6c1cd6ef-d230-5afd-974c-4d18698b81a2",
+			"fac71b58-3ca7-527c-ba80-4e5ce70bfcfa",
+			"847d02b1-a0c5-5fb2-ab28-61898823542d",
+			"bed75682-8441-5233-a9a5-7c6449ffce8f",
+			"5354c05e-266a-521c-9200-e4671a6b30a2",
+		];
+		const pa = "05c12913-e863-55db-9d0b-d3b40731cdfa";
+		const offered = venueProfiles(
+			[...retired, pa].map((id) => ({ ...definition(id, 1), manufacturer: "Venue" }) as FixtureDefinition),
+		);
+		expect(offered.map(({ profileId }) => profileId)).toEqual([pa]);
 		const ids = Object.values(CAD_PART_CATALOGUE).flatMap((groups) =>
 			groups.flatMap((group) => group.parts.map(partKey)),
 		);

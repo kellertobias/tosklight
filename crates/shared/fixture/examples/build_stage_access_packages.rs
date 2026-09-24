@@ -1,4 +1,5 @@
-//! Build the shipped stage-access packages: the flights of stairs and the parametric handrail.
+//! Build the shipped generated stage parts: the flights of stairs, the parametric handrail, and the
+//! equipment generated at the size it is placed — a flight rack, a PA speaker and a line array.
 //!
 //! Stairs used to be one profile declaring itself a riser, told apart from a deck only by having
 //! "stair" in its name. They are their own generated kind now, in two variants — with a handrail
@@ -39,6 +40,8 @@ struct Entry {
     adjustable: SceneryAxes,
     kind: ProfileSceneryKind,
     handrails: bool,
+    /// The shipped package whose photograph this part shows, when it is not the stairs'.
+    photograph_from: Option<&'static str>,
 }
 
 const ENTRIES: &[Entry] = &[
@@ -58,6 +61,7 @@ Generated at the size it is placed rather than drawn from a model made for one h
         },
         kind: ProfileSceneryKind::Stairs,
         handrails: false,
+        photograph_from: None,
     },
     Entry {
         file: "venue--stage-stairs-with-handrails.toskfixture",
@@ -75,6 +79,7 @@ placed at. Generated at the size it is placed rather than drawn from a model mad
         },
         kind: ProfileSceneryKind::Stairs,
         handrails: true,
+        photograph_from: None,
     },
     Entry {
         file: "venue--stage-handrail.toskfixture",
@@ -94,6 +99,64 @@ placed rather than drawn from a model made for one length.",
         },
         kind: ProfileSceneryKind::Railing,
         handrails: false,
+        photograph_from: None,
+    },
+    // Equipment whose one count is read off its height, as it is bought: a rack by its 19-inch
+    // units (120 mm of case plus 44.45 mm a unit), a line array by its elements (a 100 mm frame
+    // plus 250 mm an element), a PA speaker by its pole (anything above its 600 mm cabinet).
+    Entry {
+        file: "venue--flight-rack.toskfixture",
+        slug: Some("flight-rack"),
+        name: "Flight Rack",
+        notes: "A 19-inch flight-case rack on the floor, generated at the rack units and depth it is \
+placed at: 1 to 24 units, 0.4 to 1 m deep.",
+        size: (0.6, 0.12 + 0.04445 * 6.0, 0.6),
+        minimum: (0.6, 0.12 + 0.04445, 0.4),
+        maximum: (0.6, 0.12 + 0.04445 * 24.0, 1.0),
+        adjustable: SceneryAxes {
+            width: false,
+            height: true,
+            depth: true,
+        },
+        kind: ProfileSceneryKind::FlightRack,
+        handrails: false,
+        photograph_from: Some("venue--flight-case-rack-6u.toskfixture"),
+    },
+    Entry {
+        file: "venue--pa-speaker.toskfixture",
+        slug: Some("pa-speaker"),
+        name: "PA Speaker",
+        notes: "A PA top cabinet, standing on its own or on a pole stand: placed taller than its \
+600 mm cabinet, the rest of its height is the pole, up to a 2 m pole.",
+        size: (0.35, 0.6, 0.4),
+        minimum: (0.35, 0.6, 0.4),
+        maximum: (0.35, 2.6, 0.4),
+        adjustable: SceneryAxes {
+            width: false,
+            height: true,
+            depth: false,
+        },
+        kind: ProfileSceneryKind::PaTop,
+        handrails: false,
+        photograph_from: Some("venue--pa-top.toskfixture"),
+    },
+    Entry {
+        file: "venue--line-array.toskfixture",
+        slug: Some("line-array"),
+        name: "Line Array",
+        notes: "A hanging line-array PA: a flying frame over 1 to 24 elements, generated at the \
+number of elements it is placed with.",
+        size: (1.0, 0.1 + 0.25 * 8.0, 0.6),
+        minimum: (1.0, 0.1 + 0.25, 0.6),
+        maximum: (1.0, 0.1 + 0.25 * 24.0, 0.6),
+        adjustable: SceneryAxes {
+            width: false,
+            height: true,
+            depth: false,
+        },
+        kind: ProfileSceneryKind::LineArray,
+        handrails: false,
+        photograph_from: Some("venue--line-array-hang.toskfixture"),
     },
 ];
 
@@ -128,13 +191,19 @@ fn build(entry: &Entry) {
     // A part keeps the revision it already ships; it is raised only when this writes a different
     // package, so an installation that already holds it is offered the change once and no more.
     profile.revision = held.as_ref().map_or(1, |held| held.revision);
+    if let Some(source) = entry.photograph_from {
+        profile.photograph_asset = existing(source)
+            .expect("the package the photograph comes from is shipped")
+            .photograph_asset;
+    }
     profile.name = entry.name.into();
     profile.short_name = entry.name.into();
     profile.notes = entry.notes.into();
+    // The profile editor works in whole millimetres; a rack's units need not come out whole.
     let (width, height, depth) = entry.size;
-    profile.physical.width_millimetres = Some(width * 1000.0);
-    profile.physical.height_millimetres = Some(height * 1000.0);
-    profile.physical.depth_millimetres = Some(depth * 1000.0);
+    profile.physical.width_millimetres = Some((width * 1000.0).round());
+    profile.physical.height_millimetres = Some((height * 1000.0).round());
+    profile.physical.depth_millimetres = Some((depth * 1000.0).round());
     profile.scenery = Some(ProfileScenery {
         kind: entry.kind,
         chords: 0,

@@ -4,8 +4,9 @@
  *
  * A truss is listed by its section and then the part — the straight run at any length, or one of the
  * corner pieces made for that section. A stage element is listed by what it stands on and then its
- * platform size, and is raised to the height it is placed at. A curtain is the parametric profile or one made at a fixed width. Each add button
- * places one of its parts at once, and its caret menu chooses which.
+ * platform size, and is raised to the height it is placed at. The scenic elements — the parametric
+ * curtain, chain, disco ball, stage railing and the flight rack by its units — share one button.
+ * Each add button places one of its parts at once, and its caret menu chooses which.
  *
  * Profiles are named by their fixed ids, so a renamed profile still lands in the right place. A part
  * whose profile is missing from this machine's library is offered but cannot be placed.
@@ -23,6 +24,8 @@ export interface VenuePart {
 	 * handrails on. Parts that share a profile are told apart by their `key`.
 	 */
 	sceneryOptions?: NonNullable<PatchFixtureWrite["sceneryOptions"]>;
+	/** The size the part is placed at in metres, when it is not its profile's default. */
+	sizeMetres?: { x: number; y: number; z: number };
 	/** How the part is chosen and remembered when its profile alone does not say; else its profile. */
 	key?: string;
 }
@@ -36,12 +39,32 @@ export function partKey(part: VenuePart): string {
 const STAIRS_PROFILE_ID = "d5982d33-9723-5749-ade6-7be0e6b4adf1";
 
 /**
- * Profiles the add buttons no longer offer, because one part now places what they did: the flight
- * of stairs made with handrails is the one Stairs placed with rails on both sides. A show that
- * placed it still draws it; it is just not offered again.
+ * Profiles the add buttons and the venue element dialog no longer offer, because one generated part
+ * now places what they did: the flight of stairs made with handrails is the one Stairs with rails on
+ * both sides, a fixed-width curtain is the parametric curtain at that width, and the racks, PA tops
+ * and line array modelled at one size are the generated Flight Rack, PA Speaker and Line Array. A
+ * show that placed one still draws it; it is just not offered again.
  */
 const RETIRED_PART_PROFILE_IDS: ReadonlySet<string> = new Set([
 	"47662838-33b1-5fcc-9323-bb5840c1783f",
+	// The curtains made at one fixed width: the parametric curtain is any of them.
+	"6c1cd6ef-d230-5afd-974c-4d18698b81a2",
+	"db730b89-b3f0-5920-8c79-177193785459",
+	"2def7a39-ebb2-5028-9f81-1f2d916597fe",
+	"69cd8d74-d92b-5b9e-b004-bb179d95a5e1",
+	"b2e36256-402c-5fc1-bab8-fb63c329ceb6",
+	// The racks modelled at one height: the generated flight rack holds any number of units.
+	"b642001a-9ff2-574f-9c05-b1a1696af660",
+	"441aa8d0-d1a1-56bd-9415-4469fafea459",
+	"fac71b58-3ca7-527c-ba80-4e5ce70bfcfa",
+	"93bdb44a-ad3b-5e10-9bab-a2a1188d0a3b",
+	"a1e077f0-fe95-5b35-a0f4-5335bc1e6132",
+	"7bba0182-5046-5b15-b6c5-93eec8cbc65b",
+	// The PA modelled with and without its pole, and the line array modelled at one length: the
+	// generated PA Speaker and Line Array are set to either in Info.
+	"847d02b1-a0c5-5fb2-ab28-61898823542d",
+	"bed75682-8441-5233-a9a5-7c6449ffce8f",
+	"5354c05e-266a-521c-9200-e4671a6b30a2",
 ]);
 
 const HANDRAIL_CHOICES = [
@@ -190,32 +213,55 @@ export const STAGE_TYPES: readonly VenuePartGroup[] = [
 /** The parametric curtain: placed at any width, then sized in Info. */
 export const PARAMETRIC_CURTAIN_PROFILE_ID = "6f34b81e-3f71-5d35-b8fb-b4b0b7cce859";
 
-/** The parametric curtain first, then the drapes made at a fixed width. */
-export const CURTAIN_TYPES: readonly VenuePartGroup[] = [
+/** The generated flight rack, placed at the rack units chosen for it and sized further in Info. */
+export const FLIGHT_RACK_PROFILE_ID = "448af0db-7419-557e-a621-26eadcd05eed";
+
+/** A rack case's height for the 19-inch units it holds, as `push_flight_rack` reads it back. */
+export function rackHeightMetres(units: number): number {
+	return 0.12 + 0.04445 * units;
+}
+
+/**
+ * The scenic elements the stage is dressed with, together: the parametric curtain (a fixed-width
+ * drape is just this at another width), the chain, the disco ball, the stage railing and the
+ * generated flight rack, chosen by the rack units it holds.
+ */
+export const SCENIC_TYPES: readonly VenuePartGroup[] = [
 	{
-		id: "parametric",
-		label: "Any width",
+		id: "curtain",
+		label: "Curtain",
 		partsLabel: "Curtain",
 		parts: [
 			{
 				id: "parametric",
 				label: "curtain",
-				detail: "Sized in Info",
+				detail: "Any width, sized in Info",
 				profileId: PARAMETRIC_CURTAIN_PROFILE_ID,
 			},
 		],
 	},
+	...[
+		["chain", "Chain", "30e46e3d-69c6-5233-8acc-da3835abc316", "Rigging, any length"],
+		["disco-ball", "Disco ball", "6dd53026-195e-4224-939b-352615b3bce9", "50 cm"],
+		["railing", "Stage railing", "9fc82162-c31c-4a34-bb2c-01fcc2254e37", "2 m"],
+	].map(([id, label, profileId, detail]) => ({
+		id,
+		label,
+		partsLabel: "Part",
+		parts: [{ id, label: label.toLowerCase(), detail, profileId }],
+	})),
 	{
-		id: "fixed",
-		label: "Fixed width",
-		partsLabel: "Curtain",
-		parts: [
-			["1", "6c1cd6ef-d230-5afd-974c-4d18698b81a2"],
-			["2", "db730b89-b3f0-5920-8c79-177193785459"],
-			["3", "2def7a39-ebb2-5028-9f81-1f2d916597fe"],
-			["5", "69cd8d74-d92b-5b9e-b004-bb179d95a5e1"],
-			["6", "b2e36256-402c-5fc1-bab8-fb63c329ceb6"],
-		].map(([metres, profileId]) => ({ id: `${metres}-m`, label: `${metres} m`, profileId })),
+		id: "flight-rack",
+		label: "Flight rack",
+		partsLabel: "Rack units",
+		parts: [2, 4, 6, 8, 12, 16].map((units) => ({
+			id: `rack-${units}u`,
+			key: `${FLIGHT_RACK_PROFILE_ID}:units-${units}`,
+			label: `${units}U`,
+			detail: "0.6 m deep, sized in Info",
+			profileId: FLIGHT_RACK_PROFILE_ID,
+			sizeMetres: { x: 0.6, y: rackHeightMetres(units), z: 0.6 },
+		})),
 	},
 ];
 
@@ -240,7 +286,7 @@ export type CadPartKind = "truss" | "stage" | "curtain" | "primitive";
 export const CAD_PART_CATALOGUE: Readonly<Record<CadPartKind, readonly VenuePartGroup[]>> = {
 	truss: TRUSS_TYPES,
 	stage: STAGE_TYPES,
-	curtain: CURTAIN_TYPES,
+	curtain: SCENIC_TYPES,
 	primitive: PRIMITIVE_TYPES,
 };
 

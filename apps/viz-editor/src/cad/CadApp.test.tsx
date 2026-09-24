@@ -849,6 +849,61 @@ describe("the CAD planning screen", () => {
 		});
 	});
 
+	it("puts a PA speaker on a pole stand from Info and sets the pole's height", async () => {
+		const paId = "57575757-5757-4575-8575-575757575757";
+		const [original] = snapshot.entities;
+		mocks.snapshot.mockResolvedValue({
+			...snapshot,
+			selectedIds: [paId],
+			entities: [{ ...original, id: paId, logicalFixtureId: paId, name: "PA Speaker", kind: "venue" }],
+		});
+		const fixture = {
+			fixtureId: paId,
+			name: "PA Speaker",
+			profileId: "pa-profile",
+			profileRevision: 1,
+			location: { x: 0, y: 0, z: 0 },
+			rotation: { x: 0, y: 0, z: 0 },
+			multipatch: [],
+			scenerySizeMetres: null,
+		};
+		const revision = {
+			profileId: "pa-profile",
+			profileRevision: 1,
+			profileSnapshot: {
+				scenery: {
+					kind: "pa_top",
+					chords: 0,
+					default_size_metres: { x: 0.35, y: 0.6, z: 0.4 },
+					adjustable: { width: false, height: true, depth: false },
+					minimum_size_metres: { x: 0.35, y: 0.6, z: 0.4 },
+					maximum_size_metres: { x: 0.35, y: 2.6, z: 0.4 },
+				},
+			},
+		};
+		documentMocks.patchSnapshot.mockResolvedValue({ fixtures: [fixture], profileRevisions: [revision] });
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		const info = await screen.findByRole("region", { name: "Info" });
+		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
+		// On its own cabinet: the stand is off and there is no pole to set.
+		const stand = await within(info).findByRole("checkbox", { name: "Pole stand" });
+		expect(stand).not.toBeChecked();
+		expect(within(info).queryByLabelText("Pole")).toBeNull();
+		expect(within(info).queryByLabelText("Height")).toBeNull();
+		fireEvent.click(stand);
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		// The stand goes up at 1.2 m of pole under the 0.6 m cabinet.
+		expect(transportMocks.patchFixtures.mock.calls[0][2].fixtures[0].scenerySizeMetres).toEqual({
+			x: 350,
+			y: 1800,
+			z: 400,
+		});
+	});
+
 	it("offers a corrected profile to an element built from an older version of it", async () => {
 		const trussId = "66666666-6666-4666-8666-666666666666";
 		const [original] = snapshot.entities;
