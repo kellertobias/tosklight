@@ -22,6 +22,7 @@ mod points;
 mod provider;
 mod renderer_settings;
 mod scene;
+mod stair_rails;
 mod values;
 mod view;
 
@@ -53,8 +54,9 @@ pub use scene::{
     FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MediaCrop, MediaProjector,
     MediaSection, MediaSectionKind, MediaSourceBinding, MotionAxis, PhysicsBody,
     PhysicsConstraints, PhysicsProgram, PhysicsSceneryObject, PlanArtwork, PlanFallback, RiserFeet,
-    Scene, SceneryDetail, SceneryKind, SceneryObject, SourceForm, StairRails, euler_degrees,
+    Scene, SceneryDetail, SceneryKind, SceneryObject, SourceForm, euler_degrees,
 };
+pub use stair_rails::StairRails;
 pub use uuid;
 pub use values::{
     CellValue, EffectFrame, EmitterValues, ExternalCameraState, LaserScan, ParticleEmitter,
