@@ -604,8 +604,9 @@ the key that picks it, such as **Draw line · L**. From left to right:
     set in **Info** as **Diameter** and **Chain** — the **Stage railing** and the **Flight rack**. The
     rack is one entry: it is placed at 8U and 0.6 m deep and selected, so **Info** shows its **Units**
     (1 to 24) and **Depth** (0.4 to 1 m) straight away to set the size it should be; both change at
-    any time. A rack size chosen from the older list of 2U to 16U racks places this one rack. The
-    button places the curtain until you choose another.
+    any time. A rack size chosen from the older list of 2U to 16U racks places this one rack. Every
+    view draws the rack as a road case, its corners rounded and capped with ball corners, with a
+    panel at each unit on its front; it keeps that look at any size. The button places the curtain until you choose another.
   * **Add primitive** (a box, a ball and a cylinder) lists **Box**, **Cylinder** and **Ball**. Each
     fills the width, height and depth set in **Info** — a cylinder stands upright, so its height is its
     length — and takes the **Colour** set for it, neutral grey until you choose one. **Load model…**

@@ -85,12 +85,56 @@ describe("a disco ball measured by its diameter and its chain", () => {
 
 describe("equipment on the plan", () => {
 	it("draws a rack's units on its front, standing on the floor", () => {
+		// The case and its four corner protectors, then a panel at each unit.
 		const front = flightRackPlan(600, rackHeight(8), "front_to_back");
-		expect(front).toHaveLength(1 + 8);
+		expect(front).toHaveLength(5 + 8);
 		expect(Math.min(...front.flatMap(({ points }) => points.map(([, y]) => y)))).toBe(0);
-		// From the side it is the case alone; from above the box with its front edge.
-		expect(flightRackPlan(600, rackHeight(8), "left_to_right")).toHaveLength(1);
-		expect(flightRackPlan(600, 600, "top_down")).toHaveLength(2);
+		// From the side it is the case alone; from above the case with its front edge.
+		expect(flightRackPlan(600, rackHeight(8), "left_to_right")).toHaveLength(5);
+		expect(flightRackPlan(600, 600, "top_down")).toHaveLength(6);
+	});
+
+	it("draws a rack as a road case with rounded, capped corners that fill its footprint in every view", () => {
+		const extent = (points: readonly (readonly [number, number])[]) => [
+			Math.min(...points.map(([x]) => x)),
+			Math.max(...points.map(([x]) => x)),
+			Math.min(...points.map(([, y]) => y)),
+			Math.max(...points.map(([, y]) => y)),
+		];
+		for (const [width, height, view] of [
+			[600, rackHeight(8), "front_to_back"],
+			[800, rackHeight(16), "left_to_right"],
+			[600, 800, "top_down"],
+			[480, rackHeight(2), "back_to_front"],
+		] as const) {
+			const [shell, ...rest] = flightRackPlan(width, height, view);
+			const bottom = view === "top_down" ? -height / 2 : 0;
+			// The case spans exactly what it is placed at, so its selection box and snapping still fit it.
+			for (const [actual, expected] of extent(shell.points).map((value, index) => [
+				value,
+				[-width / 2, width / 2, bottom, bottom + height][index],
+			]))
+				expect(actual).toBeCloseTo(expected, 6);
+			// No point of the shell is a square corner: each corner is rounded off.
+			for (const [x, y] of [
+				[-width / 2, bottom],
+				[width / 2, bottom],
+				[width / 2, bottom + height],
+				[-width / 2, bottom + height],
+			])
+				expect(shell.points.some(([px, py]) => Math.hypot(px - x, py - y) < 1)).toBe(false);
+			expect(shell.points.length).toBeGreaterThan(4);
+			// A protector sits over each corner, inside the footprint.
+			const caps = rest.filter((polygon) => polygon.points.length > 4);
+			expect(caps).toHaveLength(4);
+			for (const cap of caps) {
+				const [left, right, low, high] = extent(cap.points);
+				expect(left).toBeGreaterThanOrEqual(-width / 2 - 1e-6);
+				expect(right).toBeLessThanOrEqual(width / 2 + 1e-6);
+				expect(low).toBeGreaterThanOrEqual(bottom - 1e-6);
+				expect(high).toBeLessThanOrEqual(bottom + height + 1e-6);
+			}
+		}
 	});
 
 	it("puts a PA speaker on a pole and feet only when it has one", () => {
