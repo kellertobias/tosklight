@@ -104,24 +104,7 @@ pub(super) fn generate_profile_presets_action(
         .map_err(|_| "the active show is changing; retry Preset generation".to_owned())?;
     let generated =
         generated_profile_presets(&state.output.snapshot(), &fixture_ids.into_iter().collect())?;
-    // Color Intent programs one whole colour: wheel slots and other native colour functions are
-    // resolver output, so they generate no presets of their own.
-    let generated = if state.attributes.color_model() == light_core::ColorProgrammingModel::Intent {
-        generated
-            .into_iter()
-            .filter_map(|mut preset| {
-                for values in preset.values.values_mut() {
-                    values.retain(|attribute, _| {
-                        !super::attribute_configuration::is_native_color_attribute(&attribute.0)
-                    });
-                }
-                preset.values.retain(|_, values| !values.is_empty());
-                (!preset.values.is_empty()).then_some(preset)
-            })
-            .collect()
-    } else {
-        generated
-    };
+    let generated = without_native_color_in_intent(state, generated);
     if generated.is_empty() {
         return Err("the selected fixtures have no fixed or indexed values".into());
     }
@@ -240,4 +223,27 @@ pub(super) fn generate_profile_presets_action(
         event_sequence: result.event_sequence,
         created,
     })
+}
+
+/// Color Intent programs one whole colour: wheel slots and other native colour functions are
+/// resolver output, so they generate no presets of their own.
+fn without_native_color_in_intent(
+    state: &AppState,
+    generated: Vec<GeneratedProfilePreset>,
+) -> Vec<GeneratedProfilePreset> {
+    if state.attributes.color_model() != light_core::ColorProgrammingModel::Intent {
+        return generated;
+    }
+    generated
+        .into_iter()
+        .filter_map(|mut preset| {
+            for values in preset.values.values_mut() {
+                values.retain(|attribute, _| {
+                    !super::attribute_configuration::is_native_color_attribute(&attribute.0)
+                });
+            }
+            preset.values.retain(|_, values| !values.is_empty());
+            (!preset.values.is_empty()).then_some(preset)
+        })
+        .collect()
 }

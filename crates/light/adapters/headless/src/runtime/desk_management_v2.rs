@@ -387,10 +387,31 @@ async fn clear_programmer(
     event_ws::clear_programmer(State(state), Path(id), headers).await
 }
 
+/// Defaults the desk copies into Cuelists and shows it creates. Existing objects keep theirs.
+fn patch_new_object_defaults(
+    configuration: &mut DeskConfiguration,
+    patch: &wire::ConfigurationPatch,
+) {
+    if let Some(value) = patch.cuelist_auto_off_at_zero_default {
+        configuration.cuelist_auto_off_at_zero_default = value;
+    }
+    if let Some(value) = patch.cuelist_auto_off_flash_release_default {
+        configuration.cuelist_auto_off_flash_release_default = value;
+    }
+    if let Some(value) = patch.color_programming_model_default {
+        configuration.color_programming_model_default =
+            super::color_model_impact::domain_model(value);
+    }
+    if let Some(value) = patch.start_after_first_recording {
+        configuration.start_after_first_recording = value;
+    }
+}
+
 fn patched_configuration(
     mut configuration: DeskConfiguration,
     patch: wire::ConfigurationPatch,
 ) -> Result<DeskConfiguration, ApiError> {
+    patch_new_object_defaults(&mut configuration, &patch);
     if let Some(value) = patch.frame_rate_hz {
         configuration.frame_rate_hz = value;
     }
@@ -483,19 +504,6 @@ fn patched_configuration(
     }
     if let Some(value) = patch.release_fade_millis {
         configuration.release_fade_millis = value;
-    }
-    if let Some(value) = patch.cuelist_auto_off_at_zero_default {
-        configuration.cuelist_auto_off_at_zero_default = value;
-    }
-    if let Some(value) = patch.cuelist_auto_off_flash_release_default {
-        configuration.cuelist_auto_off_flash_release_default = value;
-    }
-    if let Some(value) = patch.color_programming_model_default {
-        configuration.color_programming_model_default =
-            super::color_model_impact::domain_model(value);
-    }
-    if let Some(value) = patch.start_after_first_recording {
-        configuration.start_after_first_recording = value;
     }
     if let Some(value) = patch.preload_programmer_changes {
         configuration.preload_programmer_changes = value;

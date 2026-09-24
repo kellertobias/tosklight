@@ -156,6 +156,7 @@ mod mvr_apply;
 mod mvr_apply_store;
 mod mvr_import;
 mod network_endpoints_api;
+mod new_show_defaults;
 mod object_api;
 mod object_normalization;
 mod operator_api;

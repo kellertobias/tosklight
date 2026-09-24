@@ -564,21 +564,7 @@ impl FixtureMode {
                     yellow_channel_id,
                     filters,
                 } => {
-                    if filters.is_some_and(|filters| {
-                        [
-                            filters.open_xyz,
-                            filters.cyan_xyz,
-                            filters.magenta_xyz,
-                            filters.yellow_xyz,
-                        ]
-                        .into_iter()
-                        .any(|xyz| !valid_measured_xyz(xyz))
-                            || filters.open_xyz.y <= 0.0
-                    }) {
-                        return Err(ProfileError::Invalid(
-                            "subtractive filter calibration is invalid".into(),
-                        ));
-                    }
+                    validate_subtractive_filters(filters.as_ref())?;
                     vec![*cyan_channel_id, *magenta_channel_id, *yellow_channel_id]
                 }
                 ColorSystem::HueSaturation {
@@ -820,4 +806,25 @@ fn validate_positive(name: &str, value: Option<f32>) -> Result<(), ProfileError>
     } else {
         Ok(())
     }
+}
+
+/// Measured CMY filter data must be real colours, with a lit open beam to divide by.
+fn validate_subtractive_filters(
+    filters: Option<&super::SubtractiveCalibration>,
+) -> Result<(), ProfileError> {
+    let Some(filters) = filters else {
+        return Ok(());
+    };
+    let measurements = [
+        filters.open_xyz,
+        filters.cyan_xyz,
+        filters.magenta_xyz,
+        filters.yellow_xyz,
+    ];
+    if measurements.into_iter().any(|xyz| !valid_measured_xyz(xyz)) || filters.open_xyz.y <= 0.0 {
+        return Err(ProfileError::Invalid(
+            "subtractive filter calibration is invalid".into(),
+        ));
+    }
+    Ok(())
 }

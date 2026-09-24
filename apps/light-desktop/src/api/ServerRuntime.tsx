@@ -53,6 +53,7 @@ import { supplementalEventSource } from "./runtimeModels";
 import { ServerDeskBoundaries } from "./ServerDeskBoundaries";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
 import { ServerVisualizationRuntimeBoundary } from "./ServerVisualizationRuntimeBoundary";
+import type { BootstrapSnapshot } from "./types/desk";
 import type { TimecodeTransportSnapshot } from "./types/timecode";
 import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 
@@ -653,15 +654,7 @@ export function ServerRuntime({
 	);
 	const refreshAttributeRegistry = useCallback(async () => {
 		const next = await state.api.runtime.bootstrap();
-		state.setBootstrap((current) =>
-			current
-				? {
-						...current,
-						attribute_registry: next.attribute_registry,
-						color_model: next.color_model,
-					}
-				: next,
-		);
+		state.setBootstrap((current) => withAttributeSurface(current, next));
 	}, [state.api, state.setBootstrap]);
 	const scheduler = useServerSchedulerController({
 		api: state.api,
@@ -752,4 +745,17 @@ export function ServerRuntime({
 			</TimecodeActionsProvider>
 		</MacroActionsProvider>
 	);
+}
+
+/** Adopt the attribute surface a show-attribute change produced, keeping the rest of bootstrap. */
+function withAttributeSurface(
+	current: BootstrapSnapshot | null,
+	next: BootstrapSnapshot,
+): BootstrapSnapshot {
+	if (!current) return next;
+	return {
+		...current,
+		attribute_registry: next.attribute_registry,
+		color_model: next.color_model,
+	};
 }

@@ -183,6 +183,8 @@ function activeShowMutationDirections() {
     "crates/light/adapters/headless/src/runtime/active_show_adapter.rs",
     // Default-show creation writes a new library file, never the loaded active show.
     "crates/light/adapters/headless/src/default_show/seed.rs",
+    // New-show defaults write a show file this desk has just created, before it is opened.
+    "crates/light/adapters/headless/src/runtime/new_show_defaults.rs",
     // MVR apply is a deliberately separate whole-import boundary.
     "crates/light/adapters/headless/src/runtime/mvr_apply_store.rs",
     // Show loading commits compatibility migrations before installing the loaded show.
