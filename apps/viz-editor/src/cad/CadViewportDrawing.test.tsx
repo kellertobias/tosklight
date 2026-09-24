@@ -15,7 +15,9 @@ function setup({
 	rotationQuarterTurns = 0,
 	entities = [],
 	snapping = false,
+	placing = null,
 }: {
+	placing?: CadTools["placing"];
 	tool: CadDrawTool;
 	annotations?: CadAnnotation[];
 	rotationQuarterTurns?: number;
@@ -33,6 +35,10 @@ function setup({
 		clearError: vi.fn(),
 		placed: null,
 		announcePlaced: vi.fn(),
+		placing,
+		startPlacing: vi.fn(),
+		stopPlacing: vi.fn(),
+		placeAt: vi.fn(),
 	};
 	const onSelection = vi.fn();
 	render(
@@ -352,5 +358,26 @@ describe("snapping while drawing", () => {
 		expect(saved(tools)).toEqual([
 			expect.objectContaining({ points: [[2010, 160], [330, 330]] }),
 		]);
+	});
+});
+
+describe("Add Several on a CAD viewport", () => {
+	it("places a copy of the held element at every press and stops on Escape or Done", () => {
+		const { tools, click, onSelection } = setup({
+			tool: "select",
+			placing: { profileId: "railing", name: "Stage Railing 2 m" },
+		});
+		const banner = screen.getByRole("status", { name: "Adding several" });
+		expect(banner).toHaveTextContent("Adding several Stage Railing 2 m");
+		// A metre right and two up of the origin, then the origin itself: one copy each press.
+		click(600, 200);
+		click(500, 400);
+		expect(tools.placeAt).toHaveBeenNthCalledWith(1, { x: 1, y: 2, z: 0 });
+		expect(tools.placeAt).toHaveBeenNthCalledWith(2, { x: 0, y: 0, z: 0 });
+		expect(onSelection).not.toHaveBeenCalled();
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(tools.stopPlacing).toHaveBeenCalledOnce();
+		fireEvent.click(screen.getByRole("button", { name: "Done" }));
+		expect(tools.stopPlacing).toHaveBeenCalledTimes(2);
 	});
 });

@@ -608,8 +608,12 @@ the key that picks it, such as **Draw line · L**. From left to right:
     library that no button above places — railings, crowds, mirror balls, chain, PA and backline,
     figures and imported venue models — each shown by its picture on a dark ground. The trusses,
     decks, curtains and primitives are left out on purpose: place those from their own buttons and
-    part menus. Type in the dialog's search to narrow the list by name or type, and choose an object
-    to place it.
+    part menus. Type in the dialog's search to narrow the list by name or type. Choosing an object
+    only selects it; **Add** in the title bar (or a double-click on the object) places one. The
+    small **++** button on each object — its tooltip reads **Add Several** — closes the dialog and
+    holds that object instead: every click on a CAD view then places another copy where you click,
+    on the floor in a plan and at the height you click in an elevation, until you press Escape or
+    **Done** on the banner at the top of the view.
 
 A placed part goes to the stage origin with the next free virtual ID, the drawing shows it at once,
 and it is selected so **Info** opens to place it and set its size. A wizard's field takes the next

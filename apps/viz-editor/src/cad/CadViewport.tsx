@@ -7,7 +7,12 @@ import type { CadObjectMenuRequest } from "./CadObjectMenu";
 import { clampZoom } from "./cadShortcuts";
 import { useCadTools } from "./cadTools";
 import { PrintFrame } from "./CadPrintFrame";
-import { CadEntityLabels, CadMoveReadout, CadScaleBar } from "./CadViewportOverlays";
+import {
+	CadEntityLabels,
+	CadMoveReadout,
+	CadPlacingBanner,
+	CadScaleBar,
+} from "./CadViewportOverlays";
 import {
 	type CadFrame,
 	LineRenderer,
@@ -30,6 +35,7 @@ import type {
 } from "./types";
 import type { CadUnderlay } from "./underlays";
 import { useCadDrawingTool } from "./useCadDrawingTool";
+import { useCadPlacementTool } from "./useCadPlacementTool";
 import {
 	type CadViewportContext,
 	useCadViewportInteraction,
@@ -206,6 +212,13 @@ function useViewportGestures(context: CadViewportContext) {
 		return drawing.draft ? [...onView, drawing.draft] : onView;
 	}, [tools.annotations, view, drawing.draft]);
 	const interaction = useCadViewportInteraction(context);
+	const placement = useCadPlacementTool({
+		canvas,
+		view,
+		rotationQuarterTurns,
+		camera,
+		enabled: context.editEnabled,
+	});
 	const moveMarkers = interaction.snapMarkers;
 	const snapMarkers = useMemo(
 		() => (drawing.snapMarker ? [...moveMarkers, drawing.snapMarker] : moveMarkers),
@@ -214,7 +227,9 @@ function useViewportGestures(context: CadViewportContext) {
 	// The drawing tool is asked first; what it leaves goes to selection, moves and panning.
 	const canvasHandlers = {
 		onPointerDown: (event: React.PointerEvent<HTMLCanvasElement>) =>
-			drawing.pointerDown(event) || interaction.pointerDown(event),
+			placement.pointerDown(event) ||
+			drawing.pointerDown(event) ||
+			interaction.pointerDown(event),
 		onPointerMove: (event: React.PointerEvent<HTMLCanvasElement>) =>
 			// A pointer move is not urgent to React and would render after the next frame;
 			// rendering it inside the event puts the pan or drag on screen in that frame.
@@ -231,7 +246,7 @@ function useViewportGestures(context: CadViewportContext) {
 		onContextMenu: (event: React.MouseEvent<HTMLCanvasElement>) =>
 			drawing.active ? drawing.contextMenu(event) : interaction.contextMenu(event),
 	};
-	return { drawing, annotations, interaction, snapMarkers, canvasHandlers };
+	return { drawing, annotations, interaction, placement, snapMarkers, canvasHandlers };
 }
 
 export function CadViewport({
@@ -273,7 +288,8 @@ export function CadViewport({
 		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),
 		[drawings],
 	);
-	const { drawing, annotations, interaction, snapMarkers, canvasHandlers } = useViewportGestures({
+	const { drawing, annotations, interaction, placement, snapMarkers, canvasHandlers } =
+		useViewportGestures({
 		canvas,
 		entities,
 		drawingById,
@@ -345,6 +361,9 @@ export function CadViewport({
 				}}
 			/>
 			<CadMoveReadout readout={interaction.readout} camera={camera} />
+			{placement.active && placement.placing ? (
+				<CadPlacingBanner name={placement.placing.name} onDone={placement.stop} />
+			) : null}
 			<CadAnnotationLayer
 				annotations={annotations}
 				rotationQuarterTurns={rotationQuarterTurns}

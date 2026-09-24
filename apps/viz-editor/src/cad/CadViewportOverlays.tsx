@@ -139,3 +139,17 @@ export function CadMoveReadout({
 		</div>
 	);
 }
+
+/** While Add Several holds an element: what a press places, and the way to stop. */
+export function CadPlacingBanner({ name, onDone }: { name: string; onDone(): void }) {
+	return (
+		<div className="cad-placing-banner" role="status" aria-label="Adding several">
+			<span>
+				Adding several <strong>{name}</strong> — click to place a copy, Esc to finish
+			</span>
+			<button type="button" onClick={onDone}>
+				Done
+			</button>
+		</div>
+	);
+}

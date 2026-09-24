@@ -14,6 +14,7 @@ import {
 	useState,
 } from "react";
 import { type CadAnnotation, annotationSession } from "./annotations";
+import { placeProfile } from "./cadPlacement";
 
 /**
  * What the add buttons place: a truss, a stage element, a curtain, a primitive shape (box, cylinder
@@ -43,6 +44,21 @@ export interface CadTools {
 	placed: CadPlaced | null;
 	/** Tells the CAD screen an add flow has just placed these objects. */
 	announcePlaced(fixtureIds: string | readonly string[]): void;
+	/**
+	 * The Venue element **Add Several** is placing: every press on a viewport places one more copy
+	 * where it lands, until Escape or another tool ends it.
+	 */
+	placing: CadPlacing | null;
+	startPlacing(placing: CadPlacing): void;
+	stopPlacing(): void;
+	/** Places one copy of the element being placed at a world point, in metres. */
+	placeAt(position: { x: number; y: number; z: number }): Promise<void>;
+}
+
+/** The element repeated placement puts down. */
+export interface CadPlacing {
+	profileId: string;
+	name: string;
 }
 
 /**
@@ -67,6 +83,10 @@ const NO_TOOLS: CadTools = {
 	clearError: () => undefined,
 	placed: null,
 	announcePlaced: () => undefined,
+	placing: null,
+	startPlacing: () => undefined,
+	stopPlacing: () => undefined,
+	placeAt: async () => undefined,
 };
 
 export const CadToolContext = createContext<CadTools>(NO_TOOLS);
@@ -89,6 +109,7 @@ export function CadToolProvider({
 	const [tool, setTool] = useState<CadDrawTool>("select");
 	const [annotations, setAnnotations] = useState<CadAnnotation[]>([]);
 	const [error, setError] = useState<string | null>(null);
+	const [placing, setPlacing] = useState<CadPlacing | null>(null);
 
 	useEffect(() => {
 		let disposed = false;
@@ -112,24 +133,43 @@ export function CadToolProvider({
 
 	const value = useMemo<CadTools>(() => {
 		const report = (reason: unknown) => setError(String(reason));
+		const announcePlaced = (fixtureIds: string | readonly string[]) =>
+			setPlaced((current) => ({
+				fixtureIds: typeof fixtureIds === "string" ? [fixtureIds] : [...fixtureIds],
+				request: (current?.request ?? 0) + 1,
+			}));
 		return {
 			onAdd,
 			tool,
-			setTool,
+			// Picking up another tool puts the element being placed down.
+			setTool: (next) => {
+				setPlacing(null);
+				setTool(next);
+			},
 			annotations,
 			error,
 			placed,
-			announcePlaced: (fixtureIds) =>
-				setPlaced((current) => ({
-					fixtureIds: typeof fixtureIds === "string" ? [fixtureIds] : [...fixtureIds],
-					request: (current?.request ?? 0) + 1,
-				})),
+			announcePlaced,
+			placing,
+			startPlacing: (next) => {
+				setTool("select");
+				setPlacing(next);
+			},
+			stopPlacing: () => setPlacing(null),
+			placeAt: async (position) => {
+				if (!placing) return;
+				const result = await placeProfile(placing.profileId, placing.name, undefined, [
+					{ position, rotation: { x: 0, y: 0, z: 0 } },
+				]);
+				if (result.ok) announcePlaced(result.fixtureIds);
+				else report(result.reason);
+			},
 			clearError: () => setError(null),
 			save: (annotation) =>
 				annotationSession.save(annotation).then(() => undefined, report),
 			remove: (id) => annotationSession.remove(id).then(() => undefined, report),
 		};
-	}, [onAdd, tool, annotations, error, placed]);
+	}, [onAdd, tool, annotations, error, placed, placing]);
 
 	return <CadToolContext.Provider value={value}>{children}</CadToolContext.Provider>;
 }

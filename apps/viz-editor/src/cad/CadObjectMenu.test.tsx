@@ -44,6 +44,10 @@ function setup({
 		clearError: vi.fn(),
 		placed: null,
 		announcePlaced: vi.fn(),
+		placing: null,
+		startPlacing: vi.fn(),
+		stopPlacing: vi.fn(),
+		placeAt: vi.fn(),
 	};
 	const onSelection = vi.fn();
 	const onObjectMenu = vi.fn();

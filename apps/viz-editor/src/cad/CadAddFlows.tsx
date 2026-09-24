@@ -4,7 +4,8 @@
  * **Add truss**, **Add stage element**, **Add curtain** and **Add primitive** place a part at once:
  * the part a press names — chosen from the button's caret menu, which the button then remembers — or
  * else the part the button last placed. **Add venue element** opens the picture list of every Venue
- * profile. **Place several…**, in the truss and stage part menus, opens that part's wizard instead:
+ * profile, where an element is selected and added, or held with **Add Several** so every press on a
+ * viewport places another copy. **Place several…**, in the truss and stage part menus, opens that part's wizard instead:
  * a field of stage elements, or rows of truss, placed in one go. This stays mounted for the life of
  * the CAD screen, so the press that opened or placed something is never mistaken for a new one.
  * What is placed is announced to the CAD screen, which selects it and opens Info.
@@ -125,6 +126,10 @@ export function CadAddFlows({
 					if (placed) setVenueOpen(false);
 				})
 			}
+			onAddSeveral={(profileId, name) => {
+				setVenueOpen(false);
+				tools.startPlacing({ profileId, name });
+			}}
 		/>
 	) : null;
 }

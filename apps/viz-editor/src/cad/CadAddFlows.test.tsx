@@ -99,8 +99,9 @@ beforeEach(() => {
 
 function renderFlows() {
 	const announcePlaced = vi.fn();
+	const startPlacing = vi.fn();
 	const onError = vi.fn();
-	const tools = { announcePlaced } as unknown as CadTools;
+	const tools = { announcePlaced, startPlacing } as unknown as CadTools;
 	const view = (add: CadAddRequest) => (
 		<ModalProvider>
 			<CadToolContext.Provider value={tools}>
@@ -112,7 +113,7 @@ function renderFlows() {
 	let request = 0;
 	const press = (kind: CadAddRequest["kind"], profileId?: string, several?: boolean) =>
 		rerender(view({ kind, profileId, several, request: ++request }));
-	return { announcePlaced, onError, press };
+	return { announcePlaced, startPlacing, onError, press };
 }
 
 const placedFixture = (call = 0) => mocks.patchFixtures.mock.calls[call][2].fixtures[0];
@@ -152,7 +153,7 @@ describe("the CAD add buttons", () => {
 		expect(announcePlaced).not.toHaveBeenCalled();
 	});
 
-	it("lists the Venue profiles no add button offers, narrows them by search and places the chosen one", async () => {
+	it("lists the Venue profiles no add button offers, narrows them by search and adds the selected one", async () => {
 		const { announcePlaced, press } = renderFlows();
 		press("venue");
 		const dialog = await screen.findByRole("dialog", { name: "Add venue element" });
@@ -172,9 +173,44 @@ describe("the CAD add buttons", () => {
 			target: { value: "crowd" },
 		});
 		await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(1));
-		fireEvent.click(within(list).getByRole("button", { name: /Crowd Area/u }));
+		const tile = within(list).getByRole("button", { name: /^Crowd Area/u });
+		// Choosing an element only selects it.
+		fireEvent.click(tile);
+		expect(tile).toHaveAttribute("aria-pressed", "true");
+		await Promise.resolve();
+		expect(announcePlaced).not.toHaveBeenCalled();
+		expect(mocks.patchFixtures).not.toHaveBeenCalled();
+		fireEvent.click(within(dialog).getByRole("button", { name: "Add Crowd Area" }));
 		await waitFor(() => expect(announcePlaced).toHaveBeenCalledTimes(1));
 		expect(placedFixture().profileId).toBe(CROWD);
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "Add venue element" })).not.toBeInTheDocument(),
+		);
+	});
+});
+
+describe("Add Several", () => {
+	it("holds the row's own element for repeated placement without placing a first copy", async () => {
+		const { announcePlaced, startPlacing, press } = renderFlows();
+		press("venue");
+		const dialog = await screen.findByRole("dialog", { name: "Add venue element" });
+		const list = await within(dialog).findByRole("list", { name: "Venue elements" });
+		await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(2));
+		const railing = within(list).getAllByRole("listitem")[1];
+		const several = within(railing).getByRole("button", {
+			name: "Add Several Stage Railing 2 m",
+		});
+		expect(several).toHaveAttribute("title", "Add Several");
+		expect(several).toHaveTextContent("++");
+		// A keyboard press is a click on the real button.
+		several.focus();
+		fireEvent.click(several);
+		expect(startPlacing).toHaveBeenCalledWith({
+			profileId: RAILING,
+			name: "Stage Railing 2 m",
+		});
+		expect(announcePlaced).not.toHaveBeenCalled();
+		expect(mocks.patchFixtures).not.toHaveBeenCalled();
 		await waitFor(() =>
 			expect(screen.queryByRole("dialog", { name: "Add venue element" })).not.toBeInTheDocument(),
 		);

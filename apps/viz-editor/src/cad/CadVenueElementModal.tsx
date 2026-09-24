@@ -5,8 +5,9 @@
  * A Venue profile is one from the Venue manufacturer or any profile placed without DMX, so imported
  * venue models are listed beside the shipped railings, crowds, mirror balls, PA and figures. The
  * trusses, decks, curtains and primitives are left out: they are placed from their own buttons and
- * part menus. Choosing one places it; the dialog stays open with the show's reason when the show
- * refuses it.
+ * part menus. Choosing one selects it and **Add** (or a double-click) places one; the dialog stays
+ * open with the show's reason when the show refuses it. Each element's **Add Several** button closes
+ * the dialog and holds that element, so every press on a viewport places another copy.
  */
 import { ModalFrame } from "@tosklight/ui";
 import { useState } from "react";
@@ -19,16 +20,25 @@ const TITLE = "Add venue element";
 export function CadVenueElementModal({
 	placing,
 	onChoose,
+	onAddSeveral,
 	onClose,
 }: {
 	placing: boolean;
+	/** Places one of the element. */
 	onChoose(profileId: string, name: string, library: FixtureLibrary): void;
+	/** Holds the element for repeated placement on the viewports. */
+	onAddSeveral(profileId: string, name: string): void;
 	onClose(): void;
 }) {
 	const library = useFixtureLibrary();
 	const [query, setQuery] = useState("");
+	const [selected, setSelected] = useState<string | null>(null);
 	const all = library.state === "ready" ? venueProfiles(library.definitions) : [];
 	const shown = all.filter(({ definition }) => matchesVenueQuery(definition, query));
+	const chosen = shown.find(({ profileId }) => profileId === selected);
+	const add = () => {
+		if (chosen) onChoose(chosen.profileId, chosen.definition.name, library);
+	};
 	return (
 		<ModalFrame
 			ariaLabel={TITLE}
@@ -40,6 +50,13 @@ export function CadVenueElementModal({
 				onSearch: setQuery,
 				ariaLabel: "Search venue elements",
 				placeholder: "Search venue elements",
+			}}
+			accept={{
+				id: "add-venue-element",
+				label: "Add",
+				ariaLabel: chosen ? `Add ${chosen.definition.name}` : "Add the selected venue element",
+				disabled: !chosen || placing,
+				onPress: add,
 			}}
 			onClose={onClose}
 		>
@@ -63,12 +80,14 @@ export function CadVenueElementModal({
 					{shown.map(({ profileId, definition }) => {
 						const preview = previewOf(definition);
 						return (
-							<div role="listitem" key={profileId}>
+							<div role="listitem" key={profileId} className="cad-part-item">
 								<button
 									type="button"
 									className="cad-part-tile"
+									aria-pressed={profileId === selected}
 									disabled={placing}
-									onClick={() => onChoose(profileId, definition.name, library)}
+									onClick={() => setSelected(profileId)}
+									onDoubleClick={() => onChoose(profileId, definition.name, library)}
 								>
 									<span className="cad-part-preview">
 										{preview ? (
@@ -81,6 +100,16 @@ export function CadVenueElementModal({
 									<small>
 										{definition.profile_snapshot?.fixture_type === "rigging" ? "Rigging" : "Venue"}
 									</small>
+								</button>
+								<button
+									type="button"
+									className="cad-part-add-several"
+									title="Add Several"
+									aria-label={`Add Several ${definition.name}`}
+									disabled={placing}
+									onClick={() => onAddSeveral(profileId, definition.name)}
+								>
+									<span aria-hidden="true">++</span>
 								</button>
 							</div>
 						);
