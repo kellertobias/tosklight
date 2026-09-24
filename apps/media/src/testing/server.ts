@@ -966,6 +966,7 @@ function writeText(
 			text: body.text ?? null,
 			durationSeconds: body.durationSeconds ?? null,
 			targetUnixMillis: body.targetUnixMillis ?? null,
+			timeOfDaySeconds: body.timeOfDaySeconds ?? null,
 			style: body.style ?? aClock().style,
 			format: body.format ?? aTextFormat(),
 		};
@@ -994,6 +995,9 @@ function writeText(
 		if (body.text !== undefined) slot.text = body.text;
 		if (body.durationSeconds !== undefined) {
 			slot.durationSeconds = body.durationSeconds;
+		}
+		if (body.timeOfDaySeconds !== undefined) {
+			slot.timeOfDaySeconds = body.timeOfDaySeconds;
 		}
 		if (body.style !== undefined) slot.style = body.style;
 		if (body.format !== undefined) slot.format = body.format;
@@ -1808,6 +1812,7 @@ export function aClock(overrides: Partial<TextSlotView> = {}): TextSlotView {
 		text: null,
 		durationSeconds: null,
 		targetUnixMillis: null,
+		timeOfDaySeconds: null,
 		style: aTextStyle(),
 		format: aTextFormat(),
 		...overrides,
@@ -1825,6 +1830,7 @@ export function aCountdown(
 		text: null,
 		durationSeconds: 600,
 		targetUnixMillis: null,
+		timeOfDaySeconds: null,
 		style: aTextStyle(),
 		format: aTextFormat(),
 		...overrides,

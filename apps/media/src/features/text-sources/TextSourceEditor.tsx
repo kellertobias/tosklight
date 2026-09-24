@@ -26,6 +26,7 @@ export const KINDS = [
 	{ value: "clock", label: "Time of day" },
 	{ value: "countdown-duration", label: "Countdown of a length" },
 	{ value: "countdown-target", label: "Countdown to a moment" },
+	{ value: "countdown-time-of-day", label: "Countdown to a time every day" },
 ] as const;
 
 const ALIGNMENTS = [
@@ -55,6 +56,8 @@ export interface TextDraft {
 	durationSeconds: number;
 	/** A local datetime as an `<input type="datetime-local">` gives it. */
 	target: string;
+	/** A local time of day as an `<input type="time">` gives it, `HH:MM:SS`. */
+	timeOfDay: string;
 	style: TextStyleView;
 	format: TextFormatView;
 }
@@ -68,6 +71,7 @@ export function draftOf(slot: TextSlotView): TextDraft {
 		durationSeconds: slot.durationSeconds ?? 600,
 		target:
 			slot.targetUnixMillis === null ? "" : localMoment(slot.targetUnixMillis),
+		timeOfDay: timeOfDayText(slot.timeOfDaySeconds ?? DEFAULT_TIME_OF_DAY),
 		style: slot.style,
 		format: slot.format,
 	};
@@ -81,6 +85,7 @@ export function emptyDraft(): TextDraft {
 		text: "",
 		durationSeconds: 600,
 		target: "",
+		timeOfDay: timeOfDayText(DEFAULT_TIME_OF_DAY),
 		style: {
 			family: "sans-serif",
 			size: 0.2,
@@ -107,6 +112,7 @@ export function payloadOf(draft: TextDraft): {
 	text?: string;
 	durationSeconds?: number;
 	targetUnixMillis?: number;
+	timeOfDaySeconds?: number;
 	format: TextFormatView;
 } {
 	const format = draft.format;
@@ -120,6 +126,8 @@ export function payloadOf(draft: TextDraft): {
 				targetUnixMillis: draft.target ? Date.parse(draft.target) : Date.now(),
 				format,
 			};
+		case "countdown-time-of-day":
+			return { timeOfDaySeconds: secondsOfDay(draft.timeOfDay), format };
 		default:
 			return { format };
 	}
@@ -260,15 +268,8 @@ export function TextSourceEditor({
 							}
 						/>
 					)}
-					{section === "content" && draft.kind === "countdown-target" && (
-						<label className="media-text-moment">
-							Counts down to
-							<input
-								type="datetime-local"
-								value={draft.target}
-								onChange={(event) => set("target", event.target.value)}
-							/>
-						</label>
+					{section === "content" && (
+						<CountdownTarget draft={draft} onChange={onChange} />
 					)}
 					{section === "content" && draft.kind === "clock" && (
 						<FormatSection draft={draft} onChange={onChange} clock />
@@ -291,6 +292,43 @@ export function TextSourceEditor({
 				</div>
 			)}
 		</form>
+	);
+}
+
+/// What a countdown counts to: a moment, or a time every day. Nothing for the other kinds.
+function CountdownTarget({
+	draft,
+	onChange,
+}: {
+	draft: TextDraft;
+	onChange: (draft: TextDraft) => void;
+}) {
+	if (draft.kind === "countdown-target")
+		return (
+			<label className="media-text-moment">
+				Counts down to
+				<input
+					type="datetime-local"
+					value={draft.target}
+					onChange={(event) => onChange({ ...draft, target: event.target.value })}
+				/>
+			</label>
+		);
+	if (draft.kind !== "countdown-time-of-day") return null;
+	return (
+		<label className="media-text-moment">
+			Counts down every day to
+			<input
+				type="time"
+				step={1}
+				value={draft.timeOfDay}
+				onChange={(event) => onChange({ ...draft, timeOfDay: event.target.value })}
+			/>
+			<small>
+				Local to the server's UTC offset. Once the time has passed, the After zero
+				choice applies until midnight; then it counts to the next day's time.
+			</small>
+		</label>
 	);
 }
 
@@ -444,6 +482,23 @@ function FormatSection({
 			)}
 		</fieldset>
 	);
+}
+
+/** 21:00, the time a new recurring countdown counts to. */
+const DEFAULT_TIME_OF_DAY = 21 * 3_600;
+
+/** Seconds after midnight as `HH:MM:SS`. */
+export function timeOfDayText(seconds: number): string {
+	const pad = (value: number) => String(value).padStart(2, "0");
+	return `${pad(Math.floor(seconds / 3_600))}:${pad(Math.floor((seconds % 3_600) / 60))}:${pad(seconds % 60)}`;
+}
+
+/** `HH:MM` or `HH:MM:SS` as seconds after midnight; an empty or broken field reads as midnight. */
+export function secondsOfDay(text: string): number {
+	const [hours = 0, minutes = 0, seconds = 0] = text
+		.split(":")
+		.map((part) => Number.parseInt(part, 10) || 0);
+	return Math.min(hours * 3_600 + minutes * 60 + seconds, 86_399);
 }
 
 /** A Unix millisecond stamp as a local `datetime-local` value. */

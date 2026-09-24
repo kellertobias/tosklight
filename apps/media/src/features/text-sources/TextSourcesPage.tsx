@@ -23,8 +23,10 @@ import {
 	emptyDraft,
 	KINDS,
 	payloadOf,
+	secondsOfDay,
 	type TextDraft,
 	TextSourceEditor,
+	timeOfDayText,
 } from "./TextSourceEditor";
 
 export function key(slot: TextSlotView): string {
@@ -384,7 +386,13 @@ export function formatDraftPreview(
 		draft.kind === "countdown-target"
 			? (draft.target ? Date.parse(draft.target) : nowUnixMillis) -
 				nowUnixMillis
-			: draft.durationSeconds * 1_000;
+			: draft.kind === "countdown-time-of-day"
+				? untilTimeOfDay(
+						secondsOfDay(draft.timeOfDay),
+						nowUnixMillis,
+						draft.format.utcOffsetMinutes ?? serverUtcOffsetMinutes,
+					)
+				: draft.durationSeconds * 1_000;
 	let sign = "";
 	if (remaining < 0) {
 		if (draft.format.afterZero === "hold") remaining = 0;
@@ -408,6 +416,17 @@ export function formatDraftPreview(
 	return `${sign}${pattern === "h:mm:ss" ? hours : String(hours).padStart(2, "0")}${separator}${String(Math.floor((total % 3_600) / 60)).padStart(2, "0")}${separator}${String(total % 60).padStart(2, "0")}`;
 }
 
+/** As the server counts: to today's local time, negative once passed, until local midnight. */
+export function untilTimeOfDay(
+	seconds: number,
+	nowUnixMillis: number,
+	offsetMinutes: number,
+): number {
+	const day = 86_400_000;
+	const local = nowUnixMillis + offsetMinutes * 60_000;
+	return seconds * 1_000 - (((local % day) + day) % day);
+}
+
 function escapeSvg(value: string): string {
 	return value
 		.replaceAll("&", "&amp;")
@@ -424,6 +443,8 @@ function describe(slot: TextSlotView): string {
 	if (slot.text !== null) return `${kind} · ${slot.text.replace(/\s+/gu, " ")}`;
 	if (slot.durationSeconds !== null)
 		return `${kind} · ${slot.durationSeconds} s`;
+	if (slot.timeOfDaySeconds !== null)
+		return `${kind} · ${timeOfDayText(slot.timeOfDaySeconds)}`;
 	if (slot.targetUnixMillis !== null)
 		return `${kind} · ${new Date(slot.targetUnixMillis).toLocaleString()}`;
 	return kind;

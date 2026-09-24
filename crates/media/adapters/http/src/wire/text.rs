@@ -14,7 +14,8 @@ use std::time::Duration;
 use media_domain::MediaAddress;
 use media_domain::color::Tint;
 use media_domain::text::{
-    ClockPattern, CountdownAfterZero, CountdownPattern, TextEntry, TextFormat, TextKind,
+    ClockPattern, CountdownAfterZero, CountdownPattern, SECONDS_PER_DAY, TextEntry, TextFormat,
+    TextKind,
 };
 use media_domain::text_catalog::{Alignment, TextSlot, TextStyle};
 use serde::{Deserialize, Serialize};
@@ -206,7 +207,7 @@ pub struct TextSlotView {
     pub name: String,
     /// A disabled slot produces nothing, which is how an operator parks one without deleting it.
     pub enabled: bool,
-    /// `static`, `clock`, `countdown-duration`, or `countdown-target`.
+    /// `static`, `clock`, `countdown-duration`, `countdown-target`, or `countdown-time-of-day`.
     pub kind: String,
     pub text: Option<String>,
     pub duration_seconds: Option<f64>,
@@ -214,6 +215,8 @@ pub struct TextSlotView {
     /// browser holds exactly, and a client should not need big-integer arithmetic to set a deadline.
     #[ts(type = "number | null")]
     pub target_unix_millis: Option<i64>,
+    /// The local time of day a recurring countdown counts to, in seconds after midnight.
+    pub time_of_day_seconds: Option<u32>,
     pub style: TextStyleView,
     pub format: TextFormatView,
 }
@@ -232,6 +235,11 @@ impl TextSlotView {
             TextKind::CountdownToTarget { target_unix_millis } => {
                 ("countdown-target", None, None, Some(*target_unix_millis))
             }
+            TextKind::CountdownToTimeOfDay { .. } => ("countdown-time-of-day", None, None, None),
+        };
+        let time_of_day_seconds = match slot.entry.kind {
+            TextKind::CountdownToTimeOfDay { seconds_of_day } => Some(seconds_of_day),
+            _ => None,
         };
         Self {
             address: AddressView::of(slot.address),
@@ -241,6 +249,7 @@ impl TextSlotView {
             text,
             duration_seconds,
             target_unix_millis,
+            time_of_day_seconds,
             style: TextStyleView::of(&slot.style),
             format: TextFormatView::of(&slot.entry.format),
         }
@@ -271,6 +280,8 @@ pub enum TextEditError {
     InvalidSeparator,
     #[error("a clock UTC offset must be between -840 and 840 minutes")]
     InvalidUtcOffset,
+    #[error("a time of day must be from 00:00:00 to 23:59:59")]
+    InvalidTimeOfDay,
 }
 
 /// The content half of a slot, shared by the create and update bodies.
@@ -282,6 +293,7 @@ fn kind_of(
     text: Option<&String>,
     duration_seconds: Option<f64>,
     target_unix_millis: Option<i64>,
+    time_of_day_seconds: Option<u32>,
 ) -> Result<TextKind, TextEditError> {
     match kind {
         "static" => Ok(TextKind::Static {
@@ -306,6 +318,18 @@ fn kind_of(
                 field: "targetUnixMillis",
             })?,
         }),
+        "countdown-time-of-day" => {
+            let seconds = time_of_day_seconds.ok_or(TextEditError::MissingPayload {
+                kind: "countdown",
+                field: "timeOfDaySeconds",
+            })?;
+            if seconds >= SECONDS_PER_DAY {
+                return Err(TextEditError::InvalidTimeOfDay);
+            }
+            Ok(TextKind::CountdownToTimeOfDay {
+                seconds_of_day: seconds,
+            })
+        }
         other => Err(TextEditError::UnknownKind {
             kind: other.to_owned(),
         }),
@@ -339,6 +363,8 @@ pub struct CreateText {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(type = "number | null")]
     pub target_unix_millis: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_of_day_seconds: Option<u32>,
     /// Absent means the shipped default appearance, which is what a new slot should look like.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<TextStyleView>,
@@ -354,6 +380,7 @@ impl CreateText {
             self.text.as_ref(),
             self.duration_seconds,
             self.target_unix_millis,
+            self.time_of_day_seconds,
         )?;
         let style = match self.style.clone() {
             Some(style) => style.into_style()?,
@@ -392,6 +419,8 @@ pub struct UpdateText {
     #[ts(type = "number | null")]
     pub target_unix_millis: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_of_day_seconds: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<TextStyleView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<TextFormatView>,
@@ -408,6 +437,7 @@ impl UpdateText {
                 self.text.as_ref(),
                 self.duration_seconds,
                 self.target_unix_millis,
+                self.time_of_day_seconds,
             )?),
             // Editing a payload without naming a kind edits the kind that is already there.
             None => self.edited_payload(&slot.entry.kind)?,
@@ -447,7 +477,8 @@ impl UpdateText {
     fn edited_payload(&self, current: &TextKind) -> Result<Option<TextKind>, TextEditError> {
         let touched = self.text.is_some()
             || self.duration_seconds.is_some()
-            || self.target_unix_millis.is_some();
+            || self.target_unix_millis.is_some()
+            || self.time_of_day_seconds.is_some();
         if !touched {
             return Ok(None);
         }
@@ -456,6 +487,7 @@ impl UpdateText {
             TextKind::Clock => "clock",
             TextKind::CountdownFromDuration { .. } => "countdown-duration",
             TextKind::CountdownToTarget { .. } => "countdown-target",
+            TextKind::CountdownToTimeOfDay { .. } => "countdown-time-of-day",
         };
         // Existing payloads fill in whatever the edit did not carry, so changing a countdown's
         // length does not require resending the words of a kind it is not.
@@ -474,7 +506,12 @@ impl UpdateText {
             (None, TextKind::CountdownToTarget { target_unix_millis }) => Some(*target_unix_millis),
             (None, _) => None,
         };
-        kind_of(label, text.as_ref(), duration, target).map(Some)
+        let time_of_day = match (self.time_of_day_seconds, current) {
+            (Some(seconds), _) => Some(seconds),
+            (None, TextKind::CountdownToTimeOfDay { seconds_of_day }) => Some(*seconds_of_day),
+            (None, _) => None,
+        };
+        kind_of(label, text.as_ref(), duration, target, time_of_day).map(Some)
     }
 }
 
@@ -535,6 +572,44 @@ mod tests {
         assert_eq!(slot.address, MediaAddress::new(201, 4));
         assert_eq!(slot.style, TextStyle::default());
         assert!(slot.entry.enabled, "a new slot is not parked");
+    }
+
+    #[test]
+    fn a_countdown_to_a_time_every_day_carries_only_its_time() {
+        let mut stored = slot(TextKind::CountdownFromDuration {
+            duration: Duration::from_secs(600),
+        });
+        update(r#"{"requestId":"a","kind":"countdown-time-of-day","timeOfDaySeconds":75600}"#)
+            .apply(&mut stored)
+            .expect("accepted");
+        let view = TextSlotView::of(&stored);
+        assert_eq!(view.kind, "countdown-time-of-day");
+        assert_eq!(view.time_of_day_seconds, Some(75_600));
+        assert_eq!(
+            (view.duration_seconds, view.target_unix_millis),
+            (None, None)
+        );
+
+        update(r#"{"requestId":"b","timeOfDaySeconds":3600}"#)
+            .apply(&mut stored)
+            .expect("the time alone is enough");
+        assert_eq!(
+            stored.entry.kind,
+            TextKind::CountdownToTimeOfDay {
+                seconds_of_day: 3_600
+            }
+        );
+        assert_eq!(
+            update(r#"{"requestId":"c","timeOfDaySeconds":86400}"#).apply(&mut stored),
+            Err(TextEditError::InvalidTimeOfDay)
+        );
+        assert_eq!(
+            update(r#"{"requestId":"d","kind":"countdown-time-of-day"}"#).apply(&mut stored),
+            Err(TextEditError::MissingPayload {
+                kind: "countdown",
+                field: "timeOfDaySeconds"
+            })
+        );
     }
 
     #[test]

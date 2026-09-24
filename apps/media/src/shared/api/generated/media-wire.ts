@@ -455,14 +455,18 @@ export type TextSlotView = { address: AddressView, name: string,
  */
 enabled: boolean,
 /**
- * `static`, `clock`, `countdown-duration`, or `countdown-target`.
+ * `static`, `clock`, `countdown-duration`, `countdown-target`, or `countdown-time-of-day`.
  */
 kind: string, text: string | null, durationSeconds: number | null,
 /**
  * Rendered as a number rather than a `bigint`: a Unix millisecond stamp is well inside what a
  * browser holds exactly, and a client should not need big-integer arithmetic to set a deadline.
  */
-targetUnixMillis: number | null, style: TextStyleView, format: TextFormatView, };
+targetUnixMillis: number | null,
+/**
+ * The local time of day a recurring countdown counts to, in seconds after midnight.
+ */
+timeOfDaySeconds: number | null, style: TextStyleView, format: TextFormatView, };
 export type AudioBandsView = { bass: number, mid: number, treble: number, };
 export type WaveformView = { points: Array<number>, };
 export type AudioVoiceView = {
@@ -747,7 +751,7 @@ export type UpdateLibrarySettings = { requestId: string, directory?: string | nu
 export type UpdateDataFolder = { requestId: string, directory: string, };
 export type UpdateTime = { requestId: string, utcOffsetMinutes?: number | null, };
 export type UpdatePlayback = { requestId: string, switchHoldMillis?: number | null, frameRate?: number | null, };
-export type CreateText = { requestId: string, folder: number, file: number, name: string, kind: string, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null,
+export type CreateText = { requestId: string, folder: number, file: number, name: string, kind: string, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null, timeOfDaySeconds?: number | null,
 /**
  * Absent means the shipped default appearance, which is what a new slot should look like.
  */
@@ -756,7 +760,7 @@ export type UpdateText = { requestId: string, name?: string | null, enabled?: bo
 /**
  * Changing the kind carries that kind's payload with it.
  */
-kind?: string | null, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null, style?: TextStyleView | null, format?: TextFormatView | null, };
+kind?: string | null, text?: string | null, durationSeconds?: number | null, targetUnixMillis?: number | null, timeOfDaySeconds?: number | null, style?: TextStyleView | null, format?: TextFormatView | null, };
 export type DeleteText = { requestId: string, };
 export type UpdateAudio = { requestId: string,
 /**

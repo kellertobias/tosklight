@@ -563,11 +563,16 @@ body {
 .media-text-colour,
 .media-text-moment {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 0.5rem;
 	min-height: 44px;
 	color: var(--muted);
 	font-size: 0.9rem;
+}
+
+.media-text-moment > small {
+	flex-basis: 100%;
 }
 
 .media-text-colour input[type="color"] {

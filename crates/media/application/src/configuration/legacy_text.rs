@@ -435,9 +435,9 @@ fn name_of(slot: u16, entry: &TextEntry) -> String {
     let described = match &entry.kind {
         TextKind::Static { text } => text.lines().next().unwrap_or("").trim().to_owned(),
         TextKind::Clock => "Clock".to_owned(),
-        TextKind::CountdownFromDuration { .. } | TextKind::CountdownToTarget { .. } => {
-            "Countdown".to_owned()
-        }
+        TextKind::CountdownFromDuration { .. }
+        | TextKind::CountdownToTarget { .. }
+        | TextKind::CountdownToTimeOfDay { .. } => "Countdown".to_owned(),
     };
     if described.is_empty() {
         // A slot with nothing in it still needs to be findable, and its old number is what the

@@ -26,7 +26,18 @@ pub enum TextKind {
     /// Counts down to a fixed moment, expressed as milliseconds since the Unix epoch so the domain
     /// needs no calendar library.
     CountdownToTarget { target_unix_millis: i64 },
+    /// Counts down to a time of day that comes round every day, such as 21:00 before each show.
+    ///
+    /// The time is local to the offset a clock on this entry would show — its own, else the
+    /// server's — and that offset is fixed, so a daylight-saving change moves the target only when
+    /// the offset is changed. The countdown belongs to the day: from local midnight it counts to
+    /// that day's time, once the time has passed it does what the format says after zero, and at
+    /// the next local midnight it starts on the next day's.
+    CountdownToTimeOfDay { seconds_of_day: u32 },
 }
+
+/// Seconds in a day, and the longest a time of day may be.
+pub const SECONDS_PER_DAY: u32 = 86_400;
 
 /// Operator-visible formatting, stored beside the kind so old unit variants remain compatible.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -298,7 +309,24 @@ pub fn render(
             let remaining = i128::from(*target_unix_millis) - i128::from(now_unix_millis);
             format_countdown(remaining, &entry.format.countdown)
         }
+        TextKind::CountdownToTimeOfDay { seconds_of_day } => {
+            let offset = entry
+                .format
+                .clock
+                .utc_offset_minutes
+                .unwrap_or(server_utc_offset_minutes);
+            let remaining = until_time_of_day(*seconds_of_day, now_unix_millis, offset);
+            format_countdown(i128::from(remaining), &entry.format.countdown)
+        }
     })
+}
+
+/// Milliseconds from now to today's `seconds_of_day` in local time at `offset_minutes`; negative
+/// once it has passed, until local midnight starts the next day.
+pub fn until_time_of_day(seconds_of_day: u32, now_unix_millis: i64, offset_minutes: i16) -> i64 {
+    let local = now_unix_millis.saturating_add(i64::from(offset_minutes) * 60_000);
+    let into_day = local.rem_euclid(i64::from(SECONDS_PER_DAY) * 1_000);
+    i64::from(seconds_of_day.min(SECONDS_PER_DAY - 1)) * 1_000 - into_day
 }
 
 /// `HH:MM:SS` of the day, from a Unix millisecond stamp. No calendar library needed for a clock.
@@ -610,6 +638,59 @@ mod tests {
             "00:00:00",
             "past the target it holds rather than counting up"
         );
+    }
+
+    #[test]
+    fn a_time_of_day_countdown_recurs_every_local_day() {
+        const HOUR: i64 = 3_600_000;
+        let day = 20_000 * 24 * HOUR;
+        let mut entry = TextEntry::new(TextKind::CountdownToTimeOfDay {
+            seconds_of_day: 21 * 3_600,
+        });
+        entry.format.countdown.after_zero = CountdownAfterZero::CountUp;
+        let at = |millis| render(&entry, &Countdown::new(), millis, 0, 0).unwrap();
+        assert_eq!(
+            at(day + 8 * HOUR),
+            "13:00:00",
+            "the morning counts to tonight"
+        );
+        assert_eq!(at(day + 21 * HOUR), "00:00:00");
+        assert_eq!(
+            at(day + 22 * HOUR + 1_000),
+            "01:00:01",
+            "past it, after zero applies"
+        );
+        assert_eq!(
+            at(day + 24 * HOUR),
+            "21:00:00",
+            "local midnight starts the next day's countdown"
+        );
+        assert_eq!(at(2 * day + 8 * HOUR), "13:00:00", "every day alike");
+
+        // The day is the local one: two hours ahead of UTC, 19:00 UTC is 21:00 there.
+        assert_eq!(
+            render(&entry, &Countdown::new(), day + 18 * HOUR, 0, 120).unwrap(),
+            "01:00:00"
+        );
+        // A clock offset on the entry wins over the server's, as it does for a clock.
+        entry.format.clock.utc_offset_minutes = Some(60);
+        assert_eq!(
+            render(&entry, &Countdown::new(), day + 18 * HOUR, 0, 120).unwrap(),
+            "02:00:00"
+        );
+    }
+
+    #[test]
+    fn a_time_of_day_countdown_is_stored_by_its_time() {
+        let kind = TextKind::CountdownToTimeOfDay {
+            seconds_of_day: 75_600,
+        };
+        let json = serde_json::to_string(&kind).unwrap();
+        assert_eq!(
+            json,
+            r#"{"kind":"countdownToTimeOfDay","seconds_of_day":75600}"#
+        );
+        assert_eq!(serde_json::from_str::<TextKind>(&json).unwrap(), kind);
     }
 
     #[test]

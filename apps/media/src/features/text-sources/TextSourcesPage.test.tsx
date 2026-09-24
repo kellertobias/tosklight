@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -232,6 +232,32 @@ describe("the text sources page", () => {
 		expect(server.writes).toContain("/text/200/2/update");
 	});
 
+	it("switches a countdown to a time every day and edits that time", async () => {
+		const server = stubServer({ text: [aCountdown()] });
+		render(<TextSourcesPage />);
+
+		await screen.findByLabelText("Length in seconds");
+		await userEvent.click(screen.getByRole("button", { name: "Text type" }));
+		await userEvent.click(
+			screen.getByRole("option", { name: "Countdown to a time every day" }),
+		);
+		const time = await screen.findByLabelText(/Counts down every day to/u);
+		expect(time).toHaveAttribute("type", "time");
+		expect(screen.queryByLabelText("Length in seconds")).not.toBeInTheDocument();
+		await waitFor(() =>
+			expect(server.text[0]).toMatchObject({
+				kind: "countdown-time-of-day",
+				timeOfDaySeconds: 21 * 3_600,
+			}),
+		);
+
+		fireEvent.change(time, { target: { value: "19:30:15" } });
+		await waitFor(() =>
+			expect(server.text[0].timeOfDaySeconds).toBe(19 * 3_600 + 30 * 60 + 15),
+		);
+		expect(time).toHaveValue("19:30:15");
+	});
+
 	it("updates countdown formatting and its preview live", async () => {
 		const server = stubServer({ text: [aCountdown()] });
 		render(<TextSourcesPage />);
@@ -356,5 +382,18 @@ describe("text preview formatting", () => {
 		expect(formatDraftPreview(draft, 0)).toBe("61.01");
 		draft.format.rollover = true;
 		expect(formatDraftPreview(draft, 0)).toBe("01.01");
+	});
+
+	it("counts to a time every day as the server does, in the server's offset", () => {
+		const draft = emptyDraft();
+		draft.kind = "countdown-time-of-day";
+		draft.timeOfDay = "21:00";
+		draft.format = { ...aTextFormat(), afterZero: "count-up", utcOffsetMinutes: null };
+		const at = (hour: number) => Date.UTC(2026, 8, 24, hour);
+		expect(formatDraftPreview(draft, at(8))).toBe("13:00:00");
+		expect(formatDraftPreview(draft, at(22))).toBe("01:00:00");
+		expect(formatDraftPreview(draft, at(24))).toBe("21:00:00");
+		// Two hours ahead of UTC, 19:00 UTC is 21:00 there.
+		expect(formatDraftPreview(draft, at(18), 120)).toBe("01:00:00");
 	});
 });

@@ -129,6 +129,10 @@ Open Pixel's **DMX** page. For each output, confirm **Listening for DMX on** sho
 
 With a desk driving an output on two layers and the master at half, open Pixel's **Library** and confirm **Enable preview** sits below **Take over playback**, and that choosing media while it is off changes no layer. Turn it on: playback is taken over, every layer goes out and the master goes full. Click a media item: it plays on Layer 1 at full level, looping, with every other layer out and the master full; click another and the output switches to it. Turn preview off: each layer's slot, level and play mode and the master level return to what they were, and playback returns to the desk. Turn it on again and navigate to another page: the output is restored the same way. Reload the page and confirm preview is off and the library is unchanged.
 
+## PIXEL-012 — a countdown to a time every day
+
+Set the server's UTC offset. Create a text source of kind **Countdown to a time every day** and enter 21:00 with no date. Confirm that its preview and an output layer showing it count to 21:00 local time and tick down live. Set **After zero** to count up and move the target just before now. Confirm that it counts up after zero until local midnight and then counts to the next day's time. Change the server's UTC offset and confirm the countdown follows. Confirm an existing **Countdown to a moment** still counts to its saved date and time.
+
 ## RUNNING-001 — containment, deduplication, and identity
 
 Start one Cuelist through several assignments or control surfaces, with a Dynamic contained in it; start one independent Dynamic, Timecode, and Macro. Running shows exactly four rows. The Cuelist row uses the Cuelist's own number and name plus its current Cue, not an assignment number, and suppresses the contained Dynamic. The other rows use their own stable identities and show **Cue —**.
