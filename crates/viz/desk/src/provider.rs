@@ -898,6 +898,7 @@ async fn read_models(client: &DeskClient, endpoint: &str) -> Result<DeskReadMode
     let led_module_types = optional_objects(client, "led_module_type").await;
     let media_surfaces = optional_objects(client, "media_surface").await;
     let media_projectors = optional_objects(client, "media_projector").await;
+    let venue_groups = optional_objects(client, "cad_venue_groups").await;
     Ok(DeskReadModels {
         show_name: patch.show_id.to_string(),
         server_identity: endpoint.to_owned(),
@@ -912,6 +913,7 @@ async fn read_models(client: &DeskClient, endpoint: &str) -> Result<DeskReadMode
         led_module_types,
         media_surfaces,
         media_projectors,
+        venue_groups,
     })
 }
 

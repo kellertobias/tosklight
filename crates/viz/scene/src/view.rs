@@ -608,6 +608,15 @@ impl Theme {
         }
     }
 
+    /// Ink for the members of a selected Venue group: every member is marked, in a hue of its own
+    /// so a whole group reads apart from one element picked on its own.
+    pub fn group_selected_ink(self) -> [f32; 3] {
+        match self {
+            Self::LightOnDark => [0.74, 0.47, 1.0],
+            Self::DarkOnLight => [0.46, 0.16, 0.74],
+        }
+    }
+
     /// Ink for the fixture number and its patch address.
     pub fn label_ink(self) -> [f32; 3] {
         match self {

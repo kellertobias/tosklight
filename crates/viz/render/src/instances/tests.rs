@@ -1485,6 +1485,56 @@ mod selection {
         );
     }
 
+    #[test]
+    fn every_member_of_a_whole_selected_group_takes_the_group_ink_and_a_lone_pick_does_not() {
+        let id = viz_scene::uuid::Uuid::from_u128;
+        let mut scene = Scene::default();
+        for (number, x) in [(7, 0.0), (8, 2.0), (9, 4.0)] {
+            let mut member = fixture();
+            member.fixture_id = id(number);
+            member.position = Vec3::new(x, 0.0, 0.0);
+            scene.fixtures.push(member);
+        }
+        scene.venue_groups = vec![vec![id(7), id(8)]];
+        let style = outline_style();
+        let inks = |selected: &[u128]| {
+            let mut values = SceneValues::default();
+            values.resize(0);
+            values.selected_fixtures = selected.iter().map(|number| id(*number)).collect();
+            build(&scene, &values, &style)
+                .lines
+                .iter()
+                .map(|vertex| Vec3::from_slice(&vertex.colour[..3]))
+                .collect::<Vec<_>>()
+        };
+        let near = |inks: &[Vec3], ink: Vec3| {
+            inks.iter()
+                .filter(|seen| (**seen - ink).length() < 1e-5)
+                .count()
+        };
+
+        // The whole group and a fixture of its own: both members in group ink, the other in the
+        // ordinary selection ink.
+        let whole = inks(&[7, 8, 9]);
+        let lone = inks(&[9]);
+        assert!(near(&whole, style.group_selected_ink) > 0);
+        assert_eq!(
+            near(&whole, style.group_selected_ink),
+            2 * near(&lone, style.selected_ink),
+            "each of the two members is marked, as fully as a lone fixture"
+        );
+        assert!(
+            near(&whole, style.selected_ink) > 0,
+            "the ungrouped pick keeps its ink"
+        );
+
+        // One member picked on its own (Shift) is a single element, not the group.
+        let single = inks(&[7]);
+        assert_eq!(near(&single, style.group_selected_ink), 0);
+        assert!(near(&single, style.selected_ink) > 0);
+        assert!((style.group_selected_ink - style.selected_ink).length() > 0.3);
+    }
+
     /// Nothing selected means nothing stands out, rather than everything doing.
     #[test]
     fn with_nothing_selected_no_fixture_takes_the_selection_ink() {

@@ -99,6 +99,17 @@ it("draws locked CAD entities darker while retaining cyan selection", () => {
 	).toEqual([0.02, 0.82, 0.98]);
 });
 
+it("marks a member of a whole selected group in its own violet, a lone pick in cyan", () => {
+	const venue = { kind: "venue", selectable: true };
+	expect(cadEntityOutlineColor(venue, true, true)).toEqual([0.74, 0.47, 1.0]);
+	expect(cadEntityOutlineColor(venue, true, false)).toEqual([0.02, 0.82, 0.98]);
+	// Grouping never colours an unselected element, and a locked one keeps its own grey.
+	expect(cadEntityOutlineColor(venue, false, true)).toEqual([0.56, 0.62, 0.68]);
+	expect(
+		cadEntityOutlineColor({ kind: "venue", selectable: false }, false, true),
+	).toEqual([0.24, 0.27, 0.3]);
+});
+
 beforeEach(() => {
 	vi.stubGlobal(
 		"ResizeObserver",

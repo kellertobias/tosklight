@@ -3,6 +3,7 @@ import type { CadEntity } from "./types";
 import {
 	expandToGroups,
 	groupOf,
+	groupSelectedIds,
 	groupSelection,
 	nextGroupName,
 	ungroupSelection,
@@ -53,5 +54,19 @@ describe("Venue element groups", () => {
 		).toEqual(["a", "b", "c"]);
 		expect(venueGroupAction(rig, entities, ["c"], "ungroup")).toBeNull();
 		expect(venueGroupAction(rig, entities, ["a", "b"], "ungroup")).toEqual({ groups: [] });
+	});
+});
+
+describe("a group selection", () => {
+	const expand = (ids: readonly string[]) => expandToGroups(rig, ids);
+
+	it("is every member of a group that is wholly selected", () => {
+		expect([...groupSelectedIds(["a", "b", "c"], expand)].sort()).toEqual(["a", "b"]);
+	});
+
+	it("is not a member picked out of its group alone, nor an ungrouped element", () => {
+		expect(groupSelectedIds(["a"], expand).size).toBe(0);
+		expect(groupSelectedIds(["c"], expand).size).toBe(0);
+		expect(groupSelectedIds(["a", "b"], undefined).size).toBe(0);
 	});
 });

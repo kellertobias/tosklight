@@ -26,8 +26,33 @@ pub struct DeskReadModels {
     pub led_module_types: Vec<ObjectRecord>,
     pub media_surfaces: Vec<ObjectRecord>,
     pub media_projectors: Vec<ObjectRecord>,
+    /// The CAD's Venue groups (`cad_venue_groups`), so a whole selected group is drawn apart.
+    pub venue_groups: Vec<ObjectRecord>,
     pub show_name: String,
     pub server_identity: String,
+}
+
+/// Each Venue group's member fixture ids, read from the CAD's one groups object. An unreadable or
+/// absent object means no groups: selection is then drawn exactly as before groups existed.
+fn venue_group_members(objects: &[ObjectRecord]) -> Vec<Vec<uuid::Uuid>> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Group {
+        #[serde(default)]
+        member_ids: Vec<uuid::Uuid>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Groups {
+        #[serde(default)]
+        groups: Vec<Group>,
+    }
+    objects
+        .iter()
+        .filter_map(|object| serde_json::from_value::<Groups>(object.body.clone()).ok())
+        .flat_map(|groups| groups.groups)
+        .map(|group| group.member_ids)
+        .filter(|members| !members.is_empty())
+        .collect()
 }
 
 /// Build the scene and its bindings, plus any warnings the operator must see.
@@ -157,6 +182,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     plan.scene.show_name = models.show_name.clone();
     plan.scene.source_identity = models.server_identity.clone();
     plan.scene.revision = models.patch.patch_revision;
+    plan.scene.venue_groups = venue_group_members(&models.venue_groups);
     // Standalone `venue` records predate Venue fixtures. Once the patch carries its own scenery
     // they only duplicate it, so they are drawn solely for a show that has none.
     let legacy_venue: &[ObjectRecord] = if patch_carries_scenery(models, &profiles) {

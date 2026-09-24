@@ -258,6 +258,7 @@ fn models(profile: serde_json::Value, layout: StageLayoutBody) -> DeskReadModels
         led_module_types: Vec::new(),
         media_surfaces: Vec::new(),
         media_projectors: Vec::new(),
+        venue_groups: Vec::new(),
         show_name: "Test show".into(),
         server_identity: "http://127.0.0.1:5000".into(),
     }
@@ -775,4 +776,37 @@ fn a_crowd_hides_with_its_layer() {
         body: json!({"id": "default", "name": "Default", "visible3d": false}),
     });
     assert!(scene_build::build(&models).scene.crowds.is_empty());
+}
+
+#[test]
+fn the_cads_venue_groups_reach_the_scene_and_a_show_without_them_has_none() {
+    let profile = shipped_profile("claypaky--sharpy");
+    let plain = models(profile.clone(), StageLayoutBody::default());
+    assert!(scene_build::build(&plain).scene.venue_groups.is_empty());
+
+    let mut grouped = models(profile, StageLayoutBody::default());
+    grouped.venue_groups.push(ObjectRecord {
+        id: "groups".into(),
+        revision: 2,
+        body: json!({
+            "groups": [
+                {
+                    "id": "g1",
+                    "name": "Upstage truss",
+                    "memberIds": [
+                        "11111111-1111-4111-8111-111111111111",
+                        "33333333-3333-4333-8333-333333333333"
+                    ]
+                },
+                { "id": "g2", "name": "Empty", "memberIds": [] }
+            ]
+        }),
+    });
+    assert_eq!(
+        scene_build::build(&grouped).scene.venue_groups,
+        vec![vec![
+            uuid::Uuid::parse_str("11111111-1111-4111-8111-111111111111").unwrap(),
+            uuid::Uuid::parse_str("33333333-3333-4333-8333-333333333333").unwrap(),
+        ]]
+    );
 }

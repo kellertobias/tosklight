@@ -322,6 +322,8 @@ pub struct FrameStyle {
     pub symbol_ink: Vec3,
     /// Ink for a fixture the operator has selected — the one thing allowed to stand out.
     pub selected_ink: Vec3,
+    /// Ink for the members of a whole selected Venue group, apart from one element on its own.
+    pub group_selected_ink: Vec3,
     /// Draw each fixture's own model, rather than a box standing where it is.
     pub fixture_models: bool,
     /// Draw the emitting faces that belong to a simulated-light picture.
@@ -371,6 +373,7 @@ impl Default for FrameStyle {
             faint_ink: Vec3::splat(0.35),
             symbol_ink: Vec3::splat(0.42),
             selected_ink: Vec3::new(0.25, 0.6, 1.0),
+            group_selected_ink: Vec3::new(0.74, 0.47, 1.0),
             fixture_models: true,
             emitter_apertures: true,
             scenery_surfaces: true,
@@ -598,6 +601,7 @@ fn push_bodies(
     selection: &std::collections::HashSet<viz_scene::uuid::Uuid>,
     points: &[viz_scene::PointPose],
 ) {
+    let grouped = grouped_selection(scene, selection);
     for (fixture_index, fixture) in scene.fixtures.iter().enumerate() {
         // Built at the size it was placed by the scenery pass, so it has no body here.
         if fixture.drawn_as_scenery {
@@ -607,6 +611,7 @@ fn push_bodies(
         let base = Mat4::from_rotation_translation(fixture_orientation, fixture_position);
         let size = fixture.body.size;
         let selected = selection.contains(&fixture.fixture_id);
+        let selected_ink = selection_ink(style, &grouped, fixture.fixture_id);
         // A view that draws no models draws the outline of a box the size of the fixture, standing
         // and turned where the fixture does. Outline rather than a solid: this view simulates no
         // light, so a solid box has nothing to reveal it and would be a black shape in a black
@@ -614,7 +619,7 @@ fn push_bodies(
         // whether two heads will foul each other needs the box to be the size of the thing.
         if !style.fixture_models {
             let (ink, opacity) = if selected {
-                (style.selected_ink, 1.0)
+                (selected_ink, 1.0)
             } else {
                 (style.symbol_ink, 0.75)
             };
@@ -637,7 +642,7 @@ fn push_bodies(
                 points,
             );
             if selected {
-                push_selection_cage(frame, base, size, style.selected_ink);
+                push_selection_cage(frame, base, size, selected_ink);
             }
             continue;
         }
@@ -723,7 +728,7 @@ fn push_bodies(
             }
         }
         if selected {
-            push_selection_cage(frame, base, size, style.selected_ink);
+            push_selection_cage(frame, base, size, selected_ink);
         }
     }
 }
@@ -1172,6 +1177,8 @@ fn push_aim_guide(frame: &mut FrameInstances, origin: Vec3, pose: EmitterPose, i
 }
 
 mod crowd;
+mod group_selection;
+pub(crate) use group_selection::{grouped_selection, selection_ink};
 mod laser;
 mod plot;
 mod scenery;

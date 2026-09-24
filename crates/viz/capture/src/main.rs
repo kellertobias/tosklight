@@ -235,6 +235,7 @@ fn scene_from(path: &Path) -> Result<Capture, String> {
         led_module_types: Vec::new(),
         media_surfaces: Vec::new(),
         media_projectors: Vec::new(),
+        venue_groups: Vec::new(),
         show_name: document.name().unwrap_or_else(|_| "Show".to_owned()),
         server_identity: path.display().to_string(),
     };

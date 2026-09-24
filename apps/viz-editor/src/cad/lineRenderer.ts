@@ -61,6 +61,8 @@ export interface CadFrame {
 	entities: readonly CadEntity[];
 	drawings: ReadonlyMap<string, CadDrawing>;
 	selected: ReadonlySet<string>;
+	/** The selected entities that are members of a whole selected Venue group. */
+	groupSelected?: ReadonlySet<string>;
 	view: CadViewDirection;
 	rotationQuarterTurns: number;
 	camera: TileCamera;
@@ -162,11 +164,20 @@ function painterFor(camera: TileCamera): Painter {
 	};
 }
 
+/** The selection ink of one element picked on its own. */
+export const SELECTED_COLOR: LineColor = [0.02, 0.82, 0.98];
+/**
+ * The selection ink of every member of a whole selected Venue group: a violet of its own, so a
+ * group reads apart from a single element, and the same hue the 3D PreViz marks it in.
+ */
+export const GROUP_SELECTED_COLOR: LineColor = [0.74, 0.47, 1.0];
+
 export function cadEntityOutlineColor(
 	entity: Pick<CadEntity, "kind" | "selectable">,
 	active: boolean,
+	grouped = false,
 ): LineColor {
-	if (active) return [0.02, 0.82, 0.98];
+	if (active) return grouped ? GROUP_SELECTED_COLOR : SELECTED_COLOR;
 	if (!entity.selectable) return [0.24, 0.27, 0.3];
 	return entity.kind === "venue" ? [0.56, 0.62, 0.68] : [0.8, 0.84, 0.88];
 }
@@ -274,6 +285,7 @@ function paintEntities(
 	);
 	for (const entity of ordered) {
 		const active = selected.has(entity.logicalFixtureId);
+		const grouped = frame.groupSelected?.has(entity.logicalFixtureId) ?? false;
 		const entityWorldPreview = previewDeltaForEntity(
 			preview,
 			entity.logicalFixtureId,
@@ -311,7 +323,7 @@ function paintEntities(
 					baseDepth + (triangle.depths?.[index] ?? 0),
 				);
 		}
-		const outlineColor = cadEntityOutlineColor(entity, active);
+		const outlineColor = cadEntityOutlineColor(entity, active, grouped);
 		for (const outline of projected.outlines) {
 			for (let index = 0; index < outline.length; index++) {
 				painter.depthLine(
@@ -477,6 +489,7 @@ export class EntityLayerCache {
 			frame.entities,
 			frame.drawings,
 			frame.selected,
+			frame.groupSelected,
 			frame.view,
 			frame.rotationQuarterTurns,
 		];

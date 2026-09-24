@@ -7,7 +7,7 @@
 
 use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind};
 use glam::{Mat4, Quat, Vec3};
-use std::collections::HashSet;
+use std::collections::HashMap;
 use viz_scene::{
     RiserFeet, Scene, SceneValues, SceneryKind, SceneryObject, euler_degrees, uuid::Uuid,
 };
@@ -29,31 +29,48 @@ pub(super) fn push_scenery(
     } else {
         Vec::new()
     };
-    let selected = selected_instances(scene, values);
+    let selected = selected_instances(scene, values, style);
     for object in &scene.scenery {
-        push_object(frame, object, style, &chords, selected.contains(&object.id));
+        push_object(
+            frame,
+            object,
+            style,
+            &chords,
+            selected.get(&object.id).copied(),
+        );
     }
     for (body, state) in scene.physics_scenery.iter().zip(&values.physics_frames) {
         let mut object = body.scenery.clone();
         object.position += Vec3::from_array(state.position_offset);
-        let chosen = selected.contains(&body.fixture_instance_id);
+        let chosen = selected.get(&body.fixture_instance_id).copied();
         push_object(frame, &object, style, &chords, chosen);
     }
 }
 
-/// Physical instances of the fixtures the shared Architect/Patch selection names.
+/// Physical instances of the fixtures the shared Architect/Patch selection names, with the ink
+/// each is marked in: a member of a whole selected Venue group takes the group ink.
 ///
 /// A generated Venue object is a fixture the scenery pass builds instead of a body, so the
 /// selection — which names logical fixtures — reaches its drawn object through the instance id.
-fn selected_instances(scene: &Scene, values: &SceneValues) -> HashSet<Uuid> {
+fn selected_instances(
+    scene: &Scene,
+    values: &SceneValues,
+    style: &FrameStyle,
+) -> HashMap<Uuid, Vec3> {
     if values.selected_fixtures.is_empty() {
-        return HashSet::new();
+        return HashMap::new();
     }
+    let grouped = super::grouped_selection(scene, &values.selected_fixtures);
     scene
         .fixtures
         .iter()
         .filter(|fixture| values.selected_fixtures.contains(&fixture.fixture_id))
-        .map(|fixture| fixture.instance_id)
+        .map(|fixture| {
+            (
+                fixture.instance_id,
+                super::selection_ink(style, &grouped, fixture.fixture_id),
+            )
+        })
         .collect()
 }
 
@@ -62,7 +79,8 @@ fn push_object(
     object: &SceneryObject,
     style: &FrameStyle,
     chords: &[truss::ChordLine],
-    selected: bool,
+    // The ink the object is selected in, or none when it is not selected.
+    selected: Option<Vec3>,
 ) {
     // Not every view draws every kind. A lines view keeps what the rig is arranged around and
     // drops the rigging and the soft goods, which would only stand between the operator and
@@ -78,8 +96,8 @@ fn push_object(
     // box around the ground is a box around everything.
     let bounds = Mat4::from_scale_rotation_translation(object.size, orientation, object.position);
     if !style.scenery_surfaces {
-        if selected {
-            super::push_box_outline(frame, bounds, style.selected_ink, 1.0);
+        if let Some(ink) = selected {
+            super::push_box_outline(frame, bounds, ink, 1.0);
         } else if object.kind != SceneryKind::Floor {
             super::push_box_outline(frame, bounds, style.faint_ink, 0.8);
         }
@@ -87,8 +105,8 @@ fn push_object(
     }
     // A selected object keeps its own material; the mark is an additive cage just outside it,
     // exactly as a selected lamp gets, so the Visualizer shows what the Architect has selected.
-    if selected {
-        push_selection_cage(frame, object, orientation, style.selected_ink);
+    if let Some(ink) = selected {
+        push_selection_cage(frame, object, orientation, ink);
     }
     match object.kind {
         SceneryKind::Truss => push_truss(frame, object, orientation, colour),

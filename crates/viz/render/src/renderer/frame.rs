@@ -247,6 +247,7 @@ impl Renderer {
             faint_ink: Vec3::from(view.theme.faint_ink()),
             symbol_ink: Vec3::from(view.theme.symbol_ink()),
             selected_ink: Vec3::from(view.theme.selected_ink()),
+            group_selected_ink: Vec3::from(view.theme.group_selected_ink()),
             fixture_models: view.mode.draws_fixture_models(),
             emitter_apertures: view.mode.simulates_light(),
             scenery_surfaces: view.mode.simulates_light(),

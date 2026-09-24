@@ -135,3 +135,24 @@ export function ungroupSelection(
 		),
 	};
 }
+
+/**
+ * The selected elements that are members of a whole selected group: a group every member of which
+ * is selected, found through the same expansion a plain pick uses. A group of one reads as the
+ * element alone, and an element picked out of its group with Shift is not a group selection.
+ */
+export function groupSelectedIds(
+	selectedIds: readonly string[],
+	expand?: (ids: readonly string[]) => string[],
+): Set<string> {
+	const grouped = new Set<string>();
+	if (!expand) return grouped;
+	const selected = new Set(selectedIds);
+	for (const id of selectedIds) {
+		if (grouped.has(id)) continue;
+		const members = expand([id]);
+		if (members.length > 1 && members.every((member) => selected.has(member)))
+			for (const member of members) grouped.add(member);
+	}
+	return grouped;
+}

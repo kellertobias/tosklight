@@ -77,11 +77,13 @@ pub(super) fn push_plot(
         }
     }
 
+    let grouped = super::grouped_selection(scene, &values.selected_fixtures);
     for (index, fixture) in scene.fixtures.iter().enumerate() {
         let lights = makes_light.get(index).copied().unwrap_or(false);
         let selected = values.selected_fixtures.contains(&fixture.fixture_id);
+        let selected_ink = super::selection_ink(style, &grouped, fixture.fixture_id);
         let (ink, opacity) = if selected {
-            (style.selected_ink, 1.0)
+            (selected_ink, 1.0)
         } else if lights {
             (style.symbol_ink, 0.9)
         } else {
@@ -97,7 +99,7 @@ pub(super) fn push_plot(
         if let Some(artwork) = packaged {
             push_plan_artwork(frame, scene, artwork, transform, ink, opacity);
             if selected {
-                push_symbol(frame, fixture, style, style.selected_ink, 1.0);
+                push_symbol(frame, fixture, style, selected_ink, 1.0);
             }
         } else {
             // Both renderer fallbacks are explicit opaque regions, so their depth can hide truss

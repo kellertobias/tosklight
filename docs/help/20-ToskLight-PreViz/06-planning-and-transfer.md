@@ -829,7 +829,9 @@ A click selects the whole group: its row, one of its members in the list, or any
 view, and so does a selection rectangle that catches one of them. Hold **Shift** to take elements one
 at a time instead — Shift-click in a view adds or removes just that element, and Shift-click on a
 member in the list selects only that member. A selected group moves together with the gizmo, like any
-selection. **Ungroup** — at the top of **Objects**, in the right-click menu, or ⇧⌘G — dissolves
+selection. Every element of a selected group is drawn in violet, in the CAD views and in the 3D
+PreViz alike, while an element selected on its own — including one Shift-picked out of its group —
+keeps the ordinary blue selection colour, so a whole group always reads apart from a single piece. **Ungroup** — at the top of **Objects**, in the right-click menu, or ⇧⌘G — dissolves
 every group the selection touches and leaves its elements where they are. An element is in one group
 at most: grouping it again takes it out of its old group. A deleted element leaves its group, and a
 group with no element left goes with it. **+** adds more: the same truss, stage element, curtain,

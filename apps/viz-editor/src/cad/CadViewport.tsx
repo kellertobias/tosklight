@@ -36,6 +36,7 @@ import type {
 import type { CadUnderlay } from "./underlays";
 import { useCadDrawingTool } from "./useCadDrawingTool";
 import { useCadPlacementTool } from "./useCadPlacementTool";
+import { groupSelectedIds } from "./venueGroups";
 import {
 	type CadViewportContext,
 	useCadViewportInteraction,
@@ -284,6 +285,10 @@ export function CadViewport({
 	const liveCamera = useAnchoredCamera(canvas, committedCamera, onCamera);
 	const { camera } = liveCamera;
 	const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+	const groupSelected = useMemo(
+		() => groupSelectedIds(selectedIds, expandSelection),
+		[selectedIds, expandSelection],
+	);
 	const drawingById = useMemo(
 		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),
 		[drawings],
@@ -315,6 +320,7 @@ export function CadViewport({
 		entities,
 		drawings: drawingById,
 		selected,
+		groupSelected,
 		view,
 		rotationQuarterTurns,
 		camera,

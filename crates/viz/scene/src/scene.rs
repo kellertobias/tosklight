@@ -52,6 +52,10 @@ pub struct Scene {
     /// Gobo artwork read from the profiles in this scene, referenced by [`GoboSlot::artwork`].
     /// One image per distinct piece of glass, however many wheels point at it.
     pub gobo_artwork: Vec<GoboArtwork>,
+    /// The CAD's Venue groups, as the fixture ids of each group's members. Selecting every member
+    /// of a group is a group selection, which is drawn apart from a single selected element.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub venue_groups: Vec<Vec<Uuid>>,
     pub bounds: Aabb,
 }
 
