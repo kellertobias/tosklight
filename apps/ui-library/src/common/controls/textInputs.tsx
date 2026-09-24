@@ -360,6 +360,21 @@ function OpenNumberPadButton({
 	);
 }
 
+/** Whether a field's step or bounds are fractional, so it takes a decimal point unless told otherwise. */
+function fractionalNumberField(...settings: (number | string | undefined)[]) {
+	return settings.some((setting) => {
+		if (setting == null || setting === "") return false;
+		const numeric = Number(setting);
+		return Number.isFinite(numeric) && !Number.isInteger(numeric);
+	});
+}
+
+/** Decimal places a step is written with, so stepping by 0.1 shows 0.3 rather than 0.30000000000000004. */
+function stepPrecision(step: number) {
+	const [, fraction = ""] = String(step).split(".");
+	return fraction.length;
+}
+
 function steppedNumber(
 	current: string,
 	direction: -1 | 1,
@@ -382,7 +397,8 @@ function steppedNumber(
 	if (wrap && next < lower) next = upper;
 	else if (wrap && next > upper) next = lower;
 	else next = clampNumber(next, min, max);
-	return String(next);
+	const places = Math.max(stepPrecision(increment), stepPrecision(numeric));
+	return String(Number(next.toFixed(Math.min(places, 20))));
 }
 
 function commitNumberModal(
@@ -437,7 +453,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 			defaultValue,
 			onChange,
 			onValueChange,
-			allowDecimal = false,
+			allowDecimal: allowDecimalProp,
 			showStepButtons = true,
 			stepBehavior = "increment",
 			wrapStepAtBounds = false,
@@ -449,6 +465,8 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
 			step = 1,
 			...rest
 		} = inputProps;
+		const allowDecimal =
+			allowDecimalProp ?? fractionalNumberField(step, min, max);
 		const props = domInputProps(rest);
 		const [open, setOpen] = useState(false);
 		const lastKeyboardRequest = useRef(keyboardRequest);

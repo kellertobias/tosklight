@@ -155,6 +155,24 @@ describe("the visualizers page", () => {
 		expect(screen.queryByLabelText("Gravity")).not.toBeInTheDocument();
 	});
 
+	it("takes a decimal value in a fractional parameter and a whole one in a count", async () => {
+		const server = stubServer();
+		render(<VisualizersPage />);
+		await screen.findByLabelText("Name");
+
+		const size = screen.getByLabelText("Size");
+		await userEvent.clear(size);
+		await userEvent.type(size, "0.35");
+		expect(size).toHaveValue("0.35");
+		await waitFor(() =>
+			expect(server.visualizers[0].parameters.size).toBe(0.35),
+		);
+		expect(screen.getByLabelText("Count")).toHaveAttribute(
+			"inputmode",
+			"numeric",
+		);
+	});
+
 	it("configures Grid Landscape roadside scenery independently", async () => {
 		const base = aVisualizer();
 		const server = stubServer({
