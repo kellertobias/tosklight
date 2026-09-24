@@ -14,6 +14,7 @@ import { BrowserRoutedSelection } from "../command-selection/routedSelectionScen
 import type { SelectionTarget } from "../command-selection/selectionContract";
 import { BrowserSelection } from "../command-selection/selectionScenario";
 import { BrowserAttachedEncoders } from "../encoders/attachedEncoderScenario";
+import { BrowserDynamics } from "../dynamics/dynamicScenario";
 import { BrowserEncoders } from "../encoders/encoderScenario";
 import { BrowserGroups } from "../groups-presets/groupScenario";
 import { BrowserPresets } from "../groups-presets/presetScenario";
@@ -123,6 +124,7 @@ export class BrowserScenarioWorld {
 	readonly highlight: BrowserHighlight;
 	readonly group: BrowserGroups;
 	readonly preset: BrowserPresets;
+	readonly dynamic: BrowserDynamics;
 	readonly demo: BrowserProductDemo;
 	readonly record: BrowserRecording;
 	readonly cue: BrowserCues;
@@ -261,6 +263,10 @@ export class BrowserScenarioWorld {
 			this.hardware,
 			() => this.show.contractIdentity().workingId,
 			`${this.routeSeed}:preset`,
+		);
+		this.dynamic = new BrowserDynamics(
+			api,
+			() => this.show.contractIdentity().workingId,
 		);
 		this.demo = new BrowserProductDemo(page, desk, bench, api, testInfo);
 		this.record = new BrowserRecording(
