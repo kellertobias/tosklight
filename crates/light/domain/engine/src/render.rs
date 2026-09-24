@@ -40,6 +40,10 @@ impl Engine {
         options: RenderOptions,
         sampled: &[ContributionBatch],
     ) -> Result<RenderResult, EngineError> {
+        let options = RenderOptions {
+            color_model: self.color_model(),
+            ..options
+        };
         let snapshot = generation.snapshot();
         let mut resolved =
             self.resolved_attributes_for_render(generation, self.clock.now(), sampled);

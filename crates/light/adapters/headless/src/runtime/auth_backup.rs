@@ -172,6 +172,10 @@ async fn install_activated_snapshot(
             .active_show
             .replace_current(Some(entry.clone()));
         worker_state.attributes.install_entry(Some(&entry));
+        worker_state
+            .output
+            .engine()
+            .set_color_model(worker_state.attributes.color_model());
         worker_state.active_show.set_error(None);
         restore_output_runtime_for_show(&worker_state, entry.id, output_runtime);
         drop(activation);

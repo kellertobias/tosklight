@@ -284,6 +284,9 @@ pub(super) struct DeskConfiguration {
     /// Installation default copied onto each newly created Cuelist. Flash auto-off remains
     /// independent from fader-zero auto-off.
     pub(super) cuelist_auto_off_flash_release_default: bool,
+    /// Installation default copied into each newly created show. A show keeps the model it was
+    /// created with when this default changes; shows older than the setting stay Direct.
+    pub(super) color_programming_model_default: light_core::ColorProgrammingModel,
     /// Start only a transactionally new Playback/Cuelist/first-Cue topology after recording.
     pub(super) start_after_first_recording: bool,
     pub(super) preload_programmer_changes: bool,
@@ -368,6 +371,7 @@ impl Default for DeskConfiguration {
             release_fade_millis: default_release_fade_millis(),
             cuelist_auto_off_at_zero_default: false,
             cuelist_auto_off_flash_release_default: false,
+            color_programming_model_default: light_core::ColorProgrammingModel::Direct,
             start_after_first_recording: false,
             preload_programmer_changes: true,
             preload_physical_playback_actions: false,

@@ -547,6 +547,10 @@ fn build_app_state(
         lifecycle: LifecycleResource::new(resources.cancellation.clone()),
         discovery,
     };
+    state
+        .output
+        .engine()
+        .set_color_model(state.attributes.color_model());
     state.extensions.attach_state(state.clone());
     Ok(state)
 }

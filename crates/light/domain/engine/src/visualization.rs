@@ -58,6 +58,10 @@ impl Engine {
         let group_master_flashes = self.group_master_flashes.read();
         let highlight_layers = self.highlight_layers.read();
         let highlight_look = self.highlight_look.read();
+        let options = crate::RenderOptions {
+            color_model: self.color_model(),
+            ..options
+        };
         let mut projected = crate::ResolvedValues::default();
         let mut output = crate::ResolvedProfileFixtureOutput::default();
         for fixture in snapshot.fixtures.iter() {

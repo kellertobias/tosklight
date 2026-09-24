@@ -83,6 +83,10 @@ pub struct ConfigurationPatch {
     pub cuelist_auto_off_flash_release_default: Option<bool>,
     #[serde(default)]
     #[ts(optional = nullable)]
+    pub color_programming_model_default:
+        Option<super::attribute_configuration::ColorProgrammingModel>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
     pub start_after_first_recording: Option<bool>,
     #[serde(default)]
     #[ts(optional = nullable)]

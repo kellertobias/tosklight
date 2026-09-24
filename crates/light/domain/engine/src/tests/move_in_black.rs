@@ -37,6 +37,7 @@ fn hazardous_fixture_defaults_to_immediate_safe_on_control_loss() {
             grand_master: 1.0,
             blackout: false,
             control_loss_progress: Some(0.0),
+            ..Default::default()
         })
         .unwrap();
     assert_eq!(rendered.universes[&1][0], 0);

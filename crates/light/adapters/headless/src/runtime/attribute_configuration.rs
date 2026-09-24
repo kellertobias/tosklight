@@ -149,6 +149,55 @@ pub(super) fn router() -> Router<AppState> {
             "/api/v2/attribute-configuration/update",
             post(update_configuration),
         )
+        .route(
+            "/api/v2/attribute-configuration/color-model-impact",
+            get(color_model_impact),
+        )
+}
+
+#[derive(Deserialize)]
+struct ColorModelImpactQuery {
+    model: wire::ColorProgrammingModel,
+}
+
+/// What switching the active show to `model` would do to the colour it stores. Read-only.
+async fn color_model_impact(
+    State(state): State<AppState>,
+    context: ShowContext,
+    headers: HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<ColorModelImpactQuery>,
+) -> Result<Json<wire::ColorModelImpact>, ApiError> {
+    authenticate(&state, &headers)?;
+    let show_id = context.resolve(&state)?;
+    let installed = state.attributes.snapshot();
+    if installed.show_id != Some(show_id) {
+        return Err(ApiError::conflict(
+            "Attribute configuration is not ready for the active show",
+        ));
+    }
+    Ok(Json(current_color_model_impact(
+        &state,
+        installed.configuration.color_model,
+        super::color_model_impact::domain_model(query.model),
+    )?))
+}
+
+fn current_color_model_impact(
+    state: &AppState,
+    from: light_core::ColorProgrammingModel,
+    to: light_core::ColorProgrammingModel,
+) -> Result<wire::ColorModelImpact, ApiError> {
+    let entry = state
+        .active_show
+        .current()
+        .ok_or_else(|| ApiError::conflict("no show is active"))?;
+    let document = ActiveShowRepository::open(&entry.path)
+        .and_then(|store| store.portable_document())
+        .map_err(ApiError::store)?;
+    let fixtures = super::command_http::color_attribute_index(state);
+    Ok(super::color_model_impact::color_model_impact(
+        &document, &fixtures, from, to,
+    ))
 }
 
 async fn snapshot(
@@ -205,6 +254,28 @@ async fn update_configuration(
     configuration
         .validate()
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    if configuration.color_model != before.configuration.color_model
+        && request.acknowledge_color_model_impact != Some(true)
+    {
+        let impact = current_color_model_impact(
+            &state,
+            before.configuration.color_model,
+            configuration.color_model,
+        )?;
+        if impact.lossy {
+            let details = impact
+                .items
+                .iter()
+                .filter(|item| item.lossy)
+                .map(|item| item.message.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            return Err(ApiError::conflict(format!(
+                "Switching the colour model changes stored colour; acknowledge the impact to \
+                 switch anyway. {details}"
+            )));
+        }
+    }
     let action = active_show_object_action(
         operator_action_context(&session, light_application::ActionSource::Http)
             .with_request_id(&request.request_id),
@@ -395,6 +466,7 @@ fn wire_configuration(
                     .collect(),
             })
             .collect(),
+        color_model: super::color_model_impact::wire_model(configuration.color_model),
     }
 }
 
@@ -405,6 +477,7 @@ fn apply_patch(
     if patch.custom_attributes.is_none()
         && patch.placements.is_none()
         && patch.activation_groups.is_none()
+        && patch.color_model.is_none()
     {
         return Err(ApiError::bad_request(
             "Attribute configuration update requires at least one changed field",
@@ -450,6 +523,9 @@ fn apply_patch(
                     .map(|attribute| light_core::AttributeKey(attribute.into())),
             })
             .collect();
+    }
+    if let Some(model) = patch.color_model {
+        configuration.color_model = super::color_model_impact::domain_model(model);
     }
     if let Some(activation_groups) = patch.activation_groups {
         configuration.activation_groups = activation_groups

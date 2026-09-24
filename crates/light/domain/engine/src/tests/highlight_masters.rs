@@ -211,6 +211,7 @@ fn render_slot(engine: &Engine, slot: usize, grand_master: f32, blackout: bool) 
             grand_master,
             blackout,
             control_loss_progress: None,
+            ..Default::default()
         })
         .unwrap()
         .universes[&1][slot]

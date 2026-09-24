@@ -511,6 +511,7 @@ mod highlight_looks;
 
 mod lifecycle;
 
+mod color_intent;
 mod contribution_batches;
 
 mod frame_addresses;

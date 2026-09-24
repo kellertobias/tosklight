@@ -304,6 +304,22 @@ impl Engine {
         self.tracked_overrides.write().clear();
     }
 
+    /// Install the active show's colour programming model. Takes effect from the next frame.
+    pub fn set_color_model(&self, model: light_core::ColorProgrammingModel) {
+        self.color_intent.store(
+            model == light_core::ColorProgrammingModel::Intent,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
+    pub fn color_model(&self) -> light_core::ColorProgrammingModel {
+        if self.color_intent.load(std::sync::atomic::Ordering::Relaxed) {
+            light_core::ColorProgrammingModel::Intent
+        } else {
+            light_core::ColorProgrammingModel::Direct
+        }
+    }
+
     pub fn tracked_overrides(&self) -> Vec<TrackedOverride> {
         self.tracked_overrides.read().clone()
     }

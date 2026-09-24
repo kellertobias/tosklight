@@ -71,12 +71,57 @@ pub struct AttributeActivationGroup {
     pub members: Vec<String>,
 }
 
+/// How a show programs colour: fixture-native channels, or one device-independent Color Intent.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorProgrammingModel {
+    #[default]
+    Direct,
+    Intent,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct AttributeConfiguration {
     pub version: u16,
     pub custom_attributes: Vec<CustomAttributeDescriptor>,
     pub placements: Vec<AttributePlacement>,
     pub activation_groups: Vec<AttributeActivationGroup>,
+    /// Absent from requests written before Color Intent, which therefore mean Direct.
+    #[serde(default)]
+    pub color_model: ColorProgrammingModel,
+}
+
+/// What switching a programmed show to another colour model would do to its stored values.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorModelImpactKind {
+    /// Fixture-native colour-channel values: kept and still played, but no longer edited from the
+    /// Color feature in Intent.
+    NativeColorValues,
+    /// Whole-colour values whose brightness is carried in the colour; Intent shows them at full
+    /// brightness and leaves dimming to Intensity.
+    DimmedWholeColors,
+    /// Whole-colour values on fixtures without an authored colour system; Direct cannot resolve
+    /// them, so those fixtures lose that colour.
+    UnresolvedWholeColors,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ColorModelImpactItem {
+    pub kind: ColorModelImpactKind,
+    pub count: u32,
+    /// The stored values cannot come back unchanged if the operator switches back.
+    pub lossy: bool,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ColorModelImpact {
+    pub from: ColorProgrammingModel,
+    pub to: ColorProgrammingModel,
+    /// At least one item is lossy: the update must acknowledge the impact.
+    pub lossy: bool,
+    pub items: Vec<ColorModelImpactItem>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -125,6 +170,9 @@ pub struct AttributeConfigurationPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub activation_groups: Option<Vec<AttributeActivationGroup>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub color_model: Option<ColorProgrammingModel>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -135,6 +183,11 @@ pub struct AttributeConfigurationUpdateRequest {
     #[ts(type = "number")]
     pub expected_object_revision: u64,
     pub patch: AttributeConfigurationPatch,
+    /// Required when changing `color_model` would lose stored colour: the operator has seen the
+    /// `ColorModelImpact` and chosen to switch anyway.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub acknowledge_color_model_impact: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

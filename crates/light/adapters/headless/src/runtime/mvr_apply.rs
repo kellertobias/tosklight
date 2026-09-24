@@ -69,6 +69,7 @@ fn import_destination(
             return Err(ApiError::conflict("a show with that name already exists"));
         }
         initialise_show(&path, &new.name).map_err(ApiError::store)?;
+        super::show_library::apply_new_show_defaults(state, &path)?;
         Ok((
             state
                 .installation

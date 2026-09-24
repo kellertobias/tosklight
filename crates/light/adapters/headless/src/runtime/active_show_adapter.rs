@@ -314,6 +314,10 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
                     document.apply_commit(&commit);
                     debug_assert_eq!(document.revision(), commit.revision());
                     self.state.attributes.install_document(document);
+                    self.state
+                        .output
+                        .engine()
+                        .set_color_model(self.state.attributes.color_model());
                 }
                 Ok(commit)
             }

@@ -1,4 +1,5 @@
 use crate::FixtureId;
+use crate::color_intent::ColorProgrammingModel;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -249,6 +250,10 @@ pub struct AttributeConfiguration {
     pub placements: Vec<AttributePlacement>,
     #[serde(default)]
     pub activation_groups: Vec<AttributeActivationGroup>,
+    /// How this show programs colour. Absent in shows written before Color Intent, and written
+    /// only for Intent, so a Direct show's configuration is byte-for-byte what it always was.
+    #[serde(default, skip_serializing_if = "ColorProgrammingModel::is_direct")]
+    pub color_model: ColorProgrammingModel,
 }
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]

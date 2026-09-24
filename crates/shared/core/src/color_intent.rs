@@ -54,6 +54,12 @@ pub enum ColorProgrammingModel {
     Intent,
 }
 
+impl ColorProgrammingModel {
+    pub const fn is_direct(&self) -> bool {
+        matches!(self, Self::Direct)
+    }
+}
+
 /// How faithfully one fixture head reproduces its Color Intent target, most trustworthy first.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

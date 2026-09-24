@@ -8,11 +8,32 @@ export type AttributeBounds = { min: number, max: number, };
 export type CustomAttributeDescriptor = { id: string, label: string, value_type: AttributeValueType, display_unit: string | null, physical_unit: string | null, normalized_bounds: AttributeBounds | null, domain_bounds: AttributeBounds | null, cyclic: boolean, recordable: boolean, lifecycle: CustomAttributeLifecycle, };
 export type AttributePlacement = { attribute: string, encoder_group: AttributeEncoderGroup, encoder_page: number, encoder_slot: number, push_turn_of: string | null, };
 export type AttributeActivationGroup = { id: string, label: string, members: Array<string>, };
-export type AttributeConfiguration = { version: number, custom_attributes: Array<CustomAttributeDescriptor>, placements: Array<AttributePlacement>, activation_groups: Array<AttributeActivationGroup>, };
+export type ColorProgrammingModel = "direct" | "intent";
+export type AttributeConfiguration = { version: number, custom_attributes: Array<CustomAttributeDescriptor>, placements: Array<AttributePlacement>, activation_groups: Array<AttributeActivationGroup>,
+/**
+ * Absent from requests written before Color Intent, which therefore mean Direct.
+ */
+color_model: ColorProgrammingModel, };
+export type ColorModelImpactKind = "native_color_values" | "dimmed_whole_colors" | "unresolved_whole_colors";
+export type ColorModelImpactItem = { kind: ColorModelImpactKind, count: number,
+/**
+ * The stored values cannot come back unchanged if the operator switches back.
+ */
+lossy: boolean, message: string, };
+export type ColorModelImpact = { from: ColorProgrammingModel, to: ColorProgrammingModel,
+/**
+ * At least one item is lossy: the update must acknowledge the impact.
+ */
+lossy: boolean, items: Array<ColorModelImpactItem>, };
 export type ConfiguredAttributeDescriptor = { id: string, label: string, encoder_group: AttributeEncoderGroup, encoder_page: number, encoder_slot: number, value_type: AttributeValueType, display_unit: string | null, physical_unit: string | null, normalized_min: number | null, normalized_max: number | null, domain_min: number | null, domain_max: number | null, cyclic: boolean, recordable: boolean, built_in: boolean, retired: boolean, activation_group_id: string | null, push_turn_of: string | null, };
 export type AttributeConfigurationSnapshot = { show_id: string | null, show_revision: number, object_revision: number, configuration: AttributeConfiguration, recommended_configuration: AttributeConfiguration, descriptors: Array<ConfiguredAttributeDescriptor>, validation_error: string | null, };
-export type AttributeConfigurationPatch = { custom_attributes?: Array<CustomAttributeDescriptor> | null, placements?: Array<AttributePlacement> | null, activation_groups?: Array<AttributeActivationGroup> | null, };
-export type AttributeConfigurationUpdateRequest = { request_id: string, expected_show_revision: number, expected_object_revision: number, patch: AttributeConfigurationPatch, };
+export type AttributeConfigurationPatch = { custom_attributes?: Array<CustomAttributeDescriptor> | null, placements?: Array<AttributePlacement> | null, activation_groups?: Array<AttributeActivationGroup> | null, color_model?: ColorProgrammingModel | null, };
+export type AttributeConfigurationUpdateRequest = { request_id: string, expected_show_revision: number, expected_object_revision: number, patch: AttributeConfigurationPatch,
+/**
+ * Required when changing `color_model` would lose stored colour: the operator has seen the
+ * `ColorModelImpact` and chosen to switch anyway.
+ */
+acknowledge_color_model_impact?: boolean | null, };
 export type AttributeConfigurationUpdateOutcome = { request_id: string, replayed: boolean, snapshot: AttributeConfigurationSnapshot, event_sequence: number, };
 export type CommandTarget = "FIXTURE" | "GROUP";
 export type CommandKey = "SET" | "GRP" | "CUE" | "PBK" | "OFF" | "UND" | "CLR" | "DEL" | "MOV" | "CPY" | "TRU" | "DIV" | "BACKSPACE" | "AT" | "ENT" | "PRE" | "REC" | "ESC" | "SHIFT" | "TIME" | "DELAY" | "LINK" | "SELECT" | "HIGH" | "PREV" | "NEXT" | "ALL" | "ENC" | "PGUP" | "PGDN" | "ALIGN" | "FADE" | "+" | "-" | "." | "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
@@ -43,7 +64,7 @@ export type ControlDeskConfigurationAction = { "type": "update", patch: ControlD
 export type ControlDeskConfigurationPatch = { hardware_led_brightness: number | null, hardware_gooseneck_brightness: number | null, hardware_gooseneck_color: number | null, name: string | null, columns: number | null, rows: number | null, buttons: number | null, playback_layout: RuntimePlaybackSurfaceLayout | null, };
 export type ControlDeskConfigurationActionOutcome = { request_id: string, replayed: boolean, desk: RuntimeControlDesk, removed: boolean, page: number | null, event_sequence: number | null, page_creation_event_sequence: number | null, };
 export type ConfigurationUpdateRequest = { request_id: string, patch: ConfigurationPatch, };
-export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, timecode_source?: TimecodeSourceSelectionConfiguration | null, timecode_frame_rate?: TimecodeFrameRateConfiguration | null | null, timecode_external_loss_policy?: ExternalTimecodeLossPolicyConfiguration | null, timecode_external_loss_timeout_millis?: number, osc_timecode?: OscTimecodeConfiguration | null | null, timecode_audio_output_device?: string | null | null, timecode_audio_latency_trim_micros_by_output?: { [key in string]: bigint } | null, internal_audio_library_roots?: { [key in string]: string } | null, internal_audio_output_devices?: { [key in string]: string } | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, command_line_at_uses_programmer_fade?: boolean | null, sequence_master_fade_millis?: number, release_fade_millis?: number, cuelist_auto_off_at_zero_default?: boolean | null, cuelist_auto_off_flash_release_default?: boolean | null, start_after_first_recording?: boolean | null, preload_programmer_changes?: boolean | null, preload_physical_playback_actions?: boolean | null, preload_virtual_playback_actions?: boolean | null, patch_preview_highlight_dmx?: boolean | null, highlight_look?: HighlightLookConfiguration | null, matter_enabled?: boolean | null, pool_presentation?: PoolPresentationConfiguration | null, file_manager_system_picker_fallback?: boolean | null, file_manager_roots?: Array<FileManagerRoot> | null, };
+export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, timecode_source?: TimecodeSourceSelectionConfiguration | null, timecode_frame_rate?: TimecodeFrameRateConfiguration | null | null, timecode_external_loss_policy?: ExternalTimecodeLossPolicyConfiguration | null, timecode_external_loss_timeout_millis?: number, osc_timecode?: OscTimecodeConfiguration | null | null, timecode_audio_output_device?: string | null | null, timecode_audio_latency_trim_micros_by_output?: { [key in string]: bigint } | null, internal_audio_library_roots?: { [key in string]: string } | null, internal_audio_output_devices?: { [key in string]: string } | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, command_line_at_uses_programmer_fade?: boolean | null, sequence_master_fade_millis?: number, release_fade_millis?: number, cuelist_auto_off_at_zero_default?: boolean | null, cuelist_auto_off_flash_release_default?: boolean | null, color_programming_model_default?: ColorProgrammingModel | null, start_after_first_recording?: boolean | null, preload_programmer_changes?: boolean | null, preload_physical_playback_actions?: boolean | null, preload_virtual_playback_actions?: boolean | null, patch_preview_highlight_dmx?: boolean | null, highlight_look?: HighlightLookConfiguration | null, matter_enabled?: boolean | null, pool_presentation?: PoolPresentationConfiguration | null, file_manager_system_picker_fallback?: boolean | null, file_manager_roots?: Array<FileManagerRoot> | null, };
 export type HighlightLookConfiguration = { intensity: number, color?: HighlightLookColor | null, iris?: number | null, zoom?: number | null, focus?: number | null, frost?: number | null, compatibility: HighlightLookCompatibility, };
 export type HighlightLookColor = "white" | "red" | "green" | "blue" | "cyan" | "magenta" | "amber";
 export type HighlightLookCompatibility = "semantic" | "legacy_raw" | "needs_review";

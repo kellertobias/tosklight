@@ -490,6 +490,10 @@ fn patched_configuration(
     if let Some(value) = patch.cuelist_auto_off_flash_release_default {
         configuration.cuelist_auto_off_flash_release_default = value;
     }
+    if let Some(value) = patch.color_programming_model_default {
+        configuration.color_programming_model_default =
+            super::color_model_impact::domain_model(value);
+    }
     if let Some(value) = patch.start_after_first_recording {
         configuration.start_after_first_recording = value;
     }

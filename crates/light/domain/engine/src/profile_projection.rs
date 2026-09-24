@@ -4,7 +4,7 @@ use crate::{
     EngineError, GroupMasterIndex, ProfileValueIndex, RenderOptions, apply_safe_values,
     apply_safe_values_with_snap, blackout_raw, channel_visual_level, profile_visual_color,
 };
-use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
+use light_core::{AttributeKey, AttributeValue, ColorProgrammingModel, FixtureId, Xyz};
 use light_fixture::ChannelAttribute;
 use light_fixture::{
     BoundFixtureModeResolution, ChannelFunctionBehavior, ChannelScales, FixtureChannel,
@@ -185,6 +185,7 @@ pub(crate) fn resolve_profile_head(
             grand_master: 1.0,
             blackout: false,
             control_loss_progress: None,
+            ..options
         }
     } else {
         options
@@ -250,7 +251,7 @@ pub(crate) fn resolve_profile_head(
     )?;
     let virtual_intensity = virtual_intensity(&inputs);
     let requested_color = requested_color(&inputs.values);
-    resolve_requested_color(mode, &mut inputs, requested_color)?;
+    resolve_requested_color(mode, &mut inputs, requested_color, options.color_model)?;
     let channel_start = channels.len();
     resolve_channels(
         ChannelResolutionContext {
@@ -431,6 +432,7 @@ fn prepare_head_inputs(
             grand_master: 1.0,
             blackout: false,
             control_loss_progress: None,
+            ..options
         }
     } else {
         options
@@ -611,15 +613,20 @@ fn resolve_requested_color(
     mode: &FixtureMode,
     inputs: &mut ProfileHeadInputs,
     target: Option<Xyz>,
+    model: ColorProgrammingModel,
 ) -> Result<(), EngineError> {
     let Some(target) = target else {
         return Ok(());
     };
     let color_attribute = AttributeKey::color();
     let color_master = inputs.sequence_masters.get(&color_attribute).copied();
-    let resolved = match inputs.semantic_highlight_color {
-        Some(color) => mode.resolve_highlight_color(inputs.head_id, color),
-        None => mode.resolve_color(inputs.head_id, target),
+    let resolved = match (inputs.semantic_highlight_color, model) {
+        (Some(color), _) => mode.resolve_highlight_color(inputs.head_id, color),
+        // Intent shows one chromaticity at the engine's full reach; Intensity does the dimming.
+        (None, ColorProgrammingModel::Intent) => {
+            Ok(mode.resolve_intent(inputs.head_id, target).channels)
+        }
+        (None, ColorProgrammingModel::Direct) => mode.resolve_color(inputs.head_id, target),
     }
     .map_err(|error| EngineError::Invalid(error.to_string()))?;
     for (channel_id, raw) in resolved {

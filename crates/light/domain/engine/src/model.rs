@@ -189,6 +189,9 @@ pub struct RenderOptions {
     pub grand_master: f32,
     pub blackout: bool,
     pub control_loss_progress: Option<f32>,
+    /// How the active show programs colour. The engine fills it from [`crate::Engine::color_model`]
+    /// for every frame, so callers never need to set it.
+    pub color_model: light_core::ColorProgrammingModel,
 }
 impl Default for RenderOptions {
     fn default() -> Self {
@@ -196,6 +199,7 @@ impl Default for RenderOptions {
             grand_master: 1.0,
             blackout: false,
             control_loss_progress: None,
+            color_model: light_core::ColorProgrammingModel::Direct,
         }
     }
 }

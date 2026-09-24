@@ -243,6 +243,11 @@ impl AttributeConfigurationResource {
         *self.installed.write() = InstalledAttributeConfiguration::for_document(document);
     }
 
+    /// The active show's colour programming model, which the engine must follow.
+    pub(super) fn color_model(&self) -> light_core::ColorProgrammingModel {
+        self.installed.read().configuration.color_model
+    }
+
     #[cfg(test)]
     pub(super) fn replace_installed(&self, installed: InstalledAttributeConfiguration) {
         *self.installed.write() = installed;

@@ -78,6 +78,7 @@ fn grand_master_and_blackout_affect_intensity() {
                 grand_master: 0.5,
                 blackout: false,
                 control_loss_progress: None,
+                ..Default::default()
             })
             .unwrap()
             .universes[&1][0],
@@ -89,6 +90,7 @@ fn grand_master_and_blackout_affect_intensity() {
                 grand_master: 1.0,
                 blackout: true,
                 control_loss_progress: None,
+                ..Default::default()
             })
             .unwrap()
             .universes[&1][0],
@@ -209,6 +211,7 @@ fn full_freeze_bypasses_every_master_and_resumes_underlying_state_when_removed()
                 grand_master: 0.0,
                 blackout: true,
                 control_loss_progress: Some(1.0),
+                ..Default::default()
             })
             .unwrap()
             .universes[&1][0],

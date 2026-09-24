@@ -117,6 +117,7 @@ impl AttributeConfiguration {
             custom_attributes: Vec::new(),
             placements,
             activation_groups: linked_groups,
+            color_model: Default::default(),
         }
     }
 
