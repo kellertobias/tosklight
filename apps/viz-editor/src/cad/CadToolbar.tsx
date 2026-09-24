@@ -25,6 +25,7 @@ import { CadPartMenu } from "./CadPartMenu";
 import { rememberPart } from "./cadAddChoice";
 import { LOAD_MODEL } from "./cadModelImport";
 import { placedWith } from "./cadPlacement";
+import { ErrorMessage } from "../ErrorMessage";
 import { type CadPartKind, findPart, partLabel } from "./venueParts";
 import "./cadTitleTools.css";
 
@@ -179,8 +180,6 @@ export function holdPart(tools: CadTools, kind: CadPartKind, key: string) {
 /** Why the show refused the last drawn item, until the operator dismisses it. */
 export function CadToolError({ tools }: { tools: CadTools }) {
 	return tools.error ? (
-		<output className="cad-error" role="alert" onClick={tools.clearError}>
-			{tools.error}
-		</output>
+		<ErrorMessage className="cad-error" message={tools.error} onDismiss={tools.clearError} />
 	) : null;
 }

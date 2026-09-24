@@ -1751,15 +1751,6 @@ body {
 	box-shadow: 0 12px 36px rgb(0 0 0 / 45%);
 }
 
-.viz-editor-toast span {
-	flex: 1;
-}
-
-.viz-editor-toast .ui-button {
-	min-width: 28px;
-	min-height: 28px;
-	padding: 0;
-}
 
 /*
  * The MVR import decision panel.
@@ -2047,12 +2038,42 @@ body {
 	top: 40px;
 	right: 8px;
 	max-width: min(480px, calc(100% - 16px));
-	padding: 8px 14px;
+	padding: 6px 6px 6px 14px;
 	border: 1px solid #8f3038;
 	border-radius: 3px;
 	background: #54171c;
 	color: #ffdadd;
-	cursor: pointer;
+}
+
+/* An error's words can be selected and copied, though the window around it cannot; Copy and ×
+   sit at its right, clear of the words. */
+.viz-error-message {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	-webkit-app-region: no-drag;
+}
+
+.viz-error-message-text {
+	flex: 1;
+	min-width: 0;
+	align-self: center;
+	overflow-wrap: anywhere;
+	cursor: text;
+	user-select: text;
+	-webkit-user-select: text;
+}
+
+.viz-error-message-actions {
+	display: flex;
+	flex: none;
+	gap: 4px;
+}
+
+.viz-error-message-actions .ui-button {
+	min-width: 28px;
+	min-height: 28px;
+	padding: 0 8px;
 }
 
 /* A short confirmation that an action did something, in the same corner as an error. */

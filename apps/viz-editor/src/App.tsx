@@ -47,6 +47,7 @@ import type { PatchTransport } from "@tosklight/patch/transport";
 import { type EditorWorkspace, EditorSidebar } from "./EditorSidebar";
 import { MediaWorkspace } from "./MediaWorkspace";
 import { PreviewControls } from "./PreviewControls";
+import { ErrorMessage } from "./ErrorMessage";
 import { ShowScreen } from "./ShowScreen";
 import { beginWindowDrag, WindowControls } from "./WindowChrome";
 
@@ -700,12 +701,7 @@ export function App() {
 				</main>
 			</div>
 			{error ? (
-				<output className="viz-editor-toast" role="alert">
-					<span>{error}</span>
-					<Button aria-label="Dismiss error" onClick={() => setError(null)}>
-						×
-					</Button>
-				</output>
+				<ErrorMessage className="viz-editor-toast" message={error} onDismiss={() => setError(null)} />
 			) : null}
 		</div>
 	);

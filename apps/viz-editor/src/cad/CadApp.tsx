@@ -26,6 +26,7 @@ import { useCadMove } from "./useCadMove";
 import { useCadPrintPages } from "./useCadPrintPages";
 import { useCadUnderlays } from "./useCadUnderlays";
 import { useCadVenueGroups } from "./useCadVenueGroups";
+import { ErrorMessage } from "../ErrorMessage";
 import { expandToGroups } from "./venueGroups";
 import {
 	applySelectionChange,
@@ -448,7 +449,7 @@ export function CadApp() {
 				onSettings={() => setSettingsOpen(true)}
 			/>
 			<CadToolError tools={tools} />
-			{error ? <output className="cad-error">{error}</output> : null}
+			{error ? <ErrorMessage className="cad-error" message={error} onDismiss={() => setError(null)} /> : null}
 			{!error && notice ? <output className="cad-notice">{notice}</output> : null}
 			<div className={`cad-print-layout ${panelOpen ? "is-printing" : ""}`}>
 				<section className="cad-workspace">
