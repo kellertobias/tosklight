@@ -16,12 +16,14 @@ import {
 	useOutputsForControl,
 } from "../shared/api/layerControl";
 import type { Resource } from "../shared/api/resource";
+import { type LibraryPreview, useLibraryPreview } from "./libraryPreview";
 
 interface PlaybackTakeoverValue {
 	outputs: Resource<OutputView[]>;
 	control: LayerControl;
 	selectedOutputId: string;
 	selectOutput: (outputId: string) => void;
+	preview: LibraryPreview;
 }
 
 const PlaybackTakeoverContext = createContext<PlaybackTakeoverValue | null>(
@@ -36,6 +38,7 @@ export function PlaybackTakeoverProvider({
 	const outputs = useOutputsForControl();
 	const control = useLayerControl();
 	const [selectedOutputId, selectOutput] = useState("");
+	const preview = useLibraryPreview(outputs.data, control, selectedOutputId);
 	useFailureToast(control.refusal);
 
 	useEffect(() => {
@@ -45,8 +48,8 @@ export function PlaybackTakeoverProvider({
 	}, [outputs.data, selectedOutputId]);
 
 	const value = useMemo(
-		() => ({ outputs, control, selectedOutputId, selectOutput }),
-		[outputs, control, selectedOutputId],
+		() => ({ outputs, control, selectedOutputId, selectOutput, preview }),
+		[outputs, control, selectedOutputId, preview],
 	);
 	return (
 		<PlaybackTakeoverContext.Provider value={value}>
@@ -95,8 +98,15 @@ export function usePlaybackTakeover(): PlaybackTakeoverValue {
 	return value;
 }
 
-export function PlaybackTakeoverToggle() {
-	const { outputs, control, selectedOutputId } = usePlaybackTakeover();
+/** The Library's preview, or null outside the provider (feature tests and stories). */
+export function useOptionalLibraryPreview(): LibraryPreview | null {
+	return useContext(PlaybackTakeoverContext)?.preview ?? null;
+}
+
+/** Take over playback, and in the Library also Enable preview beside it. */
+export function PlaybackTakeoverToggle({ preview = false }: { preview?: boolean }) {
+	const { outputs, control, selectedOutputId, preview: libraryPreview } =
+		usePlaybackTakeover();
 	const output =
 		outputs.data?.find((candidate) => candidate.id === selectedOutputId) ??
 		outputs.data?.[0];
@@ -114,6 +124,18 @@ export function PlaybackTakeoverToggle() {
 					if (output) void control.setTakeover(output, event.target.checked);
 				}}
 			/>
+			{preview && (
+				<SwitchField
+					bare
+					className="media-playback-takeover media-library-preview"
+					label="Enable preview"
+					offLabel={null}
+					onLabel={null}
+					checked={libraryPreview.outputId !== null}
+					disabled={!output && libraryPreview.outputId === null}
+					onChange={(event) => void libraryPreview.setEnabled(event.target.checked)}
+				/>
+			)}
 		</div>
 	);
 }

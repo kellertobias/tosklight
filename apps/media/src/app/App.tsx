@@ -14,6 +14,7 @@ import { DeskIdentityProvider } from "../operator/DeskIdentityContext";
 import {
 	PlaybackTakeoverProvider,
 	PlaybackTakeoverToggle,
+	usePlaybackTakeover,
 } from "../operator/PlaybackTakeoverContext";
 import {
 	type MediaServerSection,
@@ -94,6 +95,12 @@ function AppSurface() {
 			: path === "/text"
 				? "text"
 				: "media";
+	const { preview } = usePlaybackTakeover();
+	// Preview belongs to the Library: leaving it puts the output back as it was.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: only a change of page turns it off.
+	useEffect(() => {
+		if (path !== "/library") void preview.setEnabled(false);
+	}, [path]);
 	const [now, setNow] = useState(() => new Date());
 	useEffect(() => {
 		const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -107,7 +114,7 @@ function AppSurface() {
 			instance={health.data?.instance}
 			showName={showName}
 			now={now}
-			playbackOwnership={<PlaybackTakeoverToggle />}
+			playbackOwnership={<PlaybackTakeoverToggle preview={path === "/library"} />}
 			onNavigate={(section) => {
 				const route = ROUTES.find(
 					(candidate) => SECTION_BY_PATH[candidate.path] === section,

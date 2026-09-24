@@ -125,6 +125,10 @@ On an HDMI output, configure the reference layout: a **Centre** display region c
 
 Open Pixel's **DMX** page. For each output, confirm **Listening for DMX on** shows the protocol, universe and start address set in Settings > Network & DMX, and that the page explains the output's name (such as **Main**), the **Master** row and the **Layer** rows. Confirm the table gives each of Master and Layer 1–8 its **DMX patch** as universe and first–last address matching Connect to Console's patch, and that a layer with nothing selected reads **None selected** in **Selected media** rather than 000/000. Change the start address in Settings and confirm the page follows within a few seconds without reopening it; clear the start address and confirm **Not configured** with a note on where to set it.
 
+## PIXEL-011 — isolated live preview from the Library
+
+With a desk driving an output on two layers and the master at half, open Pixel's **Library** and confirm **Enable preview** sits below **Take over playback**, and that choosing media while it is off changes no layer. Turn it on: playback is taken over, every layer goes out and the master goes full. Click a media item: it plays on Layer 1 at full level, looping, with every other layer out and the master full; click another and the output switches to it. Turn preview off: each layer's slot, level and play mode and the master level return to what they were, and playback returns to the desk. Turn it on again and navigate to another page: the output is restored the same way. Reload the page and confirm preview is off and the library is unchanged.
+
 ## RUNNING-001 — containment, deduplication, and identity
 
 Start one Cuelist through several assignments or control surfaces, with a Dynamic contained in it; start one independent Dynamic, Timecode, and Macro. Running shows exactly four rows. The Cuelist row uses the Cuelist's own number and name plus its current Cue, not an assignment number, and suppresses the contained Dynamic. The other rows use their own stable identities and show **Cue —**.

@@ -120,6 +120,9 @@
 .media-playback-takeover-dock {
 	display: flex;
 	justify-content: center;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
 	padding: 8px 4px;
 }
 

@@ -37,6 +37,7 @@ import {
 	type LibrarySourceType,
 	librarySourceGroups,
 } from "./GeneratedLibraryBrowserView";
+import { useOptionalLibraryPreview } from "../../operator/PlaybackTakeoverContext";
 import { ImportPanel } from "./ImportPanel";
 import {
 	EmptySlotEditor,
@@ -231,14 +232,14 @@ onDismissFailure, onRenameFolder, onSetFolderIcon, onSetFolderPicture, onRemoveF
 onSwapFolders, onCompactFolder, onUpdateItem, onDeleteItem, onSetItemsEnabled,
 onDeleteItems, onRetryThumbnail, onUploadCustomThumbnail, onMoveItems, onReorderItem,
 onUpload, onUploadAt, onUpdateNotes, thumbnailUrl = api.thumbnailUrl, previewAspectRatio = 16 / 9,
-importPanel, onModeChange, }: LibraryBrowserViewProps) { const [folder, setFolder] = useState(1); const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+importPanel, onModeChange, }: LibraryBrowserViewProps) { const preview = useOptionalLibraryPreview(); const [folder, setFolder] = useState(1); const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 const [selectedFolders, setSelectedFolders] = useState<Set<number>>( new Set(), ); const [focusedId, setFocusedId] = useState<string | null>(null); const [emptyFile, setEmptyFile] = useState<number | null>(null);
 const [folderEditor, setFolderEditor] = useState<number | null>(null); const [search, setSearch] = useState(""); const [dropFailure, setDropFailure] = useState<string | null>(null); const picker = useRef<HTMLInputElement>(null); const selectionAnchorId = useRef<string | null>(null);
 const rangeBaseIds = useRef<Set<string>>(new Set()); const selectedFolder = catalog.folders.find( (entry) => entry.folder === folder, ); const visibleItems = useMemo(() => {
 const needle = search.trim().toLowerCase(); return (selectedFolder?.items ?? []).filter( (item) => !needle || item.name.toLowerCase().includes(needle), ); }, [search, selectedFolder]);
 const focused = selectedFolder?.items.find((item) => item.id === focusedId);  useEffect(() => { setSelectedIds(new Set()); setFocusedId(null);
 setEmptyFile(null); selectionAnchorId.current = null; rangeBaseIds.current = new Set(); }, [folder]);
-const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => { setSelectedFolders(new Set()); setFocusedId(item.id); setEmptyFile(null); setFolderEditor(null);
+const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => { if (!event.shiftKey && !event.metaKey && !event.ctrlKey) void preview?.show({ folder, file: item.file }); setSelectedFolders(new Set()); setFocusedId(item.id); setEmptyFile(null); setFolderEditor(null);
 setSelectedIds((current) => { if (event.shiftKey && selectionAnchorId.current) { const anchor = selectedFolder?.items.find( (candidate) => candidate.id === selectionAnchorId.current, );
 if (anchor) { const first = Math.min(anchor.file, item.file); const last = Math.max(anchor.file, item.file); const next = new Set(rangeBaseIds.current); for (const candidate of selectedFolder?.items ?? []) {
 if (candidate.file >= first && candidate.file <= last) next.add(candidate.id); } return next; }
