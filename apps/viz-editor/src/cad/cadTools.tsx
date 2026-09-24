@@ -192,8 +192,13 @@ export function CadToolProvider({
 			save: (annotation) =>
 				annotationSession.save(annotation).then(() => undefined, report),
 			remove: (id) => annotationSession.remove(id).then(() => undefined, report),
+			// The changed item is drawn from the show's answer at once, so moved text never falls back
+			// to where it was between its preview clearing and the delta every window receives.
 			change: (annotation) =>
-				annotationSession.change(annotation).then(() => undefined, report),
+				annotationSession.change(annotation).then((changed) => {
+					if (changed?.id)
+						setAnnotations((all) => all.map((each) => (each.id === changed.id ? changed : each)));
+				}, report),
 			// Text that is no longer drawn cannot stay picked.
 			selectedTextId: annotations.some((each) => each.id === selectedTextId)
 				? selectedTextId

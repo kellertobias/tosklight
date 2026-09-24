@@ -73,7 +73,12 @@ export function useTextDrag({
 }) {
 	const tools = useCadTools();
 	const active = useRef<TextDrag | null>(null);
-	const texts = tools.annotations.filter((each) => each.view === view && each.kind === "text");
+	// Text is where it is drawn: a move the show has not taken yet already carries its anchor, so the
+	// gizmo stays on the words and the next press picks them up from there, never from where they were.
+	const preview = tools.textPreview;
+	const texts = tools.annotations
+		.filter((each) => each.view === view && each.kind === "text")
+		.map((each) => (preview?.id === each.id ? { ...each, points: preview.points } : each));
 	const picked = texts.find((each) => each.id === tools.selectedTextId) ?? null;
 
 	const toPlan = (clientX: number, clientY: number): PlanPoint => {
@@ -85,7 +90,7 @@ export function useTextDrag({
 		];
 	};
 
-	/** Where the picked text's gizmo stands on this tile: its anchor. */
+	/** Where the picked text's gizmo stands on this tile: its anchor, wherever the words are drawn. */
 	const gizmo: PlanPoint | null = picked?.points[0]
 		? viewPoint(view, picked.points[0], rotationQuarterTurns)
 		: null;

@@ -17,6 +17,7 @@ function setup({
 	snapping = false,
 	selectedTextId = null,
 	placing = null,
+	textPreview = null,
 }: {
 	placing?: CadTools["placing"];
 	tool: CadDrawTool;
@@ -25,6 +26,7 @@ function setup({
 	entities?: CadEntity[];
 	snapping?: boolean;
 	selectedTextId?: string | null;
+	textPreview?: CadTools["textPreview"];
 }) {
 	const tools: CadTools = {
 		onAdd: vi.fn(),
@@ -44,7 +46,7 @@ function setup({
 		change: vi.fn().mockResolvedValue(undefined),
 		selectedTextId: selectedTextId,
 		selectText: vi.fn(),
-		textPreview: null,
+		textPreview,
 		setTextPreview: vi.fn(),
 	};
 	const onSelection = vi.fn();
@@ -432,6 +434,22 @@ describe("picking and moving placed text", () => {
 		// The horizontal arrow runs right from the anchor; the drag's rise is ignored.
 		drag([230, 400], [330, 350]);
 		expect(tools.change).toHaveBeenCalledWith({ ...note, points: [[-2000, 0]] });
+	});
+
+	it("keeps the gizmo on the words while a move is on its way to the show, and moves on from there", () => {
+		// Dragged a metre right to screen (300, 400); the show has not answered yet.
+		const { tools, drag } = setup({
+			tool: "select",
+			annotations: [note],
+			selectedTextId: "note",
+			textPreview: { id: "note", points: [[-2000, 0]] },
+		});
+		// The old anchor's arrow at (230, 400) is not there any more.
+		drag([230, 400], [230, 300]);
+		expect(tools.change).not.toHaveBeenCalled();
+		// The arrow stands on the moved anchor, and the next move starts where the words are.
+		drag([330, 400], [430, 350]);
+		expect(tools.change).toHaveBeenCalledWith({ ...note, points: [[-1000, 0]] });
 	});
 
 	it("puts picked text down on a press elsewhere, and a click on it moves nothing", () => {
