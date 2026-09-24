@@ -29,6 +29,8 @@ const STRAIGHT = "562e7947-8284-5ec8-9750-3cd3fe6c1c6d";
 const CROWD = "a0e75c30-92e5-4c20-bcd1-9a51ddbc6257";
 const RAILING = "9fc82162-c31c-4a34-bb2c-01fcc2254e37";
 const PAR = "par-profile";
+/** The one flight of stairs, placed with the handrails chosen for it. */
+const STAIRS = "d5982d33-9723-5749-ade6-7be0e6b4adf1";
 /** The 2 × 1 m stage element, which is the stage button's own default part. */
 const DECK = "ae45dcb3-cd94-59db-b3b1-0e8a5adb9141";
 
@@ -76,6 +78,7 @@ beforeEach(() => {
 		profile(CORNER, "Four-Point Truss Corner 2-Way"),
 		profile(CROWD, "Crowd Area", { fixture_type: "venue" }),
 		profile(RAILING, "Stage Railing 2 m", { fixture_type: "venue" }),
+		profile(STAIRS, "Stage Stairs", { fixture_type: "venue" }),
 		profile(PAR, "LED Par", { manufacturer: "Generic", fixture_type: "par", patch_policy: "dmx" }),
 		{
 			...profile(DECK, "Stage Element 2 × 1 m", { fixture_type: "venue" }),
@@ -214,6 +217,38 @@ describe("Add Several", () => {
 		await waitFor(() =>
 			expect(screen.queryByRole("dialog", { name: "Add venue element" })).not.toBeInTheDocument(),
 		);
+	});
+});
+
+describe("the one Stairs part", () => {
+	it("is chosen with its handrails and placed with them, each side remembered on its own", async () => {
+		const onChoose = vi.fn();
+		const menu = render(<CadPartMenu kind="stage" onChoose={onChoose} />);
+		const stairs = await screen.findByRole("group", { name: "Stairs" });
+		expect(within(stairs).getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual([
+			"No handrails",
+			"LeftSeen climbing",
+			"RightSeen climbing",
+			"Both sides",
+		]);
+		const left = within(stairs).getByRole("menuitemradio", { name: /^Left/u });
+		await waitFor(() => expect(left).toBeEnabled());
+		fireEvent.click(left);
+		const [key] = onChoose.mock.calls[0];
+		expect(key).toBe(`${STAIRS}:handrails-left`);
+		menu.unmount();
+
+		const { announcePlaced, press } = renderFlows();
+		press("stage", key);
+		await waitFor(() => expect(announcePlaced).toHaveBeenCalledTimes(1));
+		expect(placedFixture(0)).toMatchObject({
+			profileId: STAIRS,
+			sceneryOptions: { handrails: "left" },
+		});
+		// A plain press places the same choice again, and the menu checks it.
+		press("stage");
+		await waitFor(() => expect(announcePlaced).toHaveBeenCalledTimes(2));
+		expect(placedFixture(1).sceneryOptions).toEqual({ handrails: "left" });
 	});
 });
 

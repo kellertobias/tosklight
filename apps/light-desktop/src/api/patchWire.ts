@@ -168,6 +168,7 @@ function mapFixtureProjection(
 					colourSrgb: fixture.scenery_options.colour_srgb ?? null,
 					chainTop: fixture.scenery_options.chain_top ?? null,
 					chainBottom: fixture.scenery_options.chain_bottom ?? null,
+					handrails: fixture.scenery_options.handrails ?? null,
 				}
 			: null,
 	};

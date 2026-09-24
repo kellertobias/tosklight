@@ -7,6 +7,7 @@ import {
 	DEFAULT_PART_PROFILE_IDS,
 	definitionForProfile,
 	findPart,
+	partKey,
 	matchesVenueQuery,
 	nextVirtualNumber,
 	PART_MENU_PROFILE_IDS,
@@ -29,7 +30,7 @@ describe("the Add primitive dialog", () => {
 			"269ae83e-4ea8-5639-9d34-418fc8a08d23",
 		]);
 		const ids = [...TRUSS_TYPES, ...STAGE_TYPES, ...PRIMITIVE_TYPES].flatMap((type) =>
-			type.parts.map((part) => part.profileId),
+			type.parts.map(partKey),
 		);
 		expect(new Set(ids).size).toBe(ids.length);
 	});
@@ -60,10 +61,29 @@ describe("the CAD add dialogs' parts", () => {
 			"Stairs",
 			"Handrail",
 		]);
-		// Stairs come with and without a rail up each side; the handrail is a part of its own.
+		// One Stairs, placed with the handrails chosen for it; the handrail is a part of its own.
+		const stairs = STAGE_TYPES.find((type) => type.id === "stairs")?.parts ?? [];
+		expect(stairs.map((part) => part.label)).toEqual(["No handrails", "Left", "Right", "Both sides"]);
+		expect(new Set(stairs.map((part) => part.profileId)).size).toBe(1);
+		expect(stairs.map((part) => part.sceneryOptions?.handrails)).toEqual([
+			"none",
+			"left",
+			"right",
+			"both",
+		]);
+		// Each choice is found and remembered on its own; a plain profile id finds the first.
+		const [none, left] = stairs;
+		expect(findPart("stage", partKey(left))?.part).toBe(left);
+		expect(findPart("stage", left.profileId)?.part).toBe(none);
+		// The flight made with handrails is retired: no dialog offers it again.
 		expect(
-			STAGE_TYPES.find((type) => type.id === "stairs")?.parts.map((part) => part.label),
-		).toEqual(["Without", "With"]);
+			venueProfiles([
+				{
+					...definition("47662838-33b1-5fcc-9323-bb5840c1783f", 1),
+					manufacturer: "Venue",
+				} as FixtureDefinition,
+			]),
+		).toEqual([]);
 		// The sections corner pieces are made for list them after the straight truss.
 		const partsOf = (id: string) =>
 			TRUSS_TYPES.find((type) => type.id === id)?.parts.map((part) => part.label);
@@ -89,7 +109,7 @@ describe("the CAD add dialogs' parts", () => {
 			]);
 			expect(group.parts.every((part) => part.detail === undefined)).toBe(true);
 		}
-		const ids = [...TRUSS_TYPES, ...STAGE_TYPES].flatMap((type) => type.parts.map((part) => part.profileId));
+		const ids = [...TRUSS_TYPES, ...STAGE_TYPES].flatMap((type) => type.parts.map(partKey));
 		expect(new Set(ids).size).toBe(ids.length);
 	});
 
@@ -114,7 +134,7 @@ describe("the CAD part buttons' catalogue", () => {
 		expect(CURTAIN_TYPES[0].parts[0].profileId).toBe(PARAMETRIC_CURTAIN_PROFILE_ID);
 		expect(CURTAIN_TYPES[1].parts.map((part) => part.label)).toEqual(["1 m", "2 m", "3 m", "5 m", "6 m"]);
 		const ids = Object.values(CAD_PART_CATALOGUE).flatMap((groups) =>
-			groups.flatMap((group) => group.parts.map((part) => part.profileId)),
+			groups.flatMap((group) => group.parts.map(partKey)),
 		);
 		expect(new Set(ids).size).toBe(ids.length);
 	});

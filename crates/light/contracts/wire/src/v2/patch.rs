@@ -365,6 +365,20 @@ pub struct PatchSceneryOptions {
     /// What the bottom of a chain holds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chain_bottom: Option<PatchChainBottomEnd>,
+    /// Which sides of a flight of stairs carry a handrail. Absent keeps what the profile declares.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handrails: Option<PatchStairHandrails>,
+}
+
+/// Which sides of a flight of stairs a handrail runs up, as seen climbing it.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum PatchStairHandrails {
+    None,
+    Left,
+    Right,
+    Both,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

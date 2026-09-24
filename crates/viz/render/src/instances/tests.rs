@@ -1266,11 +1266,31 @@ mod lines_view {
         assert_eq!(mesh_count(&drawn(stairs.clone()), MeshKind::Cube), 6);
 
         stairs.size.y = 0.6;
-        stairs.detail.handrails = true;
-        let railed = drawn(stairs);
+        stairs.detail.handrails = viz_scene::StairRails::BOTH;
+        let railed = drawn(stairs.clone());
         assert_eq!(mesh_count(&railed, MeshKind::Cube), 3, "the same steps");
         // A post on every nosing up each side, and the rail over them: 2 x (4 posts + 1 rail).
         assert_eq!(mesh_count(&railed, MeshKind::Cylinder), 10);
+
+        // One side alone: the flight climbs along +z here, so its left, seen climbing, is +x.
+        let across = |frame: &FrameInstances| -> Vec<f32> {
+            frame
+                .meshes
+                .iter()
+                .filter(|(kind, _)| *kind == MeshKind::Cylinder)
+                .flat_map(|(_, tubes)| tubes.iter().map(|tube| tube.model[3][0]))
+                .collect()
+        };
+        for (left, right, sign) in [(true, false, 1.0), (false, true, -1.0)] {
+            stairs.detail.handrails = viz_scene::StairRails { left, right };
+            let one = drawn(stairs.clone());
+            assert_eq!(mesh_count(&one, MeshKind::Cylinder), 5);
+            assert!(
+                across(&one).iter().all(|x| x * sign > 0.4),
+                "{left}/{right}: {:?}",
+                across(&one)
+            );
+        }
     }
 
     /// Deco truss crosses its diagonals, so the same length carries more bracing.

@@ -86,7 +86,13 @@ describe("the model a selection shares", () => {
 
 	it("still names the profile id when the patch carries no revision for it", () => {
 		const model = sharedModel([fixture("a", "deck"), fixture("b", "deck")], []);
-		expect(model).toEqual({ profileId: "deck", label: "", scenery: null, crowd: false });
+		expect(model).toEqual({
+			profileId: "deck",
+			label: "",
+			scenery: null,
+			sizing: null,
+			crowd: false,
+		});
 	});
 });
 

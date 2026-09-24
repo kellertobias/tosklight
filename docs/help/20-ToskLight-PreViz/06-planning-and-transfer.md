@@ -581,11 +581,16 @@ the key that picks it, such as **Draw line · L**. From left to right:
     **3-point regular** and **4-point**, the corner pieces made for that section. It places a
     **3-point regular** straight truss until you choose another.
   * **Add stage element** (a deck raised off the floor) lists the decks on **Regular feet** and the
-    decks on **Scissor feet**, each by platform size, the **Stairs** — **Without** or **With**
-    handrails — and the **Handrail**. Either kind of deck is built to the height set in **Info**, so
-    there is no part per leg height. Stairs climb to the height set there in 200 mm steps, and a
-    handrail is a stage edge guard 1 m high, set to any length from 0.4 m to 24 m. It places a
-    2 × 1 m deck on scissor feet until you choose another.
+    decks on **Scissor feet**, each by platform size, the one **Stairs** and the **Handrail**.
+    **Stairs** asks for its handrails as you choose it: **No handrails**, **Left**, **Right** or
+    **Both sides**, left and right as seen climbing the flight; the choice goes with the flight and
+    can be changed later under **Parameters → Handrails** in **Info**. Either kind of deck is built
+    to the height set in **Info**, so there is no part per leg height. Stairs climb to the height set
+    there in 200 mm steps, and a handrail is a stage edge guard 1 m high, set to any length from
+    0.4 m to 24 m. It places a 2 × 1 m deck on scissor feet until you choose another. From above, a
+    flight is drawn as stairs rather than a deck: a line across it at every nosing, an arrow pointing
+    up the climb and its rails along the chosen sides. Stairs placed from the retired **Stairs with
+    Handrails** part keep their rails up both sides until you choose otherwise.
   * **Add curtain** (a drape on its rail) lists the parametric curtain, sized in **Info**, and the
     curtains made at a fixed width of 1, 2, 3, 5 and 6 m. It places the parametric curtain until you
     choose another.

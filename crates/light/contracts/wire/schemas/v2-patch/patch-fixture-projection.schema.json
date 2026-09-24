@@ -753,6 +753,17 @@
             "string",
             "null"
           ]
+        },
+        "handrails": {
+          "description": "Which sides of a flight of stairs carry a handrail. Absent keeps what the profile declares.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchStairHandrails"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -788,6 +799,16 @@
         "split",
         "universe",
         "address"
+      ]
+    },
+    "PatchStairHandrails": {
+      "description": "Which sides of a flight of stairs a handrail runs up, as seen climbing it.",
+      "type": "string",
+      "enum": [
+        "none",
+        "left",
+        "right",
+        "both"
       ]
     }
   }

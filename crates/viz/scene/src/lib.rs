@@ -53,7 +53,7 @@ pub use scene::{
     FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MediaCrop, MediaProjector,
     MediaSection, MediaSectionKind, MediaSourceBinding, MotionAxis, PhysicsBody,
     PhysicsConstraints, PhysicsProgram, PhysicsSceneryObject, PlanArtwork, PlanFallback, RiserFeet,
-    Scene, SceneryDetail, SceneryKind, SceneryObject, SourceForm, euler_degrees,
+    Scene, SceneryDetail, SceneryKind, SceneryObject, SourceForm, StairRails, euler_degrees,
 };
 pub use uuid;
 pub use values::{

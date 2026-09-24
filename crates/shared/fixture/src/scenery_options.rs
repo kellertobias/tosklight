@@ -2,7 +2,8 @@
 //!
 //! A curtain is bought in a colour and a chain is rigged with what hangs at each end. Neither is a
 //! property of the product the profile describes — the same curtain profile is black serge on one
-//! stage and white muslin on the next — so both travel with the placement, beside its size.
+//! stage and white muslin on the next — so both travel with the placement, beside its size. So do
+//! the handrails of a flight of stairs: which side a rail runs up depends on where the flight stands.
 
 use serde::{Deserialize, Serialize};
 
@@ -21,11 +22,27 @@ pub struct SceneryOptions {
     /// What the bottom of a chain holds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chain_bottom: Option<ChainBottomEnd>,
+    /// Which sides of a flight of stairs carry a handrail. Absent keeps what the profile declares.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handrails: Option<StairHandrails>,
 }
 
 impl SceneryOptions {
     pub fn is_empty(&self) -> bool {
-        self.colour_srgb.is_none() && self.chain_top.is_none() && self.chain_bottom.is_none()
+        self.colour_srgb.is_none()
+            && self.chain_top.is_none()
+            && self.chain_bottom.is_none()
+            && self.handrails.is_none()
+    }
+
+    /// The handrails this flight carries: the placement's choice, else the profile's own — both
+    /// sides for a profile made with handrails, none for one made without.
+    pub fn stair_handrails(&self, declared: bool) -> StairHandrails {
+        self.handrails.unwrap_or(if declared {
+            StairHandrails::Both
+        } else {
+            StairHandrails::None
+        })
     }
 
     /// Whether every choice is one the object can be drawn with.
@@ -48,6 +65,27 @@ impl SceneryOptions {
             srgb_to_linear(green),
             srgb_to_linear(blue),
         ])
+    }
+}
+
+/// Which sides of a flight of stairs a handrail runs up, as seen climbing it.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StairHandrails {
+    #[default]
+    None,
+    Left,
+    Right,
+    Both,
+}
+
+impl StairHandrails {
+    pub fn left(self) -> bool {
+        matches!(self, Self::Left | Self::Both)
+    }
+
+    pub fn right(self) -> bool {
+        matches!(self, Self::Right | Self::Both)
     }
 }
 

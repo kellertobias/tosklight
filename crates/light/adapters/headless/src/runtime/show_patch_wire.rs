@@ -431,6 +431,12 @@ fn application_scenery_options(input: wire::PatchSceneryOptions) -> fixture::Sce
             wire::PatchChainBottomEnd::SteelflexLoop => fixture::ChainBottomEnd::SteelflexLoop,
             wire::PatchChainBottomEnd::Motor => fixture::ChainBottomEnd::Motor,
         }),
+        handrails: input.handrails.map(|sides| match sides {
+            wire::PatchStairHandrails::None => fixture::StairHandrails::None,
+            wire::PatchStairHandrails::Left => fixture::StairHandrails::Left,
+            wire::PatchStairHandrails::Right => fixture::StairHandrails::Right,
+            wire::PatchStairHandrails::Both => fixture::StairHandrails::Both,
+        }),
     }
 }
 
@@ -446,6 +452,12 @@ fn wire_scenery_options(options: &fixture::SceneryOptions) -> Option<wire::Patch
             fixture::ChainBottomEnd::Direct => wire::PatchChainBottomEnd::Direct,
             fixture::ChainBottomEnd::SteelflexLoop => wire::PatchChainBottomEnd::SteelflexLoop,
             fixture::ChainBottomEnd::Motor => wire::PatchChainBottomEnd::Motor,
+        }),
+        handrails: options.handrails.map(|sides| match sides {
+            fixture::StairHandrails::None => wire::PatchStairHandrails::None,
+            fixture::StairHandrails::Left => wire::PatchStairHandrails::Left,
+            fixture::StairHandrails::Right => wire::PatchStairHandrails::Right,
+            fixture::StairHandrails::Both => wire::PatchStairHandrails::Both,
         }),
     })
 }

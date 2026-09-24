@@ -43,6 +43,7 @@ fn scenery_options_round_trip_through_the_patch_record_exactly() {
         colour_srgb: Some("#2A0B3C".into()),
         chain_top: Some(ChainTopEnd::Direct),
         chain_bottom: Some(ChainBottomEnd::SteelflexLoop),
+        handrails: Some(crate::StairHandrails::Left),
     };
     let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
     let body = serde_json::to_value(&record).unwrap();
@@ -51,7 +52,8 @@ fn scenery_options_round_trip_through_the_patch_record_exactly() {
         json!({
             "colour_srgb": "#2A0B3C",
             "chain_top": "direct",
-            "chain_bottom": "steelflex_loop"
+            "chain_bottom": "steelflex_loop",
+            "handrails": "left"
         })
     );
     let decoded = PortablePatchedFixtureRecord::decode(body.clone()).unwrap();

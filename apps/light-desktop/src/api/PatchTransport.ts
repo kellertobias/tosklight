@@ -415,6 +415,7 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 					colour_srgb: fixture.sceneryOptions.colourSrgb ?? null,
 					chain_top: fixture.sceneryOptions.chainTop ?? null,
 					chain_bottom: fixture.sceneryOptions.chainBottom ?? null,
+					handrails: fixture.sceneryOptions.handrails ?? null,
 				}
 			: null,
 	};

@@ -17,7 +17,7 @@ import {
 	projectionViewForCad,
 } from "./projection";
 import { trussBays, trussParts } from "./trussPlan";
-import type { CadDrawing, CadEntity, CadViewDirection } from "./types";
+import type { CadDrawing, CadEntity, CadStairHandrails, CadViewDirection } from "./types";
 
 const movingLight: CadEntity = {
 	id: "11111111-1111-4111-8111-111111111111",
@@ -967,7 +967,7 @@ describe("CAD plan projections", () => {
 	});
 
 	it("builds a flight of stairs from the kind its profile declares, handrails and all", () => {
-		const flight = (handrails: boolean, view: CadViewDirection = "front_to_back") =>
+		const flight = (handrails: CadStairHandrails, view: CadViewDirection = "front_to_back") =>
 			entityPlanGeometry(
 				{
 					...movingLight,
@@ -987,16 +987,66 @@ describe("CAD plan projections", () => {
 				...geometry.lines.flatMap(({ points }) => points),
 			].map(([, y]) => y);
 		// Three 200 mm rises to a 600 mm deck: the flight stands on the floor and meets the deck.
-		const plain = flight(false);
+		const plain = flight("none");
 		expect(Math.min(...heights(plain))).toBeCloseTo(0, 3);
 		expect(Math.max(...heights(plain))).toBeCloseTo(600, 3);
 		// Each step is a block from the floor to its own nosing, so a nosing sits at every rise.
 		const nosings = [...new Set(heights(plain).map((y) => Math.round(y)))].sort((a, b) => a - b);
 		expect(nosings).toEqual([0, 200, 400, 600]);
 		// A rail post stands on every nosing and the rail follows the climb above them.
-		const railed = flight(true);
+		const railed = flight("both");
 		expect(Math.max(...heights(railed))).toBeCloseTo(1200, 3);
 		expect(railed.lines.length).toBeGreaterThan(plain.lines.length);
+		// One side railed still draws the rail in elevation, where both sides fall on one line.
+		expect(Math.max(...heights(flight("left")))).toBeCloseTo(1200, 3);
+	});
+
+	it("draws stairs from above as treads and an arrow up the climb, with the chosen rails", () => {
+		const top = (handrails: CadStairHandrails, size: [number, number, number] = [1000, 2800, 600]) =>
+			entityPlanGeometry(
+				{
+					...movingLight,
+					name: "Stage Stairs",
+					kind: "venue",
+					fixtureType: "venue",
+					sizeMillimetres: size,
+					scenery: { kind: "stairs", chords: 0, pattern: "standard", handrails },
+				},
+				undefined,
+				"top_down",
+			).triangles;
+		const deck = entityPlanGeometry(
+			{
+				...movingLight,
+				name: "Stage Deck",
+				kind: "venue",
+				fixtureType: "venue",
+				sizeMillimetres: [1000, 2800, 600],
+				scenery: { kind: "riser", chords: 0, pattern: "standard", feet: "fixed" },
+			},
+			undefined,
+			"top_down",
+		).triangles;
+		const plain = top("none");
+		// Not a deck: two nosings between three treads, an arrow shaft and its head.
+		expect(plain.length).not.toBe(deck.length);
+		expect(plain.length).toBe(2 + 2 * 2 + 2 + 1);
+		// The arrow's head points up the climb: a deep flight climbs towards -y.
+		const head = plain[plain.length - 1].points;
+		expect(Math.min(...head.map(([, y]) => y))).toBeLessThan(-1000);
+		// Seen climbing towards -y, left is +x and right is -x; each rail runs the whole flight.
+		const rail = (handrails: CadStairHandrails) => top(handrails).slice(plain.length);
+		const xs = (triangles: ReturnType<typeof top>) => triangles.flatMap(({ points }) => points.map(([x]) => x));
+		expect(Math.min(...xs(rail("left")))).toBeGreaterThan(400);
+		expect(Math.max(...xs(rail("right")))).toBeLessThan(-400);
+		expect(rail("both")).toHaveLength(4);
+		const ys = rail("left").flatMap(({ points }) => points.map(([, y]) => y));
+		expect(Math.min(...ys)).toBeCloseTo(-1400, 3);
+		expect(Math.max(...ys)).toBeCloseTo(1400, 3);
+		// A wide flight climbs towards +x, so its left rail runs along +y.
+		const wide = top("left", [2800, 1000, 600]);
+		const wideRail = wide.slice(top("none", [2800, 1000, 600]).length);
+		expect(Math.min(...wideRail.flatMap(({ points }) => points.map(([, y]) => y)))).toBeGreaterThan(400);
 	});
 
 	it("draws a handrail as posts under a top rail and a knee rail, standing on its own feet", () => {

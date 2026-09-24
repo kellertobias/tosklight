@@ -20,8 +20,9 @@ pub struct CadScenery {
     pub pattern: String,
     /// What a stage element stands on: `scissor` or `fixed`. Only a riser has one.
     pub feet: String,
-    /// Whether the object carries a handrail of its own; a flight of stairs may up each side.
-    pub handrails: bool,
+    /// Which sides of a flight of stairs carry a handrail, as seen climbing it: `none`, `left`,
+    /// `right` or `both`. The placement's choice, else what the profile was made with.
+    pub handrails: light_fixture::StairHandrails,
     /// How a chain is rigged: plain, a hoist at the top or a hoist at the bottom. Only a chain has
     /// one.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -218,6 +219,7 @@ pub fn cad_scenery(
     if scenery.kind == "chain" {
         scenery.chain = Some(options.chain_mode());
     }
+    scenery.handrails = options.stair_handrails(scenery.handrails.left());
     Some(scenery)
 }
 
@@ -239,10 +241,15 @@ fn profile_scenery(profile: &serde_json::Value) -> Option<CadScenery> {
             .map_or(0, |chords| chords.min(4) as u8),
         pattern: text("pattern", "standard"),
         feet: text("feet", "scissor"),
-        handrails: scenery
+        handrails: if scenery
             .get("handrails")
             .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false),
+            .unwrap_or(false)
+        {
+            light_fixture::StairHandrails::Both
+        } else {
+            light_fixture::StairHandrails::None
+        },
         chain: None,
         anchor: None,
     })
@@ -338,7 +345,7 @@ mod tests {
                 chords: 3,
                 pattern: "deco".into(),
                 feet: "scissor".into(),
-                handrails: false,
+                handrails: light_fixture::StairHandrails::None,
                 chain: None,
                 anchor: None,
             })
@@ -354,9 +361,24 @@ mod tests {
         let railed = json!({ "scenery": { "kind": "stairs", "handrails": true } });
         let flight = profile_scenery(&railed).unwrap();
         assert_eq!(flight.kind, "stairs");
-        assert!(flight.handrails);
+        assert_eq!(flight.handrails, light_fixture::StairHandrails::Both);
         let plain = json!({ "scenery": { "kind": "stairs" } });
-        assert!(!profile_scenery(&plain).unwrap().handrails);
+        assert_eq!(
+            profile_scenery(&plain).unwrap().handrails,
+            light_fixture::StairHandrails::None
+        );
+        // The placement chooses the sides, over either profile.
+        let mut options = light_fixture::SceneryOptions::default();
+        options.handrails = Some(light_fixture::StairHandrails::Left);
+        assert_eq!(
+            cad_scenery(Some(&plain), &options).unwrap().handrails,
+            light_fixture::StairHandrails::Left
+        );
+        options.handrails = Some(light_fixture::StairHandrails::None);
+        assert_eq!(
+            cad_scenery(Some(&railed), &options).unwrap().handrails,
+            light_fixture::StairHandrails::None
+        );
         assert_eq!(profile_scenery(&json!({ "name": "Spot" })), None);
     }
 
@@ -461,7 +483,7 @@ mod tests {
                 chords,
                 pattern: "standard".into(),
                 feet: "scissor".into(),
-                handrails: false,
+                handrails: light_fixture::StairHandrails::None,
                 chain,
                 anchor: None,
             }),

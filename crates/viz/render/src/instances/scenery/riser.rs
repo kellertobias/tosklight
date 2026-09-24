@@ -237,7 +237,6 @@ pub(super) fn push_stairs(
     };
     let up = orientation * Vec3::Y;
     let along = orientation * if long_x { Vec3::X } else { Vec3::Z };
-    let beside = orientation * if long_x { Vec3::Z } else { Vec3::X };
     let floor = object.position - up * (height * 0.5);
     let steps = ((height / STEP_RISE).round() as usize).clamp(1, 24);
     let rise = height / steps as f32;
@@ -263,12 +262,18 @@ pub(super) fn push_stairs(
             0.0,
         ));
     }
-    if !object.detail.handrails {
-        return;
-    }
-    // A rail up each side, its posts standing on the nosings and its rail following the climb.
-    for side in [1.0, -1.0] {
-        let edge = beside * (width * 0.5 - RAIL_RADIUS) * side;
+    // A rail up each chosen side, its posts standing on the nosings and its rail following the
+    // climb. Left and right are as seen climbing: up the flight, with the steps rising ahead.
+    let left = up.cross(along).normalize_or_zero();
+    let sides = [
+        (object.detail.handrails.left, 1.0),
+        (object.detail.handrails.right, -1.0),
+    ];
+    for (railed, side) in sides {
+        if !railed {
+            continue;
+        }
+        let edge = left * (width * 0.5 - RAIL_RADIUS) * side;
         let nosing = |index: usize| {
             floor + edge + along * (-run * 0.5 + tread * index as f32) + up * (rise * index as f32)
         };

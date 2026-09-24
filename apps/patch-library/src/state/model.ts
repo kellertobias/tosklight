@@ -176,6 +176,7 @@ export function patchedFixtureCandidate(
 						colourSrgb: fixture.scenery_options.colour_srgb ?? null,
 						chainTop: fixture.scenery_options.chain_top ?? null,
 						chainBottom: fixture.scenery_options.chain_bottom ?? null,
+						handrails: fixture.scenery_options.handrails ?? null,
 					}
 				: null,
 			modelScale: fixture.model_scale ?? null,
@@ -290,6 +291,7 @@ export function projectionToPatchedFixture(
 					colour_srgb: projection.sceneryOptions.colourSrgb ?? null,
 					chain_top: projection.sceneryOptions.chainTop ?? null,
 					chain_bottom: projection.sceneryOptions.chainBottom ?? null,
+					handrails: projection.sceneryOptions.handrails ?? null,
 				}
 			: null,
 		model_scale: projection.modelScale ?? null,

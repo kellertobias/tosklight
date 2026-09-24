@@ -17,7 +17,7 @@ import { CadVenueElementModal } from "./CadVenueElementModal";
 import { chosenPart, rememberPart } from "./cadAddChoice";
 import { type FixtureLibrary, placeProfile, readLibrary } from "./cadPlacement";
 import { type CadAddKind, useCadTools } from "./cadTools";
-import { definitionForProfile, findPart, partLabel } from "./venueParts";
+import { definitionForProfile, findPart, partKey, partLabel, type VenuePart } from "./venueParts";
 
 /** One press of an add button: what it adds, the part it names, and how many presses there have been. */
 export interface CadAddRequest {
@@ -31,7 +31,7 @@ export interface CadAddRequest {
 /** The wizard that is open: which shape it is, and the part it places. */
 interface BulkFlow {
 	shape: BulkShape;
-	profileId: string;
+	part: VenuePart;
 	label: string;
 	footprint?: { width: number; depth: number };
 }
@@ -54,9 +54,10 @@ export function CadAddFlows({
 		label: string,
 		known?: FixtureLibrary,
 		placements?: readonly PlanPlacement[],
+		sceneryOptions?: VenuePart["sceneryOptions"],
 	) {
 		setPlacing(true);
-		const result = await placeProfile(profileId, label, known, placements);
+		const result = await placeProfile(profileId, label, known, placements, sceneryOptions);
 		setPlacing(false);
 		if (!result.ok) {
 			onError(result.reason);
@@ -67,16 +68,16 @@ export function CadAddFlows({
 	}
 
 	/** Opens a wizard, with the part's own footprint when this computer's library knows it. */
-	async function openBulk(shape: BulkShape, profileId: string, label: string) {
+	async function openBulk(shape: BulkShape, part: VenuePart, label: string) {
 		const library = await readLibrary();
 		const scenery =
 			library.state === "ready"
-				? definitionForProfile(library.definitions, profileId)?.profile_snapshot?.scenery
+				? definitionForProfile(library.definitions, part.profileId)?.profile_snapshot?.scenery
 				: undefined;
 		const size = scenery?.default_size_metres;
 		setBulk({
 			shape,
-			profileId,
+			part,
 			label,
 			// A profile's y is up; a footprint is what it covers on the floor.
 			footprint: size ? { width: size.x, depth: size.z } : undefined,
@@ -92,13 +93,13 @@ export function CadAddFlows({
 			return;
 		}
 		const named = add.profileId ? findPart(add.kind, add.profileId) : undefined;
-		if (named) rememberPart(add.kind, named.part.profileId);
+		if (named) rememberPart(add.kind, partKey(named.part));
 		const found = named ?? chosenPart(add.kind);
 		if (add.several && (add.kind === "truss" || add.kind === "stage")) {
-			void openBulk(add.kind, found.part.profileId, partLabel(found));
+			void openBulk(add.kind, found.part, partLabel(found));
 			return;
 		}
-		void place(found.part.profileId, partLabel(found));
+		void place(found.part.profileId, partLabel(found), undefined, undefined, found.part.sceneryOptions);
 	});
 
 	if (bulk)
@@ -110,7 +111,13 @@ export function CadAddFlows({
 				placing={placing}
 				onClose={() => setBulk(null)}
 				onPlace={(placements) =>
-					void place(bulk.profileId, bulk.label, undefined, placements).then((placed) => {
+					void place(
+						bulk.part.profileId,
+						bulk.label,
+						undefined,
+						placements,
+						bulk.part.sceneryOptions,
+					).then((placed) => {
 						if (placed) setBulk(null);
 					})
 				}

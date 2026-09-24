@@ -94,6 +94,8 @@ export interface SharedModel {
 	label: string;
 	/** What the profile generates, when it generates anything. */
 	scenery: FixtureProfileScenery | null;
+	/** What the selection's measurements are read against: the generated object's, or a crowd's. */
+	sizing: FixtureProfileScenery | null;
 	/** A crowd area is drawn at the size it is given and never scaled. */
 	crowd: boolean;
 }
@@ -119,7 +121,8 @@ export function sharedModel(
 	return {
 		profileId: first.profileId,
 		label: [revision?.manufacturer, revision?.name].filter(Boolean).join(" ").trim(),
-		scenery: sizedScenery(snapshot),
+		scenery: snapshot?.scenery ?? null,
+		sizing: sizedScenery(snapshot),
 		crowd: Boolean(snapshot?.crowd),
 	};
 }
@@ -132,7 +135,7 @@ export function sharedModel(
  * out of shape. A placed model offers its scale instead. A lamp has neither.
  */
 export function sharedModelFields(model: SharedModel, allVenue: boolean): ThruFieldSpec[] {
-	const { scenery } = model;
+	const { sizing: scenery } = model;
 	if (scenery && hasAdjustableSize(scenery))
 		return SIZE_AXES.filter(({ axis }) => scenery.adjustable[axis]).map(
 			({ key, label }): ThruFieldSpec => ({

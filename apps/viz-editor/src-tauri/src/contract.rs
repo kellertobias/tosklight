@@ -287,11 +287,16 @@ pub struct SceneryOptionsDto {
     pub chain_top: Option<ChainTopEnd>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chain_bottom: Option<ChainBottomEnd>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handrails: Option<light_fixture::StairHandrails>,
 }
 
 impl SceneryOptionsDto {
     fn is_empty(&self) -> bool {
-        self.colour_srgb.is_none() && self.chain_top.is_none() && self.chain_bottom.is_none()
+        self.colour_srgb.is_none()
+            && self.chain_top.is_none()
+            && self.chain_bottom.is_none()
+            && self.handrails.is_none()
     }
 }
 
@@ -301,6 +306,7 @@ impl From<&SceneryOptions> for SceneryOptionsDto {
             colour_srgb: options.colour_srgb.clone(),
             chain_top: options.chain_top,
             chain_bottom: options.chain_bottom,
+            handrails: options.handrails,
         }
     }
 }
@@ -311,6 +317,7 @@ impl From<SceneryOptionsDto> for SceneryOptions {
             colour_srgb: dto.colour_srgb,
             chain_top: dto.chain_top,
             chain_bottom: dto.chain_bottom,
+            handrails: dto.handrails,
         }
     }
 }
@@ -1029,7 +1036,8 @@ mod tests {
             "sceneryOptions": {
                 "colourSrgb": "#1A2B3C",
                 "chainTop": "direct",
-                "chainBottom": "steelflex_loop"
+                "chainBottom": "steelflex_loop",
+                "handrails": "right"
             }
         }))
         .expect("fixture DTO");
@@ -1040,6 +1048,7 @@ mod tests {
                 colour_srgb: Some("#1A2B3C".into()),
                 chain_top: Some(ChainTopEnd::Direct),
                 chain_bottom: Some(ChainBottomEnd::SteelflexLoop),
+                handrails: Some(light_fixture::StairHandrails::Right),
             }
         );
         assert_eq!(
@@ -1047,7 +1056,8 @@ mod tests {
             serde_json::json!({
                 "colourSrgb": "#1A2B3C",
                 "chainTop": "direct",
-                "chainBottom": "steelflex_loop"
+                "chainBottom": "steelflex_loop",
+                "handrails": "right"
             })
         );
 

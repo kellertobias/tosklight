@@ -489,6 +489,7 @@ export interface EmitterHeadBinding {
 export interface FixtureProfileScenery {
 	kind:
 		| "riser"
+		| "stairs"
 		| "truss"
 		| "curtain"
 		| "railing"
@@ -502,6 +503,8 @@ export interface FixtureProfileScenery {
 	chords: number;
 	/** A truss's bracing; absent is the standard zig-zag. Every other kind ignores it. */
 	pattern?: "standard" | "deco";
+	/** Whether a flight of stairs is made with a rail up each side. Every other kind ignores it. */
+	handrails?: boolean;
 	default_size_metres: Vector3Value;
 	/** Which of its dimensions an operator sets; the rest are what the object is. */
 	adjustable: { width: boolean; height: boolean; depth: boolean };

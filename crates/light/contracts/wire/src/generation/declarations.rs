@@ -967,6 +967,7 @@ fn patch(config: &Config) -> Vec<String> {
         PatchSceneryOptions::decl(config),
         PatchChainTopEnd::decl(config),
         PatchChainBottomEnd::decl(config),
+        PatchStairHandrails::decl(config),
         PatchInstalledLightSource::decl(config),
         PatchGelDefinitionSnapshot::decl(config),
         PatchGelAssignment::decl(config),

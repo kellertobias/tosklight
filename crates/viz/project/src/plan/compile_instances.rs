@@ -330,7 +330,14 @@ fn scenery_detail(
             },
             _ => RiserFeet::None,
         },
-        handrails: declared.handrails,
+        // The placement chooses the sides; one placed before it could keeps what its profile has.
+        handrails: {
+            let sides = options.stair_handrails(declared.handrails);
+            viz_scene::StairRails {
+                left: sides.left(),
+                right: sides.right(),
+            }
+        },
     }
 }
 

@@ -97,6 +97,7 @@ export interface PatchSceneryOptions {
 	colourSrgb?: string | null;
 	chainTop?: "motor" | "direct" | "steelflex_loop" | null;
 	chainBottom?: "direct" | "steelflex_loop" | "motor" | null;
+	handrails?: "none" | "left" | "right" | "both" | null;
 }
 
 export interface PatchHighlightOverride {

@@ -65,7 +65,9 @@ const transport = new TauriPatchTransport();
 /** The selected fixture as the patch holds it, with its note and what its profile generates. */
 function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 	const [fixture, setFixture] = useState<PatchFixtureProjection | null>(null);
+	// What the profile generates, and what Info sizes: the same, or a crowd area's footprint.
 	const [scenery, setScenery] = useState<FixtureProfileScenery | null>(null);
+	const [sizing, setSizing] = useState<FixtureProfileScenery | null>(null);
 	const [note, setNote] = useState("");
 	useEffect(() => {
 		let current = true;
@@ -87,7 +89,8 @@ function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 						each.profileId === found?.profileId &&
 						each.profileRevision === found?.profileRevision,
 				);
-				setScenery(sizedScenery(revision?.profileSnapshot));
+				setScenery(revision?.profileSnapshot?.scenery ?? null);
+				setSizing(sizedScenery(revision?.profileSnapshot));
 				setNote(notes.find((each) => each.fixtureId === fixtureId)?.note ?? "");
 			})
 			.catch(() => current && setFixture(null));
@@ -95,7 +98,7 @@ function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 			current = false;
 		};
 	}, [fixtureId, sceneRevision]);
-	return { fixture, setFixture, scenery, note, setNote };
+	return { fixture, setFixture, scenery, sizing, note, setNote };
 }
 
 function PlacementChooser({
@@ -231,7 +234,7 @@ export function CadInfoPanel({
 	/** What Info shows while several elements are selected; a count when absent. */
 	several?: ReactNode;
 }) {
-	const { fixture, setFixture, scenery, note, setNote } = useInfoFixture(
+	const { fixture, setFixture, scenery, sizing, note, setNote } = useInfoFixture(
 		entity?.logicalFixtureId ?? null,
 		sceneRevision,
 	);
@@ -308,6 +311,7 @@ export function CadInfoPanel({
 					sceneRevision={sceneRevision}
 					onError={onError}
 					scenery={scenery}
+					sizing={sizing}
 					placement={placement}
 					shared={shared}
 					place={place}
@@ -383,6 +387,7 @@ function PlacementFields({
 	sceneRevision,
 	onError,
 	scenery,
+	sizing,
 	placement,
 	shared,
 	place,
@@ -393,6 +398,8 @@ function PlacementFields({
 	sceneRevision: number;
 	onError(reason: unknown): void;
 	scenery: FixtureProfileScenery | null;
+	/** The measurements Info offers: the generated object's, or a crowd area's footprint. */
+	sizing: FixtureProfileScenery | null;
 	placement: Placement | null;
 	shared: string;
 	place(change: Partial<Placement>): void;
@@ -427,8 +434,8 @@ function PlacementFields({
 				show={(degrees) => degrees}
 				onCommit={(axis, degrees) => place({ rotation: { ...rotation, [axis]: degrees } })}
 			/>
-			{fixture && scenery && hasAdjustableSize(scenery) ? (
-				<SizeFields fixture={fixture} scenery={scenery} shared={shared} onWrite={write} />
+			{fixture && sizing && hasAdjustableSize(sizing) ? (
+				<SizeFields fixture={fixture} scenery={sizing} shared={shared} onWrite={write} />
 			) : supportsScale(entity) ? (
 				<CommitNumber
 					label={`Scale${shared}`}

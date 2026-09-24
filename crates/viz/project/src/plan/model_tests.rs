@@ -947,14 +947,38 @@ fn a_stage_element_stands_on_the_feet_its_profile_gives_it() {
     }
 }
 
-/// A flight of stairs is told from a deck by its kind, and a railed flight carries its rails.
+/// A flight of stairs is told from a deck by its kind, and carries the rails its placement chose —
+/// or, placed before the sides could be chosen, the rails its profile was made with.
 #[test]
-fn a_flight_of_stairs_says_whether_it_carries_handrails() {
-    let plain = compile(&[shipped_venue("venue--stage-stairs")]);
-    assert!(!plain.scene.scenery[0].detail.handrails);
-    let railed = compile(&[shipped_venue("venue--stage-stairs-with-handrails")]);
-    assert_eq!(railed.scene.scenery[0].kind, viz_scene::SceneryKind::Stairs);
-    assert!(railed.scene.scenery[0].detail.handrails);
+fn a_flight_of_stairs_carries_the_handrails_chosen_for_it() {
+    use viz_scene::StairRails;
+    let mut plain = shipped_venue("venue--stage-stairs");
+    let rails = |fixture: &PatchedFixture| {
+        compile(std::slice::from_ref(fixture)).scene.scenery[0]
+            .detail
+            .handrails
+    };
+    assert_eq!(rails(&plain), StairRails::NONE);
+    let railed = shipped_venue("venue--stage-stairs-with-handrails");
+    assert_eq!(
+        compile(std::slice::from_ref(&railed)).scene.scenery[0].kind,
+        viz_scene::SceneryKind::Stairs
+    );
+    assert_eq!(rails(&railed), StairRails::BOTH);
+
+    for (sides, left, right) in [
+        (light_fixture::StairHandrails::Left, true, false),
+        (light_fixture::StairHandrails::Right, false, true),
+        (light_fixture::StairHandrails::Both, true, true),
+        (light_fixture::StairHandrails::None, false, false),
+    ] {
+        plain.instances[0].scenery_options.handrails = Some(sides);
+        assert_eq!(rails(&plain), StairRails { left, right }, "{sides:?}");
+    }
+    // A choice overrides what a railed profile was made with, too.
+    let mut bare = railed;
+    bare.instances[0].scenery_options.handrails = Some(light_fixture::StairHandrails::None);
+    assert_eq!(rails(&bare), StairRails::NONE);
 }
 
 /// A handrail is the one shipped part that uses the Railing kind the Visualizer already built.

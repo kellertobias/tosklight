@@ -74,9 +74,14 @@ choices existed open unchanged.
    elevations draw a flight of steps climbing to the height that was set: a 200 mm rise per step,
    so a 0.6 m flight has three and a 1.0 m flight five. Set it to a deck's height beside that deck
    and confirm the top step meets the deck's surface.
-6. Add **Stage Stairs with Handrails**. Confirm the same footprint fields, and that the Visualizer
-   draws a rail up each side with a post on every nosing, following the climb. Confirm the plain
-   flight has none.
+6. Add **Stairs** with **Both sides** handrails. Confirm the same footprint fields, and that the
+   Visualizer draws a rail up each side with a post on every nosing, following the climb. Add it
+   again with **Left**, then **Right**, and confirm the one rail is on that side as seen climbing,
+   in the Visualizer and from above in the plan; confirm **No handrails** draws none. Change the
+   choice under **Info → Parameters → Handrails**, save and reopen, and confirm it is kept. From
+   above, confirm the flight shows a line at every nosing and an arrow up the climb, unlike a deck.
+   Open a show that placed the retired **Stage Stairs with Handrails** and confirm it still draws
+   its rails up both sides.
 7. Add **Stage Handrail**. Confirm **Footprint width** can be set between 0.4 m and 24 m and that
    **Footprint height** and **Footprint depth** show a dash — a stage edge guard is 1 m high and no
    deeper than its posts. Confirm the Visualizer and the PreViz elevations draw posts about 1.2 m
@@ -86,8 +91,9 @@ choices existed open unchanged.
    the deck's corners so a run of rail closes the side. Drag it well clear and confirm it stays
    where it is put.
 9. In **Add stage element**, confirm **Regular feet** and **Scissor feet** each list the three
-   platform sizes and nothing per leg height, that **Stairs** lists **Without** and **With**
-   handrails, and that **Handrail** is a part of its own.
+   platform sizes and nothing per leg height, that there is one **Stairs** whose choices are
+   **No handrails**, **Left**, **Right** and **Both sides**, that **Handrail** is a part of its own,
+   and that **Add venue element** does not offer a separate stairs with handrails.
 10. Confirm a stairs profile is told from a deck by its kind, not its name: rename **Stage Stairs**
     to something without "stair" in it and confirm it still draws as a flight of steps.
 

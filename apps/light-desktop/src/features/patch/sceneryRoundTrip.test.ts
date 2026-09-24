@@ -73,6 +73,8 @@ function wireSnapshot() {
 					colour_srgb: "#FF0000",
 					chain_top: "direct",
 					chain_bottom: "motor",
+					// Not a chain's choice, but it must survive every write all the same.
+					handrails: "left",
 				},
 				logical_heads: [],
 				multipatch: [
@@ -167,6 +169,7 @@ describe("a Venue object's size, colour and chain ends on the desk", () => {
 			colour_srgb: "#FF0000",
 			chain_top: "direct",
 			chain_bottom: "motor",
+			handrails: "left",
 		});
 		expect(chain.multipatch?.[0].scenery_size_metres).toEqual({ x: 0, y: 0, z: 5000 });
 	});
@@ -182,6 +185,7 @@ describe("a Venue object's size, colour and chain ends on the desk", () => {
 			colour_srgb: "#00FF00",
 			chain_top: "motor",
 			chain_bottom: "steelflex_loop",
+			handrails: null,
 		});
 	});
 
@@ -194,6 +198,7 @@ describe("a Venue object's size, colour and chain ends on the desk", () => {
 			colour_srgb: "#FF0000",
 			chain_top: "direct",
 			chain_bottom: "motor",
+			handrails: "left",
 		});
 		expect(
 			(written.multipatch as Record<string, unknown>[] | undefined)?.[0]?.scenery_size_metres,

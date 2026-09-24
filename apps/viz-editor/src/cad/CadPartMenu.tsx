@@ -16,6 +16,7 @@ import {
 	CAD_PART_CATALOGUE,
 	type CadPartKind,
 	definitionForProfile,
+	partKey,
 	previewOf,
 	type VenuePart,
 } from "./venueParts";
@@ -52,7 +53,7 @@ function PartMenuItem({
 			aria-checked={checked}
 			className="cad-part-menu-item"
 			disabled={!definition}
-			onClick={() => onChoose(part.profileId)}
+			onClick={() => onChoose(partKey(part))}
 		>
 			<span className="cad-part-menu-preview">
 				{preview ? <img src={preview} alt="" /> : null}
@@ -76,7 +77,7 @@ export function CadPartMenu({
 	onSeveral?(profileId: string): void;
 }) {
 	const library = useFixtureLibrary();
-	const current = chosenPart(kind).part.profileId;
+	const current = partKey(chosenPart(kind).part);
 	return (
 		<div className="cad-part-menu" aria-busy={library.state === "loading" || undefined}>
 			{library.state === "failed" ? (
@@ -92,7 +93,7 @@ export function CadPartMenu({
 						detail={detail}
 						part={part}
 						library={library}
-						checked={part.profileId === current}
+						checked={partKey(part) === current}
 						onChoose={onChoose}
 					/>
 				);

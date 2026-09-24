@@ -119,6 +119,7 @@ export interface PatchFixtureWrite {
 		colourSrgb?: string | null;
 		chainTop?: "motor" | "direct" | "steelflex_loop" | null;
 		chainBottom?: "direct" | "steelflex_loop" | "motor" | null;
+		handrails?: "none" | "left" | "right" | "both" | null;
 	} | null;
 	/** How many times its built size a placed Venue object is drawn; `null` is its built size. */
 	modelScale?: number | null;

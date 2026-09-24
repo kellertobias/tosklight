@@ -742,9 +742,59 @@ pub struct SceneryDetail {
     /// be chosen reads as.
     #[serde(default)]
     pub feet: RiserFeet,
-    /// Whether the object carries a handrail of its own, as a flight of stairs may up each side.
+    /// Which sides of a flight of stairs carry a handrail of their own.
     #[serde(default)]
-    pub handrails: bool,
+    pub handrails: StairRails,
+}
+
+/// Which sides of a flight of stairs a handrail runs up, as seen climbing it.
+///
+/// A snapshot written before the sides could be chosen said only whether the flight had rails; it
+/// reads as rails up both sides or none, which is what it drew.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(from = "StairRailsWire")]
+pub struct StairRails {
+    pub left: bool,
+    pub right: bool,
+}
+
+impl StairRails {
+    pub const NONE: Self = Self {
+        left: false,
+        right: false,
+    };
+    pub const BOTH: Self = Self {
+        left: true,
+        right: true,
+    };
+
+    pub fn any(self) -> bool {
+        self.left || self.right
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum StairRailsWire {
+    Legacy(bool),
+    Sides {
+        #[serde(default)]
+        left: bool,
+        #[serde(default)]
+        right: bool,
+    },
+}
+
+impl From<StairRailsWire> for StairRails {
+    fn from(wire: StairRailsWire) -> Self {
+        match wire {
+            StairRailsWire::Legacy(railed) => Self {
+                left: railed,
+                right: railed,
+            },
+            StairRailsWire::Sides { left, right } => Self { left, right },
+        }
+    }
 }
 
 /// What a generated stage element stands on.
@@ -868,6 +918,34 @@ impl Aabb {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stair_rails_read_old_snapshots_as_both_sides_or_none() {
+        let rails = |json: &str| serde_json::from_str::<StairRails>(json).unwrap();
+        assert_eq!(rails("true"), StairRails::BOTH);
+        assert_eq!(rails("false"), StairRails::NONE);
+        assert_eq!(
+            rails(r#"{"left":true}"#),
+            StairRails {
+                left: true,
+                right: false
+            }
+        );
+        let detail: SceneryDetail = serde_json::from_str("{}").unwrap();
+        assert_eq!(detail.handrails, StairRails::NONE);
+        let written = serde_json::to_string(&StairRails {
+            left: false,
+            right: true,
+        })
+        .unwrap();
+        assert_eq!(
+            rails(&written),
+            StairRails {
+                left: false,
+                right: true
+            }
+        );
+    }
 
     #[test]
     fn bounds_fall_back_to_a_default_room_when_the_scene_is_empty() {

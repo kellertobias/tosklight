@@ -1,4 +1,7 @@
 import type { CutPlanes } from "./cutPlanes";
+/** Which sides of a flight of stairs a handrail runs up, as seen climbing it. */
+export type CadStairHandrails = "none" | "left" | "right" | "both";
+
 export type CadViewDirection =
 	| "top_down"
 	| "left_to_right"
@@ -54,8 +57,11 @@ export interface CadScenery {
 	pattern: "standard" | "deco" | string;
 	/** What a stage element stands on; only a riser carries it, and absent reads as a scissor lift. */
 	feet?: CadRiserFeet;
-	/** Whether the object carries a handrail of its own, as a flight of stairs may up each side. */
-	handrails?: boolean;
+	/**
+	 * Which sides of a flight of stairs carry a handrail, as seen climbing it: the placement's
+	 * choice, else what the profile was made with. Absent reads as none.
+	 */
+	handrails?: CadStairHandrails;
 	/** How a chain is rigged; only a chain carries it, and absent reads as a hoist at the top. */
 	chain?: CadChainMode;
 	/** What a rigged chain's end away from its hoist is fixed with; absent reads as a steelflex. */

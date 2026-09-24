@@ -10,7 +10,7 @@
  * Profiles are named by their fixed ids, so a renamed profile still lands in the right place. A part
  * whose profile is missing from this machine's library is offered but cannot be placed.
  */
-import type { FixtureDefinition } from "@tosklight/patch";
+import type { FixtureDefinition, PatchFixtureWrite } from "@tosklight/patch";
 
 export interface VenuePart {
 	id: string;
@@ -18,7 +18,38 @@ export interface VenuePart {
 	profileId: string;
 	/** A second line under the label, such as a deck's leg height. */
 	detail?: string;
+	/**
+	 * What the part is placed with beyond its profile, such as the sides a flight of stairs carries
+	 * handrails on. Parts that share a profile are told apart by their `key`.
+	 */
+	sceneryOptions?: NonNullable<PatchFixtureWrite["sceneryOptions"]>;
+	/** How the part is chosen and remembered when its profile alone does not say; else its profile. */
+	key?: string;
 }
+
+/** How a part is chosen and remembered: its own key, or its profile when that alone names it. */
+export function partKey(part: VenuePart): string {
+	return part.key ?? part.profileId;
+}
+
+/** The one flight of stairs, placed with the handrails chosen for it. */
+const STAIRS_PROFILE_ID = "d5982d33-9723-5749-ade6-7be0e6b4adf1";
+
+/**
+ * Profiles the add buttons no longer offer, because one part now places what they did: the flight
+ * of stairs made with handrails is the one Stairs placed with rails on both sides. A show that
+ * placed it still draws it; it is just not offered again.
+ */
+const RETIRED_PART_PROFILE_IDS: ReadonlySet<string> = new Set([
+	"47662838-33b1-5fcc-9323-bb5840c1783f",
+]);
+
+const HANDRAIL_CHOICES = [
+	["none", "No handrails", undefined],
+	["left", "Left", "Seen climbing"],
+	["right", "Right", "Seen climbing"],
+	["both", "Both sides", undefined],
+] as const;
 
 /** The corner pieces made for a 3- or 4-point section, each a fixed block with 500 mm arms. */
 function corners(section: "three" | "four", ids: readonly string[]): VenuePart[] {
@@ -132,14 +163,14 @@ export const STAGE_TYPES: readonly VenuePartGroup[] = [
 		id: "stairs",
 		label: "Stairs",
 		partsLabel: "Handrails",
-		parts: [
-			{ id: "stairs", label: "Without", profileId: "d5982d33-9723-5749-ade6-7be0e6b4adf1" },
-			{
-				id: "stairs-handrails",
-				label: "With",
-				profileId: "47662838-33b1-5fcc-9323-bb5840c1783f",
-			},
-		],
+		parts: HANDRAIL_CHOICES.map(([handrails, label, detail]) => ({
+			id: `stairs-${handrails}`,
+			key: `${STAIRS_PROFILE_ID}:handrails-${handrails}`,
+			label,
+			detail,
+			profileId: STAIRS_PROFILE_ID,
+			sceneryOptions: { handrails },
+		})),
 	},
 	{
 		id: "handrail",
@@ -226,19 +257,23 @@ export interface FoundPart {
 	part: VenuePart;
 }
 
-/** Every profile one of the add buttons already offers, so no other list has to repeat it. */
-export const PART_MENU_PROFILE_IDS: ReadonlySet<string> = new Set(
-	Object.values(CAD_PART_CATALOGUE).flatMap((groups) =>
+/** Every profile one of the add buttons already offers or has retired, so no other list repeats it. */
+export const PART_MENU_PROFILE_IDS: ReadonlySet<string> = new Set([
+	...Object.values(CAD_PART_CATALOGUE).flatMap((groups) =>
 		groups.flatMap((group) => group.parts.map((part) => part.profileId)),
 	),
-);
+	...RETIRED_PART_PROFILE_IDS,
+]);
 
-/** A button's part by its profile, or undefined when the button does not offer that profile. */
-export function findPart(kind: CadPartKind, profileId: string): FoundPart | undefined {
-	for (const group of CAD_PART_CATALOGUE[kind]) {
-		const part = group.parts.find((each) => each.profileId === profileId);
-		if (part) return { group, part };
-	}
+/** A button's part by its key, or undefined when the button does not offer that part. */
+export function findPart(kind: CadPartKind, key: string): FoundPart | undefined {
+	const groups = CAD_PART_CATALOGUE[kind];
+	// A key names one part; a bare profile, as a choice remembered before keys existed, its first.
+	for (const matches of [(part: VenuePart) => partKey(part) === key, (part: VenuePart) => part.profileId === key])
+		for (const group of groups) {
+			const part = group.parts.find(matches);
+			if (part) return { group, part };
+		}
 	return undefined;
 }
 

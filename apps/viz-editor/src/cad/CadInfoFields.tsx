@@ -134,7 +134,44 @@ function ChainEnd({
 	);
 }
 
-/** The options a generated object is built with: its colour, and a chain's two ends. */
+/** The sides a flight of stairs can carry a handrail on, as seen climbing it. */
+const HANDRAIL_SIDES = [
+	{ value: "none", label: "None" },
+	{ value: "left", label: "Left" },
+	{ value: "right", label: "Right" },
+	{ value: "both", label: "Both sides" },
+] as const;
+
+/** Which sides a flight's handrails run up: the choice made for it, else what its profile has. */
+function StairHandrails({
+	value,
+	onChange,
+}: {
+	value: NonNullable<SceneryOptions["handrails"]>;
+	onChange(value: NonNullable<SceneryOptions["handrails"]>): void;
+}) {
+	return (
+		<label className="cad-field">
+			<span>Handrails</span>
+			<select
+				className="ui-input"
+				aria-label="Handrails"
+				value={value}
+				onChange={(event) =>
+					onChange(event.currentTarget.value as NonNullable<SceneryOptions["handrails"]>)
+				}
+			>
+				{HANDRAIL_SIDES.map((side) => (
+					<option key={side.value} value={side.value}>
+						{side.label}
+					</option>
+				))}
+			</select>
+		</label>
+	);
+}
+
+/** The options a generated object is built with: its colour, a chain's two ends, a stair's rails. */
 export function SceneryParameters({
 	scenery,
 	options,
@@ -180,6 +217,12 @@ export function SceneryParameters({
 						}
 					/>
 				</>
+			) : null}
+			{scenery.kind === "stairs" ? (
+				<StairHandrails
+					value={current.handrails ?? (scenery.handrails ? "both" : "none")}
+					onChange={(handrails) => onCommit({ ...current, handrails })}
+				/>
 			) : null}
 		</div>
 	);
