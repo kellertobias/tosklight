@@ -10,6 +10,7 @@ import {
 } from "@tosklight/ui/controls";
 import { NumberField } from "@tosklight/ui/forms";
 import { type ChangeEvent, useState } from "react";
+import { usePreviewOf } from "../../operator/PlaybackTakeoverContext";
 import { requestId } from "../../shared/api/editing";
 import type {
 	UpdateVisualizer,
@@ -62,6 +63,9 @@ export function VisualizerEditor({
 	onChange,
 }: VisualizerEditorProps) {
 	const [parameters, setParameters] = useState(visualizer.parameters);
+	// With preview on, the visualizer plays alone on the output as it is edited.
+	const { folder, file } = visualizer.address;
+	usePreviewOf({ slot: { folder, file } });
 
 	const publish = (nextParameters: VisualizerParametersView) =>
 		onChange({

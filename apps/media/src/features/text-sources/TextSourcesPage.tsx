@@ -50,9 +50,6 @@ export function TextSourcesPage({
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const [inspectedFolder, setInspectedFolder] = useState<number | null>(null);
 	const aspectRatio = useMainOutputAspectRatio();
-	// With preview on, the selected text plays alone on the output as it is edited.
-	const previewed = text.data?.find((slot) => key(slot) === selectedKey);
-	usePreviewOf(previewed ? { slot: previewed.address } : null);
 
 	useEffect(() => {
 		if (selectedKey === null && text.data?.[0]) setSelectedKey(key(text.data[0]));
@@ -288,6 +285,8 @@ function TextDetail({
 	onDelete: () => void;
 }) {
 	const [now, setNow] = useState(() => Date.now());
+	// With preview on, the selected text plays alone on the output as it is edited.
+	usePreviewOf({ slot: { folder: slot.address.folder, file: slot.address.file } });
 	useEffect(() => {
 		const interval = window.setInterval(() => setNow(Date.now()), 250);
 		return () => window.clearInterval(interval);
