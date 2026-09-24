@@ -408,6 +408,19 @@ function useShiftChanges(
 	});
 }
 
+/** The preview turns into a copy, or back into the move, the moment the modifier changes. */
+function followDuplicateKey(
+	context: CadViewportContext,
+	active: Drag | null,
+	held: boolean,
+	shift: boolean,
+	showSnap: (markers: PlanPoint[], guides?: SnapGuide[]) => void,
+) {
+	if (active?.type !== "move" || active.duplicate === held) return;
+	active.duplicate = held;
+	if (active.rawDeltaMillimetres) updateMovePreview(context, active, ...active.last, shift, showSnap);
+}
+
 export function useCadViewportInteraction(
 	context: CadViewportContext,
 ): CadViewportInteraction {
@@ -440,13 +453,7 @@ export function useCadViewportInteraction(
 		if (active?.type !== "move" || !active.rawDeltaMillimetres) return;
 		updateMovePreview(context, active, ...active.last, held, showSnap);
 		refresh(active);
-	}, (held, shift) => {
-		// The preview turns into a copy, or back into the move, the moment the modifier changes.
-		const active = drag.current;
-		if (active?.type !== "move" || active.duplicate === held) return;
-		active.duplicate = held;
-		if (active.rawDeltaMillimetres) updateMovePreview(context, active, ...active.last, shift, showSnap);
-	});
+	}, (held, shift) => followDuplicateKey(context, drag.current, held, shift, showSnap));
 
 	function pointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
 		// The right button picks for the object menu, which `contextMenu` handles; it drags nothing.
