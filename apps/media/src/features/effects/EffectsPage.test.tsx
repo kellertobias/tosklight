@@ -88,6 +88,19 @@ describe("the effects library", () => {
 		expect(server.writes[0]?.body.parameters).toEqual([0.7]);
 	});
 
+	it("saves the selected source for a beat effect", async () => {
+		const server = stubEffects([
+			typedEffect(1, "Move", "beat-move", "amount", "Amount", 0.2, 0, 1),
+		]);
+		render(<EffectsPage />);
+		await screen.findByText("1/255 assigned");
+		await userEvent.click(screen.getByRole("button", { name: "React to" }));
+		await userEvent.click(screen.getByRole("option", { name: "Snare" }));
+		await userEvent.click(screen.getByRole("button", { name: "Save effect" }));
+		await waitFor(() => expect(server.writes).toHaveLength(1));
+		expect(server.writes[0]?.body.beatSource).toBe("snare");
+	});
+
 	it("ships one rendered thumbnail for every effect type and nothing else", () => {
 		expect(effectThumbnailTypes()).toEqual(
 			EFFECT_TYPES.map((effect) => effect.value).sort(),
@@ -223,6 +236,7 @@ function stubEffects(initial: EffectLibrarySlot[]) {
 					effect: {
 						index: 0,
 						effectType: String(body.effectType),
+						beatSource: String(body.beatSource ?? "detected-beat"),
 						label: String(body.name),
 						enabled: true,
 						mix: 1,
@@ -254,6 +268,7 @@ function anEffect(): EffectLibrarySlot {
 			label: "TV/CRT/VHS Simulation",
 			enabled: true,
 			mix: 1,
+			beatSource: "detected-beat",
 			supported: true,
 			capabilityDetail: null,
 			parameters: [
@@ -290,6 +305,7 @@ function typedEffect(
 			label: name,
 			enabled: true,
 			mix: 1,
+			beatSource: "detected-beat",
 			supported: true,
 			capabilityDetail: null,
 			parameters: [

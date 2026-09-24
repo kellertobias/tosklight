@@ -60,7 +60,25 @@ fn apply_parameters(effect: &mut media_domain::EffectSlot, bank: &EffectBankStat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use media_domain::LayerPersonality;
+    use media_domain::{BeatSource, LayerPersonality};
+
+    #[test]
+    fn bank_keeps_the_preset_beat_source() {
+        let mut configuration = MediaConfiguration::default();
+        let slot = 6;
+        let preset = configuration.effects.resolve(slot).unwrap().clone();
+        let mut effect = preset.effect;
+        effect.beat_source = BeatSource::Snare;
+        configuration
+            .effects
+            .assign(slot, preset.name, effect)
+            .unwrap();
+        let id = configuration.outputs[0].id;
+        let mut output = OutputState::new(id, LayerPersonality::TwoLayers);
+        output.layers[0].effect_banks[0].select = slot;
+        let resolved = resolve_output(&output, &configuration);
+        assert_eq!(resolved.layers[0].effects[0].beat_source, BeatSource::Snare);
+    }
 
     #[test]
     fn two_banks_resolve_in_order_and_zero_or_missing_is_off() {

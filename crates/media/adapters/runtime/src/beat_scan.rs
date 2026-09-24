@@ -4,6 +4,7 @@
 //! layer state and appends transient event positions for the compositor; it never writes those
 //! positions back into the show configuration.
 
+use crate::beat_events::{BeatEvents, BeatTracker, source_index};
 use std::collections::{BTreeMap, BTreeSet};
 
 use media_domain::LayerState;
@@ -20,7 +21,7 @@ struct Event {
 #[derive(Debug, Default)]
 pub(crate) struct BeatScan {
     events: BTreeMap<(usize, usize), Vec<Event>>,
-    beat_high: bool,
+    beat_tracker: BeatTracker,
 }
 
 impl BeatScan {
@@ -28,12 +29,10 @@ impl BeatScan {
         &mut self,
         layers: &[LayerState],
         seconds: f32,
-        beat: f32,
+        beat: impl Into<BeatEvents>,
         strength: f32,
     ) -> Vec<LayerState> {
-        let high = beat >= 0.95;
-        let landed = high && !self.beat_high;
-        self.beat_high = high;
+        let landed = self.beat_tracker.landed(beat.into());
         let line_count = line_count(strength);
 
         let mut active = BTreeSet::new();
@@ -46,6 +45,7 @@ impl BeatScan {
                     let Some(parameters) = effect.beat_scan_parameters() else {
                         continue;
                     };
+                    let landed = landed[source_index(effect.beat_source)];
                     let key = (layer_index, slot);
                     active.insert(key);
                     let events = self.events.entry(key).or_default();

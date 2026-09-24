@@ -1,5 +1,6 @@
 //! Beat-driven event history for the three-dimensional grid wave effect.
 
+use crate::beat_events::{BeatEvents, BeatTracker, source_index};
 use std::collections::{BTreeMap, BTreeSet};
 
 use media_domain::LayerState;
@@ -15,7 +16,7 @@ struct Event {
 #[derive(Debug, Default)]
 pub(crate) struct BeatGridWave {
     events: BTreeMap<(usize, usize), Vec<Event>>,
-    beat_high: bool,
+    beat_tracker: BeatTracker,
 }
 
 impl BeatGridWave {
@@ -23,12 +24,10 @@ impl BeatGridWave {
         &mut self,
         layers: &[LayerState],
         seconds: f32,
-        beat: f32,
+        beat: impl Into<BeatEvents>,
         strength: f32,
     ) -> Vec<LayerState> {
-        let high = beat >= 0.95;
-        let landed = high && !self.beat_high;
-        self.beat_high = high;
+        let landed = self.beat_tracker.landed(beat.into());
         let strength = if strength.is_finite() {
             strength.clamp(0.15, 1.0)
         } else {
@@ -45,6 +44,7 @@ impl BeatGridWave {
                     let Some(parameters) = effect.beat_grid_wave_parameters() else {
                         continue;
                     };
+                    let landed = landed[source_index(effect.beat_source)];
                     let key = (layer_index, slot);
                     active.insert(key);
                     let events = self.events.entry(key).or_default();

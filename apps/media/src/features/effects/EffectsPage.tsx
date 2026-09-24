@@ -25,6 +25,20 @@ import {
 import { effectThumbnailUrl } from "./thumbnails";
 
 const EFFECT_SLOT_COUNT = 255;
+const BEAT_SOURCES = [
+	{ value: "detected-beat", label: "Detected beat" },
+	{ value: "live-beat", label: "Live beat (tempo pulse)" },
+	{ value: "kick", label: "Bass drum" },
+	{ value: "hi-hat", label: "Hi-hat" },
+	{ value: "snare", label: "Snare" },
+];
+const BEAT_EFFECTS = new Set([
+	"beat-move",
+	"beat-scan",
+	"beat-scale-turn",
+	"beat-form-flash",
+	"outline",
+]);
 
 export function EffectsPage({
 	onModeChange,
@@ -94,6 +108,7 @@ export function EffectsLibraryView({
 		name: string;
 		effectType: string;
 		parameters: number[];
+		beatSource: string;
 	}): void;
 	onClear(): void;
 }) {
@@ -200,6 +215,9 @@ function EffectSlotEditor({
 	const [parameters, setParameters] = useState(
 		effect?.effect.parameters.map((parameter) => parameter.value) ?? [],
 	);
+	const [beatSource, setBeatSource] = useState(
+		effect?.effect.beatSource ?? "detected-beat",
+	);
 
 	const save = () => {
 		const rasterMode = effectType === "rasterize-cmyk" ? 1 : 0;
@@ -211,6 +229,7 @@ function EffectSlotEditor({
 			parameters: effectType.startsWith("rasterize-")
 				? [rasterMode, ...parameters.slice(1)]
 				: parameters,
+			beatSource,
 		});
 	};
 
@@ -236,6 +255,15 @@ function EffectSlotEditor({
 				options={[...EFFECT_TYPES]}
 				onChange={(value) => setEffectType(value as EffectType)}
 			/>
+			{BEAT_EFFECTS.has(effectType) && (
+				<SelectField
+					label="React to"
+					ariaLabel="React to"
+					value={beatSource}
+					options={BEAT_SOURCES}
+					onChange={setBeatSource}
+				/>
+			)}
 			{effect?.effect.parameters.map((parameter, index) => {
 				const options = discreteParameterOptions(parameter.id);
 				const value = parameters[index] ?? parameter.defaultValue;

@@ -1,3 +1,4 @@
+use crate::beat_events::{BeatEvents, BeatTracker, source_index};
 use std::collections::{BTreeMap, BTreeSet};
 
 use media_domain::LayerState;
@@ -12,7 +13,7 @@ struct Envelope {
 pub(crate) struct BeatScaleTurn {
     envelopes: BTreeMap<(usize, usize), Envelope>,
     last_seconds: Option<f32>,
-    beat_high: bool,
+    beat_tracker: BeatTracker,
 }
 
 impl BeatScaleTurn {
@@ -20,16 +21,14 @@ impl BeatScaleTurn {
         &mut self,
         layers: &[LayerState],
         seconds: f32,
-        beat: f32,
+        beat: impl Into<BeatEvents>,
     ) -> Vec<LayerState> {
         let delta = self
             .last_seconds
             .map(|previous| (seconds - previous).clamp(0.0, 0.25))
             .unwrap_or(0.0);
         self.last_seconds = Some(seconds);
-        let high = beat >= 0.95;
-        let landed = high && !self.beat_high;
-        self.beat_high = high;
+        let landed = self.beat_tracker.landed(beat.into());
 
         let mut active = BTreeSet::new();
         let effective = layers
@@ -41,6 +40,7 @@ impl BeatScaleTurn {
                     let Some(parameters) = effect.beat_scale_turn_parameters() else {
                         continue;
                     };
+                    let landed = landed[source_index(effect.beat_source)];
                     let key = (layer_index, slot);
                     active.insert(key);
                     let envelope = self.envelopes.entry(key).or_default();

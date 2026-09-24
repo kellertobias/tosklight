@@ -820,18 +820,41 @@ pub struct EffectSlot {
     pub seed: u32,
     /// The normalized primary amount the DMX byte carries.
     pub mix: f32,
+    #[serde(default)]
+    pub beat_source: BeatSource,
     pub parameters: Vec<f32>,
 }
 
+/// The event stream that starts a beat-reactive effect.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BeatSource {
+    LiveBeat,
+    Kick,
+    HiHat,
+    Snare,
+    #[default]
+    DetectedBeat,
+}
+
 impl EffectSlot {
-    pub fn analog_tv() -> Self {
+    /// An enabled slot of one typed effect at full mix.
+    fn typed(effect_type: &str, parameters: Vec<f32>) -> Self {
         Self {
-            effect_type: Some(ANALOG_TV_EFFECT.to_owned()),
+            effect_type: Some(effect_type.to_owned()),
             enabled: true,
             seed: 0,
+            beat_source: BeatSource::default(),
             mix: 1.0,
-            parameters: AnalogTvParameters::default().as_array().to_vec(),
+            parameters,
         }
+    }
+
+    pub fn analog_tv() -> Self {
+        Self::typed(
+            ANALOG_TV_EFFECT,
+            AnalogTvParameters::default().as_array().to_vec(),
+        )
     }
 
     pub fn analog_tv_parameters(&self) -> Option<AnalogTvParameters> {
@@ -840,13 +863,10 @@ impl EffectSlot {
     }
 
     pub fn digital_tv() -> Self {
-        Self {
-            effect_type: Some(DIGITAL_TV_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: DigitalTvParameters::default().as_array().to_vec(),
-        }
+        Self::typed(
+            DIGITAL_TV_EFFECT,
+            DigitalTvParameters::default().as_array().to_vec(),
+        )
     }
 
     pub fn digital_tv_parameters(&self) -> Option<DigitalTvParameters> {
@@ -855,13 +875,10 @@ impl EffectSlot {
     }
 
     pub fn opacity_cycle() -> Self {
-        Self {
-            effect_type: Some(OPACITY_CYCLE_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: vec![OpacityCycleInterval::EveryBeat.parameter()],
-        }
+        Self::typed(
+            OPACITY_CYCLE_EFFECT,
+            vec![OpacityCycleInterval::EveryBeat.parameter()],
+        )
     }
 
     pub fn opacity_cycle_interval(&self) -> Option<OpacityCycleInterval> {
@@ -872,13 +889,7 @@ impl EffectSlot {
     }
 
     pub fn blur() -> Self {
-        Self {
-            effect_type: Some(BLUR_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: BlurParameters::default().as_array().to_vec(),
-        }
+        Self::typed(BLUR_EFFECT, BlurParameters::default().as_array().to_vec())
     }
 
     pub fn blur_parameters(&self) -> Option<BlurParameters> {
@@ -887,13 +898,10 @@ impl EffectSlot {
     }
 
     pub fn feedback() -> Self {
-        Self {
-            effect_type: Some(FEEDBACK_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: FeedbackParameters::default().as_array().to_vec(),
-        }
+        Self::typed(
+            FEEDBACK_EFFECT,
+            FeedbackParameters::default().as_array().to_vec(),
+        )
     }
 
     pub fn feedback_parameters(&self) -> Option<FeedbackParameters> {
@@ -902,13 +910,10 @@ impl EffectSlot {
     }
 
     pub fn beat_move() -> Self {
-        Self {
-            effect_type: Some(BEAT_MOVE_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: BeatMoveParameters::default().as_array().to_vec(),
-        }
+        Self::typed(
+            BEAT_MOVE_EFFECT,
+            BeatMoveParameters::default().as_array().to_vec(),
+        )
     }
 
     pub fn beat_move_parameters(&self) -> Option<BeatMoveParameters> {
@@ -917,13 +922,10 @@ impl EffectSlot {
     }
 
     pub fn kaleidoscope() -> Self {
-        Self {
-            effect_type: Some(KALEIDOSCOPE_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: KaleidoscopeParameters::default().as_array().to_vec(),
-        }
+        Self::typed(
+            KALEIDOSCOPE_EFFECT,
+            KaleidoscopeParameters::default().as_array().to_vec(),
+        )
     }
 
     pub fn kaleidoscope_parameters(&self) -> Option<KaleidoscopeParameters> {
@@ -932,13 +934,10 @@ impl EffectSlot {
     }
 
     pub fn rasterize() -> Self {
-        Self {
-            effect_type: Some(RASTERIZE_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: RasterizeParameters::default().as_array().to_vec(),
-        }
+        Self::typed(
+            RASTERIZE_EFFECT,
+            RasterizeParameters::default().as_array().to_vec(),
+        )
     }
 
     pub fn rasterize_parameters(&self) -> Option<RasterizeParameters> {
@@ -947,13 +946,10 @@ impl EffectSlot {
     }
 
     pub fn beat_scan() -> Self {
-        Self {
-            effect_type: Some(BEAT_SCAN_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: BeatScanParameters::default().as_array().to_vec(),
-        }
+        Self::typed(
+            BEAT_SCAN_EFFECT,
+            BeatScanParameters::default().as_array().to_vec(),
+        )
     }
 
     pub fn beat_scan_parameters(&self) -> Option<BeatScanParameters> {
@@ -962,13 +958,10 @@ impl EffectSlot {
     }
 
     pub fn beat_scale_turn() -> Self {
-        Self {
-            effect_type: Some(BEAT_SCALE_TURN_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: BeatScaleTurnParameters::default().as_array().to_vec(),
-        }
+        Self::typed(
+            BEAT_SCALE_TURN_EFFECT,
+            BeatScaleTurnParameters::default().as_array().to_vec(),
+        )
     }
 
     pub fn beat_scale_turn_parameters(&self) -> Option<BeatScaleTurnParameters> {
@@ -979,13 +972,10 @@ impl EffectSlot {
     }
 
     pub fn beat_grid_wave() -> Self {
-        Self {
-            effect_type: Some(BEAT_GRID_WAVE_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: BeatGridWaveParameters::default().as_array().to_vec(),
-        }
+        Self::typed(
+            BEAT_GRID_WAVE_EFFECT,
+            BeatGridWaveParameters::default().as_array().to_vec(),
+        )
     }
 
     pub fn beat_grid_wave_parameters(&self) -> Option<BeatGridWaveParameters> {
@@ -996,13 +986,10 @@ impl EffectSlot {
     }
 
     pub fn beat_form_flash() -> Self {
-        Self {
-            effect_type: Some(BEAT_FORM_FLASH_EFFECT.to_owned()),
-            enabled: true,
-            seed: 0,
-            mix: 1.0,
-            parameters: BeatFormFlashParameters::default().as_array().to_vec(),
-        }
+        Self::typed(
+            BEAT_FORM_FLASH_EFFECT,
+            BeatFormFlashParameters::default().as_array().to_vec(),
+        )
     }
 
     pub fn beat_form_flash_parameters(&self) -> Option<BeatFormFlashParameters> {
@@ -1244,6 +1231,18 @@ impl LayerState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn older_effect_slots_default_to_detected_beats() {
+        let stored =
+            r#"{"effectType":"beat-move","enabled":true,"seed":1,"mix":1.0,"parameters":[]}"#;
+        let effect: EffectSlot = serde_json::from_str(stored).unwrap();
+        assert_eq!(effect.beat_source, BeatSource::DetectedBeat);
+        assert_eq!(
+            serde_json::to_value(&effect).unwrap()["beatSource"],
+            "detected-beat"
+        );
+    }
 
     #[test]
     fn scaling_modes_tile_the_channel_in_four_sixty_four_value_ranges() {

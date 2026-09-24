@@ -4,18 +4,16 @@
 //! toward one by Beat depth, and the push falls back over Beat decay. The result is written only
 //! into the frame's effective layers, never into the show state.
 
+use crate::beat_events::{BeatEvents, BeatTracker, source_index};
 use std::collections::{BTreeMap, BTreeSet};
 
 use media_domain::{LayerState, OutlineParameters};
-
-/// The beat level that counts as a landed beat, as for Beat Scale & Turn.
-const BEAT_LANDED: f32 = 0.95;
 
 #[derive(Debug, Default)]
 pub(crate) struct OutlineBeat {
     envelopes: BTreeMap<(usize, usize), f32>,
     last_seconds: Option<f32>,
-    beat_high: bool,
+    beat_tracker: BeatTracker,
 }
 
 impl OutlineBeat {
@@ -23,15 +21,13 @@ impl OutlineBeat {
         &mut self,
         layers: &[LayerState],
         seconds: f32,
-        beat: f32,
+        beat: impl Into<BeatEvents>,
     ) -> Vec<LayerState> {
         let delta = self
             .last_seconds
             .map_or(0.0, |previous| (seconds - previous).clamp(0.0, 0.25));
         self.last_seconds = Some(seconds);
-        let high = beat >= BEAT_LANDED;
-        let landed = high && !self.beat_high;
-        self.beat_high = high;
+        let landed = self.beat_tracker.landed(beat.into());
 
         let mut active = BTreeSet::new();
         let effective = layers
@@ -43,6 +39,7 @@ impl OutlineBeat {
                     let Some(parameters) = effect.outline_parameters() else {
                         continue;
                     };
+                    let landed = landed[source_index(effect.beat_source)];
                     if parameters.beat_depth <= 0.0 {
                         continue;
                     }

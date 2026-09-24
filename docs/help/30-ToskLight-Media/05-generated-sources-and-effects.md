@@ -138,6 +138,8 @@ Beat form Flash, Kaleidoscope, B/W Rasterize, CMYK Rasterize, Drawn Image Style,
 repetitions run from Off through 12. Feedback supports Shake and Tunnel motion and is tuned for a
 longer, smoother trail by default.
 
+Beat Move, Beat Scan, Beat Grid Wave, Beat Scale & Turn, Beat Form Flash, and Outline with Beat depth have a **React to** setting in their Library effect slot. **Detected beat** follows actual kick or snare hits heard in the audio, even when the song slows down. **Live beat (tempo pulse)** follows the current tempo-aligned pulse, including through gaps in the music. **Bass drum**, **Hi-hat**, and **Snare** follow only that instrument's detected hits. The default for existing and new beat effects is Detected beat. A missing input or a silent instrument produces no hits for that source.
+
 Every slot in the Library's **Effects** tab shows a thumbnail of its effect type, and the slot
 editor's thumbnail follows the **Effect type** you choose before you save. The thumbnails are
 pictures rendered ahead of time by the Media Server's own compositor, so browsing the library never

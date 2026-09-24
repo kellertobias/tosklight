@@ -581,6 +581,7 @@ impl Detector {
         }
         if self.tempo.bpm() <= 0.0 && kick.hit.is_some() {
             self.beat = 1.0;
+            self.beats += 1;
         }
 
         self.reading = Reading {

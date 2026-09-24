@@ -8,6 +8,7 @@
 //! half a server up.
 
 mod admin_listener;
+mod beat_events;
 mod beat_form_flash;
 mod beat_grid_wave;
 mod beat_move;

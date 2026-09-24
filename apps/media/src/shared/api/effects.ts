@@ -22,6 +22,7 @@ export interface UpdateEffectLibrarySlot {
 	name?: string;
 	effectType?: string;
 	parameters?: number[];
+	beatSource?: string;
 	clear?: boolean;
 }
 

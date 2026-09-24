@@ -1,3 +1,4 @@
+use crate::beat_events::{BeatEvents, BeatTracker, source_index};
 use std::collections::{BTreeMap, BTreeSet};
 
 use media_domain::{BeatMoveDirection, LayerState};
@@ -12,7 +13,7 @@ struct Envelope {
 pub(crate) struct BeatMove {
     envelopes: BTreeMap<(usize, usize), Envelope>,
     last_seconds: Option<f32>,
-    beat_high: bool,
+    beat_tracker: BeatTracker,
 }
 
 impl BeatMove {
@@ -20,16 +21,14 @@ impl BeatMove {
         &mut self,
         layers: &[LayerState],
         seconds: f32,
-        beat: f32,
+        beat: impl Into<BeatEvents>,
     ) -> Vec<LayerState> {
         let delta = self
             .last_seconds
             .map(|previous| (seconds - previous).clamp(0.0, 0.25))
             .unwrap_or(0.0);
         self.last_seconds = Some(seconds);
-        let high = beat >= 0.95;
-        let landed = high && !self.beat_high;
-        self.beat_high = high;
+        let landed = self.beat_tracker.landed(beat.into());
 
         let mut active = BTreeSet::new();
         let effective = layers
@@ -41,6 +40,7 @@ impl BeatMove {
                     let Some(parameters) = effect.beat_move_parameters() else {
                         continue;
                     };
+                    let landed = landed[source_index(effect.beat_source)];
                     let key = (layer_index, slot);
                     active.insert(key);
                     let envelope = self.envelopes.entry(key).or_default();
@@ -75,6 +75,7 @@ const fn direction_vector(direction: BeatMoveDirection) -> (f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use media_domain::BeatSource;
     use media_domain::{BeatMoveParameters, EffectSlot};
 
     fn layer() -> LayerState {
@@ -93,6 +94,25 @@ mod tests {
         .to_vec();
         layer.effects[0] = effect;
         layer
+    }
+
+    #[test]
+    fn selected_instrument_fires_even_when_its_pulse_was_between_frames() {
+        let mut layer = layer();
+        layer.effects[0].beat_source = BeatSource::Snare;
+        let mut movement = BeatMove::default();
+        let mut heard = media_audio::AnalysisSnapshot::default();
+        movement.apply(std::slice::from_ref(&layer), 0.0, &heard);
+        heard.kick_hits = 1;
+        heard.detected_beats = 1;
+        assert_eq!(
+            movement.apply(std::slice::from_ref(&layer), 0.1, &heard)[0],
+            layer
+        );
+        heard.snare_hits = 1;
+        heard.detected_beats = 2;
+        let fired = movement.apply(std::slice::from_ref(&layer), 0.2, &heard);
+        assert!((fired[0].position_x - 0.4).abs() < 0.0001);
     }
 
     #[test]

@@ -706,28 +706,28 @@ impl HostedOutput {
         seconds: f32,
         heard: &media_audio::AnalysisSnapshot,
     ) -> Vec<media_domain::LayerState> {
+        let events = crate::beat_events::BeatEvents::from(heard);
         let effective_layers =
             self.opacity_cycle
                 .apply(output_state, prepared, seconds, heard.bpm, heard.beat_phase);
-        let effective_layers = self.beat_move.apply(&effective_layers, seconds, heard.beat);
+        let effective_layers = self.beat_move.apply(&effective_layers, seconds, events);
         let turn = &mut self.beat_scale_turn;
-        let effective_layers = turn.apply(&effective_layers, seconds, heard.beat);
+        let effective_layers = turn.apply(&effective_layers, seconds, events);
         let effective_layers = self.beat_scan.apply(
             &effective_layers,
             seconds,
-            heard.beat,
+            events,
             heard.analysis.peak.max(heard.analysis.energy * 4.0),
         );
         let effective_layers = self.beat_grid_wave.apply(
             &effective_layers,
             seconds,
-            heard.beat,
+            events,
             heard.analysis.peak.max(heard.analysis.energy * 4.0),
         );
         let flash = &mut self.beat_form_flash;
-        let effective_layers = flash.apply(&effective_layers, seconds, heard.beat);
-        self.outline_beat
-            .apply(&effective_layers, seconds, heard.beat)
+        let effective_layers = flash.apply(&effective_layers, seconds, events);
+        self.outline_beat.apply(&effective_layers, seconds, events)
     }
 
     /// Brings this output's GPU model copies in line with the model library; a missing selection

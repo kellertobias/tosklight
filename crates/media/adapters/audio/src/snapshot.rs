@@ -17,6 +17,14 @@ pub struct AnalysisSnapshot {
     /// rather than strobe on every analysis pass. Once a tempo is known this follows the tempo's
     /// flywheel, so it keeps time through a breakdown with no kick.
     pub beat: f32,
+    /// Flywheel beats counted across analysis windows, including the first detected kicks.
+    pub beats: u64,
+    /// Kick or snare hits, independent of the tempo flywheel. A kick and a clap on the same beat
+    /// count once.
+    pub detected_beats: u64,
+    pub kick_hits: u64,
+    pub snare_hits: u64,
+    pub hihat_hits: u64,
     /// Zero until the music has shown a tempo.
     pub bpm: f32,
     /// Where this instant sits between beats, `0.0..1.0`. Zero until a tempo is known.
@@ -37,6 +45,11 @@ impl Default for AnalysisSnapshot {
         Self {
             analysis: Analysis::default(),
             beat: 0.0,
+            beats: 0,
+            detected_beats: 0,
+            kick_hits: 0,
+            snare_hits: 0,
+            hihat_hits: 0,
             bpm: 0.0,
             beat_phase: 0.0,
             tempo_confidence: 0.0,
@@ -139,6 +152,11 @@ fn snapshot(analysis: Analysis, reading: &Reading, gain: f32) -> AnalysisSnapsho
     AnalysisSnapshot {
         analysis,
         beat: reading.beat,
+        beats: reading.beats,
+        detected_beats: reading.hits,
+        kick_hits: reading.kick.count,
+        snare_hits: reading.snare.count,
+        hihat_hits: reading.hihat.count,
         bpm: reading.bpm,
         beat_phase: reading.beat_phase,
         tempo_confidence: reading.tempo_confidence,

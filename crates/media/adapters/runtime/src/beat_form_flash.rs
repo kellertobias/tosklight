@@ -1,3 +1,4 @@
+use crate::beat_events::{BeatEvents, BeatTracker, source_index};
 use std::collections::{BTreeMap, BTreeSet};
 
 use media_domain::LayerState;
@@ -15,7 +16,7 @@ struct Flash {
 pub(crate) struct BeatFormFlash {
     flashes: BTreeMap<(usize, usize), Vec<Flash>>,
     sequence: u32,
-    beat_high: bool,
+    beat_tracker: BeatTracker,
 }
 
 impl BeatFormFlash {
@@ -23,12 +24,10 @@ impl BeatFormFlash {
         &mut self,
         layers: &[LayerState],
         seconds: f32,
-        beat: f32,
+        beat: impl Into<BeatEvents>,
     ) -> Vec<LayerState> {
-        let high = beat >= 0.95;
-        let landed = high && !self.beat_high;
-        self.beat_high = high;
-        if landed {
+        let landed = self.beat_tracker.landed(beat.into());
+        if landed.iter().any(|value| *value) {
             self.sequence = self.sequence.wrapping_add(1);
         }
 
@@ -42,6 +41,7 @@ impl BeatFormFlash {
                     let Some(parameters) = effect.beat_form_flash_parameters() else {
                         continue;
                     };
+                    let landed = landed[source_index(effect.beat_source)];
                     let key = (layer_index, slot);
                     active.insert(key);
                     let flashes = self.flashes.entry(key).or_default();

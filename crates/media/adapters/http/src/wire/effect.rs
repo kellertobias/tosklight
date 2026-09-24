@@ -7,10 +7,10 @@ use media_domain::{
     ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT,
     BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
     BeatFormFlashParameters, BeatGridWaveParameters, BeatMoveParameters, BeatScaleTurnParameters,
-    BeatScanParameters, BlurParameters, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters,
-    DrawnImageParameters, EffectSlot, FEEDBACK_EFFECT, FeedbackParameters, KALEIDOSCOPE_EFFECT,
-    KaleidoscopeParameters, OPACITY_CYCLE_EFFECT, OUTLINE_EFFECT, OpacityCycleInterval,
-    OutlineParameters, RASTERIZE_EFFECT, RasterizeParameters,
+    BeatScanParameters, BeatSource, BlurParameters, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT,
+    DigitalTvParameters, DrawnImageParameters, EffectSlot, FEEDBACK_EFFECT, FeedbackParameters,
+    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, OPACITY_CYCLE_EFFECT, OUTLINE_EFFECT,
+    OpacityCycleInterval, OutlineParameters, RASTERIZE_EFFECT, RasterizeParameters,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -38,6 +38,7 @@ pub struct EffectSlotView {
     pub label: String,
     pub enabled: bool,
     pub mix: f32,
+    pub beat_source: String,
     pub supported: bool,
     pub capability_detail: Option<String>,
     pub parameters: Vec<EffectParameterView>,
@@ -75,6 +76,8 @@ pub struct UpdateEffectPreset {
     pub effect_type: Option<String>,
     #[serde(default)]
     pub parameters: Option<Vec<f32>>,
+    #[serde(default)]
+    pub beat_source: Option<String>,
     #[serde(default)]
     pub clear: Option<bool>,
 }
@@ -118,6 +121,14 @@ impl EffectSlotView {
                 .to_owned(),
             enabled: effect.enabled,
             mix: effect.mix,
+            beat_source: match effect.beat_source {
+                BeatSource::LiveBeat => "live-beat",
+                BeatSource::Kick => "kick",
+                BeatSource::HiHat => "hi-hat",
+                BeatSource::Snare => "snare",
+                BeatSource::DetectedBeat => "detected-beat",
+            }
+            .to_owned(),
             supported: effect_type.is_none() || rendered.is_some(),
             capability_detail: (effect_type.is_some() && rendered.is_none())
                 .then(|| "This Media Server build cannot render the selected effect.".to_owned()),
@@ -257,6 +268,7 @@ mod tests {
             mix: 1.0,
             parameters: vec![0.4],
             seed: 7,
+            beat_source: BeatSource::default(),
         };
         let view = EffectSlotView::of(2, &effect);
 

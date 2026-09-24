@@ -94,6 +94,21 @@ pub(super) async fn update_effect(
         }
         effect.parameters = parameters;
     }
+    if let Some(source) = body.beat_source.as_deref() {
+        effect.beat_source = match source {
+            "live-beat" => media_domain::BeatSource::LiveBeat,
+            "kick" => media_domain::BeatSource::Kick,
+            "hi-hat" => media_domain::BeatSource::HiHat,
+            "snare" => media_domain::BeatSource::Snare,
+            "detected-beat" => media_domain::BeatSource::DetectedBeat,
+            _ => {
+                return Err(ApiError::bad_request(
+                    "beat-source-invalid",
+                    "beatSource must be live-beat, kick, hi-hat, snare, or detected-beat",
+                ));
+            }
+        };
+    }
     effect.normalize();
     configuration
         .effects
@@ -163,6 +178,33 @@ mod tests {
         assert_eq!(parameters.len(), 7);
         assert_eq!(parameters[0]["id"], "outline-intensity");
         assert_eq!(parameters[0]["value"], 0.5);
+    }
+
+    #[tokio::test]
+    async fn a_beat_source_is_saved_and_an_unknown_one_is_refused() {
+        let bench = bench();
+        let (status, changed) = send(&bench.router, post("/api/v2/effects/60/update".into(),
+            r#"{"requestId":"source-60","name":"Move","effectType":"beat-move","beatSource":"snare"}"#)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(changed["effect"]["beatSource"], "snare");
+        assert_eq!(
+            bench.stored.lock().unwrap()[0]
+                .effects
+                .resolve(60)
+                .unwrap()
+                .effect
+                .beat_source,
+            media_domain::BeatSource::Snare
+        );
+        let (status, _) = send(
+            &bench.router,
+            post(
+                "/api/v2/effects/60/update".into(),
+                r#"{"requestId":"invalid-source-60","beatSource":"unknown"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

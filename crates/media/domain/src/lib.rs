@@ -68,12 +68,12 @@ pub use layer::{
     ANALOG_TV_EFFECT, AnalogTvParameters, BEAT_FORM_FLASH_EFFECT, BEAT_GRID_WAVE_EFFECT,
     BEAT_MOVE_EFFECT, BEAT_SCALE_TURN_EFFECT, BEAT_SCAN_EFFECT, BLUR_EFFECT,
     BeatFormFlashParameters, BeatGridWaveOrigin, BeatGridWaveParameters, BeatMoveDirection,
-    BeatMoveParameters, BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BlurParameters,
-    BlurType, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters, DrawnImageParameters,
-    EffectBankState, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion, FeedbackParameters,
-    KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource, MaskState, ModelMapping,
-    OPACITY_CYCLE_EFFECT, OpacityCycleInterval, RASTERIZE_EFFECT, RasterizeMode,
-    RasterizeParameters, ScalingMode, SourceFailure, SourceStatus,
+    BeatMoveParameters, BeatScaleTurnParameters, BeatScanEdge, BeatScanParameters, BeatSource,
+    BlurParameters, BlurType, DIGITAL_TV_EFFECT, DRAWN_IMAGE_EFFECT, DigitalTvParameters,
+    DrawnImageParameters, EffectBankState, EffectSlot, FEEDBACK_EFFECT, FeedbackMotion,
+    FeedbackParameters, KALEIDOSCOPE_EFFECT, KaleidoscopeParameters, LayerState, MaskSource,
+    MaskState, ModelMapping, OPACITY_CYCLE_EFFECT, OpacityCycleInterval, RASTERIZE_EFFECT,
+    RasterizeMode, RasterizeParameters, ScalingMode, SourceFailure, SourceStatus,
 };
 pub use master::{BeatRatio, MasterShaper, MasterState};
 pub use model_library::{

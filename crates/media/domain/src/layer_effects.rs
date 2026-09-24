@@ -293,6 +293,7 @@ impl EffectSlot {
             effect_type: Some(DRAWN_IMAGE_EFFECT.to_owned()),
             enabled: true,
             seed: 0,
+            beat_source: Default::default(),
             mix: 1.0,
             parameters: DrawnImageParameters::default().as_array().to_vec(),
         }
