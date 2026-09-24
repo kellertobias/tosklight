@@ -49,8 +49,74 @@ impl PlaybackEngine {
         if self.dynamics_paused_at.is_some() {
             return PlaybackTickResult::default();
         }
-        PlaybackTickResult {
-            transitions: self.advance_automatic_cues(now, timecode_frame),
+        let transitions = self.advance_automatic_cues(now, timecode_frame);
+        self.advance_temporary_cues(now, timecode_frame);
+        self.release_emptied_playbacks(now);
+        PlaybackTickResult { transitions }
+    }
+
+    fn automatic_timing(&self, now: DateTime<Utc>, timecode_frame: Option<u64>) -> AutomaticTiming {
+        AutomaticTiming {
+            now,
+            timecode_frame,
+            speed_groups_bpm: self.speed_groups_bpm,
+            speed_groups_paused: self.speed_groups_paused,
+            sequence_master_fade_millis: self.sequence_master_fade_millis,
+            release_fade_millis: self.release_fade_millis,
+        }
+    }
+
+    /// A Temp or Flash runs its Cuelist as a GO does: Follow and Wait Cues advance under it too.
+    fn advance_temporary_cues(&mut self, now: DateTime<Utc>, timecode_frame: Option<u64>) {
+        let timing = self.automatic_timing(now, timecode_frame);
+        for playback in self.temporary.values_mut() {
+            if self.timeline_controlled.contains(&playback.cue_list_id) {
+                continue;
+            }
+            let (Some(cue_list), Some(compiled)) = (
+                self.cue_lists.get(&playback.cue_list_id),
+                self.compiled_cue_lists.get(&playback.cue_list_id),
+            ) else {
+                continue;
+            };
+            advance_automatic_playback(playback, cue_list, compiled, None, timing);
+        }
+    }
+
+    /// A Cuelist that no longer holds any parameter turns itself off: its current Cue has released
+    /// everything the list tracked and every fade into that has finished. A Temp or Flash holding
+    /// it ends with it, so its button reads off again.
+    fn release_emptied_playbacks(&mut self, now: DateTime<Utc>) {
+        let timing = self.automatic_timing(now, None);
+        let emptied = |playback: &ActivePlayback| match (
+            self.cue_lists.get(&playback.cue_list_id),
+            self.compiled_cue_lists.get(&playback.cue_list_id),
+        ) {
+            (Some(cue_list), Some(compiled)) => {
+                !self.timeline_controlled.contains(&playback.cue_list_id)
+                    && holds_nothing(playback, cue_list, compiled, &timing)
+            }
+            _ => false,
+        };
+        let active = self
+            .active
+            .iter()
+            .filter(|(_, playback)| emptied(playback))
+            .map(|(key, _)| *key)
+            .collect::<Vec<_>>();
+        let temporary = self
+            .temporary
+            .iter()
+            .filter(|(_, playback)| emptied(playback))
+            .map(|(key, _)| *key)
+            .collect::<Vec<_>>();
+        for key in active {
+            if let Some(playback) = self.active.get_mut(&key) {
+                crate::controls::deactivate(playback);
+            }
+        }
+        for key in temporary {
+            self.temporary.remove(&key);
         }
     }
 
@@ -407,6 +473,64 @@ fn advance_follow_or_wait(
     }
     playback.activated_at = timing.now;
     Some(cue_transition(playback, cue_list, previous_index, cause, 1))
+}
+
+/// Whether a running Cuelist holds nothing any more: it tracked values, its current Cue has
+/// released every one of them, nothing automatic is still to come, and the fades have finished.
+///
+/// A list that never held a value (an empty first Cue waiting for GO) is not "released", and lists
+/// carrying Group values or running Dynamics, chasers, and paused or manually crossfading lists are
+/// left to their own controls. A Dynamic Release on its own holds nothing.
+fn holds_nothing(
+    playback: &ActivePlayback,
+    cue_list: &CueList,
+    compiled: &CompiledCueList,
+    timing: &AutomaticTiming,
+) -> bool {
+    if !playback.enabled
+        || playback.paused
+        || playback.manual_xfade_to_index.is_some()
+        || cue_list.mode == CueListMode::Chaser
+        || cue_list.cues.iter().any(|cue| {
+            !cue.group_changes.is_empty()
+                || cue.dynamic_changes.iter().any(|change| {
+                    !matches!(change.value, light_dynamics::DynamicSemanticValue::Release)
+                })
+        })
+    {
+        return false;
+    }
+    let index = playback.cue_index;
+    if index >= cue_list.cues.len()
+        || next_cue_index(index, cue_list)
+            .and_then(|next| automatic_trigger(&cue_list.cues[next]))
+            .is_some()
+    {
+        return false;
+    }
+    let tracked = compiled.attributes_through(index);
+    if tracked.is_empty()
+        || tracked
+            .iter()
+            .any(|attribute| attribute.value(index, playback.tracking_wrap).is_some())
+    {
+        return false;
+    }
+    let cue_fade_millis = effective_cue_fade_millis(
+        cue_list,
+        &cue_list.cues[index],
+        playback,
+        timing.sequence_master_fade_millis,
+        &timing.speed_groups_bpm,
+    );
+    let completion = cue_completion_millis(
+        cue_list,
+        compiled,
+        playback,
+        cue_fade_millis,
+        timing.release_fade_millis,
+    );
+    elapsed_since_activation(playback, timing.now) >= completion
 }
 
 fn install_transition_source(

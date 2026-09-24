@@ -39,7 +39,8 @@ impl PlaybackEngine {
         playback.paused = false;
         playback.paused_at = None;
         playback.previous_index = None;
-        playback.transition_timing_bypassed = true;
+        // A Temp or Flash plays the Cue with its own timing, as a GO would.
+        playback.transition_timing_bypassed = false;
         playback.transition_fade_fallback_millis = None;
         playback.manual_xfade_from_index = None;
         playback.manual_xfade_to_index = None;
