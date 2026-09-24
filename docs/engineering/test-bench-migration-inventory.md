@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **260 root cases across 101 files**.
+Default catalog: **261 root cases across 102 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -81,6 +81,7 @@ Default catalog: **260 root cases across 101 files**.
 | 112-color-intent.spec.ts | COLORINTENT-004 @ui › a universal Color preset follows the selection; a preset of different colours never spreads | docs/testing/26-color-intent.md | @ui | color-intent | standard failure evidence | parallel | pending-semantic-migration |
 | 112-color-intent.spec.ts | COLORINTENT-004 @api › FixAT COLOR PRESET 1 produces the same DMX as the pool recall | docs/testing/26-color-intent.md | @api | color-intent | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 112-color-intent.spec.ts | COLORINTENT-005 @ui › switching a programmed show lists what changes and rewrites nothing | docs/testing/26-color-intent.md | @ui | color-intent | standard failure evidence | parallel | pending-semantic-migration |
+| 113-semantic-exclusive-color-playbacks.spec.ts | BENCH-RITUAL-COLOR-001 @bench @ui › Color Preset cues in one Virtual Playback exclusion zone keep exactly one colour on the rig and fall back to its resting colour | repository contract | @bench @ui | semantic-exclusive-color-playbacks | standard failure evidence | parallel | migrated-semantic-world |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 19-manual-review-software-corrections.spec.ts | POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize | docs/testing/10-desk-lock-and-operator-ui.md | @ui | manual-review-software-corrections | standard failure evidence | parallel | pending-semantic-migration |
