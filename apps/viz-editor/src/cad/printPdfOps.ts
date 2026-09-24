@@ -89,8 +89,37 @@ export function saved(seconds: number) {
 export function distance(mm: number) {
 	return mm >= 1000 ? `${n(mm / 1000)} m` : `${n(mm)} mm`;
 }
+/** The characters WinAnsiEncoding places in 0x80–0x9F; above that it is Latin-1. */
+const WIN_ANSI_EXTRAS = new Map(
+	[..."€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ"].flatMap((character, index) =>
+		character.charCodeAt(0) < 0x80 || character.charCodeAt(0) > 0x9f ? [[character, 0x80 + index] as const] : [],
+	),
+);
+
+/**
+ * A PDF literal string for Helvetica in WinAnsiEncoding, kept to ASCII: every other character it
+ * has — umlauts, ß, °, €, typographic quotes — is written as an octal escape, and a character it
+ * lacks as `-`, so the page stream's bytes are exactly its characters.
+ */
+export function winAnsiLiteral(value: string): string {
+	let out = "";
+	for (const character of value) {
+		const code = character.codePointAt(0) ?? 0x2d;
+		const byte =
+			code >= 0x20 && code < 0x7f
+				? code
+				: code >= 0xa0 && code <= 0xff
+					? code
+					: (WIN_ANSI_EXTRAS.get(character) ?? 0x2d);
+		if (byte >= 0x80) out += `\\${byte.toString(8)}`;
+		else if (byte === 0x5c || byte === 0x28 || byte === 0x29) out += `\\${String.fromCharCode(byte)}`;
+		else out += String.fromCharCode(byte);
+	}
+	return out;
+}
+
 export function text(value: string, x: number, y: number, size: number, bold = false) {
-	return `BT /${bold ? "F2" : "F1"} ${size} Tf ${n(x)} ${n(y)} Td (${value.replace(/[^\x20-\xff]/g, "-").replace(/([\\()])/g, "\\$1")}) Tj ET`;
+	return `BT /${bold ? "F2" : "F1"} ${size} Tf ${n(x)} ${n(y)} Td (${winAnsiLiteral(value)}) Tj ET`;
 }
 export function path(points: readonly PlanPoint[], fill: boolean, close = true) {
 	if (!points.length) return "";
@@ -123,7 +152,7 @@ export function pdfDocument(
 	for (let i = 0; i < streams.length; i++) {
 		const contentId = ids[i] + 1;
 		objects.push(
-			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(streams[i].width)} ${n(streams[i].height)}] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>${typefaces} >>${images} >> /Contents ${contentId} 0 R >>`,
+			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(streams[i].width)} ${n(streams[i].height)}] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>${typefaces} >>${images} >> /Contents ${contentId} 0 R >>`,
 			`<< /Length ${new TextEncoder().encode(streams[i].content).length} >>\nstream\n${streams[i].content}\nendstream`,
 		);
 	}

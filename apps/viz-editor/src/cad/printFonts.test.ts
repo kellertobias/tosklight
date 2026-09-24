@@ -96,3 +96,22 @@ describe("CAD typefaces in a printed plan", () => {
 		expect(text).toMatch(/\/F1 [\d.]+ Tf [\d. ]+Td \(FOH B.+ ISO\) Tj/u);
 	});
 });
+
+describe("Helvetica text in a printed plan", () => {
+	it("prints umlauts, ß and WinAnsi punctuation as single escaped bytes, and the rest as a dash", async () => {
+		const { winAnsiLiteral } = await import("./printPdfOps");
+		expect(winAnsiLiteral("Bühne Größe")).toBe("B\\374hne Gr\\366\\337e");
+		expect(winAnsiLiteral("12° ±5 €“x” (a\\b)")).toBe("12\\260 \\2615 \\200\\223x\\224 \\(a\\\\b\\)");
+		expect(winAnsiLiteral("舞台")).toBe("--");
+	});
+
+	it("declares WinAnsi for Helvetica and keeps the page stream ASCII", async () => {
+		const pdf = buildCadPdf(scene, [page], undefined, [], [words("screen", "Bühne Größe", 0)]);
+		const text = latin1(pdf);
+		if (process.env.TOSKLIGHT_PRINT_HELVETICA_PDF) fs.writeFileSync(process.env.TOSKLIGHT_PRINT_HELVETICA_PDF, pdf);
+		expect(text).toContain("/BaseFont /Helvetica /Encoding /WinAnsiEncoding");
+		expect(text).toContain("/BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding");
+		expect(text).toContain("(B\\374hne Gr\\366\\337e) Tj");
+		expect([...pdf].every((byte) => byte < 0x80)).toBe(true);
+	});
+});
