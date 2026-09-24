@@ -15,6 +15,7 @@ import {
 	SCISSOR_MAX_DEGREES,
 	parseProjection,
 	projectionViewForCad,
+	rotateDeskPoint,
 } from "./projection";
 import { trussBays, trussParts } from "./trussPlan";
 import type { CadDrawing, CadEntity, CadStairHandrails, CadViewDirection } from "./types";
@@ -967,7 +968,8 @@ describe("CAD plan projections", () => {
 	});
 
 	it("builds a flight of stairs from the kind its profile declares, handrails and all", () => {
-		const flight = (handrails: CadStairHandrails, view: CadViewDirection = "front_to_back") =>
+		// Deeper than wide, the flight climbs downstage, so a side view sees its steps in profile.
+		const flight = (handrails: CadStairHandrails, view: CadViewDirection = "left_to_right") =>
 			entityPlanGeometry(
 				{
 					...movingLight,
@@ -999,6 +1001,61 @@ describe("CAD plan projections", () => {
 		expect(railed.lines.length).toBeGreaterThan(plain.lines.length);
 		// One side railed still draws the rail in elevation, where both sides fall on one line.
 		expect(Math.max(...heights(flight("left")))).toBeCloseTo(1200, 3);
+	});
+
+	it("climbs the same way in the plan and in every elevation, however the flight is turned", () => {
+		const flight = (
+			view: CadViewDirection,
+			size: [number, number, number],
+			yaw = 0,
+		) =>
+			entityPlanGeometry(
+				{
+					...movingLight,
+					name: "Stage Stairs",
+					kind: "venue",
+					fixtureType: "venue",
+					sizeMillimetres: size,
+					rotationDegrees: [0, 0, yaw],
+					scenery: { kind: "stairs", chords: 0, pattern: "standard", handrails: "none" },
+				},
+				undefined,
+				view,
+			);
+		const points = (geometry: ReturnType<typeof flight>) => [
+			...geometry.triangles.flatMap(({ points }) => points),
+			...geometry.outlines.flat(),
+		];
+		/** Where the top of the flight stands along the page: the x of its highest points. */
+		const topSide = (geometry: ReturnType<typeof flight>) => {
+			const all = points(geometry);
+			const highest = Math.max(...all.map(([, y]) => y));
+			const xs = all.filter(([, y]) => y > highest - 1).map(([x]) => x);
+			const spread = Math.max(...all.map(([x]) => x)) - Math.min(...all.map(([x]) => x));
+			const middle = (Math.min(...xs) + Math.max(...xs)) / 2;
+			// End on, the whole width is the top; in profile only the last tread is.
+			return Math.max(...xs) - Math.min(...xs) > spread * 0.9 ? "level" : Math.sign(middle);
+		};
+		// Wider than deep: it climbs towards +x. Seen across the climb from the front, the top is on
+		// the right; from the back, on the left; from either side it is seen end on.
+		const wide: [number, number, number] = [2800, 1000, 600];
+		expect(topSide(flight("front_to_back", wide))).toBe(1);
+		expect(topSide(flight("back_to_front", wide))).toBe(-1);
+		expect(topSide(flight("left_to_right", wide))).toBe("level");
+		expect(topSide(flight("right_to_left", wide))).toBe("level");
+		// Deeper than wide: it climbs downstage. From house left downstage is page right.
+		const deep: [number, number, number] = [1000, 2800, 600];
+		expect(topSide(flight("left_to_right", deep))).toBe(1);
+		expect(topSide(flight("right_to_left", deep))).toBe(-1);
+		expect(topSide(flight("front_to_back", deep))).toBe("level");
+		// Turned a quarter, a wide flight climbs along the depth as its plan arrow does, so a side
+		// view reads its other side in profile — and says the turn is already shown.
+		const turned = flight("left_to_right", wide, 90);
+		// Where the turned climb points in the desk, and so which side of this page it rises to.
+		const climb = rotateDeskPoint([1, 0, 0], [0, 0, 90]);
+		expect(topSide(turned)).toBe(Math.sign(-climb[1]));
+		expect(turned.yawQuarterTurnsShown).toBe(1);
+		expect(topSide(flight("front_to_back", wide, 90))).toBe("level");
 	});
 
 	it("draws stairs from above as treads and an arrow up the climb, with the chosen rails", () => {

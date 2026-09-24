@@ -8,6 +8,7 @@ import {
 	lampRelativeView,
 	modelDrawingGeometry,
 } from "./modelDrawing";
+import { stairElevation, stairPlan } from "./stairPlan";
 import { trussPlan } from "./trussPlan";
 import type {
 	CadDrawing,
@@ -605,6 +606,21 @@ function typedGeometry(
 	) {
 		polygons = railing(horizontal, vertical, view === "top_down");
 	} else if (
+		view !== "top_down" &&
+		// A riser from before stairs had their own kind still says stairs in its name.
+		(scenery?.kind === "stairs" || /stair/.test(type))
+	) {
+		// A flight is drawn from the side of it the view sees once its yaw is taken into account, so
+		// the steps climb the way the plan's arrow points in every elevation.
+		const yaw = entity.rotationDegrees[2];
+		return {
+			...fromPolygons(
+				"typed",
+				stairElevation(width, depth, height, scenery?.handrails ?? "none", lampRelativeView(view, yaw)),
+			),
+			yawQuarterTurnsShown: bakedYawQuarterTurns(view, yaw),
+		};
+	} else if (
 		scenery?.kind === "riser" ||
 		scenery?.kind === "stairs" ||
 		/stage element|riser|stage deck|stairs/.test(type)
@@ -833,94 +849,11 @@ function stage(
 		];
 	// In an elevation a stage element stands on its origin, the floor its feet are on, and rises
 	// its height from there, as it does in the Visualizer.
-	if (stairs) return stairFlight(w, h, handrails !== "none");
 	return fixedFeet ? leggedStage(w, h) : scissorStage(w, h);
 }
 
-/** The line a tread's nosing is drawn with from above, and the arrow up the flight. */
-const NOSING = 20;
-
-/**
- * A flight of stairs from above, as a plan draws stairs: a line across the flight at every nosing,
- * an arrow pointing up the climb, and a rail along each side that carries one.
- *
- * The flight climbs along its longer side the way `push_stairs` builds it: towards +x when it is
- * wider than deep, else towards -y. Left and right are as seen climbing it, so a flight climbing
- * towards +x has its left rail on the +y side and one climbing towards -y has it on +x.
- */
-function stairPlan(
-	w: number,
-	d: number,
-	rise: number,
-	handrails: CadStairHandrails,
-): Polygon[] {
-	const alongX = w >= d;
-	const run = alongX ? w : d;
-	const across = alongX ? d : w;
-	const steps = Math.min(24, Math.max(1, Math.round(rise / 200)));
-	const tread = run / steps;
-	// A point `a` along the climb (from the bottom) and `b` towards its left, as a typed symbol is
-	// authored: the plan mirrors every typed symbol top to bottom (see `entityPlanGeometry`), so
-	// these are the mirror images of where they land — up the page here is down the plan.
-	const at = (a: number, b: number): PlanPoint =>
-		alongX ? [-run / 2 + a, -b] : [b, a - run / 2];
-	const band = (from: number, to: number, left: number, right: number, color: Polygon["color"]): Polygon => ({
-		color,
-		points: [at(from, right), at(to, right), at(to, left), at(from, left)],
-	});
-	const polygons: Polygon[] = [rect(-w / 2, -d / 2, w, d, BODY)];
-	for (let index = 1; index < steps; index += 1)
-		polygons.push(
-			band(tread * index - NOSING / 2, tread * index + NOSING / 2, across / 2, -across / 2, DARK),
-		);
-	// The arrow runs up the middle of the flight and points at the top step.
-	const shaft = Math.max(NOSING, across * 0.06);
-	const head = Math.min(across * 0.35, run * 0.3);
-	polygons.push(band(run * 0.12, run * 0.88 - head, shaft / 2, -shaft / 2, DETAIL));
-	polygons.push({
-		color: DETAIL,
-		points: [at(run * 0.88 - head, -head / 1.6), at(run * 0.88, 0), at(run * 0.88 - head, head / 1.6)],
-	});
-	const rail = Math.min(RAIL_SECTION * 1.5, across * 0.1);
-	if (handrails === "left" || handrails === "both")
-		polygons.push(band(0, run, across / 2, across / 2 - rail, DETAIL));
-	if (handrails === "right" || handrails === "both")
-		polygons.push(band(0, run, -across / 2 + rail, -across / 2, DETAIL));
-	return polygons;
-}
-
-/** How high a handrail stands above what it guards, in millimetres, on stairs and along an edge. */
-const RAIL_HEIGHT = 900;
 /** The section a rail and its posts are drawn at. */
 const RAIL_SECTION = 40;
-
-/**
- * A flight of stairs from the front or side: its steps climbing to the height it is placed at,
- * and a rail over the nosings when it carries one, the way `push_stairs` builds it.
- */
-function stairFlight(w: number, h: number, handrails: boolean): Polygon[] {
-	const steps = Math.min(24, Math.max(1, Math.round(h / 200)));
-	const rise = h / steps;
-	const tread = w / steps;
-	const polygons: Polygon[] = [];
-	for (let index = 0; index < steps; index += 1)
-		polygons.push(rect(-w / 2 + tread * index, 0, tread, rise * (index + 1), BODY));
-	if (!handrails) return polygons;
-	// The rail follows the nosings, so in elevation it is a band of the same climb one rail-height
-	// above the steps; the end posts stand from the first and last nosing up to it.
-	const rail = Math.min(RAIL_HEIGHT, Math.max(200, h));
-	for (let index = 0; index <= steps; index += 1)
-		polygons.push(
-			rect(
-				-w / 2 + tread * index - RAIL_SECTION / 2,
-				rise * index,
-				RAIL_SECTION,
-				rail,
-				DETAIL,
-			),
-		);
-	return polygons;
-}
 
 /**
  * A handrail: posts along its run with a top rail and a knee rail, the way `push_railing` builds

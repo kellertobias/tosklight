@@ -589,7 +589,10 @@ the key that picks it, such as **Draw line · L**. From left to right:
     there in 200 mm steps, and a handrail is a stage edge guard 1 m high, set to any length from
     0.4 m to 24 m. It places a 2 × 1 m deck on scissor feet until you choose another. From above, a
     flight is drawn as stairs rather than a deck: a line across it at every nosing, an arrow pointing
-    up the climb and its rails along the chosen sides. Stairs placed from the retired **Stairs with
+    up the climb and its rails along the chosen sides. A flight climbs along its longer side, as it
+    does in the Visualizer. An elevation that looks across the climb shows the steps in profile,
+    rising the way the arrow points. One that looks along it shows the flight end on, at its full
+    height. Turning the flight turns this with it. Stairs placed from the retired **Stairs with
     Handrails** part keep their rails up both sides until you choose otherwise.
   * **Add scenery** (a drape on its rail) keeps the scenic elements together: the **Curtain** —
     one, generated at any width and drop you set in **Info**, so a 3 m drape is this curtain at 3 m —
