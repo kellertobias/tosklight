@@ -10,7 +10,8 @@ import { flushSync } from "react-dom";
 import { createPreviewStore } from "./cadPreviewStore";
 import { duplicateSelection } from "./cadDuplicate";
 import { cadSession } from "./session";
-import type { CadSceneSnapshot, CadTransformPreview } from "./types";
+import { selectionStep } from "./duplicateStep";
+import type { CadSceneSnapshot, CadTransformPreview, ViewportTile } from "./types";
 
 export function useCadMove({
 	sceneRef,
@@ -18,6 +19,7 @@ export function useCadMove({
 	onError,
 	snapToMounts,
 	blocked,
+	onCopied,
 }: {
 	sceneRef: RefObject<CadSceneSnapshot | null>;
 	applyScene(scene: CadSceneSnapshot): void;
@@ -25,6 +27,8 @@ export function useCadMove({
 	snapToMounts: boolean;
 	/** While print pages are open the rig does not move. */
 	blocked: boolean;
+	/** The copies a duplicate made, which become the selection so the next move is theirs. */
+	onCopied(ids: string[]): void;
 }) {
 	const [previewStore] = useState(createPreviewStore);
 
@@ -80,28 +84,31 @@ export function useCadMove({
 
 	/**
 	 * Commits a move made with the duplicate modifier: copies moved by `delta`, the originals left
-	 * where they are, as one step Undo takes away. Returns the copies' IDs, none when it failed.
+	 * where they are, as one step Undo takes away. The copies become the selection.
 	 */
 	async function copy(
 		deltaMillimetres: [number, number, number],
 		entityIds: readonly string[],
-	): Promise<string[]> {
+	): Promise<void> {
 		const scene = sceneRef.current;
-		if (!scene || !entityIds.length || blocked) {
-			settle(null);
-			return [];
-		}
+		if (!scene || !entityIds.length || blocked) return settle(null);
 		try {
 			const offset = deltaMillimetres.map(Math.round) as [number, number, number];
 			const copies = await duplicateSelection(entityIds, offset, scene.sceneRevision);
 			settle(await cadSession.snapshot());
-			return copies;
+			if (copies.length) onCopied(copies);
 		} catch (reason) {
 			const refreshed = await cadSession.snapshot().catch(() => null);
 			settle(refreshed, String(reason));
-			return [];
 		}
 	}
 
-	return { previewStore, onPreview, move, turn, copy };
+	/** ⌘D: copies of the selection beside it on `tile`, as the object menu's Duplicate places them. */
+	function duplicate(tile: Pick<ViewportTile, "view" | "rotationQuarterTurns"> | null | undefined) {
+		const scene = sceneRef.current;
+		const step = scene && selectionStep(scene.entities, scene.selectedIds, tile);
+		return step ? copy(step, scene?.selectedIds ?? []) : Promise.resolve();
+	}
+
+	return { previewStore, onPreview, move, turn, copy, duplicate };
 }

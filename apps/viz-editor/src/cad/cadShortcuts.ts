@@ -1,6 +1,6 @@
 /**
  * The CAD screen's shortcuts: the drawing tools, the five view directions, zoom and pan, Delete,
- * and Undo, Redo, Group and Ungroup with ⌘ (Ctrl).
+ * and Undo, Redo, Duplicate, Group and Ungroup with ⌘ (Ctrl).
  *
  * A key reaches the drawing only when nothing else wants it: never while a field, a select or an
  * editable text has focus, and never while a dialog is open. Apart from the ⌘ shortcuts named
@@ -23,7 +23,9 @@ export type CadShortcut =
 	| { type: "delete" }
 	/** ⌘Z (Ctrl+Z) undoes the last move or deletion; ⇧⌘Z or Ctrl+Y redoes it. */
 	| { type: "undo" }
-	| { type: "redo" };
+	| { type: "redo" }
+	/** ⌘D (Ctrl+D) duplicates the selection as the object menu's Duplicate does, and selects the copies. */
+	| { type: "duplicate" };
 
 export const CAD_MIN_ZOOM = 0.004;
 export const CAD_MAX_ZOOM = 2.5;
@@ -66,6 +68,7 @@ export function cadShortcutFor(
 	if (command && letter === "g") return { type: event.shiftKey ? "ungroup" : "group" };
 	if (command && letter === "z") return { type: event.shiftKey ? "redo" : "undo" };
 	if (command && letter === "y" && event.ctrlKey) return { type: "redo" };
+	if (command && letter === "d" && !event.shiftKey) return { type: "duplicate" };
 	if (event.ctrlKey || event.metaKey || event.altKey) return null;
 	if (event.key === "Delete" || event.key === "Backspace") return { type: "delete" };
 	const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;

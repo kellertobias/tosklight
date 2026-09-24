@@ -10,7 +10,7 @@
  * selection whose members disagree, the step goes along the view's right.
  */
 import { entityBounds } from "./marqueeSelection";
-import { type CadEntity, type CadViewDirection, planeDelta } from "./types";
+import { type CadEntity, type CadViewDirection, planeDelta, type ViewportTile } from "./types";
 
 /** The step for an element that has no footprint to measure, in millimetres. */
 export const DUPLICATE_FALLBACK_MILLIMETRES = 500;
@@ -78,4 +78,14 @@ export function duplicateStep(
 	const distance = extent >= 1 ? extent : DUPLICATE_FALLBACK_MILLIMETRES;
 	const local: [number, number] = axis === 0 ? [distance, 0] : [0, -distance];
 	return planeDelta(local, view, rotationQuarterTurns);
+}
+
+/** The step ⌘D copies the selection by on `tile`, the view last used; none without a selection. */
+export function selectionStep(
+	entities: readonly CadEntity[],
+	ids: readonly string[],
+	tile: Pick<ViewportTile, "view" | "rotationQuarterTurns"> | null | undefined,
+): [number, number, number] | null {
+	if (!ids.length || !tile) return null;
+	return duplicateStep(entities, ids, tile.view, tile.rotationQuarterTurns);
 }

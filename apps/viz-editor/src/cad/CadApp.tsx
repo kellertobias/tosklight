@@ -317,12 +317,13 @@ export function CadApp() {
 		});
 	}
 
-	const { previewStore, onPreview, move, turn, copy } = useCadMove({
+	const { previewStore, onPreview, move, turn, copy, duplicate } = useCadMove({
 		sceneRef,
 		applyScene,
 		onError: setError,
 		snapToMounts: settings.snapToMounts,
 		blocked: printMode,
+		onCopied: (ids) => select({ type: "replace", ids }),
 	});
 
 	function togglePrintPanel(panel: "print" | "elements") {
@@ -383,6 +384,7 @@ export function CadApp() {
 	}
 
 	useCadShortcuts((shortcut) => {
+		if (shortcut.type === "duplicate") return void duplicate(activeTile(layout, activeTileId));
 		if (shortcut.type === "group" || shortcut.type === "ungroup") {
 			if (scene && !printMode) venueGroups.run(shortcut.type, scene.entities, scene.selectedIds);
 			return;
@@ -470,12 +472,7 @@ export function CadApp() {
 							onObjectMenu={objectMenu.open}
 							onMove={move}
 							onTransforms={turn}
-							onDuplicateMove={(delta, ids) =>
-								// The copies become the selection, so the next move is theirs.
-								copy(delta, ids).then((copies) => {
-									if (copies.length) select({ type: "replace", ids: copies });
-								})
-							}
+							onDuplicateMove={copy}
 							onFit={fit}
 							printMode={printMode}
 							underlays={underlayState.underlays}

@@ -634,6 +634,49 @@ describe("the CAD planning screen", () => {
 		await waitFor(() => expect(mocks.replaceSelection).toHaveBeenCalledWith(4, [written.fixtureId]));
 	});
 
+	it("duplicates the selection with Cmd+D the way its menu does, but not from a field", async () => {
+		documentMocks.patchSnapshot.mockResolvedValue({
+			showId: snapshot.showId,
+			patchRevision: 3,
+			fixtures: [
+				{
+					fixtureId,
+					fixtureNumber: 101,
+					virtualFixtureNumber: null,
+					name: "Profile Stage 1",
+					splitPatches: [{ split: 1, universe: 1, address: 1 }],
+					location: { x: 0, y: 0, z: 4000 },
+					rotation: { x: 0, y: 0, z: 0 },
+					multipatch: [],
+					logicalHeads: [],
+				},
+			],
+		});
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		fireEvent.keyDown(within(await screen.findByRole("region", { name: "Info" })).getByLabelText("Name"), {
+			key: "d",
+			metaKey: true,
+		});
+		expect(mocks.add).not.toHaveBeenCalled();
+		const pressed = new KeyboardEvent("keydown", { key: "d", metaKey: true, cancelable: true });
+		window.dispatchEvent(pressed);
+		// The browser's own ⌘D (bookmark) never runs over the drawing.
+		expect(pressed.defaultPrevented).toBe(true);
+		await waitFor(() => expect(mocks.add).toHaveBeenCalledTimes(1));
+		const [written] = mocks.add.mock.calls[0][1];
+		expect(written).toMatchObject({
+			fixtureNumber: 102,
+			splitPatches: [{ split: 1, universe: null, address: null }],
+			location: { x: 400, y: 0, z: 4000 },
+		});
+		await waitFor(() => expect(mocks.replaceSelection).toHaveBeenCalledWith(4, [written.fixtureId]));
+	});
+
 	it("lists several selected elements in Info and always confirms deleting them", async () => {
 		mocks.snapshot.mockResolvedValue({
 			...snapshot,

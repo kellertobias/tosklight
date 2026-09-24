@@ -85,6 +85,16 @@ describe("CAD keyboard shortcuts", () => {
 		expect(press("z")).toBeNull();
 	});
 
+	it("duplicates with Cmd or Ctrl+D, leaving a plain D to pan", () => {
+		expect(press("d", { metaKey: true })).toEqual({ type: "duplicate" });
+		expect(press("d", { ctrlKey: true })).toEqual({ type: "duplicate" });
+		expect(
+			cadShortcutFor({ key: "D", metaKey: true, ctrlKey: false, altKey: false, shiftKey: true }),
+		).toBeNull();
+		expect(press("d", { metaKey: true, altKey: true })).toBeNull();
+		expect(press("d")).toEqual({ type: "pan", horizontal: 1, vertical: 0 });
+	});
+
 	it("keeps zoom within the viewport's range and pans by the same screen distance at every zoom", () => {
 		expect(zoomedCamera({ pan: [0, 0], zoom: CAD_MAX_ZOOM }, 2).zoom).toBe(CAD_MAX_ZOOM);
 		expect(zoomedCamera({ pan: [0, 0], zoom: CAD_MIN_ZOOM }, 0.5).zoom).toBe(CAD_MIN_ZOOM);

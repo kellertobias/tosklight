@@ -794,8 +794,8 @@ Escape to close it.
 * **Group** and **Ungroup** are the same actions as ⌘G and ⇧⌘G and as the buttons at the top of
   **Objects**, described under [Groups](#groups). **Group** shows when two or more selected Venue
   elements are not already exactly one group, **Ungroup** when the selection touches a group.
-* **Duplicate** adds a copy of each selected element half a metre to the right of it, as the viewport
-  you opened the menu in shows right. A copy is a new element with its own identity and the next free
+* **Duplicate** (⌘D, Ctrl+D) adds a copy of each selected element beside it, edges touching, to the
+  right as the viewport you opened the menu in — or last used, for ⌘D — shows right. A copy is a new element with its own identity and the next free
   fixture (or virtual) number above its original's, keeps its profile, mode, size, rotation and name,
   and is not patched — give it a DMX address in Info when it needs one. The copies become the
   selection. **Undo** takes them away again.
@@ -864,6 +864,7 @@ and are ignored while you type in a field or a dialog is open:
 | **1** to **5** | **Top down**, **Left to right**, **Right to left**, **Front to back**, **Back to front**, framed on the rig |
 | **+** and **−** | Zoom in and out |
 | **W**, **A**, **S**, **D** | Move the view up, left, down and right |
+| **⌘D** (Ctrl+D) | **Duplicate** the selection beside itself and select the copies |
 | **⌘G** (Ctrl+G) | **Group** the selected Venue elements |
 | **⇧⌘G** (Shift+Ctrl+G) | **Ungroup** the selected groups |
 
