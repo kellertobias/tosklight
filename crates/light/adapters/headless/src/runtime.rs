@@ -119,6 +119,7 @@ mod auth_backup;
 mod boundaries;
 mod capabilities;
 mod capability_resources;
+mod color_intent_report;
 mod color_model_impact;
 mod command_parse;
 mod command_playback_addresses;

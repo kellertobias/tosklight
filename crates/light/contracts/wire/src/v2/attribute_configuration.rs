@@ -198,3 +198,49 @@ pub struct AttributeConfigurationUpdateOutcome {
     #[ts(type = "number")]
     pub event_sequence: u64,
 }
+
+/// How faithfully one fixture head shows its Color Intent target.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorResolutionQuality {
+    Exact,
+    Approximate,
+    OutOfGamut,
+    WheelLimited,
+    Uncalibrated,
+    Unsupported,
+}
+
+/// The kind of colour engine that shows a head's Color Intent.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorIntentEngine {
+    Additive,
+    Subtractive,
+    HueSaturation,
+    Wheel,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ColorIntentHeadReport {
+    pub fixture_id: Uuid,
+    pub fixture_number: Option<u32>,
+    pub fixture_name: String,
+    /// The selectable identity owning the head: the fixture, or one of its logical heads.
+    pub owner_id: Uuid,
+    pub head_name: String,
+    /// False when nothing programs a colour yet; the head is then reported against white.
+    pub has_target: bool,
+    pub quality: ColorResolutionQuality,
+    pub engine: Option<ColorIntentEngine>,
+    /// CIE 1976 u′v′ distance between the target and what the head is modelled to show.
+    pub delta_uv: Option<f32>,
+    /// The chosen colour system's calibration revision; absent for inferred systems.
+    pub calibration_revision: Option<u32>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ColorIntentReport {
+    pub color_model: ColorProgrammingModel,
+    pub heads: Vec<ColorIntentHeadReport>,
+}

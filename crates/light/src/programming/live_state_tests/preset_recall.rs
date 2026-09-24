@@ -92,6 +92,7 @@ impl RecallSetup {
                 "5".into(),
                 HashMap::from([(intensity, AttributeValue::Normalized(0.8))]),
             )]),
+            universal_values: Default::default(),
         };
         let raw_body = serde_json::json!({
             "name":"Look",

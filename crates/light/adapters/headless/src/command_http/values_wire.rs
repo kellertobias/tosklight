@@ -8,6 +8,18 @@ pub(crate) fn values_command(
     action: wire::ProgrammingValuesAction,
     colors: &ColorAttributeIndex,
 ) -> Result<application::ProgrammingValuesCommand, application::ActionError> {
+    if colors.intent {
+        let attribute = match &action {
+            wire::ProgrammingValuesAction::ApplyIntent { attribute, .. }
+            | wire::ProgrammingValuesAction::SetSelection { attribute, .. }
+            | wire::ProgrammingValuesAction::SetFixture { attribute, .. }
+            | wire::ProgrammingValuesAction::SetGroup { attribute, .. } => Some(attribute.as_str()),
+            _ => None,
+        };
+        if let Some(attribute) = attribute.filter(|attribute| attribute.starts_with("color.")) {
+            return Err(native_color_in_intent(attribute));
+        }
+    }
     Ok(match action {
         wire::ProgrammingValuesAction::ApplyIntent {
             fixture_ids,
@@ -296,6 +308,21 @@ fn application_mutations(
     mutation: wire::ProgrammingValueMutation,
     colors: &ColorAttributeIndex,
 ) -> Result<Vec<application::ProgrammingValueMutation>, application::ActionError> {
+    if colors.intent {
+        let attribute = match &mutation {
+            wire::ProgrammingValueMutation::SetSelection { attribute, .. } => {
+                Some(attribute.as_str())
+            }
+            wire::ProgrammingValueMutation::SetFixture { attribute, .. }
+            | wire::ProgrammingValueMutation::SetGroup { attribute, .. } => {
+                Some(attribute.as_str())
+            }
+            _ => None,
+        };
+        if let Some(attribute) = attribute.filter(|attribute| attribute.starts_with("color.")) {
+            return Err(native_color_in_intent(attribute));
+        }
+    }
     if let wire::ProgrammingValueMutation::SetSelectionColorRange {
         fixture_ids,
         start,
@@ -358,6 +385,17 @@ fn application_mutations(
             .collect());
     }
     Ok(vec![application_mutation(mutation)])
+}
+
+/// Color Intent programs one whole colour; a fixture-native colour channel is resolver output.
+pub(crate) fn native_color_in_intent(attribute: &str) -> application::ActionError {
+    application::ActionError::new(
+        application::ActionErrorKind::Invalid,
+        format!(
+            "this show programs Color Intent: set the whole colour instead of the \
+             fixture-native colour channel `{attribute}`"
+        ),
+    )
 }
 
 /// Expands one color-range gesture into per-fixture normalized channel mutations: the server

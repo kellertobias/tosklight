@@ -139,6 +139,20 @@ pub(super) fn apply_command_preset(
         return Ok(());
     }
     for fixture in selected {
+        // A universal colour reaches every selected fixture; the preset's own per-fixture and
+        // Group values follow and win.
+        if live_group_targets.is_empty() {
+            for (attribute, value) in &preset.universal_values {
+                state.programming.set_faded_with_timing(
+                    session.id,
+                    *fixture,
+                    attribute.clone(),
+                    value.clone(),
+                    Some(programmer_fade_millis),
+                    None,
+                );
+            }
+        }
         if let Some(attributes) = preset.values.get(fixture) {
             for (attribute, value) in attributes {
                 state.programming.set_faded_with_timing(
@@ -173,6 +187,16 @@ pub(super) fn apply_command_preset(
         }
     }
     for group_id in live_group_targets {
+        for (attribute, value) in &preset.universal_values {
+            state.programming.set_group_faded_with_timing(
+                session.id,
+                group_id.clone(),
+                attribute.clone(),
+                value.clone(),
+                Some(programmer_fade_millis),
+                None,
+            );
+        }
         let Some(attributes) = preset.group_values.get(&group_id) else {
             continue;
         };

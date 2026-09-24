@@ -292,6 +292,8 @@ fn record_preset(
         preset.aim_at_fixture_number = Some(target);
     } else if preset.values.is_empty() && preset.group_values.is_empty() {
         return Err("the programmer has no values to record".into());
+    } else if state.attributes.color_model() == light_core::ColorProgrammingModel::Intent {
+        preset.consolidate_universal_color();
     }
     let (entry, store) = active_show_store(state)?;
     let existing = store

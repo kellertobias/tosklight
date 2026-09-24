@@ -184,6 +184,7 @@ fn template_group_preset() -> light_programmer::Preset {
             ("profile".into(), values(&white)),
             ("leds".into(), values(&led_white)),
         ]),
+        universal_values: Default::default(),
     }
 }
 

@@ -165,6 +165,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
                 light_core::AttributeValue::Normalized(0.65),
             )]),
         )]),
+        universal_values: Default::default(),
     };
     let mut preset_body = serde_json::to_value(preset).unwrap();
     preset_body["future_extension"] = serde_json::json!({"retained":true});
@@ -389,6 +390,7 @@ async fn preset_recall_http_redirects_fixture_and_live_group_values_to_pending_p
             "5".into(),
             HashMap::from([(pan, light_core::AttributeValue::Normalized(0.7))]),
         )]),
+        universal_values: Default::default(),
     };
     assert_eq!(
         scenario
@@ -537,6 +539,7 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
         )]),
         group_values: HashMap::new(),
         aim_at_fixture_number: None,
+        universal_values: Default::default(),
     };
     assert_eq!(
         scenario

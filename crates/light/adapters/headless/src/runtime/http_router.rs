@@ -20,6 +20,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(internal_audio_http::router())
         .merge(playback_topology_http::router())
         .merge(attribute_configuration::router())
+        .merge(color_intent_report::router())
         .merge(control_desk_configuration_v2::router())
         .merge(desk_management_v2::router())
         .merge(screen_configuration_v2::router())

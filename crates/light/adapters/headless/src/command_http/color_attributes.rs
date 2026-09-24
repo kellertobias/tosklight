@@ -25,11 +25,47 @@ pub(crate) enum ColorTarget {
 
 /// Selectable identity → the whole-color target its heads expose. A plain fixture id resolves
 /// through its shared heads; a logical-head id through exactly that head.
-pub(crate) type ColorAttributeIndex = HashMap<FixtureId, ColorTarget>;
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ColorAttributeIndex {
+    targets: HashMap<FixtureId, ColorTarget>,
+    /// The show programs Color Intent: native colour channels are resolver output, not controls.
+    pub(crate) intent: bool,
+}
+
+impl ColorAttributeIndex {
+    pub(crate) fn get(&self, fixture: &FixtureId) -> Option<&ColorTarget> {
+        self.targets.get(fixture)
+    }
+
+    fn insert(&mut self, fixture: FixtureId, target: ColorTarget) {
+        self.targets.insert(fixture, target);
+    }
+}
 
 pub(crate) fn color_attribute_index(state: &AppState) -> ColorAttributeIndex {
     let snapshot = state.output.snapshot();
-    let mut index = ColorAttributeIndex::new();
+    let mut index = ColorAttributeIndex::default();
+    if state.attributes.color_model() == light_core::ColorProgrammingModel::Intent {
+        // Color Intent programs one device-independent target on every fixture. A head the
+        // resolver cannot drive still takes it and reports itself unsupported rather than being
+        // silently left out of the selection.
+        index.intent = true;
+        for fixture in snapshot.fixtures.iter() {
+            index.insert(fixture.fixture_id, ColorTarget::Canonical);
+            for logical in &fixture.logical_heads {
+                index.insert(logical.fixture_id, ColorTarget::Canonical);
+            }
+        }
+        return index;
+    }
+    authored_color_attribute_index(state)
+}
+
+/// What each fixture accepts under Direct: a whole colour where the profile authors a colour
+/// system, its RGB/CMY channels otherwise. Independent of the show's model.
+pub(crate) fn authored_color_attribute_index(state: &AppState) -> ColorAttributeIndex {
+    let snapshot = state.output.snapshot();
+    let mut index = ColorAttributeIndex::default();
     for fixture in snapshot.fixtures.iter() {
         index.insert(
             fixture.fixture_id,

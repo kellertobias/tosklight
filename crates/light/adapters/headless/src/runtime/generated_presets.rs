@@ -104,6 +104,24 @@ pub(super) fn generate_profile_presets_action(
         .map_err(|_| "the active show is changing; retry Preset generation".to_owned())?;
     let generated =
         generated_profile_presets(&state.output.snapshot(), &fixture_ids.into_iter().collect())?;
+    // Color Intent programs one whole colour: wheel slots and other native colour functions are
+    // resolver output, so they generate no presets of their own.
+    let generated = if state.attributes.color_model() == light_core::ColorProgrammingModel::Intent {
+        generated
+            .into_iter()
+            .filter_map(|mut preset| {
+                for values in preset.values.values_mut() {
+                    values.retain(|attribute, _| {
+                        !super::attribute_configuration::is_native_color_attribute(&attribute.0)
+                    });
+                }
+                preset.values.retain(|_, values| !values.is_empty());
+                (!preset.values.is_empty()).then_some(preset)
+            })
+            .collect()
+    } else {
+        generated
+    };
     if generated.is_empty() {
         return Err("the selected fixtures have no fixed or indexed values".into());
     }
@@ -146,6 +164,7 @@ pub(super) fn generate_profile_presets_action(
             values: preset.values,
             group_values: HashMap::new(),
             aim_at_fixture_number: None,
+            universal_values: Default::default(),
         })
         .map_err(|error| error.to_string())?;
         body["generated_from_fixture_profile"] = serde_json::json!({

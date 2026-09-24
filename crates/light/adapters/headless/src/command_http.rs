@@ -147,7 +147,9 @@ pub(super) use adapter::{
     prevalidate_external_command, prevalidate_typed_command, route_osc_command_gesture_outcome,
     route_osc_command_key_outcome, run_service_with_source,
 };
-pub(super) use color_attributes::{ColorAttributeIndex, ColorTarget, color_attribute_index};
+pub(super) use color_attributes::{
+    ColorAttributeIndex, ColorTarget, authored_color_attribute_index, color_attribute_index,
+};
 pub(crate) use cue_deletion_ports::ServerProgrammingCueDeletionPorts;
 pub(crate) use cue_recording_osc::{
     PlaybackTargetInterception, complete_off_target,

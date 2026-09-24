@@ -82,3 +82,50 @@ fn direct_shows_keep_their_exact_output_and_intent_shows_drive_unauthored_rgb_at
         "switching back restores Direct exactly"
     );
 }
+
+#[test]
+fn the_report_names_each_heads_quality_for_its_current_target() {
+    let (engine, programmers, session, fixture_id) = rgb_engine();
+    let report = engine.color_intent_report(None).unwrap();
+    assert_eq!(report.len(), 1);
+    assert_eq!(
+        report[0].target, None,
+        "no colour programmed yet: reported against white"
+    );
+    assert_eq!(
+        report[0].quality,
+        light_core::ColorResolutionQuality::Uncalibrated
+    );
+
+    programmers.set(session, fixture_id, AttributeKey::color(), dim_red());
+    let report = engine.color_intent_report(None).unwrap();
+    assert_eq!(
+        report[0].target,
+        Some(match dim_red() {
+            AttributeValue::ColorXyz(color) => color,
+            _ => unreachable!(),
+        })
+    );
+    assert_eq!(
+        report[0].engine,
+        Some(light_fixture::ColorIntentEngine::Additive)
+    );
+
+    let (dimmer, dimmer_id) =
+        schema_v2_fixture(&[("intensity", false, false, false, false, false)]);
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![dimmer].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let report = engine
+        .color_intent_report(Some(&std::collections::HashSet::from([dimmer_id])))
+        .unwrap();
+    assert_eq!(
+        report[0].quality,
+        light_core::ColorResolutionQuality::Unsupported
+    );
+}

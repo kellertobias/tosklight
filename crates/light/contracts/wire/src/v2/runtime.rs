@@ -198,7 +198,11 @@ pub struct RuntimeBootstrapHighlightState {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeBootstrapSnapshot {
     pub api_version: String,
+    /// The operator's attributes. In Color Intent fixture-native colour attributes are left out:
+    /// the Color feature programs one whole colour.
     pub attribute_registry: Vec<RuntimeAttributeDescriptor>,
+    /// The active show's colour programming model.
+    pub color_model: super::attribute_configuration::ColorProgrammingModel,
     pub desk: Option<RuntimeControlDesk>,
     pub clients: Vec<RuntimeClientSummary>,
     pub active_show: Option<RuntimeShowEntry>,

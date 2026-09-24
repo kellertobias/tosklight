@@ -2,6 +2,7 @@
 //! Deterministic bridge from fixture attributes and playbacks to immutable DMX universe frames.
 
 mod channel_slots;
+mod color_report;
 mod contribution;
 mod contribution_batch;
 mod controls;
@@ -38,6 +39,7 @@ mod tracked_positions;
 mod value_pool;
 mod visualization;
 
+pub use color_report::HeadColorReport;
 pub use contribution_batch::{
     ContributionBatch, ContributionSample, ContributionSequenceMaster, ContributionSourceId,
 };

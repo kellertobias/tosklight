@@ -212,12 +212,13 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
         .collect();
     wire::RuntimeBootstrapSnapshot {
         api_version: "v2".into(),
-        attribute_registry: attribute_configuration::configured_descriptors(
+        attribute_registry: attribute_configuration::operator_descriptors(
             &state.attributes.snapshot().configuration,
         )
         .into_iter()
         .map(runtime_wire::attribute)
         .collect(),
+        color_model: super::color_model_impact::wire_model(state.attributes.color_model()),
         desk: desk.map(runtime_wire::desk),
         clients,
         active_show: state.active_show.current().clone().map(runtime_wire::show),

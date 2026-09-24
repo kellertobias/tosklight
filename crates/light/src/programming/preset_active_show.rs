@@ -41,7 +41,10 @@ fn prepare_recording(
     validate_show(document, commit)?;
     let existing = find_preset(document, commit.address)?;
     validate_revision(existing.as_ref().map(|(object, _)| *object), commit)?;
-    let preset = commit.merged_with(existing.as_ref().map(|(_, preset)| preset))?;
+    let mut preset = commit.merged_with(existing.as_ref().map(|(_, preset)| preset))?;
+    if show_color_model(document) == light_core::ColorProgrammingModel::Intent {
+        preset.consolidate_universal_color();
+    }
     let object_id = existing.as_ref().map_or_else(
         || new_preset_object_id(commit.address),
         |(object, _)| object.key().id().to_owned(),
@@ -95,6 +98,17 @@ fn prepare_recording(
             ),
         },
     })
+}
+
+/// The show's colour programming model, stored on its attribute configuration; absent is Direct.
+pub(crate) fn show_color_model(
+    document: &PortableShowDocument,
+) -> light_core::ColorProgrammingModel {
+    document
+        .object("attribute_configuration", "default")
+        .and_then(|object| object.body().get("color_model").cloned())
+        .and_then(|model| serde_json::from_value(model).ok())
+        .unwrap_or_default()
 }
 
 fn new_preset_object_id(address: PresetAddress) -> String {
@@ -392,6 +406,7 @@ mod tests {
             )]),
             group_values: HashMap::new(),
             aim_at_fixture_number: None,
+            universal_values: Default::default(),
         })
         .unwrap()
     }
@@ -418,6 +433,7 @@ mod tests {
             )]),
             group_values: HashMap::new(),
             aim_at_fixture_number: None,
+            universal_values: Default::default(),
         };
         ProgrammingPresetCommit::new(&request, captured)
     }

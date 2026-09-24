@@ -194,7 +194,7 @@ fn current_color_model_impact(
     let document = ActiveShowRepository::open(&entry.path)
         .and_then(|store| store.portable_document())
         .map_err(ApiError::store)?;
-    let fixtures = super::command_http::color_attribute_index(state);
+    let fixtures = super::command_http::authored_color_attribute_index(state);
     Ok(super::color_model_impact::color_model_impact(
         &document, &fixtures, from, to,
     ))
@@ -330,6 +330,24 @@ fn wire_snapshot(
         descriptors: configured_descriptors(&installed.configuration),
         validation_error: installed.validation_error.clone(),
     }
+}
+
+/// The descriptors an operator programs with. Color Intent leaves out fixture-native colour
+/// attributes: emitters, flags, wheels and the like are resolver output there, not controls.
+pub(super) fn operator_descriptors(
+    configuration: &light_core::AttributeConfiguration,
+) -> Vec<wire::ConfiguredAttributeDescriptor> {
+    let mut descriptors = configured_descriptors(configuration);
+    if configuration.color_model == light_core::ColorProgrammingModel::Intent {
+        descriptors.retain(|descriptor| !is_native_color_attribute(&descriptor.id));
+    }
+    descriptors
+}
+
+/// A fixture-native colour attribute: any `color.*` channel, as opposed to the whole-colour
+/// `color` target itself.
+pub(super) fn is_native_color_attribute(attribute: &str) -> bool {
+    attribute.starts_with("color.")
 }
 
 pub(super) fn configured_descriptors(

@@ -115,6 +115,11 @@ pub fn plan_preset_update(
             write_preset_value(&mut updated, incoming);
         }
     }
+    // Only a Color Intent show records universal presets. Updating one with that same colour
+    // keeps it universal; a different colour stays specific to the fixtures it was set on.
+    if preset.is_universal() {
+        updated.consolidate_universal_color();
+    }
     Ok(AtomicUpdatePlan {
         target: preview.target.clone(),
         expected_revision,

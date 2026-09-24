@@ -295,3 +295,95 @@ async fn websocket_preset_request_replay_skips_interaction_side_effects() {
     assert_eq!(scenario.history_len(), first_history);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
+
+#[tokio::test]
+async fn an_intent_show_records_one_shared_colour_as_a_universal_preset() {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario.create_and_open_show("Universal colour").await;
+    let snapshot = json(
+        scenario
+            .app
+            .clone()
+            .oneshot(
+                Request::get("/api/v2/attribute-configuration")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                    .header("x-tosk-show", &show_id)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let switched = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/attribute-configuration/update")
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-tosk-show", &show_id)
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "intent",
+                        "expected_show_revision": snapshot["show_revision"],
+                        "expected_object_revision": snapshot["object_revision"],
+                        "patch": {"color_model": "intent"},
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(switched.status(), StatusCode::OK);
+
+    let mut first = schema_v2_direct_fixture().0;
+    first.fixture_id = light_core::FixtureId::new();
+    let mut second = first.clone();
+    second.fixture_id = light_core::FixtureId::new();
+    second.address = Some(100);
+    second.fixture_number = Some(2);
+    let ids = [first.fixture_id, second.fixture_id];
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![first, second].into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let pick = serde_json::json!({
+        "request_id": "pick-red",
+        "expected_revision": 0,
+        "expected_capture_mode_revision": 0,
+        "action": {
+            "type": "set_selection_color_range",
+            "fixture_ids": [ids[0].0, ids[1].0],
+            "start": {"hue": 0.0, "saturation": 1.0},
+            "end": {"hue": 0.0, "saturation": 1.0},
+            "hue_travel": 0.0,
+            "brightness": 1.0,
+            "timing": {"fade": false}
+        }
+    });
+    assert_eq!(scenario.values_action(pick).await.status(), StatusCode::OK);
+
+    let response = scenario
+        .preset_recording_action(
+            &show_id,
+            Some(&scenario.token),
+            preset_record_request("universal-red", "color", 1, 0),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let outcome = json(response).await;
+    let body = &outcome["preset"]["body"];
+    assert_eq!(body["values"], serde_json::json!({}), "{body}");
+    assert_eq!(
+        body["universal_values"]["color"]["kind"], "color_xyz",
+        "one shared colour is stored once, for every fixture: {body}"
+    );
+    let _ = std::fs::remove_dir_all(&scenario.data_dir);
+}

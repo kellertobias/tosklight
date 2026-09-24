@@ -329,6 +329,16 @@ fn execute_fix_at_command(
         }
         _ => (before_fix_at, None),
     };
+    if let Some(attribute) = explicit_attribute.as_ref()
+        && state.attributes.color_model() == light_core::ColorProgrammingModel::Intent
+        && super::attribute_configuration::is_native_color_attribute(&attribute.0)
+    {
+        return Err(format!(
+            "this show programs Color Intent: set the whole colour instead of the fixture-native \
+             colour channel `{}`",
+            attribute.0
+        ));
+    }
     let programmer = state
         .programming
         .get(session.id)
@@ -647,7 +657,7 @@ fn fix_at_preset_values(
                     .into_iter()
                     .flatten()
             });
-        for (attribute, value) in direct.chain(expanded) {
+        for (attribute, value) in preset.universal_values.iter().chain(direct).chain(expanded) {
             if explicit_attribute.is_some_and(|explicit| explicit != attribute) {
                 continue;
             }

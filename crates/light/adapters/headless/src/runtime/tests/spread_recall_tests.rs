@@ -197,6 +197,7 @@ fn preset_recall_of_live_group_spread_re_resolves_after_membership_edit() {
                 light_core::AttributeValue::Spread(vec![1.0, 0.0, 1.0]),
             )]),
         )]),
+        universal_values: Default::default(),
     };
     ActiveShowRepository::open(&rig.entry.path)
         .unwrap()

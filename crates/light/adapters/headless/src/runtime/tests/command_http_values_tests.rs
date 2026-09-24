@@ -800,6 +800,97 @@ async fn color_range_resolves_rgb_and_cmy_channels_server_side_in_selection_orde
 }
 
 #[tokio::test]
+async fn color_intent_picker_programs_one_whole_colour_on_every_selected_fixture() {
+    let scenario = CommandHttpScenario::new().await;
+    let rgb = color_range_fixture(1, &["color.red", "color.green", "color.blue"]);
+    let cmy = color_range_fixture(2, &["color.cyan", "color.magenta", "color.yellow"]);
+    let dimmer = color_range_fixture(3, &["intensity"]);
+    let ids = [rgb.fixture_id, cmy.fixture_id, dimmer.fixture_id];
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![rgb, cmy, dimmer].into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let mut installed = scenario.state.attributes.snapshot();
+    installed.configuration.color_model = light_core::ColorProgrammingModel::Intent;
+    scenario.state.attributes.replace_installed(installed);
+
+    let action = serde_json::json!({
+        "request_id": "intent-color",
+        "expected_revision": 0,
+        "expected_capture_mode_revision": 0,
+        "action": {
+            "type": "set_selection_color_range",
+            "fixture_ids": [ids[0].0, ids[1].0, ids[2].0],
+            "start": {"hue": 0.0, "saturation": 1.0},
+            "end": {"hue": 0.0, "saturation": 1.0},
+            "hue_travel": 0.0,
+            "brightness": 1.0,
+            "timing": {"fade": false}
+        }
+    });
+    let response = scenario.values_action(action).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
+    let red = light_fixture::srgb_to_xyz(1.0, 0.0, 0.0);
+    for id in ids {
+        let values = programmer
+            .values
+            .iter()
+            .filter(|value| value.fixture_id == id)
+            .map(|value| (value.attribute.0.to_string(), value.value.clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec![("color".to_owned(), light_core::AttributeValue::ColorXyz(red))],
+            "Intent stores one whole colour and no native channel values"
+        );
+    }
+    let report = scenario
+        .state
+        .output
+        .engine()
+        .color_intent_report(None)
+        .unwrap();
+    let quality = |id: light_core::FixtureId| {
+        report
+            .iter()
+            .find(|head| head.fixture_id == id)
+            .map(|head| head.quality)
+    };
+    assert_eq!(
+        quality(ids[2]),
+        Some(light_core::ColorResolutionQuality::Unsupported),
+        "a fixture without a colour engine stays selected and says so"
+    );
+
+    let native = serde_json::json!({
+        "request_id": "intent-native",
+        "expected_revision": 1,
+        "expected_capture_mode_revision": 0,
+        "action": {
+            "type": "set_fixture",
+            "fixture_id": ids[0].0,
+            "attribute": "color.red",
+            "value": {"kind": "normalized", "value": 1.0},
+            "timing": {"fade": false}
+        }
+    });
+    let response = scenario.values_action(native).await;
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "a fixture-native colour channel is not programmable in Color Intent"
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
 async fn color_picker_persists_canonical_color_and_renders_native_hsi_channels() {
     let scenario = CommandHttpScenario::new().await;
     let fixture = native_hsi_color_range_fixture(1);

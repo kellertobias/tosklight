@@ -25,6 +25,26 @@ export type ColorModelImpact = { from: ColorProgrammingModel, to: ColorProgrammi
  * At least one item is lossy: the update must acknowledge the impact.
  */
 lossy: boolean, items: Array<ColorModelImpactItem>, };
+export type ColorResolutionQuality = "exact" | "approximate" | "out_of_gamut" | "wheel_limited" | "uncalibrated" | "unsupported";
+export type ColorIntentEngine = "additive" | "subtractive" | "hue_saturation" | "wheel";
+export type ColorIntentHeadReport = { fixture_id: string, fixture_number: number | null, fixture_name: string,
+/**
+ * The selectable identity owning the head: the fixture, or one of its logical heads.
+ */
+owner_id: string, head_name: string,
+/**
+ * False when nothing programs a colour yet; the head is then reported against white.
+ */
+has_target: boolean, quality: ColorResolutionQuality, engine: ColorIntentEngine | null,
+/**
+ * CIE 1976 u′v′ distance between the target and what the head is modelled to show.
+ */
+delta_uv: number | null,
+/**
+ * The chosen colour system's calibration revision; absent for inferred systems.
+ */
+calibration_revision: number | null, };
+export type ColorIntentReport = { color_model: ColorProgrammingModel, heads: Array<ColorIntentHeadReport>, };
 export type ConfiguredAttributeDescriptor = { id: string, label: string, encoder_group: AttributeEncoderGroup, encoder_page: number, encoder_slot: number, value_type: AttributeValueType, display_unit: string | null, physical_unit: string | null, normalized_min: number | null, normalized_max: number | null, domain_min: number | null, domain_max: number | null, cyclic: boolean, recordable: boolean, built_in: boolean, retired: boolean, activation_group_id: string | null, push_turn_of: string | null, };
 export type AttributeConfigurationSnapshot = { show_id: string | null, show_revision: number, object_revision: number, configuration: AttributeConfiguration, recommended_configuration: AttributeConfiguration, descriptors: Array<ConfiguredAttributeDescriptor>, validation_error: string | null, };
 export type AttributeConfigurationPatch = { custom_attributes?: Array<CustomAttributeDescriptor> | null, placements?: Array<AttributePlacement> | null, activation_groups?: Array<AttributeActivationGroup> | null, color_model?: ColorProgrammingModel | null, };
@@ -1158,7 +1178,16 @@ export type RuntimeAttributeDescriptor = { id: string, label: string, family: st
 export type RuntimeHighlightFixture = { fixture_id: string, name: string | null, number: number | null, };
 export type RuntimeHighlightState = { active: boolean, mode: string, output_enabled: boolean, capture_only: boolean, remembered: Array<RuntimeHighlightFixture>, active_index: number | null, active_fixture: RuntimeHighlightFixture | null, can_previous: boolean, can_next: boolean, message: string | null, };
 export type RuntimeBootstrapHighlightState = { session_id: string, desk_id: string, state: RuntimeHighlightState, };
-export type RuntimeBootstrapSnapshot = { api_version: string, attribute_registry: Array<RuntimeAttributeDescriptor>, desk: RuntimeControlDesk | null, clients: Array<RuntimeClientSummary>, active_show: RuntimeShowEntry | null,
+export type RuntimeBootstrapSnapshot = { api_version: string,
+/**
+ * The operator's attributes. In Color Intent fixture-native colour attributes are left out:
+ * the Color feature programs one whole colour.
+ */
+attribute_registry: Array<RuntimeAttributeDescriptor>,
+/**
+ * The active show's colour programming model.
+ */
+color_model: ColorProgrammingModel, desk: RuntimeControlDesk | null, clients: Array<RuntimeClientSummary>, active_show: RuntimeShowEntry | null,
 /**
  * Retained as an empty compatibility collection until the facade is removed.
  */

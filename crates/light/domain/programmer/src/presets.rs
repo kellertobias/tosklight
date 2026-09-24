@@ -158,6 +158,12 @@ pub struct Preset {
     /// and absent means the stored angles are used exactly as they always were.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aim_at_fixture_number: Option<u32>,
+    /// Values that apply to every selected fixture, named or not: a Color Intent preset that
+    /// holds one shared colour. Kept apart from `values` so a preset of deliberately different
+    /// per-fixture colours is never mistaken for one colour and extended to other fixtures.
+    /// Absent in every preset recorded before universal presets existed.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub universal_values: HashMap<AttributeKey, AttributeValue>,
 }
 
 impl Preset {
@@ -188,6 +194,61 @@ impl Preset {
         for attributes in self.group_values.values_mut() {
             attributes.retain(|attribute, _| family.accepts(attribute));
         }
+        self.universal_values
+            .retain(|attribute, _| family.accepts(attribute));
+    }
+
+    /// Whether recall applies this preset to selected fixtures it does not name.
+    pub fn is_universal(&self) -> bool {
+        !self.universal_values.is_empty()
+    }
+
+    /// Whether the preset stores nothing at all.
+    pub fn is_empty(&self) -> bool {
+        self.universal_values.is_empty()
+            && self.values.values().all(HashMap::is_empty)
+            && self.group_values.values().all(HashMap::is_empty)
+    }
+
+    /// Store a Color preset that holds exactly one shared whole colour as a universal preset.
+    ///
+    /// Applies only to the Color family and only when every stored value, for every fixture and
+    /// Group, is the same whole colour (or matches the colour the preset is already universal
+    /// for). Anything else — differing colours, native channels, other attributes — keeps its
+    /// explicit per-fixture form, so deliberately different colours never auto-extend.
+    pub fn consolidate_universal_color(&mut self) {
+        if self.family != PresetFamily::Color {
+            return;
+        }
+        let color = AttributeKey::color();
+        let mut shared: Option<&AttributeValue> = self.universal_values.get(&color);
+        if self.universal_values.len() > 1 {
+            return;
+        }
+        for attributes in self.values.values().chain(self.group_values.values()) {
+            if attributes.is_empty() {
+                continue;
+            }
+            if attributes.len() != 1 {
+                return;
+            }
+            let Some(value) = attributes.get(&color) else {
+                return;
+            };
+            if !matches!(value, AttributeValue::ColorXyz(_)) {
+                return;
+            }
+            match shared {
+                Some(existing) if existing != value => return,
+                _ => shared = Some(value),
+            }
+        }
+        let Some(value) = shared.cloned() else {
+            return;
+        };
+        self.values.clear();
+        self.group_values.clear();
+        self.universal_values = HashMap::from([(color, value)]);
     }
 
     pub fn store(&mut self, incoming: Preset, mode: PresetStoreMode) {
@@ -199,8 +260,10 @@ impl Preset {
             PresetStoreMode::Overwrite => {
                 self.values = incoming.values;
                 self.group_values = incoming.group_values;
+                self.universal_values = incoming.universal_values;
             }
             PresetStoreMode::Merge => {
+                self.universal_values.extend(incoming.universal_values);
                 for (fixture, attributes) in incoming.values {
                     self.values.entry(fixture).or_default().extend(attributes);
                 }
@@ -212,6 +275,9 @@ impl Preset {
                 }
             }
             PresetStoreMode::AddMissingFixtures => {
+                for (attribute, value) in incoming.universal_values {
+                    self.universal_values.entry(attribute).or_insert(value);
+                }
                 for (fixture, attributes) in incoming.values {
                     self.values.entry(fixture).or_insert(attributes);
                 }

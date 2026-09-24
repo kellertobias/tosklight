@@ -735,6 +735,7 @@ fn preset_with_values(fixture: FixtureId, intensity: f32, group_value: &str) -> 
                 AttributeValue::Discrete(group_value.into()),
             )]),
         )]),
+        universal_values: Default::default(),
     }
 }
 

@@ -144,6 +144,7 @@ fn preset_store_modes_are_explicit() {
         )]),
         group_values: HashMap::new(),
         aim_at_fixture_number: None,
+        universal_values: Default::default(),
     };
     preset.store(
         Preset {
@@ -159,6 +160,7 @@ fn preset_store_modes_are_explicit() {
             ]),
             group_values: HashMap::new(),
             aim_at_fixture_number: None,
+            universal_values: Default::default(),
         },
         PresetStoreMode::AddMissingFixtures,
     );
@@ -175,6 +177,7 @@ fn preset_store_modes_are_explicit() {
             )]),
             group_values: HashMap::new(),
             aim_at_fixture_number: None,
+            universal_values: Default::default(),
         },
         PresetStoreMode::Merge,
     );
@@ -406,4 +409,66 @@ fn transaction_snapshot_restores_programmer_and_desk_interaction_exactly() {
         registry.command_line_state(session).unwrap(),
         command_before
     );
+}
+
+#[test]
+fn one_shared_whole_colour_consolidates_into_a_universal_color_preset() {
+    let color = AttributeKey::color();
+    let red = AttributeValue::ColorXyz(light_core::Xyz {
+        x: 0.4124,
+        y: 0.2126,
+        z: 0.0193,
+    });
+    let [first, second] = [FixtureId::new(), FixtureId::new()];
+    let mut preset = Preset {
+        family: PresetFamily::Color,
+        number: 1,
+        values: HashMap::from([
+            (first, HashMap::from([(color.clone(), red.clone())])),
+            (second, HashMap::from([(color.clone(), red.clone())])),
+        ]),
+        group_values: HashMap::from([("7".into(), HashMap::from([(color.clone(), red.clone())]))]),
+        ..Preset::default()
+    };
+    preset.consolidate_universal_color();
+    assert!(preset.is_universal());
+    assert!(preset.values.is_empty() && preset.group_values.is_empty());
+    assert_eq!(
+        preset.universal_values,
+        HashMap::from([(color.clone(), red.clone())])
+    );
+    let json = serde_json::to_value(&preset).unwrap();
+    assert!(json.get("universal_values").is_some());
+    let reread: Preset = serde_json::from_value(json).unwrap();
+    assert_eq!(reread, preset);
+
+    // Native channels, other families, or anything beside the colour keep the explicit form.
+    for (family, extra) in [
+        (
+            PresetFamily::Color,
+            Some((
+                AttributeKey("color.white".into()),
+                AttributeValue::Normalized(1.0),
+            )),
+        ),
+        (PresetFamily::Mixed, None),
+    ] {
+        let mut values = HashMap::from([(color.clone(), red.clone())]);
+        values.extend(extra);
+        let mut preset = Preset {
+            family,
+            number: 2,
+            values: HashMap::from([(first, values)]),
+            ..Preset::default()
+        };
+        preset.consolidate_universal_color();
+        assert!(!preset.is_universal(), "{family:?}");
+    }
+
+    // A preset recorded before universal presets existed reads with none.
+    let legacy: Preset = serde_json::from_value(serde_json::json!({
+        "name": "Old", "family": "Color", "number": 3, "values": {}
+    }))
+    .unwrap();
+    assert!(!legacy.is_universal());
 }

@@ -72,7 +72,14 @@ pub(super) fn target_selection(
         missing_fixture_targets,
         missing_group_members,
         &missing_groups,
-    );
+    )
+    .or_else(|| {
+        (preset.is_universal() && requested.is_empty()).then(|| {
+            "This universal Color preset applies to whatever is selected: select fixtures, then \
+             recall it."
+                .to_owned()
+        })
+    });
     PresetTargetPlan { selected, warning }
 }
 
@@ -146,6 +153,11 @@ pub(super) fn plan(
     };
     let mut planned = Vec::new();
     for fixture_id in &selection.selected {
+        // A universal colour reaches every selected fixture; values the preset names for this
+        // fixture come after it, so they win.
+        if live_groups.is_empty() {
+            append_universal_values(&mut planned, preset, *fixture_id, timing);
+        }
         append_fixture_values(&mut planned, preset, *fixture_id, timing);
         append_expanded_group_values(&mut planned, preset, &expanded_groups, *fixture_id, timing);
     }
@@ -251,6 +263,22 @@ fn expanded_group_memberships(
         .collect()
 }
 
+fn append_universal_values(
+    planned: &mut Vec<NormalProgrammerValueMutation>,
+    preset: &Preset,
+    fixture_id: FixtureId,
+    timing: NormalProgrammerValueTiming,
+) {
+    for attribute in sorted_attributes(&preset.universal_values) {
+        planned.push(NormalProgrammerValueMutation::SetFixture {
+            fixture_id,
+            attribute: attribute.clone(),
+            value: preset.universal_values[attribute].clone(),
+            timing,
+        });
+    }
+}
+
 fn append_fixture_values(
     planned: &mut Vec<NormalProgrammerValueMutation>,
     preset: &Preset,
@@ -300,6 +328,14 @@ fn append_live_group_values(
     timing: NormalProgrammerValueTiming,
 ) {
     for group_id in live_groups {
+        for attribute in sorted_attributes(&preset.universal_values) {
+            planned.push(NormalProgrammerValueMutation::SetGroup {
+                group_id: group_id.clone(),
+                attribute: attribute.clone(),
+                value: preset.universal_values[attribute].clone(),
+                timing,
+            });
+        }
         let Some(attributes) = preset.group_values.get(group_id) else {
             continue;
         };
@@ -367,6 +403,124 @@ mod tests {
     use super::*;
     use light_core::AttributeValue;
     use light_programmer::{GroupDefinition, PresetFamily};
+
+    fn red() -> AttributeValue {
+        AttributeValue::ColorXyz(light_core::Xyz {
+            x: 0.4124,
+            y: 0.2126,
+            z: 0.0193,
+        })
+    }
+
+    fn blue() -> AttributeValue {
+        AttributeValue::ColorXyz(light_core::Xyz {
+            x: 0.1805,
+            y: 0.0722,
+            z: 0.9505,
+        })
+    }
+
+    #[test]
+    fn a_universal_colour_reaches_selected_fixtures_the_preset_never_named() {
+        let named = FixtureId::new();
+        let unnamed = FixtureId::new();
+        let preset = Preset {
+            family: PresetFamily::Color,
+            number: 1,
+            universal_values: HashMap::from([(AttributeKey::color(), red())]),
+            ..Preset::default()
+        };
+        let planned = plan(
+            &selection(vec![named, unnamed]),
+            &preset,
+            &HashMap::new(),
+            0,
+        )
+        .unwrap();
+        assert_eq!(
+            fixture_writes(&planned),
+            vec![
+                (named, "color".into(), red()),
+                (unnamed, "color".into(), red()),
+            ]
+        );
+    }
+
+    #[test]
+    fn fixture_specific_colours_never_extend_to_unrelated_fixtures() {
+        let first = FixtureId::new();
+        let second = FixtureId::new();
+        let unrelated = FixtureId::new();
+        let mut preset = Preset {
+            family: PresetFamily::Color,
+            number: 2,
+            values: HashMap::from([
+                (first, HashMap::from([(AttributeKey::color(), red())])),
+                (second, HashMap::from([(AttributeKey::color(), blue())])),
+            ]),
+            ..Preset::default()
+        };
+        preset.consolidate_universal_color();
+        assert!(
+            !preset.is_universal(),
+            "differing colours stay fixture-specific"
+        );
+        let planned = plan(
+            &selection(vec![first, second, unrelated]),
+            &preset,
+            &HashMap::new(),
+            0,
+        )
+        .unwrap();
+        assert_eq!(
+            fixture_writes(&planned),
+            vec![
+                (first, "color".into(), red()),
+                (second, "color".into(), blue()),
+            ],
+            "the unrelated fixture receives nothing"
+        );
+    }
+
+    #[test]
+    fn a_named_fixture_keeps_its_own_colour_over_the_universal_one() {
+        let named = FixtureId::new();
+        let other = FixtureId::new();
+        let preset = Preset {
+            family: PresetFamily::Color,
+            number: 3,
+            values: HashMap::from([(named, HashMap::from([(AttributeKey::color(), blue())]))]),
+            universal_values: HashMap::from([(AttributeKey::color(), red())]),
+            ..Preset::default()
+        };
+        let planned = plan(&selection(vec![named, other]), &preset, &HashMap::new(), 0).unwrap();
+        assert_eq!(
+            fixture_writes(&planned),
+            vec![
+                (named, "color".into(), blue()),
+                (other, "color".into(), red())
+            ]
+        );
+    }
+
+    #[test]
+    fn a_universal_preset_selects_nothing_and_says_why_without_a_selection() {
+        let preset = Preset {
+            family: PresetFamily::Color,
+            number: 1,
+            universal_values: HashMap::from([(AttributeKey::color(), red())]),
+            ..Preset::default()
+        };
+        let fixture = FixtureId::new();
+        let plan = target_selection(
+            &preset,
+            &HashMap::new(),
+            &[fixture],
+            &HashMap::from([(fixture, vec![fixture])]),
+        );
+        assert!(plan.selected.is_empty());
+        assert!(plan.warning.unwrap().contains("universal Color preset"));
+    }
 
     #[test]
     fn overlapping_fixture_and_group_values_have_deterministic_last_source_precedence() {
