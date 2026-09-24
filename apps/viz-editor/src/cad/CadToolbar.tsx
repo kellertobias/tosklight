@@ -22,6 +22,7 @@ import venueObjectSvg from "../../../../assets/icons/misc/venue-object.svg?raw";
 import { CAD_TOOL_SHORTCUTS } from "./cadShortcuts";
 import type { CadAddKind, CadDrawTool, CadTools } from "./cadTools";
 import { CadPartMenu } from "./CadPartMenu";
+import { LOAD_MODEL } from "./cadModelImport";
 import "./cadTitleTools.css";
 
 export const CAD_ADD_ACTIONS: readonly {
@@ -114,6 +115,14 @@ export function cadTitleGroups(
 															close();
 															onAdd(kind, profileId);
 														}}
+														onLoadModel={
+															kind === "primitive"
+																? () => {
+																		close();
+																		onAdd(kind, LOAD_MODEL);
+																	}
+																: undefined
+														}
 														onSeveral={
 															kind === "truss" || kind === "stage"
 																? (profileId) => {

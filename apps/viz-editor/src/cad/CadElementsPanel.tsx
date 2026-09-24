@@ -6,10 +6,8 @@
  * models. The tabs and the **+** that adds to the open tab live in the side panel's title row, so
  * this panel receives which tab is open and each add as a request.
  */
-import { open } from "@tauri-apps/plugin-dialog";
 import type { TitleDropdownItem } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
-import { documentSession } from "../document/session";
 import type { CadAnnotation } from "./annotations";
 import { formatMeasurement, measurementLength } from "./annotationGeometry";
 import { CadDrawingTree } from "./CadDrawingTree";
@@ -23,7 +21,7 @@ import type { CadUnderlays } from "./useCadUnderlays";
 import { useCadDrawingTree } from "./useCadDrawingTree";
 import { useCadVenueGroups } from "./useCadVenueGroups";
 import { groupOf, type VenueGroup, venueGroupAction } from "./venueGroups";
-import { VENUE_MODEL_EXTENSIONS } from "./venueModelFormats";
+import { chooseAndImportModel } from "./cadModelImport";
 import "./cadElements.css";
 
 export type ElementsTab = "drawings" | "objects";
@@ -312,15 +310,9 @@ function ObjectsTab({
 	useRequest(requests.importModel, () => void importModel());
 
 	async function importModel() {
-		const path = await open({
-			multiple: false,
-			directory: false,
-			filters: [{ name: "3D model", extensions: [...VENUE_MODEL_EXTENSIONS] }],
-		});
-		if (typeof path !== "string") return;
-		setStatus(IMPORTING);
 		try {
-			const imported = await documentSession.importVenueModel(path, null);
+			const imported = await chooseAndImportModel(() => setStatus(IMPORTING));
+			if (!imported) return;
 			onSelect([imported.fixtureId]);
 			setStatus(`${imported.name} placed at the stage origin.`);
 		} catch (reason) {

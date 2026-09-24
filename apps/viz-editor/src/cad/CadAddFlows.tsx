@@ -16,6 +16,7 @@ import { type BulkShape, CadBulkAddModal } from "./CadBulkAddModal";
 import { CadVenueElementModal } from "./CadVenueElementModal";
 import { chosenPart, rememberPart } from "./cadAddChoice";
 import { type FixtureLibrary, type PlacedWith, placeProfile, readLibrary } from "./cadPlacement";
+import { chooseAndImportModel, LOAD_MODEL } from "./cadModelImport";
 import { type CadAddKind, useCadTools } from "./cadTools";
 import { definitionForProfile, findPart, partKey, partLabel, type VenuePart } from "./venueParts";
 
@@ -58,6 +59,19 @@ export function CadAddFlows({
 	const [venueOpen, setVenueOpen] = useState(false);
 	const [bulk, setBulk] = useState<BulkFlow | null>(null);
 	const [placing, setPlacing] = useState(false);
+	// A model file being imported: long enough to show, and to say when it is done.
+	const [importing, setImporting] = useState(false);
+
+	async function loadModel() {
+		try {
+			const imported = await chooseAndImportModel(() => setImporting(true));
+			if (imported) tools.announcePlaced([imported.fixtureId]);
+		} catch (reason) {
+			onError(`Could not load the 3D model: ${String(reason)}`);
+		} finally {
+			setImporting(false);
+		}
+	}
 	const handled = useRef(add.request);
 
 	async function place(
@@ -98,6 +112,10 @@ export function CadAddFlows({
 	useEffect(() => {
 		if (add.request === handled.current) return;
 		handled.current = add.request;
+		if (add.kind === "primitive" && add.profileId === LOAD_MODEL) {
+			void loadModel();
+			return;
+		}
 		if (add.kind === "venue") {
 			if (add.profileId) void place(add.profileId, "venue element");
 			else setVenueOpen(true);
@@ -135,6 +153,12 @@ export function CadAddFlows({
 			/>
 		);
 
+	if (importing)
+		return (
+			<p className="cad-import-status" role="status">
+				Loading the 3D model…
+			</p>
+		);
 	return venueOpen ? (
 		<CadVenueElementModal
 			placing={placing}

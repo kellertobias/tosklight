@@ -2867,6 +2867,22 @@ body {
 	white-space: nowrap;
 }
 
+/* A model file loading from Add primitive: shown until the import has placed it or said why not. */
+.cad-import-status {
+	position: fixed;
+	bottom: 24px;
+	left: 50%;
+	translate: -50% 0;
+	z-index: 40;
+	margin: 0;
+	padding: 8px 14px;
+	border: 1px solid rgb(125 211 252 / 55%);
+	border-radius: 6px;
+	background: rgb(9 13 18 / 92%);
+	color: #dde3ea;
+	font-size: 13px;
+}
+
 .cad-placing-banner {
 	position: absolute;
 	top: 8px;

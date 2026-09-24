@@ -152,6 +152,15 @@ choices existed open unchanged.
 3. Change the words in Info, save and reopen the show, and confirm the moved, reworded text is still
    drawn where it was left. Repeat in a front view.
 
+## Loading a model from Add primitive
+
+1. Open the **Add primitive** menu and choose **Load model…**. Confirm the file picker opens for
+   glTF, GLB, 3MF and OBJ files. Choose a GLB and confirm **Loading the 3D model…** shows, then the
+   model stands at the stage origin, selected, in the plan and the Visualizer.
+2. Move, turn and scale it in **Info**, save and reopen the show, and confirm it is still there as
+   left. Choose **Load model…** again with a file that is not a model and confirm the reason is
+   shown and the show is unchanged; close the picker once and confirm nothing is loaded.
+
 ## Snapping Venue geometry by dragging
 
 With snapping on and no key held, drag each object by its move gizmo in the plan.

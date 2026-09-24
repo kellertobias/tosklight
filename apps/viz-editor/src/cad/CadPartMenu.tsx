@@ -70,11 +70,14 @@ export function CadPartMenu({
 	kind,
 	onChoose,
 	onSeveral,
+	onLoadModel,
 }: {
 	kind: CadPartKind;
 	onChoose(profileId: string): void;
 	/** Opens the bulk wizard for the part the button places now; absent on kinds that have none. */
 	onSeveral?(profileId: string): void;
+	/** Loads a 3D model file instead of a part from the library; absent on kinds that have none. */
+	onLoadModel?(): void;
 }) {
 	const library = useFixtureLibrary();
 	const current = partKey(chosenPart(kind).part);
@@ -110,6 +113,19 @@ export function CadPartMenu({
 					</div>
 				);
 			})}
+			{onLoadModel ? (
+				<button
+					type="button"
+					role="menuitem"
+					className="cad-part-menu-item cad-part-menu-several"
+					onClick={onLoadModel}
+				>
+					<span className="cad-part-menu-text">
+						<strong>Load model…</strong>
+						<small>A glTF, GLB, 3MF or OBJ file</small>
+					</span>
+				</button>
+			) : null}
 			{onSeveral ? (
 				<button
 					type="button"

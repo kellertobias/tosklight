@@ -600,7 +600,12 @@ the key that picks it, such as **Draw line · L**. From left to right:
     places the curtain until you choose another.
   * **Add primitive** (a box, a ball and a cylinder) lists **Box**, **Cylinder** and **Ball**. Each
     fills the width, height and depth set in **Info** — a cylinder stands upright, so its height is its
-    length — and takes the **Colour** set for it, neutral grey until you choose one.
+    length — and takes the **Colour** set for it, neutral grey until you choose one. **Load model…**
+    at the end of its menu opens the file picker for a 3D model — glTF, GLB, 3MF or OBJ — and places
+    it at the stage origin, selected, while **Loading the 3D model…** shows until it is in. Place,
+    turn and scale it from **Info** like any Venue object; the show carries the model itself, so it
+    opens again with the show. A file that cannot be read is refused with the reason and changes
+    nothing; closing the picker loads nothing.
   * **Place several…** ends the **Add truss** and **Add stage element** menus. A rig is rarely one
     of anything, so it opens a wizard that lays out a whole field of the part the button places now
     and writes it in one go. Nothing is placed until **Place**; **Cancel** places nothing at all,

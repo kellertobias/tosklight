@@ -9,14 +9,18 @@ const mocks = vi.hoisted(() => ({
 	fixtureProfiles: vi.fn(),
 	patchSnapshot: vi.fn(),
 	patchFixtures: vi.fn(),
+	importVenueModel: vi.fn(),
+	open: vi.fn(),
 }));
 
 vi.mock("../document/session", () => ({
 	documentSession: {
 		fixtureProfiles: mocks.fixtureProfiles,
 		patchSnapshot: mocks.patchSnapshot,
+		importVenueModel: mocks.importVenueModel,
 	},
 }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: mocks.open }));
 vi.mock("../document/transport", () => ({
 	TauriPatchTransport: class {
 		patchFixtures = mocks.patchFixtures;
@@ -103,6 +107,8 @@ beforeEach(() => {
 		fixtures: [{ virtualFixtureNumber: 1 }, { virtualFixtureNumber: 2 }, { virtualFixtureNumber: null }],
 	});
 	mocks.patchFixtures.mockReset().mockResolvedValue({});
+	mocks.open.mockReset();
+	mocks.importVenueModel.mockReset();
 });
 
 function renderFlows() {
@@ -223,6 +229,51 @@ describe("Add Several", () => {
 		await waitFor(() =>
 			expect(screen.queryByRole("dialog", { name: "Add venue element" })).not.toBeInTheDocument(),
 		);
+	});
+});
+
+describe("Load model from Add primitive", () => {
+	it("offers Load model in the primitive menu and nowhere else", () => {
+		const onLoadModel = vi.fn();
+		const { unmount } = render(<CadPartMenu kind="primitive" onChoose={vi.fn()} onLoadModel={onLoadModel} />);
+		fireEvent.click(screen.getByRole("menuitem", { name: /Load model/u }));
+		expect(onLoadModel).toHaveBeenCalledTimes(1);
+		unmount();
+		render(<CadPartMenu kind="truss" onChoose={vi.fn()} />);
+		expect(screen.queryByRole("menuitem", { name: /Load model/u })).toBeNull();
+	});
+
+	it("imports the chosen file, shows it loading, and selects what it placed", async () => {
+		mocks.open.mockResolvedValue("/models/stage-set.glb");
+		let finish: (value: { fixtureId: string; name: string }) => void = () => undefined;
+		mocks.importVenueModel.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+		const { announcePlaced, onError, press } = renderFlows();
+		press("primitive", "load-model");
+		expect(await screen.findByRole("status")).toHaveTextContent("Loading the 3D model");
+		expect(mocks.importVenueModel).toHaveBeenCalledWith("/models/stage-set.glb", null);
+		finish({ fixtureId: "set", name: "Stage Set" });
+		await waitFor(() => expect(announcePlaced).toHaveBeenCalledWith(["set"]));
+		expect(screen.queryByRole("status")).toBeNull();
+		expect(onError).not.toHaveBeenCalled();
+		// Nothing from the library was placed, and the button still places its own part next.
+		expect(mocks.patchFixtures).not.toHaveBeenCalled();
+	});
+
+	it("says why a file could not be loaded, and does nothing when the picker is closed", async () => {
+		mocks.open.mockResolvedValueOnce(null);
+		const { announcePlaced, onError, press } = renderFlows();
+		press("primitive", "load-model");
+		await waitFor(() => expect(mocks.open).toHaveBeenCalledTimes(1));
+		expect(mocks.importVenueModel).not.toHaveBeenCalled();
+		expect(screen.queryByRole("status")).toBeNull();
+
+		mocks.open.mockResolvedValueOnce("/models/broken.obj");
+		mocks.importVenueModel.mockRejectedValueOnce(new Error("the OBJ file has no faces"));
+		press("primitive", "load-model");
+		await waitFor(() =>
+			expect(onError).toHaveBeenCalledWith("Could not load the 3D model: Error: the OBJ file has no faces"),
+		);
+		expect(announcePlaced).not.toHaveBeenCalled();
 	});
 });
 
