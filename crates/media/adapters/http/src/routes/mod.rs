@@ -237,6 +237,7 @@ pub fn router(state: ApiState) -> Router {
             )),
         )
         .route("/api/v2/models/{slot}/update", post(models::update_model))
+        .route("/api/v2/models/{slot}/preview", get(models::preview))
         .route(
             "/api/v2/effects/{slot}/update",
             post(effects::update_effect),

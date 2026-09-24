@@ -633,6 +633,32 @@
 	color: var(--danger, #ff6b6b);
 }
 
+.media-model-preview {
+	display: grid;
+	place-items: center;
+	margin: 0;
+	aspect-ratio: 1;
+	max-width: 240px;
+	border-radius: 6px;
+	background: #081018;
+}
+
+.media-model-preview > img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.media-model-preview > figcaption {
+	padding: 12px;
+	color: var(--muted);
+	text-align: center;
+}
+
+.media-model-fixed {
+	color: var(--muted);
+}
+
 @media (max-width: 860px) {
 	.media-effects-library-layout {
 		grid-template-columns: 1fr;

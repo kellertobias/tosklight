@@ -38,7 +38,13 @@ struct Inner {
     loaded: HashMap<String, Result<Arc<ModelGeometry>, String>>,
     /// Slots already reported as selected but empty.
     reported_missing: HashSet<u8>,
+    /// Preview pictures, as PNG, by the mesh they were drawn from. Holding the mesh keeps its
+    /// address from being reused while the picture is kept.
+    previews: Vec<(Arc<ModelGeometry>, Arc<Vec<u8>>)>,
 }
+
+/// The side of a model preview picture, in pixels.
+pub const MODEL_PREVIEW_SIZE: u32 = 160;
 
 impl Models {
     pub(crate) fn new(library_root: &Path) -> Self {
@@ -91,6 +97,12 @@ impl Models {
             .map(|entry| entry.file.as_str())
             .collect();
         inner.loaded.retain(|file, _| files.contains(file.as_str()));
+        inner.previews.retain(|(geometry, _)| {
+            resolved
+                .geometries
+                .values()
+                .any(|drawn| Arc::ptr_eq(drawn, geometry))
+        });
         inner.library = Some(library.clone());
         inner.resolved = Arc::new(resolved);
         Arc::clone(&inner.resolved)
@@ -138,6 +150,51 @@ impl Models {
         inner.loaded.remove(file);
         inner.library = None;
         Ok(())
+    }
+
+    /// What the API may do with the models, against the live configuration's library.
+    pub(crate) fn access(&self, live: &crate::SharedConfiguration) -> media_http::ModelAccess {
+        let (importing, removing, reading, picturing) =
+            (self.clone(), self.clone(), self.clone(), self.clone());
+        let (reading_configuration, picturing_configuration) = (live.clone(), live.clone());
+        media_http::ModelAccess {
+            import: Arc::new(move |slot, bytes| importing.import(slot, bytes)),
+            remove: Arc::new(move |file| removing.remove(file)),
+            failures: Arc::new(move || {
+                reading
+                    .resolve(&reading_configuration.load().models)
+                    .failures
+                    .clone()
+            }),
+            preview: Arc::new(move |slot| {
+                picturing.preview(&picturing_configuration.load().models, slot)
+            }),
+        }
+    }
+
+    /// A PNG picture of the model in `slot`, drawn once from the mesh the outputs draw and kept
+    /// while the slot holds that mesh. `None` when the slot is empty or its model cannot be loaded.
+    pub(crate) fn preview(&self, library: &ModelLibrary, slot: u8) -> Option<Arc<Vec<u8>>> {
+        let geometry = Arc::clone(self.resolve(library).geometries.get(&slot)?);
+        if let Some((_, picture)) = self
+            .lock()
+            .previews
+            .iter()
+            .find(|(drawn, _)| Arc::ptr_eq(drawn, &geometry))
+        {
+            return Some(Arc::clone(picture));
+        }
+        let size = MODEL_PREVIEW_SIZE;
+        let rgba = media_domain::model_preview::render_model_preview(&geometry, size as usize);
+        let picture = match crate::preview::encode_png(&rgba, size, size) {
+            Ok(png) => Arc::new(png),
+            Err(error) => {
+                tracing::warn!(slot, %error, "a 3D model preview could not be encoded");
+                return None;
+            }
+        };
+        self.lock().previews.push((geometry, Arc::clone(&picture)));
+        Some(picture)
     }
 
     /// Logs, once per slot, a layer that selects a model slot holding nothing.
@@ -322,5 +379,23 @@ mod tests {
             });
         }
         assert_eq!(uploads, 1);
+    }
+
+    #[test]
+    fn a_model_is_pictured_once_and_an_empty_slot_has_no_picture() {
+        let models = Models::new(&root("preview"));
+        let library = ModelLibrary::default();
+        let cube = models
+            .preview(&library, 2)
+            .expect("the built-in cube is pictured");
+        assert!(cube.starts_with(b"\x89PNG"), "a PNG");
+        let again = models.preview(&library, 2).unwrap();
+        assert!(Arc::ptr_eq(&cube, &again), "drawn once, then kept");
+        assert_ne!(
+            models.preview(&library, 3).unwrap(),
+            cube,
+            "each shape its own picture"
+        );
+        assert!(models.preview(&library, 40).is_none());
     }
 }

@@ -298,6 +298,7 @@ pub type ImportModel =
     Arc<dyn Fn(u8, &[u8]) -> Result<ImportedModel, ModelRejection> + Send + Sync>;
 pub type RemoveModel = Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
 pub type ModelFailures = Arc<dyn Fn() -> Vec<(u8, String)> + Send + Sync>;
+pub type ModelPreview = Arc<dyn Fn(u8) -> Option<Arc<Vec<u8>>> + Send + Sync>;
 
 /// The 3D model store, which belongs to the runtime and its library adapter: the API never
 /// parses a mesh or opens a model file itself.
@@ -310,6 +311,8 @@ pub struct ModelAccess {
     pub remove: RemoveModel,
     /// Assigned slots whose stored file the running process could not load, with the reason.
     pub failures: ModelFailures,
+    /// A PNG picture of the model a slot holds, drawn from its mesh; `None` when there is none.
+    pub preview: ModelPreview,
 }
 
 impl Default for ModelAccess {
@@ -323,6 +326,7 @@ impl Default for ModelAccess {
             }),
             remove: Arc::new(|_| Ok(())),
             failures: Arc::new(Vec::new),
+            preview: Arc::new(|_| None),
         }
     }
 }

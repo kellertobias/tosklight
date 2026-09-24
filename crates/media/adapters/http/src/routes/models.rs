@@ -46,6 +46,33 @@ fn failure_for(failures: &[(u8, String)], slot: u8) -> Option<&str> {
         .map(|(_, reason)| reason.as_str())
 }
 
+/// A picture of the model in one slot, drawn from the mesh the outputs draw. An empty slot, or one
+/// whose model cannot be loaded, has none; the chooser then shows its plain card.
+pub(super) async fn preview(
+    State(state): State<ApiState>,
+    Path(slot): Path<u8>,
+) -> Result<Response, ApiError> {
+    let draw = state.diagnostics.models.preview.clone();
+    let picture = tokio::task::spawn_blocking(move || draw(slot))
+        .await
+        .ok()
+        .flatten()
+        .ok_or_else(|| {
+            ApiError::not_found(
+                "model-preview-not-found",
+                "this model slot has no model that can be pictured",
+            )
+        })?;
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, "image/png"),
+            (axum::http::header::CACHE_CONTROL, "no-store"),
+        ],
+        picture.as_ref().clone(),
+    )
+        .into_response())
+}
+
 pub(super) async fn models(State(state): State<ApiState>) -> impl IntoResponse {
     let configuration = state.configuration.load();
     let failures = (state.diagnostics.models.failures)();

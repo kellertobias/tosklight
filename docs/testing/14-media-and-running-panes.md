@@ -133,6 +133,10 @@ With a desk driving an output on two layers and the master at half, open Pixel's
 
 Set the server's UTC offset. Create a text source of kind **Countdown to a time every day** and enter 21:00 with no date. Confirm that its preview and an output layer showing it count to 21:00 local time and tick down live. Set **After zero** to count up and move the target just before now. Confirm that it counts up after zero until local midnight and then counts to the next day's time. Change the server's UTC offset and confirm the countdown follows. Confirm an existing **Countdown to a moment** still counts to its saved date and time.
 
+## PIXEL-013 — fixed built-in models and model pictures
+
+Open **Library > Models**. Confirm the cards for Plane, Cube, Sphere, Cylinder, and Pyramid each show a picture of their own shape, turned so its depth shows, with an orange top-left quarter, not a plain blue block. Select a built-in slot and confirm its inspector shows the picture and **Clear slot** only: no name field, no model file, and no other preset buttons. Upload a `.glb` into an empty slot and confirm its card and inspector show its shape, and that **Name**, **Replace model**, and **Clear slot** are offered. Make its file unloadable, restart, and confirm its card reads **Cannot load** with the plain colour, and its inspector says there is no picture. Restart the server again and confirm the pictures and assignments are unchanged.
+
 ## RUNNING-001 — containment, deduplication, and identity
 
 Start one Cuelist through several assignments or control surfaces, with a Dynamic contained in it; start one independent Dynamic, Timecode, and Macro. Running shows exactly four rows. The Cuelist row uses the Cuelist's own number and name plus its current Cue, not an assignment number, and suppresses the contained Dynamic. The other rows use their own stable identities and show **Cue —**.

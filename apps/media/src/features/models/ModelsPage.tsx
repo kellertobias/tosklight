@@ -6,7 +6,7 @@ import {
 	PoolGrid,
 } from "@tosklight/ui/pools";
 import { WindowFrame, WindowScrollArea } from "@tosklight/ui/window-kit";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { MediaErrorToast } from "../../app/ToastContext";
 import { ApiFailure, api } from "../../shared/api/client";
@@ -34,6 +34,37 @@ export const BUILTIN_MODELS: ReadonlyArray<{
 	{ id: "cylinder", label: "Cylinder" },
 	{ id: "pyramid", label: "Pyramid" },
 ];
+
+/**
+ * The picture of a slot's model, drawn by the server from the mesh the outputs draw, or null for
+ * a model that cannot be loaded. The URL changes whenever the slot's model does.
+ */
+export function modelPreviewUrl(model: ModelSlotView): string | null {
+	if (model.status !== "ready") return null;
+	const version = model.builtin ?? `${model.vertices}-${model.triangles}-${model.name}`;
+	return api.modelPreviewUrl(model.slot, version);
+}
+
+/** The preview URLs that failed to load, so their cards fall back to the plain colour. */
+function useFailedPreviews(urls: readonly string[]): ReadonlySet<string> {
+	const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
+	const key = urls.join("\n");
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for the URL list.
+	useEffect(() => {
+		let live = true;
+		for (const url of urls) {
+			const probe = new Image();
+			probe.onerror = () => {
+				if (live) setFailed((current) => new Set(current).add(url));
+			};
+			probe.src = url;
+		}
+		return () => {
+			live = false;
+		};
+	}, [key]);
+	return failed;
+}
 
 /** Where the selected slot's upload has got to. Nothing about an upload is silent. */
 export type ModelUpload =
@@ -161,6 +192,13 @@ export function ModelsLibraryView({
 		[models],
 	);
 	const selected = bySlot.get(selectedSlot);
+	const failedPreviews = useFailedPreviews(
+		models.flatMap((model) => modelPreviewUrl(model) ?? []),
+	);
+	const pictureOf = (model: ModelSlotView) => {
+		const url = modelPreviewUrl(model);
+		return url && !failedPreviews.has(url) ? url : null;
+	};
 	return (
 		<WindowFrame
 			title="Library"
@@ -181,22 +219,28 @@ export function ModelsLibraryView({
 						className="media-file-pool-grid media-models-pool-grid"
 						slotCount={MODEL_SLOT_COUNT}
 						minimumCardWidth={112}
-						slots={models.map((model) => ({
-							id: `model-${model.slot}`,
-							position: model.slot - 1,
-							card: {
-								number: model.slot,
-								primary: model.name,
-								secondary:
-									model.status !== "ready"
-										? "Cannot load"
-										: model.builtin
-											? "Built-in"
-											: `${model.triangles} triangles`,
-								color: DEFAULT_POOL_COLOR_PALETTE.dynamic,
-								states: model.slot === selectedSlot ? ["selected"] : [],
-							},
-						}))}
+						slots={models.map((model) => {
+							const picture = pictureOf(model);
+							return {
+								id: `model-${model.slot}`,
+								position: model.slot - 1,
+								card: {
+									...(picture
+										? { image: { src: picture, alt: `${model.name} model` } }
+										: {}),
+									number: model.slot,
+									primary: model.name,
+									secondary:
+										model.status !== "ready"
+											? "Cannot load"
+											: model.builtin
+												? "Built-in"
+												: `${model.triangles} triangles`,
+									color: DEFAULT_POOL_COLOR_PALETTE.dynamic,
+									states: model.slot === selectedSlot ? ["selected"] : [],
+								},
+							};
+						})}
 						emptySlot={(index) => ({
 							id: `empty-model-${index + 1}`,
 							position: index,
@@ -225,6 +269,7 @@ export function ModelsLibraryView({
 						key={`${selectedSlot}:${selected?.name ?? "empty"}:${selected?.builtin ?? ""}`}
 						slot={selectedSlot}
 						model={selected}
+						picture={selected ? pictureOf(selected) : null}
 						busy={busy}
 						upload={upload}
 						onUpload={onUpload}
@@ -242,6 +287,7 @@ export function ModelsLibraryView({
 function ModelSlotEditor({
 	slot,
 	model,
+	picture,
 	busy,
 	upload,
 	onUpload,
@@ -252,6 +298,7 @@ function ModelSlotEditor({
 }: {
 	slot: number;
 	model?: ModelSlotView;
+	picture: string | null;
 	busy: boolean;
 	upload: ModelUpload;
 	onUpload(file: File): void;
@@ -287,14 +334,95 @@ function ModelSlotEditor({
 					the Plane: {model.detail}
 				</p>
 			)}
+			{model && (
+				<figure className="media-model-preview">
+					{picture ? (
+						<img src={picture} alt={`Picture of the ${model.name} model`} />
+					) : (
+						<figcaption role="status">
+							{model.status === "ready"
+								? "No picture of this model"
+								: "No picture: the model cannot be loaded"}
+						</figcaption>
+					)}
+				</figure>
+			)}
+			{model?.builtin ? (
+				<>
+					<p className="media-model-fixed">
+						A built-in preset: its shape is fixed and needs no file or settings.
+						Clear the slot to use it for another model.
+					</p>
+					<div className="media-operator-toolbar">
+						<Button disabled={disabled} onClick={onClear}>
+							Clear slot
+						</Button>
+					</div>
+				</>
+			) : (
+				<ImportedModelFields
+					model={model}
+					name={name}
+					setName={setName}
+					disabled={disabled}
+					picker={picker}
+					upload={upload}
+					transferring={transferring}
+					onUpload={onUpload}
+					onRejected={onRejected}
+					onRename={onRename}
+					onClear={onClear}
+					onBuiltin={onBuiltin}
+				/>
+			)}
+			<p className="media-field-help">
+				The model is centred and scaled to fit the output height at scale 1. The
+				layer&apos;s look is wrapped onto it through its texture coordinates.
+				Select it with the layer&apos;s 3D model channel; 0 draws the layer
+				flat. No imported file is needed for the built-in models.
+			</p>
+		</div>
+	);
+}
+
+/// An empty slot's or an imported model's controls: place a preset, name it, replace or clear it.
+function ImportedModelFields({
+	model,
+	name,
+	setName,
+	disabled,
+	picker,
+	upload,
+	transferring,
+	onUpload,
+	onRejected,
+	onRename,
+	onClear,
+	onBuiltin,
+}: {
+	model?: ModelSlotView;
+	name: string;
+	setName(name: string): void;
+	disabled: boolean;
+	picker: React.RefObject<HTMLInputElement | null>;
+	upload: ModelUpload;
+	transferring: boolean;
+	onUpload(file: File): void;
+	onRejected(message: string): void;
+	onRename(name: string): void;
+	onClear(): void;
+	onBuiltin(builtin: BuiltinModelId): void;
+}) {
+	return (
+		<>
 			<fieldset className="media-model-builtins">
 				<legend>Built-in model</legend>
 				<div className="media-operator-toolbar">
 					{BUILTIN_MODELS.map((builtin) => (
 						<Button
 							key={builtin.id}
-							aria-pressed={model?.builtin === builtin.id}
-							active={model?.builtin === builtin.id}
+							aria-pressed={false}
+							active={false}
 							disabled={disabled}
 							onClick={() => onBuiltin(builtin.id)}
 						>
@@ -363,13 +491,7 @@ function ModelSlotEditor({
 					{upload.message}
 				</p>
 			)}
-			<p className="media-field-help">
-				The model is centred and scaled to fit the output height at scale 1. The
-				layer&apos;s look is wrapped onto it through its texture coordinates.
-				Select it with the layer&apos;s 3D model channel; 0 draws the layer
-				flat. No imported file is needed for the built-in models.
-			</p>
-		</div>
+		</>
 	);
 }
 

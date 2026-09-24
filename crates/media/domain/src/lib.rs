@@ -29,6 +29,7 @@ pub mod layer;
 mod layer_effects;
 pub mod master;
 pub mod model_library;
+pub mod model_preview;
 pub mod model_projection;
 pub mod outline_effect;
 pub mod output;

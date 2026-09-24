@@ -417,6 +417,9 @@ export const api = {
 			method: "POST",
 			body: JSON.stringify(edit),
 		}),
+	/** A picture of the model in a slot. `version` changes whenever the slot's model does. */
+	modelPreviewUrl: (slot: number, version: string) =>
+		`${BASE}/models/${slot}/preview?v=${encodeURIComponent(version)}`,
 	thumbnailUrl: (folder: number, file: number) =>
 		`${BASE}/library/${folder}/${file}/thumbnail`,
 	previewUrl: (folder: number, file: number, frame: number) =>

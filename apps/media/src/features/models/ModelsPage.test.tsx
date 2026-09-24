@@ -258,11 +258,51 @@ describe("the 3D model library", () => {
 			expect.stringContaining("Empty"),
 		]);
 		expect(screen.getAllByText("Built-in")).toHaveLength(5);
-		const plane = screen.getByRole("button", { name: "Plane" });
-		expect(plane).toHaveAttribute("aria-pressed", "true");
 		expect(screen.getByText(/^Built-in ·/u)).toHaveTextContent(
 			"Built-in · 4 vertices · 2 triangles",
 		);
+		// Each card shows its model's picture rather than a plain colour.
+		const pictures = cards
+			.slice(0, 5)
+			.map((card) => card.querySelector("img.pool-card-image")?.getAttribute("src"));
+		expect(pictures[0]).toBe("/api/v2/models/1/preview?v=plane");
+		expect(pictures[4]).toBe("/api/v2/models/5/preview?v=pyramid");
+		expect(screen.getByRole("img", { name: "Picture of the Plane model" })).toBeInTheDocument();
+	});
+
+	it("keeps a built-in preset fixed and an imported model configurable", async () => {
+		stubModels([...BUILT_INS, { ...cube, slot: 6 }]);
+		const { container } = render(<ModelsPage />);
+		await screen.findByText("6/255 assigned");
+		// A preset has nothing to set: no file, no name, no other preset to switch to.
+		expect(screen.getByText(/built-in preset: its shape is fixed/iu)).toBeInTheDocument();
+		expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
+		expect(screen.queryByText("Replace model")).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Cube" })).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Clear slot" })).toBeInTheDocument();
+
+		const cards = container.querySelectorAll(".media-models-pool-grid .pool-card");
+		fireEvent.click(cards[5]);
+		expect(await screen.findByRole("textbox", { name: "Name" })).toHaveValue("Stage cube");
+		expect(screen.getByText("Replace model")).toBeInTheDocument();
+		expect(screen.getByRole("img", { name: "Picture of the Stage cube model" })).toHaveAttribute(
+			"src",
+			"/api/v2/models/6/preview?v=24-12-Stage%20cube",
+		);
+	});
+
+	it("falls back to the plain card when a model cannot be pictured", async () => {
+		stubModels([{ ...cube, status: "unloadable", detail: "file missing" }]);
+		const { container } = render(<ModelsPage />);
+		await screen.findByText("1/255 assigned");
+		const card = container.querySelector(".media-models-pool-grid .pool-card");
+		expect(card?.querySelector("img.pool-card-image")).toBeNull();
+		expect(card).toHaveTextContent("Cannot load");
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"No picture: the model cannot be loaded",
+		);
+		// It can still be replaced.
+		expect(screen.getByText("Replace model")).toBeInTheDocument();
 	});
 
 	it("assigns every built-in model to a slot without an upload", async () => {
@@ -285,19 +325,21 @@ describe("the 3D model library", () => {
 			"Cylinder",
 			"Pyramid",
 		].entries()) {
+			const slot = index + 1;
+			fireEvent.click(
+				document.querySelectorAll(".media-models-pool-grid .pool-card")[index],
+			);
 			await user.click(await screen.findByRole("button", { name: label }));
 			await waitFor(() => expect(writes).toHaveLength(index + 1));
-			expect(writes[index].path).toBe("/api/v2/models/1/update");
+			expect(writes[index].path).toBe(`/api/v2/models/${slot}/update`);
 			expect(writes[index].body).toMatchObject({ builtin: ids[index] });
 			expect(writes[index].body.requestId).toEqual(expect.any(String));
+			// Once placed, the preset is fixed: its inspector offers no other preset.
 			await waitFor(() =>
-				expect(screen.getByRole("button", { name: label })).toHaveAttribute(
-					"aria-pressed",
-					"true",
-				),
+				expect(screen.queryByRole("button", { name: label })).not.toBeInTheDocument(),
 			);
 		}
 		expect(FakeUpload.last).toBeUndefined();
-		expect(screen.getByText("1/255 assigned")).toBeInTheDocument();
+		expect(screen.getByText("5/255 assigned")).toBeInTheDocument();
 	});
 });

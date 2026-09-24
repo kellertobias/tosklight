@@ -582,26 +582,13 @@ fn diagnostics_of(
     received_speed_groups: &speed_groups::SharedSpeedGroups,
     started: std::time::Instant,
 ) -> media_http::Diagnostics {
-    let importing = models.clone();
-    let removing = models.clone();
-    let reading = models.clone();
-    let reading_configuration = live.clone();
     let log = logging.window.clone();
     let dmx_diagnostics = dmx_diagnostics.clone();
     let network_warnings = network_warnings.clone();
     let console_identity = console_identity.clone();
     let available_monitors = available_monitors.clone();
     media_http::Diagnostics {
-        models: media_http::ModelAccess {
-            import: std::sync::Arc::new(move |slot, bytes| importing.import(slot, bytes)),
-            remove: std::sync::Arc::new(move |file| removing.remove(file)),
-            failures: std::sync::Arc::new(move || {
-                reading
-                    .resolve(&reading_configuration.load().models)
-                    .failures
-                    .clone()
-            }),
-        },
+        models: models.access(live),
         audio: match audio {
             Some(service) => {
                 let analysis = service.analysis();

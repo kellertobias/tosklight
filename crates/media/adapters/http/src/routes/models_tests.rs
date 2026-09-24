@@ -58,10 +58,35 @@ fn models_bench() -> (Bench, Store) {
                 Ok(())
             }),
             failures: Arc::new(move || failing.lock().unwrap().clone()),
+            preview: Arc::new(|slot| (slot == 2).then(|| Arc::new(b"\x89PNG-cube".to_vec()))),
         },
         ..Default::default()
     };
     (bench_with(diagnostics), Store { removed, failures })
+}
+
+#[tokio::test]
+async fn a_slot_serves_its_model_picture_and_an_empty_one_says_it_has_none() {
+    let (bench, _) = models_bench();
+    let response = tower::ServiceExt::oneshot(
+        bench.router.clone(),
+        Request::builder()
+            .uri("/api/v2/models/2/preview")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::CONTENT_TYPE], "image/png");
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(&bytes[..], b"\x89PNG-cube");
+
+    let (status, body) = send(&bench.router, get("/api/v2/models/40/preview".into())).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "model-preview-not-found");
 }
 
 #[tokio::test]

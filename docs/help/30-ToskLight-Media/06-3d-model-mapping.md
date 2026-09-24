@@ -18,7 +18,7 @@ Five test models ship with every Media Server and need no import:
 | 4 | **Cylinder** | As tall as it is wide; the image wrapped once around its side, the whole image on each end. |
 | 5 | **Pyramid** | A square base; the image as a triangle on each side, the whole image on the base. |
 
-To put a built-in model in any slot, select the slot and press its button under **Built-in model**. The choice is saved with the Media Server's configuration and takes effect on the output at once; the slot shows **Built-in** and the model's name, which you can change with **Save name**. Choosing a built-in model for a slot that held an imported model deletes that model's file. **Clear slot** empties a built-in slot too; press the model's button to put it back.
+To put a built-in model in a slot, select an empty slot, or one holding an imported model, and press the model's button under **Built-in model**. The choice is saved with the Media Server's configuration and takes effect on the output at once. Choosing a built-in model for a slot that held an imported model deletes that model's file. A built-in slot is a fixed preset. Its inspector shows its picture and **Clear slot**, and nothing else: it has no file, no name to edit, and no settings. To put a different model in the slot, press **Clear slot** first.
 
 An existing installation receives the built-in models the first time it starts with this version, each in its slot above unless an imported model already occupies it. Imported models never move.
 
@@ -32,7 +32,11 @@ The Plane is never square: it always takes the aspect ratio of the output it is 
 2. Drop a `.glb` file on **Model file**, or open the picker. The upload shows its progress, then **Importing…** while the server reads the model.
 3. When the import succeeds the slot shows the model's name (taken from the file name), its vertex count, and its triangle count. When it fails, the slot stays as it was and the reason is shown under the upload field.
 
-Uploading onto a slot holding an imported model replaces it and keeps its name; uploading onto a built-in slot names the slot after the file. **Save name** renames the slot; **Clear slot** empties it and deletes the stored file. Models are stored with the Media Server's library (in the hidden `.models` folder of the library root) and their slot assignments with its configuration.
+Uploading onto a slot holding an imported model replaces it and keeps its name. **Save name** renames an imported model's slot; **Clear slot** empties it and deletes the stored file. Models are stored with the Media Server's library (in the hidden `.models` folder of the library root) and their slot assignments with its configuration.
+
+### Model pictures
+
+Each model card, and the inspector of the selected slot, shows a picture of that model. The server draws the picture from the same mesh the outputs draw. The model is turned 30° to the right and tipped 20° towards the viewer, so its depth shows. It is covered with a checker test card whose top-left quarter is orange. That quarter shows where the top-left of a layer's image lands on the model. The picture is drawn the first time it is asked for and kept until the slot's model changes; nothing extra is stored. A model that cannot be loaded has no picture. Its card keeps the plain colour and reads **Cannot load**, and the slot can still be replaced or cleared.
 
 ### Import requirements
 
