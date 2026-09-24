@@ -6,7 +6,7 @@
  * and stands at its profile's default. Info reads a size the same way for one element and for a
  * whole selection of the same model, so the reading lives here rather than in either panel.
  */
-import type { FixtureProfileScenery, PatchFixtureWrite } from "@tosklight/patch";
+import type { FixtureProfile, FixtureProfileScenery, PatchFixtureWrite } from "@tosklight/patch";
 
 /** The measurements of a generated Venue object, with the key the patch stores each under. */
 export const SIZE_AXES = [
@@ -17,6 +17,34 @@ export const SIZE_AXES = [
 
 /** The key one measurement is stored under: `x`, `y` or `z`. */
 export type SizeAxisKey = (typeof SIZE_AXES)[number]["key"];
+
+/** The footprint a crowd area may be given, in metres on each side, as its profile validates it. */
+const CROWD_SIDE_METRES = { minimum: 1, maximum: 250 };
+
+/**
+ * The measurements Info offers for a profile: a generated object's own, or a crowd area's footprint.
+ *
+ * A crowd area generates its people over the width and depth it is given, so those two are set like
+ * a deck's; its height is the people's, never set. It is described with the same shape as generated
+ * scenery (its `kind` is not read for sizing), so one element and a whole selection size it the
+ * same way and the patch stores it where every other placed size lives.
+ */
+export function sizedScenery(
+	profile: Pick<FixtureProfile, "scenery" | "crowd" | "physical"> | null | undefined,
+): FixtureProfileScenery | null {
+	if (profile?.scenery) return profile.scenery;
+	const crowd = profile?.crowd;
+	if (!crowd) return null;
+	const height = (profile.physical?.height_millimetres ?? 1780) / 1000;
+	return {
+		kind: "prop",
+		chords: 0,
+		default_size_metres: { x: crowd.default_width_metres, y: height, z: crowd.default_depth_metres },
+		adjustable: { width: true, height: false, depth: true },
+		minimum_size_metres: { x: CROWD_SIDE_METRES.minimum, y: height, z: CROWD_SIDE_METRES.minimum },
+		maximum_size_metres: { x: CROWD_SIDE_METRES.maximum, y: height, z: CROWD_SIDE_METRES.maximum },
+	};
+}
 
 /** Whether a generated object has any measurement the operator sets. */
 export function hasAdjustableSize(scenery: FixtureProfileScenery | null | undefined) {

@@ -15,7 +15,7 @@ import type {
 	PatchFixtureProjection,
 	PatchProfileRevision,
 } from "@tosklight/patch";
-import { clampToRange, hasAdjustableSize, placedSize, SIZE_AXES } from "./sceneryAxes";
+import { clampToRange, hasAdjustableSize, placedSize, SIZE_AXES, sizedScenery } from "./sceneryAxes";
 
 export interface ThruFieldSpec {
 	id: string;
@@ -119,7 +119,7 @@ export function sharedModel(
 	return {
 		profileId: first.profileId,
 		label: [revision?.manufacturer, revision?.name].filter(Boolean).join(" ").trim(),
-		scenery: snapshot?.scenery ?? null,
+		scenery: sizedScenery(snapshot),
 		crowd: Boolean(snapshot?.crowd),
 	};
 }

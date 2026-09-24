@@ -10,6 +10,7 @@ import {
 import {
 	audiencePersonHeight,
 	audiencePersonScale,
+	crowdGrid,
 	entityPlanGeometry,
 	SCISSOR_MAX_DEGREES,
 	parseProjection,
@@ -467,7 +468,9 @@ describe("CAD plan projections", () => {
 		expect(audienceOutline.top_strokes).toHaveLength(5);
 		expect(audienceOutline.front_strokes).toHaveLength(4);
 		expect(audienceOutline.side_strokes).toHaveLength(5);
-		expect(top.outlines).toHaveLength(24 * 5);
+		// 8 × 4 m holds 11 people across in 6 rows, at a standing audience's spacing.
+		expect(crowdGrid(8000, 4000)).toEqual({ columns: 11, rows: 6 });
+		expect(top.outlines).toHaveLength(66 * 5);
 		expect(side.outlines).toHaveLength(8 * 5);
 		expect(oppositeSide.outlines).toHaveLength(8 * 5);
 		expect(back.outlines).toHaveLength(14 * 4);
@@ -495,14 +498,60 @@ describe("CAD plan projections", () => {
 		const sideY = side.outlines.flat().map((point) => point[1]);
 		expect(Math.min(...sideY)).toBeGreaterThan(-30);
 		expect(Math.max(...sideY)).toBeGreaterThanOrEqual(1600);
-		expect(Math.max(...sideY)).toBeLessThanOrEqual(1750 * 1.15 + 1);
-		const heights = Array.from({ length: 24 }, (_, index) =>
-			audiencePersonHeight(index),
+		expect(Math.max(...sideY)).toBeLessThanOrEqual(1850 + 1);
+		// Real audiences: 1.55 to 1.85 m, and nobody drawn two metres tall.
+		const heights = Array.from({ length: 200 }, (_, index) =>
+			audiencePersonHeight(index, 7),
 		);
-		expect(new Set(heights).size).toBeGreaterThan(12);
-		expect(
-			heights.every((height) => height >= 1750 * 0.85 && height <= 1750 * 1.15),
-		).toBe(true);
+		expect(new Set(heights).size).toBeGreaterThan(150);
+		expect(heights.every((height) => height >= 1550 && height <= 1850)).toBe(true);
+		expect(Math.max(...heights)).toBeGreaterThan(1800);
+		expect(Math.min(...heights)).toBeLessThan(1600);
+	});
+
+	it("fills a larger footprint with more people rather than stretching the same ones", () => {
+		const plan = (width: number, depth: number) =>
+			entityPlanGeometry(
+				{
+					...movingLight,
+					name: "Dancefloor Crowd",
+					kind: "venue",
+					fixtureType: "crowd_area",
+					sizeMillimetres: [width, depth, 1780],
+				},
+				undefined,
+				"top_down",
+			).outlines;
+		const people = (width: number, depth: number) => plan(width, depth).length / 5;
+		expect(people(5000, 3000)).toBe(7 * 4);
+		expect(people(10_000, 3000)).toBe(14 * 4);
+		expect(people(5000, 6000)).toBe(7 * 9);
+		// Every person stays inside the footprint, however it is sized.
+		for (const [width, depth] of [
+			[5000, 3000],
+			[1000, 1000],
+			[20_000, 12_000],
+		]) {
+			const points = plan(width, depth).flat();
+			const furthest = (axis: 0 | 1) =>
+				points.reduce((most, point) => Math.max(most, Math.abs(point[axis])), 0);
+			expect(furthest(0)).toBeLessThanOrEqual(width / 2);
+			expect(furthest(1)).toBeLessThanOrEqual(depth / 2);
+		}
+		// The side view lines up more figures along a wider crowd too.
+		const side = (width: number) =>
+			entityPlanGeometry(
+				{
+					...movingLight,
+					name: "Dancefloor Crowd",
+					kind: "venue",
+					fixtureType: "crowd_area",
+					sizeMillimetres: [width, 3000, 1780],
+				},
+				undefined,
+				"front_to_back",
+			).outlines.length;
+		expect(side(6000)).toBeGreaterThan(side(3000));
 	});
 
 	it("sizes every person in a crowd differently, yet the same on every redraw", () => {
@@ -548,7 +597,7 @@ describe("CAD plan projections", () => {
 		expect(
 			scales.every(
 				({ width, height }) =>
-					width >= 0.85 && width <= 1.15 && height >= 0.85 && height <= 1.15,
+					width >= 0.85 && width <= 1.15 && height >= 1550 / 1700 && height <= 1850 / 1700,
 			),
 		).toBe(true);
 	});

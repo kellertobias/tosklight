@@ -23,6 +23,7 @@ import type {
 export {
 	audiencePersonHeight,
 	audiencePersonScale,
+	crowdGrid,
 	seedOf,
 } from "./crowdPlan";
 

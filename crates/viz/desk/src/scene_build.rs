@@ -292,6 +292,14 @@ fn build_crowds(
             .stage_layout
             .positions3d
             .get(&fixture.fixture_id.to_string());
+        // The size the PreViz plan gave the area, in the patch's millimetres (x across, z deep).
+        let placed = fixture.scenery_size_metres.map(|size| {
+            Vec3::new(
+                size.x as f32 / 1000.0,
+                size.y as f32 / 1000.0,
+                size.z as f32 / 1000.0,
+            )
+        });
         result.push(CrowdArea {
             id: fixture.fixture_id,
             name: fixture.name.clone(),
@@ -303,10 +311,12 @@ fn build_crowds(
             rotation_degrees: placement.rotation_degrees,
             width_metres: valid_crowd_dimension(
                 authored_footprint.and_then(|value| value.crowd_width_metres),
+                placed.map(|size| size.x),
                 crowd.default_width_metres,
             ),
             depth_metres: valid_crowd_dimension(
                 authored_footprint.and_then(|value| value.crowd_depth_metres),
+                placed.map(|size| size.z),
                 crowd.default_depth_metres,
             ),
             posture: match mode.posture {
@@ -325,9 +335,13 @@ fn build_crowds(
     result
 }
 
-fn valid_crowd_dimension(value: Option<f32>, fallback: f32) -> f32 {
-    value
-        .filter(|value| value.is_finite() && (1.0..=250.0).contains(value))
+/// A crowd area's side: the desk's authored stage layout first, then the size the plan placed it
+/// at, then its profile's default. A value outside 1-250 m is not a crowd and is passed over.
+fn valid_crowd_dimension(authored: Option<f32>, placed: Option<f32>, fallback: f32) -> f32 {
+    let valid = |value: &f32| value.is_finite() && (1.0..=250.0).contains(value);
+    authored
+        .filter(valid)
+        .or(placed.filter(valid))
         .unwrap_or(fallback)
 }
 

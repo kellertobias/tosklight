@@ -73,12 +73,15 @@ fn push_people(frame: &mut FrameInstances, crowd: &CrowdArea, count: usize) {
     }
 }
 
-/// Height of an average person in the crowd, in metres.
-const PERSON_HEIGHT: f32 = 1.72;
+/// How tall the people of an audience stand, in metres: an adult crowd spreads between these,
+/// around a typical 1.70 m, so a two-metre figure is not what an audience looks like.
+const SHORTEST: f32 = 1.55;
+const TALLEST: f32 = 1.85;
 
-/// How tall and how wide one person is drawn: each scaled on its own between 0.85 and 1.15 of an
-/// average person. It follows only the crowd's seed and the person's index, so a person keeps
-/// their size from frame to frame and when the footprint, posture or amount drawn changes.
+/// How tall and how wide one person is drawn: a standing height between the shortest and the
+/// tallest of the audience, and a build between 0.85 and 1.15 of average. It follows only the
+/// crowd's seed and the person's index, so a person keeps their size from frame to frame and when
+/// the footprint, posture or amount drawn changes.
 fn person_size(seed: u64, index: usize) -> PersonSize {
     let mut random = SplitMix64::new(
         seed ^ (index as u64)
@@ -86,7 +89,7 @@ fn person_size(seed: u64, index: usize) -> PersonSize {
             .wrapping_mul(0xd1b5_4a32_d192_ed03),
     );
     PersonSize {
-        height: PERSON_HEIGHT * random.range(0.85, 1.15),
+        height: random.range(SHORTEST, TALLEST),
         width: random.range(0.85, 1.15),
     }
 }
@@ -363,7 +366,7 @@ mod tests {
         );
         for person in &silhouettes.1 {
             let height = person.model[1][1].abs();
-            assert!((1.46..=1.98).contains(&height), "height={height}");
+            assert!((SHORTEST..=TALLEST).contains(&height), "height={height}");
         }
     }
 
@@ -403,8 +406,10 @@ mod tests {
             (low, high)
         };
         let (short, tall) = spread(&heights);
-        assert!(short >= PERSON_HEIGHT * 0.85 - 1e-3 && tall <= PERSON_HEIGHT * 1.15 + 1e-3);
-        assert!(tall - short > 0.3, "heights {short}..{tall}");
+        // Real audience heights: nobody two metres tall, and a clear spread from short to tall.
+        assert!(short >= SHORTEST - 1e-3 && tall <= TALLEST + 1e-3);
+        assert!(tall <= 1.86, "tallest {tall}");
+        assert!(tall - short > 0.25, "heights {short}..{tall}");
         let (narrow, wide) = spread(&builds);
         assert!(narrow >= 0.85 - 1e-3 && wide <= 1.15 + 1e-3);
         assert!(wide - narrow > 0.2, "widths {narrow}..{wide}");

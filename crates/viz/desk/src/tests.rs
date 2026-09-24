@@ -779,6 +779,33 @@ fn a_crowd_hides_with_its_layer() {
 }
 
 #[test]
+fn a_crowd_takes_the_size_the_plan_placed_it_at_unless_the_desk_authored_one() {
+    let crowd = shipped_profile("venue--crowd-area");
+    let sides = |models: &DeskReadModels| {
+        let area = &scene_build::build(models).scene.crowds[0];
+        (area.width_metres, area.depth_metres)
+    };
+    // Nothing placed or authored: the package's own 5 × 3 m.
+    let plain = models(crowd.clone(), StageLayoutBody::default());
+    assert_eq!(sides(&plain), (5.0, 3.0));
+
+    // Sized in the PreViz plan: the patch carries it, in millimetres, x across and z deep.
+    let mut placed = models(crowd.clone(), StageLayoutBody::default());
+    placed.patch.fixtures[0].scenery_size_metres =
+        serde_json::from_value(json!({"x": 12000, "y": 1780, "z": 6000})).unwrap();
+    assert_eq!(sides(&placed), (12.0, 6.0));
+
+    // A size the desk authored in its stage layout still wins where it exists.
+    let layout: StageLayoutBody = serde_json::from_value(json!({
+        "positions3d": {"11111111-1111-4111-8111-111111111111": {"crowdWidthMetres": 9.0}}
+    }))
+    .unwrap();
+    let mut authored = models(crowd, layout);
+    authored.patch.fixtures[0].scenery_size_metres = placed.patch.fixtures[0].scenery_size_metres;
+    assert_eq!(sides(&authored), (9.0, 6.0));
+}
+
+#[test]
 fn the_cads_venue_groups_reach_the_scene_and_a_show_without_them_has_none() {
     let profile = shipped_profile("claypaky--sharpy");
     let plain = models(profile.clone(), StageLayoutBody::default());

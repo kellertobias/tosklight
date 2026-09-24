@@ -10,6 +10,16 @@ the 3D Visualizer populates with flat, double-sided black people and contrasting
 shipped audience artwork. Height is never scaled with the footprint: Sitting uses seated human
 height, while Standing still and Dancing use standing human height.
 
+In the PreViz plan, **Info** shows the same two sides as **Size — Width** and **Depth**, each from 1 to
+250 m, both for a Crowd Area you have just added and at any time after; with several Crowd Areas
+selected they spread like any other field. The size is kept with the patch, so it is still there when
+the show is saved and reopened, and the desk draws it too unless its own Stage layout sets another.
+The plan fills the new footprint with more rows and more people in each, at the spacing of a standing
+audience, rather than stretching the same few.
+
+People are as tall as a real audience: every standing person is between 1.55 and 1.85 m, spread
+around a typical 1.70 m, in the plan and in the Visualizer alike. Nobody is drawn two metres tall.
+
 Population is deterministic. The fixture's stable show identity, selected mode, authored
 footprint, and density produce the same people after saving, reopening, or restarting the
 Visualizer. Moving another fixture does not reshuffle them. Changing mode or footprint produces a

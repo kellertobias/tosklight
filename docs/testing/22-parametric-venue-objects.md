@@ -122,6 +122,13 @@ With snapping on and no key held, drag each object by its move gizmo in the plan
 
 1. Add **Crowd Area**. Confirm its people differ in size in the Visualizer and in every PreViz view,
    and that reopening the show draws the same sizes again.
+2. In the PreViz plan, add a Crowd Area and, while it is still selected, set **Width** to 12 m and
+   **Depth** to 6 m in Info. Confirm the plan's footprint grows to 12 × 6 m and fills with more
+   rows and more people rather than larger ones, and that a width of 300 m is held at 250 m.
+3. Confirm no standing person in a front or side view, or in the Visualizer, is taller than about
+   1.85 m, that they stand on the floor, and that the tallest and shortest clearly differ.
+4. Save, reopen and load the show on the desk. Confirm the crowd is still 12 × 6 m in the plan and
+   in the Visualizer, with the same people.
 
 ## The same objects in PreViz
 

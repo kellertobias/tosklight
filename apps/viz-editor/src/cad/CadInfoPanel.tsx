@@ -26,7 +26,7 @@ import { documentSession, type ProfileUpdate } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
 import { CommitNumber, CommitText, CommitTextArea } from "./cadFields";
 import { MountingFields, PatchFields, SceneryParameters } from "./CadInfoFields";
-import { hasAdjustableSize, placedSize, SIZE_AXES } from "./sceneryAxes";
+import { hasAdjustableSize, placedSize, SIZE_AXES, sizedScenery } from "./sceneryAxes";
 import type { CadEntity } from "./types";
 
 export type InfoTab = "generic" | "placement";
@@ -87,7 +87,7 @@ function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 						each.profileId === found?.profileId &&
 						each.profileRevision === found?.profileRevision,
 				);
-				setScenery(revision?.profileSnapshot?.scenery ?? null);
+				setScenery(sizedScenery(revision?.profileSnapshot));
 				setNote(notes.find((each) => each.fixtureId === fixtureId)?.note ?? "");
 			})
 			.catch(() => current && setFixture(null));

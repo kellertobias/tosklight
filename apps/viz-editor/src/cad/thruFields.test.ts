@@ -137,12 +137,32 @@ describe("the controls a shared model offers", () => {
 		expect(sharedModelFields(lamp, false)).toEqual([]);
 	});
 
-	it("offers a crowd area no scale, since it is drawn at the size it is given", () => {
+	it("offers a crowd area its width and depth rather than a scale, within 1 to 250 m", () => {
 		const crowd = sharedModel(
 			[fixture("a", "crowd"), fixture("b", "crowd")],
-			[revision("crowd", { profileSnapshot: { scenery: null, crowd: {} } as never })],
+			[
+				revision("crowd", {
+					profileSnapshot: {
+						scenery: null,
+						crowd: { default_width_metres: 5, default_depth_metres: 3, modes: [] },
+						physical: { height_millimetres: 1780 },
+					} as never,
+				}),
+			],
 		)!;
-		expect(sharedModelFields(crowd, true)).toEqual([]);
+		const fields = sharedModelFields(crowd, true);
+		expect(fields.map((field) => field.id)).toEqual(["size-x", "size-z"]);
+		const [width, depth] = fields;
+		expect(width.read(fixture("a", "crowd"))).toBe(5);
+		expect(depth.read(fixture("a", "crowd"))).toBe(3);
+		// The height stored beside them is the people's, never set here.
+		expect(width.write(fixture("a", "crowd"), 12).scenerySizeMetres).toEqual({
+			x: 12000,
+			y: 1780,
+			z: 3000,
+		});
+		expect(depth.write(fixture("a", "crowd"), 400).scenerySizeMetres?.z).toBe(250_000);
+		expect(depth.write(fixture("a", "crowd"), 0.2).scenerySizeMetres?.z).toBe(1000);
 	});
 });
 
