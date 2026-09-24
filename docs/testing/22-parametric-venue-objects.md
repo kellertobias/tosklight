@@ -131,6 +131,16 @@ choices existed open unchanged.
    confirm they turn about the gizmo together. Zoom in and out and confirm the arc stays the same
    size on screen and can still be taken.
 
+## Duplicating by dragging
+
+1. Select a deck and drag its gizmo with Option held (Ctrl on Windows or Linux). Confirm a copy
+   moves with the pointer while the original stays, and that letting go leaves both, the copy
+   selected with its own number and no DMX address. Press ⌘Z and confirm only the copy goes.
+2. Start a drag without Option, press Option mid-drag, let it go, then let go of the mouse. Confirm
+   a copy is still placed. Drag again without ever holding Option and confirm the deck just moves.
+3. Option-drag an empty part of the plan and confirm the view pans. Duplicate from the right-click
+   menu and confirm ⌘Z takes that copy away too.
+
 ## Snapping Venue geometry by dragging
 
 With snapping on and no key held, drag each object by its move gizmo in the plan.

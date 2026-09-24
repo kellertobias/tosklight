@@ -8,6 +8,7 @@
 import { type RefObject, useState } from "react";
 import { flushSync } from "react-dom";
 import { createPreviewStore } from "./cadPreviewStore";
+import { duplicateSelection } from "./cadDuplicate";
 import { cadSession } from "./session";
 import type { CadSceneSnapshot, CadTransformPreview } from "./types";
 
@@ -77,5 +78,30 @@ export function useCadMove({
 		}
 	}
 
-	return { previewStore, onPreview, move, turn };
+	/**
+	 * Commits a move made with the duplicate modifier: copies moved by `delta`, the originals left
+	 * where they are, as one step Undo takes away. Returns the copies' IDs, none when it failed.
+	 */
+	async function copy(
+		deltaMillimetres: [number, number, number],
+		entityIds: readonly string[],
+	): Promise<string[]> {
+		const scene = sceneRef.current;
+		if (!scene || !entityIds.length || blocked) {
+			settle(null);
+			return [];
+		}
+		try {
+			const offset = deltaMillimetres.map(Math.round) as [number, number, number];
+			const copies = await duplicateSelection(entityIds, offset, scene.sceneRevision);
+			settle(await cadSession.snapshot());
+			return copies;
+		} catch (reason) {
+			const refreshed = await cadSession.snapshot().catch(() => null);
+			settle(refreshed, String(reason));
+			return [];
+		}
+	}
+
+	return { previewStore, onPreview, move, turn, copy };
 }

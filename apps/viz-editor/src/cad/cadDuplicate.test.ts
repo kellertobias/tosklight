@@ -1,6 +1,7 @@
+import type { CadEntity } from "./types";
 import type { PatchFixtureProjection } from "@tosklight/patch";
 import { describe, expect, it } from "vitest";
-import { duplicateFixtures } from "./cadDuplicate";
+import { duplicateFixtures, withDuplicatePreview } from "./cadDuplicate";
 
 function fixture(
 	fixtureId: string,
@@ -89,5 +90,36 @@ describe("duplicating CAD elements", () => {
 				location: { x: 0, y: 500, z: 0 },
 			}),
 		]);
+	});
+});
+
+describe("a duplicating move's preview", () => {
+	it("leaves every placement of the copied fixtures and moves a copy of each", () => {
+		const base = {
+			selectable: true,
+			rotationDegrees: [0, 0, 0],
+			sizeMillimetres: [400, 400, 400],
+		};
+		const lamp = { ...base, id: "a", logicalFixtureId: "a", positionMillimetres: [0, 0, 4000] };
+		const lampCopy = { ...base, id: "a-2", logicalFixtureId: "a", positionMillimetres: [1000, 0, 4000] };
+		const other = { ...base, id: "b", logicalFixtureId: "b", positionMillimetres: [0, 2000, 0] };
+		const entities = [lamp, lampCopy, other] as unknown as CadEntity[];
+		const preview = {
+			entityIds: ["a"],
+			deltaMillimetres: [500, 0, 0] as [number, number, number],
+			spread: false,
+			duplicate: true,
+		};
+		const shown = withDuplicatePreview(entities, preview);
+		expect(shown.entities.slice(0, 3)).toEqual(entities);
+		expect(shown.entities.slice(3).map((entity) => [entity.id, entity.positionMillimetres])).toEqual([
+			["a:copy", [500, 0, 4000]],
+			["a-2:copy", [1500, 0, 4000]],
+		]);
+		// The originals no longer follow the preview; the gizmo still does through its delta.
+		expect(shown.preview).toEqual({ ...preview, entityIds: [] });
+		// An ordinary move is left as it is.
+		const move = { ...preview, duplicate: undefined };
+		expect(withDuplicatePreview(entities, move)).toEqual({ entities, preview: move });
 	});
 });

@@ -42,6 +42,12 @@ export const cadSession = {
 		}>,
 	) =>
 		invoke<CadTransformOutcome>("cad_set_transforms", { expectedSceneRevision, transforms }),
+	/** Adds whole fixtures, such as copies, as one step that `undo` takes away again. */
+	add: (expectedSceneRevision: number, fixtures: readonly unknown[]) =>
+		invoke<{ sceneRevision: number; addedIds: string[] }>("cad_add", {
+			expectedSceneRevision,
+			fixtures,
+		}),
 	/** Deletes fixtures from the show as one step that `undo` brings back. */
 	delete: (expectedSceneRevision: number, fixtureIds: readonly string[]) =>
 		invoke<{ sceneRevision: number; deletedIds: string[] }>("cad_delete", {

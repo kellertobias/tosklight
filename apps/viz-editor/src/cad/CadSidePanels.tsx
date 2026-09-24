@@ -256,6 +256,7 @@ function titleGroups({
 function SelectionMenu({
 	objectMenu,
 	entities,
+	sceneRevision,
 	venueGroups,
 	onDelete,
 	onSelect,
@@ -265,6 +266,8 @@ function SelectionMenu({
 }: {
 	objectMenu: ObjectMenuState | undefined;
 	entities: readonly CadEntity[];
+	/** The rig the menu's copies are made from. */
+	sceneRevision: number;
 	venueGroups: VenueGroupsState | undefined;
 	onDelete(targets: readonly SelectedElement[]): void;
 	onSelect(ids: string[]): void;
@@ -294,6 +297,7 @@ function SelectionMenu({
 		duplicateSelection(
 			elements.map((element) => element.id),
 			request.duplicateOffset,
+			sceneRevision,
 		)
 			.then((ids) => {
 				if (!ids.length) return;
@@ -469,6 +473,7 @@ export function CadSidePanels({
 			<SelectionMenu
 				{...{ objectMenu, venueGroups, onSelect, onFocusEntity, onError, onNotice }}
 				entities={scene?.entities ?? []}
+				sceneRevision={scene?.sceneRevision ?? 0}
 				onDelete={(targets) => deletion.request(targets)}
 			/>
 		</>

@@ -102,6 +102,8 @@ export interface CadTransformPreview {
 	entityIds: readonly string[];
 	deltaMillimetres: [number, number, number];
 	spread: boolean;
+	/** A move that places copies: the originals stay drawn where they are and the copies move. */
+	duplicate?: boolean;
 	/** A turn in flight: where each turned fixture stands and how it is turned, drawn in its place. */
 	placements?: ReadonlyArray<{
 		id: string;

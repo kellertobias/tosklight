@@ -333,6 +333,7 @@ fn main() {
             cad::cad_transform,
             cad::history::cad_undo,
             cad::history::cad_delete,
+            cad::history::cad_add,
             cad::history::cad_set_transforms,
             cad::history::cad_redo,
             cad::cad_export_pdf,

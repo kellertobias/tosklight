@@ -49,6 +49,8 @@ const mocks = vi.hoisted(() => ({
 	undo: vi.fn(),
 	redo: vi.fn(),
 	delete: vi.fn(),
+	add: vi.fn(),
+	setTransforms: vi.fn(),
 	exportPdf: vi.fn(),
 	onSceneDelta: vi.fn(),
 	onSelectionDelta: vi.fn(),
@@ -181,6 +183,7 @@ beforeEach(() => {
 	mocks.undo.mockReset();
 	mocks.redo.mockReset();
 	mocks.delete.mockReset().mockResolvedValue({ sceneRevision: 10, deletedIds: [fixtureId] });
+	mocks.add.mockReset().mockResolvedValue({ sceneRevision: 10, addedIds: [] });
 	mocks.exportPdf.mockReset().mockResolvedValue(undefined);
 	mocks.onSceneDelta.mockReset().mockResolvedValue(() => undefined);
 	mocks.onSelectionDelta.mockReset().mockResolvedValue(() => undefined);
@@ -618,8 +621,10 @@ describe("the CAD planning screen", () => {
 		expect(screen.queryByRole("menu")).toBeNull();
 		fireEvent.keyDown(window, { key: "F10", shiftKey: true });
 		fireEvent.click(await screen.findByRole("menuitem", { name: "Duplicate" }));
-		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
-		const [written] = transportMocks.patchFixtures.mock.calls[0][2].fixtures;
+		// The copy goes to the show as one step Undo takes away, against the rig it was made from.
+		await waitFor(() => expect(mocks.add).toHaveBeenCalledTimes(1));
+		expect(mocks.add.mock.calls[0][0]).toBe(9);
+		const [written] = mocks.add.mock.calls[0][1];
 		expect(written.fixtureId).not.toBe(fixtureId);
 		expect(written).toMatchObject({
 			fixtureNumber: 102,

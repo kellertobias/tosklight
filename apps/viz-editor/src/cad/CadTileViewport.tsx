@@ -11,6 +11,7 @@ import { useLivePreview } from "./cadPreviewStore";
 import { CadViewport } from "./CadViewport";
 import { visibleEntities } from "./cutPlanes";
 import { withTurnedPlacements } from "./gizmoRotation";
+import { withDuplicatePreview } from "./cadDuplicate";
 import type { TileCamera, ViewportTile } from "./types";
 import { underlaysForView } from "./underlayGeometry";
 
@@ -22,16 +23,17 @@ export function CadTileViewport({
 	node: ViewportTile;
 }) {
 	const { scene, settings, printMode, onTile } = props;
-	const preview = useLivePreview(props.previewStore, scene.sceneRevision);
+	const live = useLivePreview(props.previewStore, scene.sceneRevision);
 	// The elements this tile shows, once its own cut planes are applied.
 	const visible = useMemo(
 		() => visibleEntities(scene.entities, node.view, node.cutPlanes),
 		[scene.entities, node.view, node.cutPlanes],
 	);
-	// A turn in flight draws each turned element where the turn puts it.
-	const entities = useMemo(
-		() => withTurnedPlacements(visible, preview?.placements),
-		[visible, preview?.placements],
+	// A turn in flight draws each turned element where the turn puts it, and a duplicating move
+	// leaves the originals and moves their copies.
+	const { entities, preview } = useMemo(
+		() => withDuplicatePreview(withTurnedPlacements(visible, live?.placements), live),
+		[visible, live],
 	);
 	const underlays = useMemo(
 		() => underlaysForView(props.underlays, node.view),
@@ -86,6 +88,7 @@ export function CadTileViewport({
 			onObjectMenu={printMode ? undefined : props.onObjectMenu}
 			onMove={props.onMove}
 			onTransforms={props.onTransforms}
+			onDuplicateMove={props.onDuplicateMove}
 			editEnabled={!printMode}
 			printPages={printPages}
 			selectedPrintPageId={props.selectedPrintPageId}

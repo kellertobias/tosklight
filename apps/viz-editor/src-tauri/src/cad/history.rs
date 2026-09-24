@@ -24,6 +24,8 @@ pub(super) struct History {
 enum Step {
     Move(TransformRecord),
     Delete(DeleteRecord),
+    /// New fixtures, such as copies: Undo removes them and Redo patches them back.
+    Add(DeleteRecord),
 }
 
 #[derive(Clone)]
@@ -55,6 +57,13 @@ impl History {
 pub struct DeleteOutcome {
     pub scene_revision: u64,
     pub deleted_ids: Vec<Uuid>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddOutcome {
+    pub scene_revision: u64,
+    pub added_ids: Vec<Uuid>,
 }
 
 /// The fixtures `ids` names as they stand, ready to be deleted and later patched back.
@@ -250,6 +259,37 @@ pub fn cad_set_transforms(
     })
 }
 
+/// Adds fixtures to the show as one step Undo takes away again: the copies a duplicate makes.
+///
+/// Each arrives whole, as the patch writes it, with its own new identity; Redo patches the very
+/// same fixtures back.
+#[tauri::command]
+pub fn cad_add(
+    app: tauri::AppHandle,
+    session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, CadState>,
+    expected_scene_revision: u64,
+    fixtures: Vec<serde_json::Value>,
+) -> Result<AddOutcome, String> {
+    if fixtures.is_empty() {
+        return Err("There is nothing to add".to_owned());
+    }
+    check_revision(&session, expected_scene_revision)?;
+    let record = DeleteRecord {
+        fixtures,
+        attachments: Vec::new(),
+    };
+    let scene_revision = restore(&app, &session, &cad, &record)?;
+    let added_ids = record.ids();
+    let mut history = cad.history.lock();
+    history.undo.push(Step::Add(record));
+    history.redo.clear();
+    Ok(AddOutcome {
+        scene_revision,
+        added_ids,
+    })
+}
+
 /// Which way through the history a step is taken.
 #[derive(Clone, Copy)]
 enum Direction {
@@ -309,11 +349,17 @@ fn apply_step(
                 attachments: attachments(session)?,
             })
         }
-        Step::Delete(record) => {
+        Step::Delete(record) | Step::Add(record) => {
             check_revision(session, expected_scene_revision)?;
-            let revision = match direction {
-                Direction::Back => restore(app, session, cad, record)?,
-                Direction::Forward => remove(app, session, cad, record)?,
+            // Undoing a deletion patches the fixtures back; undoing an addition takes them away.
+            let restoring = matches!(
+                (step, direction),
+                (Step::Delete(_), Direction::Back) | (Step::Add(_), Direction::Forward)
+            );
+            let revision = if restoring {
+                restore(app, session, cad, record)?
+            } else {
+                remove(app, session, cad, record)?
             };
             Ok(TransformOutcome {
                 scene_revision: revision,
@@ -416,6 +462,40 @@ mod tests {
             }],
         )
         .unwrap();
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn an_added_copy_takes_its_own_identity_beside_the_original_and_goes_again() {
+        let (session, path, ids) = transform_session();
+        let mut copy = patched(&session)
+            .into_iter()
+            .find(|fixture| fixture["fixtureId"] == ids[1].to_string())
+            .unwrap();
+        let copy_id = uuid::Uuid::new_v4();
+        copy["fixtureId"] = serde_json::json!(copy_id);
+        copy["fixtureNumber"] = serde_json::json!(9);
+        copy["location"]["x"] = serde_json::json!(5000);
+        let record = super::DeleteRecord {
+            fixtures: vec![copy],
+            attachments: Vec::new(),
+        };
+        // Adding is the restoration of what the record holds; Undo is its removal.
+        apply(&session, record.restoration().unwrap());
+        let now = patched(&session);
+        assert_eq!(now.len(), 3);
+        let added = now
+            .iter()
+            .find(|fixture| fixture["fixtureId"] == copy_id.to_string())
+            .expect("the copy is patched");
+        assert_eq!(added["location"]["x"], 5000);
+        let original = now
+            .iter()
+            .find(|fixture| fixture["fixtureId"] == ids[1].to_string())
+            .unwrap();
+        assert_eq!(original["location"]["x"], 1000);
+        apply(&session, record.removal());
+        assert_eq!(patched(&session).len(), 2);
         let _ = std::fs::remove_file(path);
     }
 

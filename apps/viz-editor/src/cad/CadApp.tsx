@@ -317,7 +317,7 @@ export function CadApp() {
 		});
 	}
 
-	const { previewStore, onPreview, move, turn } = useCadMove({
+	const { previewStore, onPreview, move, turn, copy } = useCadMove({
 		sceneRef,
 		applyScene,
 		onError: setError,
@@ -470,6 +470,12 @@ export function CadApp() {
 							onObjectMenu={objectMenu.open}
 							onMove={move}
 							onTransforms={turn}
+							onDuplicateMove={(delta, ids) =>
+								// The copies become the selection, so the next move is theirs.
+								copy(delta, ids).then((copies) => {
+									if (copies.length) select({ type: "replace", ids: copies });
+								})
+							}
 							onFit={fit}
 							printMode={printMode}
 							underlays={underlayState.underlays}
@@ -635,6 +641,8 @@ export interface CadTileProps {
 		spread: boolean,
 		snap?: boolean,
 	): Promise<void>;
+	/** Places moved copies of a drag made with the duplicate modifier, leaving the originals. */
+	onDuplicateMove?(delta: [number, number, number], entityIds: readonly string[]): Promise<void>;
 	/** Commits a turn of the rotate handle: each fixture's new place and rotation. */
 	onTransforms?(placements: NonNullable<CadTransformPreview["placements"]>): Promise<void>;
 	onFit(id: string): void;

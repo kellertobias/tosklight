@@ -18,6 +18,7 @@ import {
 import { type EntryAxis, type MoveReadout, moveOrigin } from "./moveEntry";
 import { typedDelta, useCadMoveEntry } from "./useCadMoveEntry";
 import { type RotateDrag, useRotateHandle } from "./cadRotateDrag";
+import { holdsDuplicateModifier, isDuplicateModifierKey } from "./cadModifiers";
 import { type MoveAxis, pickEntity, pickGizmo } from "./planGeometry";
 import type { PlanPoint } from "./projection";
 import { type FreeAxes, snapMove, snapThreshold } from "./snapping";
@@ -57,6 +58,11 @@ export interface Drag {
 	entry?: string;
 	/** On a free drag, the screen axis a typed value applies to; Tab switches it. */
 	entryAxis?: EntryAxis;
+	/**
+	 * Whether the move places a copy instead: set once the duplicate modifier is held at any point in
+	 * the drag, so letting the modifier go before the mouse does not cancel the copy.
+	 */
+	duplicate?: boolean;
 }
 
 export interface CadViewportInteraction {
@@ -113,6 +119,8 @@ export interface CadViewportContext {
 	): Promise<void>;
 	/** Commits a turn of the gizmo's rotate handle; absent, the handle takes no press. */
 	onTransforms?(placements: NonNullable<CadTransformPreview["placements"]>): Promise<void>;
+	/** Places copies of `entityIds` moved by `deltaMillimetres`; absent, a move never duplicates. */
+	onDuplicateMove?(deltaMillimetres: [number, number, number], entityIds: readonly string[]): Promise<void>;
 }
 
 /** Screen pixels to plan millimetres, through the tile's own camera. */
@@ -168,7 +176,7 @@ function updateMovePreview(
 	const raw = planeDelta(localDelta, view, rotationQuarterTurns);
 	const entityIds = active.entityIds ?? selectedIds;
 	active.rawDeltaMillimetres = raw;
-	active.spread = active.axis !== "plane" && shift;
+	active.spread = active.axis !== "plane" && shift && !active.duplicate;
 	// A spread move fans the selection out, so there is no one fit for it to snap onto.
 	const snapped =
 		context.snapping && !shift && !active.spread && Math.hypot(...raw) >= 1
@@ -190,6 +198,7 @@ function updateMovePreview(
 		entityIds,
 		deltaMillimetres: snapped.delta,
 		spread: active.spread,
+		...(active.duplicate && context.onDuplicateMove ? { duplicate: true } : {}),
 	});
 }
 
@@ -210,7 +219,20 @@ function beginDrag(
 		camera,
 	);
 	const start: [number, number] = [event.clientX, event.clientY];
-	if (event.button === 1 || event.altKey)
+	// A press on the gizmo moves, even with Option held, which is the Mac's duplicate modifier; a
+	// press anywhere else with Option, or the middle button, pans.
+	const axis =
+		event.button === 0 && context.editEnabled
+			? pickGizmo(
+					screenToPlane(context, event.clientX, event.clientY),
+					entities,
+					selected,
+					view,
+					rotationQuarterTurns,
+					camera,
+				)
+			: null;
+	if (!axis && (event.button === 1 || event.altKey))
 		return {
 			type: "pan",
 			start,
@@ -219,14 +241,6 @@ function beginDrag(
 			startCamera: camera,
 		};
 	if (!context.editEnabled) return null;
-	const axis = pickGizmo(
-		screenToPlane(context, event.clientX, event.clientY),
-		entities,
-		selected,
-		view,
-		rotationQuarterTurns,
-		camera,
-	);
 	if (axis) {
 		const selectable = new Set(
 			entities
@@ -245,6 +259,7 @@ function beginDrag(
 			entry: "",
 			entryAxis: "horizontal",
 			spread: axis !== "plane" && event.shiftKey,
+			duplicate: holdsDuplicateModifier(event),
 			// The gizmo stands on the selection's origin, so a press there that never moves is
 			// still a click on the element beneath it.
 			additive: event.shiftKey,
@@ -370,11 +385,15 @@ function finishBox(
 	});
 }
 
-/** Calls `onChange` whenever Shift is pressed or let go, with whether it is now held. */
-function useShiftChanges(onChange: (held: boolean) => void) {
+/**
+ * Calls `onChange` whenever Shift is pressed or let go, with whether it is now held, and
+ * `onDuplicate` when the platform's duplicate modifier is pressed.
+ */
+function useShiftChanges(onChange: (held: boolean) => void, onDuplicate: () => void) {
 	useEffect(() => {
 		const shift = (held: boolean) => (event: KeyboardEvent) => {
 			if (event.key === "Shift") onChange(held);
+			if (held && isDuplicateModifierKey(event.key)) onDuplicate();
 		};
 		const [down, up] = [shift(true), shift(false)];
 		window.addEventListener("keydown", down);
@@ -418,6 +437,8 @@ export function useCadViewportInteraction(
 		if (active?.type !== "move" || !active.rawDeltaMillimetres) return;
 		updateMovePreview(context, active, ...active.last, held, showSnap);
 		refresh(active);
+	}, () => {
+		if (drag.current?.type === "move") drag.current.duplicate = true;
 	});
 
 	function pointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -434,6 +455,7 @@ export function useCadViewportInteraction(
 		const dy = event.clientY - active.start[1];
 		active.last = [event.clientX, event.clientY];
 		if (active.type === "rotate") return turning.turnTo(active, active.last, event.shiftKey);
+		if (active.type === "move" && holdsDuplicateModifier(event)) active.duplicate = true;
 		if (active.type === "pan") {
 			const start = active.startCamera ?? context.camera;
 			context.onCamera({
@@ -478,6 +500,7 @@ export function useCadViewportInteraction(
 			return;
 		}
 		clearReadout();
+		if (holdsDuplicateModifier(event)) active.duplicate = true;
 		// Shift may have been pressed or let go since the last move; the release decides.
 		if (active.rawDeltaMillimetres)
 			updateMovePreview(context, active, event.clientX, event.clientY, event.shiftKey, showSnap);
@@ -501,6 +524,7 @@ export function useCadViewportInteraction(
 		// in the same render that draws the committed positions.
 		const moved = active.entityIds ?? context.selectedIds;
 		rememberMoveAxis(moved, current, context.view, context.rotationQuarterTurns);
+		if (active.duplicate && context.onDuplicateMove) return context.onDuplicateMove(current, moved);
 		await context.onMove(current, moved, active.spread ?? false, !event.shiftKey);
 	}
 

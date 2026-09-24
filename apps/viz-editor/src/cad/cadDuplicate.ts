@@ -11,9 +11,8 @@
  */
 import type { PatchFixtureProjection, PatchSplitAssignment } from "@tosklight/patch";
 import { documentSession } from "../document/session";
-import { TauriPatchTransport } from "../document/transport";
-
-const transport = new TauriPatchTransport();
+import { cadSession } from "./session";
+import type { CadEntity, CadTransformPreview } from "./types";
 
 type Location = PatchFixtureProjection["location"];
 
@@ -76,20 +75,44 @@ export function duplicateFixtures(
 }
 
 /**
- * Writes copies of the named elements to the show in one undoable step and returns their IDs, in
- * the order named.
+ * Writes copies of the named elements to the show as one step Undo takes away again, and returns
+ * their IDs in the order named. `sceneRevision` is the rig the copies were made from.
  */
 export async function duplicateSelection(
 	ids: readonly string[],
 	offset: readonly [number, number, number],
+	sceneRevision: number,
 ): Promise<string[]> {
 	const snapshot = await documentSession.patchSnapshot();
 	const copies = duplicateFixtures(snapshot.fixtures, ids, offset);
 	if (!copies.length) return [];
-	await transport.patchFixtures(snapshot.showId, snapshot.patchRevision, {
-		requestId: crypto.randomUUID(),
-		fixtures: copies,
-		removeFixtureIds: [],
-	});
+	await cadSession.add(sceneRevision, copies);
 	return copies.map((copy) => copy.fixtureId);
+}
+
+/**
+ * What a duplicating move draws: every placement of the fixtures it copies stays where it is, and a
+ * copy of each rides the move, so the operator sees the original stay and the copy go.
+ */
+export function withDuplicatePreview(
+	entities: readonly CadEntity[],
+	preview: CadTransformPreview | null,
+): { entities: readonly CadEntity[]; preview: CadTransformPreview | null } {
+	if (!preview?.duplicate) return { entities, preview };
+	const copying = new Set(preview.entityIds);
+	const [dx, dy, dz] = preview.deltaMillimetres;
+	const copies = entities
+		.filter((entity) => copying.has(entity.logicalFixtureId))
+		.map((entity) => ({
+			...entity,
+			id: `${entity.id}:copy`,
+			logicalFixtureId: `${entity.logicalFixtureId}:copy`,
+			positionMillimetres: [
+				entity.positionMillimetres[0] + dx,
+				entity.positionMillimetres[1] + dy,
+				entity.positionMillimetres[2] + dz,
+			] as [number, number, number],
+		}));
+	// The gizmo still follows the move; the originals no longer do.
+	return { entities: [...entities, ...copies], preview: { ...preview, entityIds: [] } };
 }

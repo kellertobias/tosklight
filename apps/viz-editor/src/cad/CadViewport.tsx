@@ -92,6 +92,8 @@ interface CadViewportProps {
 	): Promise<void>;
 	/** Commits a turn of the gizmo's rotate handle; absent, the handle is not offered. */
 	onTransforms?(placements: NonNullable<CadTransformPreview["placements"]>): Promise<void>;
+	/** Places moved copies of a drag made with the duplicate modifier; absent, a drag only moves. */
+	onDuplicateMove?(deltaMillimetres: [number, number, number], entityIds: readonly string[]): Promise<void>;
 }
 
 interface CadRigOverviewProps {
