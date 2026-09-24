@@ -58,7 +58,15 @@ pub struct CadAnnotation {
     /// How tall text reads on the plan, in millimetres.
     #[serde(default = "default_text_height")]
     pub text_height_millimetres: f64,
+    /// The typeface text is set in, by its stable ID (`osifont`, `hershey-simplex`, …); empty
+    /// for the screen's own. A show carries only the ID, so one written with a typeface this
+    /// build does not ship still opens and draws in the screen's own.
+    #[serde(default)]
+    pub font: String,
 }
+
+/// The longest typeface ID a drawn item may carry.
+const FONT_ID_LIMIT: usize = 64;
 
 fn default_text_height() -> f64 {
     250.0
@@ -88,6 +96,15 @@ pub fn validate(annotation: &CadAnnotation) -> Answer<()> {
         CadAnnotationKind::Text if count != 1 => Err("text needs exactly one point".to_owned()),
         CadAnnotationKind::Text if annotation.text.trim().is_empty() => {
             Err("text needs something to say".to_owned())
+        }
+        CadAnnotationKind::Text
+            if annotation.font.len() > FONT_ID_LIMIT
+                || !annotation
+                    .font
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-') =>
+        {
+            Err("text names its typeface by a short ID of letters, digits and dashes".to_owned())
         }
         CadAnnotationKind::Text
             if !annotation.text_height_millimetres.is_finite()
@@ -175,6 +192,7 @@ mod tests {
             closed: false,
             text: String::new(),
             text_height_millimetres: 250.0,
+            font: String::new(),
         }
     }
 
@@ -198,6 +216,13 @@ mod tests {
         let mut text = item(CadAnnotationKind::Text, vec![[0.0, 0.0]]);
         text.text = "FOH".to_owned();
         assert!(validate(&text).is_ok());
+        // A typeface this build does not know is kept, so a newer show's text survives an edit.
+        text.font = "osifont".to_owned();
+        assert!(validate(&text).is_ok());
+        text.font = "a-typeface-from-a-later-release".to_owned();
+        assert!(validate(&text).is_ok());
+        text.font = "../../etc/passwd".to_owned();
+        assert!(validate(&text).is_err());
     }
 
     #[test]
@@ -229,5 +254,7 @@ mod tests {
         assert_eq!(annotation.kind, CadAnnotationKind::Measure);
         assert!(!annotation.closed);
         assert_eq!(annotation.text_height_millimetres, 250.0);
+        // Text written before typefaces existed is set in the screen's own.
+        assert_eq!(annotation.font, "");
     }
 }

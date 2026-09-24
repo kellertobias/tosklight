@@ -44,6 +44,17 @@ describe("Info for picked text", () => {
 		expect(change).toHaveBeenLastCalledWith({ ...note, textHeightMillimetres: 400 });
 	});
 
+	it("sets the text in one of the bundled typefaces, stored by its ID", () => {
+		const { change } = show(note);
+		const font = screen.getByLabelText("Font");
+		expect(font).toHaveValue("");
+		fireEvent.change(font, { target: { value: "osifont" } });
+		expect(change).toHaveBeenLastCalledWith({ ...note, font: "osifont" });
+		// A typeface this build does not ship shows as the screen's own, and the text still opens.
+		show({ ...note, font: "a-typeface-from-a-later-release" });
+		expect(screen.getAllByLabelText("Font").at(-1)).toHaveValue("");
+	});
+
 	it("names the position by the page's axes on an elevation", () => {
 		show({ ...note, view: "front_to_back" });
 		expect(screen.getByLabelText("Across")).toHaveValue("-3");

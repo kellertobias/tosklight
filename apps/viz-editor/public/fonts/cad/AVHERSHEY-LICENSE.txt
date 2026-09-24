@@ -1,0 +1,27 @@
+AVHershey Simplex, Duplex and Complex (Medium) — Hershey vector lettering
+Source: https://github.com/scruss/AVHershey-OTF (commit 4344992ea54a2082a613f4ba05451991da84f46f, otf/)
+
+Made in 2016 by Stewart C. Russell - scruss.com
+Licence: Dual-licensed CC0 1.0 Universal (public domain dedication) / WTFPL version 2, as each font
+states; the WTFPL text the project ships follows.
+
+Derived from character stroke coordinates by Allen V. Hershey published in "Calligraphy for
+Computers" (US Naval Weapons Laboratory, 1967-08-01, NWL Report No. 2101, NTIS accession number
+AD-662 398) and elsewhere. These coordinates were published without copyright. The efforts of the
+Usenet Font Consortium (James Hurt, et al) who reformatted Hershey's data and published it to
+mod.sources on 1986-04-01 [Volume 4, Issue 42] are greatly appreciated.
+
+            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
+                    Version 2, December 2004
+
+ Copyright (C) 2004 Sam Hocevar <sam@hocevar.net>
+
+ Everyone is permitted to copy and distribute verbatim or modified
+ copies of this license document, and changing it is allowed as long
+ as the name is changed.
+
+            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+  0. You just DO WHAT THE FUCK YOU WANT TO.
+

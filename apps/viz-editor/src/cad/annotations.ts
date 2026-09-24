@@ -19,6 +19,8 @@ export interface CadAnnotation {
 	closed: boolean;
 	text: string;
 	textHeightMillimetres: number;
+	/** The typeface text is set in, by its ID in `CAD_FONTS`; absent or empty for the screen's own. */
+	font?: string;
 }
 
 export const annotationSession = {

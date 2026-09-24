@@ -1,0 +1,24 @@
+/* The CAD text typefaces, served unaltered from public/fonts/cad beside their licences. */
+@font-face {
+	font-family: "ToskLight CAD osifont";
+	src: url("/fonts/cad/osifont-lgpl3fe.ttf") format("truetype");
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "ToskLight CAD Hershey Simplex";
+	src: url("/fonts/cad/AVHersheySimplexMedium.otf") format("opentype");
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "ToskLight CAD Hershey Duplex";
+	src: url("/fonts/cad/AVHersheyDuplexMedium.otf") format("opentype");
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "ToskLight CAD Hershey Complex";
+	src: url("/fonts/cad/AVHersheyComplexMedium.otf") format("opentype");
+	font-display: swap;
+}

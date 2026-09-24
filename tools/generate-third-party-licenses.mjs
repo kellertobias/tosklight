@@ -61,6 +61,18 @@ function rustPackages() {
 		.sort((left, right) => left.name.localeCompare(right.name) || left.version.localeCompare(right.version));
 }
 
+/** The typefaces CAD text can be set in, shipped unaltered beside their licence texts. */
+function bundledFonts() {
+	const manifest = JSON.parse(readFileSync(resolve(root, "apps/viz-editor/public/fonts/cad/fonts.json"), "utf8"));
+	return manifest.fonts.map((font) => ({
+		ecosystem: "Font",
+		name: `${font.name} — ${font.attribution}`,
+		version: font.version,
+		license: font.license,
+		source: font.source,
+	}));
+}
+
 function table(rows) {
 	return rows
 		.map(
@@ -80,6 +92,7 @@ if (!output) throw new Error("Usage: generate-third-party-licenses.mjs OUTPUT.ht
 
 const npm = nodePackages();
 const rust = rustPackages();
+const fonts = bundledFonts();
 const generatedAt = new Date().toISOString();
 const document = `<!doctype html>
 <html lang="en">
@@ -95,11 +108,11 @@ const document = `<!doctype html>
   <nav class="topbar shell"><a class="wordmark" href="./"><img src="icon.png" alt="" /><span>ToskLight</span></a><div class="nav-links"><a href="downloads/">Downloads</a><a href="performance/">Development</a><a class="nav-cta" href="./">Back to the suite</a></div></nav>
   <main class="document-page shell">
     <header class="document-hero"><p class="eyebrow">Open-source software</p><h1>Third-party licenses.</h1><p>ToskLight stands on excellent open-source work. Every package remains available under its own declared license.</p></header>
-    <section class="license-summary"><p>ToskLight itself is distributed under the <a href="license/">ToskLight Community License</a>. This notice is generated from the resolved production dependency graphs: ${npm.length} npm packages and ${rust.length} Rust packages. It excludes development-only dependencies.</p><p>Generated ${escape(generatedAt)}.</p></section>
+    <section class="license-summary"><p>ToskLight itself is distributed under the <a href="license/">ToskLight Community License</a>. This notice is generated from the resolved production dependency graphs: ${npm.length} npm packages and ${rust.length} Rust packages, and lists the ${fonts.length} typefaces bundled for CAD text, whose full licence texts ship beside them in the PreViz application. It excludes development-only dependencies.</p><p>Generated ${escape(generatedAt)}.</p></section>
     <div class="license-table-scroll"><table class="license-table">
       <thead><tr><th>Ecology</th><th>Package</th><th>Version</th><th>Declared license</th><th>Project source</th></tr></thead>
       <tbody>
-${table([...npm, ...rust])}
+${table([...npm, ...rust, ...fonts])}
       </tbody>
     </table></div>
   </main>
@@ -108,4 +121,4 @@ ${table([...npm, ...rust])}
 </html>
 `;
 writeFileSync(output, document);
-console.log(`Generated ${relative(root, output)} with ${npm.length + rust.length} license notices`);
+console.log(`Generated ${relative(root, output)} with ${npm.length + rust.length + fonts.length} license notices`);

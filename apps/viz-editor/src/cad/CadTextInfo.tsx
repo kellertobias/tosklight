@@ -8,6 +8,7 @@
  */
 import type { CadAnnotation } from "./annotations";
 import { CommitNumber, CommitText } from "./cadFields";
+import { CAD_FONTS } from "./cadFonts";
 import { useCadTools } from "./cadTools";
 
 export function CadTextInfo({ annotation }: { annotation: CadAnnotation }) {
@@ -43,6 +44,21 @@ export function CadTextInfo({ annotation }: { annotation: CadAnnotation }) {
 				value={annotation.textHeightMillimetres / 1000}
 				onCommit={(metres) => write({ textHeightMillimetres: Math.round(metres * 1000) })}
 			/>
+			<label className="cad-field">
+				<span>Font</span>
+				<select
+					className="ui-input"
+					aria-label="Font"
+					value={CAD_FONTS.some((font) => font.id === (annotation.font ?? "")) ? (annotation.font ?? "") : ""}
+					onChange={(event) => write({ font: event.currentTarget.value })}
+				>
+					{CAD_FONTS.map((font) => (
+						<option key={font.id} value={font.id} style={font.family ? { fontFamily: font.family } : undefined}>
+							{font.label}
+						</option>
+					))}
+				</select>
+			</label>
 			<div className="cad-info-vector" role="group" aria-label="Position">
 				<span>Position</span>
 				<CommitNumber

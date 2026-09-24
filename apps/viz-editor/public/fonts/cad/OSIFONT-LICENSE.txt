@@ -1,0 +1,17 @@
+osifont — ISO 3098 technical lettering
+Source: https://github.com/hikikomori82/osifont (commit 2e9aa86a8a09b044e08c00f5a4a2505dc3ca9f6e, file osifont-lgpl3fe.ttf)
+The full GNU LGPL version 3 is in LGPL-3.0.txt and the GNU GPL version 3 it builds on in GPL-3.0.txt.
+
+As the font itself states:
+
+Created by
+Zefram Cochrane,
+hikikomori82@gmail.com,
+with FontForge 2.0 (http://fontforge.sf.net)
+
+Project hosted on:
+http://github.com/hikikomori82/osifont/
+
+Distributed under GNU LGPL version 3 with GPL font exception:
+
+As a special exception, if you create a document which uses this font, and embed this font or unaltered portions of this font into the document, this font does not by itself cause the resulting document to be covered by the GNU General Public License. This exception does not however invalidate any other reasons why the document might be covered by the GNU General Public License. If you modify this font, you may extend this exception to your version of the font, but you are not obligated to do so. If you do not wish to do so, delete this exception statement from your version.

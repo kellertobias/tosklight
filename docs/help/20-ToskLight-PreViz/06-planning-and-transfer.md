@@ -839,8 +839,16 @@ view's plan pages:
   With **Select** in hand, click placed text to pick it: it is outlined in cyan and picked on its
   own, so the element drawn under the words stays unselected. Drag the words to move them, or use
   the gizmo that stands on the text's start — the square moves it freely, an arrow along one axis.
-  While text is picked, **Info** shows its **Text**, its **Height** and its **Position** — X and Y on
-  a plan, **Across** and **Height** on an elevation — and typing a value there moves or rewords it.
+  While text is picked, **Info** shows its **Text**, its **Height**, its **Font** and its
+  **Position** — X and Y on a plan, **Across** and **Height** on an elevation — and typing a value
+  there moves or rewords it. **Font** sets the words in the screen's own typeface (the default),
+  **ISO 3098 (osifont)** for lettering to the technical-drawing standard, or one of Allen V.
+  Hershey's plotter alphabets: **Hershey Simplex** (single stroke), **Hershey Duplex** (heavier)
+  or **Hershey Complex** (serif). The Hershey alphabets have no umlauts, ß or some symbols; those
+  characters are drawn in osifont. The show keeps only the font's name, so it opens anywhere, and
+  a font a later release adds shows in the screen's own typeface here. The fonts ship with
+  ToskLight under their own open licences, listed with the third-party notices. Printed plans set
+  all text in Helvetica for now.
   Every move or change is one step **Undo** puts back, and it is kept with the show. Click anywhere
   else to put the text down.
 * **Measure**: drag from one point to another. The measurement is drawn in amber with a tick at

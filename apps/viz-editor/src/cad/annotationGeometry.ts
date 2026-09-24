@@ -122,6 +122,8 @@ export interface AnnotationLabel {
 	text: string;
 	/** Text's own height; a measurement's label follows the screen instead. */
 	heightMillimetres: number | null;
+	/** Text's typeface ID; a measurement's label is always in the screen's own. */
+	font?: string;
 }
 
 /**
@@ -143,6 +145,7 @@ export function annotationLabels(
 					point: place(annotation.points[0]),
 					text: annotation.text,
 					heightMillimetres: annotation.textHeightMillimetres,
+					...(annotation.font ? { font: annotation.font } : {}),
 				},
 			];
 		if (annotation.kind === "measure" && annotation.points.length >= 2) {

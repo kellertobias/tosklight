@@ -8,6 +8,7 @@
  */
 import type { CadAnnotation } from "./annotations";
 import { annotationLabels } from "./annotationGeometry";
+import { cadFontFamily } from "./cadFonts";
 import type { PlanPoint } from "./projection";
 import type { TileCamera } from "./types";
 
@@ -50,6 +51,7 @@ export function CadAnnotationLayer({
 						...(label.heightMillimetres
 							? { fontSize: `${label.heightMillimetres * camera.zoom}px` }
 							: {}),
+						...(cadFontFamily(label.font) ? { fontFamily: cadFontFamily(label.font) ?? undefined } : {}),
 					}}
 				>
 					{label.text}

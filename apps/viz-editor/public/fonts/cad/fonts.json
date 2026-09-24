@@ -1,0 +1,53 @@
+{
+	"note": "The typefaces CAD text can be set in. Each is shipped unaltered from its source; its licence travels beside it in this folder and in the third-party notices.",
+	"fonts": [
+		{
+			"id": "osifont",
+			"name": "ISO 3098 (osifont)",
+			"file": "osifont-lgpl3fe.ttf",
+			"version": "0.1.20221020",
+			"sha256": "81880ba0a1ba2e15752f5ec536f227a69bec98b73ae8200780804b66750320b6",
+			"source": "https://github.com/hikikomori82/osifont",
+			"revision": "2e9aa86a8a09b044e08c00f5a4a2505dc3ca9f6e",
+			"license": "LGPL-3.0-only WITH GPL font exception",
+			"licenseFiles": ["OSIFONT-LICENSE.txt", "LGPL-3.0.txt", "GPL-3.0.txt"],
+			"attribution": "osifont by Zefram Cochrane (hikikomori82) and contributors"
+		},
+		{
+			"id": "hershey-simplex",
+			"name": "Hershey Simplex",
+			"file": "AVHersheySimplexMedium.otf",
+			"version": "000.001",
+			"sha256": "919ae9cf082647290104861d305390268b55933c9fd8929fb852143377fbf7ea",
+			"source": "https://github.com/scruss/AVHershey-OTF",
+			"revision": "4344992ea54a2082a613f4ba05451991da84f46f",
+			"license": "CC0-1.0 OR WTFPL",
+			"licenseFiles": ["AVHERSHEY-LICENSE.txt"],
+			"attribution": "AVHershey by Stewart C. Russell, from the vector lettering of Allen V. Hershey"
+		},
+		{
+			"id": "hershey-duplex",
+			"name": "Hershey Duplex",
+			"file": "AVHersheyDuplexMedium.otf",
+			"version": "000.001",
+			"sha256": "e682a356eeab15282741d76e36a459b3f8712c93c52a3d6f103d2eb81a95a9c0",
+			"source": "https://github.com/scruss/AVHershey-OTF",
+			"revision": "4344992ea54a2082a613f4ba05451991da84f46f",
+			"license": "CC0-1.0 OR WTFPL",
+			"licenseFiles": ["AVHERSHEY-LICENSE.txt"],
+			"attribution": "AVHershey by Stewart C. Russell, from the vector lettering of Allen V. Hershey"
+		},
+		{
+			"id": "hershey-complex",
+			"name": "Hershey Complex",
+			"file": "AVHersheyComplexMedium.otf",
+			"version": "000.001",
+			"sha256": "1d72546152564731ee69889426fc698677945878756fc526bc95ab5753cc3452",
+			"source": "https://github.com/scruss/AVHershey-OTF",
+			"revision": "4344992ea54a2082a613f4ba05451991da84f46f",
+			"license": "CC0-1.0 OR WTFPL",
+			"licenseFiles": ["AVHERSHEY-LICENSE.txt"],
+			"attribution": "AVHershey by Stewart C. Russell, from the vector lettering of Allen V. Hershey"
+		}
+	]
+}
