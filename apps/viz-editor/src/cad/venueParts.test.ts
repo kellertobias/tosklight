@@ -63,20 +63,15 @@ describe("the CAD add dialogs' parts", () => {
 			"Stairs",
 			"Handrail",
 		]);
-		// One Stairs, placed with the handrails chosen for it; the handrail is a part of its own.
+		// One Stairs, whose handrails are chosen in Info; the handrail is a part of its own.
 		const stairs = STAGE_TYPES.find((type) => type.id === "stairs")?.parts ?? [];
-		expect(stairs.map((part) => part.label)).toEqual(["No handrails", "Left", "Right", "Both sides"]);
-		expect(new Set(stairs.map((part) => part.profileId)).size).toBe(1);
-		expect(stairs.map((part) => part.sceneryOptions?.handrails)).toEqual([
-			"none",
-			"left",
-			"right",
-			"both",
-		]);
-		// Each choice is found and remembered on its own; a plain profile id finds the first.
-		const [none, left] = stairs;
-		expect(findPart("stage", partKey(left))?.part).toBe(left);
-		expect(findPart("stage", left.profileId)?.part).toBe(none);
+		expect(stairs.map((part) => part.label)).toEqual(["Stairs"]);
+		const [flight] = stairs;
+		expect(flight.sceneryOptions).toBeUndefined();
+		// A flight remembered with its handrails, from when the menu offered each, finds the one Stairs.
+		for (const side of ["none", "left", "right", "both"])
+			expect(findPart("stage", `${flight.profileId}:handrails-${side}`)?.part).toBe(flight);
+		expect(findPart("stage", flight.profileId)?.part).toBe(flight);
 		// The flight made with handrails is retired: no dialog offers it again.
 		expect(
 			venueProfiles([

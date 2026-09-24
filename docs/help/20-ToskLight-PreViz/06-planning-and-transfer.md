@@ -585,9 +585,10 @@ the key that picks it, such as **Draw line · L**. From left to right:
     **3-point regular** straight truss until you choose another.
   * **Add stage element** (a deck raised off the floor) lists the decks on **Regular feet** and the
     decks on **Scissor feet**, each by platform size, the one **Stairs** and the **Handrail**.
-    **Stairs** asks for its handrails as you choose it: **No handrails**, **Left**, **Right** or
-    **Both sides**, left and right as seen climbing the flight; the choice goes with the flight and
-    can be changed later under **Parameters → Handrails** in **Info**. Either kind of deck is built
+    **Stairs** is one entry. It places a flight without rails. With the flight selected, choose its
+    rails on the **Placement** tab in **Info**, under **Parameters → Handrails**: **None**,
+    **Left**, **Right** or **Both sides**, left and right as seen climbing it. The drawing shows the
+    change at once. Either kind of deck is built
     to the height set in **Info**, so there is no part per leg height. Stairs climb to the height set
     there in 200 mm steps, and a handrail is a stage edge guard 1 m high, set to any length from
     0.4 m to 24 m. It places a 2 × 1 m deck on scissor feet until you choose another. From above, a

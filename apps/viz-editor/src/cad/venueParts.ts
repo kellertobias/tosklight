@@ -69,13 +69,6 @@ const RETIRED_PART_PROFILE_IDS: ReadonlySet<string> = new Set([
 	"5354c05e-266a-521c-9200-e4671a6b30a2",
 ]);
 
-const HANDRAIL_CHOICES = [
-	["none", "No handrails", undefined],
-	["left", "Left", "Seen climbing"],
-	["right", "Right", "Seen climbing"],
-	["both", "Both sides", undefined],
-] as const;
-
 /** The corner pieces made for a 3- or 4-point section, each a fixed block with 500 mm arms. */
 function corners(section: "three" | "four", ids: readonly string[]): VenuePart[] {
 	const names = [
@@ -185,17 +178,18 @@ export const STAGE_TYPES: readonly VenuePartGroup[] = [
 		],
 	},
 	{
+		// One flight of stairs: its handrails are chosen in Info once it is placed, not from the menu.
 		id: "stairs",
 		label: "Stairs",
-		partsLabel: "Handrails",
-		parts: HANDRAIL_CHOICES.map(([handrails, label, detail]) => ({
-			id: `stairs-${handrails}`,
-			key: `${STAIRS_PROFILE_ID}:handrails-${handrails}`,
-			label,
-			detail,
-			profileId: STAIRS_PROFILE_ID,
-			sceneryOptions: { handrails },
-		})),
+		partsLabel: "Part",
+		parts: [
+			{
+				id: "stairs",
+				label: "Stairs",
+				detail: "Handrails are chosen in Info",
+				profileId: STAIRS_PROFILE_ID,
+			},
+		],
 	},
 	{
 		id: "handrail",
@@ -315,6 +309,9 @@ export const PART_MENU_PROFILE_IDS: ReadonlySet<string> = new Set([
 
 /** A button's part by its key, or undefined when the button does not offer that part. */
 export function findPart(kind: CadPartKind, key: string): FoundPart | undefined {
+	// A flight chosen with its handrails, remembered before the handrails moved to Info, is the one
+	// Stairs part now.
+	key = key.replace(/^(.*):handrails-(?:none|left|right|both)$/u, "$1");
 	const groups = CAD_PART_CATALOGUE[kind];
 	// A key names one part; a bare profile, as a choice remembered before keys existed, its first.
 	for (const matches of [(part: VenuePart) => partKey(part) === key, (part: VenuePart) => part.profileId === key])

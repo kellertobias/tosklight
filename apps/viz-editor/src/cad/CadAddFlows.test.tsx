@@ -259,11 +259,11 @@ describe("Add Several beside every part in a button's menu", () => {
 
 	it("holds the exact part, options and all, so each press places one more of it", () => {
 		const startPlacing = vi.fn();
-		holdPart({ startPlacing } as unknown as CadTools, "stage", `${STAIRS}:handrails-left`);
+		holdPart({ startPlacing } as unknown as CadTools, "stage", STAIRS);
 		expect(startPlacing).toHaveBeenCalledWith({
 			profileId: STAIRS,
-			name: expect.stringMatching(/Left/u),
-			with: expect.objectContaining({ sceneryOptions: { handrails: "left" } }),
+			name: "Stairs",
+			with: { sceneryOptions: undefined, scenerySizeMetres: undefined },
 		});
 		startPlacing.mockClear();
 		holdPart({ startPlacing } as unknown as CadTools, "curtain", `${RACK}:units-12`);
@@ -335,34 +335,28 @@ describe("the scenery button's flight rack", () => {
 });
 
 describe("the one Stairs part", () => {
-	it("is chosen with its handrails and placed with them, each side remembered on its own", async () => {
+	it("is one item in the menu, placed without rails, whatever variant was remembered before", async () => {
 		const onChoose = vi.fn();
 		const menu = render(<CadPartMenu kind="stage" onChoose={onChoose} />);
-		const stairs = await screen.findByRole("group", { name: "Stairs" });
-		expect(within(stairs).getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual([
-			"No handrails",
-			"LeftSeen climbing",
-			"RightSeen climbing",
-			"Both sides",
-		]);
-		const left = within(stairs).getByRole("menuitemradio", { name: /^Left/u });
-		await waitFor(() => expect(left).toBeEnabled());
-		fireEvent.click(left);
-		const [key] = onChoose.mock.calls[0];
-		expect(key).toBe(`${STAIRS}:handrails-left`);
+		// One Stairs entry, not a heading over handrail variants.
+		expect(screen.queryByRole("group", { name: "Stairs" })).toBeNull();
+		const stairs = screen.getByRole("menuitemradio", { name: /^Stairs/u });
+		await waitFor(() => expect(stairs).toBeEnabled());
+		expect(stairs).toHaveTextContent("Handrails are chosen in Info");
+		fireEvent.click(stairs);
+		expect(onChoose).toHaveBeenCalledWith(STAIRS);
 		menu.unmount();
 
 		const { announcePlaced, press } = renderFlows();
-		press("stage", key);
+		press("stage", STAIRS);
 		await waitFor(() => expect(announcePlaced).toHaveBeenCalledTimes(1));
-		expect(placedFixture(0)).toMatchObject({
-			profileId: STAIRS,
-			sceneryOptions: { handrails: "left" },
-		});
-		// A plain press places the same choice again, and the menu checks it.
+		expect(placedFixture(0)).toMatchObject({ profileId: STAIRS });
+		expect(placedFixture(0).sceneryOptions ?? undefined).toBeUndefined();
+		// A choice remembered as one of the old variants places the same one Stairs.
+		localStore.set("tosklight:viz-editor:cad-add-part:stage:v1", `${STAIRS}:handrails-left`);
 		press("stage");
 		await waitFor(() => expect(announcePlaced).toHaveBeenCalledTimes(2));
-		expect(placedFixture(1).sceneryOptions).toEqual({ handrails: "left" });
+		expect(placedFixture(1)).toMatchObject({ profileId: STAIRS });
 	});
 });
 
