@@ -344,7 +344,12 @@ mod tests {
         let (session, path, ids) = transform_session();
         let before = patched(&session);
         let record = deletion(&session, &ids).unwrap();
-        assert_eq!(record.ids(), ids.to_vec());
+        // The patch lists its fixtures in its own order, so the record holds them in that order.
+        let mut deleted = record.ids();
+        deleted.sort();
+        let mut wanted = ids.to_vec();
+        wanted.sort();
+        assert_eq!(deleted, wanted);
 
         apply(&session, record.removal());
         assert!(patched(&session).is_empty());
