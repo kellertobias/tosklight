@@ -54,7 +54,8 @@ pub struct Scene {
     pub gobo_artwork: Vec<GoboArtwork>,
     /// The CAD's Venue groups, as the fixture ids of each group's members. Selecting every member
     /// of a group is a group selection, which is drawn apart from a single selected element.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// Always written: the helper's binary channel cannot skip a field.
+    #[serde(default)]
     pub venue_groups: Vec<Vec<Uuid>>,
     pub bounds: Aabb,
 }
@@ -758,9 +759,9 @@ pub struct SceneryDetail {
 /// Which sides of a flight of stairs a handrail runs up, as seen climbing it.
 ///
 /// A snapshot written before the sides could be chosen said only whether the flight had rails; it
-/// reads as rails up both sides or none, which is what it drew.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(from = "StairRailsWire")]
+/// reads as rails up both sides or none, which is what it drew. The binary channel to the helper is
+/// not self-describing, so there the two sides are read as they were written.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
 pub struct StairRails {
     pub left: bool,
     pub right: bool,
@@ -778,6 +779,22 @@ impl StairRails {
 
     pub fn any(self) -> bool {
         self.left || self.right
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct StairRailSides {
+    left: bool,
+    right: bool,
+}
+
+impl<'de> serde::Deserialize<'de> for StairRails {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        if !deserializer.is_human_readable() {
+            let StairRailSides { left, right } = StairRailSides::deserialize(deserializer)?;
+            return Ok(Self { left, right });
+        }
+        StairRailsWire::deserialize(deserializer).map(Self::from)
     }
 }
 

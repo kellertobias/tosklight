@@ -793,6 +793,22 @@ mod scene_plane {
         assert!(arrived.fixtures.is_empty(), "an empty rig stays empty");
     }
 
+    /// Stair handrails read the older one-flag form from a JSON snapshot; the binary channel is not
+    /// self-describing, so there each side must come back exactly as it was written.
+    #[test]
+    fn stair_handrails_cross_the_channel_side_by_side() {
+        let detail = viz_scene::SceneryDetail {
+            handrails: viz_scene::StairRails {
+                left: true,
+                right: false,
+            },
+            ..viz_scene::SceneryDetail::default()
+        };
+        let arrived: viz_scene::SceneryDetail =
+            decode(&encode(&detail).expect("encodes")).expect("the handrails decode");
+        assert_eq!(arrived, detail);
+    }
+
     /// An empty scene is the case that decided the channel's format.
     ///
     /// An empty `Aabb` is infinities — that is how "nothing included yet" is represented, and it is
