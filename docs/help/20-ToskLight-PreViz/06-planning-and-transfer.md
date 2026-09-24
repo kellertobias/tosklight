@@ -568,7 +568,8 @@ title's buttons. Rest the pointer on a button, or reach it with the keyboard, an
 a tooltip just below it, above the side panel and the viewports. A drawing tool's tooltip also shows
 the key that picks it, such as **Draw line · L**. From left to right:
 
-* **Undo** and **Redo** step back and forward through changes to the drawing.
+* **Undo** and **Redo** step back and forward through moves and deletions in the drawing. ⌘Z
+  (Ctrl+Z) undoes too, and ⇧⌘Z (Ctrl+Y) redoes.
 * The add group places venue objects. **Add truss**, **Add stage element**, **Add curtain** and
   **Add primitive** each place their part at once when pressed. A small caret in the button's
   bottom-right corner opens a menu of the parts that button can place, each shown by its picture; the
@@ -731,10 +732,12 @@ above — is out of reach. **Measure** snaps its ends in the same way, onto conn
 curtain ends and the centre of every object. Hold **Shift** to place freely: while it is held, a drag
 or a measurement snaps to nothing and a moved lamp is not mounted.
 
-The trash button at the top of Info deletes the selection from the show, with every multi-patch copy
-of each fixture. It asks first. Shift-click it to delete a single selected element without being
-asked; several selected elements are always confirmed. **Undo** in the CAD title brings a deletion
-back.
+The trash button at the top of Info, **Delete** and **Backspace** delete the selection from the
+show, with every multi-patch copy of each fixture. A single selected element goes at once; several
+are always confirmed first, and **Cancel** leaves every one of them in place. A deletion is one step:
+**Undo** in the CAD title, or ⌘Z, brings back everything it removed — same fixtures, numbers, patch
+and place — and **Redo** deletes it again. While a field has the focus, Backspace edits the field,
+and during a move it edits the typed position.
 
 With **Select** in hand, right-click an element in a viewport for its menu: **Group**, **Ungroup**,
 **Duplicate** and **Delete**. Lamps, trusses, stage parts and imported models all offer Duplicate and
@@ -753,7 +756,8 @@ Escape to close it.
   fixture (or virtual) number above its original's, keeps its profile, mode, size, rotation and name,
   and is not patched — give it a DMX address in Info when it needs one. The copies become the
   selection. **Undo** takes them away again.
-* **Delete** is the trash button's delete: it always asks first, and **Undo** brings the elements back.
+* **Delete** is the trash button's delete: one element goes at once, several are confirmed first,
+  and **Undo** brings the elements back.
 
 A multi-patched fixture stands in the plan once for each copy. Click a copy and Info edits that copy
 alone: its name, position and rotation change, and the fixture and its other copies stay where they

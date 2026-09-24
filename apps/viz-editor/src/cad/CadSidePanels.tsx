@@ -11,7 +11,7 @@ import {
 	type TitleActionGroup,
 	type TitleDropdownItem,
 } from "@tosklight/ui";
-import { type KeyboardEvent, type PointerEvent, type ReactNode, useRef, useState } from "react";
+import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { CadElementsPanel, type ElementsRequests, type ElementsTab, elementsAddItems } from "./CadElementsPanel";
 import { duplicateSelection } from "./cadDuplicate";
 import { CadObjectMenu, type CadObjectMenuRequest } from "./CadObjectMenu";
@@ -412,6 +412,7 @@ export function CadSidePanels({
 	onFocusEntity,
 	objectMenu,
 	venueGroups,
+	deleteRequest = 0,
 	onError,
 	onNotice,
 }: {
@@ -432,6 +433,8 @@ export function CadSidePanels({
 	objectMenu?: ObjectMenuState;
 	/** The show's Venue groups, so that menu can Group and Ungroup what it names. */
 	venueGroups?: VenueGroupsState;
+	/** Counts Delete and Backspace presses; each new one deletes the selection as the trash does. */
+	deleteRequest?: number;
 	onError(reason: unknown): void;
 	/** A short confirmation that an action did something. */
 	onNotice(message: string): void;
@@ -450,8 +453,15 @@ export function CadSidePanels({
 	const elements = scene ? selectedElements(scene.entities, scene.selectedIds) : [];
 	const deletion = useDeleteSelection({
 		elements,
+		sceneRevision: scene?.sceneRevision ?? null,
 		onDeleted: () => onSelect([]),
 		onError,
+	});
+	const handledDelete = useRef(deleteRequest);
+	useEffect(() => {
+		if (deleteRequest === handledDelete.current) return;
+		handledDelete.current = deleteRequest;
+		deletion.request();
 	});
 	const overlays = (
 		<>
@@ -459,13 +469,13 @@ export function CadSidePanels({
 			<SelectionMenu
 				{...{ objectMenu, venueGroups, onSelect, onFocusEntity, onError, onNotice }}
 				entities={scene?.entities ?? []}
-				onDelete={(targets) => deletion.request(undefined, targets)}
+				onDelete={(targets) => deletion.request(targets)}
 			/>
 		</>
 	);
 	if (!panel && selectionCount === 0) return overlays;
 	const deleteButton = (
-		<DeleteSelectionButton count={elements.length} onPress={(event) => deletion.request(event)} />
+		<DeleteSelectionButton count={elements.length} onPress={() => deletion.request()} />
 	);
 
 	const infoTabs = infoTabsGroup(infoTab, setInfoTab);

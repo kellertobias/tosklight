@@ -96,7 +96,8 @@ export function useCadMoveEntry({
 	function typeMoveKey(active: Drag, key: string): boolean {
 		const entry = active.entry ?? "";
 		if (isEntryKey(key)) active.entry = entry + key;
-		else if (key === "Backspace" && entry) active.entry = entry.slice(0, -1);
+		// Backspace during a move is the entry's even when it is empty: it never deletes what moves.
+		else if (key === "Backspace") active.entry = entry.slice(0, -1);
 		else if (key === "Tab" && active.axis === "plane")
 			active.entryAxis = active.entryAxis === "vertical" ? "horizontal" : "vertical";
 		else if (key === "Escape") {

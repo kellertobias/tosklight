@@ -109,6 +109,15 @@ With snapping on and no key held, drag each object by its move gizmo in the plan
    does not couple to it.
 5. Repeat any drag with **Shift** held and confirm nothing snaps and nothing is marked.
 
+## Deleting and undoing in the CAD
+
+1. Move a truss, then select it and press **Delete**. Confirm it goes at once with no question.
+   Press ⌘Z and confirm it comes back with the same number, patch and place; press ⌘Z again and
+   confirm the earlier move is undone too, with no message about missing elements.
+2. Select a deck and press **Backspace**; confirm it goes at once. Redo with ⇧⌘Z after undoing it.
+3. Select three elements and press **Delete**. Confirm a question lists all three; **Cancel** leaves
+   all three in place. Delete again and confirm; one ⌘Z brings all three back.
+
 ## Crowds
 
 1. Add **Crowd Area**. Confirm its people differ in size in the Visualizer and in every PreViz view,

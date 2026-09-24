@@ -32,6 +32,12 @@ export const cadSession = {
 				spread,
 			},
 		}),
+	/** Deletes fixtures from the show as one step that `undo` brings back. */
+	delete: (expectedSceneRevision: number, fixtureIds: readonly string[]) =>
+		invoke<{ sceneRevision: number; deletedIds: string[] }>("cad_delete", {
+			expectedSceneRevision,
+			fixtureIds,
+		}),
 	undo: (expectedSceneRevision: number) =>
 		invoke<CadTransformOutcome>("cad_undo", { expectedSceneRevision }),
 	redo: (expectedSceneRevision: number) =>

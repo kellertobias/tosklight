@@ -1,13 +1,15 @@
 /**
- * The CAD screen's single-key shortcuts: the drawing tools, the five view directions, zoom and pan.
+ * The CAD screen's shortcuts: the drawing tools, the five view directions, zoom and pan, Delete,
+ * and Undo, Redo, Group and Ungroup with ⌘ (Ctrl).
  *
  * A key reaches the drawing only when nothing else wants it: never while a field, a select or an
- * editable text has focus, never while a dialog is open, and never with Ctrl, Cmd or Alt held, so
- * the window's own shortcuts keep working. The keys act on the viewport the operator last used.
+ * editable text has focus, and never while a dialog is open. Apart from the ⌘ shortcuts named
+ * here, nothing is taken with Ctrl, Cmd or Alt held, so the window's own shortcuts keep working.
+ * The keys act on the viewport the operator last used.
  */
 import { useEffect, useRef } from "react";
 import type { CadDrawTool } from "./cadTools";
-import { CAD_VIEW_LABELS, type CadViewDirection, type TileCamera } from "./types";
+import { CAD_VIEW_LABELS, type CadViewDirection, type TileCamera, type ViewportTile } from "./types";
 
 export type CadShortcut =
 	| { type: "tool"; tool: CadDrawTool }
@@ -16,7 +18,12 @@ export type CadShortcut =
 	| { type: "pan"; horizontal: -1 | 0 | 1; vertical: -1 | 0 | 1 }
 	/** ⌘G (Ctrl+G) groups the selected Venue elements; ⇧⌘G ungroups them. */
 	| { type: "group" }
-	| { type: "ungroup" };
+	| { type: "ungroup" }
+	/** Delete or Backspace deletes the selection. */
+	| { type: "delete" }
+	/** ⌘Z (Ctrl+Z) undoes the last move or deletion; ⇧⌘Z or Ctrl+Y redoes it. */
+	| { type: "undo" }
+	| { type: "redo" };
 
 export const CAD_MIN_ZOOM = 0.004;
 export const CAD_MAX_ZOOM = 2.5;
@@ -54,9 +61,13 @@ export function cadShortcutFor(
 		shiftKey?: boolean;
 	},
 ): CadShortcut | null {
-	if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "g")
-		return { type: event.shiftKey ? "ungroup" : "group" };
+	const command = (event.ctrlKey || event.metaKey) && !event.altKey;
+	const letter = event.key.toLowerCase();
+	if (command && letter === "g") return { type: event.shiftKey ? "ungroup" : "group" };
+	if (command && letter === "z") return { type: event.shiftKey ? "redo" : "undo" };
+	if (command && letter === "y" && event.ctrlKey) return { type: "redo" };
 	if (event.ctrlKey || event.metaKey || event.altKey) return null;
+	if (event.key === "Delete" || event.key === "Backspace") return { type: "delete" };
 	const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 	const tool = TOOL_KEYS[key];
 	if (tool) return { type: "tool", tool };
@@ -95,6 +106,36 @@ export function pannedCamera(
 		...camera,
 		pan: [camera.pan[0] - horizontal * step, camera.pan[1] - vertical * step],
 	};
+}
+
+/**
+ * A tile after a view, zoom or pan shortcut; any other shortcut leaves it as it is. `fit` frames the
+ * rig in a view, or gives null to keep the tile's camera.
+ */
+export function shortcutTile(
+	tile: ViewportTile,
+	shortcut: CadShortcut,
+	fit: (view: CadViewDirection) => TileCamera | null,
+): ViewportTile {
+	switch (shortcut.type) {
+		case "view":
+			// As the view menu does: the new direction starts unrotated and framed on the rig.
+			return {
+				...tile,
+				view: shortcut.view,
+				rotationQuarterTurns: 0,
+				camera: fit(shortcut.view) ?? tile.camera,
+			};
+		case "zoom":
+			return { ...tile, camera: zoomedCamera(tile.camera, shortcut.factor) };
+		case "pan":
+			return {
+				...tile,
+				camera: pannedCamera(tile.camera, shortcut.horizontal, shortcut.vertical),
+			};
+		default:
+			return tile;
+	}
 }
 
 function wantsTheKey(target: EventTarget | null) {

@@ -48,6 +48,7 @@ const mocks = vi.hoisted(() => ({
 	transform: vi.fn(),
 	undo: vi.fn(),
 	redo: vi.fn(),
+	delete: vi.fn(),
 	exportPdf: vi.fn(),
 	onSceneDelta: vi.fn(),
 	onSelectionDelta: vi.fn(),
@@ -179,6 +180,7 @@ beforeEach(() => {
 	mocks.transform.mockReset();
 	mocks.undo.mockReset();
 	mocks.redo.mockReset();
+	mocks.delete.mockReset().mockResolvedValue({ sceneRevision: 10, deletedIds: [fixtureId] });
 	mocks.exportPdf.mockReset().mockResolvedValue(undefined);
 	mocks.onSceneDelta.mockReset().mockResolvedValue(() => undefined);
 	mocks.onSelectionDelta.mockReset().mockResolvedValue(() => undefined);
@@ -518,7 +520,7 @@ describe("the CAD planning screen", () => {
 		expect(screen.getByTestId("cad-canvas")).toHaveTextContent("left_to_right");
 	});
 
-	it("deletes the selected element from Info after asking, or at once with Shift", async () => {
+	it("deletes a single selected element at once, from Info or with Delete and Backspace", async () => {
 		render(
 			<ModalProvider>
 				<CadApp />
@@ -527,30 +529,43 @@ describe("the CAD planning screen", () => {
 		await screen.findByTestId("cad-canvas");
 		const aside = await screen.findByRole("complementary", { name: "Info" });
 		fireEvent.click(within(aside).getByRole("button", { name: "Delete selected element" }));
-		const confirm = await screen.findByRole("dialog", { name: "Delete Profile Stage 1?" });
-		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
-		fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
-		await waitFor(() =>
-			expect(screen.queryByRole("dialog", { name: "Delete Profile Stage 1?" })).toBeNull(),
-		);
-		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
-
-		fireEvent.click(within(aside).getByRole("button", { name: "Delete selected element" }));
-		fireEvent.click(
-			within(await screen.findByRole("dialog", { name: "Delete Profile Stage 1?" })).getByRole(
-				"button",
-				{ name: "Delete" },
-			),
-		);
-		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
-		expect(transportMocks.patchFixtures.mock.calls[0][2]).toMatchObject({
-			fixtures: [],
-			removeFixtureIds: [fixtureId],
-		});
+		await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith(9, [fixtureId]));
+		expect(screen.queryByRole("dialog")).toBeNull();
 		await waitFor(() => expect(mocks.replaceSelection).toHaveBeenCalledWith(4, []));
+
+		for (const key of ["Delete", "Backspace"]) {
+			mocks.delete.mockClear();
+			fireEvent.keyDown(window, { key });
+			await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith(9, [fixtureId]));
+			expect(screen.queryByRole("dialog")).toBeNull();
+		}
+		// A key typed into a field is the field's: Backspace there edits the text.
+		mocks.delete.mockClear();
+		fireEvent.keyDown(within(await screen.findByRole("region", { name: "Info" })).getByLabelText("Name"), {
+			key: "Backspace",
+		});
+		expect(mocks.delete).not.toHaveBeenCalled();
 	});
 
-	it("opens Duplicate and Delete for the selection from the Menu key, deleting only after asking", async () => {
+	it("undoes and redoes with Command-Z and Shift-Command-Z", async () => {
+		mocks.undo.mockResolvedValue({ sceneRevision: 10, transforms: [], attachments: [] });
+		mocks.redo.mockResolvedValue({ sceneRevision: 11, transforms: [], attachments: [] });
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		fireEvent.keyDown(window, { key: "z", metaKey: true });
+		await waitFor(() => expect(mocks.undo).toHaveBeenCalledWith(9));
+		fireEvent.keyDown(window, { key: "Z", metaKey: true, shiftKey: true });
+		await waitFor(() => expect(mocks.redo).toHaveBeenCalledTimes(1));
+		fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+		await waitFor(() => expect(mocks.undo).toHaveBeenCalledTimes(2));
+		expect(mocks.delete).not.toHaveBeenCalled();
+	});
+
+	it("opens Duplicate and Delete for the selection from the Menu key", async () => {
 		render(
 			<ModalProvider>
 				<CadApp />
@@ -566,15 +581,9 @@ describe("the CAD planning screen", () => {
 		]);
 		fireEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
 		expect(screen.queryByRole("menu")).toBeNull();
-		const confirm = await screen.findByRole("dialog", { name: "Delete Profile Stage 1?" });
-		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
-		fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
-		await waitFor(() =>
-			expect(transportMocks.patchFixtures.mock.calls[0]?.[2]).toMatchObject({
-				fixtures: [],
-				removeFixtureIds: [fixtureId],
-			}),
-		);
+		// One element goes at once, as it does from Info.
+		await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith(9, [fixtureId]));
+		expect(screen.queryByRole("dialog")).toBeNull();
 	});
 
 	it("duplicates the selection from its menu as a new, unpatched element beside it, and selects it", async () => {
@@ -620,23 +629,7 @@ describe("the CAD planning screen", () => {
 		await waitFor(() => expect(mocks.replaceSelection).toHaveBeenCalledWith(4, [written.fixtureId]));
 	});
 
-	it("deletes a single element without asking when the trash button is Shift-clicked", async () => {
-		render(
-			<ModalProvider>
-				<CadApp />
-			</ModalProvider>,
-		);
-		await screen.findByTestId("cad-canvas");
-		const aside = await screen.findByRole("complementary", { name: "Info" });
-		fireEvent.click(within(aside).getByRole("button", { name: "Delete selected element" }), {
-			shiftKey: true,
-		});
-		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
-		expect(screen.queryByRole("dialog")).toBeNull();
-		expect(transportMocks.patchFixtures.mock.calls[0][2].removeFixtureIds).toEqual([fixtureId]);
-	});
-
-	it("lists several selected elements in Info and always confirms deleting them, even with Shift", async () => {
+	it("lists several selected elements in Info and always confirms deleting them", async () => {
 		mocks.snapshot.mockResolvedValue({
 			...snapshot,
 			selectedIds: [fixtureId, secondFixtureId],
@@ -668,25 +661,22 @@ describe("the CAD planning screen", () => {
 		const aside = screen.getByRole("complementary", { name: "Info" });
 		// The trash button is how a selection is deleted; the list offers no second way.
 		expect(within(aside).queryByRole("button", { name: /Delete all/ })).toBeNull();
-		fireEvent.click(within(aside).getByRole("button", { name: "Delete 2 selected elements" }), {
-			shiftKey: true,
-		});
+		fireEvent.click(within(aside).getByRole("button", { name: "Delete 2 selected elements" }));
 		const confirm = await screen.findByRole("dialog", { name: "Delete 2 elements?" });
-		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
+		expect(mocks.delete).not.toHaveBeenCalled();
 		fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
 		await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+		expect(mocks.delete).not.toHaveBeenCalled();
 
-		fireEvent.click(within(aside).getByRole("button", { name: "Delete 2 selected elements" }));
+		// Delete asks the same question, and only the confirmation deletes: all of them, in one step.
+		fireEvent.keyDown(window, { key: "Delete" });
 		fireEvent.click(
 			within(await screen.findByRole("dialog", { name: "Delete 2 elements?" })).getByRole("button", {
 				name: "Delete all 2",
 			}),
 		);
-		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
-		expect(transportMocks.patchFixtures.mock.calls[0][2].removeFixtureIds).toEqual([
-			fixtureId,
-			secondFixtureId,
-		]);
+		await waitFor(() => expect(mocks.delete).toHaveBeenCalledTimes(1));
+		expect(mocks.delete).toHaveBeenCalledWith(9, [fixtureId, secondFixtureId]);
 	});
 
 	it("selects only the element a row of the selection list names", async () => {

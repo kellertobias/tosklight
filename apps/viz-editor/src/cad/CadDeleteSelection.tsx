@@ -1,17 +1,16 @@
 /**
- * Deleting what the drawing has selected, from the Info panel.
+ * Deleting what the drawing has selected: the trash button in Info, Delete or Backspace, and the
+ * object menu all come here.
  *
- * The trash button asks first. Shift-clicking it deletes one selected element at once; several are
- * always confirmed, because a stray click on a marquee selection could otherwise empty a rig.
- * Deleting removes the fixture from the show, with every multi-patch copy it has.
+ * One element goes at once; several are always confirmed first, because a stray key on a marquee
+ * selection could otherwise empty a rig. Deleting removes the fixture from the show, with every
+ * multi-patch copy it has, as one step that Undo brings back.
  */
 import { Button, ModalFrame } from "@tosklight/ui";
 import { type MouseEvent, useState } from "react";
-import { TauriPatchTransport } from "../document/transport";
+import { cadSession } from "./session";
 import type { CadEntity } from "./types";
 import "./cadDeleteSelection.css";
-
-const transport = new TauriPatchTransport();
 
 /** How many names a confirmation lists before it only counts the rest. */
 const LISTED_NAMES = 12;
@@ -65,7 +64,7 @@ export function DeleteSelectionButton({
 		<Button
 			className="cad-sidebar-delete"
 			aria-label={label}
-			title={count > 1 ? label : `${label} (Shift-click deletes without asking)`}
+			title={`${label} (Delete)`}
 			disabled={count === 0}
 			onClick={onPress}
 		>
@@ -136,15 +135,18 @@ function DeleteConfirm({
 }
 
 /**
- * The delete flow for one selection: `request` asks (or, with Shift on a single element, deletes at
- * once), and `dialog` is the confirmation to render while it is asking.
+ * The delete flow for one selection: `request` deletes a single element at once and asks before
+ * deleting several, and `dialog` is the confirmation to render while it is asking.
  */
 export function useDeleteSelection({
 	elements,
+	sceneRevision,
 	onDeleted,
 	onError,
 }: {
 	elements: readonly SelectedElement[];
+	/** The rig revision the selection was read at; a deletion against an older one is refused. */
+	sceneRevision: number | null;
 	onDeleted(): void;
 	onError(reason: unknown): void;
 }) {
@@ -152,14 +154,13 @@ export function useDeleteSelection({
 	const [deleting, setDeleting] = useState(false);
 
 	async function remove(targets: readonly SelectedElement[]) {
-		if (!targets.length) return;
+		if (!targets.length || sceneRevision === null) return;
 		setDeleting(true);
 		try {
-			await transport.patchFixtures("", 0, {
-				requestId: crypto.randomUUID(),
-				fixtures: [],
-				removeFixtureIds: targets.map((element) => element.id),
-			});
+			await cadSession.delete(
+				sceneRevision,
+				targets.map((element) => element.id),
+			);
 			setConfirming(null);
 			onDeleted();
 		} catch (reason) {
@@ -174,12 +175,9 @@ export function useDeleteSelection({
 	 * opens in the frame of the right-click that made them the selection, before that selection has
 	 * come back from the desk.
 	 */
-	function request(
-		event?: { shiftKey?: boolean },
-		targets: readonly SelectedElement[] = elements,
-	) {
+	function request(targets: readonly SelectedElement[] = elements) {
 		if (!targets.length) return;
-		if (event?.shiftKey && targets.length === 1) void remove(targets);
+		if (targets.length === 1) void remove(targets);
 		else setConfirming(targets);
 	}
 

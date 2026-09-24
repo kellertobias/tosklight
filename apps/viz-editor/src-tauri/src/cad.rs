@@ -6,6 +6,7 @@
 //! same scene, which is why the deltas below are broadcast rather than sent to one window.
 
 mod aim;
+pub mod history;
 mod layer_visibility;
 mod profile_drawing;
 mod scenery;
@@ -14,6 +15,7 @@ use crate::contract::{FixtureDto, MutationDto};
 use crate::session::Session;
 use aim::{CadAim, aim_lamps};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use history::{History, TransformRecord};
 use layer_visibility::{
     fixture_notes, hidden_fixture_ids, hidden_layers, locked_layers, selectable_ids,
 };
@@ -56,20 +58,6 @@ pub struct CadState {
 struct SelectionState {
     revision: u64,
     ids: Vec<Uuid>,
-}
-
-#[derive(Default)]
-struct History {
-    undo: Vec<TransformRecord>,
-    redo: Vec<TransformRecord>,
-}
-
-#[derive(Clone)]
-struct TransformRecord {
-    before: Vec<EntityTransform>,
-    after: Vec<EntityTransform>,
-    before_attachments: Vec<RigAttachment>,
-    after_attachments: Vec<RigAttachment>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -282,15 +270,12 @@ pub fn cad_transform(
         .into_iter()
         .filter(|attachment| ids.contains(&attachment.fixture_id))
         .collect::<Vec<_>>();
-    let mut history = cad.history.lock();
-    history.undo.push(TransformRecord {
+    cad.history.lock().record_move(TransformRecord {
         before,
         after: after.clone(),
         before_attachments,
         after_attachments,
     });
-    history.redo.clear();
-    drop(history);
     emit_scene_delta(&app, &session, &cad, revision, Vec::new())?;
     Ok(TransformOutcome {
         scene_revision: revision,
@@ -328,68 +313,6 @@ fn moved_transforms(
             transform
         })
         .collect()
-}
-
-#[tauri::command]
-pub fn cad_undo(
-    app: tauri::AppHandle,
-    session: tauri::State<'_, Session>,
-    cad: tauri::State<'_, CadState>,
-    expected_scene_revision: u64,
-) -> Result<TransformOutcome, String> {
-    let record = cad
-        .history
-        .lock()
-        .undo
-        .pop()
-        .ok_or_else(|| "There is no CAD move to undo".to_owned())?;
-    match apply_transforms(&session, expected_scene_revision, &record.before) {
-        Ok(revision) => {
-            restore_attachments(&session, &record.before, &record.before_attachments)?;
-            cad.history.lock().redo.push(record.clone());
-            emit_scene_delta(&app, &session, &cad, revision, Vec::new())?;
-            Ok(TransformOutcome {
-                scene_revision: revision,
-                transforms: record.before,
-                attachments: attachments(&session)?,
-            })
-        }
-        Err(error) => {
-            cad.history.lock().undo.push(record);
-            Err(error)
-        }
-    }
-}
-
-#[tauri::command]
-pub fn cad_redo(
-    app: tauri::AppHandle,
-    session: tauri::State<'_, Session>,
-    cad: tauri::State<'_, CadState>,
-    expected_scene_revision: u64,
-) -> Result<TransformOutcome, String> {
-    let record = cad
-        .history
-        .lock()
-        .redo
-        .pop()
-        .ok_or_else(|| "There is no CAD move to redo".to_owned())?;
-    match apply_transforms(&session, expected_scene_revision, &record.after) {
-        Ok(revision) => {
-            restore_attachments(&session, &record.after, &record.after_attachments)?;
-            cad.history.lock().undo.push(record.clone());
-            emit_scene_delta(&app, &session, &cad, revision, Vec::new())?;
-            Ok(TransformOutcome {
-                scene_revision: revision,
-                transforms: record.after,
-                attachments: attachments(&session)?,
-            })
-        }
-        Err(error) => {
-            cad.history.lock().redo.push(record);
-            Err(error)
-        }
-    }
 }
 
 pub fn emit_scene_delta(
@@ -955,7 +878,7 @@ mod tests {
             "each direction contains representative opaque model surfaces"
         );
     }
-    fn transform_session() -> (Session, PathBuf, [Uuid; 2]) {
+    pub(super) fn transform_session() -> (Session, PathBuf, [Uuid; 2]) {
         let path = std::env::temp_dir().join(format!("cad-transform-{}.show", Uuid::new_v4()));
         let document = PlanningDocument::create(&path, "CAD transform test").unwrap();
         let mut profile = FixtureProfile::blank();

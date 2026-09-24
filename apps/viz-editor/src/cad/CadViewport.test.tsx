@@ -635,6 +635,17 @@ describe("CAD fixture interaction", () => {
 		expect(onMove).not.toHaveBeenCalled();
 	});
 
+	it("keeps Backspace inside a move even with nothing typed, so it never deletes what moves", () => {
+		const { canvas } = setup([fixture.id]);
+		const heard = vi.fn();
+		window.addEventListener("keydown", heard);
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 537, clientY: 400 });
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 577, clientY: 400 });
+		expect(fireEvent.keyDown(window, { key: "Backspace" })).toBe(false);
+		expect(heard).not.toHaveBeenCalled();
+		window.removeEventListener("keydown", heard);
+	});
+
 	it("types onto the world axis an elevation view shows upward, and Tab picks the axis of a free drag", async () => {
 		const { canvas, onMove } = setup([fixture.id], fixture, undefined, {
 			view: "front_to_back",

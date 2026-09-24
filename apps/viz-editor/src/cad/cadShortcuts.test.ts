@@ -70,6 +70,21 @@ describe("CAD keyboard shortcuts", () => {
 		expect(press("g", { metaKey: true, altKey: true })).toBeNull();
 	});
 
+	it("deletes with Delete or Backspace, undoes with Cmd or Ctrl+Z and redoes with Shift added", () => {
+		expect(press("Delete")).toEqual({ type: "delete" });
+		expect(press("Backspace")).toEqual({ type: "delete" });
+		expect(press("Backspace", { metaKey: true })).toBeNull();
+		expect(press("z", { metaKey: true })).toEqual({ type: "undo" });
+		expect(press("z", { ctrlKey: true })).toEqual({ type: "undo" });
+		expect(
+			cadShortcutFor({ key: "Z", metaKey: true, ctrlKey: false, altKey: false, shiftKey: true }),
+		).toEqual({ type: "redo" });
+		expect(press("y", { ctrlKey: true })).toEqual({ type: "redo" });
+		expect(press("z", { metaKey: true, altKey: true })).toBeNull();
+		// A plain Z is no shortcut at all.
+		expect(press("z")).toBeNull();
+	});
+
 	it("keeps zoom within the viewport's range and pans by the same screen distance at every zoom", () => {
 		expect(zoomedCamera({ pan: [0, 0], zoom: CAD_MAX_ZOOM }, 2).zoom).toBe(CAD_MAX_ZOOM);
 		expect(zoomedCamera({ pan: [0, 0], zoom: CAD_MIN_ZOOM }, 0.5).zoom).toBe(CAD_MIN_ZOOM);

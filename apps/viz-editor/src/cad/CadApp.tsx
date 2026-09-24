@@ -17,7 +17,7 @@ import type { CadObjectMenuRequest } from "./CadObjectMenu";
 import { useCadObjectMenu } from "./useCadObjectMenu";
 import { CadToolError, cadTitleGroups } from "./CadToolbar";
 import { useCadTools } from "./cadTools";
-import { pannedCamera, useCadShortcuts, zoomedCamera } from "./cadShortcuts";
+import { shortcutTile, useCadShortcuts } from "./cadShortcuts";
 import { buildCadPdf, type CadPrintDocumentInfo } from "./print";
 import { cadSession } from "./session";
 import type { CadUnderlay } from "./underlays";
@@ -138,6 +138,8 @@ export function CadApp() {
 	const [layout, setLayout] = useState<TileNode>(restoreLayout);
 	const [settings, setSettings] = useState<CadSettings>(restoreSettings);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	// Each Delete or Backspace press, for Info to delete the selection as its trash button does.
+	const [deleteRequest, setDeleteRequest] = useState(0);
 	// Which side panel is open, and nothing when neither is. Print and Elements are two independent
 	// choices rather than a mode with a tab strip inside it, so each title button opens its own
 	// panel and closes it again when it is already the one showing.
@@ -385,6 +387,14 @@ export function CadApp() {
 			if (scene && !printMode) venueGroups.run(shortcut.type, scene.entities, scene.selectedIds);
 			return;
 		}
+		if (shortcut.type === "undo" || shortcut.type === "redo") {
+			void history(shortcut.type);
+			return;
+		}
+		if (shortcut.type === "delete") {
+			if (!printMode) setDeleteRequest((count) => count + 1);
+			return;
+		}
 		if (shortcut.type === "tool") {
 			// Drawing is off while the print pages are open, and a host without tools offers none.
 			if (tools.onAdd && !printMode) tools.setTool(shortcut.tool);
@@ -392,27 +402,8 @@ export function CadApp() {
 		}
 		const tileId = activeTile(layout, activeTileId)?.id;
 		if (!tileId) return;
-		updateTile(tileId, (tile) => {
-			switch (shortcut.type) {
-				case "view":
-					// As the view menu does: the new direction starts unrotated and framed on the rig.
-					return {
-						...tile,
-						view: shortcut.view,
-						rotationQuarterTurns: 0,
-						camera: scene
-							? fittedCamera(scene.entities, shortcut.view, 0)
-							: tile.camera,
-					};
-				case "zoom":
-					return { ...tile, camera: zoomedCamera(tile.camera, shortcut.factor) };
-				case "pan":
-					return {
-						...tile,
-						camera: pannedCamera(tile.camera, shortcut.horizontal, shortcut.vertical),
-					};
-			}
-		});
+		const fit = (view: CadViewDirection) => (scene ? fittedCamera(scene.entities, view, 0) : null);
+		updateTile(tileId, (tile) => shortcutTile(tile, shortcut, fit));
 	});
 
 	return (
@@ -507,6 +498,7 @@ export function CadApp() {
 					onFocusEntity={setFocusedEntityId}
 					objectMenu={objectMenu}
 					venueGroups={venueGroups}
+					deleteRequest={deleteRequest}
 					onError={(reason) => setError(String(reason))}
 					onNotice={setNotice}
 				/>
