@@ -281,13 +281,22 @@ configured independently. **Copy to other heads** gives every other head that ha
 channels its own copy, bound to that head's channels; each copy can then be edited on its own.
 Heads without matching channels, such as a shared master head, keep what they have.
 
+Each color system also declares its **Color Intent calibration**: **Measured** for data taken with a
+colorimeter or spectrometer, **Nominal** for datasheet or typical values, **Uncalibrated** when the
+data cannot promise a colour. Raise the **Calibration revision** whenever the colour data changes and
+name its **Calibration source**. A **Subtractive CMY** system can hold the **Measured filter
+output**: the open beam and the beam with each flag fully in. [Color Intent](../20-Programmer-and-Cues/05-color-intent.md)
+uses this data to decide how closely the fixture can show a colour and says so.
+
 For a **Discrete color wheel**, **Fill slots from wheel functions** creates one slot for each
 named position of the wheel channel. Colors you already defined are kept. Each slot has a
 **display color** that the Visualizer shows while the wheel is in that slot. Choose one in the
 picker to store it with the profile; it is marked **Defined color**. A slot without a defined color
 shows the color its name describes, marked **From the slot name**: Open or White shows white, Deep
 Red a dark red, CTO a warm tint. A slot whose name describes no color leaves the fixture's own
-color in the Visualizer. Each wheel slot gives every field room for its value; in a narrow window
+color in the Visualizer. **Steady colour for Color Intent** says whether Color Intent may park the
+wheel in that slot: left on **Judge by the slot name**, a split, scroll, rotation or effect position
+is never used. Each wheel slot gives every field room for its value; in a narrow window
 **DMX from** and **DMX to** move onto their own line rather than shrinking. Then use **Generate
 portable presets** in **Control → Special Dialog** when fixed or indexed choices should be added to
 the show.

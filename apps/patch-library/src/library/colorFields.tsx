@@ -7,7 +7,12 @@ import {
 	SelectField,
 	TextField,
 } from "@tosklight/ui";
-import type { ColorSystem, FixtureChannel } from "../wire";
+import type {
+	ColorSystem,
+	ColorSystemCalibration,
+	FixtureChannel,
+	SubtractiveCalibration,
+} from "../wire";
 import {
 	hexToXyz,
 	wheelSlotDisplayXyz,
@@ -185,6 +190,126 @@ export function XyyFields({
 	);
 }
 
+const DEFAULT_CALIBRATION: ColorSystemCalibration = {
+	status: "nominal",
+	revision: 0,
+};
+
+/** How far Color Intent may trust this system's colour data, and which revision it is. */
+export function ColorCalibrationFields({
+	headName,
+	calibration,
+	onChange,
+}: {
+	headName: string;
+	calibration: ColorSystemCalibration | undefined;
+	onChange: (calibration: ColorSystemCalibration) => void;
+}) {
+	const value = calibration ?? DEFAULT_CALIBRATION;
+	return (
+		<fieldset className="color-calibration">
+			<legend>Color Intent calibration</legend>
+			<p>
+				Measured data can promise an exact colour; nominal data is typical;
+				uncalibrated data cannot promise a colour. Raise the revision whenever
+				the colour data changes.
+			</p>
+			<FormLayout columns={3} minColumnWidth={200}>
+				<SelectField
+					label="Calibration"
+					ariaLabel={`${headName} calibration`}
+					value={value.status}
+					options={[
+						{ value: "measured", label: "Measured" },
+						{ value: "nominal", label: "Nominal (datasheet)" },
+						{ value: "uncalibrated", label: "Uncalibrated" },
+					]}
+					onChange={(status) => onChange({ ...value, status })}
+				/>
+				<NumberField
+					label="Calibration revision"
+					min={0}
+					value={value.revision}
+					onChange={(event) =>
+						onChange({ ...value, revision: Number(event.target.value) })
+					}
+				/>
+				<TextField
+					label="Calibration source"
+					value={value.source ?? ""}
+					onChange={(event) =>
+						onChange({ ...value, source: event.target.value || null })
+					}
+				/>
+			</FormLayout>
+		</fieldset>
+	);
+}
+
+const FILTER_FIELDS: ReadonlyArray<{
+	key: keyof SubtractiveCalibration;
+	label: string;
+}> = [
+	{ key: "open_xyz", label: "Open beam" },
+	{ key: "cyan_xyz", label: "Cyan flag in" },
+	{ key: "magenta_xyz", label: "Magenta flag in" },
+	{ key: "yellow_xyz", label: "Yellow flag in" },
+];
+
+function SubtractiveFilterFields({
+	filters,
+	onChange,
+}: {
+	filters: SubtractiveCalibration | null | undefined;
+	onChange: (filters: SubtractiveCalibration | null) => void;
+}) {
+	const white = { x: 0.95047, y: 1, z: 1.08883 };
+	return (
+		<>
+			<CheckboxField
+				label="Measured filter output"
+				stateLabel="Use measured CMY filters"
+				checked={Boolean(filters)}
+				onChange={(event) =>
+					onChange(
+						event.target.checked
+							? {
+									open_xyz: white,
+									cyan_xyz: { x: 0.54, y: 0.79, z: 1.07 },
+									magenta_xyz: { x: 0.59, y: 0.28, z: 0.97 },
+									yellow_xyz: { x: 0.77, y: 0.93, z: 0.14 },
+								}
+							: null,
+					)
+				}
+			/>
+			{filters &&
+				FILTER_FIELDS.map(({ key, label }) => (
+					<FormLayout key={key} columns={3} minColumnWidth={140}>
+						{(["x", "y", "z"] as const).map((axis) => (
+							<NumberField
+								key={axis}
+								label={`${label} ${axis.toUpperCase()}`}
+								allowDecimal
+								min={0}
+								value={filters[key][axis]}
+								onChange={(event) =>
+									onChange({
+										...filters,
+										[key]: {
+											...filters[key],
+											[axis]: Number(event.target.value),
+										},
+									})
+								}
+							/>
+						))}
+					</FormLayout>
+				))}
+		</>
+	);
+}
+
 export function SubtractiveColorEditor({
 	system,
 	options,
@@ -195,6 +320,11 @@ export function SubtractiveColorEditor({
 	onChange: (system: Extract<ColorSystem, { type: "subtractive" }>) => void;
 }) {
 	return (
+		<>
+		<SubtractiveFilterFields
+			filters={system.filters}
+			onChange={(filters) => onChange({ ...system, filters })}
+		/>
 		<FormLayout columns={3}>
 			{(
 				["cyan_channel_id", "magenta_channel_id", "yellow_channel_id"] as const
@@ -210,6 +340,7 @@ export function SubtractiveColorEditor({
 				/>
 			))}
 		</FormLayout>
+		</>
 	);
 }
 
@@ -340,6 +471,23 @@ export function DiscreteColorEditor({
 						}
 						value={display ? xyzToHex(display) : ""}
 						onChange={(hex) => setSlot(index, { measured_xyz: hexToXyz(hex) })}
+					/>
+					<SelectField
+						label="Steady colour for Color Intent"
+						ariaLabel={`${slot.label || slot.semantic_id} steady colour`}
+						value={
+							slot.steady == null ? "auto" : slot.steady ? "steady" : "moving"
+						}
+						options={[
+							{ value: "auto", label: "Judge by the slot name" },
+							{ value: "steady", label: "Steady colour" },
+							{ value: "moving", label: "Not steady (split, scroll, effect)" },
+						]}
+						onChange={(value) =>
+							setSlot(index, {
+								steady: value === "auto" ? null : value === "steady",
+							})
+						}
 					/>
 					<CheckboxField
 						label="Measured XYZ available"

@@ -206,6 +206,53 @@ describe("discrete color wheel definitions", () => {
 	});
 });
 
+describe("Color Intent calibration", () => {
+	it("declares a system's calibration and marks a wheel slot as not steady", async () => {
+		const profile = wheelProfile();
+		const save = vi.fn(async (draft: FixtureProfile) => draft);
+		render(
+			<FixtureProfileEditor
+				initialProfile={profile}
+				manufacturers={[]}
+				onSave={save}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Modes" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Edit channels for Default" }),
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Color" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Fill slots from wheel functions" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /calibration/ }));
+		fireEvent.click(await screen.findByRole("option", { name: "Measured" }));
+		fireEvent.change(screen.getByLabelText("Calibration revision"), {
+			target: { value: "3" },
+		});
+		const slots = document.querySelectorAll(".color-wheel-editor > article");
+		const open = within(slots[0] as HTMLElement);
+		fireEvent.click(
+			open.getByRole("button", { name: /Open steady colour/ }),
+		);
+		fireEvent.click(
+			await screen.findByRole("option", {
+				name: "Not steady (split, scroll, effect)",
+			}),
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+		await waitFor(() => expect(save).toHaveBeenCalled());
+		const [record] = save.mock.calls[0][0].modes[0].color_systems;
+		expect(record.calibration).toMatchObject({ status: "measured", revision: 3 });
+		expect(record.system).toMatchObject({
+			type: "discrete_wheel",
+			slots: [{ semantic_id: "open", steady: false }, { semantic_id: "deep_red" }],
+		});
+	});
+});
+
 describe("per-head color systems", () => {
 	it("copies a head's system to every matching head, bound to that head's own channels", () => {
 		const mode = pixelMode();

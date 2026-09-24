@@ -1,12 +1,14 @@
 import { Button, FormLayout, NumberField, SelectField } from "@tosklight/ui";
 import type {
 	ColorSystem,
+	ColorSystemCalibration,
 	FixtureMode,
 	HeadColorSystem,
 } from "../wire";
 import { reconcileColorSystemHighlightDefaults } from "../sheet/fixtureProfileModel";
 import {
 	AdditiveColorEditor,
+	ColorCalibrationFields,
 	DiscreteColorEditor,
 	HueSaturationColorEditor,
 	SubtractiveColorEditor,
@@ -305,6 +307,16 @@ export function ColorEditor({
 				),
 			),
 		);
+	const setCalibration = (
+		record: HeadColorSystem,
+		calibration: ColorSystemCalibration,
+	) =>
+		onChange({
+			...mode,
+			color_systems: mode.color_systems.map((candidate) =>
+				candidate === record ? { ...candidate, calibration } : candidate,
+			),
+		});
 	return (
 		<div className="fixture-color-editor">
 			<p>
@@ -357,6 +369,13 @@ export function ColorEditor({
 								</Button>
 							)}
 						</header>
+						{record && (
+							<ColorCalibrationFields
+								headName={head.name}
+								calibration={record.calibration}
+								onChange={(calibration) => setCalibration(record, calibration)}
+							/>
+						)}
 						{record && (
 							<CorrectionMatrixFields
 								headName={head.name}
