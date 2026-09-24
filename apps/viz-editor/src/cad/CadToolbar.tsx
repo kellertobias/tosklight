@@ -131,7 +131,7 @@ export function cadTitleGroups(
 																	}
 																: undefined
 														}
-														onSeveral={
+														onPlaceMultiple={
 															kind === "truss" || kind === "stage"
 																? (profileId) => {
 																		close();

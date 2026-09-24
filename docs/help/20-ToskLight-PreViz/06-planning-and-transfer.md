@@ -575,9 +575,11 @@ the key that picks it, such as **Draw line · L**. From left to right:
   bottom-right corner opens a menu of the parts that button can place, each shown by its picture; the
   part the button places now is highlighted. Choosing a part places it and makes it the part the
   button places from then on, and this computer remembers that choice for the next time you open the
-  CAD screen. Every part in the menu has a small **++** button at the right of its row. Its tooltip
-  reads **Add Several**, and it can be reached with Tab. It holds that exact part, with its options
-  and size, without placing one first: every click on a CAD view then places another copy where you
+  CAD screen. Every part in the menu has a small button at the right of its row, which can be
+  reached with Tab. Beside a truss or a stage deck it is **Place Multiple** (a grid of four
+  squares), described below. Beside every other part — the stairs, the handrail, scenery and
+  primitives — it is **++**, **Add Several**: it holds that exact part, with its options and size,
+  without placing one first, and every click on a CAD view then places another copy where you
   click, until you press Escape or **Done** on the banner.
   * **Add truss** (a truss segment) lists the sections — **Pipe**, **2-point**, **3-point deco**,
     **3-point regular**, **4-point** and **4-point large** — with the straight truss and, for
@@ -615,19 +617,22 @@ the key that picks it, such as **Draw line · L**. From left to right:
     turn and scale it from **Info** like any Venue object; the show carries the model itself, so it
     opens again with the show. A file that cannot be read is refused with the reason and changes
     nothing; closing the picker loads nothing.
-  * **Place several…** ends the **Add truss** and **Add stage element** menus. A rig is rarely one
-    of anything, so it opens a wizard that lays out a whole field of the part the button places now
-    and writes it in one go. Nothing is placed until **Place**; **Cancel** places nothing at all,
-    and everything the wizard does place is left selected so you can move, turn or size it as one.
-    * For a **stage element**, choose whether the elements lie **Long side across** or **Long side
-      deep**, then how many go **Across** and how many **Deep**. They butt against each other at
-      their own footprint, so the field has no gaps to close afterwards, and the wizard names the
-      size the field will cover. The first element lands where one placed on its own would.
-    * For a **truss**, type the **Heights** the run is flown at and the lines it stands on —
-      **Back** for runs that lie across the room, or **Across** once you turn them to **Runs
-      deep**. One run is placed per height and line: two heights over three lines is six trusses.
-      Both fields take a list such as `5 7`, or an evenly spaced run such as `4 THRU 8 BY 2`; a
-      comma is a decimal point, as everywhere else on the desk.
+  * **Place Multiple**, beside each truss and stage deck in those two menus, opens a dialog that
+    lays out many of that exact part at once and writes them in one step. A plan of the
+    arrangement under the fields shows every element as it will be placed and follows each change.
+    Nothing is placed until **Place**; **Cancel** places nothing at all, and everything placed is
+    left selected so you can move, turn or size it as one.
+    * For a **truss**, type the **First point** and **Last point** of the run (X, Y and Z in
+      metres) and how many **Sections** it is made of. The sections are spaced evenly from the first
+      point to the last, each centred on its share of the run, and each is turned about Z only to
+      the run's heading on the plan — never pitched or rolled. When the two points stand at
+      different heights, each section is raised to the height of its own place along the run, so
+      the run is stepped, not tilted. A straight section's **Section length** starts at the length
+      that fills the run end to end and can be typed; a corner piece keeps its own size.
+    * For a **stage deck**, choose whether the decks lie **Long side across** or **Long side
+      deep**, how many go **Across (X)** and **Deep (Y)**, and the **Grid centre** (X, Y and the
+      height Z the decks are placed at). The decks butt against each other at their own footprint,
+      so the grid has no gaps and no overlaps, and the dialog names the size it will cover.
   * **Add venue element** (a box) opens a dialog listing the Venue objects in this computer's fixture
     library that no button above places — crowds, PA and backline, figures and imported venue
     models — each shown by its picture on a dark ground. The trusses, decks, scenic elements and
@@ -644,7 +649,7 @@ the key that picks it, such as **Draw line · L**. From left to right:
     **Done** on the banner at the top of the view.
 
 A placed part goes to the stage origin with the next free virtual ID, the drawing shows it at once,
-and it is selected so **Info** opens to place it and set its size. A wizard's field takes the next
+and it is selected so **Info** opens to place it and set its size. A Place Multiple takes the next
 free virtual IDs one after another, in the order it lays the elements out. A part whose profile is not in this
 computer's fixture library is listed but cannot be chosen, and pressing a button whose part is missing
 says so instead of placing anything. When the show refuses a placement, the reason appears at the top

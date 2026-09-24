@@ -1,34 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { parseMetreList, stageGridPlacements, trussRowPlacements } from "./bulkPlacement";
+import { stageGridPlacements, trussRunPlacements, trussRunSectionLength } from "./bulkPlacement";
 
-describe("a field of stage elements", () => {
+describe("a grid of stage elements", () => {
 	const deck = { width: 2, depth: 1 };
 
-	it("butts the elements edge to edge, with no gap anywhere in the field", () => {
+	it("butts the elements edge to edge, with no gap anywhere, centred on the grid's centre", () => {
 		const grid = stageGridPlacements({ columns: 3, rows: 2, turned: false, footprint: deck });
 		expect(grid).toHaveLength(6);
 		expect(grid.map((each) => [each.position.x, each.position.y])).toEqual([
-			[0, 0],
-			[2000, 0],
-			[4000, 0],
-			[0, 1000],
-			[2000, 1000],
-			[4000, 1000],
+			[-2000, -500],
+			[0, -500],
+			[2000, -500],
+			[-2000, 500],
+			[0, 500],
+			[2000, 500],
 		]);
+		// Neighbours are exactly one footprint apart: touching, never overlapping.
+		for (let column = 1; column < 3; column += 1)
+			expect(grid[column].position.x - grid[column - 1].position.x).toBe(2000);
+		expect(grid[3].position.y - grid[0].position.y).toBe(1000);
 	});
 
-	it("puts its first element exactly where one pressed on its own would land", () => {
-		const [first] = stageGridPlacements({ columns: 4, rows: 4, turned: false, footprint: deck });
-		expect(first.position).toEqual({ x: 0, y: 0, z: 0 });
+	it("stands the whole grid around the centre asked for, at its height", () => {
+		const grid = stageGridPlacements({
+			columns: 2,
+			rows: 2,
+			turned: false,
+			footprint: deck,
+			centre: { x: 4, y: -3, z: 0.6 },
+		});
+		const xs = grid.map((each) => each.position.x);
+		const ys = grid.map((each) => each.position.y);
+		expect((Math.min(...xs) + Math.max(...xs)) / 2).toBe(4000);
+		expect((Math.min(...ys) + Math.max(...ys)) / 2).toBe(-3000);
+		for (const each of grid) expect(each.position.z).toBe(600);
 	});
 
 	it("turns the step with the elements, so a deck on its side steps its own short side across", () => {
 		const grid = stageGridPlacements({ columns: 2, rows: 2, turned: true, footprint: deck });
 		expect(grid.map((each) => [each.position.x, each.position.y])).toEqual([
-			[0, 0],
-			[1000, 0],
-			[0, 2000],
-			[1000, 2000],
+			[-500, -1000],
+			[500, -1000],
+			[-500, 1000],
+			[500, 1000],
 		]);
 		for (const each of grid) expect(each.rotation.z).toBe(90);
 	});
@@ -38,53 +52,31 @@ describe("a field of stage elements", () => {
 	});
 });
 
-describe("rows of truss", () => {
-	it("flies the run again at every height, over every line", () => {
-		const rows = trussRowPlacements({ heights: [5, 7], positions: [0, 4], turned: false });
-		expect(rows.map((each) => [each.position.x, each.position.y, each.position.z])).toEqual([
-			[0, 0, 5000],
-			[0, 4000, 5000],
-			[0, 0, 7000],
-			[0, 4000, 7000],
-		]);
-		for (const each of rows) expect(each.rotation.z).toBe(0);
+describe("a run of truss", () => {
+	it("spaces the sections evenly from the first point to the last, filling the run end to end", () => {
+		const run = { first: { x: 0, y: 0, z: 6 }, last: { x: 8, y: 0, z: 6 }, count: 4 };
+		const sections = trussRunPlacements(run);
+		expect(sections.map((each) => each.position.x)).toEqual([1000, 3000, 5000, 7000]);
+		expect(trussRunSectionLength(run)).toBe(2);
+		for (const each of sections) expect(each.rotation).toEqual({ x: 0, y: 0, z: 0 });
 	});
 
-	it("crosses the heights with X instead when the runs are turned a quarter turn", () => {
-		const rows = trussRowPlacements({ heights: [6], positions: [-3, 3], turned: true });
-		expect(rows.map((each) => [each.position.x, each.position.y, each.position.z])).toEqual([
-			[-3000, 0, 6000],
-			[3000, 0, 6000],
-		]);
-		for (const each of rows) expect(each.rotation.z).toBe(90);
+	it("heads the sections along the run on the plan, turning about Z only", () => {
+		const diagonal = trussRunPlacements({ first: { x: 0, y: 0, z: 5 }, last: { x: 3, y: 3, z: 5 }, count: 2 });
+		for (const each of diagonal) expect(each.rotation).toEqual({ x: 0, y: 0, z: 45 });
+		const downstage = trussRunPlacements({ first: { x: 0, y: 4, z: 5 }, last: { x: 0, y: -4, z: 5 }, count: 1 });
+		expect(downstage[0].rotation).toEqual({ x: 0, y: 0, z: -90 });
+		expect(downstage[0].position).toEqual({ x: 0, y: 0, z: 5000 });
 	});
 
-	it("places nothing when either list is empty", () => {
-		expect(trussRowPlacements({ heights: [], positions: [1], turned: false })).toEqual([]);
-		expect(trussRowPlacements({ heights: [5], positions: [], turned: false })).toEqual([]);
-	});
-});
-
-describe("a typed list of metres", () => {
-	it("reads values separated by spaces, with a comma as the decimal point", () => {
-		expect(parseMetreList("4 6 8")).toEqual([4, 6, 8]);
-		expect(parseMetreList("4,5 6")).toEqual([4.5, 6]);
+	it("raises each section to the height of its own place along a run whose ends differ in height", () => {
+		const sections = trussRunPlacements({ first: { x: 0, y: 0, z: 4 }, last: { x: 10, y: 0, z: 6 }, count: 5 });
+		expect(sections.map((each) => each.position.z)).toEqual([4200, 4600, 5000, 5400, 5800]);
+		// Still no pitch: a raised run is stepped, never tilted.
+		for (const each of sections) expect(each.rotation.y).toBe(0);
 	});
 
-	it("reads a list written with commas between the values", () => {
-		expect(parseMetreList("4, 6, 8")).toEqual([4, 6, 8]);
-	});
-
-	it("counts out an evenly spaced run rather than making the operator type it", () => {
-		expect(parseMetreList("4 THRU 8 BY 2")).toEqual([4, 6, 8]);
-		expect(parseMetreList("4 THRU 6")).toEqual([4, 5, 6]);
-		expect(parseMetreList("6 THRU 4")).toEqual([6, 5, 4]);
-	});
-
-	it("is empty for an empty field, and refuses anything it cannot read", () => {
-		expect(parseMetreList("   ")).toEqual([]);
-		expect(parseMetreList("4,5,6")).toBeNull();
-		expect(parseMetreList("high")).toBeNull();
-		expect(parseMetreList("4 THRU 8 BY 0")).toBeNull();
+	it("places at least one section however few are asked for", () => {
+		expect(trussRunPlacements({ first: { x: 0, y: 0, z: 0 }, last: { x: 1, y: 0, z: 0 }, count: 0 })).toHaveLength(1);
 	});
 });

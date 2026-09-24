@@ -5,14 +5,15 @@
  * the part a press names — chosen from the button's caret menu, which the button then remembers — or
  * else the part the button last placed. **Add venue element** opens the picture list of every Venue
  * profile, where an element is selected and added, or held with **Add Several** so every press on a
- * viewport places another copy. **Place several…**, in the truss and stage part menus, opens that part's wizard instead:
- * a field of stage elements, or rows of truss, placed in one go. This stays mounted for the life of
+ * viewport places another copy. **Place Multiple**, the button beside a truss or stage element in
+ * its part menu, opens that part's arrangement instead: a run of truss or a grid of stage
+ * elements, placed in one go. This stays mounted for the life of
  * the CAD screen, so the press that opened or placed something is never mistaken for a new one.
  * What is placed is announced to the CAD screen, which selects it and opens Info.
  */
 import { useEffect, useRef, useState } from "react";
 import type { PlanPlacement } from "./bulkPlacement";
-import { type BulkShape, CadBulkAddModal } from "./CadBulkAddModal";
+import { type BulkShape, CadBulkAddModal, type TrussSize } from "./CadBulkAddModal";
 import { CadVenueElementModal } from "./CadVenueElementModal";
 import { chosenPart, rememberPart } from "./cadAddChoice";
 import { type FixtureLibrary, placedWith, placeProfile, readLibrary } from "./cadPlacement";
@@ -35,6 +36,7 @@ interface BulkFlow {
 	part: VenuePart;
 	label: string;
 	footprint?: { width: number; depth: number };
+	truss?: TrussSize;
 }
 
 export function CadAddFlows({
@@ -95,6 +97,16 @@ export function CadAddFlows({
 			label,
 			// A profile's y is up; a footprint is what it covers on the floor.
 			footprint: size ? { width: size.x, depth: size.z } : undefined,
+			// A truss's length is its width, which a straight section lets the operator set.
+			truss:
+				scenery && size
+					? {
+							metres: { x: size.x, y: size.y, z: size.z },
+							lengthAdjustable: scenery.adjustable.width,
+							minimumLength: scenery.minimum_size_metres.x,
+							maximumLength: scenery.maximum_size_metres.x,
+						}
+					: undefined,
 		});
 	}
 
@@ -126,15 +138,16 @@ export function CadAddFlows({
 				shape={bulk.shape}
 				partLabel={bulk.label}
 				footprint={bulk.footprint}
+				truss={bulk.truss}
 				placing={placing}
 				onClose={() => setBulk(null)}
-				onPlace={(placements) =>
+				onPlace={(placements, size) =>
 					void place(
 						bulk.part.profileId,
 						bulk.label,
 						undefined,
 						placements,
-						bulk.part,
+						size ? { ...bulk.part, sizeMetres: size } : bulk.part,
 					).then((placed) => {
 						if (placed) setBulk(null);
 					})

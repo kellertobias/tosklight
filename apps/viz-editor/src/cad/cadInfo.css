@@ -146,3 +146,24 @@
 .cad-bulk-add .cad-placement-assistant-shapes {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+
+/* Place Multiple is wider: a run has two points of three coordinates each. */
+.cad-bulk-add .cad-placement-assistant-body {
+	width: min(480px, 90vw);
+}
+
+/* The plan of the arrangement to be placed, each element outlined as it will stand. */
+.cad-bulk-preview {
+	display: block;
+	width: 100%;
+	height: 160px;
+	border: 1px solid #2b3642;
+	border-radius: 4px;
+	background: #0b0f14;
+}
+
+.cad-bulk-preview polygon {
+	fill: rgb(5 209 250 / 18%);
+	stroke: #05d1fa;
+	stroke-width: 1.5;
+}

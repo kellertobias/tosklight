@@ -81,7 +81,17 @@ beforeEach(() => {
 		removeItem: (key: string) => localStore.delete(key),
 	});
 	mocks.fixtureProfiles.mockReset().mockResolvedValue([
-		profile(THREE_POINT, "Three-Point Truss"),
+		{
+			...profile(THREE_POINT, "Three-Point Truss"),
+			scenery: {
+				kind: "truss",
+				chords: 3,
+				default_size_metres: { x: 2, y: 0.29, z: 0.29 },
+				adjustable: { width: true, height: false, depth: false },
+				minimum_size_metres: { x: 0.5, y: 0.29, z: 0.29 },
+				maximum_size_metres: { x: 20, y: 0.29, z: 0.29 },
+			},
+		},
 		profile(STRAIGHT, "Four-Point Truss", { revision: 3 }),
 		profile(CORNER, "Four-Point Truss Corner 2-Way"),
 		profile(CROWD, "Crowd Area", { fixture_type: "venue" }),
@@ -396,79 +406,122 @@ describe("a part button's caret menu", () => {
 	});
 });
 
-describe("the Place several wizards", () => {
+describe("Place Multiple", () => {
 	/** The fixtures of one write, in the order the batch made them. */
 	const batch = (call = 0) => mocks.patchFixtures.mock.calls[call][2].fixtures;
+	const type = (dialog: HTMLElement, label: string, value: string) => {
+		const field = within(dialog).getByLabelText(label);
+		fireEvent.change(field, { target: { value } });
+		fireEvent.keyDown(field, { key: "Enter" });
+	};
 
-	it("butts a field of stage elements edge to edge and writes them in one go", async () => {
+	it("is the button beside every truss and stage element, and the menus end with no Place several", async () => {
+		const onPlaceMultiple = vi.fn();
+		const onAddSeveral = vi.fn();
+		const truss = render(
+			<CadPartMenu kind="truss" onChoose={vi.fn()} onAddSeveral={onAddSeveral} onPlaceMultiple={onPlaceMultiple} />,
+		);
+		expect(screen.queryByRole("menuitem", { name: /Place several/u })).toBeNull();
+		// Beside every truss part the library holds, each naming its own part.
+		await waitFor(() =>
+			expect(
+				screen.getAllByRole("menuitem", { name: /^Place Multiple/u }).some((each) => !each.hasAttribute("disabled")),
+			).toBe(true),
+		);
+		const beside = screen
+			.getAllByRole("menuitem", { name: /^Place Multiple/u })
+			.filter((each) => !each.hasAttribute("disabled"));
+		for (const each of beside) fireEvent.click(each);
+		expect(onPlaceMultiple.mock.calls.map(([key]) => key)).toEqual(expect.arrayContaining([THREE_POINT, STRAIGHT]));
+		expect(new Set(onPlaceMultiple.mock.calls.map(([key]) => key)).size).toBe(beside.length);
+		onPlaceMultiple.mockClear();
+		expect(screen.queryByRole("menuitem", { name: /^Add Several/u })).toBeNull();
+		truss.unmount();
+
+		const stage = render(
+			<CadPartMenu kind="stage" onChoose={vi.fn()} onAddSeveral={onAddSeveral} onPlaceMultiple={onPlaceMultiple} />,
+		);
+		expect(screen.getByRole("menuitem", { name: "Place Multiple 2 × 1 m (Scissor feet)" })).toBeInTheDocument();
+		// Stairs are placed one at a time: they keep Add Several.
+		expect(screen.queryByRole("menuitem", { name: /^Place Multiple Stairs/u })).toBeNull();
+		expect(screen.getByRole("menuitem", { name: /^Add Several Stairs/u })).toBeInTheDocument();
+		expect(screen.queryByRole("menuitem", { name: /Place several/u })).toBeNull();
+		stage.unmount();
+
+		// Parts that are never arranged offer only Add Several.
+		render(<CadPartMenu kind="curtain" onChoose={vi.fn()} onAddSeveral={onAddSeveral} onPlaceMultiple={onPlaceMultiple} />);
+		expect(screen.queryByRole("menuitem", { name: /^Place Multiple/u })).toBeNull();
+		expect(screen.getAllByRole("menuitem", { name: /^Add Several/u }).length).toBeGreaterThan(0);
+	});
+
+	it("butts a grid of stage elements edge to edge around its centre and writes it in one go", async () => {
 		const { announcePlaced, press } = renderFlows();
 		press("stage", DECK, true);
-		const dialog = await screen.findByRole("dialog", {
-			name: "Place several stage elements",
-		});
-		// Two across and two deep is what the wizard opens on.
-		fireEvent.click(within(dialog).getByRole("button", { name: /^Place 4$/u }));
+		const dialog = await screen.findByRole("dialog", { name: "Place multiple stage elements" });
+		type(dialog, "Across (X)", "3");
+		type(dialog, "Grid centre X", "5");
+		type(dialog, "Grid centre Y", "-2");
+		// The plan shows every element before anything is placed.
+		expect(within(dialog).getAllByTestId("cad-bulk-preview-element")).toHaveLength(6);
+		expect(mocks.patchFixtures).not.toHaveBeenCalled();
+		fireEvent.click(within(dialog).getByRole("button", { name: /^Place 6$/u }));
 		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledTimes(1));
-		expect(batch()).toHaveLength(4);
 		expect(batch().map((fixture: { location: unknown }) => fixture.location)).toEqual([
-			{ x: 0, y: 0, z: 0 },
-			{ x: 2000, y: 0, z: 0 },
-			{ x: 0, y: 1000, z: 0 },
-			{ x: 2000, y: 1000, z: 0 },
+			{ x: 3000, y: -2500, z: 0 },
+			{ x: 5000, y: -2500, z: 0 },
+			{ x: 7000, y: -2500, z: 0 },
+			{ x: 3000, y: -1500, z: 0 },
+			{ x: 5000, y: -1500, z: 0 },
+			{ x: 7000, y: -1500, z: 0 },
 		]);
 		// Every element takes its own free virtual number: 1 and 2 are already used.
 		expect(batch().map((fixture: { virtualFixtureNumber: number }) => fixture.virtualFixtureNumber)).toEqual([
-			3, 4, 5, 6,
+			3, 4, 5, 6, 7, 8,
 		]);
-		// The whole field is selected, so it can be moved or adjusted as one.
-		expect(announcePlaced).toHaveBeenCalledWith(
-			batch().map((fixture: { fixtureId: string }) => fixture.fixtureId),
-		);
+		// The whole grid is selected, so it can be moved or adjusted as one.
+		expect(announcePlaced).toHaveBeenCalledWith(batch().map((fixture: { fixtureId: string }) => fixture.fixtureId));
 	});
 
-	it("flies a truss run again at every height, over every line", async () => {
+	it("lays a truss run from its first point to its last, turned about Z and stepped in height", async () => {
 		const { press } = renderFlows();
 		press("truss", THREE_POINT, true);
-		const dialog = await screen.findByRole("dialog", { name: "Place several trusses" });
-		const heights = within(dialog).getByLabelText("Heights");
-		fireEvent.change(heights, { target: { value: "5 7" } });
-		fireEvent.blur(heights);
-		const back = within(dialog).getByLabelText("Positions back");
-		fireEvent.change(back, { target: { value: "0 4" } });
-		fireEvent.blur(back);
-		fireEvent.click(await within(dialog).findByRole("button", { name: /^Place 4$/u }));
+		const dialog = await screen.findByRole("dialog", { name: "Place multiple trusses" });
+		type(dialog, "First point X", "0");
+		type(dialog, "First point Y", "0");
+		type(dialog, "First point Z", "5");
+		type(dialog, "Last point X", "6");
+		type(dialog, "Last point Y", "6");
+		type(dialog, "Last point Z", "8");
+		type(dialog, "Sections", "3");
+		expect(within(dialog).getAllByTestId("cad-bulk-preview-element")).toHaveLength(3);
+		fireEvent.click(within(dialog).getByRole("button", { name: /^Place 3$/u }));
 		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledTimes(1));
 		expect(batch().map((fixture: { location: unknown }) => fixture.location)).toEqual([
-			{ x: 0, y: 0, z: 5000 },
-			{ x: 0, y: 4000, z: 5000 },
-			{ x: 0, y: 0, z: 7000 },
-			{ x: 0, y: 4000, z: 7000 },
+			{ x: 1000, y: 1000, z: 5500 },
+			{ x: 3000, y: 3000, z: 6500 },
+			{ x: 5000, y: 5000, z: 7500 },
 		]);
+		// Heading along the run on the plan, never pitched or rolled.
+		for (const fixture of batch()) expect(fixture.rotation).toEqual({ x: 0, y: 0, z: 45 });
+		// Each straight section fills its share of the run: √72 / 3 m.
+		expect(batch()[0].scenerySizeMetres).toEqual({ x: 2828, y: 290, z: 290 });
 	});
 
-	it("crosses the heights with positions across the room when the runs are turned", async () => {
+	it("places each section at the length typed for it", async () => {
 		const { press } = renderFlows();
 		press("truss", THREE_POINT, true);
-		const dialog = await screen.findByRole("dialog", { name: "Place several trusses" });
-		fireEvent.click(within(dialog).getByRole("button", { name: "Runs deep" }));
-		const across = within(dialog).getByLabelText("Positions across");
-		fireEvent.change(across, { target: { value: "-3 3" } });
-		fireEvent.blur(across);
-		fireEvent.click(await within(dialog).findByRole("button", { name: /^Place 2$/u }));
+		const dialog = await screen.findByRole("dialog", { name: "Place multiple trusses" });
+		type(dialog, "Section length", "1.5");
+		fireEvent.click(within(dialog).getByRole("button", { name: /^Place 4$/u }));
 		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledTimes(1));
-		expect(batch().map((fixture: { location: unknown }) => fixture.location)).toEqual([
-			{ x: -3000, y: 0, z: 5000 },
-			{ x: 3000, y: 0, z: 5000 },
-		]);
-		expect(batch().every((fixture: { rotation: { z: number } }) => fixture.rotation.z === 90)).toBe(true);
+		expect(batch().map((fixture: { location: { x: number } }) => fixture.location.x)).toEqual([-3000, -1000, 1000, 3000]);
+		for (const fixture of batch()) expect(fixture.scenerySizeMetres).toEqual({ x: 1500, y: 290, z: 290 });
 	});
 
 	it("places nothing at all when the wizard is cancelled", async () => {
 		const { announcePlaced, press } = renderFlows();
 		press("stage", DECK, true);
-		const dialog = await screen.findByRole("dialog", {
-			name: "Place several stage elements",
-		});
+		const dialog = await screen.findByRole("dialog", { name: "Place multiple stage elements" });
 		fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
 		await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 		expect(mocks.patchFixtures).not.toHaveBeenCalled();

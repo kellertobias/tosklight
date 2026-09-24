@@ -7,16 +7,17 @@
  * Choosing a part makes it the button's part and places it. A part this computer's library does not
  * hold is listed but cannot be chosen.
  *
- * Every part's row carries **Add Several** at its right edge: it holds that part so each press on a
- * viewport places one more copy, without placing one first. A truss and a stage element are rarely
- * placed one at a time, so those two menus also end with **Place several…**, which opens the wizard
- * for the part the button places now.
+ * Every part's row carries a button at its right edge. A truss and a stage element are rarely
+ * placed one at a time, so theirs is **Place Multiple**: it opens the arrangement for that exact
+ * part — a run of truss, or a grid of stage elements. Every other part's is **Add Several**: it
+ * holds that part so each press on a viewport places one more copy, without placing one first.
  */
 import { chosenPart } from "./cadAddChoice";
 import { type FixtureLibrary, useFixtureLibrary } from "./cadPlacement";
 import {
 	CAD_PART_CATALOGUE,
 	type CadPartKind,
+	placesMultiple,
 	definitionForProfile,
 	partKey,
 	partLabel,
@@ -34,6 +35,7 @@ function PartMenuItem({
 	checked,
 	onChoose,
 	onAddSeveral,
+	onPlaceMultiple,
 }: {
 	label: string;
 	/** The part's full name, its group's and its own, for the Add Several button. */
@@ -44,6 +46,8 @@ function PartMenuItem({
 	checked: boolean;
 	onChoose(profileId: string): void;
 	onAddSeveral?(profileId: string): void;
+	/** Opens this part's Place Multiple; given, it takes Add Several's place beside the part. */
+	onPlaceMultiple?(profileId: string): void;
 }) {
 	const definition =
 		library.state === "ready" ? definitionForProfile(library.definitions, part.profileId) : undefined;
@@ -72,7 +76,21 @@ function PartMenuItem({
 					{note ? <small>{note}</small> : null}
 				</span>
 			</button>
-			{onAddSeveral ? (
+			{onPlaceMultiple ? (
+				<button
+					type="button"
+					role="menuitem"
+					className="cad-part-add-several cad-part-menu-add-several cad-part-menu-place-multiple"
+					title="Place Multiple"
+					aria-label={`Place Multiple ${name}`}
+					disabled={!definition}
+					onClick={() => onPlaceMultiple(partKey(part))}
+				>
+					<svg viewBox="0 0 16 16" aria-hidden="true">
+						<path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z" />
+					</svg>
+				</button>
+			) : onAddSeveral ? (
 				<button
 					type="button"
 					role="menuitem"
@@ -93,15 +111,15 @@ export function CadPartMenu({
 	kind,
 	onChoose,
 	onAddSeveral,
-	onSeveral,
+	onPlaceMultiple,
 	onLoadModel,
 }: {
 	kind: CadPartKind;
 	onChoose(profileId: string): void;
 	/** Holds a part for repeated placement: each press on a viewport places one more copy. */
 	onAddSeveral?(profileId: string): void;
-	/** Opens the bulk wizard for the part the button places now; absent on kinds that have none. */
-	onSeveral?(profileId: string): void;
+	/** Opens Place Multiple for one part, offered only beside the parts that arrange (see `placesMultiple`). */
+	onPlaceMultiple?(profileId: string): void;
 	/** Loads a 3D model file instead of a part from the library; absent on kinds that have none. */
 	onLoadModel?(): void;
 }) {
@@ -126,6 +144,7 @@ export function CadPartMenu({
 						checked={partKey(part) === current}
 						onChoose={onChoose}
 						onAddSeveral={onAddSeveral}
+						onPlaceMultiple={onPlaceMultiple && placesMultiple(kind, group) ? onPlaceMultiple : undefined}
 					/>
 				);
 				if (group.parts.length === 1) {
@@ -151,19 +170,6 @@ export function CadPartMenu({
 					<span className="cad-part-menu-text">
 						<strong>Load model…</strong>
 						<small>A glTF, GLB, 3MF or OBJ file</small>
-					</span>
-				</button>
-			) : null}
-			{onSeveral ? (
-				<button
-					type="button"
-					role="menuitem"
-					className="cad-part-menu-item cad-part-menu-several"
-					onClick={() => onSeveral(current)}
-				>
-					<span className="cad-part-menu-text">
-						<strong>Place several…</strong>
-						<small>A field of them, laid out at once</small>
 					</span>
 				</button>
 			) : null}

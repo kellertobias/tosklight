@@ -312,6 +312,15 @@ export const PART_MENU_PROFILE_IDS: ReadonlySet<string> = new Set([
 	...RETIRED_PART_PROFILE_IDS,
 ]);
 
+/**
+ * Whether a part is placed many at once with **Place Multiple**: every truss, laid as a run, and
+ * every stage element, laid as a grid — but not the stairs or handrail the stage menu also lists,
+ * which are placed one at a time.
+ */
+export function placesMultiple(kind: CadPartKind, group: VenuePartGroup): boolean {
+	return kind === "truss" || (kind === "stage" && group.id !== "stairs" && group.id !== "handrail");
+}
+
 /** A button's part by its key, or undefined when the button does not offer that part. */
 export function findPart(kind: CadPartKind, key: string): FoundPart | undefined {
 	// A flight chosen with its handrails, remembered before the handrails moved to Info, is the one
