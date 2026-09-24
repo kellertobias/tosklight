@@ -106,6 +106,7 @@ mod tests {
             z: 0.3,
         };
         let mut slot = ColorWheelSlot {
+            steady: None,
             semantic_id: "red".into(),
             label: "Red".into(),
             dmx_from: 0,

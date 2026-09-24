@@ -4,6 +4,7 @@
 mod aim;
 mod attributes;
 mod clock;
+pub mod color_intent;
 mod frame_address;
 mod surface;
 
@@ -22,6 +23,7 @@ pub use attributes::{
     transform_canonical_normalized, transform_canonical_value,
 };
 pub use clock::{ApplicationClock, EngineClock, ManualClock, SharedClock, SystemClock};
+pub use color_intent::{ColorProgrammingModel, ColorResolutionQuality};
 pub use frame_address::{FrameAddress, FrameAddressResolver};
 pub use surface::SurfaceCapability;
 

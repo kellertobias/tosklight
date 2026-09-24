@@ -562,7 +562,23 @@ impl FixtureMode {
                     cyan_channel_id,
                     magenta_channel_id,
                     yellow_channel_id,
+                    filters,
                 } => {
+                    if filters.is_some_and(|filters| {
+                        [
+                            filters.open_xyz,
+                            filters.cyan_xyz,
+                            filters.magenta_xyz,
+                            filters.yellow_xyz,
+                        ]
+                        .into_iter()
+                        .any(|xyz| !valid_measured_xyz(xyz))
+                            || filters.open_xyz.y <= 0.0
+                    }) {
+                        return Err(ProfileError::Invalid(
+                            "subtractive filter calibration is invalid".into(),
+                        ));
+                    }
                     vec![*cyan_channel_id, *magenta_channel_id, *yellow_channel_id]
                 }
                 ColorSystem::HueSaturation {

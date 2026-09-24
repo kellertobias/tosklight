@@ -54,6 +54,7 @@ fn additive_color_mode() -> FixtureMode {
     let channel_id = emitter.id;
     mode.channels = vec![emitter];
     mode.color_systems = vec![HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: identity_color_correction(),
         system: ColorSystem::Additive {
@@ -90,12 +91,14 @@ fn discrete_color_mode() -> FixtureMode {
     let channel_id = wheel.id;
     mode.channels = vec![wheel];
     mode.color_systems = vec![HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: identity_color_correction(),
         system: ColorSystem::DiscreteWheel {
             channel_id,
             slots: vec![
                 ColorWheelSlot {
+                    steady: None,
                     semantic_id: "red".into(),
                     label: "Red".into(),
                     dmx_from: 0,
@@ -107,6 +110,7 @@ fn discrete_color_mode() -> FixtureMode {
                     }),
                 },
                 ColorWheelSlot {
+                    steady: None,
                     semantic_id: "blue".into(),
                     label: "Blue".into(),
                     dmx_from: 100,
@@ -131,6 +135,7 @@ fn wheel_slots(mode: &mut FixtureMode) -> &mut Vec<ColorWheelSlot> {
 }
 
 mod color_geometry;
+mod color_intent;
 mod definition_projection;
 mod encoding_plan;
 mod inversion;

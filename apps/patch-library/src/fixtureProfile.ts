@@ -292,6 +292,24 @@ export interface HeadColorSystem {
 		[number, number, number],
 	];
 	system: ColorSystem;
+	/** Absent in profiles written before Color Intent: reads as nominal, revision 0. */
+	calibration?: ColorSystemCalibration;
+}
+
+export type ColorCalibrationStatus = "measured" | "nominal" | "uncalibrated";
+
+export interface ColorSystemCalibration {
+	status: ColorCalibrationStatus;
+	revision: number;
+	source?: string | null;
+}
+
+/** Measured CMY output: the open beam and each flag fully in on its own. */
+export interface SubtractiveCalibration {
+	open_xyz: XyzValue;
+	cyan_xyz: XyzValue;
+	magenta_xyz: XyzValue;
+	yellow_xyz: XyzValue;
 }
 
 export type ColorSystem =
@@ -301,6 +319,7 @@ export type ColorSystem =
 			cyan_channel_id: string;
 			magenta_channel_id: string;
 			yellow_channel_id: string;
+			filters?: SubtractiveCalibration | null;
 	  }
 	| {
 			type: "hue_saturation";
@@ -325,6 +344,8 @@ export interface ColorWheelSlot {
 	dmx_from: number;
 	dmx_to: number;
 	measured_xyz: XyzValue | null;
+	/** Unset: steady unless the name describes a split, scroll, rotation, or effect. */
+	steady?: boolean | null;
 }
 
 export interface XyzValue {

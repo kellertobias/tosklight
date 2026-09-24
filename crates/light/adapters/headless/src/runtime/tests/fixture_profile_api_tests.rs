@@ -8,12 +8,14 @@ async fn fixture_profile_api_rejects_invalid_discrete_wheel_before_storing_revis
     let profile_id = profile.id;
     let head_id = profile.modes[0].heads[0].id;
     profile.modes[0].color_systems = vec![light_fixture::HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
         system: light_fixture::ColorSystem::DiscreteWheel {
             channel_id: channel_ids[0],
             slots: vec![
                 light_fixture::ColorWheelSlot {
+                    steady: None,
                     semantic_id: "red".into(),
                     label: "Red".into(),
                     dmx_from: 0,
@@ -21,6 +23,7 @@ async fn fixture_profile_api_rejects_invalid_discrete_wheel_before_storing_revis
                     measured_xyz: None,
                 },
                 light_fixture::ColorWheelSlot {
+                    steady: None,
                     semantic_id: "blue".into(),
                     label: "Blue".into(),
                     dmx_from: 100,

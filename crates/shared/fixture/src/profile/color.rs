@@ -110,6 +110,7 @@ impl FixtureMode {
                 cyan_channel_id,
                 magenta_channel_id,
                 yellow_channel_id,
+                ..
             } => {
                 let (red, green, blue) = xyz_to_srgb(target);
                 for (id, level) in [

@@ -17,6 +17,7 @@ fn wheel_channel(id: uuid::Uuid, head_id: uuid::Uuid) -> FixtureChannel {
 
 fn slot(id: &str, label: &str, range: (u32, u32), measured: Option<Xyz>) -> ColorWheelSlot {
     ColorWheelSlot {
+        steady: None,
         semantic_id: id.into(),
         label: label.into(),
         dmx_from: range.0,
@@ -51,6 +52,7 @@ fn two_wheel_mode() -> (light_fixture::FixtureMode, [uuid::Uuid; 2]) {
     };
     mode.color_systems = vec![
         HeadColorSystem {
+            calibration: Default::default(),
             head_id: heads[0],
             correction_matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             system: ColorSystem::DiscreteWheel {
@@ -64,6 +66,7 @@ fn two_wheel_mode() -> (light_fixture::FixtureMode, [uuid::Uuid; 2]) {
             },
         },
         HeadColorSystem {
+            calibration: Default::default(),
             head_id: heads[1],
             correction_matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             system: ColorSystem::DiscreteWheel {

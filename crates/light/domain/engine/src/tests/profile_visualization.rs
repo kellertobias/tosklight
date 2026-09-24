@@ -141,6 +141,7 @@ fn calibrated_visual_definition() -> FixtureDefinition {
         calibrated_channel(blue_id, head_id, "color.blue", false, false, false),
     ];
     mode.color_systems = vec![light_fixture::HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: [[0.5, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
         system: ColorSystem::Additive {

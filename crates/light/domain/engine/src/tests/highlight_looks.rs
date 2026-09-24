@@ -163,6 +163,7 @@ fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
     let blue_id = channels[3].id;
     mode.channels = channels;
     mode.color_systems = vec![light_fixture::HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
         system: ColorSystem::Additive {

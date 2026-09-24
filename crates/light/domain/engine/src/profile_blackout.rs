@@ -25,6 +25,7 @@ pub(crate) fn blackout_raw(mode: &FixtureMode, channel: &FixtureChannel, raw: u3
                 cyan_channel_id,
                 magenta_channel_id,
                 yellow_channel_id,
+                ..
             } if [cyan_channel_id, magenta_channel_id, yellow_channel_id]
                 .contains(&&channel.id) =>
             {

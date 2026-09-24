@@ -10,6 +10,50 @@ pub struct HeadColorSystem {
     #[serde(default = "identity_color_correction")]
     pub correction_matrix: [[f32; 3]; 3],
     pub system: ColorSystem,
+    /// How far Color Intent may trust this system's colour data. Profiles written before the
+    /// declaration existed read as [`ColorCalibrationStatus::Nominal`] at revision zero.
+    #[serde(default)]
+    pub calibration: ColorSystemCalibration,
+}
+
+/// Where a colour system's data comes from.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorCalibrationStatus {
+    /// Measured on the fixture with a colorimeter or spectrometer.
+    Measured,
+    /// Taken from a datasheet or typical values: the colour is right, the exact shade may not be.
+    #[default]
+    Nominal,
+    /// Not enough data to promise a colour; Color Intent resolves from channel names only.
+    Uncalibrated,
+}
+
+/// The versioned calibration declaration a colour system carries in its fixture package.
+///
+/// A show stores its Color Intent as device-independent colour and each patched fixture keeps
+/// the profile snapshot it was patched with, so a new calibration revision changes a fixture's
+/// output only when the operator updates that fixture's profile; the stored intent never changes.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ColorSystemCalibration {
+    #[serde(default)]
+    pub status: ColorCalibrationStatus,
+    /// Incremented whenever the colour data of this system changes.
+    #[serde(default)]
+    pub revision: u32,
+    /// Free text naming the instrument, datasheet, or person behind the data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+/// Measured output of a CMY engine: the open beam, and the beam with each flag fully in on its
+/// own. Colour Intent models the flags as independent filters between those measurements.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SubtractiveCalibration {
+    pub open_xyz: Xyz,
+    pub cyan_xyz: Xyz,
+    pub magenta_xyz: Xyz,
+    pub yellow_xyz: Xyz,
 }
 
 pub(super) fn identity_color_correction() -> [[f32; 3]; 3] {
@@ -26,6 +70,9 @@ pub enum ColorSystem {
         cyan_channel_id: Uuid,
         magenta_channel_id: Uuid,
         yellow_channel_id: Uuid,
+        /// Measured filter output. Without it the flags are treated as ideal sRGB complements.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        filters: Option<SubtractiveCalibration>,
     },
     /// A fixture-native hue/saturation coordinate system. Brightness is optional because many
     /// fixtures expose H/S alongside an independent intensity channel while true HSI fixtures
@@ -159,4 +206,8 @@ pub struct ColorWheelSlot {
     pub dmx_to: u32,
     #[serde(default)]
     pub measured_xyz: Option<Xyz>,
+    /// Whether Color Intent may park the wheel here to show a colour. Unset, a slot counts as
+    /// steady unless its name describes a split, scroll, rotation, or effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steady: Option<bool>,
 }

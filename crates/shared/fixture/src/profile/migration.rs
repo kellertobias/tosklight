@@ -258,6 +258,7 @@ impl FixtureMode {
                             })
                             .collect::<Vec<_>>();
                         (!emitters.is_empty()).then_some(HeadColorSystem {
+                            calibration: Default::default(),
                             head_id: head.id,
                             correction_matrix: calibration.correction_matrix,
                             system: ColorSystem::Additive { emitters },

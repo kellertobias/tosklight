@@ -708,6 +708,7 @@ fn native_hsi_color_range_fixture(number: u32) -> light_fixture::PatchedFixture 
     })
     .collect();
     mode.color_systems = vec![light_fixture::HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
         system: light_fixture::ColorSystem::HueSaturation {

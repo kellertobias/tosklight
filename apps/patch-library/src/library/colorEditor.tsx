@@ -74,15 +74,19 @@ export function replaceHeadColorSystem(
 	if (!system)
 		return systems.filter((candidate) => candidate.head_id !== headId);
 	const existing = systems.find((candidate) => candidate.head_id === headId);
+	// A hybrid head carries further systems (a wheel beside CMY) that this editor does not show;
+	// editing the first one keeps them.
+	if (existing)
+		return systems.map((candidate) =>
+			candidate === existing ? { ...existing, system } : candidate,
+		);
 	return [
-		...systems.filter((candidate) => candidate.head_id !== headId),
-		existing
-			? { ...existing, system }
-			: {
-					head_id: headId,
-					correction_matrix: identityColorCorrectionMatrix(),
-					system,
-				},
+		...systems,
+		{
+			head_id: headId,
+			correction_matrix: identityColorCorrectionMatrix(),
+			system,
+		},
 	];
 }
 

@@ -54,6 +54,7 @@ fn additive_color_applies_response_drive_limit_inversion_and_gamut_clipping() {
         .collect();
     mode.channels[0].invert = true;
     mode.color_systems = vec![HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: identity_color_correction(),
         system: ColorSystem::Additive {
@@ -135,9 +136,11 @@ fn subtractive_color_uses_cmy_fallback_and_honors_continuous_inversion() {
         .collect();
     mode.channels[1].invert = true;
     mode.color_systems = vec![HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: identity_color_correction(),
         system: ColorSystem::Subtractive {
+            filters: None,
             cyan_channel_id: mode.channels[0].id,
             magenta_channel_id: mode.channels[1].id,
             yellow_channel_id: mode.channels[2].id,
@@ -176,6 +179,7 @@ fn hue_saturation_color_resolves_canonical_xyz_to_authored_hsi_channels() {
     let saturation_channel_id = mode.channels[1].id;
     let intensity_channel_id = mode.channels[2].id;
     mode.color_systems = vec![HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: identity_color_correction(),
         system: ColorSystem::HueSaturation {
@@ -229,6 +233,7 @@ fn hue_saturation_color_rejects_reused_or_cross_head_channels() {
             .contains("is not bound to its color system")
     );
     mode.color_systems = vec![HeadColorSystem {
+        calibration: Default::default(),
         head_id: first_head,
         correction_matrix: identity_color_correction(),
         system: ColorSystem::HueSaturation {
@@ -271,12 +276,14 @@ fn discrete_color_wheel_selects_measured_slot_as_an_exact_fixture_raw_value() {
     let red = crate::srgb_to_xyz(1.0, 0.0, 0.0);
     let blue = crate::srgb_to_xyz(0.0, 0.0, 1.0);
     mode.color_systems = vec![HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: identity_color_correction(),
         system: ColorSystem::DiscreteWheel {
             channel_id: wheel_id,
             slots: vec![
                 ColorWheelSlot {
+                    steady: None,
                     semantic_id: "red".into(),
                     label: "Red".into(),
                     dmx_from: 10,
@@ -284,6 +291,7 @@ fn discrete_color_wheel_selects_measured_slot_as_an_exact_fixture_raw_value() {
                     measured_xyz: Some(red),
                 },
                 ColorWheelSlot {
+                    steady: None,
                     semantic_id: "blue".into(),
                     label: "Blue".into(),
                     dmx_from: 100,
@@ -308,11 +316,13 @@ fn highlight_color_uses_an_authored_semantic_wheel_slot_without_measurement() {
     let wheel_id = wheel.id;
     mode.channels = vec![wheel];
     mode.color_systems = vec![HeadColorSystem {
+        calibration: Default::default(),
         head_id,
         correction_matrix: identity_color_correction(),
         system: ColorSystem::DiscreteWheel {
             channel_id: wheel_id,
             slots: vec![ColorWheelSlot {
+                steady: None,
                 semantic_id: "blue".into(),
                 label: "Blue".into(),
                 dmx_from: 100,

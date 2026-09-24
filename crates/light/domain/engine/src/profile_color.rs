@@ -64,6 +64,7 @@ pub(crate) fn profile_visual_color(
             cyan_channel_id,
             magenta_channel_id,
             yellow_channel_id,
+            ..
         }) => Some(srgb_to_xyz(
             1.0 - level_of(mode, channels, *cyan_channel_id).unwrap_or(0.0),
             1.0 - level_of(mode, channels, *magenta_channel_id).unwrap_or(0.0),

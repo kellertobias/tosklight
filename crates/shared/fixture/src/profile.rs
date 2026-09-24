@@ -1,5 +1,6 @@
 mod channel_model;
 mod color;
+mod color_intent;
 mod color_model;
 mod definition_projection;
 mod encoding_plan;
@@ -16,6 +17,7 @@ mod validation;
 mod wheel_color;
 
 pub use channel_model::*;
+pub use color_intent::{ColorIntentEngine, ColorIntentResolution};
 pub use color_model::*;
 pub use encoding_plan::*;
 pub use error::*;
