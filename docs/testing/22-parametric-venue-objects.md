@@ -91,6 +91,24 @@ choices existed open unchanged.
 10. Confirm a stairs profile is told from a deck by its kind, not its name: rename **Stage Stairs**
     to something without "stair" in it and confirm it still draws as a flight of steps.
 
+## Snapping Venue geometry by dragging
+
+With snapping on and no key held, drag each object by its move gizmo in the plan.
+
+1. Place a 2 × 1 m deck and a 1 × 1 m deck. Drag the small deck towards the long back side of the
+   large one, half a metre in from its end. Confirm it closes up against that side with no gap and
+   that a magenta line runs along the joined side, wherever along it the deck is let go. Drag it
+   towards the end of the large deck and confirm its end clicks into line with the large deck's
+   end, a second magenta line marking that side.
+2. Drag the small deck off the large one's corner until the corners are close. Confirm they meet
+   corner on corner.
+3. In a front view, drag the small deck down onto the large deck's top. Confirm its feet land on
+   the top.
+4. Place two four-point trusses and drag one end towards the other's end. Confirm the connectors
+   meet with a magenta diamond. Drag a three-point truss towards a four-point one and confirm it
+   does not couple to it.
+5. Repeat any drag with **Shift** held and confirm nothing snaps and nothing is marked.
+
 ## Crowds
 
 1. Add **Crowd Area**. Confirm its people differ in size in the Visualizer and in every PreViz view,

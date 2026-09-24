@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { duplicateStep, rememberMoveAxis } from "./duplicateStep";
 import type { CadObjectMenuRequest } from "./CadObjectMenu";
-import type { SelectionBox } from "./lineRenderer";
+import type { SelectionBox, SnapGuide } from "./lineRenderer";
 import {
 	boundsOf,
 	entityBounds,
@@ -29,6 +29,8 @@ import type {
 	TileCamera,
 } from "./types";
 import { planeDelta, projectPoint } from "./types";
+
+const NO_SNAP: { markers: PlanPoint[]; guides: SnapGuide[] } = { markers: [], guides: [] };
 
 export interface Drag {
 	type: "pan" | "move" | "box";
@@ -59,6 +61,8 @@ export interface CadViewportInteraction {
 	selectionBox: SelectionBox | null;
 	/** Where the move in flight has snapped onto a fit, on this tile's plan. */
 	snapMarkers: readonly PlanPoint[];
+	/** The sides the move in flight has lined up, as lines on this tile's plan. */
+	snapGuides: readonly SnapGuide[];
 	/** The live coordinates and typed entry beside the gizmo while a move is in flight. */
 	readout: MoveReadout | null;
 	pointerDown(event: React.PointerEvent<HTMLCanvasElement>): void;
@@ -147,7 +151,7 @@ function updateMovePreview(
 	clientX: number,
 	clientY: number,
 	shift: boolean,
-	showSnap: (markers: PlanPoint[]) => void,
+	showSnap: (markers: PlanPoint[], guides?: SnapGuide[]) => void,
 ) {
 	const { camera, view, rotationQuarterTurns, selectedIds, onPreview } = context;
 	const dx = clientX - active.start[0];
@@ -170,9 +174,13 @@ function updateMovePreview(
 					freeAxes(active.axis, view, rotationQuarterTurns),
 					snapThreshold(camera.zoom),
 				)
-			: { delta: raw, targets: [] };
+			: { delta: raw, targets: [], guides: [] };
 	active.deltaMillimetres = snapped.delta;
-	showSnap(snapped.targets.map((target) => projectPoint(target, view, rotationQuarterTurns)));
+	const onPlan = (point: [number, number, number]) => projectPoint(point, view, rotationQuarterTurns);
+	showSnap(
+		snapped.targets.map(onPlan),
+		snapped.guides.map(([start, end]): SnapGuide => [onPlan(start), onPlan(end)]),
+	);
 	onPreview({
 		entityIds,
 		deltaMillimetres: snapped.delta,
@@ -363,8 +371,8 @@ export function useCadViewportInteraction(
 	const drag = useRef<Drag | null>(null);
 	const [guide, setGuide] = useState<MoveAxis | null>(null);
 	const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
-	const [snapMarkers, setSnapMarkers] = useState<readonly PlanPoint[]>([]);
-	const shownSnap = useRef<string>("[]");
+	const [snap, setSnap] = useState<{ markers: PlanPoint[]; guides: SnapGuide[] }>(NO_SNAP);
+	const shownSnap = useRef<string>(JSON.stringify([[], []]));
 	const { readout, refresh, commitTyped, clearReadout } = useCadMoveEntry({
 		drag,
 		context,
@@ -375,11 +383,11 @@ export function useCadViewportInteraction(
 		},
 	});
 	// Set only when the markers change, so a drag that stays snapped does not re-render every move.
-	function showSnap(markers: PlanPoint[]) {
-		const key = JSON.stringify(markers);
+	function showSnap(markers: PlanPoint[], guides: SnapGuide[] = []) {
+		const key = JSON.stringify([markers, guides]);
 		if (key === shownSnap.current) return;
 		shownSnap.current = key;
-		setSnapMarkers(markers);
+		setSnap({ markers, guides });
 	}
 	useEffect(() => {
 		const shift = (held: boolean) => (event: KeyboardEvent) => {
@@ -495,7 +503,8 @@ export function useCadViewportInteraction(
 	return {
 		guide,
 		selectionBox,
-		snapMarkers,
+		snapMarkers: snap.markers,
+		snapGuides: snap.guides,
 		readout,
 		pointerDown,
 		pointerMove,

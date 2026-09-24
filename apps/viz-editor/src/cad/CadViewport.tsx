@@ -227,6 +227,9 @@ function useViewportGestures(context: CadViewportContext) {
 	);
 	// The drawing tool is asked first; what it leaves goes to selection, moves and panning.
 	const canvasHandlers = {
+		// How many fits and lined-up sides are marked, for tests and tooling to read.
+		"data-snap-markers": snapMarkers.length,
+		"data-snap-guides": interaction.snapGuides.length,
 		onPointerDown: (event: React.PointerEvent<HTMLCanvasElement>) =>
 			placement.pointerDown(event) ||
 			drawing.pointerDown(event) ||
@@ -332,6 +335,7 @@ export function CadViewport({
 		underlays,
 		annotations,
 		snapMarkers,
+		snapGuides: interaction.snapGuides,
 	});
 
 	const scale = cadScaleForZoom(camera.zoom);

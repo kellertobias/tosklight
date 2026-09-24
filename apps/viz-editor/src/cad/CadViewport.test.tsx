@@ -799,6 +799,48 @@ describe("CAD fixture interaction", () => {
 		);
 	});
 
+	it("butts a dragged stage deck against its neighbour's side and draws the joined side", async () => {
+		const deck = (id: string, position: [number, number, number], width: number): CadEntity => ({
+			...fixture,
+			id,
+			logicalFixtureId: id,
+			kind: "venue",
+			fixtureType: "venue",
+			fixtureProfile: "Venue Stage Deck",
+			positionMillimetres: position,
+			sizeMillimetres: [width, 1000, 400],
+			scenery: { kind: "riser", chords: 0, pattern: "standard" },
+		});
+		const still = deck("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", [0, 0, 0], 2000);
+		const moving = deck("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", [300, 1040, 0], 1000);
+		const { canvas, onPreview, onMove } = setup([moving.id], [still, moving], undefined, {
+			snapping: true,
+		});
+		// An ordinary drag of the gizmo, which stands on the deck's position (530, 296 on screen).
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 530, clientY: 296 });
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 531, clientY: 297 });
+		expect(onPreview).toHaveBeenLastCalledWith({
+			entityIds: [moving.id],
+			deltaMillimetres: [10, -40, 0],
+			spread: false,
+		});
+		expect(canvas).toHaveAttribute("data-snap-guides", "1");
+		expect(canvas).toHaveAttribute("data-snap-markers", "1");
+		// Shift places freely: no snap and nothing marked.
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 531, clientY: 297, shiftKey: true });
+		expect(onPreview).toHaveBeenLastCalledWith({
+			entityIds: [moving.id],
+			deltaMillimetres: [10, -10, 0],
+			spread: false,
+		});
+		expect(canvas).toHaveAttribute("data-snap-guides", "0");
+		fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 531, clientY: 297 });
+		await waitFor(() =>
+			expect(onMove).toHaveBeenCalledWith([10, -40, 0], [moving.id], false, true),
+		);
+		expect(canvas).toHaveAttribute("data-snap-guides", "0");
+	});
+
 	it("does not select locked entities and renders optional operator labels", () => {
 		const locked = { ...fixture, selectable: false };
 		const { canvas, onSelection } = setup([], locked, {

@@ -107,6 +107,16 @@ export function trussCornerArms(entity: Shape): readonly Vec3[] | null {
 	return match ? (ARMS[match[1].trim().toLowerCase()] ?? null) : null;
 }
 
+/**
+ * How many chords the truss system has — three or four — or 0 when the part does not say, so it
+ * couples to anything: a straight run says it in its scenery, a corner piece in its profile's name.
+ */
+export function trussChords(entity: Shape): number {
+	const corner = /^Venue (Three|Four)-Point Truss /iu.exec(entity.fixtureProfile ?? "");
+	if (corner) return corner[1].toLowerCase() === "three" ? 3 : 4;
+	return isTruss(entity) ? (entity.scenery?.chords ?? 0) : 0;
+}
+
 /** A straight truss's run: which of its own axes it is long along, and its section. */
 function trussRun(entity: Shape) {
 	const size = entity.sizeMillimetres;

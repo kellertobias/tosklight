@@ -699,14 +699,21 @@ second Escape abandons the move. A typed move neither snaps nor spreads.
 ### Snapping
 
 With **Settings (⚙) → Enable snapping** on, a moved object that comes within about 12 pixels of a fit
-lands exactly on it, and a magenta diamond marks the fit while the drag holds it:
+lands exactly on it, and a magenta diamond marks the fit while the drag holds it. Snapping is part of
+an ordinary drag of the move gizmo; no key needs to be held:
 
 * **Trusses** join where their connectors meet: the ends of a straight truss, and the end of each
   arm of a corner, T-piece, cross or node, where the coupler egg sits. A corner block is 500 mm
-  overall wherever it has arms, so adding arms makes it busier rather than bigger.
-* **Stage elements** — decks on scissor lifts, decks on regular feet and stairs — put their corners
-  on another's corners, and in a side or front view their feet on another stage element's top. A
-  stage element stands on its position: the position is the floor under the middle of its feet.
+  overall wherever it has arms, so adding arms makes it busier rather than bigger. Connectors join
+  only within one truss system: three-point to three-point, four-point to four-point.
+* **Stage elements** — decks on scissor lifts, decks on regular feet and stairs — butt their sides
+  against a neighbour's and line them up flush with its sides, each direction on its own: slide a
+  deck along the front of a wider one and it closes up against it wherever you let go, and its end
+  clicks into line with the wider deck's end when it comes close. Two sides that meet on both axes
+  put corner on corner. A magenta line runs along each side that was lined up. This works for
+  elements turned in quarter turns; one turned at another angle still puts its corners on another's.
+  In a side or front view a stage element's feet land on another stage element's top. A stage
+  element stands on its position: the position is the floor under the middle of its feet.
 * **Curtains** hang their rail just under a truss or pipe, and line their ends up with the ends of
   the next curtain.
 * **Handrails** land their foot line on the outside edge of a stage element, and their ends on that

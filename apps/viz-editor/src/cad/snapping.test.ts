@@ -87,7 +87,7 @@ describe("CAD snapping", () => {
 		expectVector(snapped.targets[0], [2000, 0, 5000]);
 		// Beyond the snap distance the drag is left alone.
 		const far = snapMove([still, moving], ["b"], [-300, 0, 0], PLAN, 150);
-		expect(far).toEqual({ delta: [-300, 0, 0], targets: [] });
+		expect(far).toEqual({ delta: [-300, 0, 0], targets: [], guides: [] });
 	});
 
 	it("finds a corner piece's connectors at the end of its arms, whatever size the block is", () => {
@@ -124,6 +124,64 @@ describe("CAD snapping", () => {
 		expectVector(snapMove([still, moving], ["b"], [10, 0, 0], PLAN, 150).delta, [-50, -20, 0]);
 	});
 
+	it("couples a truss only to a connector of the same system", () => {
+		const four = truss("a", [0, 0, 5000]);
+		const three = truss("b", [4100, 0, 5000], [4000, 290, 290], 3);
+		expectVector(snapMove([four, three], ["b"], [-50, 0, 0], PLAN, 150).delta, [-50, 0, 0]);
+		// A corner block says its system in its name: a three-point corner takes only a three-point run.
+		const corner = base("c", {
+			fixtureProfile: "Venue Three-Point Truss Corner 2-Way",
+			sizeMillimetres: [500, 500, 290],
+			positionMillimetres: [2375, 20, 5000],
+		});
+		expectVector(snapMove([four, corner], ["c"], [0, 0, 0], PLAN, 150).delta, [0, 0, 0]);
+		const run = truss("r", [0, 0, 5000], [4000, 290, 290], 3);
+		expectVector(snapMove([run, corner], ["c"], [0, 0, 0], PLAN, 150).delta, [-20, -20, 0]);
+	});
+
+	it("butts a stage element against a neighbour's side wherever along it the drag lets go", () => {
+		const wide = riser("a", [0, 0, 0], [2000, 1000, 400]);
+		// A metre-square deck 40 mm clear of the wide deck's back side, 300 mm along it: no corner
+		// is anywhere near, but the sides meet.
+		const moving = riser("b", [300, 1040, 0], [1000, 1000, 600]);
+		const snapped = snapMove([wide, moving], ["b"], [5, 0, 0], PLAN, 150);
+		expectVector(snapped.delta, [5, -40, 0]);
+		// The guide runs along the joined side, across both decks, at the higher top.
+		expect(snapped.guides).toHaveLength(1);
+		expectVector(snapped.guides[0][0], [-1000, 500, 600]);
+		expectVector(snapped.guides[0][1], [1000, 500, 600]);
+		expect(snapped.targets).toHaveLength(1);
+		// Beyond the snap distance it stays where it was dragged.
+		const far = snapMove([wide, { ...moving, positionMillimetres: [300, 1400, 0] }], ["b"], [5, 0, 0], PLAN, 150);
+		expect(far).toEqual({ delta: [5, 0, 0], targets: [], guides: [] });
+	});
+
+	it("lines a stage element's side up flush with a neighbour's and butts it on the other axis", () => {
+		const still = riser("a", [0, 0, 0], [2000, 1000, 400]);
+		// Beside the deck on the right, 60 mm clear and 100 mm proud of its front.
+		const moving = riser("b", [1560, -100, 0], [1000, 1000, 400]);
+		const snapped = snapMove([still, moving], ["b"], [0, 0, 0], PLAN, 150);
+		expectVector(snapped.delta, [-60, 100, 0]);
+		expect(snapped.guides).toHaveLength(2);
+		// The two sides, drawn where the deck landed: the joined side at x = 1000 and the flush
+		// front at y = -500 running across both decks.
+		expectVector(snapped.guides[0][0], [1000, -500, 400]);
+		expectVector(snapped.guides[1][0], [-1000, -500, 400]);
+		expectVector(snapped.guides[1][1], [2000, -500, 400]);
+	});
+
+	it("lines up stage elements turned a quarter turn, but not ones at an angle", () => {
+		const still = riser("a", [0, 0, 0], [2000, 1000, 400]);
+		// Turned a quarter, the 2 × 1 m deck is 1 m across and 2 m deep.
+		const turned = {
+			...riser("b", [1540, 700, 0], [2000, 1000, 400]),
+			rotationDegrees: [0, 0, 90] as V3,
+		};
+		expectVector(snapMove([still, turned], ["b"], [0, 0, 0], PLAN, 150).delta, [-40, 0, 0]);
+		const askew = { ...turned, rotationDegrees: [0, 0, 30] as V3 };
+		expectVector(snapMove([still, askew], ["b"], [0, 0, 0], PLAN, 150).delta, [0, 0, 0]);
+	});
+
 	it("stands a stage element's feet on the top of another", () => {
 		// A deck from a show made before the decks were generated stands on its feet by its name.
 		const deck = base("a", {
@@ -135,7 +193,7 @@ describe("CAD snapping", () => {
 		expectVector(snapped.delta, [0, 0, -60]);
 		expect(snapped.targets[0][2]).toBe(440);
 		// Seen from above, height is not the drag's to change.
-		expectVector(snapMove([deck, moving], ["b"], [0, 5, 0], PLAN, 150).delta, [0, 5, 0]);
+		expect(snapMove([deck, moving], ["b"], [0, 5, 0], PLAN, 150).delta[2]).toBe(0);
 	});
 
 	it("hangs a curtain's rail under a pipe and lines its ends up with the next curtain", () => {

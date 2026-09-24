@@ -2,7 +2,8 @@
  * Snapping in the CAD: a move or a measurement that comes close to a fit lands exactly on it.
  *
  * - A truss connector (the end of a straight run or of a corner piece's arm) onto another's.
- * - A stage element's corner onto another's, and its feet onto another stage element's top.
+ * - A stage element's corner onto another's, its sides against or flush with a neighbour's (see
+ *   `stageAlignment`), and its feet onto another stage element's top.
  * - A curtain's rail up under a truss or pipe, and its ends onto a neighbouring curtain's.
  * - A lamp's mounting point onto the nearest truss pipe.
  * - A measurement's ends onto any of those points, or an object's centre.
@@ -12,6 +13,7 @@
  * a lamp on the floor, seen from above — is out of reach. Holding Shift turns snapping off.
  */
 import type { PlanPoint } from "./projection";
+import { nearestStageAlignment } from "./stageAlignment";
 import { type CadEntity, type CadViewDirection, projectPoint } from "./types";
 import {
 	addVec,
@@ -24,6 +26,7 @@ import {
 	stageCorners,
 	stageEdges,
 	trussAxis,
+	trussChords,
 	trussConnectors,
 	trussPipeRadius,
 	trussPipes,
@@ -49,12 +52,16 @@ export interface MoveSnap {
 	delta: Vec3;
 	/** Where the snapped features meet, in plan axes; empty when nothing snapped. */
 	targets: Vec3[];
+	/** The sides lined up by the snap, as lines in plan axes; empty when no side was. */
+	guides: [Vec3, Vec3][];
 }
 
 interface Candidate {
 	correction: Vec3;
 	distance: number;
 	target: Vec3;
+	/** A stage element's corner on another's, which lining up their sides also finds. */
+	corner?: boolean;
 }
 
 function pointCandidate(
@@ -101,7 +108,9 @@ function nearestFit(
 		if (candidate && (!best || candidate.distance < best.distance)) best = candidate;
 	};
 	const moved = (point: readonly number[]) => addVec(point, delta);
-	const connectors = still.flatMap(trussConnectors);
+	const connectors = still.flatMap((entity) =>
+		trussConnectors(entity).map((point) => ({ point, chords: trussChords(entity) })),
+	);
 	const corners = still.filter(isStageElement).flatMap(stageCorners);
 	const railEnds = still.flatMap((entity) => curtainRail(entity)?.ends ?? []);
 	const edges = still.filter(isStageElement).flatMap(stageEdges);
@@ -109,13 +118,18 @@ function nearestFit(
 	const axes = still.flatMap((entity) => trussAxis(entity) ?? []);
 	const reach = SNAP_REACH_MILLIMETRES;
 	for (const mover of movers) {
+		// A connector couples only to one of the same truss system: three chords to three, four to four.
+		const chords = trussChords(mover);
 		for (const connector of trussConnectors(mover))
 			for (const target of connectors)
-				consider(pointCandidate(moved(connector), target, free, threshold, reach));
+				if (!chords || !target.chords || chords === target.chords)
+					consider(pointCandidate(moved(connector), target.point, free, threshold, reach));
 		if (isStageElement(mover))
 			for (const corner of stageCorners(mover))
-				for (const target of corners)
-					consider(pointCandidate(moved(corner), target, free, threshold, null));
+				for (const target of corners) {
+					const candidate = pointCandidate(moved(corner), target, free, threshold, null);
+					consider(candidate && { ...candidate, corner: true });
+				}
 		// A handrail guards a deck's edge: its foot line lands on the top perimeter of a stage
 		// element, and its ends line up with the corners of it, so a run of rail closes the side.
 		const foot = railingFoot(mover);
@@ -253,10 +267,23 @@ export function snapMove(
 		return {
 			delta: addVec(start, mount.correction),
 			targets: [mount.target],
+			guides: [],
 		};
-	const fit = nearestFit(movers, still, start, free, threshold);
+	const nearest = nearestFit(movers, still, start, free, threshold);
+	// Stage elements line their sides up, which puts corner on corner too and draws the sides that
+	// met; a deck turned at an angle still has its corners, and anything else its own fit.
+	const alignment =
+		!nearest || nearest.corner
+			? nearestStageAlignment(movers, still, start, free, threshold)
+			: null;
+	const fit = alignment ? null : nearest;
+	const aligned: Candidate | null = alignment && {
+		correction: alignment.correction,
+		distance: Math.hypot(...alignment.correction),
+		target: midpoint(alignment.guides[0]),
+	};
 	const landing = free[2] ? nearestLanding(movers, still, start, threshold) : null;
-	const chosen = [fit, landing].filter((candidate): candidate is Candidate =>
+	const chosen = [fit ?? aligned, landing].filter((candidate): candidate is Candidate =>
 		Boolean(candidate),
 	);
 	// A landing only adds height, so it joins a fit that left the height alone.
@@ -265,7 +292,12 @@ export function snapMove(
 	return {
 		delta: applied.reduce((sum, candidate) => addVec(sum, candidate.correction), start),
 		targets: applied.map((candidate) => candidate.target),
+		guides: alignment && applied.includes(aligned as Candidate) ? alignment.guides : [],
 	};
+}
+
+function midpoint([start, end]: [Vec3, Vec3]): Vec3 {
+	return [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2, (start[2] + end[2]) / 2];
 }
 
 /** The points a measurement can snap to: connectors, stage corners, rail ends and every object's centre. */

@@ -77,6 +77,8 @@ export interface CadFrame {
 	annotations?: readonly CadAnnotation[];
 	/** Where a move or a measurement has snapped onto a fit, marked over everything. */
 	snapMarkers?: readonly PlanPoint[];
+	/** The sides a snapped move has lined up, drawn as lines in the snap colour. */
+	snapGuides?: readonly SnapGuide[];
 }
 
 /** The three vertex arrays of a frame, and the closures that append plan points to them. */
@@ -414,9 +416,13 @@ function paintSelectionBox(painter: Painter, frame: CadFrame) {
 	painter.line([start[0], end[1]], [start[0], start[1]], color);
 }
 
+/** A side a snapped move has lined up, from one end of the joined run to the other. */
+export type SnapGuide = readonly [PlanPoint, PlanPoint];
+
 /** A snapped fit: a magenta diamond eight pixels across, so it reads apart from the cyan selection. */
 function paintSnapMarkers(painter: Painter, frame: CadFrame) {
 	const color: LineColor = [1, 0.3, 0.85];
+	for (const [start, end] of frame.snapGuides ?? []) painter.stroke(start, end, color, 2 * painter.pixel);
 	const size = 8 * painter.pixel * (window.devicePixelRatio || 1);
 	for (const [x, y] of frame.snapMarkers ?? []) {
 		const corners: PlanPoint[] = [
