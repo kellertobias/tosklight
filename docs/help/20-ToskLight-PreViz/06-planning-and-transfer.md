@@ -783,6 +783,11 @@ above — is out of reach. **Measure** snaps its ends in the same way, onto conn
 curtain ends and the centre of every object. Hold **Shift** to place freely: while it is held, a drag
 or a measurement snaps to nothing and a moved lamp is not mounted.
 
+The switch is on unless you turn it off. Before decks and trusses snapped, it read **Snap to
+declared truss mounts** and governed only whether a moved lamp was recorded on a truss; a computer
+where that old switch was turned off starts with snapping on, since nobody had turned off snapping
+that did not yet exist.
+
 The trash button at the top of Info, **Delete** and **Backspace** delete the selection from the
 show, with every multi-patch copy of each fixture. A single selected element goes at once; several
 are always confirmed first, and **Cancel** leaves every one of them in place. A deletion is one step:

@@ -1218,6 +1218,46 @@ describe("the CAD planning screen", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("snaps although the old lamp-mount switch was saved off, and stays off only when snapping itself was", async () => {
+		// Until snapping.ts existed the switch read "Snap to declared truss mounts" and governed only
+		// a lamp's mounting; an operator who turned that off did not turn decks and trusses off.
+		localStorage.setItem(
+			"tosklight:viz-editor:cad-settings:v1",
+			JSON.stringify({ snapToMounts: false, showGrid: false }),
+		);
+		const { unmount } = render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		let settings = screen.getByRole("dialog", { name: "Architect Settings" });
+		const snapping = within(settings).getByRole("switch", { name: "Enable snapping" });
+		expect(snapping).toBeChecked();
+		fireEvent.click(snapping);
+		const stored = JSON.parse(
+			localStorage.getItem("tosklight:viz-editor:cad-settings:v1") ?? "{}",
+		);
+		expect(stored.snapping).toBe(false);
+		// The other settings saved beside the old switch still count.
+		expect(stored.showGrid).toBe(false);
+		expect(stored).not.toHaveProperty("snapToMounts");
+		unmount();
+
+		render(
+			<ModalProvider>
+				<CadApp />
+			</ModalProvider>,
+		);
+		await screen.findByTestId("cad-canvas");
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		settings = screen.getByRole("dialog", { name: "Architect Settings" });
+		expect(
+			within(settings).getByRole("switch", { name: "Enable snapping" }),
+		).not.toBeChecked();
+	});
+
 	it("sets the grid colour as a setting of this computer, never of the show", async () => {
 		render(
 			<ModalProvider>

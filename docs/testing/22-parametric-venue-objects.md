@@ -178,6 +178,10 @@ With snapping on and no key held, drag each object by its move gizmo in the plan
    meet with a magenta diamond. Drag a three-point truss towards a four-point one and confirm it
    does not couple to it.
 5. Repeat any drag with **Shift** held and confirm nothing snaps and nothing is marked.
+6. On a computer whose Architect settings were saved before geometric snapping existed with the
+   old **Snap to declared truss mounts** switch off (`snapToMounts: false` in the stored CAD
+   settings), open Settings and confirm **Enable snapping** is on and a dragged deck snaps. Turn it
+   off, reopen the Architect, and confirm it stays off.
 
 ## Deleting and undoing in the CAD
 

@@ -76,7 +76,7 @@ export function CadTileViewport({
 			showFixtureIds={settings.showFixtureIds}
 			showDmxAddresses={settings.showDmxAddresses}
 			showCoordinateOrigins={settings.showCoordinateOrigins}
-			snapping={settings.snapToMounts && !printMode}
+			snapping={settings.snapping && !printMode}
 			grid={grid}
 			printMode={printMode}
 			underlays={underlays}

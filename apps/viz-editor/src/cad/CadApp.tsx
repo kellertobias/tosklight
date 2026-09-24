@@ -59,7 +59,12 @@ const LEGACY_WORKSPACE_KEY = "tosklight:viz-editor:cad-workspace:v1";
 const SETTINGS_KEY = "tosklight:viz-editor:cad-settings:v1";
 
 interface CadSettings {
-	snapToMounts: boolean;
+	/**
+	 * Whether a move snaps onto a fit. Stored under its own name: until geometric snapping existed
+	 * this switch was "Snap to declared truss mounts", and an operator who turned lamps' mounting
+	 * off then had not asked for decks and trusses never to meet, so that old value is not read.
+	 */
+	snapping: boolean;
 	showFixtureIds: boolean;
 	showDmxAddresses: boolean;
 	showCoordinateOrigins: boolean;
@@ -323,7 +328,7 @@ export function CadApp() {
 		sceneRef,
 		applyScene,
 		onError: setError,
-		snapToMounts: settings.snapToMounts,
+		snapToMounts: settings.snapping,
 		blocked: printMode,
 		onCopied: (ids) => select({ type: "replace", ids }),
 	});
@@ -550,8 +555,8 @@ function CadSettingsWindow({
 								label="Enable snapping"
 								offLabel={null}
 								onLabel={null}
-								checked={settings.snapToMounts}
-								onChange={(event) => onChange({ snapToMounts: event.currentTarget.checked })}
+								checked={settings.snapping}
+								onChange={(event) => onChange({ snapping: event.currentTarget.checked })}
 							/>
 							<SwitchField
 								label="Show fixture IDs"
@@ -790,7 +795,7 @@ function restoreSettings(): CadSettings {
 	try {
 		const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null");
 		return {
-			snapToMounts: stored?.snapToMounts !== false,
+			snapping: stored?.snapping !== false,
 			showFixtureIds: stored?.showFixtureIds === true,
 			showDmxAddresses: stored?.showDmxAddresses === true,
 			showCoordinateOrigins: stored?.showCoordinateOrigins === true,
@@ -807,7 +812,7 @@ function restoreSettings(): CadSettings {
 		};
 	} catch {
 		return {
-			snapToMounts: true,
+			snapping: true,
 			showFixtureIds: false,
 			showDmxAddresses: false,
 			showCoordinateOrigins: false,
