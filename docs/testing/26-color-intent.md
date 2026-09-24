@@ -39,8 +39,8 @@ In a Color Intent show with all five fixtures patched and selected at Intensity 
   its colour channels together — and keeps the colour's proportions. Picking a darker shade of the
   same red changes nothing.
 - The encoders, Fixture Sheet columns and channel faders show no Red, Green, Blue, White, Amber,
-  CMY, colour-wheel, Hue, Saturation or Tint control. `FIXTURE 1 ATTRIBUTE color.red FIXAT 50`
-  is refused with a message naming Color Intent.
+  CMY, colour-wheel, Hue, Saturation or Tint control. Setting a fixture-native colour channel
+  through a value action is refused with a message naming Color Intent.
 - A media-server fixture with a Grayscale level still shows **Grayscale** in the Color dialog.
 
 ## COLORINTENT-003 — Visible resolution results

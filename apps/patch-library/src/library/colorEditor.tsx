@@ -267,6 +267,29 @@ function CorrectionMatrixFields({
 	);
 }
 
+/** One head's correction matrix with a single entry changed. */
+function withCorrection(
+	systems: HeadColorSystem[],
+	headId: string,
+	row: number,
+	column: number,
+	value: number,
+): HeadColorSystem[] {
+	return systems.map((candidate) =>
+		candidate.head_id === headId
+			? {
+					...candidate,
+					correction_matrix: candidate.correction_matrix.map(
+						(values, rowIndex) =>
+							values.map((entry, columnIndex) =>
+								rowIndex === row && columnIndex === column ? value : entry,
+							),
+					) as HeadColorSystem["correction_matrix"],
+				}
+			: candidate,
+	);
+}
+
 export function ColorEditor({
 	mode,
 	onChange,
@@ -290,21 +313,7 @@ export function ColorEditor({
 		onChange(
 			reconcileColorSystemHighlightDefaults(
 				mode,
-				mode.color_systems.map((candidate) =>
-					candidate.head_id === headId
-						? {
-								...candidate,
-								correction_matrix: candidate.correction_matrix.map(
-									(values, rowIndex) =>
-										values.map((entry, columnIndex) =>
-											rowIndex === row && columnIndex === column
-												? value
-												: entry,
-										),
-								) as HeadColorSystem["correction_matrix"],
-							}
-						: candidate,
-				),
+				withCorrection(mode.color_systems, headId, row, column, value),
 			),
 		);
 	const setCalibration = (

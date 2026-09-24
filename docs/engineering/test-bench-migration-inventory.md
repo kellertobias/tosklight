@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **253 root cases across 100 files**.
+Default catalog: **260 root cases across 101 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -74,6 +74,13 @@ Default catalog: **253 root cases across 100 files**.
 | 110-record-update-options.spec.ts | RECUPD-002 @ui › UPDATE UPDATE uses the same layout and a stored Update default | docs/testing/24-record-and-update-options.md | @ui | record-update-options | standard failure evidence | parallel | pending-semantic-migration |
 | 111-media-cue-previews.spec.ts | MEDIACUE-001 @ui › media-only Cues show their own server's Program or layer picture and explicit fallbacks | docs/testing/25-media-cue-previews.md | @ui | media-cue-previews | standard failure evidence | parallel | pending-semantic-migration |
 | 111-media-cue-previews.spec.ts | MEDIACUE-002 @ui › single-Cue Virtual Playbacks show their Cue preview by default and keep an operator image | docs/testing/25-media-cue-previews.md | @ui | media-cue-previews | standard failure evidence | parallel | pending-semantic-migration |
+| 112-color-intent.spec.ts | COLORINTENT-001 @ui › existing and Direct-default shows stay Direct; the desk default only seeds new shows | docs/testing/26-color-intent.md | @ui | color-intent | standard failure evidence | parallel | pending-semantic-migration |
+| 112-color-intent.spec.ts | COLORINTENT-002 @ui › one whole colour on every fixture, level from Intensity | docs/testing/26-color-intent.md | @ui | color-intent | standard failure evidence | parallel | pending-semantic-migration |
+| 112-color-intent.spec.ts | COLORINTENT-002 @ui › the encoders offer no fixture-native colour control | docs/testing/26-color-intent.md | @ui | color-intent | standard failure evidence | parallel | pending-semantic-migration |
+| 112-color-intent.spec.ts | COLORINTENT-003 @ui › the Color dialog names every fixture that does not show the colour exactly | docs/testing/26-color-intent.md | @ui | color-intent | standard failure evidence | parallel | pending-semantic-migration |
+| 112-color-intent.spec.ts | COLORINTENT-004 @ui › a universal Color preset follows the selection; a preset of different colours never spreads | docs/testing/26-color-intent.md | @ui | color-intent | standard failure evidence | parallel | pending-semantic-migration |
+| 112-color-intent.spec.ts | COLORINTENT-004 @api › FixAT COLOR PRESET 1 produces the same DMX as the pool recall | docs/testing/26-color-intent.md | @api | color-intent | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 112-color-intent.spec.ts | COLORINTENT-005 @ui › switching a programmed show lists what changes and rewrites nothing | docs/testing/26-color-intent.md | @ui | color-intent | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 19-manual-review-software-corrections.spec.ts | POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize | docs/testing/10-desk-lock-and-operator-ui.md | @ui | manual-review-software-corrections | standard failure evidence | parallel | pending-semantic-migration |

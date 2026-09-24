@@ -91,12 +91,15 @@ pub(super) fn validate_release_targets(
             .iter()
             .find(|fixture| fixture.fixture_id == target.fixture_id)
             .is_some_and(|fixture| {
-                fixture
-                    .definition
-                    .heads
-                    .iter()
-                    .flat_map(|head| &head.parameters)
-                    .any(|parameter| parameter.attribute == target.attribute)
+                // The whole-colour target is no fixture channel: the engine resolves it through
+                // each head's colour engine, and a head without one reports itself unsupported.
+                target.attribute == AttributeKey::color()
+                    || fixture
+                        .definition
+                        .heads
+                        .iter()
+                        .flat_map(|head| &head.parameters)
+                        .any(|parameter| parameter.attribute == target.attribute)
             });
         if !supported {
             return Err(ActionError::new(

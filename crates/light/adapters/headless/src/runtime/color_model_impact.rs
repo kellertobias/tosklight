@@ -73,6 +73,14 @@ pub(super) fn color_model_impact(
                 counts.visit(None, attribute, value, fixtures);
             }
         }
+        // A universal colour reaches whatever is selected, so it is lost wherever Direct cannot
+        // resolve a whole colour.
+        for (attribute, value) in &preset.universal_values {
+            counts.visit(None, attribute, value, fixtures);
+            if matches!(value, AttributeValue::ColorXyz(_)) && fixtures.any_direct() {
+                counts.unresolved += 1;
+            }
+        }
     }
     for object in document.objects_of_kind("cue_list") {
         let Ok(cue_list) = serde_json::from_value::<light_playback::CueList>(object.body().clone())

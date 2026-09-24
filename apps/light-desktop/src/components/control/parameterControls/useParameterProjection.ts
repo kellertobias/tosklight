@@ -6,6 +6,7 @@ import {
 } from "../../../features/configuration/ConfigurationState";
 import {
 	useAttributeRegistry,
+	useColorModel,
 	useHardwareConnected,
 } from "../../../features/deskSnapshot/DeskSnapshotState";
 import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
@@ -173,6 +174,20 @@ const FAMILY_GROUPS: Record<
 	Media: "media",
 };
 
+/** The built-in encoder order for a family the show configures no encoders for. Color Intent
+ * programs one whole colour, so native colour channels never become encoders there. */
+function useFallbackAttributes(
+	family: ParameterFamily,
+	supported: ReadonlySet<string>,
+) {
+	const colorModel = useColorModel();
+	return parameterFamilies[family].filter(
+		(attribute) =>
+			supported.has(attribute) &&
+			!(colorModel === "intent" && attribute.startsWith("color.")),
+	);
+}
+
 function placedRegistry(
 	registry: ReturnType<typeof useAttributeRegistry>,
 ): AttributeEncoderPlacement[] {
@@ -277,9 +292,7 @@ export function useParameterProjection(
 		pageAnchor,
 	);
 	const configuredPage = configuredGroup?.pages[resolvedPage - 1];
-	const fallbackAttributes = parameterFamilies[family].filter((attribute) =>
-		supported.attributes.has(attribute),
-	);
+	const fallbackAttributes = useFallbackAttributes(family, supported.attributes);
 	const hasConfiguredFamily = Boolean(configuredGroup?.pages.length);
 	const encoderSlots = hasConfiguredFamily
 		? (configuredPage?.slots.map((descriptor) => descriptor?.id ?? null) ??

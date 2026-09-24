@@ -37,6 +37,13 @@ impl ColorAttributeIndex {
         self.targets.get(fixture)
     }
 
+    /// Whether some patched fixture cannot take a whole colour under Direct.
+    pub(crate) fn any_direct(&self) -> bool {
+        self.targets
+            .values()
+            .any(|target| matches!(target, ColorTarget::Direct(_)))
+    }
+
     fn insert(&mut self, fixture: FixtureId, target: ColorTarget) {
         self.targets.insert(fixture, target);
     }
