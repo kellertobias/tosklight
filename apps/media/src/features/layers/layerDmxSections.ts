@@ -181,6 +181,15 @@ export function playbackRangeControls(
 			value: length.value,
 			description: length.description,
 			group: "Playback range",
+			// Back to the whole clip at once: In and Out both 0, offered while either is set.
+			action: {
+				label: "Clear playback range",
+				disabled: disabled || (layer.inPoint === 0 && layer.outPoint === 0),
+				changes: [
+					{ controlId: "in-point", value: 0 },
+					{ controlId: "out-point", value: 0 },
+				],
+			},
 		},
 		...(
 		[

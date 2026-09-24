@@ -553,6 +553,54 @@ describe("MediaPaneSurface control state", () => {
 		expect(screen.queryByRole("dialog", { name: "Choose Speed" })).toBeNull();
 	});
 
+	it("clears the playback range from the button at the clip length's right edge", async () => {
+		const onChangeControl = vi.fn();
+		const range = (disabled: boolean) => ({
+			controlSections: [
+				{
+					id: "playback",
+					label: "Playback",
+					controls: [
+						{
+							id: "media.clip_length",
+							kind: "readout" as const,
+							label: "Clip length",
+							value: "00:24.00",
+							action: {
+								label: "Clear playback range",
+								disabled,
+								changes: [
+									{ controlId: "media.in_point", value: 0 },
+									{ controlId: "media.out_point", value: 0 },
+								],
+							},
+						},
+					],
+				},
+			],
+			selectedControlSectionId: "playback",
+			mainSectionId: "playback",
+		});
+		const view = renderSurface({ kind: "ready" }, [], range(false), onChangeControl);
+		const clear = within(view.container).getByRole("button", {
+			name: "Clear playback range",
+		});
+		expect(clear).toHaveAttribute("title", "Clear playback range");
+		await userEvent.click(clear);
+		expect(onChangeControl.mock.calls).toEqual([
+			["media.in_point", 0],
+			["media.out_point", 0],
+		]);
+		view.unmount();
+
+		const cleared = renderSurface({ kind: "ready" }, [], range(true));
+		expect(
+			within(cleared.container).getByRole("button", {
+				name: "Clear playback range",
+			}),
+		).toBeDisabled();
+	});
+
 	it("offers a reset beside each editable media control", async () => {
 		const onResetControl = vi.fn();
 		renderSurface(

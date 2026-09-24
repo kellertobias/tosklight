@@ -141,6 +141,10 @@ Open **Library > Models**. Confirm the cards for Plane, Cube, Sphere, Cylinder, 
 
 On Pixel's layer page, open **Playback**. For a layer showing a 24-second clip, confirm **Clip length** reads `00:24.00` under **Playback range**, read-only and apart from the In and Out fields. Type In and Out points and confirm the length does not change. Set the layer to another clip and confirm the length follows it. A still image reads **Still image**. Open the desk's Media pane for the same layer and confirm the same length above **In point**. Patch a third-party CITP server that sends no clip lengths and confirm **Not reported**, with no length guessed. Change the point frame rate in Pixel's Settings and confirm both places show the length at the new rate.
 
+## PIXEL-015 — clearing the playback range with one press
+
+On Pixel's layer page, open **Playback** and confirm the **✕** at the right of **Clip length** is labelled **Clear playback range** and is greyed out while In and Out are both 0. Type an In point and an Out point, and confirm the output plays only that range. Press **✕** once. Confirm In reads `00:00.00`, Out reads **End of clip**, the whole clip plays again, no confirmation was asked, and the **✕** greys out. Repeat from the desk's Media pane for the same layer, and confirm both points are cleared together there too.
+
 ## RUNNING-001 — containment, deduplication, and identity
 
 Start one Cuelist through several assignments or control surfaces, with a Dynamic contained in it; start one independent Dynamic, Timecode, and Macro. Running shows exactly four rows. The Cuelist row uses the Cuelist's own number and name plus its current Cue, not an assignment number, and suppresses the contained Dynamic. The other rows use their own stable identities and show **Cue —**.

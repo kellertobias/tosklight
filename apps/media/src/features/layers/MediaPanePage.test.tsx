@@ -691,6 +691,41 @@ describe("the production Media pane", () => {
 		);
 	});
 
+	it("clears the playback range back to the whole clip with one press", async () => {
+		const server = stubServer();
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Playback" }));
+		const playback = screen.getByRole("tabpanel", {
+			name: "Playback controls",
+		});
+		const clear = within(playback).getByRole("button", {
+			name: "Clear playback range",
+		});
+		expect(clear).toHaveAttribute("title", "Clear playback range");
+		expect(clear).toBeDisabled();
+
+		const layer = server.outputs[0].layers[0];
+		fireEvent.click(
+			within(playback).getByRole("button", { name: /^In point: 00:00.00/ }),
+		);
+		typeInModal("In point (mm:ss.ff)", "00:12.00", 8);
+		fireEvent.click(
+			within(playback).getByRole("button", { name: /^Out point: End of clip/ }),
+		);
+		typeInModal("Out point (mm:ss.ff before end)", "00:04.00", 8);
+		await waitFor(() => expect([layer.inPoint, layer.outPoint]).toEqual([300, 100]));
+		await waitFor(() => expect(clear).toBeEnabled());
+
+		fireEvent.click(clear);
+		await waitFor(() => expect([layer.inPoint, layer.outPoint]).toEqual([0, 0]));
+		expect(within(playback).getByText("End of clip")).toBeInTheDocument();
+		expect(within(playback).getByText("00:00.00")).toBeInTheDocument();
+		await waitFor(() => expect(clear).toBeDisabled());
+	});
+
 	it("shows the selected clip's own length beside its playback range", async () => {
 		const catalog = aCatalog();
 		catalog.folders[0].items[0].durationMillis = 24_000;

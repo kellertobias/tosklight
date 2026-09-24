@@ -83,11 +83,16 @@ export function selectedClipLength(
 	return { kind: "known", seconds: reported.length_frames / reported.fps };
 }
 
-/** The clip's own length, shown read-only before its In and Out points. */
+/**
+ * The clip's own length, shown read-only before its In and Out points, with the action that clears
+ * the range back to the whole clip: In and Out both 0 at once, offered only while either is set.
+ */
 function clipLengthControl(
 	input: BuildMediaPaneModelInput,
 	length: ClipLength,
 ): MediaControlSection["controls"][number] {
+	const point = (attribute: string) =>
+		Math.round((normalizedValue(input.liveProgrammer, attribute) ?? 0) * 65535);
 	const rate = input.pointFrameRate;
 	const shown = clipLengthReadout(
 		length,
@@ -99,6 +104,15 @@ function clipLengthControl(
 		kind: "readout",
 		value: shown.value,
 		description: shown.description,
+		action: {
+			label: "Clear playback range",
+			disabled:
+				point("media.in_point") === 0 && point("media.out_point") === 0,
+			changes: [
+				{ controlId: "media.in_point", value: 0 },
+				{ controlId: "media.out_point", value: 0 },
+			],
+		},
 	};
 }
 

@@ -173,6 +173,15 @@ export interface MediaColorControl extends MediaControlBase {
 export interface MediaReadoutControl extends MediaControlBase {
 	kind: "readout";
 	value: ReactNode;
+	/**
+	 * One action at the row's right edge, such as clearing the range the row heads: the changes
+	 * it sends, each as the control it writes and the value, all at once.
+	 */
+	action?: {
+		label: string;
+		disabled?: boolean;
+		changes: ReadonlyArray<{ controlId: string; value: number }>;
+	};
 }
 
 export type MediaSecondaryControl =

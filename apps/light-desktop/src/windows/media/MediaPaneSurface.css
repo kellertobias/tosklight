@@ -842,6 +842,23 @@
 	opacity: 0.45;
 }
 
+/* A readout heading a range carries its clear action at the right, a full touch target high. */
+.media-control-readout:has(> .media-control-readout-action) {
+	grid-template-columns: minmax(0, 1fr) auto;
+	column-gap: 8px;
+}
+.media-control-readout > :not(.media-control-readout-action) {
+	grid-column: 1;
+}
+.media-control-readout > .media-control-readout-action.ui-button {
+	grid-column: 2;
+	grid-row: 1 / span 3;
+	align-self: center;
+	min-width: 44px;
+	min-height: 44px;
+	font-size: 16px;
+}
+
 @container media-pane (max-width: 980px) {
 	.media-pane-header-tools > .ui-multi-value-toggle:nth-child(2) {
 		display: none;

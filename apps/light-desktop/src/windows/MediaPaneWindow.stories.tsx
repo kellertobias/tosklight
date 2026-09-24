@@ -285,6 +285,20 @@ export function StatefulMediaStory({
 						display: `${controlValues.grayscale}%`,
 					},
 					{
+						id: "media.clip_length",
+						kind: "readout",
+						label: "Clip length",
+						value: "00:24.00",
+						description: "The whole clip. In and Out trim playback within it.",
+						action: {
+							label: "Clear playback range",
+							changes: [
+								{ controlId: "media.in_point", value: 0 },
+								{ controlId: "media.out_point", value: 0 },
+							],
+						},
+					},
+					{
 						id: "tint",
 						kind: "color",
 						label: "Color",

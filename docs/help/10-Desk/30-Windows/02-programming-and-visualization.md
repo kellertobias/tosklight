@@ -96,6 +96,8 @@ Control sections never change shape between servers. A control whose attribute t
 
 **Clip length**, just above **In point**, is read-only. It shows the whole length of the clip the layer is set to, as its Media Server reports it over CITP, in the same `mm:ss.ff` as the points. While the rate is unknown it shows seconds. Changing In or Out never changes it; choosing another clip does. When the layer has no clip it reads **No clip**. When the server does not report a length for the clip it reads **Not reported**, and the desk does not guess one. Some third-party servers do not report lengths, and a still image has none.
 
+The **✕** at the right of **Clip length** is **Clear playback range**. One press sets both In and Out back to 0, so the whole clip plays again, with no further step and no confirmation. It is greyed out while both points are already 0.
+
 The folder and file pools separate browsing from live output. Touching a folder changes only the local draft and loads its files; it does not change Programmer values or DMX. Touching a file commits that folder and file together as one Programmer operation and one Undo step. It never exposes the newly browsed folder with the old live file. Media encoders remain immediate and do not use this staged touch workflow.
 
 **Media / Mask** always selects the corresponding complete numeric folder/file range. Advertised mask names and thumbnails reconcile into those slots; without that advertisement the values remain configurable through the patched layer's Programmer attributes and are identified as not advertised. Server-specific secondary controls still appear only when the fixture and connection advertise them. Library administration and connection setup stay outside this window.

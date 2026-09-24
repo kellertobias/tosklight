@@ -821,6 +821,20 @@ function MediaControl({
 				<span>{control.label}</span>
 				<strong>{control.value}</strong>
 				{control.description && <small>{control.description}</small>}
+				{control.action ? (
+					<Button
+						className="media-control-readout-action"
+						aria-label={control.action.label}
+						title={control.action.label}
+						disabled={Boolean(disabled || control.action.disabled)}
+						onClick={() => {
+							for (const change of control.action?.changes ?? [])
+								onChange(change.controlId, change.value);
+						}}
+					>
+						✕
+					</Button>
+				) : null}
 			</div>
 		);
 	if (control.kind === "point-time")

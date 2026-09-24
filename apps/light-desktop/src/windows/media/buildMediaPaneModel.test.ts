@@ -1670,3 +1670,55 @@ describe("the selected clip's length on the desk", () => {
 		).toBe("Not reported");
 	});
 });
+
+describe("clearing the playback range on the desk", () => {
+	const server = {
+		fixture_id: "server-1",
+		name: "Pixel",
+		endpoint: null,
+		layers: [{ fixture_id: "layer-1", head_index: 1, attributes: [] }],
+		master_attributes: [],
+		status: { online: true, last_success: null, last_error: null },
+	};
+	const point = (attribute: string, frames: number) => ({
+		fixtureId: "layer-1",
+		attribute,
+		value: { kind: "normalized" as const, value: frames / 65535 },
+		programmerOrder: 0,
+		fade: false,
+		fadeMillis: null,
+		delayMillis: null,
+	});
+	const clearAction = (inPoint: number, outPoint: number) =>
+		(
+			buildMediaPaneModel(
+				input({
+					servers: [server],
+					selectedServer: server,
+					selectedServerId: server.fixture_id,
+					selectedLayerId: "layer-1",
+					liveProgrammer: [
+						point("media.in_point", inPoint),
+						point("media.out_point", outPoint),
+					],
+				}),
+			)
+				.controlSections.find((section) => section.id === "playback")
+				?.controls.find((control) => control.id === "media.clip_length") as
+				| { action?: Record<string, unknown> }
+				| undefined
+		)?.action;
+
+	it("sets In and Out to the whole clip together, and only while a range is set", () => {
+		expect(clearAction(300, 100)).toEqual({
+			label: "Clear playback range",
+			disabled: false,
+			changes: [
+				{ controlId: "media.in_point", value: 0 },
+				{ controlId: "media.out_point", value: 0 },
+			],
+		});
+		expect(clearAction(0, 100)?.disabled).toBe(false);
+		expect(clearAction(0, 0)?.disabled).toBe(true);
+	});
+});
