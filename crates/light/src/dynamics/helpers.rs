@@ -86,21 +86,30 @@ pub(super) fn validate_release_targets(
     targets: &[light_programmer::ReleaseProgrammerFixtureValue],
 ) -> Result<(), ActionError> {
     for target in targets {
-        let supported = snapshot
-            .fixtures
-            .iter()
-            .find(|fixture| fixture.fixture_id == target.fixture_id)
-            .is_some_and(|fixture| {
-                // The whole-colour target is no fixture channel: the engine resolves it through
-                // each head's colour engine, and a head without one reports itself unsupported.
-                target.attribute == AttributeKey::color()
-                    || fixture
-                        .definition
-                        .heads
-                        .iter()
-                        .flat_map(|head| &head.parameters)
-                        .any(|parameter| parameter.attribute == target.attribute)
-            });
+        // A multi-head fixture's heads carry their own identities: a head's value is checked
+        // against what that head carries, and the fixture's own identity against every head.
+        let supported = snapshot.fixtures.iter().any(|fixture| {
+            let head_index = fixture
+                .logical_heads
+                .iter()
+                .find(|head| head.fixture_id == target.fixture_id)
+                .map(|head| head.head_index);
+            if fixture.fixture_id != target.fixture_id && head_index.is_none() {
+                return false;
+            }
+            // The whole-colour target is no fixture channel: the engine resolves it through
+            // each head's colour engine, and a head without one reports itself unsupported.
+            target.attribute == AttributeKey::color()
+                || fixture
+                    .definition
+                    .heads
+                    .iter()
+                    .filter(|head| {
+                        fixture.fixture_id == target.fixture_id || Some(head.index) == head_index
+                    })
+                    .flat_map(|head| &head.parameters)
+                    .any(|parameter| parameter.attribute == target.attribute)
+        });
         if !supported {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,

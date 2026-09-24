@@ -539,25 +539,42 @@ fn release_fixture_values(
     let target_set = targets.iter().copied().collect::<HashSet<_>>();
     let mut seen = HashSet::new();
     let mut values = Vec::new();
-    for fixture in snapshot
-        .fixtures
-        .iter()
-        .filter(|fixture| target_set.contains(&fixture.fixture_id))
-    {
-        for attribute in fixture
-            .definition
-            .heads
-            .iter()
-            .flat_map(|head| &head.parameters)
-            .map(|parameter| &parameter.attribute)
-            .filter(|attribute| release_accepts(family, attribute))
-        {
-            if seen.insert((fixture.fixture_id, attribute.clone())) {
-                values.push(light_programmer::ReleaseProgrammerFixtureValue {
-                    fixture_id: fixture.fixture_id,
-                    attribute: attribute.clone(),
-                });
+    let mut push =
+        |fixture_id: light_core::FixtureId,
+         heads: &mut dyn Iterator<Item = &light_fixture::LogicalHead>| {
+            for attribute in heads
+                .flat_map(|head| &head.parameters)
+                .map(|parameter| &parameter.attribute)
+                .filter(|attribute| release_accepts(family, attribute))
+            {
+                if seen.insert((fixture_id, attribute.clone())) {
+                    values.push(light_programmer::ReleaseProgrammerFixtureValue {
+                        fixture_id,
+                        attribute: attribute.clone(),
+                    });
+                }
             }
+        };
+    for fixture in snapshot.fixtures.iter() {
+        if target_set.contains(&fixture.fixture_id) {
+            push(fixture.fixture_id, &mut fixture.definition.heads.iter());
+        }
+        // A multi-head fixture is selected head by head: each selected head releases what that
+        // head carries, under the head's own identity, as the Programmer holds it.
+        for head in fixture
+            .logical_heads
+            .iter()
+            .filter(|head| head.fixture_id != fixture.fixture_id)
+            .filter(|head| target_set.contains(&head.fixture_id))
+        {
+            push(
+                head.fixture_id,
+                &mut fixture
+                    .definition
+                    .heads
+                    .iter()
+                    .filter(|candidate| candidate.index == head.head_index),
+            );
         }
     }
     values
