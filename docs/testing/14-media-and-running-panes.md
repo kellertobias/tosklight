@@ -4,6 +4,10 @@ These scenarios are the operator acceptance contract for the capability-gated Me
 
 ## MEDIA-005 — two effect banks and shared presets
 
+Given a beat-reactive effect preset in Pixel's Effects library, changing **React to** to Detected beat, Live beat, Bass drum, Hi-hat, or Snare persists that choice and changes which counted audio events start the effect. Detected beat reacts to actual kick or snare hits when the music slows; Live beat follows the current tempo-aligned pulse. One instrument's hit does not fire an effect set to another instrument. A beat whose brief level pulse falls entirely between rendered frames still fires once, and a held level does not fire twice. Existing presets without a source use Detected beat.
+
+Given Pixel has a selected audio input and macOS microphone access has not yet been decided, the Audio page shows **Request microphone access**. Pressing it opens the macOS permission prompt for the Pixel process and starts capture in the same running process after a grant. A denial gives the operator the System Settings path and **Check microphone access**; a grant with a stopped capture stream offers **Start audio input**. Neither path requires restarting Pixel.
+
 Given a Media Server is patched and its Effects library assigns two distinct presets, when an
 operator selects them in Bank 1 and Bank 2 and changes each Effect Strength, then both the Media
 Server and ToskLight Control show exactly those two ordered banks with the literal controls
@@ -144,6 +148,10 @@ On Pixel's layer page, open **Playback**. For a layer showing a 24-second clip, 
 ## PIXEL-015 — clearing the playback range with one press
 
 On Pixel's layer page, open **Playback** and confirm the **✕** at the right of **Clip length** is labelled **Clear playback range** and is greyed out while In and Out are both 0. Type an In point and an Out point, and confirm the output plays only that range. Press **✕** once. Confirm In reads `00:00.00`, Out reads **End of clip**, the whole clip plays again, no confirmation was asked, and the **✕** greys out. Repeat from the desk's Media pane for the same layer, and confirm both points are cleared together there too.
+
+## PIXEL-016 — preview while editing visualizers, text, effects and models
+
+With two layers playing and the master below full, open Pixel's **Visualizers** page and turn on **Enable preview** in the dock. Confirm the selected visualizer plays alone on Layer 1 at full, every other layer is out and the master is full. Change one of its settings and confirm the output shows the change at once. Open **Text** and confirm preview stays on and switches to the selected text; edit its words and see them on the output. Open **Effects** and confirm the selected Effects slot runs on Layer 1's first effect bank at full strength over that text. Open **Models** and confirm the text is mapped onto the selected model and the effect is taken off. Open **Audio** and confirm preview turns off and every layer's slot, level, play mode, effect banks and model and the master are back as they were. Confirm the Library's preview still works as in PIXEL-011, and that nothing of the preview is saved.
 
 ## RUNNING-001 — containment, deduplication, and identity
 
