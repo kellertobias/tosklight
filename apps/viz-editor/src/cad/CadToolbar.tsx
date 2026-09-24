@@ -22,7 +22,10 @@ import venueObjectSvg from "../../../../assets/icons/misc/venue-object.svg?raw";
 import { CAD_TOOL_SHORTCUTS } from "./cadShortcuts";
 import type { CadAddKind, CadDrawTool, CadTools } from "./cadTools";
 import { CadPartMenu } from "./CadPartMenu";
+import { rememberPart } from "./cadAddChoice";
 import { LOAD_MODEL } from "./cadModelImport";
+import { placedWith } from "./cadPlacement";
+import { type CadPartKind, findPart, partLabel } from "./venueParts";
 import "./cadTitleTools.css";
 
 export const CAD_ADD_ACTIONS: readonly {
@@ -115,6 +118,10 @@ export function cadTitleGroups(
 															close();
 															onAdd(kind, profileId);
 														}}
+														onAddSeveral={(key) => {
+															close();
+															holdPart(tools, kind, key);
+														}}
 														onLoadModel={
 															kind === "primitive"
 																? () => {
@@ -152,6 +159,21 @@ export function cadTitleGroups(
 				]
 			: []),
 	];
+}
+
+/**
+ * Holds one catalogue part for repeated placement, as the Venue list's Add Several does: every
+ * press on a viewport then places one more copy, with the part's own options and size.
+ */
+export function holdPart(tools: CadTools, kind: CadPartKind, key: string) {
+	const found = findPart(kind, key);
+	if (!found) return;
+	rememberPart(kind, key);
+	tools.startPlacing({
+		profileId: found.part.profileId,
+		name: partLabel(found),
+		with: placedWith(found.part),
+	});
 }
 
 /** Why the show refused the last drawn item, until the operator dismisses it. */

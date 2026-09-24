@@ -147,6 +147,21 @@
 	text-transform: uppercase;
 }
 
+/* A part's row: the part itself, and Add Several at its right edge. */
+.cad-part-menu-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 4px;
+	align-items: center;
+}
+
+/* In a menu row the button sits beside the part rather than over a tile's corner. */
+.cad-part-add-several.cad-part-menu-add-several {
+	position: static;
+	min-width: 36px;
+	min-height: 36px;
+}
+
 .cad-part-menu-item {
 	display: grid;
 	grid-template-columns: 52px minmax(0, 1fr);

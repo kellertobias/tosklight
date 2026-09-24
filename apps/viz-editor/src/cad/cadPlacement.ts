@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { documentSession } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
 import type { PlanPlacement } from "./bulkPlacement";
-import { definitionForProfile, nextVirtualNumber } from "./venueParts";
+import { definitionForProfile, nextVirtualNumber, type VenuePart } from "./venueParts";
 
 const transport = new TauriPatchTransport();
 
@@ -59,6 +59,17 @@ export function useFixtureLibrary(): FixtureLibrary {
  */
 /** What a part is placed with beyond its profile: its options, and a size other than the default. */
 export type PlacedWith = Partial<Pick<PatchFixtureWrite, "sceneryOptions" | "scenerySizeMetres">>;
+
+/** What a part is placed with: its options, and its size in the patch's millimetres. */
+export function placedWith(part: VenuePart | undefined): PlacedWith {
+	const size = part?.sizeMetres;
+	return {
+		sceneryOptions: part?.sceneryOptions,
+		scenerySizeMetres: size
+			? { x: Math.round(size.x * 1000), y: Math.round(size.y * 1000), z: Math.round(size.z * 1000) }
+			: undefined,
+	};
+}
 
 async function placeDefinitions(
 	definition: FixtureDefinition,

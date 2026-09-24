@@ -14,7 +14,7 @@ import {
 	useState,
 } from "react";
 import { type CadAnnotation, annotationSession } from "./annotations";
-import { placeProfile } from "./cadPlacement";
+import { type PlacedWith, placeProfile } from "./cadPlacement";
 
 /**
  * What the add buttons place: a truss, a stage element, a curtain, a primitive shape (box, cylinder
@@ -70,6 +70,8 @@ export interface CadTools {
 export interface CadPlacing {
 	profileId: string;
 	name: string;
+	/** A catalogue part's options and size, which every copy is placed with. */
+	with?: PlacedWith;
 }
 
 /**
@@ -176,9 +178,13 @@ export function CadToolProvider({
 			stopPlacing: () => setPlacing(null),
 			placeAt: async (position) => {
 				if (!placing) return;
-				const result = await placeProfile(placing.profileId, placing.name, undefined, [
-					{ position, rotation: { x: 0, y: 0, z: 0 } },
-				]);
+				const result = await placeProfile(
+					placing.profileId,
+					placing.name,
+					undefined,
+					[{ position, rotation: { x: 0, y: 0, z: 0 } }],
+					placing.with,
+				);
 				if (result.ok) announcePlaced(result.fixtureIds);
 				else report(result.reason);
 			},

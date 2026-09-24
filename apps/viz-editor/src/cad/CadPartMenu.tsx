@@ -7,8 +7,10 @@
  * Choosing a part makes it the button's part and places it. A part this computer's library does not
  * hold is listed but cannot be chosen.
  *
- * A truss and a stage element are rarely placed one at a time, so those two menus end with
- * **Place several…**, which opens the wizard for the part the button places now.
+ * Every part's row carries **Add Several** at its right edge: it holds that part so each press on a
+ * viewport places one more copy, without placing one first. A truss and a stage element are rarely
+ * placed one at a time, so those two menus also end with **Place several…**, which opens the wizard
+ * for the part the button places now.
  */
 import { chosenPart } from "./cadAddChoice";
 import { type FixtureLibrary, useFixtureLibrary } from "./cadPlacement";
@@ -17,6 +19,7 @@ import {
 	type CadPartKind,
 	definitionForProfile,
 	partKey,
+	partLabel,
 	previewOf,
 	type VenuePart,
 } from "./venueParts";
@@ -24,18 +27,23 @@ import "./cadAddParts.css";
 
 function PartMenuItem({
 	label,
+	name,
 	detail,
 	part,
 	library,
 	checked,
 	onChoose,
+	onAddSeveral,
 }: {
 	label: string;
+	/** The part's full name, its group's and its own, for the Add Several button. */
+	name: string;
 	detail: string | undefined;
 	part: VenuePart;
 	library: FixtureLibrary;
 	checked: boolean;
 	onChoose(profileId: string): void;
+	onAddSeveral?(profileId: string): void;
 }) {
 	const definition =
 		library.state === "ready" ? definitionForProfile(library.definitions, part.profileId) : undefined;
@@ -47,33 +55,51 @@ function PartMenuItem({
 				? "Not in this library"
 				: detail;
 	return (
-		<button
-			type="button"
-			role="menuitemradio"
-			aria-checked={checked}
-			className="cad-part-menu-item"
-			disabled={!definition}
-			onClick={() => onChoose(partKey(part))}
-		>
-			<span className="cad-part-menu-preview">
-				{preview ? <img src={preview} alt="" /> : null}
-			</span>
-			<span className="cad-part-menu-text">
-				<strong>{label}</strong>
-				{note ? <small>{note}</small> : null}
-			</span>
-		</button>
+		<div className="cad-part-menu-row">
+			<button
+				type="button"
+				role="menuitemradio"
+				aria-checked={checked}
+				className="cad-part-menu-item"
+				disabled={!definition}
+				onClick={() => onChoose(partKey(part))}
+			>
+				<span className="cad-part-menu-preview">
+					{preview ? <img src={preview} alt="" /> : null}
+				</span>
+				<span className="cad-part-menu-text">
+					<strong>{label}</strong>
+					{note ? <small>{note}</small> : null}
+				</span>
+			</button>
+			{onAddSeveral ? (
+				<button
+					type="button"
+					role="menuitem"
+					className="cad-part-add-several cad-part-menu-add-several"
+					title="Add Several"
+					aria-label={`Add Several ${name}`}
+					disabled={!definition}
+					onClick={() => onAddSeveral(partKey(part))}
+				>
+					<span aria-hidden="true">++</span>
+				</button>
+			) : null}
+		</div>
 	);
 }
 
 export function CadPartMenu({
 	kind,
 	onChoose,
+	onAddSeveral,
 	onSeveral,
 	onLoadModel,
 }: {
 	kind: CadPartKind;
 	onChoose(profileId: string): void;
+	/** Holds a part for repeated placement: each press on a viewport places one more copy. */
+	onAddSeveral?(profileId: string): void;
 	/** Opens the bulk wizard for the part the button places now; absent on kinds that have none. */
 	onSeveral?(profileId: string): void;
 	/** Loads a 3D model file instead of a part from the library; absent on kinds that have none. */
@@ -93,11 +119,13 @@ export function CadPartMenu({
 					<PartMenuItem
 						key={part.id}
 						label={label}
+						name={partLabel({ group, part })}
 						detail={detail}
 						part={part}
 						library={library}
 						checked={partKey(part) === current}
 						onChoose={onChoose}
+						onAddSeveral={onAddSeveral}
 					/>
 				);
 				if (group.parts.length === 1) {

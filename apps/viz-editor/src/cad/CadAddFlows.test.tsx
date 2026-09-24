@@ -3,6 +3,7 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CadAddFlows, type CadAddRequest } from "./CadAddFlows";
 import { CadPartMenu } from "./CadPartMenu";
+import { holdPart } from "./CadToolbar";
 import { CadToolContext, type CadTools } from "./cadTools";
 
 const mocks = vi.hoisted(() => ({
@@ -228,6 +229,49 @@ describe("Add Several", () => {
 		expect(mocks.patchFixtures).not.toHaveBeenCalled();
 		await waitFor(() =>
 			expect(screen.queryByRole("dialog", { name: "Add venue element" })).not.toBeInTheDocument(),
+		);
+	});
+});
+
+describe("Add Several beside every part in a button's menu", () => {
+	it("puts the button at the right of each real part and holds that part, not the checked one", async () => {
+		const onChoose = vi.fn();
+		const onAddSeveral = vi.fn();
+		render(<CadPartMenu kind="truss" onChoose={onChoose} onAddSeveral={onAddSeveral} />);
+		const rows = screen.getAllByRole("menuitemradio");
+		const buttons = screen.getAllByRole("menuitem", { name: /^Add Several /u });
+		// One per part row, each in the same row as its part.
+		expect(buttons).toHaveLength(rows.length);
+		for (const [index, button] of buttons.entries()) {
+			expect(button).toHaveAttribute("title", "Add Several");
+			expect(button.closest(".cad-part-menu-row")).toBe(rows[index].closest(".cad-part-menu-row"));
+		}
+		const fourPoint = await screen.findByRole("group", { name: "4-point" });
+		const corner = within(fourPoint).getByRole("menuitem", { name: /^Add Several Corner 2-way/u });
+		await waitFor(() => expect(corner).toBeEnabled());
+		// A button is a button of its own: reachable by keyboard, and it never chooses the part.
+		corner.focus();
+		expect(corner).toHaveFocus();
+		fireEvent.click(corner);
+		expect(onAddSeveral).toHaveBeenCalledWith(CORNER);
+		expect(onChoose).not.toHaveBeenCalled();
+	});
+
+	it("holds the exact part, options and all, so each press places one more of it", () => {
+		const startPlacing = vi.fn();
+		holdPart({ startPlacing } as unknown as CadTools, "stage", `${STAIRS}:handrails-left`);
+		expect(startPlacing).toHaveBeenCalledWith({
+			profileId: STAIRS,
+			name: expect.stringMatching(/Left/u),
+			with: expect.objectContaining({ sceneryOptions: { handrails: "left" } }),
+		});
+		startPlacing.mockClear();
+		holdPart({ startPlacing } as unknown as CadTools, "curtain", `${RACK}:units-12`);
+		expect(startPlacing).toHaveBeenCalledWith(
+			expect.objectContaining({
+				profileId: RACK,
+				with: expect.objectContaining({ scenerySizeMetres: { x: 600, y: 653, z: 600 } }),
+			}),
 		);
 	});
 });

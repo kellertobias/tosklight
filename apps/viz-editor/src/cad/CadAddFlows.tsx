@@ -15,7 +15,7 @@ import type { PlanPlacement } from "./bulkPlacement";
 import { type BulkShape, CadBulkAddModal } from "./CadBulkAddModal";
 import { CadVenueElementModal } from "./CadVenueElementModal";
 import { chosenPart, rememberPart } from "./cadAddChoice";
-import { type FixtureLibrary, type PlacedWith, placeProfile, readLibrary } from "./cadPlacement";
+import { type FixtureLibrary, placedWith, placeProfile, readLibrary } from "./cadPlacement";
 import { chooseAndImportModel, LOAD_MODEL } from "./cadModelImport";
 import { type CadAddKind, useCadTools } from "./cadTools";
 import { definitionForProfile, findPart, partKey, partLabel, type VenuePart } from "./venueParts";
@@ -35,17 +35,6 @@ interface BulkFlow {
 	part: VenuePart;
 	label: string;
 	footprint?: { width: number; depth: number };
-}
-
-/** What a part is placed with: its options, and its size in the patch's millimetres. */
-function placedWith(part: VenuePart | undefined): PlacedWith {
-	const size = part?.sizeMetres;
-	return {
-		sceneryOptions: part?.sceneryOptions,
-		scenerySizeMetres: size
-			? { x: Math.round(size.x * 1000), y: Math.round(size.y * 1000), z: Math.round(size.z * 1000) }
-			: undefined,
-	};
 }
 
 export function CadAddFlows({

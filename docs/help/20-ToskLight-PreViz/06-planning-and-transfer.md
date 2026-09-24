@@ -575,7 +575,10 @@ the key that picks it, such as **Draw line · L**. From left to right:
   bottom-right corner opens a menu of the parts that button can place, each shown by its picture; the
   part the button places now is highlighted. Choosing a part places it and makes it the part the
   button places from then on, and this computer remembers that choice for the next time you open the
-  CAD screen.
+  CAD screen. Every part in the menu has a small **++** button at the right of its row. Its tooltip
+  reads **Add Several**, and it can be reached with Tab. It holds that exact part, with its options
+  and size, without placing one first: every click on a CAD view then places another copy where you
+  click, until you press Escape or **Done** on the banner.
   * **Add truss** (a truss segment) lists the sections — **Pipe**, **2-point**, **3-point deco**,
     **3-point regular**, **4-point** and **4-point large** — with the straight truss and, for
     **3-point regular** and **4-point**, the corner pieces made for that section. It places a
