@@ -10,6 +10,7 @@ import type { CadTileProps } from "./CadApp";
 import { useLivePreview } from "./cadPreviewStore";
 import { CadViewport } from "./CadViewport";
 import { visibleEntities } from "./cutPlanes";
+import { withTurnedPlacements } from "./gizmoRotation";
 import type { TileCamera, ViewportTile } from "./types";
 import { underlaysForView } from "./underlayGeometry";
 
@@ -23,9 +24,14 @@ export function CadTileViewport({
 	const { scene, settings, printMode, onTile } = props;
 	const preview = useLivePreview(props.previewStore, scene.sceneRevision);
 	// The elements this tile shows, once its own cut planes are applied.
-	const entities = useMemo(
+	const visible = useMemo(
 		() => visibleEntities(scene.entities, node.view, node.cutPlanes),
 		[scene.entities, node.view, node.cutPlanes],
+	);
+	// A turn in flight draws each turned element where the turn puts it.
+	const entities = useMemo(
+		() => withTurnedPlacements(visible, preview?.placements),
+		[visible, preview?.placements],
 	);
 	const underlays = useMemo(
 		() => underlaysForView(props.underlays, node.view),
@@ -79,6 +85,7 @@ export function CadTileViewport({
 			onPreview={props.onPreview}
 			onObjectMenu={printMode ? undefined : props.onObjectMenu}
 			onMove={props.onMove}
+			onTransforms={props.onTransforms}
 			editEnabled={!printMode}
 			printPages={printPages}
 			selectedPrintPageId={props.selectedPrintPageId}

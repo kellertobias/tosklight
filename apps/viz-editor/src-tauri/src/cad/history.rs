@@ -6,7 +6,7 @@
 
 use super::{
     CadState, EntityTransform, RigAttachment, TransformOutcome, apply_transforms, attachments,
-    emit_scene_delta, restore_attachments,
+    emit_scene_delta, restore_attachments, selectable_ids, selected_transforms,
 };
 use crate::contract::{FixtureDto, MutationDto};
 use crate::session::{Session, apply_patch_mutation};
@@ -201,6 +201,52 @@ pub fn cad_delete(
     Ok(DeleteOutcome {
         scene_revision,
         deleted_ids,
+    })
+}
+
+/// Sets where fixtures stand and how they are turned, as one step Undo puts back: the rotate handle
+/// turns a selection about a pivot, which moves each fixture's position as well as its rotation.
+#[tauri::command]
+pub fn cad_set_transforms(
+    app: tauri::AppHandle,
+    session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, CadState>,
+    expected_scene_revision: u64,
+    transforms: Vec<EntityTransform>,
+) -> Result<TransformOutcome, String> {
+    let ids: BTreeSet<Uuid> = transforms.iter().map(|transform| transform.id).collect();
+    if ids.is_empty() || ids.len() != transforms.len() {
+        return Err("Set each selected CAD entity's transform exactly once".to_owned());
+    }
+    if !ids.is_subset(&selectable_ids(&session)?) {
+        return Err("One or more selected CAD entities belong to a locked layer".to_owned());
+    }
+    check_revision(&session, expected_scene_revision)?;
+    let before = session.with(|document| {
+        let patch = document
+            .patch_snapshot()
+            .map_err(|error| error.to_string())?;
+        selected_transforms(&patch, &ids)
+    })?;
+    if before.len() != ids.len() {
+        return Err("One or more selected CAD entities no longer exist".to_owned());
+    }
+    let held = attachments(&session)?
+        .into_iter()
+        .filter(|attachment| ids.contains(&attachment.fixture_id))
+        .collect::<Vec<_>>();
+    let revision = apply_transforms(&session, expected_scene_revision, &transforms)?;
+    cad.history.lock().record_move(TransformRecord {
+        before,
+        after: transforms.clone(),
+        before_attachments: held.clone(),
+        after_attachments: held,
+    });
+    emit_scene_delta(&app, &session, &cad, revision, Vec::new())?;
+    Ok(TransformOutcome {
+        scene_revision: revision,
+        transforms,
+        attachments: attachments(&session)?,
     })
 }
 

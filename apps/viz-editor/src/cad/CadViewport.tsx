@@ -90,6 +90,8 @@ interface CadViewportProps {
 		/** False while Shift is held, so nothing snapped. */
 		snap: boolean,
 	): Promise<void>;
+	/** Commits a turn of the gizmo's rotate handle; absent, the handle is not offered. */
+	onTransforms?(placements: NonNullable<CadTransformPreview["placements"]>): Promise<void>;
 }
 
 interface CadRigOverviewProps {
@@ -275,12 +277,9 @@ export function CadViewport({
 	onChangePrintPage,
 	documentInfo,
 	onCamera,
-	onSelection,
 	expandSelection,
-	onFocusEntity,
-	onPreview,
-	onObjectMenu,
-	onMove,
+	// What the gestures report back: selection, focus, the preview, the menu, moves and turns.
+	...gestureCallbacks
 }: CadViewportProps) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	// Everything drawn below — canvas, grid, labels, scale bar, print frames — reads this one camera,
@@ -310,12 +309,8 @@ export function CadViewport({
 		snapping,
 		onCamera: liveCamera.show,
 		onCameraEnd: liveCamera.commit,
-		onSelection,
 		expandSelection,
-		onFocusEntity,
-		onPreview,
-		onObjectMenu,
-		onMove,
+		...gestureCallbacks,
 	});
 	const { guide, selectionBox } = interaction;
 

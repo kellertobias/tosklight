@@ -17,6 +17,7 @@ import {
 } from "./marqueeSelection";
 import { type EntryAxis, type MoveReadout, moveOrigin } from "./moveEntry";
 import { typedDelta, useCadMoveEntry } from "./useCadMoveEntry";
+import { type RotateDrag, useRotateHandle } from "./cadRotateDrag";
 import { type MoveAxis, pickEntity, pickGizmo } from "./planGeometry";
 import type { PlanPoint } from "./projection";
 import { type FreeAxes, snapMove, snapThreshold } from "./snapping";
@@ -33,7 +34,9 @@ import { planeDelta, projectPoint } from "./types";
 const NO_SNAP: { markers: PlanPoint[]; guides: SnapGuide[] } = { markers: [], guides: [] };
 
 export interface Drag {
-	type: "pan" | "move" | "box";
+	type: "pan" | "move" | "box" | "rotate";
+	/** A turn of the gizmo's rotate handle in flight. */
+	rotate?: RotateDrag;
 	start: [number, number];
 	last: [number, number];
 	axis: MoveAxis;
@@ -108,6 +111,8 @@ export interface CadViewportContext {
 		/** False while Shift is held: nothing snaps and a lamp is not mounted onto a truss. */
 		snap: boolean,
 	): Promise<void>;
+	/** Commits a turn of the gizmo's rotate handle; absent, the handle takes no press. */
+	onTransforms?(placements: NonNullable<CadTransformPreview["placements"]>): Promise<void>;
 }
 
 /** Screen pixels to plan millimetres, through the tile's own camera. */
@@ -365,6 +370,22 @@ function finishBox(
 	});
 }
 
+/** Calls `onChange` whenever Shift is pressed or let go, with whether it is now held. */
+function useShiftChanges(onChange: (held: boolean) => void) {
+	useEffect(() => {
+		const shift = (held: boolean) => (event: KeyboardEvent) => {
+			if (event.key === "Shift") onChange(held);
+		};
+		const [down, up] = [shift(true), shift(false)];
+		window.addEventListener("keydown", down);
+		window.addEventListener("keyup", up);
+		return () => {
+			window.removeEventListener("keydown", down);
+			window.removeEventListener("keyup", up);
+		};
+	});
+}
+
 export function useCadViewportInteraction(
 	context: CadViewportContext,
 ): CadViewportInteraction {
@@ -372,6 +393,7 @@ export function useCadViewportInteraction(
 	const [guide, setGuide] = useState<MoveAxis | null>(null);
 	const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
 	const [snap, setSnap] = useState<{ markers: PlanPoint[]; guides: SnapGuide[] }>(NO_SNAP);
+	const turning = useRotateHandle(context, (point) => screenToPlane(context, ...point));
 	const shownSnap = useRef<string>(JSON.stringify([[], []]));
 	const { readout, refresh, commitTyped, clearReadout } = useCadMoveEntry({
 		drag,
@@ -389,29 +411,20 @@ export function useCadViewportInteraction(
 		shownSnap.current = key;
 		setSnap({ markers, guides });
 	}
-	useEffect(() => {
-		const shift = (held: boolean) => (event: KeyboardEvent) => {
-			if (event.key !== "Shift") return;
-			const active = drag.current;
-			if (active?.type !== "move" || !active.rawDeltaMillimetres) return;
-			updateMovePreview(context, active, ...active.last, held, showSnap);
-			refresh(active);
-		};
-		const keyDown = shift(true);
-		const keyUp = shift(false);
-		window.addEventListener("keydown", keyDown);
-		window.addEventListener("keyup", keyUp);
-		return () => {
-			window.removeEventListener("keydown", keyDown);
-			window.removeEventListener("keyup", keyUp);
-		};
+	// Shift pressed or let go mid-drag changes the drag at once: a turn goes free, a move spreads.
+	useShiftChanges((held) => {
+		const active = drag.current;
+		if (active?.type === "rotate") return turning.turnTo(active, active.last, held);
+		if (active?.type !== "move" || !active.rawDeltaMillimetres) return;
+		updateMovePreview(context, active, ...active.last, held, showSnap);
+		refresh(active);
 	});
 
 	function pointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
 		// The right button picks for the object menu, which `contextMenu` handles; it drags nothing.
 		if (event.button === 2) return;
 		context.canvas.current?.setPointerCapture(event.pointerId);
-		drag.current = beginDrag(context, event, setGuide);
+		drag.current = turning.begin(event) ?? beginDrag(context, event, setGuide);
 	}
 
 	function pointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -420,6 +433,7 @@ export function useCadViewportInteraction(
 		const dx = event.clientX - active.start[0];
 		const dy = event.clientY - active.start[1];
 		active.last = [event.clientX, event.clientY];
+		if (active.type === "rotate") return turning.turnTo(active, active.last, event.shiftKey);
 		if (active.type === "pan") {
 			const start = active.startCamera ?? context.camera;
 			context.onCamera({
@@ -455,6 +469,7 @@ export function useCadViewportInteraction(
 			finishBox(context, active, event.clientX, event.clientY);
 			return;
 		}
+		if (active?.type === "rotate") return turning.finish(active, event);
 		if (active?.type !== "move") return;
 		if (active.entry) {
 			// Letting go mid-entry keeps a valid typed coordinate; half-typed text moves nothing.
@@ -496,6 +511,7 @@ export function useCadViewportInteraction(
 		setGuide(null);
 		setSelectionBox(null);
 		clearReadout();
+		turning.clear();
 		showSnap([]);
 	}
 
@@ -505,7 +521,7 @@ export function useCadViewportInteraction(
 		selectionBox,
 		snapMarkers: snap.markers,
 		snapGuides: snap.guides,
-		readout,
+		readout: turning.readout ?? readout,
 		pointerDown,
 		pointerMove,
 		pointerUp,

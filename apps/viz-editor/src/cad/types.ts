@@ -102,6 +102,12 @@ export interface CadTransformPreview {
 	entityIds: readonly string[];
 	deltaMillimetres: [number, number, number];
 	spread: boolean;
+	/** A turn in flight: where each turned fixture stands and how it is turned, drawn in its place. */
+	placements?: ReadonlyArray<{
+		id: string;
+		positionMillimetres: [number, number, number];
+		rotationDegrees: [number, number, number];
+	}>;
 }
 
 export function previewDeltaForEntity(

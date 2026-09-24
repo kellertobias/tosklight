@@ -32,6 +32,16 @@ export const cadSession = {
 				spread,
 			},
 		}),
+	/** Sets where fixtures stand and how they are turned, as one step that `undo` puts back. */
+	setTransforms: (
+		expectedSceneRevision: number,
+		transforms: ReadonlyArray<{
+			id: string;
+			positionMillimetres: [number, number, number];
+			rotationDegrees: [number, number, number];
+		}>,
+	) =>
+		invoke<CadTransformOutcome>("cad_set_transforms", { expectedSceneRevision, transforms }),
 	/** Deletes fixtures from the show as one step that `undo` brings back. */
 	delete: (expectedSceneRevision: number, fixtureIds: readonly string[]) =>
 		invoke<{ sceneRevision: number; deletedIds: string[] }>("cad_delete", {

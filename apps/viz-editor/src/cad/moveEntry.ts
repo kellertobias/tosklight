@@ -104,6 +104,8 @@ export function formatCoordinate(millimetres: number): string {
 export interface MoveReadout {
 	/** Where the readout sits, in plan millimetres: the gizmo's own origin. */
 	anchor: [number, number];
+	/** What the readout reports, for a screen reader: a move's position unless it says otherwise. */
+	title?: string;
 	coordinates: ReadonlyArray<{
 		axis: EntryAxis;
 		label: string;

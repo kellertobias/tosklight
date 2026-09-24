@@ -120,6 +120,17 @@ choices existed open unchanged.
    longer the curtains at fixed widths, the 50 cm disco ball, the modelled racks, **PA Top**, **PA Top on a Pole Stand** or
    **Line Array Hang**. Open a show that placed any of those and confirm each still draws.
 
+## Turning with the gizmo
+
+1. Select a truss in the plan. Confirm an amber quarter arc sits between the gizmo's arrows. Drag
+   along it and confirm the truss turns about its origin in 15° steps, with **Rotation Z** and the
+   angle shown beside the gizmo; let go at 90° and confirm Info's **Rotation Z** changed by 90 and
+   nothing else. Undo and confirm it turns back.
+2. Repeat in a front view and a side view; confirm the arc turns about Y and X respectively.
+3. Hold Shift while turning and confirm the angle goes free. Select two elements and turn them;
+   confirm they turn about the gizmo together. Zoom in and out and confirm the arc stays the same
+   size on screen and can still be taken.
+
 ## Snapping Venue geometry by dragging
 
 With snapping on and no key held, drag each object by its move gizmo in the plan.

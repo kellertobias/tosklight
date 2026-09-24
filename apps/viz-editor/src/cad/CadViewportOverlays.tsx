@@ -111,7 +111,7 @@ export function CadMoveReadout({
 		<div
 			className="cad-move-readout"
 			role="status"
-			aria-label="Move position"
+			aria-label={readout.title ?? "Move position"}
 			style={{
 				left: `calc(50% + ${(x + camera.pan[0]) * camera.zoom}px)`,
 				top: `calc(50% - ${(y + camera.pan[1]) * camera.zoom}px)`,

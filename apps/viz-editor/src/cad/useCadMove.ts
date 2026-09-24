@@ -64,5 +64,18 @@ export function useCadMove({
 		}
 	}
 
-	return { previewStore, onPreview, move };
+	/** Commits a turn: each fixture's new place and rotation, as the preview showed them. */
+	async function turn(placements: NonNullable<CadTransformPreview["placements"]>) {
+		const scene = sceneRef.current;
+		if (!scene || !placements.length || blocked) return settle(null);
+		try {
+			await cadSession.setTransforms(scene.sceneRevision, placements);
+			settle(await cadSession.snapshot());
+		} catch (reason) {
+			const refreshed = await cadSession.snapshot().catch(() => null);
+			settle(refreshed, String(reason));
+		}
+	}
+
+	return { previewStore, onPreview, move, turn };
 }

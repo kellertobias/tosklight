@@ -11,6 +11,7 @@
  * elements it moves.
  */
 import { entityPlanGeometry, type PlanGeometry, type PlanPoint } from "./projection";
+import { rotateArc } from "./gizmoRotation";
 import {
 	gizmoGeometry,
 	type MoveAxis,
@@ -400,6 +401,15 @@ function paintGizmo(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement
 	);
 	drawGizmoArrow(painter, origin, [origin[0] + length, origin[1]], horizontal, square, width);
 	drawGizmoArrow(painter, origin, [origin[0], origin[1] + length], vertical, square, width);
+	// The rotate handle: a quarter arc between the arrows, turning about the axis the view looks
+	// along, with a head at each end to say it turns both ways.
+	const arc = rotateArc(origin, length);
+	arc.slice(1).forEach((point, index) => painter.stroke(arc[index], point, ROTATE_HANDLE, width));
+	for (const [end, before] of [
+		[arc[arc.length - 1], arc[arc.length - 2]],
+		[arc[0], arc[1]],
+	] as const)
+		drawGizmoArrow(painter, before, end, ROTATE_HANDLE, square * 0.8, width);
 	if (guide === "horizontal")
 		dottedGuide(painter.line, origin, true, horizontal, camera, canvas);
 	if (guide === "vertical")
@@ -686,6 +696,9 @@ function axisColor(axis: WorldAxis): LineColor {
 }
 
 /** A wide shaft from `origin` to the base of a filled head whose tip is `end`. */
+/** The rotate handle's amber, apart from the axis colours of the arrows either side of it. */
+const ROTATE_HANDLE: LineColor = [0.96, 0.72, 0.2];
+
 function drawGizmoArrow(
 	painter: Painter,
 	origin: PlanPoint,

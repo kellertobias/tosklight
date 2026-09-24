@@ -700,6 +700,16 @@ The move gizmo stands on the selected element's own origin, or on the centre of 
 Drag an arrow to move along that axis, or the square to move freely. Holding Shift while dragging an
 arrow spreads the selection along it, from the first selected element to the last.
 
+The amber quarter arc between the two arrows turns the selection about the axis the view looks
+along: Z in a plan, Y in a front or back view, X in a side view. Drag along the arc; the turn
+follows the pointer round the gizmo in 15° steps, and holding Shift turns it freely in tenths of a
+degree. Beside the gizmo, **Rotation Z +30°** (or X, or Y) says how far it has turned. A turn changes
+the same rotation the Info panel's **Rotation** field for that axis sets, so the arc and the typed
+field always agree. One element turns about its own origin; several turn together about the
+gizmo, each carried round it as well as turned. Letting go commits the turn as one step, which
+**Undo** puts back; letting go where you started turns nothing. The arc keeps its size on screen at
+every zoom.
+
 While you drag, the gizmo shows where its origin is on the two axes the view shows — X and Y in a
 plan, the horizontal axis and Z in an elevation — in metres, the same figures as the Info panel's
 position. Type a number while still dragging to place the origin there on the axis you are moving

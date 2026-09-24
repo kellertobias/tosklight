@@ -635,6 +635,57 @@ describe("CAD fixture interaction", () => {
 		expect(onMove).not.toHaveBeenCalled();
 	});
 
+	it("turns the selection with the gizmo's rotate arc, in 15° steps unless Shift is held", async () => {
+		const onTransforms = vi.fn().mockResolvedValue(undefined);
+		render(
+			<CadViewport
+				entities={[fixture]}
+				drawings={[]}
+				selectedIds={[fixture.id]}
+				view="top_down"
+				rotationQuarterTurns={0}
+				camera={camera}
+				preview={null}
+				showFixtureIds={false}
+				showDmxAddresses={false}
+				onCamera={vi.fn()}
+				onSelection={vi.fn()}
+				onPreview={vi.fn()}
+				onMove={vi.fn()}
+				onTransforms={onTransforms}
+			/>,
+		);
+		const canvas = screen.getByLabelText("CAD top down viewport") as HTMLCanvasElement;
+		Object.defineProperty(canvas, "getBoundingClientRect", {
+			value: () => ({ left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800 }),
+		});
+		Object.defineProperty(canvas, "setPointerCapture", { value: vi.fn() });
+		Object.defineProperty(canvas, "releasePointerCapture", { value: vi.fn() });
+		// The gizmo stands on the fixture at the centre; its arc is 0.62 of the 48 px arrows out.
+		const radius = 48 * 0.62;
+		const at = (degrees: number) => ({
+			clientX: 500 + radius * Math.cos((degrees * Math.PI) / 180),
+			clientY: 400 - radius * Math.sin((degrees * Math.PI) / 180),
+		});
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, ...at(45) });
+		fireEvent.pointerMove(canvas, { pointerId: 1, ...at(128) });
+		const readout = screen.getByRole("status", { name: "Rotation" });
+		expect(readout).toHaveTextContent(/Rotation Z [+−]90°/u);
+		// Shift turns freely: 83° rather than the 90° the 15° steps give.
+		fireEvent.pointerMove(canvas, { pointerId: 1, ...at(128), shiftKey: true });
+		expect(readout).toHaveTextContent(/83°/u);
+		fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, ...at(128) });
+		await waitFor(() => expect(onTransforms).toHaveBeenCalledTimes(1));
+		const [[placement]] = onTransforms.mock.calls[0];
+		// One fixture turns about itself: it stays where it stands and only its Z turns, 90° either
+		// way as the page is drawn.
+		expect(placement.id).toBe(fixture.id);
+		expect(placement.positionMillimetres).toEqual(fixture.positionMillimetres);
+		expect(Math.abs(placement.rotationDegrees[2])).toBe(90);
+		expect(placement.rotationDegrees.slice(0, 2)).toEqual([0, 0]);
+		expect(screen.queryByRole("status", { name: "Rotation" })).toBeNull();
+	});
+
 	it("keeps Backspace inside a move even with nothing typed, so it never deletes what moves", () => {
 		const { canvas } = setup([fixture.id]);
 		const heard = vi.fn();
