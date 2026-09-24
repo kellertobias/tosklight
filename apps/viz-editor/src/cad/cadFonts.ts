@@ -15,16 +15,36 @@ export interface CadFont {
 	label: string;
 	/** The CSS font-family the words are drawn with, or null for the screen's own. */
 	family: string | null;
+	/** The font file in `public/fonts/cad`, which a printed plan embeds; none for the screen's own. */
+	file: string | null;
 }
+
+/** The typeface a character another one lacks is drawn in, on screen and in print. */
+export const CAD_FALLBACK_FONT_ID = "osifont";
 
 const FALLBACK = '"ToskLight CAD osifont", sans-serif';
 
 export const CAD_FONTS: readonly CadFont[] = [
-	{ id: "", label: "Screen (default)", family: null },
-	{ id: "osifont", label: "ISO 3098 (osifont)", family: FALLBACK },
-	{ id: "hershey-simplex", label: "Hershey Simplex", family: `"ToskLight CAD Hershey Simplex", ${FALLBACK}` },
-	{ id: "hershey-duplex", label: "Hershey Duplex", family: `"ToskLight CAD Hershey Duplex", ${FALLBACK}` },
-	{ id: "hershey-complex", label: "Hershey Complex", family: `"ToskLight CAD Hershey Complex", ${FALLBACK}` },
+	{ id: "", label: "Screen (default)", family: null, file: null },
+	{ id: "osifont", label: "ISO 3098 (osifont)", family: FALLBACK, file: "osifont-lgpl3fe.ttf" },
+	{
+		id: "hershey-simplex",
+		label: "Hershey Simplex",
+		family: `"ToskLight CAD Hershey Simplex", ${FALLBACK}`,
+		file: "AVHersheySimplexMedium.otf",
+	},
+	{
+		id: "hershey-duplex",
+		label: "Hershey Duplex",
+		family: `"ToskLight CAD Hershey Duplex", ${FALLBACK}`,
+		file: "AVHersheyDuplexMedium.otf",
+	},
+	{
+		id: "hershey-complex",
+		label: "Hershey Complex",
+		family: `"ToskLight CAD Hershey Complex", ${FALLBACK}`,
+		file: "AVHersheyComplexMedium.otf",
+	},
 ];
 
 /** The CSS font-family for a stored typeface ID, or null to draw in the screen's own. */

@@ -5,6 +5,7 @@
  */
 import architectIconSvg from "../../../../assets/branding/tosklight-icon-print.svg?raw";
 import { type CompanyLogo, companyLogoHex } from "../document/companyLogo";
+import type { PrintFontSet } from "./printFonts";
 import type { PlanPoint } from "./projection";
 
 export function mark(x: number, y: number) {
@@ -105,12 +106,16 @@ export function n(value: number) {
 export function pdfDocument(
 	streams: readonly { content: string; width: number; height: number }[],
 	logo: CompanyLogo | null = null,
+	fonts: PrintFontSet | null = null,
 ) {
 	const objects: string[] = [];
 	const ids = streams.map((_, index) => 3 + index * 2);
 	// The logo is one image object after the pages, which every page may draw by name.
 	const logoId = 3 + streams.length * 2;
 	const images = logo ? ` /XObject << /CompanyLogo ${logoId} 0 R >>` : "";
+	// The CAD typefaces the text was set in follow the logo, and every page may use them by name.
+	const embedded = fonts?.objects(logoId + (logo ? 1 : 0)) ?? { resources: "", objects: [] };
+	const typefaces = embedded.resources ? ` ${embedded.resources}` : "";
 	objects.push(
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		`<< /Type /Pages /Count ${streams.length} /Kids [${ids.map((id) => `${id} 0 R`).join(" ")}] >>`,
@@ -118,7 +123,7 @@ export function pdfDocument(
 	for (let i = 0; i < streams.length; i++) {
 		const contentId = ids[i] + 1;
 		objects.push(
-			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(streams[i].width)} ${n(streams[i].height)}] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >>${images} >> /Contents ${contentId} 0 R >>`,
+			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(streams[i].width)} ${n(streams[i].height)}] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>${typefaces} >>${images} >> /Contents ${contentId} 0 R >>`,
 			`<< /Length ${new TextEncoder().encode(streams[i].content).length} >>\nstream\n${streams[i].content}\nendstream`,
 		);
 	}
@@ -128,7 +133,9 @@ export function pdfDocument(
 			`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${hex.length} >>\nstream\n${hex}\nendstream`,
 		);
 	}
-	let output = "%PDF-1.4\n%ToskLight Architect\n";
+	objects.push(...embedded.objects);
+	// An OpenType font program (FontFile3 /OpenType) needs PDF 1.6.
+	let output = `%PDF-${embedded.objects.length ? "1.6" : "1.4"}\n%ToskLight Architect\n`;
 	const offsets = [0];
 	for (let i = 0; i < objects.length; i++) {
 		offsets.push(new TextEncoder().encode(output).length);

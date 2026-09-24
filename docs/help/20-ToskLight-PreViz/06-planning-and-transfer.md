@@ -847,8 +847,10 @@ view's plan pages:
   or **Hershey Complex** (serif). The Hershey alphabets have no umlauts, ß or some symbols; those
   characters are drawn in osifont. The show keeps only the font's name, so it opens anywhere, and
   a font a later release adds shows in the screen's own typeface here. The fonts ship with
-  ToskLight under their own open licences, listed with the third-party notices. Printed plans set
-  all text in Helvetica for now.
+  ToskLight under their own open licences, listed with the third-party notices. A printed plan
+  embeds each font its text is set in, so the PDF shows the same lettering on any computer and its
+  words can still be searched and copied; text in the screen's own typeface and every measurement
+  print in Helvetica.
   Every move or change is one step **Undo** puts back, and it is kept with the show. Click anywhere
   else to put the text down.
 * **Measure**: drag from one point to another. The measurement is drawn in amber with a tick at

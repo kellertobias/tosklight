@@ -31,6 +31,7 @@ import {
 	annotationsForView,
 } from "./annotationGeometry";
 import type { CadAnnotation } from "./annotations";
+import type { PrintFontSet } from "./printFonts";
 import { planTransform } from "./planGeometry";
 import { placedPolylines, underlaysForPage } from "./underlayGeometry";
 import type { CadUnderlay } from "./underlays";
@@ -153,6 +154,7 @@ function annotationCommands(
 	annotations: readonly CadAnnotation[],
 	page: CadPrintPage,
 	frame: PageFrame,
+	fonts: PrintFontSet | null,
 ): string[] {
 	const drawn = annotationsForView(annotations, page.view);
 	if (!drawn.length) return [];
@@ -166,10 +168,13 @@ function annotationCommands(
 		const size = label.heightMillimetres
 			? label.heightMillimetres * frame.scale
 			: 7;
+		// Text in a CAD typeface is set in that font, embedded; the rest in the page's Helvetica.
+		const lettered = label.kind === "text" ? fonts?.text(label.text, label.font, x, y, size) : null;
 		commands.push(
-			label.kind === "measure"
-				? text(label.text, x - label.text.length * size * 0.25, y + 2, size)
-				: text(label.text, x, y, size),
+			lettered ??
+				(label.kind === "measure"
+					? text(label.text, x - label.text.length * size * 0.25, y + 2, size)
+					: text(label.text, x, y, size)),
 		);
 	}
 	return commands;
@@ -319,6 +324,7 @@ export function planPageStream(
 	info: CadPrintDocumentInfo,
 	underlays: readonly CadUnderlay[] = [],
 	annotations: readonly CadAnnotation[] = [],
+	fonts: PrintFontSet | null = null,
 ): PrintPageStream[] {
 	const frame = pageFrame(page);
 	const commands = gridCommands(page, frame);
@@ -340,7 +346,7 @@ export function planPageStream(
 				frame.point,
 			),
 		);
-	commands.push(...annotationCommands(annotations, page, frame));
+	commands.push(...annotationCommands(annotations, page, frame, fonts));
 	commands.push(...furnitureCommands(page, info, frame));
 	return [
 		{

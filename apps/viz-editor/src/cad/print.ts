@@ -15,6 +15,7 @@ import {
 	printPaperSize,
 } from "./types";
 import type { CadAnnotation } from "./annotations";
+import type { PrintFontSet } from "./printFonts";
 import type { CadUnderlay } from "./underlays";
 
 export {
@@ -47,6 +48,8 @@ export function buildCadPdf(
 	},
 	underlays: readonly CadUnderlay[] = [],
 	annotations: readonly CadAnnotation[] = [],
+	/** The CAD typefaces text is set in, from `loadPrintFonts`; without them text prints in Helvetica. */
+	fonts: PrintFontSet | null = null,
 ): Uint8Array {
 	const drawings = new Map(
 		scene.drawings.map((drawing) => [drawing.id, drawing]),
@@ -55,9 +58,10 @@ export function buildCadPdf(
 		pages.flatMap((page) =>
 			page.kind === "fixture_list"
 				? fixtureListStreams(scene, page, info)
-				: planPageStream(scene, drawings, page, info, underlays, annotations),
+				: planPageStream(scene, drawings, page, info, underlays, annotations, fonts),
 		),
 		parseCompanyLogo(info.companyLogo),
+		fonts,
 	);
 }
 

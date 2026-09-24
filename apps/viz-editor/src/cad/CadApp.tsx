@@ -19,6 +19,7 @@ import { CadToolError, cadTitleGroups } from "./CadToolbar";
 import { useCadTools } from "./cadTools";
 import { shortcutTile, useCadShortcuts } from "./cadShortcuts";
 import { buildCadPdf, type CadPrintDocumentInfo } from "./print";
+import { loadPrintFonts } from "./printFonts";
 import { cadSession } from "./session";
 import type { CadUnderlay } from "./underlays";
 import { useCadMove } from "./useCadMove";
@@ -352,6 +353,7 @@ export function CadApp() {
 					printInfo(documentInfo, documentInfo ?? NO_PAPERWORK),
 					underlayState.underlays,
 					tools.annotations,
+					await loadPrintFonts(tools.annotations),
 				),
 			);
 		} catch (reason) {
