@@ -550,6 +550,11 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
             0,
         ),
         (
+            "venue--disco-ball.toskfixture",
+            ProfileSceneryKind::MirrorBall,
+            0,
+        ),
+        (
             "venue--line-array.toskfixture",
             ProfileSceneryKind::LineArray,
             0,

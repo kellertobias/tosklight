@@ -60,6 +60,8 @@ const RETIRED_PART_PROFILE_IDS: ReadonlySet<string> = new Set([
 	"93bdb44a-ad3b-5e10-9bab-a2a1188d0a3b",
 	"a1e077f0-fe95-5b35-a0f4-5335bc1e6132",
 	"7bba0182-5046-5b15-b6c5-93eec8cbc65b",
+	// The disco ball modelled at 50 cm: the generated Disco Ball is any diameter on any chain.
+	"6dd53026-195e-4224-939b-352615b3bce9",
 	// The PA modelled with and without its pole, and the line array modelled at one length: the
 	// generated PA Speaker and Line Array are set to either in Info.
 	"847d02b1-a0c5-5fb2-ab28-61898823542d",
@@ -242,7 +244,7 @@ export const SCENIC_TYPES: readonly VenuePartGroup[] = [
 	},
 	...[
 		["chain", "Chain", "30e46e3d-69c6-5233-8acc-da3835abc316", "Rigging, any length"],
-		["disco-ball", "Disco ball", "6dd53026-195e-4224-939b-352615b3bce9", "50 cm"],
+		["disco-ball", "Disco ball", "76579462-8afa-5ce8-a047-b543fab61538", "Any diameter, sized in Info"],
 		["railing", "Stage railing", "9fc82162-c31c-4a34-bb2c-01fcc2254e37", "2 m"],
 	].map(([id, label, profileId, detail]) => ({
 		id,

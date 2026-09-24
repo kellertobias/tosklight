@@ -1,5 +1,6 @@
 /**
- * Generated stage equipment as a plan draws it: a flight rack, a PA speaker and a line array.
+ * Generated stage equipment as a plan draws it: a flight rack, a PA speaker, a line array and a
+ * disco ball on its chain.
  *
  * Each reads its one count off its height with the same measures the Visualizer builds it by
  * (`crates/viz/render/src/instances/scenery/equipment.rs`), so the plan shows the units, the pole
@@ -125,6 +126,36 @@ export function paSpeakerPlan(
 				[spread * side - 12 * side, 0],
 			],
 		});
+	return polygons;
+}
+
+/** The points of a circle about a centre, for a ball drawn from any side. */
+function circle(x: number, y: number, radius: number, color: Colour): EquipmentPolygon {
+	return {
+		color,
+		points: Array.from({ length: 24 }, (_, index): PlanPoint => {
+			const angle = (index / 24) * Math.PI * 2;
+			return [x + Math.cos(angle) * radius, y + Math.sin(angle) * radius];
+		}),
+	};
+}
+
+/**
+ * A disco ball on its chain: from above the round ball; from the front or side the ball at the
+ * bottom of its height with the chain running up from it to the top, about its middle.
+ */
+export function discoBallPlan(
+	horizontal: number,
+	vertical: number,
+	view: CadViewDirection,
+): EquipmentPolygon[] {
+	const w = Math.max(100, horizontal);
+	if (view === "top_down") return [circle(0, 0, w / 2, DETAIL)];
+	const h = Math.max(w, vertical);
+	const top = h / 2;
+	const chain = h - w;
+	const polygons = [circle(0, -top + w / 2, w / 2, DETAIL)];
+	if (chain > 10) polygons.push(rect(-6, top - chain, 12, chain, CASE));
 	return polygons;
 }
 

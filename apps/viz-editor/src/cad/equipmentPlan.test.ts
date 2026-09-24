@@ -1,6 +1,6 @@
 import type { FixtureProfileScenery } from "@tosklight/patch";
 import { describe, expect, it } from "vitest";
-import { flightRackPlan, lineArrayPlan, paSpeakerPlan, rackHeight } from "./equipmentPlan";
+import { discoBallPlan, flightRackPlan, lineArrayPlan, paSpeakerPlan, rackHeight } from "./equipmentPlan";
 import { sizeMeasures } from "./sceneryAxes";
 
 const equipment = (
@@ -23,6 +23,10 @@ const equipment = (
 const rack = equipment("flight_rack", [0.6, 0.3867, 0.6], [0.6, 0.16445, 0.4], [0.6, 1.1868, 1], true);
 const pa = equipment("pa_top", [0.35, 0.6, 0.4], [0.35, 0.6, 0.4], [0.35, 2.6, 0.4]);
 const array = equipment("line_array", [1, 2.1, 0.6], [1, 0.35, 0.6], [1, 6.1, 0.6]);
+const ball = {
+	...equipment("mirror_ball", [0.5, 0.75, 0.5], [0.2, 0.2, 0.2], [1.5, 4.5, 1.5]),
+	adjustable: { width: true, height: true, depth: false },
+};
 
 describe("equipment measured the way it is bought", () => {
 	it("offers a rack by its units and its depth, and stores the height those units need", () => {
@@ -49,6 +53,33 @@ describe("equipment measured the way it is bought", () => {
 		expect(pole.write({ x: 0.35, y: 0.6, z: 0.4 }, 1.2).y).toBeCloseTo(1.8, 6);
 		expect(pole.read({ x: 0.35, y: 1.8, z: 0.4 })).toBeCloseTo(1.2, 6);
 		expect(pole.write({ x: 0.35, y: 1.8, z: 0.4 }, 0).y).toBe(0.6);
+	});
+});
+
+describe("a disco ball measured by its diameter and its chain", () => {
+	it("keeps the chain when the diameter changes, and the diameter when the chain does", () => {
+		const [diameter, chain] = sizeMeasures(ball);
+		expect([diameter.label, diameter.min, diameter.max]).toEqual(["Diameter", 0.2, 1.5]);
+		expect([chain.label, chain.min, chain.max]).toEqual(["Chain", 0, 3]);
+		const size = { x: 0.5, y: 0.75, z: 0.5 };
+		expect(chain.read(size)).toBeCloseTo(0.25, 6);
+		const bigger = diameter.write(size, 0.8);
+		expect(bigger.x).toBe(0.8);
+		expect(bigger.z).toBe(0.8);
+		expect(bigger.y).toBeCloseTo(1.05, 6);
+		expect(chain.write(size, 2).y).toBeCloseTo(2.5, 6);
+	});
+
+	it("draws the ball at the bottom of its drop with the chain up to the top", () => {
+		expect(discoBallPlan(500, 500, "top_down")).toHaveLength(1);
+		const [sphere, chain] = discoBallPlan(500, 2500, "front_to_back");
+		const ys = sphere.points.map(([, y]) => y);
+		expect(Math.min(...ys)).toBeCloseTo(-1250, 3);
+		expect(Math.max(...ys)).toBeCloseTo(-750, 3);
+		expect(Math.max(...chain.points.map(([, y]) => y))).toBe(1250);
+		expect(Math.min(...chain.points.map(([, y]) => y))).toBe(-750);
+		// Without a chain it is the ball alone.
+		expect(discoBallPlan(500, 500, "left_to_right")).toHaveLength(1);
 	});
 });
 

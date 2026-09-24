@@ -1,7 +1,7 @@
 import { chainPlan } from "./chainPlan";
 import { crowdPlan, seedOf } from "./crowdPlan";
 import { curtainPlan } from "./curtainPlan";
-import { flightRackPlan, lineArrayPlan, paSpeakerPlan } from "./equipmentPlan";
+import { discoBallPlan, flightRackPlan, lineArrayPlan, paSpeakerPlan } from "./equipmentPlan";
 import { hideCoveredEdges } from "./hiddenLines";
 import {
 	bakedYawQuarterTurns,
@@ -582,6 +582,8 @@ function typedGeometry(
 		polygons = paSpeakerPlan(horizontal, vertical, view);
 	} else if (scenery?.kind === "line_array") {
 		polygons = lineArrayPlan(horizontal, vertical, view);
+	} else if (scenery?.kind === "mirror_ball") {
+		polygons = discoBallPlan(horizontal, vertical, view);
 	} else if (
 		scenery?.kind === "truss" ||
 		(!scenery && /truss|pipe grid|pipe$/.test(type))

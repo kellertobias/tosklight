@@ -109,10 +109,15 @@ choices existed open unchanged.
 3. From **Add venue element**, place the **PA Speaker**. Confirm it stands on its cabinet with
    **Pole stand** off; turn it on and confirm a pole and three feet appear with the cabinet at the
    top, and that **Pole** changes the pole's height.
-4. Place the **Line Array**. Confirm **Elements** is 8 and eight elements hang under the frame; set
+4. Choose **Add scenery → Disco ball**. Confirm **Info** shows **Diameter** 0.5 m and **Chain**
+   0.25 m. Set **Diameter** to 0.8 m and **Chain** to 2 m and confirm the plan elevations and the
+   Visualizer show a larger ball hanging 2 m under its hanging point, and that changing the
+   diameter keeps the chain. Open a show that placed the retired **Disco Ball 50 cm** and confirm it
+   still draws as before.
+5. Place the **Line Array**. Confirm **Elements** is 8 and eight elements hang under the frame; set
    it to 3 and confirm the array shortens to three.
-5. Confirm **Add venue element** still offers the musicians, DJ gear and other backline, but no
-   longer the curtains at fixed widths, the modelled racks, **PA Top**, **PA Top on a Pole Stand** or
+6. Confirm **Add venue element** still offers the musicians, DJ gear and other backline, but no
+   longer the curtains at fixed widths, the 50 cm disco ball, the modelled racks, **PA Top**, **PA Top on a Pole Stand** or
    **Line Array Hang**. Open a show that placed any of those and confirm each still draws.
 
 ## Snapping Venue geometry by dragging

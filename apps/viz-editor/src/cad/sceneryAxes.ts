@@ -123,6 +123,34 @@ export function sizeMeasures(scenery: FixtureProfileScenery): SizeMeasure[] {
 				read: (size) => count.of(size.y * 1000),
 				write: (size, value) => ({ ...size, y: count.height(Math.round(value)) / 1000 }),
 			};
+		// A disco ball is as wide and deep as the ball, and as tall as the ball and its chain: its
+		// diameter keeps the chain it hangs on, and its chain is the height above the ball.
+		if (scenery.kind === "mirror_ball" && key === "x")
+			return {
+				id: "size-x",
+				label: "Diameter",
+				unit: "m",
+				digits: 2,
+				min: low,
+				max: high,
+				read: (size) => size.x,
+				write: (size, diameter) => {
+					const chain = Math.max(0, size.y - size.x);
+					const next = Math.min(Math.max(diameter, low), high);
+					return { x: next, y: next + chain, z: next };
+				},
+			};
+		if (scenery.kind === "mirror_ball" && key === "y")
+			return {
+				id: "size-y",
+				label: "Chain",
+				unit: "m",
+				digits: 2,
+				min: 0,
+				max: Math.max(0, high - scenery.maximum_size_metres.x),
+				read: (size) => Math.max(0, size.y - size.x),
+				write: (size, chain) => ({ ...size, y: size.x + Math.max(0, chain) }),
+			};
 		if (key === "y" && scenery.kind === "pa_top")
 			return {
 				id: "size-y",

@@ -288,14 +288,26 @@ fn push_railing(
 }
 
 /// A mirror ball: a sphere of facets that throws the light back.
+/// A mirror ball on its chain.
+///
+/// A generated disco ball is as wide as the ball and as tall as the ball and its chain together, so
+/// the chain is whatever the height leaves above the ball and runs up to the top of the box. A ball
+/// placed no taller than it is wide — the modelled ball's size, and legacy mirror-ball scenery — is
+/// drawn as it always was: the ball about its position on a short drop above it.
 fn push_mirror_ball(frame: &mut FrameInstances, object: &SceneryObject, orientation: Quat) {
-    let diameter = object.size.max_element().max(0.1);
-    let centre = object.position;
-    // The hanging point, so it reads as rigged rather than floating.
+    let diameter = object.size.x.min(object.size.z).max(0.1);
+    let chain = object.size.y - diameter;
+    let (diameter, centre, drop) = if chain > 0.01 {
+        let top = object.position + Vec3::Y * (object.size.y * 0.5);
+        (diameter, top - Vec3::Y * (chain + diameter * 0.5), chain)
+    } else {
+        (object.size.max_element().max(0.1), object.position, 0.25)
+    };
+    // The chain it hangs from, so it reads as rigged rather than floating.
     push_tube(
         frame,
         centre + Vec3::Y * (diameter * 0.5),
-        centre + Vec3::Y * (diameter * 0.5 + 0.25),
+        centre + Vec3::Y * (diameter * 0.5 + drop),
         0.008,
         Vec3::splat(0.2),
         0.4,

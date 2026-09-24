@@ -593,7 +593,8 @@ the key that picks it, such as **Draw line · L**. From left to right:
     Handrails** part keep their rails up both sides until you choose otherwise.
   * **Add scenery** (a drape on its rail) keeps the scenic elements together: the **Curtain** —
     one, generated at any width and drop you set in **Info**, so a 3 m drape is this curtain at 3 m —
-    the **Chain**, the **Disco ball**, the **Stage railing** and the **Flight rack**, chosen by the
+    the **Chain**, the **Disco ball** — any diameter from 0.2 to 1.5 m on up to 3 m of chain, both
+    set in **Info** as **Diameter** and **Chain** — the **Stage railing** and the **Flight rack**, chosen by the
     rack units it holds: 2U, 4U, 6U, 8U, 12U or 16U. A rack is 0.6 m deep until you set another
     depth in **Info**, where **Units** (1 to 24) and **Depth** (0.4 to 1 m) change it at any time. It
     places the curtain until you choose another.
@@ -619,8 +620,9 @@ the key that picks it, such as **Draw line · L**. From left to right:
     primitives are left out on purpose: place those from their own buttons and part menus. The
     **PA Speaker** is set in **Info**: **Pole stand** puts it up on a pole, and **Pole** sets the
     pole's height up to 2 m under its 0.6 m cabinet. The **Line Array** is set by its **Elements**,
-    1 to 24 under its flying frame. The curtains made at one fixed width, and the racks, PA tops and
-    line array modelled at one size, are no longer offered; a show that placed one still draws it. Type in the dialog's search to narrow the list by name or type. Choosing an object
+    1 to 24 under its flying frame. The curtains made at one fixed width, and the disco ball, racks,
+    PA tops and line array modelled at one size, are no longer offered; a show that placed one still
+    draws it. Type in the dialog's search to narrow the list by name or type. Choosing an object
     only selects it; **Add** in the title bar (or a double-click on the object) places one. The
     small **++** button on each object — its tooltip reads **Add Several** — closes the dialog and
     holds that object instead: every click on a CAD view then places another copy where you click,

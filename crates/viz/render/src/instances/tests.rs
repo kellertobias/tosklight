@@ -1293,6 +1293,50 @@ mod lines_view {
         }
     }
 
+    /// A disco ball hangs at the bottom of its box on the chain its height leaves above it.
+    #[test]
+    fn a_disco_ball_hangs_its_diameter_on_the_chain_its_height_leaves() {
+        let spheres = |frame: &FrameInstances| -> Vec<Mat4> {
+            frame
+                .meshes
+                .iter()
+                .filter(|(kind, _)| *kind == MeshKind::Sphere)
+                .flat_map(|(_, balls)| {
+                    balls
+                        .iter()
+                        .map(|ball| Mat4::from_cols_array_2d(&ball.model))
+                })
+                .collect()
+        };
+        let tube = |frame: &FrameInstances| -> f32 {
+            frame
+                .meshes
+                .iter()
+                .filter(|(kind, _)| *kind == MeshKind::Cylinder)
+                .flat_map(|(_, tubes)| tubes.iter().map(|tube| tube.model[1][1].abs()))
+                .fold(0.0, f32::max)
+        };
+        let mut ball = scenery(SceneryKind::MirrorBall);
+        ball.position = Vec3::new(0.0, 5.0, 0.0);
+        ball.size = Vec3::new(0.8, 2.8, 0.8);
+        let hung = drawn(ball.clone());
+        let [sphere] = spheres(&hung)[..] else {
+            panic!("one ball")
+        };
+        let (scale, _, centre) = sphere.to_scale_rotation_translation();
+        assert!((scale.x - 0.8).abs() < 1e-4, "diameter {scale}");
+        // The box runs 3.6 to 6.4 m; the ball fills its bottom 0.8 m under 2 m of chain.
+        assert!((centre.y - 4.0).abs() < 1e-4, "centre {centre}");
+        assert!((tube(&hung) - 2.0).abs() < 1e-3, "chain {}", tube(&hung));
+
+        // A ball placed no taller than it is wide is drawn as it always was.
+        ball.size = Vec3::splat(0.5);
+        let legacy = drawn(ball);
+        let (_, _, centre) = spheres(&legacy)[0].to_scale_rotation_translation();
+        assert!((centre.y - 5.0).abs() < 1e-4);
+        assert!((tube(&legacy) - 0.25).abs() < 1e-3);
+    }
+
     /// A flight rack shows a panel line per unit it holds, read off its height.
     #[test]
     fn a_flight_rack_shows_the_units_its_height_holds() {

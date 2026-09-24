@@ -147,7 +147,10 @@ describe("the CAD part buttons' catalogue", () => {
 		expect(racks[2].sizeMetres).toEqual({ x: 0.6, y: rackHeightMetres(6), z: 0.6 });
 		// Neither the fixed widths nor the racks, PA and line array modelled at one size are offered
 		// anywhere now; the generated PA Speaker and Line Array are, from the venue element dialog.
+		// The disco ball is the generated one, any diameter; the 50 cm model is not offered.
+		expect(SCENIC_TYPES[2].parts[0].profileId).toBe("76579462-8afa-5ce8-a047-b543fab61538");
 		const retired = [
+			"6dd53026-195e-4224-939b-352615b3bce9",
 			"6c1cd6ef-d230-5afd-974c-4d18698b81a2",
 			"fac71b58-3ca7-527c-ba80-4e5ce70bfcfa",
 			"847d02b1-a0c5-5fb2-ab28-61898823542d",

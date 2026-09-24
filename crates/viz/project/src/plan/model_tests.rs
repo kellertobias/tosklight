@@ -997,6 +997,11 @@ fn generated_equipment_compiles_to_its_kind_standing_where_it_is_placed() {
             viz_scene::SceneryKind::LineArray,
             false,
         ),
+        (
+            "venue--disco-ball",
+            viz_scene::SceneryKind::MirrorBall,
+            false,
+        ),
     ] {
         let fixture = shipped_venue(name);
         let compiled = compile(std::slice::from_ref(&fixture));

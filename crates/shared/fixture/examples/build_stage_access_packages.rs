@@ -158,6 +158,26 @@ number of elements it is placed with.",
         handrails: false,
         photograph_from: Some("venue--line-array-hang.toskfixture"),
     },
+    // A disco ball hung on its chain: its width and depth are the ball's diameter, and its height
+    // is the chain and the ball together, so the drop is whatever the height leaves above the ball.
+    Entry {
+        file: "venue--disco-ball.toskfixture",
+        slug: Some("disco-ball"),
+        name: "Disco Ball",
+        notes: "A mirror ball hung on a chain, generated at the diameter and drop it is placed \
+with: a 0.2 to 1.5 m ball on up to 3 m of chain.",
+        size: (0.5, 0.75, 0.5),
+        minimum: (0.2, 0.2, 0.2),
+        maximum: (1.5, 4.5, 1.5),
+        adjustable: SceneryAxes {
+            width: true,
+            height: true,
+            depth: false,
+        },
+        kind: ProfileSceneryKind::MirrorBall,
+        handrails: false,
+        photograph_from: Some("venue--disco-ball-50-cm.toskfixture"),
+    },
 ];
 
 fn root() -> PathBuf {
