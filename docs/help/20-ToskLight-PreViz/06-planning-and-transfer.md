@@ -715,9 +715,10 @@ Drag an arrow to move along that axis, or the square to move freely. Holding Shi
 arrow spreads the selection along it, from the first selected element to the last.
 
 Hold **Option** (on Windows and Linux, **Ctrl**) while dragging the gizmo to place a copy instead:
-the copy follows the pointer and the original stays where it is. The copy is decided once the key
-has been held at any point in the drag, or at the moment you let go, so letting the key go before
-the mouse still places it; a drag with the key never held moves the selection as usual. A copy is a
+the copy follows the pointer and the original stays where it is. The preview follows the key as you
+press and release it mid-drag, and the key's state as you let go of the mouse decides: held, one copy
+is placed where the preview shows it; let go of the key first, and the drag moves the selection as
+usual, with no copy made. A copy is a
 new element like one from **Duplicate** — its own identity, the next free number, unpatched — it
 becomes the selection, and one **Undo** takes it away again. Option-dragging anywhere but the
 gizmo still pans the view.

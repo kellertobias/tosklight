@@ -723,7 +723,7 @@ describe("CAD fixture interaction", () => {
 		const onMac = (mac: boolean) =>
 			vi.spyOn(navigator, "platform", "get").mockReturnValue(mac ? "MacIntel" : "Win32");
 
-		it("places a moved copy with Option on a Mac, even when Option is let go before the mouse", async () => {
+		it("places a moved copy with Option on a Mac only while Option is held as the mouse lets go", async () => {
 			onMac(true);
 			const { canvas, onDuplicateMove, onMove, onPreview } = renderWithCopies();
 			// Option on the gizmo moves rather than pans.
@@ -732,35 +732,47 @@ describe("CAD fixture interaction", () => {
 			const preview = onPreview.mock.calls.at(-1)?.[0];
 			expect(preview.duplicate).toBe(true);
 			expect(plain(preview.deltaMillimetres)).toEqual([400, 0, 0]);
-			// Option is let go first; the copy stands.
-			fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 550, clientY: 400 });
-			fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 550, clientY: 400 });
+			// The preview is only a preview: nothing is written until the mouse lets go.
+			expect(onDuplicateMove).not.toHaveBeenCalled();
+			fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 550, clientY: 400, altKey: true });
+			fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 550, clientY: 400, altKey: true });
 			await waitFor(() => expect(onDuplicateMove).toHaveBeenCalledTimes(1));
 			expect(plain(onDuplicateMove.mock.calls[0][0])).toEqual([500, 0, 0]);
 			expect(onDuplicateMove.mock.calls[0][1]).toEqual([fixture.id]);
 			expect(onMove).not.toHaveBeenCalled();
 		});
 
-		it("takes Option pressed mid-drag or held only at release, and moves when it is never held", async () => {
+		it("follows Option down and up mid-drag at once, and moves when Option is let go first", async () => {
 			onMac(true);
-			const { canvas, onDuplicateMove, onMove } = renderWithCopies();
+			const { canvas, onDuplicateMove, onMove, onPreview } = renderWithCopies();
+			const shown = () => onPreview.mock.calls.at(-1)?.[0].duplicate ?? false;
 			fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 500, clientY: 400 });
 			fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 520, clientY: 400 });
-			fireEvent.keyDown(window, { key: "Alt" });
+			expect(shown()).toBe(false);
+			// Pressing Option turns the preview into a copy without the mouse moving.
+			fireEvent.keyDown(window, { key: "Alt", altKey: true });
+			expect(shown()).toBe(true);
+			// Letting it go turns it back into the move, still without the mouse moving.
 			fireEvent.keyUp(window, { key: "Alt" });
+			expect(shown()).toBe(false);
 			fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 520, clientY: 400 });
-			await waitFor(() => expect(onDuplicateMove).toHaveBeenCalledTimes(1));
+			await waitFor(() => expect(onMove).toHaveBeenCalledTimes(1));
+			expect(onDuplicateMove).not.toHaveBeenCalled();
 
+			// Held on the release only is still a copy; a preview that was a copy but let go moves.
 			fireEvent.pointerDown(canvas, { pointerId: 2, button: 0, clientX: 500, clientY: 400 });
 			fireEvent.pointerMove(canvas, { pointerId: 2, clientX: 520, clientY: 400 });
 			fireEvent.pointerUp(canvas, { pointerId: 2, button: 0, clientX: 520, clientY: 400, altKey: true });
-			await waitFor(() => expect(onDuplicateMove).toHaveBeenCalledTimes(2));
+			await waitFor(() => expect(onDuplicateMove).toHaveBeenCalledTimes(1));
 
 			fireEvent.pointerDown(canvas, { pointerId: 3, button: 0, clientX: 500, clientY: 400 });
-			fireEvent.pointerMove(canvas, { pointerId: 3, clientX: 520, clientY: 400 });
-			fireEvent.pointerUp(canvas, { pointerId: 3, button: 0, clientX: 520, clientY: 400 });
-			await waitFor(() => expect(onMove).toHaveBeenCalledTimes(1));
-			expect(onDuplicateMove).toHaveBeenCalledTimes(2);
+			fireEvent.pointerMove(canvas, { pointerId: 3, clientX: 520, clientY: 400, altKey: true });
+			expect(shown()).toBe(true);
+			fireEvent.pointerMove(canvas, { pointerId: 3, clientX: 530, clientY: 400 });
+			expect(shown()).toBe(false);
+			fireEvent.pointerUp(canvas, { pointerId: 3, button: 0, clientX: 530, clientY: 400 });
+			await waitFor(() => expect(onMove).toHaveBeenCalledTimes(2));
+			expect(onDuplicateMove).toHaveBeenCalledTimes(1);
 		});
 
 		it("uses Ctrl elsewhere, and Option off the gizmo still pans", async () => {
@@ -768,7 +780,7 @@ describe("CAD fixture interaction", () => {
 			const { canvas, onDuplicateMove, onCamera } = renderWithCopies();
 			fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 500, clientY: 400, ctrlKey: true });
 			fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 520, clientY: 400, ctrlKey: true });
-			fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 520, clientY: 400 });
+			fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 520, clientY: 400, ctrlKey: true });
 			await waitFor(() => expect(onDuplicateMove).toHaveBeenCalledTimes(1));
 			expect(plain(onDuplicateMove.mock.calls[0][0])).toEqual([200, 0, 0]);
 

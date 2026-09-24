@@ -59,8 +59,8 @@ export interface Drag {
 	/** On a free drag, the screen axis a typed value applies to; Tab switches it. */
 	entryAxis?: EntryAxis;
 	/**
-	 * Whether the move places a copy instead: set once the duplicate modifier is held at any point in
-	 * the drag, so letting the modifier go before the mouse does not cancel the copy.
+	 * Whether the move places a copy instead: whether the duplicate modifier is held now. It follows
+	 * the key as it goes down and up, and the release commits a copy only while it is still held.
 	 */
 	duplicate?: boolean;
 }
@@ -387,13 +387,16 @@ function finishBox(
 
 /**
  * Calls `onChange` whenever Shift is pressed or let go, with whether it is now held, and
- * `onDuplicate` when the platform's duplicate modifier is pressed.
+ * `onDuplicate` whenever the platform's duplicate modifier is, with whether it is and with Shift.
  */
-function useShiftChanges(onChange: (held: boolean) => void, onDuplicate: () => void) {
+function useShiftChanges(
+	onChange: (held: boolean) => void,
+	onDuplicate: (held: boolean, shift: boolean) => void,
+) {
 	useEffect(() => {
 		const shift = (held: boolean) => (event: KeyboardEvent) => {
 			if (event.key === "Shift") onChange(held);
-			if (held && isDuplicateModifierKey(event.key)) onDuplicate();
+			if (isDuplicateModifierKey(event.key)) onDuplicate(held, event.shiftKey);
 		};
 		const [down, up] = [shift(true), shift(false)];
 		window.addEventListener("keydown", down);
@@ -437,8 +440,12 @@ export function useCadViewportInteraction(
 		if (active?.type !== "move" || !active.rawDeltaMillimetres) return;
 		updateMovePreview(context, active, ...active.last, held, showSnap);
 		refresh(active);
-	}, () => {
-		if (drag.current?.type === "move") drag.current.duplicate = true;
+	}, (held, shift) => {
+		// The preview turns into a copy, or back into the move, the moment the modifier changes.
+		const active = drag.current;
+		if (active?.type !== "move" || active.duplicate === held) return;
+		active.duplicate = held;
+		if (active.rawDeltaMillimetres) updateMovePreview(context, active, ...active.last, shift, showSnap);
 	});
 
 	function pointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -455,7 +462,7 @@ export function useCadViewportInteraction(
 		const dy = event.clientY - active.start[1];
 		active.last = [event.clientX, event.clientY];
 		if (active.type === "rotate") return turning.turnTo(active, active.last, event.shiftKey);
-		if (active.type === "move" && holdsDuplicateModifier(event)) active.duplicate = true;
+		if (active.type === "move") active.duplicate = holdsDuplicateModifier(event);
 		if (active.type === "pan") {
 			const start = active.startCamera ?? context.camera;
 			context.onCamera({
@@ -500,7 +507,8 @@ export function useCadViewportInteraction(
 			return;
 		}
 		clearReadout();
-		if (holdsDuplicateModifier(event)) active.duplicate = true;
+		// Only a modifier still held as the mouse lets go places a copy; let go first, it is a move.
+		active.duplicate = holdsDuplicateModifier(event);
 		// Shift may have been pressed or let go since the last move; the release decides.
 		if (active.rawDeltaMillimetres)
 			updateMovePreview(context, active, event.clientX, event.clientY, event.shiftKey, showSnap);
