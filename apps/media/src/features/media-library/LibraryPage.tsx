@@ -239,7 +239,7 @@ const rangeBaseIds = useRef<Set<string>>(new Set()); const selectedFolder = cata
 const needle = search.trim().toLowerCase(); return (selectedFolder?.items ?? []).filter( (item) => !needle || item.name.toLowerCase().includes(needle), ); }, [search, selectedFolder]);
 const focused = selectedFolder?.items.find((item) => item.id === focusedId);  useEffect(() => { setSelectedIds(new Set()); setFocusedId(null);
 setEmptyFile(null); selectionAnchorId.current = null; rangeBaseIds.current = new Set(); }, [folder]);
-const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => { if (!event.shiftKey && !event.metaKey && !event.ctrlKey) void preview?.show({ folder, file: item.file }); setSelectedFolders(new Set()); setFocusedId(item.id); setEmptyFile(null); setFolderEditor(null);
+const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => { if (!event.shiftKey && !event.metaKey && !event.ctrlKey) void preview?.show({ slot: { folder, file: item.file } }); setSelectedFolders(new Set()); setFocusedId(item.id); setEmptyFile(null); setFolderEditor(null);
 setSelectedIds((current) => { if (event.shiftKey && selectionAnchorId.current) { const anchor = selectedFolder?.items.find( (candidate) => candidate.id === selectionAnchorId.current, );
 if (anchor) { const first = Math.min(anchor.file, item.file); const last = Math.max(anchor.file, item.file); const next = new Set(rangeBaseIds.current); for (const candidate of selectedFolder?.items ?? []) {
 if (candidate.file >= first && candidate.file <= last) next.add(candidate.id); } return next; }

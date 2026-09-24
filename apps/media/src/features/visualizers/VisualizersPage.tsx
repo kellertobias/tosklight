@@ -5,6 +5,7 @@ import { ResourceState } from "../../app/ResourceState";
 import { MediaErrorToast } from "../../app/ToastContext";
 import { addressLabel } from "../../entities/catalog";
 import { MediaPreview } from "../../operator/MediaServerSurface";
+import { usePreviewOf } from "../../operator/PlaybackTakeoverContext";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import type {
@@ -41,6 +42,8 @@ export function VisualizersPage({
 	} | null>(null);
 	const [inspectedFolder, setInspectedFolder] = useState<number | null>(null);
 	const aspectRatio = useMainOutputAspectRatio();
+	// With preview on, the selected visualizer plays alone on the output as it is edited.
+	usePreviewOf(selectedKey && selectedSlot ? { slot: selectedSlot } : null);
 
 	useEffect(() => {
 		if (

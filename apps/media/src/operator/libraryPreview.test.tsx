@@ -96,3 +96,74 @@ describe("the Library's live preview", () => {
 		expect(previewWrites(during, null)).toEqual({ layers: [{ index: 0, change: { dimmer: 0 } }], master: null });
 	});
 });
+
+describe("preview while editing", () => {
+	it("shows the selected visualizer or text, then an effect and a model over it, alone on Layer 1", async () => {
+		const { VisualizersPage } = await import("../features/visualizers/VisualizersPage");
+		const { EffectsPage } = await import("../features/effects/EffectsPage");
+		const { ModelsPage } = await import("../features/models/ModelsPage");
+		const { TextSourcesPage } = await import("../features/text-sources/TextSourcesPage");
+		const server = stubServer({ outputs: [aPlayingOutput()] });
+		const pages = {
+			visualizers: VisualizersPage,
+			text: TextSourcesPage,
+			effects: EffectsPage,
+			models: ModelsPage,
+		};
+		const view = (page: keyof typeof pages) => {
+			const Page = pages[page];
+			return (
+				<PlaybackTakeoverProvider>
+					<PlaybackTakeoverToggle preview />
+					<Page />
+				</PlaybackTakeoverProvider>
+			);
+		};
+		const { rerender } = render(view("visualizers"));
+		const { folder, file } = server.visualizers[0].address;
+		const visualizer = { folder, file };
+		await userEvent.click(await screen.findByRole("switch", { name: "Enable preview" }));
+		const output = server.outputs[0];
+		// Turning preview on with a visualizer selected shows it at once, the other layer out.
+		await waitFor(() => expect(output.layers[0].address).toMatchObject(visualizer));
+		expect(output.layers.map((layer) => layer.dimmer)).toEqual([1, 0]);
+		expect(output.master.dimmer).toBe(1);
+
+		// The Text editor switches the preview to its selected text.
+		rerender(view("text"));
+		const text = { folder: server.text[0].address.folder, file: server.text[0].address.file };
+		await waitFor(() => expect(output.layers[0].address).toMatchObject(text));
+
+		// The Effects editor runs its selected slot over that text on the first bank.
+		rerender(view("effects"));
+		await waitFor(() => expect(output.layers[0].effectBanks[0]).toMatchObject({ select: 1, strength: 1 }));
+		expect(output.layers[0].address).toMatchObject(text);
+
+		// The Models editor maps it onto the selected model instead; the effect is taken off.
+		rerender(view("models"));
+		await waitFor(() => expect(output.layers[0].model).toBe(1));
+		expect(output.layers[0].effectBanks[0].select).toBe(0);
+		expect(output.layers[1].dimmer).toBe(0);
+
+		// Turning preview off puts every layer back, model and effect banks included.
+		await userEvent.click(screen.getByRole("switch", { name: "Enable preview" }));
+		await waitFor(() => expect(output.playbackTakeover).toBe(false));
+		expect(output.layers.map((layer) => layer.dimmer)).toEqual([0.8, 0.6]);
+		expect(output.layers[0].model).toBe(0);
+		expect(output.layers[0].effectBanks[0]).toMatchObject({ select: 0, strength: 0 });
+		expect(output.master.dimmer).toBe(0.5);
+	});
+
+	it("restores a layer's own effect bank and model after preview", () => {
+		const before = aPlayingOutput();
+		before.layers[0].model = 3;
+		before.layers[0].effectBanks[0] = { ...before.layers[0].effectBanks[0], select: 9, strength: 0.4 };
+		const during = structuredClone(before);
+		during.layers[0].model = 0;
+		during.layers[0].effectBanks[0] = { ...during.layers[0].effectBanks[0], select: 2, strength: 1 };
+		expect(restoreWrites(before, during).layers).toEqual([
+			{ index: 0, change: { model: 3 } },
+			{ index: 0, change: { effectBank: 0, effectSelect: 9, effectStrength: 0.4 } },
+		]);
+	});
+});

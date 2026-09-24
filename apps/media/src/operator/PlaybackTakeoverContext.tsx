@@ -16,7 +16,7 @@ import {
 	useOutputsForControl,
 } from "../shared/api/layerControl";
 import type { Resource } from "../shared/api/resource";
-import { type LibraryPreview, useLibraryPreview } from "./libraryPreview";
+import { type LibraryPreview, type PreviewTarget, useLibraryPreview } from "./libraryPreview";
 
 interface PlaybackTakeoverValue {
 	outputs: Resource<OutputView[]>;
@@ -103,7 +103,21 @@ export function useOptionalLibraryPreview(): LibraryPreview | null {
 	return useContext(PlaybackTakeoverContext)?.preview ?? null;
 }
 
-/** Take over playback, and in the Library also Enable preview beside it. */
+/**
+ * Shows what an editor has selected on the preview while preview is on: again whenever the
+ * selection changes, and at once when preview is turned on with something already selected.
+ */
+export function usePreviewOf(target: PreviewTarget | null) {
+	const preview = useOptionalLibraryPreview();
+	const on = preview?.outputId ?? null;
+	const key = JSON.stringify(target);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the target is compared by value, and the preview object changes identity whenever it re-renders.
+	useEffect(() => {
+		if (on && target) void preview?.show(target);
+	}, [key, on]);
+}
+
+/** Take over playback, and on the pages that preview (Library and the editors) Enable preview beside it. */
 export function PlaybackTakeoverToggle({ preview = false }: { preview?: boolean }) {
 	const { outputs, control, selectedOutputId, preview: libraryPreview } =
 		usePlaybackTakeover();

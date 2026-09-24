@@ -9,6 +9,7 @@ import { WindowFrame, WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { MediaErrorToast } from "../../app/ToastContext";
+import { usePreviewOf } from "../../operator/PlaybackTakeoverContext";
 import { ApiFailure, api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import type {
@@ -82,6 +83,8 @@ export function ModelsPage({
 	const models = useModels();
 	const editing = useEditing(models.reload);
 	const [selectedSlot, setSelectedSlot] = useState(1);
+	// With preview on, the last previewed content is mapped onto the selected model.
+	usePreviewOf({ model: selectedSlot });
 	const [upload, setUpload] = useState<ModelUpload>({ state: "idle" });
 
 	const select = (slot: number) => {

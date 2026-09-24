@@ -4,6 +4,7 @@ import { ResourceState } from "../../app/ResourceState";
 import { MediaErrorToast } from "../../app/ToastContext";
 import { addressLabel } from "../../entities/catalog";
 import { MediaPreview } from "../../operator/MediaServerSurface";
+import { usePreviewOf } from "../../operator/PlaybackTakeoverContext";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import type { TextSlotView } from "../../shared/api/generated/media-wire";
@@ -49,6 +50,9 @@ export function TextSourcesPage({
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const [inspectedFolder, setInspectedFolder] = useState<number | null>(null);
 	const aspectRatio = useMainOutputAspectRatio();
+	// With preview on, the selected text plays alone on the output as it is edited.
+	const previewed = text.data?.find((slot) => key(slot) === selectedKey);
+	usePreviewOf(previewed ? { slot: previewed.address } : null);
 
 	useEffect(() => {
 		if (selectedKey === null && text.data?.[0]) setSelectedKey(key(text.data[0]));

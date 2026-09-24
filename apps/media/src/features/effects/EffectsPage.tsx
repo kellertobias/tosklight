@@ -9,6 +9,7 @@ import { WindowFrame, WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useMemo, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { MediaErrorToast } from "../../app/ToastContext";
+import { usePreviewOf } from "../../operator/PlaybackTakeoverContext";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import {
@@ -33,6 +34,8 @@ export function EffectsPage({
 	const effects = useEffects();
 	const editing = useEditing(effects.reload);
 	const [selectedSlot, setSelectedSlot] = useState(1);
+	// With preview on, the selected effect runs over the last previewed content.
+	usePreviewOf({ effect: selectedSlot });
 
 	return (
 		<section className="media-page media-library-page">

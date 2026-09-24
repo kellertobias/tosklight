@@ -29,6 +29,14 @@ import { useRouter } from "./useRouter";
 
 // The connection indicator is the only thing on the shell that must stay live on every page.
 const HEALTH_POLL_MS = 5_000;
+/** The pages that offer Enable preview: the Library and the editors of what a layer can show. */
+const PREVIEW_PATHS: ReadonlySet<string> = new Set([
+	"/library",
+	"/visualizers",
+	"/text",
+	"/effects",
+	"/models",
+]);
 
 const PAGES: Record<RoutePath, () => React.ReactElement> = {
 	"/": MediaPanePage,
@@ -97,9 +105,10 @@ function AppSurface() {
 				: "media";
 	const { preview } = usePlaybackTakeover();
 	// Preview belongs to the Library: leaving it puts the output back as it was.
+	// Moving between previewing pages keeps preview on; any other page turns it off.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: only a change of page turns it off.
 	useEffect(() => {
-		if (path !== "/library") void preview.setEnabled(false);
+		if (!PREVIEW_PATHS.has(path)) void preview.setEnabled(false);
 	}, [path]);
 	const [now, setNow] = useState(() => new Date());
 	useEffect(() => {
@@ -114,7 +123,7 @@ function AppSurface() {
 			instance={health.data?.instance}
 			showName={showName}
 			now={now}
-			playbackOwnership={<PlaybackTakeoverToggle preview={path === "/library"} />}
+			playbackOwnership={<PlaybackTakeoverToggle preview={PREVIEW_PATHS.has(path)} />}
 			onNavigate={(section) => {
 				const route = ROUTES.find(
 					(candidate) => SECTION_BY_PATH[candidate.path] === section,
