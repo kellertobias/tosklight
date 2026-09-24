@@ -33,6 +33,8 @@ type CueTriggerLabel = "GO" | "FOLLOW" | "TIME";
 
 export interface CueEditorValues {
 	fade?: string;
+	/** How long values leaving this Cue take to go, when a later Cue releases them. */
+	outFade?: string;
 	delay?: string;
 	trigger?: CueTriggerLabel;
 	triggerTime?: string;
@@ -250,6 +252,8 @@ export class CueEditor {
 			"Edit the selected Cue through the visible Cuelist View fields.",
 		);
 		if (values.fade != null) await this.commit(cue, "In Fade", values.fade);
+		if (values.outFade != null)
+			await this.commit(cue, "Out Fade", values.outFade);
 		if (values.delay != null) await this.commit(cue, "In Delay", values.delay);
 		if (values.trigger != null) await this.chooseTrigger(cue, values.trigger);
 		if (values.triggerTime != null)
@@ -370,12 +374,14 @@ export class CueEditor {
 		await expect(dialog).toBeVisible();
 		await expect(dialog).toHaveAttribute("aria-modal", "true");
 		// The editor opens with its close action focused, so Escape-style dismissal is one key away.
-		await expect(
-			dialog.getByRole("button", {
-				name: `Close ${label}`,
-				exact: true,
-			}),
-		).toBeFocused();
+		// The Out timing editors also offer a link to their source, which leads the keypad instead.
+		if (!label.startsWith("Out "))
+			await expect(
+				dialog.getByRole("button", {
+					name: `Close ${label}`,
+					exact: true,
+				}),
+			).toBeFocused();
 		const input = dialog.getByRole("textbox", {
 			name: `${label} · Cue 1 value`,
 		});

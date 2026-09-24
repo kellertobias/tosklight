@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **262 root cases across 103 files**.
+Default catalog: **263 root cases across 104 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -83,6 +83,7 @@ Default catalog: **262 root cases across 103 files**.
 | 112-color-intent.spec.ts | COLORINTENT-005 @ui › switching a programmed show lists what changes and rewrites nothing | docs/testing/26-color-intent.md | @ui | color-intent | standard failure evidence | parallel | pending-semantic-migration |
 | 113-semantic-exclusive-color-playbacks.spec.ts | BENCH-RITUAL-COLOR-001 @bench @ui › Color Preset cues in one Virtual Playback exclusion zone keep exactly one colour on the rig and fall back to its resting colour | repository contract | @bench @ui | semantic-exclusive-color-playbacks | standard failure evidence | parallel | migrated-semantic-world |
 | 114-semantic-dynamic-reuse-across-groups.spec.ts | BENCH-DYNAMIC-REUSE-001 @bench @ui › one targetless Dynamic applied to two mover Groups runs on each Group's own Virtual Playback and nowhere else | repository contract | @bench @ui | semantic-dynamic-reuse-across-groups | standard failure evidence | parallel | migrated-semantic-world |
+| 115-semantic-temp-release-shutdown.spec.ts | BENCH-TEMP-RELEASE-001 @bench @ui › a Temp runs a Sunstrip Cuelist with its timing, follows into the release, and turns itself off once nothing is held | repository contract | @bench @ui | semantic-temp-release-shutdown | standard failure evidence | parallel | migrated-semantic-world |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 19-manual-review-software-corrections.spec.ts | POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize | docs/testing/10-desk-lock-and-operator-ui.md | @ui | manual-review-software-corrections | standard failure evidence | parallel | pending-semantic-migration |
