@@ -29,7 +29,10 @@ import {
 	compareFixtureIds,
 	fixtureDisplayId,
 } from "../components/setup/fixturePatch/fixtureIds";
-import { useAttributeRegistry } from "../features/deskSnapshot/DeskSnapshotState";
+import {
+	useAttributeRegistry,
+	useColorModel,
+} from "../features/deskSnapshot/DeskSnapshotState";
 import type { ChannelDisplayMode } from "../types";
 
 const DEFAULT_COLUMNS = 10;
@@ -77,6 +80,7 @@ export function ChannelsWindow({
 	const displayMode = channelDisplayMode ?? standaloneDisplayMode;
 	const visualization = useChannelVisualization(active);
 	const attributeRegistry = useAttributeRegistry();
+	const colorModel = useColorModel();
 	const selectedFixtureIds = useMemo(
 		() => new Set(selection?.selected ?? []),
 		[selection?.selected],
@@ -88,6 +92,7 @@ export function ChannelsWindow({
 		visualization,
 		displayMode,
 		attributeRegistry ?? [],
+		colorModel,
 	);
 	const pages = Math.max(8, Math.ceil(channels.length / (columns * ROWS)));
 	const setChannelValue = (
@@ -301,6 +306,7 @@ export function channelProjection(
 	visualization: VisualizationSnapshot | null,
 	displayMode: ChannelDisplayMode = "intensity",
 	attributeRegistry: readonly { id: string; label: string }[] = [],
+	colorModel: "direct" | "intent" = "direct",
 ): Channel[] {
 	const labels = new Map(
 		attributeRegistry.map((descriptor) => [descriptor.id, descriptor.label]),
@@ -312,10 +318,14 @@ export function channelProjection(
 			const allAttributes = fixture.definition.heads.flatMap((head) =>
 				head.parameters.map((parameter) => parameter.attribute),
 			);
+			// Color Intent programs one whole colour: native colour channels are resolver output.
 			const attributes =
 				displayMode === "intensity"
 					? ["intensity"]
-					: [...new Set(allAttributes)];
+					: [...new Set(allAttributes)].filter(
+							(attribute) =>
+								colorModel !== "intent" || !attribute.startsWith("color."),
+						);
 			return attributes.map((attribute) => ({
 				number: 0,
 				fixture,

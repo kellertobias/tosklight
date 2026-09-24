@@ -1,3 +1,4 @@
+import { NewShowDefaultsSettings } from "./ColorModelSettings";
 import {
 	Button,
 	FormLayout,
@@ -423,6 +424,9 @@ export function DefaultsSection({
 			)}
 			{controller.defaultsTab === "playback" && (
 				<PlaybackDefaultsSettings controller={controller} />
+			)}
+			{controller.defaultsTab === "new-shows" && (
+				<NewShowDefaultsSettings controller={controller} />
 			)}
 		</PreferencesPage>
 	);

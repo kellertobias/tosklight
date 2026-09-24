@@ -380,6 +380,8 @@ export interface StoredPreset {
 	number: number;
 	values: Record<string, Record<string, unknown>>;
 	group_values?: Record<string, Record<string, unknown>>;
+	/** One shared Color Intent colour that recall applies to every selected fixture. */
+	universal_values?: Record<string, unknown>;
 	family?: PresetFamily | "All";
 	color?: string;
 	icon?: string;

@@ -42,11 +42,16 @@ export interface AttributeActivationGroup {
 	members: string[];
 }
 
+/** How a show programs colour: fixture-native channels, or one device-independent colour. */
+export type ColorProgrammingModel = "direct" | "intent";
+
 export interface AttributeConfiguration {
 	version: number;
 	custom_attributes: CustomAttributeDescriptor[];
 	placements: AttributePlacement[];
 	activation_groups: AttributeActivationGroup[];
+	/** Absent from servers older than Color Intent, which means Direct. */
+	color_model?: ColorProgrammingModel;
 }
 
 export interface ConfiguredAttributeDescriptor {
@@ -84,4 +89,5 @@ export interface AttributeConfigurationPatch {
 	custom_attributes?: CustomAttributeDescriptor[] | null;
 	placements?: AttributePlacement[] | null;
 	activation_groups?: AttributeActivationGroup[] | null;
+	color_model?: ColorProgrammingModel | null;
 }

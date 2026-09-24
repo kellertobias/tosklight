@@ -655,7 +655,11 @@ export function ServerRuntime({
 		const next = await state.api.runtime.bootstrap();
 		state.setBootstrap((current) =>
 			current
-				? { ...current, attribute_registry: next.attribute_registry }
+				? {
+						...current,
+						attribute_registry: next.attribute_registry,
+						color_model: next.color_model,
+					}
 				: next,
 		);
 	}, [state.api, state.setBootstrap]);

@@ -50,6 +50,8 @@ export interface DeskConfiguration {
 	release_fade_millis: number;
 	cuelist_auto_off_at_zero_default: boolean;
 	cuelist_auto_off_flash_release_default: boolean;
+	/** Copied into each show this desk creates; existing shows keep their own model. */
+	color_programming_model_default?: "direct" | "intent";
 	start_after_first_recording: boolean;
 	preload_programmer_changes: boolean;
 	preload_physical_playback_actions: boolean;

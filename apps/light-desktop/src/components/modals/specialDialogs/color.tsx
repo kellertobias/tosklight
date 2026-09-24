@@ -1,6 +1,7 @@
 import { Button } from "@tosklight/ui";
 import { type PointerEvent, useRef, useState } from "react";
 import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
+import { useColorModel } from "../../../features/deskSnapshot/DeskSnapshotState";
 import {
 	normalizedFixtureMutations,
 	type ProgrammerValuesMutationQueueController,
@@ -11,6 +12,7 @@ import {
 	hsvToRgb,
 	type PickerColor,
 } from "../specialColor";
+import { ColorIntentDiagnostics } from "./colorIntentDiagnostics";
 import { normalizedPointerPosition } from "./pointer";
 
 interface ColorRangePreview {
@@ -20,6 +22,9 @@ interface ColorRangePreview {
 }
 
 interface ColorDialogController {
+	/** The show programs Color Intent: the level belongs to Intensity, not the colour. */
+	intent: boolean;
+	selectedFixtureIds: readonly string[];
 	brightness: number;
 	colorRangePreview: ColorRangePreview | null;
 	colorSheet: React.RefObject<HTMLDivElement | null>;
@@ -132,9 +137,12 @@ export function useColorDialog(
 	grayscaleFixtureIds: readonly string[],
 ): ColorDialogController {
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
+	const intent = useColorModel() === "intent";
 	const [hue, setHue] = useState(0.52);
 	const [saturation, setSaturation] = useState(0.8);
-	const [brightness, setBrightness] = useState(0.85);
+	const [storedBrightness, setBrightness] = useState(0.85);
+	// Color Intent is chromaticity only; a level in the colour would be a second dimmer.
+	const brightness = intent ? 1 : storedBrightness;
 	const { tint, grayscale, changeTint, changeGrayscale } =
 		useAuxiliaryColorControls(
 			valueWrites,
@@ -245,13 +253,16 @@ export function useColorDialog(
 	const color = hsvToRgb({ hue, saturation, brightness });
 	const swatch = `rgb(${color.map((channel) => Math.round(channel * 255)).join(",")})`;
 	return {
+		intent,
+		selectedFixtureIds,
 		brightness,
 		colorRangePreview,
 		colorSheet,
 		hue,
 		saturation,
 		tint,
-		tintAvailable: tintFixtureIds.length > 0,
+		// Tint is a fixture-native colour channel; Color Intent leaves it to the resolver.
+		tintAvailable: !intent && tintFixtureIds.length > 0,
 		grayscale,
 		grayscaleAvailable: grayscaleFixtureIds.length > 0,
 		swatch,
@@ -271,6 +282,8 @@ interface ColorDialogProps extends ColorDialogController {
 }
 
 export function ColorDialog({
+	intent,
+	selectedFixtureIds,
 	brightness,
 	colorRangePreview,
 	colorSheet,
@@ -318,6 +331,7 @@ export function ColorDialog({
 					}}
 				/>
 			</div>
+			{!intent && (
 			<div className="brightness-control">
 				<span>Brightness</span>
 				<Button
@@ -336,6 +350,7 @@ export function ColorDialog({
 					+
 				</Button>
 			</div>
+			)}
 			{tintAvailable && (
 				<div className="brightness-control">
 					<span>Tint</span>
@@ -377,6 +392,12 @@ export function ColorDialog({
 				</div>
 			)}
 			<strong style={{ color: swatch }}>{swatch}</strong>
+			{intent && (
+				<ColorIntentDiagnostics
+					fixtureIds={selectedFixtureIds}
+					refreshKey={`${hue.toFixed(3)}:${saturation.toFixed(3)}`}
+				/>
+			)}
 		</div>
 	);
 }

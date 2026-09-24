@@ -31,6 +31,7 @@ describe("Desk Setup page-scoped configuration saves", () => {
 		expect(configurationFieldsForSection("preferences-defaults")).toEqual([
 			"cuelist_auto_off_at_zero_default",
 			"cuelist_auto_off_flash_release_default",
+			"color_programming_model_default",
 			"start_after_first_recording",
 		]);
 		expect(configurationFieldsForSection("preferences-attributes")).toEqual([]);

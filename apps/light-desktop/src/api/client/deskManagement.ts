@@ -353,6 +353,8 @@ function configurationPatch(
 			configuration.cuelist_auto_off_at_zero_default,
 		cuelist_auto_off_flash_release_default:
 			configuration.cuelist_auto_off_flash_release_default,
+		color_programming_model_default:
+			configuration.color_programming_model_default ?? null,
 		start_after_first_recording: configuration.start_after_first_recording,
 		preload_programmer_changes: configuration.preload_programmer_changes,
 		preload_physical_playback_actions:

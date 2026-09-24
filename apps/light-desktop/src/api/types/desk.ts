@@ -135,6 +135,8 @@ export interface HighlightState {
 export interface BootstrapSnapshot {
 	api_version: string;
 	attribute_registry: AttributeDescriptor[];
+	/** The active show's colour programming model; absent from older servers, meaning Direct. */
+	color_model?: "direct" | "intent";
 	desk: ControlDesk | null;
 	clients: ClientSummary[];
 	active_show: ShowEntry | null;

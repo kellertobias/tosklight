@@ -6,6 +6,8 @@ import { resolveSpread } from "../../components/control/parameterControls/parame
 export interface PresetFixtureCounts {
 	active: number;
 	defined: number;
+	/** Applies to whatever is selected rather than to a stored set of fixtures. */
+	universal?: boolean;
 }
 
 export type ResolvedValueIndex = ReadonlyMap<
@@ -89,10 +91,29 @@ export function presetFixtureTargets(
 }
 
 export function presetFixtureCounts(
-	preset: Pick<StoredPreset, "values" | "group_values">,
+	preset: Pick<StoredPreset, "values" | "group_values" | "universal_values">,
 	resolved: ResolvedValueIndex,
 	groupMembers: ReadonlyMap<string, readonly string[]>,
 ): PresetFixtureCounts {
+	const universal = Object.entries(preset.universal_values ?? {}).flatMap(
+		([attribute, raw]) => {
+			const value = asAttributeValue(raw);
+			return value ? [[attribute, value] as const] : [];
+		},
+	);
+	if (universal.length > 0) {
+		// A universal colour names no fixtures: count those currently showing it.
+		let active = 0;
+		for (const current of resolved.values())
+			if (
+				universal.every(([attribute, value]) => {
+					const effective = current.get(attribute);
+					return effective != null && sameEffectiveValue(value, effective);
+				})
+			)
+				active += 1;
+		return { active, defined: 0, universal: true };
+	}
 	const targets = presetFixtureTargets(preset, groupMembers);
 	let active = 0;
 	for (const [fixtureId, values] of targets) {
@@ -112,6 +133,7 @@ export function presetFixtureCounts(
 }
 
 export function presetFixtureCountLabel(counts: PresetFixtureCounts) {
+	if (counts.universal) return `Universal · ${counts.active}`;
 	return `${counts.active} / ${counts.defined}`;
 }
 

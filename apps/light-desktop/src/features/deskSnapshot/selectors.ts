@@ -13,6 +13,10 @@ export function selectAttributeRegistry(snapshot: DeskSnapshot) {
 	return snapshot.bootstrap?.attribute_registry ?? null;
 }
 
+export function selectColorModel(snapshot: DeskSnapshot) {
+	return snapshot.bootstrap?.color_model ?? "direct";
+}
+
 export function selectBootstrapReady(snapshot: DeskSnapshot) {
 	return snapshot.bootstrap !== null;
 }

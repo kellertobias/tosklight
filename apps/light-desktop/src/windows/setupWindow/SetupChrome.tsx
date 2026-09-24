@@ -36,7 +36,8 @@ const SETUP_SECTIONS: ReadonlyArray<{
 export type AttributeSettingsTab =
 	| "encoder-groups"
 	| "activation-groups"
-	| "attributes";
+	| "attributes"
+	| "color-model";
 
 export const ATTRIBUTE_SETTINGS_TABS: ReadonlyArray<{
 	id: AttributeSettingsTab;
@@ -45,10 +46,15 @@ export const ATTRIBUTE_SETTINGS_TABS: ReadonlyArray<{
 	{ id: "encoder-groups", label: "Encoder groups" },
 	{ id: "activation-groups", label: "Attribute activation groups" },
 	{ id: "attributes", label: "Attributes" },
+	{ id: "color-model", label: "Color model" },
 ];
 
 export type NetworkSettingsTab = "control-server" | "sound" | "bridges";
-export type DefaultsSettingsTab = "record-update" | "playback" | "pools";
+export type DefaultsSettingsTab =
+	| "record-update"
+	| "playback"
+	| "pools"
+	| "new-shows";
 export type OutputsSettingsTab = "engine" | "routes" | "audio";
 
 export const OUTPUTS_SETTINGS_TABS: ReadonlyArray<{
@@ -76,6 +82,7 @@ const DEFAULTS_SETTINGS_TABS: ReadonlyArray<{
 	{ id: "record-update", label: "Record & Update" },
 	{ id: "playback", label: "Playback" },
 	{ id: "pools", label: "Pool colors" },
+	{ id: "new-shows", label: "New shows" },
 ];
 
 export function setupSectionLabel(section: SetupSection) {

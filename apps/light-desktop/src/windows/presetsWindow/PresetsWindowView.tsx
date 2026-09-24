@@ -233,6 +233,9 @@ export function PresetCardGrid({
 												fixtureCounts?.get(preset.id) ?? {
 													active: 0,
 													defined: Object.keys(preset.body.values).length,
+													universal:
+														Object.keys(preset.body.universal_values ?? {})
+															.length > 0,
 												},
 											)
 									: updateArmed

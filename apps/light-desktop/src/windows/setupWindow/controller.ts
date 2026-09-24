@@ -118,7 +118,20 @@ function useAttributeConfigurationSetup(
 		},
 		[actions],
 	);
-	return { configuration, editConfiguration, error };
+	/** Adopt a snapshot the server returned from a change made outside the edit queue. */
+	const adoptConfiguration = useCallback(
+		(snapshot: AttributeConfigurationSnapshot) => {
+			saveQueue.current = saveQueue.current.then(() => {
+				saved.current = snapshot;
+				current.current = snapshot;
+				setConfiguration(snapshot);
+				setError(snapshot.validation_error);
+			});
+			return saveQueue.current;
+		},
+		[],
+	);
+	return { configuration, editConfiguration, adoptConfiguration, error };
 }
 
 export function useSetupWindowController() {
@@ -141,6 +154,7 @@ export function useSetupWindowController() {
 	const {
 		configuration: attributeConfiguration,
 		editConfiguration: editAttributeConfiguration,
+		adoptConfiguration: adoptAttributeConfiguration,
 		error: attributeConfigurationError,
 	} = useAttributeConfigurationSetup(attributeActions, section);
 	const [restartRequired, setRestartRequired] = useState(false);
@@ -207,6 +221,8 @@ export function useSetupWindowController() {
 		attributeConfiguration,
 		attributeConfigurationError,
 		editAttributeConfiguration,
+		adoptAttributeConfiguration,
+		attributeActions,
 		fixtureLibraryOpen,
 		programmerSettingsError,
 		programmerSettingsLoaded,
@@ -333,6 +349,7 @@ const CONFIGURATION_FIELDS = Object.keys({
 	release_fade_millis: true,
 	cuelist_auto_off_at_zero_default: true,
 	cuelist_auto_off_flash_release_default: true,
+	color_programming_model_default: true,
 	start_after_first_recording: true,
 	preload_programmer_changes: true,
 	preload_physical_playback_actions: true,
@@ -380,6 +397,7 @@ export function configurationFieldsForSection(
 			return [
 				"cuelist_auto_off_at_zero_default",
 				"cuelist_auto_off_flash_release_default",
+				"color_programming_model_default",
 				"start_after_first_recording",
 			];
 		default:

@@ -19,6 +19,7 @@ import {
 	selectActiveTimecode,
 	selectActiveShowError,
 	selectAttributeRegistry,
+	selectColorModel,
 	selectBootstrap,
 	selectBootstrapReady,
 	selectFrameRateHz,
@@ -83,6 +84,11 @@ export function useActiveShowError(): string | null {
 /** The desk attribute registry, or null while the bootstrap is unknown. */
 export function useAttributeRegistry() {
 	return useDeskSnapshotSelector(selectAttributeRegistry, Object.is);
+}
+
+/** The active show's colour programming model: `"intent"` programs one whole colour. */
+export function useColorModel(): "direct" | "intent" {
+	return useDeskSnapshotSelector(selectColorModel, Object.is);
 }
 
 /** Whether the desk bootstrap has been loaded for this connection. */
