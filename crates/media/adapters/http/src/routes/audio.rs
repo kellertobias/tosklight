@@ -6,6 +6,7 @@
 //! arriving?" with a single request.
 
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 
@@ -13,7 +14,9 @@ use crate::error::ApiError;
 use crate::routes::ApiState;
 use crate::routes::edit::{self, Proceed};
 use crate::tolerant::TolerantJson;
-use crate::wire::{AudioPanelView, AudioSettingsView, AudioView, UpdateAudio};
+use crate::wire::{
+    AudioPanelView, AudioSettingsView, AudioView, MicrophonePermissionView, UpdateAudio,
+};
 
 /// The audio settings, this machine's inputs, and the analysis as of now.
 pub(super) async fn audio(State(state): State<ApiState>) -> impl IntoResponse {
@@ -21,7 +24,33 @@ pub(super) async fn audio(State(state): State<ApiState>) -> impl IntoResponse {
     axum::Json(AudioPanelView {
         settings: AudioSettingsView::of(&configuration.audio, (state.diagnostics.audio_devices)()),
         analysis: AudioView::of(&(state.diagnostics.audio)()),
+        microphone_permission: (state.diagnostics.microphone_permission)(),
     })
+}
+
+/// Ask the operating system to grant the Pixel process microphone access.
+/// A first-time prompt can take as long as the operator needs, so it runs off the HTTP worker.
+pub(super) async fn request_microphone_permission(
+    State(state): State<ApiState>,
+) -> Result<axum::Json<MicrophonePermissionView>, ApiError> {
+    let request = state.diagnostics.request_microphone_permission.clone();
+    let status = tokio::task::spawn_blocking(move || request())
+        .await
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "microphone-permission-failed",
+                error.to_string(),
+            )
+        })?
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "microphone-permission-failed",
+                error,
+            )
+        })?;
+    Ok(axum::Json(status))
 }
 
 /// Edits the audio settings.
@@ -50,12 +79,13 @@ pub(super) async fn update_audio(
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use std::sync::atomic::Ordering;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     use axum::http::StatusCode;
 
     use crate::diagnostics::{AudioTelemetry, Diagnostics};
     use crate::routes::bench::{bench, bench_with, get, post, send};
+    use crate::wire::MicrophonePermissionView;
 
     fn hearing_something() -> Diagnostics {
         Diagnostics {
@@ -100,6 +130,39 @@ mod tests {
         assert_eq!(body["analysis"]["bands"]["bass"], 0.8);
         assert_eq!(body["analysis"]["bpm"], 128.0);
         assert_eq!(body["analysis"]["waveform"]["points"][1], 0.5);
+    }
+
+    #[tokio::test]
+    async fn permission_request_uses_the_server_process_and_returns_its_result() {
+        let granted = Arc::new(AtomicBool::new(false));
+        let check = granted.clone();
+        let request = granted.clone();
+        let bench = bench_with(Diagnostics {
+            microphone_permission: Arc::new(move || {
+                if check.load(Ordering::SeqCst) {
+                    MicrophonePermissionView::Granted
+                } else {
+                    MicrophonePermissionView::NotDetermined
+                }
+            }),
+            request_microphone_permission: Arc::new(move || {
+                request.store(true, Ordering::SeqCst);
+                Ok(MicrophonePermissionView::Granted)
+            }),
+            ..Default::default()
+        });
+
+        let (_, before) = send(&bench.router, get("/api/v2/audio".into())).await;
+        assert_eq!(before["microphonePermission"], "not-determined");
+        let (status, result) = send(
+            &bench.router,
+            post("/api/v2/audio/permission/request".into(), ""),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(result, "granted");
+        let (_, after) = send(&bench.router, get("/api/v2/audio".into())).await;
+        assert_eq!(after["microphonePermission"], "granted");
     }
 
     #[tokio::test]

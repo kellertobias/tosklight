@@ -34,7 +34,7 @@ mod visualizer;
 
 pub use audio::{
     AudioBandsView, AudioEditError, AudioPanelView, AudioSettingsView, AudioView, AudioVoiceView,
-    DeskIdentityView, TelemetryFrame, UpdateAudio, WaveformView,
+    DeskIdentityView, MicrophonePermissionView, TelemetryFrame, UpdateAudio, WaveformView,
 };
 pub use catalog::{CatalogFolderView, CatalogItemView, CatalogView};
 pub use data_folder::{

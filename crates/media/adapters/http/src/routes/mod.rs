@@ -212,6 +212,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v2/network", get(network::network))
         .route("/api/v2/network/update", post(network::update_network))
         .route("/api/v2/audio", get(audio::audio))
+        .route(
+            "/api/v2/audio/permission/request",
+            post(audio::request_microphone_permission),
+        )
         .route("/api/v2/audio/update", post(audio::update_audio))
         .route("/api/v2/time", get(time::time))
         .route("/api/v2/time/update", post(time::update_time))

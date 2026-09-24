@@ -8,6 +8,7 @@
 //! half a server up.
 
 mod admin_listener;
+mod audio_input;
 mod beat_events;
 mod beat_form_flash;
 mod beat_grid_wave;
@@ -122,7 +123,7 @@ fn run_inner() -> anyhow::Result<()> {
 
     let catalog_edits = std::sync::Arc::new(std::sync::Mutex::new(()));
     let importer = start_importer(&configuration, &catalog, &catalog_edits);
-    let (audio, analysis) = start_audio(&configuration);
+    let (audio, analysis) = audio_input::start(&configuration);
     let dmx_diagnostics = dmx::diagnostics();
     let network_warnings = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     // Bound before any output opens a window, so a port that cannot be had stops the process with
@@ -144,7 +145,8 @@ fn run_inner() -> anyhow::Result<()> {
     let diagnostics = diagnostics_of(
         &models,
         &live,
-        audio.as_ref(),
+        &audio,
+        &analysis,
         &logging,
         &importer,
         &configuration.library.root,
@@ -158,7 +160,7 @@ fn run_inner() -> anyhow::Result<()> {
         started,
     );
     let live_settings = live_settings::LiveSettings::new();
-    let apply = applies_to(audio.as_ref(), &live_settings);
+    let apply = applies_to(&audio, &live_settings);
 
     let previews = preview::SharedPreviews::configured(&configuration);
     let shared = presentation::Shared {
@@ -287,7 +289,7 @@ fn start_desk_listeners(
 fn stop_background(
     importer: media_library::Importer,
     off_screen: Option<std::thread::JoinHandle<()>>,
-    audio: Option<media_audio::AudioService>,
+    audio: audio_input::SharedAudio,
 ) {
     importer.stop();
     if let Some(thread) = off_screen {
@@ -405,34 +407,6 @@ fn start_importer(
     )
 }
 
-/// Opens the configured audio input, and the analysis whatever happened publishes into.
-///
-/// Audio capture is a real capability of the machine: when there is no input device the server
-/// says so once and runs on silence, rather than refusing to start.
-fn start_audio(
-    configuration: &MediaConfiguration,
-) -> (
-    Option<media_audio::AudioService>,
-    media_audio::SharedAnalysis,
-) {
-    let audio = match media_audio::AudioService::start_bounded(&configuration.audio) {
-        Ok(service) => Some(service),
-        Err(error) => {
-            tracing::warn!(%error, "no audio input; generated sources will run on silence");
-            None
-        }
-    };
-    let analysis = audio.as_ref().map_or_else(
-        || {
-            std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
-                media_audio::AnalysisSnapshot::default(),
-            ))
-        },
-        media_audio::AudioService::analysis,
-    );
-    (audio, analysis)
-}
-
 /// How many clips are converted at once.
 ///
 /// Import is CPU-bound compression and a show may be running on the same machine, so this is
@@ -546,15 +520,15 @@ fn diagnostics_asked_for(arguments: &[String]) -> Diagnostics {
 /// immediately. Everything else about audio — which device is open — is a stream, and a stream is
 /// opened at startup.
 fn applies_to(
-    audio: Option<&media_audio::AudioService>,
+    audio: &audio_input::SharedAudio,
     live: &live_settings::LiveSettings,
 ) -> media_http::ApplyConfiguration {
-    let (tuning, live) = (audio.map(media_audio::AudioService::tuning), live.clone());
+    let (audio, live) = (audio.clone(), live.clone());
     std::sync::Arc::new(move |configuration: &MediaConfiguration| {
-        if let Some(tuning) = &tuning {
-            tuning.store(std::sync::Arc::new(media_audio::tuning_of(
-                &configuration.audio,
-            )));
+        if let Ok(audio) = audio.lock()
+            && let Some(service) = audio.as_ref()
+        {
+            service.retune(&configuration.audio);
         }
         live.changed();
     })
@@ -570,7 +544,8 @@ fn applies_to(
 fn diagnostics_of(
     models: &model_store::Models,
     live: &SharedConfiguration,
-    audio: Option<&media_audio::AudioService>,
+    audio: &audio_input::SharedAudio,
+    analysis: &media_audio::SharedAnalysis,
     logging: &logging::InstalledLogging,
     importer: &media_library::Importer,
     library_root: &std::path::Path,
@@ -590,43 +565,12 @@ fn diagnostics_of(
     let available_monitors = available_monitors.clone();
     media_http::Diagnostics {
         models: models.access(live),
-        audio: match audio {
-            Some(service) => {
-                let analysis = service.analysis();
-                let device = service.device().to_owned();
-                std::sync::Arc::new(move || {
-                    let heard = analysis.load();
-                    media_http::AudioTelemetry {
-                        capturing: true,
-                        device: device.clone(),
-                        detail: None,
-                        waveform: heard.analysis.waveform.clone(),
-                        spectrum: heard.analysis.spectrum.clone(),
-                        bass: heard.analysis.bass,
-                        mid: heard.analysis.mid,
-                        treble: heard.analysis.treble,
-                        energy: heard.analysis.energy,
-                        peak: heard.analysis.peak,
-                        beat: heard.beat,
-                        bpm: heard.bpm,
-                        beat_phase: heard.beat_phase,
-                        tempo_confidence: heard.tempo_confidence,
-                        kick_level: heard.instruments.kick.level,
-                        kick_hit: heard.instruments.kick.hit,
-                        snare_level: heard.instruments.snare.level,
-                        snare_hit: heard.instruments.snare.hit,
-                        hihat_level: heard.instruments.hihat.level,
-                        hihat_hit: heard.instruments.hihat.hit,
-                        gain: heard.gain,
-                        clipping: heard.clipping,
-                    }
-                })
-            }
-            // No device, which is a real state and not a failure: the visualizers run on silence
-            // and the monitor says why the meter is flat.
-            None => std::sync::Arc::new(media_http::AudioTelemetry::default),
-        },
+        audio: audio_input::telemetry(audio, analysis),
         audio_devices: std::sync::Arc::new(media_audio::input_devices),
+        microphone_permission: std::sync::Arc::new(|| {
+            audio_input::permission_view(media_audio::permission::status())
+        }),
+        request_microphone_permission: audio_input::permission_request(audio, analysis, live),
         output_devices: std::sync::Arc::new(media_audio::output_devices),
         monitors: std::sync::Arc::new(move || {
             available_monitors

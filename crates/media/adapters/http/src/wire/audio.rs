@@ -194,6 +194,18 @@ impl AudioSettingsView {
 pub struct AudioPanelView {
     pub settings: AudioSettingsView,
     pub analysis: AudioView,
+    pub microphone_permission: MicrophonePermissionView,
+}
+
+/// Permission belongs to the Pixel process, never to the browser showing its controls.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "kebab-case")]
+pub enum MicrophonePermissionView {
+    NotRequired,
+    NotDetermined,
+    Denied,
+    Restricted,
+    Granted,
 }
 
 /// An intent-shaped audio edit: only the fields being changed.

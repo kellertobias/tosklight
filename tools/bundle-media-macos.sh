@@ -57,6 +57,7 @@ cat >"$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>10.13</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSLocalNetworkUsageDescription</key><string>ToskLight Pixel receives Art-Net, sACN, and CITP and serves its administration interface on the local network.</string>
+  <key>NSMicrophoneUsageDescription</key><string>ToskLight Pixel listens to the selected audio input to drive its audio meters, beat detection, and sound-reactive visuals.</string>
 </dict></plist>
 PLIST
 touch "$APP"

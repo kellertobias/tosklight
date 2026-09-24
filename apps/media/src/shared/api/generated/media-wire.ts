@@ -553,7 +553,8 @@ availableDevices: Array<string>,
  * different device reopens a stream, which happens on the next start.
  */
 deviceTakesEffectOnRestart: boolean, };
-export type AudioPanelView = { settings: AudioSettingsView, analysis: AudioView, };
+export type MicrophonePermissionView = "not-required" | "not-determined" | "denied" | "restricted" | "granted";
+export type AudioPanelView = { settings: AudioSettingsView, analysis: AudioView, microphonePermission: MicrophonePermissionView, };
 export type PendingImportView = { address: AddressView,
 /**
  * The name the imported clip will keep.

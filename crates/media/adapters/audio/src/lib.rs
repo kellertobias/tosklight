@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 //! Audio capture.
 //!
@@ -27,3 +27,5 @@ pub use snapshot::{AnalysisSnapshot, SharedAnalysis, Worker};
 /// Two analysis windows: enough to absorb a scheduling hiccup, small enough that a worker which
 /// falls behind drops old audio instead of analysing something an operator heard a second ago.
 pub const QUEUE_CAPACITY: usize = media_domain::audio::WINDOW * 2;
+
+pub mod permission;

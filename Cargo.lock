@@ -3907,11 +3907,14 @@ name = "media-audio"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
+ "block2 0.6.2",
  "cpal",
  "crossbeam-queue",
  "light-beat",
  "media-application",
  "media-domain",
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
  "thiserror 2.0.20",
  "tracing",
 ]

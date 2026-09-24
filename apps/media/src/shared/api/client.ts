@@ -5,6 +5,7 @@
 import type {
 	ApiErrorBody,
 	AudioPanelView,
+	MicrophonePermissionView,
 	AudioSettingsView,
 	CatalogView,
 	CreateText,
@@ -471,6 +472,10 @@ export const api = {
 		}),
 
 	audio: () => request<AudioPanelView>("/audio"),
+	requestMicrophonePermission: () =>
+		request<MicrophonePermissionView>("/audio/permission/request", {
+			method: "POST",
+		}),
 	updateAudio: (edit: UpdateAudio) =>
 		request<AudioSettingsView>("/audio/update", {
 			method: "POST",

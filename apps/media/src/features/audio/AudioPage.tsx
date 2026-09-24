@@ -5,11 +5,7 @@
 // other, and the gains reach the running analysis as soon as it is stored.
 
 import { HorizontalFaderField } from "@tosklight/ui";
-import {
-	SelectField,
-	SwitchField,
-	TextField,
-} from "@tosklight/ui/controls";
+import { SelectField, SwitchField, TextField } from "@tosklight/ui/controls";
 import { WindowFrame } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
@@ -18,6 +14,7 @@ import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
 import type {
 	AudioSettingsView,
+	MicrophonePermissionView,
 	UpdateAudio,
 } from "../../shared/api/generated/media-wire";
 import { useAudio } from "../../shared/api/queries";
@@ -30,6 +27,24 @@ export function AudioPage() {
 	const editing = useEditing(audio.reload);
 
 	const editingAudio = editing.editing === "audio";
+	const [requestingPermission, setRequestingPermission] = useState(false);
+	const [permissionError, setPermissionError] = useState<string | null>(null);
+	const requestPermission = useCallback(async () => {
+		setRequestingPermission(true);
+		setPermissionError(null);
+		try {
+			await api.requestMicrophonePermission();
+		} catch (error) {
+			setPermissionError(
+				error instanceof Error
+					? error.message
+					: "Could not request microphone access.",
+			);
+		} finally {
+			await audio.reload();
+			setRequestingPermission(false);
+		}
+	}, [audio.reload]);
 	const saveAudioLive = useCallback(
 		(edit: UpdateAudio) => editing.saveLive(() => api.updateAudio(edit)),
 		[editing.saveLive],
@@ -79,10 +94,22 @@ export function AudioPage() {
 						onDismiss={editing.dismiss}
 					/>
 				)}
+				{permissionError && (
+					<MediaErrorToast
+						message={permissionError}
+						onDismiss={() => setPermissionError(null)}
+					/>
+				)}
 
 				<ResourceState resource={audio} subject="the audio monitor">
 					{(data) => (
 						<>
+							<MicrophoneAccess
+								permission={data.microphonePermission}
+								capturing={(telemetry.frame?.audio ?? data.analysis).capturing}
+								requesting={requestingPermission}
+								onRequest={requestPermission}
+							/>
 							{/* The socket's frames when it is up, and the snapshot until it is. */}
 							<AudioMeters
 								audio={telemetry.frame?.audio ?? data.analysis}
@@ -100,6 +127,55 @@ export function AudioPage() {
 			</section>
 		</WindowFrame>
 	);
+}
+
+function MicrophoneAccess({
+	permission,
+	capturing,
+	requesting,
+	onRequest,
+}: {
+	permission: MicrophonePermissionView;
+	capturing: boolean;
+	requesting: boolean;
+	onRequest: () => void;
+}) {
+	if (permission === "not-determined")
+		return (
+			<div className="media-state is-notice" role="status">
+				<p>
+					Pixel needs microphone access to analyse the selected audio input.
+				</p>
+				<button type="button" disabled={requesting} onClick={onRequest}>
+					{requesting ? "Waiting for macOS…" : "Request microphone access"}
+				</button>
+			</div>
+		);
+	if (permission === "denied" || permission === "restricted")
+		return (
+			<div className="media-state is-warning" role="alert">
+				<p>
+					{permission === "denied"
+						? "Microphone access is denied. Enable ToskLight Pixel in macOS System Settings → Privacy & Security → Microphone, then check access here."
+						: "macOS restricts microphone access for Pixel. Check the device's privacy policy."}
+				</p>
+				{permission === "denied" && (
+					<button type="button" disabled={requesting} onClick={onRequest}>
+						Check microphone access
+					</button>
+				)}
+			</div>
+		);
+	if (permission === "granted" && !capturing)
+		return (
+			<div className="media-state is-notice" role="status">
+				<p>Microphone access is granted, but the selected input is not open.</p>
+				<button type="button" disabled={requesting} onClick={onRequest}>
+					{requesting ? "Opening input…" : "Start audio input"}
+				</button>
+			</div>
+		);
+	return null;
 }
 
 function StoredSettings({ settings }: { settings: AudioSettingsView }) {

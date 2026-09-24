@@ -532,6 +532,9 @@ pub struct Diagnostics {
     pub models: ModelAccess,
     pub audio: AudioSource,
     pub audio_devices: DeviceLister,
+    pub microphone_permission: Arc<dyn Fn() -> crate::wire::MicrophonePermissionView + Send + Sync>,
+    pub request_microphone_permission:
+        Arc<dyn Fn() -> Result<crate::wire::MicrophonePermissionView, String> + Send + Sync>,
     pub output_devices: DeviceLister,
     pub monitors: MonitorLister,
     pub logs: LogSource,
@@ -554,6 +557,10 @@ impl Default for Diagnostics {
             models: ModelAccess::default(),
             audio: Arc::new(AudioTelemetry::default),
             audio_devices: Arc::new(Vec::new),
+            microphone_permission: Arc::new(|| crate::wire::MicrophonePermissionView::NotRequired),
+            request_microphone_permission: Arc::new(|| {
+                Ok(crate::wire::MicrophonePermissionView::NotRequired)
+            }),
             output_devices: Arc::new(Vec::new),
             monitors: Arc::new(Vec::new),
             logs: Arc::new(|_| LogPage::default()),

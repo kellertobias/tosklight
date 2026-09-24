@@ -70,13 +70,23 @@ struct DeviceCapture {
 impl AudioService {
     /// Opens the configured device without allowing a platform audio service to hold up Media.
     pub fn start_bounded(configuration: &AudioConfiguration) -> Result<Self, AudioError> {
+        let published = Arc::new(arc_swap::ArcSwap::from_pointee(AnalysisSnapshot::default()));
+        Self::start_bounded_publishing(configuration, published)
+    }
+
+    /// Opens a stream into the analysis already shared with outputs and telemetry.
+    /// Used when microphone permission is granted after the server has started.
+    pub fn start_bounded_publishing(
+        configuration: &AudioConfiguration,
+        published: SharedAnalysis,
+    ) -> Result<Self, AudioError> {
         let configuration = configuration.clone();
         let (started, startup) = std::sync::mpsc::channel();
         let (stop, stopping) = std::sync::mpsc::channel();
         let device_thread = std::thread::Builder::new()
             .name("media-audio-device".into())
             .spawn(move || {
-                let (capture, opened) = match DeviceCapture::open(&configuration) {
+                let (capture, opened) = match DeviceCapture::open(&configuration, published) {
                     Ok(opened) => opened,
                     Err(error) => {
                         let _ = started.send(Err(error));
@@ -133,7 +143,10 @@ impl AudioService {
 
 impl DeviceCapture {
     /// Opens the configured device and starts analysing on the thread that retains the stream.
-    fn open(configuration: &AudioConfiguration) -> Result<(Self, Opened), AudioError> {
+    fn open(
+        configuration: &AudioConfiguration,
+        published: SharedAnalysis,
+    ) -> Result<(Self, Opened), AudioError> {
         let host = cpal::default_host();
         let device = select(&host, &configuration.device)?;
         let name = device
@@ -149,9 +162,6 @@ impl DeviceCapture {
         let channels = usize::from(config.channels().max(1));
 
         let queue = Arc::new(ArrayQueue::new(QUEUE_CAPACITY));
-        let published: SharedAnalysis =
-            Arc::new(arc_swap::ArcSwap::from_pointee(AnalysisSnapshot::default()));
-
         // Everything the callback needs is captured by value. It allocates nothing, takes no lock
         // that can block, logs nothing, and never touches the device list.
         let filling = Arc::clone(&queue);

@@ -314,6 +314,11 @@ export function stubServer(
 				server.audio.settings = { ...server.audio.settings, ...body };
 				return jsonResponse(server.audio.settings);
 			}
+			if (path === "/audio/permission/request") {
+				server.audio.microphonePermission = "granted";
+				server.audio.analysis.capturing = true;
+				return jsonResponse("granted");
+			}
 
 			const text = writeText(server, path, init);
 			if (text) return text;
@@ -1845,6 +1850,7 @@ export function anAudioPanel(
 	overrides: Partial<AudioPanelView> = {},
 ): AudioPanelView {
 	return {
+		microphonePermission: "not-required",
 		settings: {
 			deviceBy: "system-default",
 			deviceValue: null,

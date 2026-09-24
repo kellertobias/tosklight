@@ -91,6 +91,39 @@ describe("the audio monitor", () => {
 		expect(screen.getByText("listening for a tempo")).toBeInTheDocument();
 	});
 
+	it("asks the Pixel process for microphone access and explains the restart", async () => {
+		const panel = anAudioPanel({ microphonePermission: "not-determined" });
+		panel.analysis = { ...panel.analysis, capturing: false };
+		const server = stubServer({ audio: panel });
+		render(<AudioPage />);
+
+		await userEvent.click(
+			await screen.findByRole("button", { name: "Request microphone access" }),
+		);
+		await waitFor(() =>
+			expect(server.writes).toContain("/audio/permission/request"),
+		);
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("button", { name: "Request microphone access" }),
+			).not.toBeInTheDocument(),
+		);
+		expect(server.audio.analysis.capturing).toBe(true);
+	});
+
+	it("shows the macOS recovery path when access was denied", async () => {
+		stubServer({
+			audio: anAudioPanel({ microphonePermission: "denied" }),
+		});
+		render(<AudioPage />);
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"System Settings → Privacy & Security → Microphone",
+		);
+		expect(
+			screen.getByRole("button", { name: "Check microphone access" }),
+		).toBeInTheDocument();
+	});
+
 	it("reports that frames have stopped arriving instead of freezing quietly", async () => {
 		stubServer();
 		render(<AudioPage />);
