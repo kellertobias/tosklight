@@ -58,6 +58,10 @@ const TEMPO_NOVELTY_CAP: f32 = 4.0;
 /// Measured on synthetic kicks at 48 kHz as 38–48 ms, median 42 ms. The beat flywheel subtracts
 /// it, so a light flashes with the kick rather than a frame or two behind it.
 const KICK_LATENCY_SECONDS: f32 = 0.042;
+/// Two drum hits closer than this share of a beat are one beat: a clap on the kick, or the kick's
+/// fast level and a snare body answering the same strike. Before a tempo is known, the kick's own
+/// shortest gap stands in for the beat.
+const SAME_BEAT: f32 = 0.5;
 const BEAT_HALF_LIFE_SECONDS: f32 = 0.1;
 
 const KICK: Settings = Settings {
@@ -130,6 +134,9 @@ pub struct Reading {
     pub beat: f32,
     /// Beats counted since the detector started.
     pub beats: u64,
+    /// Kick or snare hits since the detector started, counted once where they land on the same
+    /// beat. A kick and a clap struck together are one hit here and one each in their voices.
+    pub hits: u64,
     /// The gain a level display should apply: automatic, or the operator's manual gain.
     pub gain: f32,
     /// The root-mean-square of the latest hop before any gain.
@@ -361,6 +368,9 @@ pub struct Detector {
     beat: f32,
     beats: u64,
     beat_decay: f32,
+    hits: u64,
+    since_drum_hit: u32,
+    hop_seconds: f32,
     gain: AutoGain,
     clip_hold: u32,
     clip_hold_hops: u32,
@@ -417,6 +427,9 @@ impl Detector {
             beat: 0.0,
             beats: 0,
             beat_decay: decay(hop_seconds, BEAT_HALF_LIFE_SECONDS),
+            hits: 0,
+            since_drum_hit: u32::MAX,
+            hop_seconds,
             gain: AutoGain::new(hop_seconds),
             clip_hold: 0,
             clip_hold_hops: (CLIP_HOLD_SECONDS * hops_per_second).round() as u32,
@@ -531,6 +544,19 @@ impl Detector {
             }
         }
 
+        self.since_drum_hit = self.since_drum_hit.saturating_add(1);
+        if kick.hit.is_some() || snare.hit.is_some() {
+            let same_beat = if self.tempo.bpm() > 0.0 {
+                SAME_BEAT * 60.0 / self.tempo.bpm()
+            } else {
+                KICK_HIT_GAP_SECONDS
+            };
+            if self.since_drum_hit as f32 * self.hop_seconds >= same_beat {
+                self.hits += 1;
+                self.since_drum_hit = 0;
+            }
+        }
+
         // The tempo listens mostly to the kick, with the hats as a weaker second opinion; each is
         // measured against its own threshold so neither band's loudness decides.
         let periodic = if armed {
@@ -566,6 +592,7 @@ impl Detector {
             beat_phase: self.tempo.phase(),
             beat: self.beat,
             beats: self.beats,
+            hits: self.hits,
             gain: if self.tuning.auto_gain {
                 self.gain.gain()
             } else {
@@ -668,6 +695,46 @@ mod tests {
         assert!(
             (hats / expected - 1.0).abs() < 0.12,
             "{hats} hats, expected {expected}"
+        );
+    }
+
+    #[test]
+    fn a_clap_on_the_kick_is_one_hit() {
+        // Four on the floor with a clap on every beat: the kick and the snare each hear it, but
+        // it is one beat, and a light or an effect following hits must move once.
+        let bpm = 124.0;
+        let beat = 60.0 / bpm;
+        let mut noise = 0x9e37_79b9u32;
+        let mut samples = song(bpm, 12.0, 1.0, true, false);
+        for (index, sample) in samples.iter_mut().enumerate() {
+            let since = (index as f32 / RATE) % beat;
+            noise ^= noise << 13;
+            noise ^= noise >> 17;
+            noise ^= noise << 5;
+            let white = noise as f32 / u32::MAX as f32 * 2.0 - 1.0;
+            *sample += 0.6 * (-since / 0.06).exp() * white
+                + 0.3 * (-since / 0.08).exp() * (2.0 * PI * 200.0 * since).sin();
+        }
+        let mut detector = Detector::new(RATE);
+        let mut at_two_seconds = None;
+        for (index, chunk) in samples.chunks(441).enumerate() {
+            detector.push(chunk, |_| {});
+            if at_two_seconds.is_none() && (index + 1) * 441 >= (2.0 * RATE) as usize {
+                at_two_seconds = Some(detector.reading());
+            }
+        }
+        let (before, after) = (at_two_seconds.unwrap(), detector.reading());
+        let hits = (after.hits - before.hits) as f32;
+        let voices =
+            (after.kick.count - before.kick.count + after.snare.count - before.snare.count) as f32;
+        let expected = 10.0 / beat;
+        assert!(
+            (hits / expected - 1.0).abs() < 0.12,
+            "{hits} hits in ten seconds, expected {expected}"
+        );
+        assert!(
+            voices > hits * 1.5,
+            "the kick and the snare both have to hear the clap: {voices} voice hits"
         );
     }
 
