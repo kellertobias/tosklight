@@ -8,6 +8,7 @@ use super::{
     CadState, EntityTransform, RigAttachment, TransformOutcome, apply_transforms, attachments,
     emit_scene_delta, restore_attachments, selectable_ids, selected_transforms,
 };
+use crate::annotation::{CadAnnotation, announce, read_annotations, store, validate};
 use crate::contract::{FixtureDto, MutationDto};
 use crate::session::{Session, apply_patch_mutation};
 use serde::Serialize;
@@ -26,6 +27,14 @@ enum Step {
     Delete(DeleteRecord),
     /// New fixtures, such as copies: Undo removes them and Redo patches them back.
     Add(DeleteRecord),
+    /// A drawn item changed — text moved or reworded: Undo writes it back as it was.
+    Annotation(Box<AnnotationChange>),
+}
+
+#[derive(Clone)]
+struct AnnotationChange {
+    before: CadAnnotation,
+    after: CadAnnotation,
 }
 
 #[derive(Clone)]
@@ -290,6 +299,33 @@ pub fn cad_add(
     })
 }
 
+/// Changes a drawn item the CAD already holds — moves or rewords a piece of text — as one step
+/// Undo puts back.
+#[tauri::command]
+pub fn cad_change_annotation(
+    app: tauri::AppHandle,
+    session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, CadState>,
+    annotation: CadAnnotation,
+) -> Result<CadAnnotation, String> {
+    validate(&annotation)?;
+    let before = read_annotations(&session)?
+        .into_iter()
+        .find(|stored| stored.id == annotation.id)
+        .ok_or_else(|| "That drawn item is no longer in the show".to_owned())?;
+    store(&session, &annotation)?;
+    announce(&app, &session)?;
+    let mut history = cad.history.lock();
+    history
+        .undo
+        .push(Step::Annotation(Box::new(AnnotationChange {
+            before,
+            after: annotation.clone(),
+        })));
+    history.redo.clear();
+    Ok(annotation)
+}
+
 /// Which way through the history a step is taken.
 #[derive(Clone, Copy)]
 enum Direction {
@@ -335,6 +371,19 @@ fn apply_step(
     direction: Direction,
 ) -> Result<TransformOutcome, String> {
     match step {
+        Step::Annotation(change) => {
+            let item = match direction {
+                Direction::Back => &change.before,
+                Direction::Forward => &change.after,
+            };
+            store(session, item)?;
+            announce(app, session)?;
+            Ok(TransformOutcome {
+                scene_revision: current_revision(session)?,
+                transforms: Vec::new(),
+                attachments: attachments(session)?,
+            })
+        }
         Step::Move(record) => {
             let (transforms, stored) = match direction {
                 Direction::Back => (&record.before, &record.before_attachments),

@@ -37,6 +37,17 @@ export interface CadTools {
 	annotations: readonly CadAnnotation[];
 	save(annotation: CadAnnotation): Promise<void>;
 	remove(id: string): Promise<void>;
+	/** Changes an item already drawn — moves or rewords text — as one step Undo puts back. */
+	change(annotation: CadAnnotation): Promise<void>;
+	/**
+	 * The drawn text the Select tool has picked, apart from the rig's selection: picking text
+	 * leaves the geometry under it alone, and picking an element puts the text down.
+	 */
+	selectedTextId: string | null;
+	selectText(id: string | null): void;
+	/** Where a text being dragged is drawn until the move is committed. */
+	textPreview: { id: string; points: [number, number][] } | null;
+	setTextPreview(preview: { id: string; points: [number, number][] } | null): void;
 	/** Why the show refused the last drawn item, until the operator dismisses it. */
 	error: string | null;
 	clearError(): void;
@@ -79,6 +90,11 @@ const NO_TOOLS: CadTools = {
 	annotations: [],
 	save: async () => undefined,
 	remove: async () => undefined,
+	change: async () => undefined,
+	selectedTextId: null,
+	selectText: () => undefined,
+	textPreview: null,
+	setTextPreview: () => undefined,
 	error: null,
 	clearError: () => undefined,
 	placed: null,
@@ -108,6 +124,8 @@ export function CadToolProvider({
 	const [placed, setPlaced] = useState<CadPlaced | null>(null);
 	const [tool, setTool] = useState<CadDrawTool>("select");
 	const [annotations, setAnnotations] = useState<CadAnnotation[]>([]);
+	const [selectedTextId, selectText] = useState<string | null>(null);
+	const [textPreview, setTextPreview] = useState<CadTools["textPreview"]>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [placing, setPlacing] = useState<CadPlacing | null>(null);
 
@@ -168,8 +186,17 @@ export function CadToolProvider({
 			save: (annotation) =>
 				annotationSession.save(annotation).then(() => undefined, report),
 			remove: (id) => annotationSession.remove(id).then(() => undefined, report),
+			change: (annotation) =>
+				annotationSession.change(annotation).then(() => undefined, report),
+			// Text that is no longer drawn cannot stay picked.
+			selectedTextId: annotations.some((each) => each.id === selectedTextId)
+				? selectedTextId
+				: null,
+			selectText,
+			textPreview,
+			setTextPreview,
 		};
-	}, [onAdd, tool, annotations, error, placed, placing]);
+	}, [onAdd, tool, annotations, error, placed, placing, selectedTextId, textPreview]);
 
 	return <CadToolContext.Provider value={value}>{children}</CadToolContext.Provider>;
 }

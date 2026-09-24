@@ -78,6 +78,8 @@ export interface CadFrame {
 	annotations?: readonly CadAnnotation[];
 	/** Where a move or a measurement has snapped onto a fit, marked over everything. */
 	snapMarkers?: readonly PlanPoint[];
+	/** Where the gizmo of picked text stands, when text rather than the rig is picked. */
+	textGizmo?: PlanPoint | null;
 	/** The sides a snapped move has lined up, drawn as lines in the snap colour. */
 	snapGuides?: readonly SnapGuide[];
 }
@@ -383,11 +385,16 @@ function paintGizmo(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement
 					: [0, 0],
 			)
 		: null;
-	if (!gizmo) return;
+	// Picked text has a gizmo on its anchor: arrows and a square, with no rotate arc.
+	const textGizmo =
+		!gizmo && frame.editEnabled && frame.textGizmo
+			? { origin: frame.textGizmo, length: 48 / camera.zoom, square: 7 / camera.zoom }
+			: null;
+	if (!gizmo && !textGizmo) return;
 	const axes = viewAxes(view, rotationQuarterTurns);
 	const horizontal = axisColor(axes.horizontal.axis);
 	const vertical = axisColor(axes.vertical.axis);
-	const { origin, length, square } = gizmo;
+	const { origin, length, square } = (gizmo ?? textGizmo) as NonNullable<typeof gizmo>;
 	const handle: LineColor = [0.75, 0.8, 0.84];
 	const width = 2 * painter.pixel;
 	const corners: PlanPoint[] = [
@@ -402,14 +409,8 @@ function paintGizmo(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement
 	drawGizmoArrow(painter, origin, [origin[0] + length, origin[1]], horizontal, square, width);
 	drawGizmoArrow(painter, origin, [origin[0], origin[1] + length], vertical, square, width);
 	// The rotate handle: a quarter arc between the arrows, turning about the axis the view looks
-	// along, with a head at each end to say it turns both ways.
-	const arc = rotateArc(origin, length);
-	arc.slice(1).forEach((point, index) => painter.stroke(arc[index], point, ROTATE_HANDLE, width));
-	for (const [end, before] of [
-		[arc[arc.length - 1], arc[arc.length - 2]],
-		[arc[0], arc[1]],
-	] as const)
-		drawGizmoArrow(painter, before, end, ROTATE_HANDLE, square * 0.8, width);
+	// along, with a head at each end to say it turns both ways. Text does not turn.
+	if (gizmo) paintRotateHandle(painter, origin, length, square, width);
 	if (guide === "horizontal")
 		dottedGuide(painter.line, origin, true, horizontal, camera, canvas);
 	if (guide === "vertical")
@@ -698,6 +699,22 @@ function axisColor(axis: WorldAxis): LineColor {
 /** A wide shaft from `origin` to the base of a filled head whose tip is `end`. */
 /** The rotate handle's amber, apart from the axis colours of the arrows either side of it. */
 const ROTATE_HANDLE: LineColor = [0.96, 0.72, 0.2];
+
+function paintRotateHandle(
+	painter: Painter,
+	origin: PlanPoint,
+	length: number,
+	square: number,
+	width: number,
+) {
+	const arc = rotateArc(origin, length);
+	arc.slice(1).forEach((point, index) => painter.stroke(arc[index], point, ROTATE_HANDLE, width));
+	for (const [end, before] of [
+		[arc[arc.length - 1], arc[arc.length - 2]],
+		[arc[0], arc[1]],
+	] as const)
+		drawGizmoArrow(painter, before, end, ROTATE_HANDLE, square * 0.8, width);
+}
 
 function drawGizmoArrow(
 	painter: Painter,

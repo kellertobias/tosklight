@@ -141,6 +141,17 @@ choices existed open unchanged.
 3. Option-drag an empty part of the plan and confirm the view pans. Duplicate from the right-click
    menu and confirm ⌘Z takes that copy away too.
 
+## Picking and moving placed text
+
+1. Place text over a deck with **Place text**, then pick **Select** and click the words. Confirm the
+   text is outlined and Info shows **Text**, **Height** and **Position**, and that the deck is not
+   selected.
+2. Drag the words and confirm the text moves with the pointer; drag an arrow of its gizmo and
+   confirm it moves along that axis only. Type a new X in Info and confirm it moves there. Undo each
+   move and confirm it goes back; Redo and confirm it returns.
+3. Change the words in Info, save and reopen the show, and confirm the moved, reworded text is still
+   drawn where it was left. Repeat in a front view.
+
 ## Snapping Venue geometry by dragging
 
 With snapping on and no key held, drag each object by its move gizmo in the plan.

@@ -15,6 +15,7 @@ function setup({
 	rotationQuarterTurns = 0,
 	entities = [],
 	snapping = false,
+	selectedTextId = null,
 	placing = null,
 }: {
 	placing?: CadTools["placing"];
@@ -23,6 +24,7 @@ function setup({
 	rotationQuarterTurns?: number;
 	entities?: CadEntity[];
 	snapping?: boolean;
+	selectedTextId?: string | null;
 }) {
 	const tools: CadTools = {
 		onAdd: vi.fn(),
@@ -39,6 +41,11 @@ function setup({
 		startPlacing: vi.fn(),
 		stopPlacing: vi.fn(),
 		placeAt: vi.fn(),
+		change: vi.fn().mockResolvedValue(undefined),
+		selectedTextId: selectedTextId,
+		selectText: vi.fn(),
+		textPreview: null,
+		setTextPreview: vi.fn(),
 	};
 	const onSelection = vi.fn();
 	render(
@@ -379,5 +386,66 @@ describe("Add Several on a CAD viewport", () => {
 		expect(tools.stopPlacing).toHaveBeenCalledOnce();
 		fireEvent.click(screen.getByRole("button", { name: "Done" }));
 		expect(tools.stopPlacing).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("picking and moving placed text", () => {
+	// At plan (-3000, 0): screen (200, 400), its words reaching right and up from there.
+	const note: CadAnnotation = {
+		id: "note",
+		view: "top_down",
+		kind: "text",
+		points: [[-3000, 0]],
+		closed: false,
+		text: "Stage left",
+		textHeightMillimetres: 250,
+	};
+	// A lamp standing right under the words, which picking the text must leave alone.
+	const lamp = {
+		id: "lamp",
+		logicalFixtureId: "lamp",
+		name: "Lamp",
+		kind: "profile",
+		fixtureType: "moving_head_profile",
+		drawingId: "lamp",
+		layerId: "default",
+		selectable: true,
+		positionMillimetres: [-2800, 50, 0],
+		rotationDegrees: [0, 0, 0],
+		sizeMillimetres: [400, 400, 400],
+		outputDirection: [0, 1, 0],
+	} as unknown as CadEntity;
+
+	it("picks text alone and moves it by dragging, as one change", () => {
+		const { tools, drag, onSelection } = setup({ tool: "select", annotations: [note], entities: [lamp] });
+		drag([220, 395], [320, 395]);
+		expect(tools.selectText).toHaveBeenCalledWith("note");
+		// The rig's selection is cleared, never set to the lamp under the words.
+		expect(onSelection).toHaveBeenCalledWith({ type: "replace", ids: [] });
+		expect(onSelection).not.toHaveBeenCalledWith(expect.objectContaining({ ids: ["lamp"] }));
+		expect(tools.setTextPreview).toHaveBeenCalledWith({ id: "note", points: [[-2000, 0]] });
+		expect(tools.change).toHaveBeenCalledWith({ ...note, points: [[-2000, 0]] });
+	});
+
+	it("moves picked text along one axis from its gizmo's arrow", () => {
+		const { tools, drag } = setup({ tool: "select", annotations: [note], selectedTextId: "note" });
+		// The horizontal arrow runs right from the anchor; the drag's rise is ignored.
+		drag([230, 400], [330, 350]);
+		expect(tools.change).toHaveBeenCalledWith({ ...note, points: [[-2000, 0]] });
+	});
+
+	it("puts picked text down on a press elsewhere, and a click on it moves nothing", () => {
+		const { tools, click } = setup({ tool: "select", annotations: [note], selectedTextId: "note" });
+		click(700, 600);
+		expect(tools.selectText).toHaveBeenCalledWith(null);
+		click(220, 395);
+		expect(tools.change).not.toHaveBeenCalled();
+		expect(tools.setTextPreview).toHaveBeenLastCalledWith(null);
+	});
+
+	it("leaves text to the drawing tools while one is in hand", () => {
+		const { tools, click } = setup({ tool: "polyline", annotations: [note] });
+		click(220, 395);
+		expect(tools.selectText).not.toHaveBeenCalled();
 	});
 });

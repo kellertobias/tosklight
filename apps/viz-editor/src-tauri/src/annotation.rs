@@ -99,7 +99,7 @@ pub fn validate(annotation: &CadAnnotation) -> Answer<()> {
     }
 }
 
-fn store(session: &Session, annotation: &CadAnnotation) -> Answer<()> {
+pub(crate) fn store(session: &Session, annotation: &CadAnnotation) -> Answer<()> {
     let body = serde_json::to_value(annotation).map_err(|error| error.to_string())?;
     session.change(|document| {
         document
@@ -108,13 +108,13 @@ fn store(session: &Session, annotation: &CadAnnotation) -> Answer<()> {
     })
 }
 
-fn announce(app: &tauri::AppHandle, session: &Session) -> Answer<()> {
+pub(crate) fn announce(app: &tauri::AppHandle, session: &Session) -> Answer<()> {
     let annotations = read_annotations(session)?;
     app.emit(ANNOTATION_DELTA_EVENT, annotations)
         .map_err(|error| error.to_string())
 }
 
-fn read_annotations(session: &Session) -> Answer<Vec<CadAnnotation>> {
+pub(crate) fn read_annotations(session: &Session) -> Answer<Vec<CadAnnotation>> {
     session.with(|document| {
         let stored = document.objects(KIND).map_err(|error| error.to_string())?;
         Ok(stored

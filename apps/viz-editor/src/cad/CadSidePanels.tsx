@@ -13,6 +13,7 @@ import {
 } from "@tosklight/ui";
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { CadElementsPanel, type ElementsRequests, type ElementsTab, elementsAddItems } from "./CadElementsPanel";
+import { CadTextInfo } from "./CadTextInfo";
 import { duplicateSelection } from "./cadDuplicate";
 import { CadObjectMenu, type CadObjectMenuRequest } from "./CadObjectMenu";
 import {
@@ -401,6 +402,11 @@ function InfoSection({
 	);
 }
 
+/** The text the Select tool has picked, which has Info of its own while no element is selected. */
+function pickedTextOf(tools: CadTools) {
+	return tools.annotations.find((each) => each.id === tools.selectedTextId && each.kind === "text");
+}
+
 export function CadSidePanels({
 	panel,
 	scene,
@@ -478,7 +484,8 @@ export function CadSidePanels({
 			/>
 		</>
 	);
-	if (!panel && selectionCount === 0) return overlays;
+	const pickedText = selectionCount === 0 ? pickedTextOf(tools) : undefined;
+	if (!panel && selectionCount === 0 && !pickedText) return overlays;
 	const deleteButton = (
 		<DeleteSelectionButton count={elements.length} onPress={() => deletion.request()} />
 	);
@@ -544,6 +551,7 @@ export function CadSidePanels({
 					onError={onError}
 				/>
 			) : null}
+			{pickedText ? <CadTextInfo annotation={pickedText} /> : null}
 			{overlays}
 		</aside>
 	);

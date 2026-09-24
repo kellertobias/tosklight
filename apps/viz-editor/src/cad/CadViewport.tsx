@@ -36,6 +36,7 @@ import type {
 import type { CadUnderlay } from "./underlays";
 import { useCadDrawingTool } from "./useCadDrawingTool";
 import { useCadPlacementTool } from "./useCadPlacementTool";
+import { useTextDrag } from "./cadTextDrag";
 import { groupSelectedIds } from "./venueGroups";
 import {
 	type CadViewportContext,
@@ -212,10 +213,22 @@ function useViewportGestures(context: CadViewportContext) {
 		entities,
 		snapping,
 	});
+	const text = useTextDrag({
+		canvas,
+		view,
+		rotationQuarterTurns,
+		camera,
+		enabled: context.editEnabled,
+		onSelection: context.onSelection,
+	});
+	const { textPreview } = tools;
 	const annotations = useMemo(() => {
-		const onView = annotationsForView(tools.annotations, view);
+		// Text being dragged is drawn where the drag has it until the move is written.
+		const onView = annotationsForView(tools.annotations, view).map((each) =>
+			textPreview?.id === each.id ? { ...each, points: textPreview.points } : each,
+		);
 		return drawing.draft ? [...onView, drawing.draft] : onView;
-	}, [tools.annotations, view, drawing.draft]);
+	}, [tools.annotations, view, drawing.draft, textPreview]);
 	const interaction = useCadViewportInteraction(context);
 	const placement = useCadPlacementTool({
 		canvas,
@@ -237,16 +250,17 @@ function useViewportGestures(context: CadViewportContext) {
 		onPointerDown: (event: React.PointerEvent<HTMLCanvasElement>) =>
 			placement.pointerDown(event) ||
 			drawing.pointerDown(event) ||
+			text.pointerDown(event) ||
 			interaction.pointerDown(event),
 		onPointerMove: (event: React.PointerEvent<HTMLCanvasElement>) =>
 			// A pointer move is not urgent to React and would render after the next frame;
 			// rendering it inside the event puts the pan or drag on screen in that frame.
 			flushSync(() => {
 				drawing.pointerMove(event);
-				interaction.pointerMove(event);
+				if (!text.pointerMove(event)) interaction.pointerMove(event);
 			}),
 		onPointerUp: (event: React.PointerEvent<HTMLCanvasElement>) => {
-			if (!drawing.pointerUp(event)) void interaction.pointerUp(event);
+			if (!drawing.pointerUp(event) && !text.pointerUp(event)) void interaction.pointerUp(event);
 		},
 		onPointerCancel: interaction.cancel,
 		onDoubleClick: drawing.doubleClick,
@@ -254,7 +268,7 @@ function useViewportGestures(context: CadViewportContext) {
 		onContextMenu: (event: React.MouseEvent<HTMLCanvasElement>) =>
 			drawing.active ? drawing.contextMenu(event) : interaction.contextMenu(event),
 	};
-	return { drawing, annotations, interaction, placement, snapMarkers, canvasHandlers };
+	return { drawing, annotations, interaction, placement, snapMarkers, canvasHandlers, text };
 }
 
 export function CadViewport({
@@ -297,7 +311,7 @@ export function CadViewport({
 		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),
 		[drawings],
 	);
-	const { drawing, annotations, interaction, placement, snapMarkers, canvasHandlers } =
+	const { drawing, annotations, interaction, placement, snapMarkers, canvasHandlers, text } =
 		useViewportGestures({
 		canvas,
 		entities,
@@ -333,6 +347,7 @@ export function CadViewport({
 		annotations,
 		snapMarkers,
 		snapGuides: interaction.snapGuides,
+		textGizmo: text.gizmo,
 	});
 
 	const scale = cadScaleForZoom(camera.zoom);
@@ -376,6 +391,7 @@ export function CadViewport({
 				rotationQuarterTurns={rotationQuarterTurns}
 				camera={camera}
 				pendingText={drawing.pendingText}
+				selectedId={text.selectedId}
 				onCommitText={drawing.commitText}
 				onCancelText={drawing.cancelText}
 			/>

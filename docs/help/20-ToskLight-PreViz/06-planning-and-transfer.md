@@ -821,6 +821,13 @@ view's plan pages:
   lands on whole 10 cm. Hold Shift to draw exactly where the pointer is.
 * **Place text**: click where the text starts, type, and press Enter. Text is sized for the zoom it
   was placed at and grows and shrinks with the plan.
+  With **Select** in hand, click placed text to pick it: it is outlined in cyan and picked on its
+  own, so the element drawn under the words stays unselected. Drag the words to move them, or use
+  the gizmo that stands on the text's start — the square moves it freely, an arrow along one axis.
+  While text is picked, **Info** shows its **Text**, its **Height** and its **Position** — X and Y on
+  a plan, **Across** and **Height** on an elevation — and typing a value there moves or rewords it.
+  Every move or change is one step **Undo** puts back, and it is kept with the show. Click anywhere
+  else to put the text down.
 * **Measure**: drag from one point to another. The measurement is drawn in amber with a tick at
   each end and its distance — in millimetres below a metre, in metres above. With snapping on, each
   end snaps onto the nearest connector, stage corner, curtain end or object centre; hold Shift to

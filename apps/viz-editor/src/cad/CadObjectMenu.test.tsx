@@ -48,6 +48,11 @@ function setup({
 		startPlacing: vi.fn(),
 		stopPlacing: vi.fn(),
 		placeAt: vi.fn(),
+		change: vi.fn().mockResolvedValue(undefined),
+		selectedTextId: null,
+		selectText: vi.fn(),
+		textPreview: null,
+		setTextPreview: vi.fn(),
 	};
 	const onSelection = vi.fn();
 	const onObjectMenu = vi.fn();

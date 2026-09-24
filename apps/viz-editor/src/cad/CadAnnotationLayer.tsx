@@ -23,6 +23,7 @@ export function CadAnnotationLayer({
 	rotationQuarterTurns,
 	camera,
 	pendingText,
+	selectedId = null,
 	onCommitText,
 	onCancelText,
 }: {
@@ -30,6 +31,8 @@ export function CadAnnotationLayer({
 	rotationQuarterTurns: number;
 	camera: TileCamera;
 	pendingText: PlanPoint | null;
+	/** The text the Select tool has picked, outlined as the rig's selection is. */
+	selectedId?: string | null;
 	onCommitText(text: string): void;
 	onCancelText(): void;
 }) {
@@ -41,6 +44,7 @@ export function CadAnnotationLayer({
 				<span
 					key={`${label.kind}:${label.id}`}
 					className={`cad-annotation-label is-${label.kind}`}
+					data-selected={label.id === selectedId && label.kind === "text" ? "true" : undefined}
 					style={{
 						...at(label.point, camera),
 						...(label.heightMillimetres

@@ -2000,6 +2000,12 @@ body {
 	transform: translateY(-100%);
 }
 
+/* Picked text is outlined in the selection's cyan, so it reads as picked apart from the rig. */
+.cad-annotation-label[data-selected="true"] {
+	outline: 1px solid rgb(5 209 250);
+	outline-offset: 2px;
+}
+
 .cad-annotation-label.is-measure,
 .cad-annotation-label.is-length {
 	padding: 1px 4px;

@@ -26,6 +26,9 @@ export const annotationSession = {
 	save: (annotation: CadAnnotation) =>
 		invoke<CadAnnotation>("save_cad_annotation", { annotation }),
 	remove: (id: string) => invoke<void>("delete_cad_annotation", { id }),
+	/** Changes an item already drawn — moves or rewords text — as one step Undo puts back. */
+	change: (annotation: CadAnnotation) =>
+		invoke<CadAnnotation>("cad_change_annotation", { annotation }),
 	/** Every window redraws when an item is drawn or erased anywhere. */
 	onDelta: (
 		handler: (annotations: CadAnnotation[]) => void,
