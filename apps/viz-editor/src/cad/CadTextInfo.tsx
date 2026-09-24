@@ -22,7 +22,9 @@ export function CadTextInfo({ annotation }: { annotation: CadAnnotation }) {
 				...annotation.points.slice(1),
 			],
 		});
+	// Held in from the sidebar's edges exactly as an element's Info is, under the same title row.
 	return (
+		<div className="cad-sidebar-info">
 		<section className="cad-info" aria-label="Info">
 			<header className="cad-info-header">
 				<h3>Text</h3>
@@ -58,5 +60,6 @@ export function CadTextInfo({ annotation }: { annotation: CadAnnotation }) {
 				/>
 			</div>
 		</section>
+		</div>
 	);
 }

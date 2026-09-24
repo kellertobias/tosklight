@@ -75,6 +75,8 @@ describe("Info's title for picked text", () => {
 			</CadToolContext.Provider>,
 		);
 		expect(screen.getByLabelText("Text")).toHaveValue("Stage left");
+		// Held in from the sidebar's edges by the same Info container an element's fields sit in.
+		expect(screen.getByLabelText("Text").closest(".cad-sidebar-info")).not.toBeNull();
 		expect(screen.queryByRole("tab", { name: "Generic" })).toBeNull();
 		expect(screen.queryByRole("tab", { name: "Placement" })).toBeNull();
 	});
