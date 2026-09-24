@@ -601,10 +601,11 @@ the key that picks it, such as **Draw line · L**. From left to right:
   * **Add scenery** (a drape on its rail) keeps the scenic elements together: the **Curtain** —
     one, generated at any width and drop you set in **Info**, so a 3 m drape is this curtain at 3 m —
     the **Chain**, the **Disco ball** — any diameter from 0.2 to 1.5 m on up to 3 m of chain, both
-    set in **Info** as **Diameter** and **Chain** — the **Stage railing** and the **Flight rack**, chosen by the
-    rack units it holds: 2U, 4U, 6U, 8U, 12U or 16U. A rack is 0.6 m deep until you set another
-    depth in **Info**, where **Units** (1 to 24) and **Depth** (0.4 to 1 m) change it at any time. It
-    places the curtain until you choose another.
+    set in **Info** as **Diameter** and **Chain** — the **Stage railing** and the **Flight rack**. The
+    rack is one entry: it is placed at 8U and 0.6 m deep and selected, so **Info** shows its **Units**
+    (1 to 24) and **Depth** (0.4 to 1 m) straight away to set the size it should be; both change at
+    any time. A rack size chosen from the older list of 2U to 16U racks places this one rack. The
+    button places the curtain until you choose another.
   * **Add primitive** (a box, a ball and a cylinder) lists **Box**, **Cylinder** and **Ball**. Each
     fills the width, height and depth set in **Info** — a cylinder stands upright, so its height is its
     length — and takes the **Colour** set for it, neutral grey until you choose one. **Load model…**

@@ -137,9 +137,10 @@ describe("the CAD part buttons' catalogue", () => {
 		// One curtain: a fixed width is the parametric curtain at that width.
 		expect(SCENIC_TYPES[0].parts.map((part) => part.profileId)).toEqual([PARAMETRIC_CURTAIN_PROFILE_ID]);
 		const racks = SCENIC_TYPES[4].parts;
-		expect(racks.map((part) => part.label)).toEqual(["2U", "4U", "6U", "8U", "12U", "16U"]);
-		expect(new Set(racks.map((part) => part.profileId))).toEqual(new Set([FLIGHT_RACK_PROFILE_ID]));
-		expect(racks[2].sizeMetres).toEqual({ x: 0.6, y: rackHeightMetres(6), z: 0.6 });
+		// One flight rack: its rack units and depth are set in Info, not chosen from a list of sizes.
+		expect(racks.map((part) => [part.label, part.profileId])).toEqual([["flight rack", FLIGHT_RACK_PROFILE_ID]]);
+		expect(racks[0].sizeMetres).toEqual({ x: 0.6, y: rackHeightMetres(8), z: 0.6 });
+		expect(findPart("curtain", `${FLIGHT_RACK_PROFILE_ID}:units-12`)?.part).toBe(racks[0]);
 		// Neither the fixed widths nor the racks, PA and line array modelled at one size are offered
 		// anywhere now; the generated PA Speaker and Line Array are, from the venue element dialog.
 		// The disco ball is the generated one, any diameter; the 50 cm model is not offered.

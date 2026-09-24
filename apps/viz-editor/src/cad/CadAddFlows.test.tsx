@@ -34,7 +34,7 @@ const STRAIGHT = "562e7947-8284-5ec8-9750-3cd3fe6c1c6d";
 const CROWD = "a0e75c30-92e5-4c20-bcd1-9a51ddbc6257";
 const RAILING = "9fc82162-c31c-4a34-bb2c-01fcc2254e37";
 const DRUMS = "d2a9d52d-0000-4000-8000-000000000001";
-/** The generated flight rack, chosen by the rack units it holds. */
+/** The generated flight rack, one part whose rack units and depth are set in Info. */
 const RACK = "448af0db-7419-557e-a621-26eadcd05eed";
 const PAR = "par-profile";
 /** The one flight of stairs, placed with the handrails chosen for it. */
@@ -266,11 +266,11 @@ describe("Add Several beside every part in a button's menu", () => {
 			with: { sceneryOptions: undefined, scenerySizeMetres: undefined },
 		});
 		startPlacing.mockClear();
-		holdPart({ startPlacing } as unknown as CadTools, "curtain", `${RACK}:units-12`);
+		holdPart({ startPlacing } as unknown as CadTools, "curtain", RACK);
 		expect(startPlacing).toHaveBeenCalledWith(
 			expect.objectContaining({
 				profileId: RACK,
-				with: expect.objectContaining({ scenerySizeMetres: { x: 600, y: 653, z: 600 } }),
+				with: expect.objectContaining({ scenerySizeMetres: { x: 600, y: 476, z: 600 } }),
 			}),
 		);
 	});
@@ -322,15 +322,32 @@ describe("Load model from Add primitive", () => {
 });
 
 describe("the scenery button's flight rack", () => {
-	it("places the rack at the height the chosen rack units need", async () => {
+	it("is one Flight rack in the menu, placed at 8U, whatever rack size was remembered before", async () => {
+		const onChoose = vi.fn();
+		const menu = render(<CadPartMenu kind="curtain" onChoose={onChoose} />);
+		// One Flight rack entry, not a heading over rack-unit sizes.
+		expect(screen.queryByRole("group", { name: "Flight rack" })).toBeNull();
+		expect(screen.queryByRole("menuitemradio", { name: /^\d+U/u })).toBeNull();
+		const rack = screen.getByRole("menuitemradio", { name: /^Flight rack/u });
+		await waitFor(() => expect(rack).toBeEnabled());
+		expect(rack).toHaveTextContent("Units and depth are set in Info");
+		fireEvent.click(rack);
+		expect(onChoose).toHaveBeenCalledWith(RACK);
+		menu.unmount();
+
 		const { announcePlaced, press } = renderFlows();
-		press("curtain", `${RACK}:units-12`);
+		press("curtain", RACK);
 		await waitFor(() => expect(announcePlaced).toHaveBeenCalledTimes(1));
 		// 120 mm of case and 44.45 mm a unit, stored in whole millimetres, 600 mm across and deep.
 		expect(placedFixture(0)).toMatchObject({
 			profileId: RACK,
-			scenerySizeMetres: { x: 600, y: 653, z: 600 },
+			scenerySizeMetres: { x: 600, y: 476, z: 600 },
 		});
+		// A choice remembered as one of the old sizes places the same one rack.
+		localStore.set("tosklight:viz-editor:cad-add-part:curtain:v1", `${RACK}:units-12`);
+		press("curtain");
+		await waitFor(() => expect(announcePlaced).toHaveBeenCalledTimes(2));
+		expect(placedFixture(1)).toMatchObject({ profileId: RACK, scenerySizeMetres: { y: 476 } });
 	});
 });
 

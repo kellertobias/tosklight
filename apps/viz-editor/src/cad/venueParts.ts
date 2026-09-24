@@ -5,7 +5,7 @@
  * A truss is listed by its section and then the part — the straight run at any length, or one of the
  * corner pieces made for that section. A stage element is listed by what it stands on and then its
  * platform size, and is raised to the height it is placed at. The scenic elements — the parametric
- * curtain, chain, disco ball, stage railing and the flight rack by its units — share one button.
+ * curtain, chain, disco ball, stage railing and the flight rack — share one button.
  * Each add button places one of its parts at once, and its caret menu chooses which.
  *
  * Profiles are named by their fixed ids, so a renamed profile still lands in the right place. A part
@@ -209,8 +209,11 @@ export const STAGE_TYPES: readonly VenuePartGroup[] = [
 /** The parametric curtain: placed at any width, then sized in Info. */
 export const PARAMETRIC_CURTAIN_PROFILE_ID = "6f34b81e-3f71-5d35-b8fb-b4b0b7cce859";
 
-/** The generated flight rack, placed at the rack units chosen for it and sized further in Info. */
+/** The generated flight rack, placed at 8 U and 0.6 m deep and sized in Info. */
 export const FLIGHT_RACK_PROFILE_ID = "448af0db-7419-557e-a621-26eadcd05eed";
+
+/** The rack units a flight rack is placed with, before Info sets its own. */
+export const FLIGHT_RACK_DEFAULT_UNITS = 8;
 
 /** A rack case's height for the 19-inch units it holds, as `push_flight_rack` reads it back. */
 export function rackHeightMetres(units: number): number {
@@ -220,7 +223,7 @@ export function rackHeightMetres(units: number): number {
 /**
  * The scenic elements the stage is dressed with, together: the parametric curtain (a fixed-width
  * drape is just this at another width), the chain, the disco ball, the stage railing and the
- * generated flight rack, chosen by the rack units it holds.
+ * generated flight rack, whose rack units are set in Info.
  */
 export const SCENIC_TYPES: readonly VenuePartGroup[] = [
 	{
@@ -247,17 +250,19 @@ export const SCENIC_TYPES: readonly VenuePartGroup[] = [
 		parts: [{ id, label: label.toLowerCase(), detail, profileId }],
 	})),
 	{
+		// One flight rack: its rack units and depth are set in Info once it is placed, not chosen here.
 		id: "flight-rack",
 		label: "Flight rack",
-		partsLabel: "Rack units",
-		parts: [2, 4, 6, 8, 12, 16].map((units) => ({
-			id: `rack-${units}u`,
-			key: `${FLIGHT_RACK_PROFILE_ID}:units-${units}`,
-			label: `${units}U`,
-			detail: "0.6 m deep, sized in Info",
-			profileId: FLIGHT_RACK_PROFILE_ID,
-			sizeMetres: { x: 0.6, y: rackHeightMetres(units), z: 0.6 },
-		})),
+		partsLabel: "Part",
+		parts: [
+			{
+				id: "flight-rack",
+				label: "flight rack",
+				detail: "Units and depth are set in Info",
+				profileId: FLIGHT_RACK_PROFILE_ID,
+				sizeMetres: { x: 0.6, y: rackHeightMetres(FLIGHT_RACK_DEFAULT_UNITS), z: 0.6 },
+			},
+		],
 	},
 ];
 
@@ -312,6 +317,8 @@ export function findPart(kind: CadPartKind, key: string): FoundPart | undefined 
 	// A flight chosen with its handrails, remembered before the handrails moved to Info, is the one
 	// Stairs part now.
 	key = key.replace(/^(.*):handrails-(?:none|left|right|both)$/u, "$1");
+	// So is a flight rack remembered at one of the rack-unit sizes the menu used to list.
+	key = key.replace(/^(.*):units-\d+$/u, "$1");
 	const groups = CAD_PART_CATALOGUE[kind];
 	// A key names one part; a bare profile, as a choice remembered before keys existed, its first.
 	for (const matches of [(part: VenuePart) => partKey(part) === key, (part: VenuePart) => part.profileId === key])
