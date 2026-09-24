@@ -70,7 +70,7 @@ stores and fixtures that are currently unpatched. The first number counts the fi
 current effective values, after the Programmer and every Playback have been merged, match every
 value the Preset stores for them; a Preset that is only stored, or whose values another source
 has overridden, is not active. The count follows the live output state while the pane is open. A
-Preset that defines no fixtures shows `0 / 0`.
+Preset that defines no fixtures shows `0 / 0`. In a [Color Intent](05-color-intent.md) show, a Color preset that holds one shared colour is **universal**: it applies to every selected fixture and its tile reads **Universal** with the number of fixtures currently showing it.
 
 Use pane settings to choose the displayed family and whether tiles use type colors or individual colors. The desk defaults are pale orange-yellow for Groups, lime for Cuelists and Sequences, cyan for Dynamics, dark red for future Macros, and grey for every Preset family. Desktop settings can customize or reset each default. Selection, focus, Store/Record/Update, disabled, and empty states also use borders, outlines, markers, labels, or dashed geometry so color is never their only indication. Test Presets on representative fixture modes before building Cues from them.
 

@@ -4,7 +4,7 @@ The Programmer is the operator's temporary working area. Selection, values, Pres
 
 ![Fixture Sheet, Programmer source cells, and attribute controls](../../assets/screenshots/fixture-sheet-programmer.png)
 
-Start with [Selecting and Setting Values](02-selecting-and-setting-values.md), then build reusable [Groups and Presets](03-groups-and-presets.md) and [Program Cues](04-programming-cues.md). The [Command Line Reference](01-command-line.md) is the precise keypad, button-layer, addressing, and command contract.
+Start with [Selecting and Setting Values](02-selecting-and-setting-values.md), then build reusable [Groups and Presets](03-groups-and-presets.md) and [Program Cues](04-programming-cues.md). A show can program colour as one fixture-independent colour instead of fixture channels: see [Color Intent](05-color-intent.md). The [Command Line Reference](01-command-line.md) is the precise keypad, button-layer, addressing, and command contract.
 
 Running-show behavior continues with [Cues and Playbacks](10-cues-and-playbacks.md), [HTP, LTP, and Ownership](11-htp-ltp-and-ownership.md), [Preload and Preload GO](12-preload.md), [Triggers, Chasers, and Speed Groups](13-triggers-chasers-and-speed.md), [Virtual Playbacks](14-virtual-playbacks.md), and [Schedules](15-schedules.md).
 
