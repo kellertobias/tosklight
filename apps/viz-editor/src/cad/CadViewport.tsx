@@ -7,7 +7,7 @@ import type { CadObjectMenuRequest } from "./CadObjectMenu";
 import { clampZoom } from "./cadShortcuts";
 import { useCadTools } from "./cadTools";
 import { PrintFrame } from "./CadPrintFrame";
-import { CadEntityLabels, CadScaleBar } from "./CadViewportOverlays";
+import { CadEntityLabels, CadMoveReadout, CadScaleBar } from "./CadViewportOverlays";
 import {
 	type CadFrame,
 	LineRenderer,
@@ -344,6 +344,7 @@ export function CadViewport({
 					showDmxAddresses,
 				}}
 			/>
+			<CadMoveReadout readout={interaction.readout} camera={camera} />
 			<CadAnnotationLayer
 				annotations={annotations}
 				rotationQuarterTurns={rotationQuarterTurns}

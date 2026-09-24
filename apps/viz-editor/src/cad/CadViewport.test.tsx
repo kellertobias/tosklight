@@ -12,7 +12,7 @@ import {
 	renderDepthMaskedLinework,
 } from "./lineRenderer";
 import { fitCadOverview, viewportGuideRange } from "./planGeometry";
-import type { CadEntity } from "./types";
+import type { CadEntity, CadViewDirection } from "./types";
 
 const fixture: CadEntity = {
 	id: "11111111-1111-4111-8111-111111111111",
@@ -117,6 +117,7 @@ function setup(
 	options: {
 		snapping?: boolean;
 		expandSelection?: (ids: readonly string[]) => string[];
+		view?: CadViewDirection;
 	} = {},
 ) {
 	const onSelection = vi.fn();
@@ -142,7 +143,7 @@ function setup(
 		/>,
 	);
 	const canvas = screen.getByLabelText(
-		"CAD top down viewport",
+		`CAD ${(options.view ?? "top_down").replaceAll("_", " ")} viewport`,
 	) as HTMLCanvasElement;
 	Object.defineProperty(canvas, "getBoundingClientRect", {
 		value: () => ({
@@ -562,6 +563,87 @@ describe("CAD fixture interaction", () => {
 		});
 		await waitFor(() =>
 			expect(onMove).toHaveBeenCalledWith([400, 0, 0], [fixture.id], false, true),
+		);
+	});
+
+	it("shows the live position beside the gizmo while a move is in flight", () => {
+		const { canvas } = setup([fixture.id]);
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 537, clientY: 400 });
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 577, clientY: 426 });
+		const readout = screen.getByRole("status", { name: "Move position" });
+		expect(readout).toHaveTextContent("X 0.400 m");
+		expect(readout).toHaveTextContent("Y 0.000 m");
+		expect(readout.style.left).toBe("calc(50% + 40px)");
+		fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 577, clientY: 426 });
+		expect(screen.queryByRole("status", { name: "Move position" })).toBeNull();
+	});
+
+	it("sets a typed coordinate on the dragged axis and moves by a signed one", async () => {
+		const { canvas, onMove } = setup([fixture.id]);
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 537, clientY: 400 });
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 577, clientY: 400 });
+		for (const key of ["2", ",", "5"]) fireEvent.keyDown(window, { key });
+		expect(screen.getByRole("status", { name: "Move position" })).toHaveTextContent(
+			"X 2.500 m",
+		);
+		fireEvent.keyDown(window, { key: "Enter" });
+		await waitFor(() =>
+			expect(onMove).toHaveBeenCalledWith([2500, 0, 0], [fixture.id], false, false),
+		);
+		// The release that follows commits nothing more.
+		fireEvent.pointerUp(canvas, { pointerId: 1, button: 0, clientX: 577, clientY: 400 });
+		expect(onMove).toHaveBeenCalledOnce();
+
+		fireEvent.pointerDown(canvas, { pointerId: 2, button: 0, clientX: 537, clientY: 400 });
+		for (const key of ["-", "1", ".", "5", "Enter"]) fireEvent.keyDown(window, { key });
+		await waitFor(() =>
+			expect(onMove).toHaveBeenLastCalledWith([-1500, 0, 0], [fixture.id], false, false),
+		);
+	});
+
+	it("moves nothing on half-typed input and lets Escape clear it, then abandon the move", async () => {
+		const { canvas, onMove, onPreview } = setup([fixture.id]);
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 537, clientY: 400 });
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 577, clientY: 400 });
+		for (const key of ["+", "Enter"]) fireEvent.keyDown(window, { key });
+		const readout = screen.getByRole("status", { name: "Move position" });
+		expect(readout).toHaveTextContent("not a number yet");
+		expect(onMove).not.toHaveBeenCalled();
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(readout).not.toHaveTextContent("not a number yet");
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(screen.queryByRole("status", { name: "Move position" })).toBeNull();
+		expect(onPreview).toHaveBeenLastCalledWith(null);
+
+		// Letting go mid-entry never commits the half-typed value.
+		fireEvent.pointerDown(canvas, { pointerId: 2, button: 0, clientX: 537, clientY: 400 });
+		fireEvent.pointerMove(canvas, { pointerId: 2, clientX: 577, clientY: 400 });
+		for (const key of ["1", ".", "."]) fireEvent.keyDown(window, { key });
+		fireEvent.pointerUp(canvas, { pointerId: 2, button: 0, clientX: 577, clientY: 400 });
+		await Promise.resolve();
+		expect(onMove).not.toHaveBeenCalled();
+	});
+
+	it("types onto the world axis an elevation view shows upward, and Tab picks the axis of a free drag", async () => {
+		const { canvas, onMove } = setup([fixture.id], fixture, undefined, {
+			view: "front_to_back",
+		});
+		// The fixture hangs at 4 m, the top edge of this tile; its upward arrow is above it.
+		fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 500, clientY: -37 });
+		fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 500, clientY: -47 });
+		expect(screen.getByRole("status", { name: "Move position" })).toHaveTextContent(
+			"Z 4.100 m",
+		);
+		for (const key of ["6", "Enter"]) fireEvent.keyDown(window, { key });
+		await waitFor(() =>
+			expect(onMove).toHaveBeenCalledWith([0, 0, 2000], [fixture.id], false, false),
+		);
+
+		fireEvent.pointerDown(canvas, { pointerId: 2, button: 0, clientX: 500, clientY: 0 });
+		fireEvent.pointerMove(canvas, { pointerId: 2, clientX: 520, clientY: 0 });
+		for (const key of ["Tab", "3", "Enter"]) fireEvent.keyDown(window, { key });
+		await waitFor(() =>
+			expect(onMove).toHaveBeenLastCalledWith([200, 0, -1000], [fixture.id], false, false),
 		);
 	});
 

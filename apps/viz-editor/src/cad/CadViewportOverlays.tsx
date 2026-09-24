@@ -6,6 +6,7 @@
  * crisp at any zoom and is selectable by a screen reader rather than baked into pixels.
  */
 import type { CadViewportScale } from "./CadViewport";
+import type { MoveReadout } from "./moveEntry";
 import type {
 	CadEntity,
 	CadTransformPreview,
@@ -88,6 +89,53 @@ export function CadEntityLabels({
 					</span>
 				);
 			})}
+		</div>
+	);
+}
+
+/**
+ * The live position beside the move gizmo while a move is in flight, and what the operator has
+ * typed: a number sets the active axis, +/- moves along it, Enter commits, Tab switches axis on a
+ * free drag, Escape clears the entry and then abandons the move.
+ */
+export function CadMoveReadout({
+	readout,
+	camera,
+}: {
+	readout: MoveReadout | null;
+	camera: TileCamera;
+}) {
+	if (!readout) return null;
+	const [x, y] = readout.anchor;
+	return (
+		<div
+			className="cad-move-readout"
+			role="status"
+			aria-label="Move position"
+			style={{
+				left: `calc(50% + ${(x + camera.pan[0]) * camera.zoom}px)`,
+				top: `calc(50% - ${(y + camera.pan[1]) * camera.zoom}px)`,
+			}}
+		>
+			{readout.coordinates.map((coordinate) => (
+				<span
+					key={coordinate.axis}
+					className="cad-move-readout-axis"
+					data-active={coordinate.active ? "true" : undefined}
+				>
+					{coordinate.label} {coordinate.value}
+				</span>
+			))}
+			{readout.entry ? (
+				<span
+					className="cad-move-readout-entry"
+					data-invalid={readout.invalid ? "true" : undefined}
+				>
+					{readout.coordinates.find((coordinate) => coordinate.active)?.label}{" "}
+					{readout.entry}
+					{readout.invalid ? " — not a number yet" : " — Enter to move"}
+				</span>
+			) : null}
 		</div>
 	);
 }

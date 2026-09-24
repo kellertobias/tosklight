@@ -682,6 +682,16 @@ The move gizmo stands on the selected element's own origin, or on the centre of 
 Drag an arrow to move along that axis, or the square to move freely. Holding Shift while dragging an
 arrow spreads the selection along it, from the first selected element to the last.
 
+While you drag, the gizmo shows where its origin is on the two axes the view shows — X and Y in a
+plan, the horizontal axis and Z in an elevation — in metres, the same figures as the Info panel's
+position. Type a number while still dragging to place the origin there on the axis you are moving
+along, or start it with + or − to move it by that distance along the axis's positive or negative
+direction; the preview follows what you type, and Enter (or letting go) commits it. On a free drag
+with the square, the underlined axis is the one you type into; Tab switches to the other. A comma
+works as the decimal point. Text that is not yet a number, such as a lone sign, is marked and moves
+nothing: Enter does nothing and letting go abandons the move. Escape clears what you typed, and a
+second Escape abandons the move. A typed move neither snaps nor spreads.
+
 ### Snapping
 
 With **Settings (⚙) → Enable snapping** on, a moved object that comes within about 12 pixels of a fit

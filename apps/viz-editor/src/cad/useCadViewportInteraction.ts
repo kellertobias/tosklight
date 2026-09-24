@@ -15,6 +15,8 @@ import {
 	marqueeCatches,
 	marqueeMode,
 } from "./marqueeSelection";
+import { type EntryAxis, type MoveReadout, moveOrigin } from "./moveEntry";
+import { typedDelta, useCadMoveEntry } from "./useCadMoveEntry";
 import { type MoveAxis, pickEntity, pickGizmo } from "./planGeometry";
 import type { PlanPoint } from "./projection";
 import { type FreeAxes, snapMove, snapThreshold } from "./snapping";
@@ -28,7 +30,7 @@ import type {
 } from "./types";
 import { planeDelta, projectPoint } from "./types";
 
-interface Drag {
+export interface Drag {
 	type: "pan" | "move" | "box";
 	start: [number, number];
 	last: [number, number];
@@ -44,6 +46,12 @@ interface Drag {
 	/** The placement under the pointer: the fixture itself, or one of its multi-patch copies. */
 	hitEntityId?: string;
 	marquee?: boolean;
+	/** The world point the gizmo stood on when the move began, in millimetres. */
+	origin?: [number, number, number];
+	/** A coordinate typed while dragging; empty until the operator types. */
+	entry?: string;
+	/** On a free drag, the screen axis a typed value applies to; Tab switches it. */
+	entryAxis?: EntryAxis;
 }
 
 export interface CadViewportInteraction {
@@ -51,6 +59,8 @@ export interface CadViewportInteraction {
 	selectionBox: SelectionBox | null;
 	/** Where the move in flight has snapped onto a fit, on this tile's plan. */
 	snapMarkers: readonly PlanPoint[];
+	/** The live coordinates and typed entry beside the gizmo while a move is in flight. */
+	readout: MoveReadout | null;
 	pointerDown(event: React.PointerEvent<HTMLCanvasElement>): void;
 	pointerMove(event: React.PointerEvent<HTMLCanvasElement>): void;
 	pointerUp(event: React.PointerEvent<HTMLCanvasElement>): Promise<void>;
@@ -211,12 +221,16 @@ function beginDrag(
 				.map((entity) => entity.logicalFixtureId),
 		);
 		setGuide(axis);
+		const entityIds = selectedIds.filter((id) => selectable.has(id));
 		return {
 			type: "move",
 			start,
 			last: start,
 			axis,
-			entityIds: selectedIds.filter((id) => selectable.has(id)),
+			entityIds,
+			origin: moveOrigin(entities, entityIds) ?? undefined,
+			entry: "",
+			entryAxis: "horizontal",
 			spread: axis !== "plane" && event.shiftKey,
 			// The gizmo stands on the selection's origin, so a press there that never moves is
 			// still a click on the element beneath it.
@@ -305,6 +319,44 @@ function openObjectMenu(context: CadViewportContext, event: React.MouseEvent<HTM
 	});
 }
 
+/** A plain pick takes whole groups; with Shift (`additive`) each element is taken alone. */
+function picked(
+	context: CadViewportContext,
+	ids: string[],
+	additive: boolean | undefined,
+): string[] {
+	return additive || !context.expandSelection ? ids : context.expandSelection(ids);
+}
+
+/** A released selection box: a marquee selects what it caught, a click what it hit. */
+function finishBox(
+	context: CadViewportContext,
+	active: Drag,
+	clientX: number,
+	clientY: number,
+) {
+	active.last = [clientX, clientY];
+	if (!active.marquee) context.onFocusEntity?.(active.hitEntityId ?? null);
+	context.onSelection({
+		type: active.marquee
+			? active.additive
+				? "add"
+				: "replace"
+			: active.additive
+				? "toggle"
+				: "replace",
+		ids: picked(
+			context,
+			active.marquee
+				? marqueeSelection(context, active, clientX)
+				: active.hitId
+					? [active.hitId]
+					: [],
+			active.additive,
+		),
+	});
+}
+
 export function useCadViewportInteraction(
 	context: CadViewportContext,
 ): CadViewportInteraction {
@@ -313,6 +365,15 @@ export function useCadViewportInteraction(
 	const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
 	const [snapMarkers, setSnapMarkers] = useState<readonly PlanPoint[]>([]);
 	const shownSnap = useRef<string>("[]");
+	const { readout, refresh, commitTyped, clearReadout } = useCadMoveEntry({
+		drag,
+		context,
+		cancel: () => cancel(),
+		endMove: () => {
+			setGuide(null);
+			showSnap([]);
+		},
+	});
 	// Set only when the markers change, so a drag that stays snapped does not re-render every move.
 	function showSnap(markers: PlanPoint[]) {
 		const key = JSON.stringify(markers);
@@ -326,6 +387,7 @@ export function useCadViewportInteraction(
 			const active = drag.current;
 			if (active?.type !== "move" || !active.rawDeltaMillimetres) return;
 			updateMovePreview(context, active, ...active.last, held, showSnap);
+			refresh(active);
 		};
 		const keyDown = shift(true);
 		const keyUp = shift(false);
@@ -369,11 +431,7 @@ export function useCadViewportInteraction(
 			return;
 		}
 		updateMovePreview(context, active, event.clientX, event.clientY, event.shiftKey, showSnap);
-	}
-
-	/** A plain pick takes whole groups; with Shift (`additive`) each element is taken alone. */
-	function picked(ids: string[], additive: boolean | undefined): string[] {
-		return additive || !context.expandSelection ? ids : context.expandSelection(ids);
+		refresh(active);
 	}
 
 	async function pointerUp(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -386,28 +444,17 @@ export function useCadViewportInteraction(
 		}
 		if (active?.type === "box") {
 			setSelectionBox(null);
-			active.last = [event.clientX, event.clientY];
-			if (!active.marquee) context.onFocusEntity?.(active.hitEntityId ?? null);
-			context.onSelection({
-				type: active.marquee
-					? active.additive
-						? "add"
-						: "replace"
-					: active.additive
-						? "toggle"
-						: "replace",
-				ids: picked(
-					active.marquee
-						? marqueeSelection(context, active, event.clientX)
-						: active.hitId
-							? [active.hitId]
-							: [],
-					active.additive,
-				),
-			});
+			finishBox(context, active, event.clientX, event.clientY);
 			return;
 		}
 		if (active?.type !== "move") return;
+		if (active.entry) {
+			// Letting go mid-entry keeps a valid typed coordinate; half-typed text moves nothing.
+			if (typedDelta(context, active)) await commitTyped(active);
+			else cancel();
+			return;
+		}
+		clearReadout();
 		// Shift may have been pressed or let go since the last move; the release decides.
 		if (active.rawDeltaMillimetres)
 			updateMovePreview(context, active, event.clientX, event.clientY, event.shiftKey, showSnap);
@@ -422,7 +469,7 @@ export function useCadViewportInteraction(
 				context.onFocusEntity?.(active.hitEntityId ?? null);
 				context.onSelection({
 					type: active.additive ? "toggle" : "replace",
-					ids: picked([active.hitId], active.additive),
+					ids: picked(context, [active.hitId], active.additive),
 				});
 			}
 			return;
@@ -440,9 +487,20 @@ export function useCadViewportInteraction(
 		context.onPreview(null);
 		setGuide(null);
 		setSelectionBox(null);
+		clearReadout();
 		showSnap([]);
 	}
 
 	const contextMenu = (event: React.MouseEvent<HTMLCanvasElement>) => openObjectMenu(context, event);
-	return { guide, selectionBox, snapMarkers, pointerDown, pointerMove, pointerUp, cancel, contextMenu };
+	return {
+		guide,
+		selectionBox,
+		snapMarkers,
+		readout,
+		pointerDown,
+		pointerMove,
+		pointerUp,
+		cancel,
+		contextMenu,
+	};
 }
