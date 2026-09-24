@@ -1,7 +1,13 @@
 import type { MediaPaneModel } from "../../../../light-desktop/src/windows/media/MediaPaneSurface";
-import { pointDisplay } from "../../../../light-desktop/src/windows/media/mediaPointTime";
+import {
+	type ClipLength,
+	clipLengthReadout,
+	pointDisplay,
+} from "../../../../light-desktop/src/windows/media/mediaPointTime";
+import { resolveAddress } from "../../entities/catalog";
 import type { api } from "../../shared/api/client";
 import type {
+	CatalogView,
 	ModelSlotView,
 	OutputView,
 	UpdateLayer,
@@ -147,12 +153,36 @@ export function blendSection(
  * shown and typed as `mm:ss.ff` at the server's point frame rate, exactly as the desk Media pane
  * shows them; the channel values stay frame counts.
  */
+/** What the catalog says about the length of the clip a layer shows. */
+export function clipLengthOf(
+	item: { kind: string; durationMillis?: number | null } | undefined,
+): ClipLength {
+	if (!item) return { kind: "none" };
+	if (item.kind !== "video") return { kind: "still" };
+	return item.durationMillis == null
+		? { kind: "unknown" }
+		: { kind: "known", seconds: item.durationMillis / 1_000 };
+}
+
+/** The playback range of the selected layer: its clip's own length, then its In and Out points. */
 export function playbackRangeControls(
-	layer: LayerState,
-	framesPerSecond: number,
+	{ layer, output }: { layer: LayerState; output: { frameRate: number } },
 	disabled: boolean,
+	catalog?: CatalogView,
 ): ControlSection["controls"] {
-	return (
+	const framesPerSecond = output.frameRate;
+	const clip = resolveAddress(catalog, layer.address.folder, layer.address.file);
+	const length = clipLengthReadout(clipLengthOf(clip.item), framesPerSecond);
+	return [
+		{
+			id: "clip-length",
+			label: "Clip length",
+			kind: "readout" as const,
+			value: length.value,
+			description: length.description,
+			group: "Playback range",
+		},
+		...(
 		[
 			["in-point", "In point", layer.inPoint, "start"],
 			["out-point", "Out point", layer.outPoint, "end"],
@@ -167,7 +197,8 @@ export function playbackRangeControls(
 		display: pointDisplay(reference, frames, framesPerSecond),
 		disabled,
 		group: "Playback range",
-	}));
+	})),
+	];
 }
 
 /**

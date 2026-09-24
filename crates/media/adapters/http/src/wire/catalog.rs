@@ -16,6 +16,10 @@ pub struct CatalogItemView {
     pub width: u32,
     pub height: u32,
     pub frames: Option<u32>,
+    /// How long the clip plays once through, from its own frame index; null for a still or an
+    /// item whose length has not been read.
+    #[ts(optional, type = "number | null")]
+    pub duration_millis: Option<u64>,
     pub intrinsic_bpm: Option<f64>,
     #[ts(optional)]
     pub note: Option<String>,
@@ -37,6 +41,7 @@ impl CatalogItemView {
             width: item.width,
             height: item.height,
             frames: item.frames,
+            duration_millis: item.duration_millis,
             intrinsic_bpm: item.intrinsic_bpm,
             note: item.note.clone(),
             enabled: Some(item.enabled),

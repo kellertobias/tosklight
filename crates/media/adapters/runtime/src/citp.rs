@@ -141,13 +141,17 @@ impl Library for PublishedLibrary {
                     found
                         .items
                         .iter()
-                        .map(|item| LibraryElement {
-                            number: item.file,
-                            name: item.name.clone(),
-                            width: item.width.min(u32::from(u16::MAX)) as u16,
-                            height: item.height.min(u32::from(u16::MAX)) as u16,
-                            length_frames: item.frames.unwrap_or(0),
-                            fps: 25,
+                        .map(|item| {
+                            // A clip whose length is not known reports none rather than a guess.
+                            let (length_frames, fps) = item.msex_length().unwrap_or((0, 25));
+                            LibraryElement {
+                                number: item.file,
+                                name: item.name.clone(),
+                                width: item.width.min(u32::from(u16::MAX)) as u16,
+                                height: item.height.min(u32::from(u16::MAX)) as u16,
+                                length_frames,
+                                fps,
+                            }
                         })
                         .collect()
                 });
@@ -474,23 +478,26 @@ impl Service {
             .layers
             .iter()
             .enumerate()
-            .map(|(index, layer)| media_citp::LayerStatus {
-                layer: index.min(255) as u8,
-                physical_output: 0,
-                folder: layer.address.folder,
-                file: layer.address.file,
-                name: catalog
+            .map(|(index, layer)| {
+                let (length_frames, fps) = catalog
                     .resolve(layer.address)
-                    .map(|item| item.name.clone())
-                    .unwrap_or_default(),
-                position_frames: 0,
-                length_frames: catalog
-                    .resolve(layer.address)
-                    .and_then(|item| item.frames)
-                    .unwrap_or(0),
-                fps: 25,
-                status: layer.source_status,
-                playing: layer.draws() && layer.source_status == SourceStatus::Ready,
+                    .and_then(|item| item.msex_length())
+                    .unwrap_or((0, 25));
+                media_citp::LayerStatus {
+                    layer: index.min(255) as u8,
+                    physical_output: 0,
+                    folder: layer.address.folder,
+                    file: layer.address.file,
+                    name: catalog
+                        .resolve(layer.address)
+                        .map(|item| item.name.clone())
+                        .unwrap_or_default(),
+                    position_frames: 0,
+                    length_frames,
+                    fps,
+                    status: layer.source_status,
+                    playing: layer.draws() && layer.source_status == SourceStatus::Ready,
+                }
             })
             .collect()
     }

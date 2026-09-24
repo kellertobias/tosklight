@@ -20,8 +20,15 @@ function wholeRate(framesPerSecond: number) {
 
 /** `mm:ss.ff` for a frame count at `framesPerSecond`. Minutes grow past 59 rather than wrap. */
 export function formatPointTime(frames: number, framesPerSecond: number) {
+	return formatFrames(
+		Math.min(MAXIMUM_POINT_FRAMES, Math.round(frames)),
+		framesPerSecond,
+	);
+}
+
+function formatFrames(frames: number, framesPerSecond: number) {
 	const fps = wholeRate(framesPerSecond);
-	const count = Math.max(0, Math.min(MAXIMUM_POINT_FRAMES, Math.round(frames)));
+	const count = Math.max(0, Math.round(frames));
 	const seconds = Math.floor(count / fps);
 	const frame = count % fps;
 	const minutes = Math.floor(seconds / 60);
@@ -94,4 +101,47 @@ export function pointDisplay(
 			: `${frames} frames before end`;
 	const time = formatPointTime(frames, framesPerSecond);
 	return reference === "start" ? time : `${time} before end`;
+}
+
+/**
+ * What is known about the selected clip's own length. It comes from the clip's metadata — the
+ * ToskLight Media Server's catalog, or a CITP server's element list — and is never worked out from
+ * the In and Out points.
+ */
+export type ClipLength =
+	| { kind: "none" }
+	| { kind: "still" }
+	| { kind: "unknown" }
+	| { kind: "known"; seconds: number };
+
+/**
+ * The selected clip's whole length beside the playback range: `mm:ss.ff` at the same rate as the
+ * points, so the two read alike, or seconds while that rate is unknown.
+ */
+export function clipLengthReadout(
+	length: ClipLength,
+	framesPerSecond: number | null,
+): { value: string; description: string } {
+	switch (length.kind) {
+		case "none":
+			return {
+				value: "No clip",
+				description: "The layer shows no clip, so there is no length.",
+			};
+		case "still":
+			return { value: "Still image", description: "A still image has no length." };
+		case "unknown":
+			return {
+				value: "Not reported",
+				description: "The Media Server does not report a length for this clip.",
+			};
+		case "known":
+			return {
+				value:
+					framesPerSecond == null
+						? `${length.seconds.toFixed(2)} s`
+						: formatFrames(length.seconds * framesPerSecond, framesPerSecond),
+				description: "The whole clip. In and Out trim playback within it.",
+			};
+	}
 }

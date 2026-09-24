@@ -863,6 +863,7 @@ mod tests {
                         width: size.width,
                         height: size.height,
                         frames: Some(2),
+                        duration_millis: None,
                         intrinsic_bpm: None,
                         note: None,
                         enabled: true,

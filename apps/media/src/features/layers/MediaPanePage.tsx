@@ -408,9 +408,9 @@ function MediaPanePageContent() {
 										"%",
 									),
 									...playbackRangeControls(
-										selected.layer,
-										selected.output.frameRate,
+										selected,
 										!takeover,
+										catalog.data,
 									),
 								],
 							},

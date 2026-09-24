@@ -87,6 +87,10 @@ pub struct CatalogItem {
     pub height: u32,
     /// Frames, for a video. Absent for a still.
     pub frames: Option<u32>,
+    /// How long a video plays once through, from its clip's own frame index. Absent for a still,
+    /// and for a catalog written before it was read.
+    #[serde(default)]
+    pub duration_millis: Option<u64>,
     /// The tempo the asset was authored at, if it has one. An operator may correct or clear it.
     pub intrinsic_bpm: Option<f64>,
     /// Operator-authored provenance or licence text. It follows the asset when it moves.
@@ -95,6 +99,18 @@ pub struct CatalogItem {
     /// Disabled media remains in the portable library but resolves as transparent playback.
     #[serde(default = "enabled_by_default")]
     pub enabled: bool,
+}
+
+impl CatalogItem {
+    /// The clip's length in frames and its whole frame rate, as CITP/MSEX reports a clip: only
+    /// when both its frame count and its playing time are known, so a desk never shows a length
+    /// the clip did not state.
+    pub fn msex_length(&self) -> Option<(u32, u8)> {
+        let frames = self.frames.filter(|frames| *frames > 0)?;
+        let millis = self.duration_millis.filter(|millis| *millis > 0)?;
+        let rate = (f64::from(frames) * 1_000.0 / millis as f64).round();
+        Some((frames, rate.clamp(1.0, f64::from(u8::MAX)) as u8))
+    }
 }
 
 const fn enabled_by_default() -> bool {
@@ -549,6 +565,25 @@ pub const fn validate_location(location: CatalogLocation) -> Result<(), CatalogE
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_clip_reports_its_length_only_when_it_stated_it() {
+        let mut clip = item(1, "Haze");
+        assert_eq!(clip.msex_length(), None, "no playing time read yet");
+        clip.duration_millis = Some(4_000);
+        assert_eq!(clip.msex_length(), Some((100, 25)));
+        clip.frames = Some(120);
+        clip.duration_millis = Some(4_004);
+        assert_eq!(clip.msex_length(), Some((120, 30)), "29.97 reads as 30");
+        clip.frames = None;
+        assert_eq!(clip.msex_length(), None, "a still has no length");
+        let old: CatalogItem = serde_json::from_value(serde_json::json!({
+            "id": AssetId::new(), "file": 2, "name": "Old", "kind": "video", "width": 1,
+            "height": 1, "frames": 10, "intrinsicBpm": null
+        }))
+        .expect("a catalog written before durations were read still loads");
+        assert_eq!(old.duration_millis, None);
+    }
+
     fn item(file: u8, name: &str) -> CatalogItem {
         CatalogItem {
             id: AssetId::new(),
@@ -558,6 +593,7 @@ mod tests {
             width: 1920,
             height: 1080,
             frames: Some(100),
+            duration_millis: None,
             intrinsic_bpm: None,
             note: None,
             enabled: true,

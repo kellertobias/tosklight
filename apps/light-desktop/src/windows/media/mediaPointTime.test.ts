@@ -1,10 +1,35 @@
 import { describe, expect, it } from "vitest";
 import {
+	clipLengthReadout,
 	formatPointTime,
 	parsePointFrames,
 	parsePointTime,
 	pointDisplay,
 } from "./mediaPointTime";
+
+describe("the selected clip's length", () => {
+	it("reads at the points' rate, past the point range, and never from the points", () => {
+		expect(clipLengthReadout({ kind: "known", seconds: 12.4 }, 25).value).toBe(
+			"00:12.10",
+		);
+		// Longer than a 16-bit point reaches: the length is not clamped.
+		expect(clipLengthReadout({ kind: "known", seconds: 3_600 }, 25).value).toBe(
+			"60:00.00",
+		);
+		expect(clipLengthReadout({ kind: "known", seconds: 12.4 }, null).value).toBe(
+			"12.40 s",
+		);
+	});
+
+	it("says plainly when there is no length to show", () => {
+		expect(clipLengthReadout({ kind: "unknown" }, 25)).toEqual({
+			value: "Not reported",
+			description: "The Media Server does not report a length for this clip.",
+		});
+		expect(clipLengthReadout({ kind: "still" }, 25).value).toBe("Still image");
+		expect(clipLengthReadout({ kind: "none" }, 25).value).toBe("No clip");
+	});
+});
 
 describe("Media In/Out point time", () => {
 	it("formats frame counts as mm:ss.ff at the server's rate", () => {

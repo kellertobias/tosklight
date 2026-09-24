@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KEYS } from "../../shared/api/queries";
 import { writeResource } from "../../shared/api/resource";
 import {
+	aCatalog,
 	anOutput,
 	anOutputConfiguration,
 	stubServer,
@@ -687,6 +688,51 @@ describe("the production Media pane", () => {
 		).toBe(false);
 		expect(server.writeBodies.at(-1)).toEqual(
 			expect.objectContaining({ maskFolder: 200, maskFile: 1 }),
+		);
+	});
+
+	it("shows the selected clip's own length beside its playback range", async () => {
+		const catalog = aCatalog();
+		catalog.folders[0].items[0].durationMillis = 24_000;
+		catalog.folders[0].items.push({
+			...catalog.folders[0].items[0],
+			id: "asset-c",
+			file: 3,
+			name: "Unmeasured",
+			durationMillis: null,
+		});
+		const server = stubServer({ catalog });
+		render(<MediaPanePage />);
+		await userEvent.click(
+			await screen.findByRole("switch", { name: "Take over playback" }),
+		);
+		await userEvent.click(screen.getByRole("tab", { name: "Playback" }));
+		const playback = screen.getByRole("tabpanel", {
+			name: "Playback controls",
+		});
+		const length = () =>
+			within(playback).getByText("Clip length").closest(".media-control-readout");
+		expect(length()).toHaveTextContent("00:24.00");
+
+		// Trimming the range leaves the clip's own length alone.
+		fireEvent.click(
+			within(playback).getByRole("button", { name: /^In point: 00:00.00/ }),
+		);
+		typeInModal("In point (mm:ss.ff)", "00:12.00", 8);
+		await waitFor(() => expect(server.outputs[0].layers[0].inPoint).toBe(300));
+		expect(length()).toHaveTextContent("00:24.00");
+
+		// Another clip on the layer: its own length, or none for a still.
+		server.outputs[0].layers[0].address.file = 2;
+		await waitFor(() => expect(length()).toHaveTextContent("Still image"), {
+			timeout: 3_000,
+		});
+		server.outputs[0].layers[0].address.file = 3;
+		await waitFor(() => expect(length()).toHaveTextContent("Not reported"), {
+			timeout: 3_000,
+		});
+		expect(length()).toHaveTextContent(
+			"The Media Server does not report a length for this clip.",
 		);
 	});
 

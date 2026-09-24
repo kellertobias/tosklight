@@ -137,6 +137,10 @@ Set the server's UTC offset. Create a text source of kind **Countdown to a time 
 
 Open **Library > Models**. Confirm the cards for Plane, Cube, Sphere, Cylinder, and Pyramid each show a picture of their own shape, turned so its depth shows, with an orange top-left quarter, not a plain blue block. Select a built-in slot and confirm its inspector shows the picture and **Clear slot** only: no name field, no model file, and no other preset buttons. Upload a `.glb` into an empty slot and confirm its card and inspector show its shape, and that **Name**, **Replace model**, and **Clear slot** are offered. Make its file unloadable, restart, and confirm its card reads **Cannot load** with the plain colour, and its inspector says there is no picture. Restart the server again and confirm the pictures and assignments are unchanged.
 
+## PIXEL-014 — the selected clip's length beside the playback range
+
+On Pixel's layer page, open **Playback**. For a layer showing a 24-second clip, confirm **Clip length** reads `00:24.00` under **Playback range**, read-only and apart from the In and Out fields. Type In and Out points and confirm the length does not change. Set the layer to another clip and confirm the length follows it. A still image reads **Still image**. Open the desk's Media pane for the same layer and confirm the same length above **In point**. Patch a third-party CITP server that sends no clip lengths and confirm **Not reported**, with no length guessed. Change the point frame rate in Pixel's Settings and confirm both places show the length at the new rate.
+
 ## RUNNING-001 — containment, deduplication, and identity
 
 Start one Cuelist through several assignments or control surfaces, with a Dynamic contained in it; start one independent Dynamic, Timecode, and Macro. Running shows exactly four rows. The Cuelist row uses the Cuelist's own number and name plus its current Cue, not an assignment number, and suppresses the contained Dynamic. The other rows use their own stable identities and show **Cue —**.

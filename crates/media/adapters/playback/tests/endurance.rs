@@ -49,6 +49,7 @@ impl Library {
                         width: 320,
                         height: 180,
                         frames: Some(FRAMES as u32),
+                        duration_millis: None,
                         intrinsic_bpm: None,
                         note: None,
                         enabled: true,

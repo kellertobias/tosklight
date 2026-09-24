@@ -652,6 +652,7 @@ async fn a_native_media_preview_uses_the_catalog_item_and_never_a_client_path() 
                 width: 1920,
                 height: 1080,
                 frames: Some(42),
+                duration_millis: None,
                 intrinsic_bpm: None,
                 note: None,
                 enabled: true,

@@ -1149,6 +1149,7 @@ mod tests {
                     width: 16,
                     height: 16,
                     frames: Some(2),
+                    duration_millis: None,
                     intrinsic_bpm: None,
                     note: None,
                     enabled: true,

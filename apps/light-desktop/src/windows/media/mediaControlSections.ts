@@ -17,7 +17,7 @@ import type {
 	MediaControlSection,
 	MediaPointFrameRate,
 } from "./mediaPaneModel";
-import { pointDisplay } from "./mediaPointTime";
+import { type ClipLength, clipLengthReadout, pointDisplay } from "./mediaPointTime";
 import {
 	normalizedValue,
 	specializedControl,
@@ -59,9 +59,53 @@ function attributeIsOwned(
 	return owned.has(attribute);
 }
 
+/**
+ * The length of the clip the layer shows, as its Media Server reports it over CITP: the layer's own
+ * status when it shows that clip, else the clip's entry in the element list. A length of zero is
+ * one the server did not state, never one the desk works out.
+ */
+export function selectedClipLength(
+	input: Pick<BuildMediaPaneModelInput, "inspection">,
+	status: { folder: number; file: number; length_frames: number; fps: number } | undefined,
+	folder: number | undefined,
+	file: number | undefined,
+): ClipLength {
+	if (folder === undefined || file === undefined || file === 0)
+		return { kind: "none" };
+	const reported =
+		status && status.folder === folder && status.file === file
+			? status
+			: input.inspection.files.find(
+					(candidate) => candidate.folder_id === folder && candidate.id === file,
+				);
+	if (!reported || reported.length_frames <= 0 || reported.fps <= 0)
+		return { kind: "unknown" };
+	return { kind: "known", seconds: reported.length_frames / reported.fps };
+}
+
+/** The clip's own length, shown read-only before its In and Out points. */
+function clipLengthControl(
+	input: BuildMediaPaneModelInput,
+	length: ClipLength,
+): MediaControlSection["controls"][number] {
+	const rate = input.pointFrameRate;
+	const shown = clipLengthReadout(
+		length,
+		rate?.kind === "known" ? rate.framesPerSecond : null,
+	);
+	return {
+		id: "media.clip_length",
+		label: "Clip length",
+		kind: "readout",
+		value: shown.value,
+		description: shown.description,
+	};
+}
+
 export function controlSections(
 	input: BuildMediaPaneModelInput,
 	controls: Array<{ attribute: string }>,
+	clipLength: ClipLength = { kind: "unknown" },
 ): MediaControlSection[] {
 	const selectedMaster = input.selectedLayerId === "master";
 	const selectedLayer = input.selectedServer?.layers.some(
@@ -96,10 +140,15 @@ export function controlSections(
 						!LAYOUT_SPECIFIC_ATTRIBUTES.has(attribute) ||
 						attributeIsOwned(owned, attribute),
 				)
-				.map((attribute) => ({
-					...advertisedControl(input, attribute, signedMasterScale),
-					disabled: !attributeIsOwned(owned, attribute),
-				})),
+				.flatMap((attribute) => [
+					...(attribute === "media.in_point"
+						? [clipLengthControl(input, clipLength)]
+						: []),
+					{
+						...advertisedControl(input, attribute, signedMasterScale),
+						disabled: !attributeIsOwned(owned, attribute),
+					},
+				]),
 		}))
 		.filter((section) => section.controls.length > 0);
 	if (remaining.size) {

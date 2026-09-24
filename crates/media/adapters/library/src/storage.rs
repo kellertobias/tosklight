@@ -966,6 +966,7 @@ mod test_support {
                         width: 16,
                         height: 16,
                         frames: Some(2),
+                        duration_millis: None,
                         intrinsic_bpm: None,
                         note: None,
                         enabled: true,
@@ -981,11 +982,10 @@ mod test_support {
         }
 
         pub(super) fn contents(&self, folder: u8, file: u8, name: &str) -> Option<String> {
-            std::fs::read_to_string(
-                self.storage
-                    .item_path(MediaAddress::new(folder, file), name),
-            )
-            .ok()
+            let path = self
+                .storage
+                .item_path(MediaAddress::new(folder, file), name);
+            std::fs::read_to_string(path).ok()
         }
 
         pub(super) fn files(&self, folder: u8) -> Vec<String> {

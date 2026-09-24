@@ -5,7 +5,7 @@ import type {
 } from "../../api/client/mediaOutput";
 import type { MediaServerFixture } from "../../api/types";
 import type { ProgrammerFixtureValue } from "../../features/programmerValues/contracts";
-import { controlSections } from "./mediaControlSections";
+import { controlSections, selectedClipLength } from "./mediaControlSections";
 import { libraryModel, selectionModel } from "./mediaPaneLibraryModel";
 import type {
 	MediaEffectLibrarySlot,
@@ -82,6 +82,7 @@ export function buildMediaPaneModel(
 	const sections = controlSections(
 		input,
 		capabilities?.secondary_controls ?? [],
+		selectedClipLength(input, selectedStatus, liveFolder, liveFile),
 	);
 	return {
 		hasPatchedServer: input.servers.length > 0,

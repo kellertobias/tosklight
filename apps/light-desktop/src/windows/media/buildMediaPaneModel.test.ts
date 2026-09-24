@@ -1042,14 +1042,14 @@ describe("Media pane disconnected configuration", () => {
 		const timedPlayback =
 			timed.controlSections.find((candidate) => candidate.id === "playback")
 				?.controls ?? [];
-		expect(timedPlayback[4]).toMatchObject({
+		expect(timedPlayback[5]).toMatchObject({
 			kind: "point-time",
 			value: 1234,
 			framesPerSecond: 25,
 			display: "00:49.09",
 			rateNotice: undefined,
 		});
-		expect(timedPlayback[5]).toMatchObject({
+		expect(timedPlayback[6]).toMatchObject({
 			kind: "point-time",
 			value: 1500,
 			reference: "end",
@@ -1073,7 +1073,7 @@ describe("Media pane disconnected configuration", () => {
 		expect(
 			unreachable.controlSections.find(
 				(candidate) => candidate.id === "playback",
-			)?.controls[4],
+			)?.controls[5],
 		).toMatchObject({
 			framesPerSecond: null,
 			display: "Frame 0",
@@ -1092,7 +1092,7 @@ describe("Media pane disconnected configuration", () => {
 		);
 		expect(
 			loading.controlSections.find((candidate) => candidate.id === "playback")
-				?.controls[4],
+				?.controls[5],
 		).toMatchObject({
 			framesPerSecond: null,
 			rateNotice: "Reading the Media Server's frame rate…",
@@ -1115,11 +1115,18 @@ describe("Media pane disconnected configuration", () => {
 			"intensity",
 			"volume",
 			"media.playback_speed",
+			"media.clip_length",
 			"media.in_point",
 			"media.out_point",
 		]);
-		// No frame rate is known, so the point is a frame count with a notice, not a fader.
+		// No clip is chosen on the layer, so there is no length to show.
 		expect(section("playback")[4]).toMatchObject({
+			label: "Clip length",
+			kind: "readout",
+			value: "No clip",
+		});
+		// No frame rate is known, so the point is a frame count with a notice, not a fader.
+		expect(section("playback")[5]).toMatchObject({
 			label: "In point",
 			kind: "point-time",
 			value: 1200,
@@ -1128,8 +1135,8 @@ describe("Media pane disconnected configuration", () => {
 			display: "Frame 1200",
 			rateNotice: expect.stringContaining("Frame rate unknown"),
 		});
-		expect(section("playback")[4]).not.toHaveProperty("maximum");
-		expect(section("playback")[5]).toMatchObject({
+		expect(section("playback")[5]).not.toHaveProperty("maximum");
+		expect(section("playback")[6]).toMatchObject({
 			label: "Out point",
 			value: 0,
 			display: "End of clip",
@@ -1559,5 +1566,107 @@ describe("Internal Audio Player library", () => {
 
 		expect(model.libraryFiles.every((file) => file.empty)).toBe(true);
 		expect(model.libraryFiles[0]?.detail).toContain("not advertised");
+	});
+});
+
+describe("the selected clip's length on the desk", () => {
+	const server = {
+		fixture_id: "server-1",
+		name: "Pixel",
+		endpoint: null,
+		layers: [{ fixture_id: "layer-1", head_index: 1, attributes: [] }],
+		master_attributes: [],
+		status: { online: true, last_success: null, last_error: null },
+	};
+	const clip = (id: number, length_frames: number, fps: number) => ({
+		folder_id: 1,
+		id,
+		name: `Clip ${id}`,
+		width: 1920,
+		height: 1080,
+		length_frames,
+		fps,
+	});
+	const lengthOn = (
+		patch: Partial<BuildMediaPaneModelInput>,
+	): Record<string, unknown> | undefined =>
+		buildMediaPaneModel(
+			input({
+				servers: [server],
+				selectedServer: server,
+				selectedServerId: server.fixture_id,
+				selectedLayerId: "layer-1",
+				...patch,
+			}),
+		)
+			.controlSections.find((section) => section.id === "playback")
+			?.controls.find((control) => control.id === "media.clip_length") as
+			| Record<string, unknown>
+			| undefined;
+	const showing = (file: number, inPoint = 0) => [
+		...[
+			["media.folder", 1],
+			["media.file", file],
+		].map(([attribute, value]) => ({
+			fixtureId: "layer-1",
+			attribute: attribute as string,
+			value: { kind: "normalized" as const, value: (value as number) / 255 },
+			programmerOrder: 0,
+			fade: false,
+			fadeMillis: null,
+			delayMillis: null,
+		})),
+		{
+			fixtureId: "layer-1",
+			attribute: "media.in_point",
+			value: { kind: "normalized" as const, value: inPoint / 65535 },
+			programmerOrder: 1,
+			fade: false,
+			fadeMillis: null,
+			delayMillis: null,
+		},
+	];
+	const inspection = {
+		...EMPTY_MEDIA_INSPECTION,
+		files: [clip(1, 600, 25), clip(2, 90, 30), clip(3, 0, 25)],
+	};
+	const known = { kind: "known" as const, framesPerSecond: 25 };
+
+	it("shows the clip's reported length at the points' rate, not from the points", () => {
+		expect(
+			lengthOn({ inspection, pointFrameRate: known, liveProgrammer: showing(1) }),
+		).toMatchObject({ kind: "readout", label: "Clip length", value: "00:24.00" });
+		expect(
+			lengthOn({
+				inspection,
+				pointFrameRate: known,
+				liveProgrammer: showing(1, 300),
+			})?.value,
+		).toBe("00:24.00");
+	});
+
+	it("follows the clip the layer is set to", () => {
+		expect(
+			lengthOn({ inspection, pointFrameRate: known, liveProgrammer: showing(2) })
+				?.value,
+		).toBe("00:03.00");
+		// Without the server's point rate, the length is seconds.
+		expect(lengthOn({ inspection, liveProgrammer: showing(2) })?.value).toBe(
+			"3.00 s",
+		);
+	});
+
+	it("says a length is not reported rather than guessing one", () => {
+		expect(
+			lengthOn({ inspection, pointFrameRate: known, liveProgrammer: showing(3) }),
+		).toMatchObject({
+			value: "Not reported",
+			description: "The Media Server does not report a length for this clip.",
+		});
+		// A clip absent from the element list is not guessed either.
+		expect(
+			lengthOn({ inspection, pointFrameRate: known, liveProgrammer: showing(9) })
+				?.value,
+		).toBe("Not reported");
 	});
 });

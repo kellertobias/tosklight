@@ -139,6 +139,7 @@ fn read_item(path: &Path, file: u8, name: &str) -> Option<CatalogItem> {
         width: header.width,
         height: header.height,
         frames: (header.frame_count > 1).then_some(header.frame_count),
+        duration_millis: (header.frame_count > 1).then(|| duration_millis(&reader)),
         // The clip carries the tempo import parsed. The filename is consulted only as a fallback
         // for a clip written before the field existed; runtime never re-infers it.
         intrinsic_bpm: corrected_bpm(path, file).unwrap_or_else(|| {
@@ -149,6 +150,11 @@ fn read_item(path: &Path, file: u8, name: &str) -> Option<CatalogItem> {
         note: item_note(path, file),
         enabled: item_enabled(path, file),
     })
+}
+
+/// The clip's playing time as its index records it, in whole milliseconds.
+fn duration_millis<R: std::io::Read + std::io::Seek>(reader: &ClipReader<R>) -> u64 {
+    u64::try_from(reader.timing().duration.as_millis()).unwrap_or(u64::MAX)
 }
 
 fn item_metadata(item_path: &Path, file: u8) -> Option<serde_json::Value> {
@@ -499,10 +505,16 @@ mod tests {
         let still = catalog.resolve(MediaAddress::new(1, 1)).unwrap();
         assert_eq!(still.kind, ItemKind::Image);
         assert_eq!(still.frames, None);
+        assert_eq!(still.duration_millis, None, "a still has no length");
 
         let video = catalog.resolve(MediaAddress::new(1, 2)).unwrap();
         assert_eq!(video.kind, ItemKind::Video);
         assert_eq!(video.frames, Some(30));
+        assert_eq!(
+            video.duration_millis,
+            Some(1_200),
+            "30 frames at 25 fps, from the index"
+        );
         assert_eq!(video.width, 1920);
     }
 

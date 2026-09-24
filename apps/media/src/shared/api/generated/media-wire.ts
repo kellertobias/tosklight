@@ -284,7 +284,12 @@ export type CatalogItemView = {
 /**
  * Stable across renames, moves, and reindexing — the identity a UI keys a row on.
  */
-id: string, file: number, name: string, kind: string, width: number, height: number, frames: number | null, intrinsicBpm: number | null, note?: string, enabled?: boolean, };
+id: string, file: number, name: string, kind: string, width: number, height: number, frames: number | null,
+/**
+ * How long the clip plays once through, from its own frame index; null for a still or an
+ * item whose length has not been read.
+ */
+durationMillis?: number | null, intrinsicBpm: number | null, note?: string, enabled?: boolean, };
 export type CatalogFolderView = { folder: number, name: string | null, icon?: string, pictureUrl?: string, note?: string, items: Array<CatalogItemView>, };
 export type CatalogView = { revision: number, itemCount: number, folders: Array<CatalogFolderView>, };
 export type FolderPresentationView = { folder: number, name: string | null, icon: string | null, pictureUrl: string | null, };
