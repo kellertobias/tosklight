@@ -170,6 +170,64 @@ describe("CAD snapping", () => {
 		expectVector(snapped.guides[1][1], [2000, -500, 400]);
 	});
 
+	describe("a 2 × 2 stage", () => {
+		// Four 2 × 1 m decks, 400 mm high: A and B along the front, C and D behind them.
+		const grid = () => [
+			riser("A", [0, 0, 0], [2000, 1000, 400]),
+			riser("B", [2000, 0, 0], [2000, 1000, 400]),
+			riser("C", [0, 1000, 0], [2000, 1000, 400]),
+			riser("D", [2000, 1000, 0], [2000, 1000, 400]),
+		];
+		/** The grid with D moved away to `at`. */
+		const broken = (at: V3) => grid().map((deck) => (deck.id === "D" ? { ...deck, positionMillimetres: at } : deck));
+
+		it("closes again when the top-right deck is dragged back near its place", () => {
+			// D was moved 600 mm right and 500 mm back; dragged back to 40 mm right and 30 mm back of
+			// its place, it meets B below it and C beside it, and both fit at once.
+			const snapped = snapMove(broken([2600, 1500, 0]), ["D"], [-560, -470, 0], PLAN, 150);
+			expectVector(snapped.delta, [-600, -500, 0]);
+			expect(snapped.guides).toHaveLength(2);
+		});
+
+		it("snaps as it enters the snap distance and not before", () => {
+			const outside = snapMove(broken([2600, 1500, 0]), ["D"], [-400, -300, 0], PLAN, 150);
+			expectVector(outside.delta, [-400, -300, 0]);
+			expect(outside.guides).toHaveLength(0);
+			const inside = snapMove(broken([2600, 1500, 0]), ["D"], [-470, -380, 0], PLAN, 150);
+			expectVector(inside.delta, [-600, -500, 0]);
+		});
+
+		it("fits one side at a time, butting against the deck below without its corner", () => {
+			// Only B is in reach: D sits over B, 300 mm to its right and 60 mm clear above it.
+			const snapped = snapMove(broken([2300, 1060, 0]), ["D"], [0, 0, 0], PLAN, 150);
+			// It butts against B's back side; flush with nothing on x within reach, x stays.
+			expectVector(snapped.delta, [0, -60, 0]);
+		});
+
+		it("takes a flight of stairs as a stage neighbour, side to side and corner to corner", () => {
+			const stairs = base("S", {
+				positionMillimetres: [3560, 30, 0],
+				sizeMillimetres: [1000, 1000, 400],
+				scenery: { kind: "stairs", chords: 0, pattern: "standard", handrails: "none" },
+			});
+			// Beside B's right side, 60 mm clear and 30 mm behind its front: flush and butted at once.
+			const snapped = snapMove([...grid(), stairs], ["S"], [0, 0, 0], PLAN, 150);
+			expectVector(snapped.delta, [-60, -30, 0]);
+			expect(snapped.guides).toHaveLength(2);
+		});
+
+		it("moves only along the axis of a drag held to one axis, and never changes the height", () => {
+			const alongX: FreeAxes = [true, false, false];
+			// D moved straight right; dragged back along x only, it snaps on x and y stays untouched.
+			const snapped = snapMove(broken([2600, 1030, 0]), ["D"], [-560, 0, 0], alongX, 150);
+			expectVector(snapped.delta, [-600, 0, 0]);
+			// From the front a drag cannot change the depth, and meeting the neighbour beside it does
+			// not lift or lower it.
+			const front = snapMove(broken([2560, 1000, 30]), ["D"], [-500, 0, 0], FRONT, 150);
+			expectVector(front.delta, [-560, 0, 0]);
+		});
+	});
+
 	it("lines up stage elements turned a quarter turn, but not ones at an angle", () => {
 		const still = riser("a", [0, 0, 0], [2000, 1000, 400]);
 		// Turned a quarter, the 2 × 1 m deck is 1 m across and 2 m deep.
