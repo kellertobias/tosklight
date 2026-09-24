@@ -581,3 +581,45 @@ fn two_layers_running_the_same_visualizer_do_not_share_a_texture() {
         "rendering layer two disturbed layer one's texture"
     );
 }
+
+#[test]
+fn a_visualizers_audio_gain_turns_the_room_up_or_down_for_it_alone() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let kind = VisualizerKind::EqualizerBars;
+    let configured = VisualizerConfiguration::new(kind).parameters;
+    let muted = VisualizerParameters {
+        audio_gain: 0.0,
+        ..configured
+    };
+    let (loud, silence) = (loud(), silence());
+
+    let heard = brightness(&draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &configured,
+        &frame(&loud, 1.0, 0.0),
+    ));
+    let turned_down = brightness(&draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &muted,
+        &frame(&loud, 1.0, 0.0),
+    ));
+    let quiet = brightness(&draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &configured,
+        &frame(&silence, 1.0, 0.0),
+    ));
+
+    assert!(heard > quiet, "the equalizer should respond to a loud room");
+    assert!(
+        (turned_down - quiet).abs() < 1e-6,
+        "a visualizer turned all the way down should draw what it draws in silence \
+         ({turned_down} against {quiet})"
+    );
+}

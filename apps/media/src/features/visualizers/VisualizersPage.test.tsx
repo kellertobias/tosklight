@@ -155,6 +155,20 @@ describe("the visualizers page", () => {
 		expect(screen.queryByLabelText("Gravity")).not.toBeInTheDocument();
 	});
 
+	it("offers every visualizer its own audio gain", async () => {
+		const server = stubServer();
+		render(<VisualizersPage />);
+		await screen.findByLabelText("Name");
+
+		const gain = screen.getByLabelText("Audio gain");
+		expect(gain).toHaveValue("1");
+		await userEvent.clear(gain);
+		await userEvent.type(gain, "2.5");
+		await waitFor(() =>
+			expect(server.visualizers[0].parameters.audioGain).toBe(2.5),
+		);
+	});
+
 	it("takes a decimal value in a fractional parameter and a whole one in a count", async () => {
 		const server = stubServer();
 		render(<VisualizersPage />);

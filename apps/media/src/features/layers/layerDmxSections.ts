@@ -454,6 +454,13 @@ export const VISUALIZER_NUMBERS: Record<
 		step: number;
 	}
 > = {
+	audioGain: {
+		field: "audioGain",
+		label: "Audio gain",
+		minimum: 0,
+		maximum: 8,
+		step: 0.1,
+	},
 	count: { field: "count", label: "Count", minimum: 1, maximum: 512, step: 1 },
 	size: {
 		field: "size",

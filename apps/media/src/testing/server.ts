@@ -1660,6 +1660,7 @@ export function aVisualizer(
 			iterations: 64,
 			threshold: 0.5,
 			smoothing: 0.5,
+			audioGain: 1,
 			gravity: 0.5,
 			lifetime: 2,
 			curvature: 0.2,

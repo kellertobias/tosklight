@@ -217,6 +217,13 @@ pub struct VisualizerParameters {
     pub amount: f32,
     pub radius: f32,
     pub thickness: f32,
+    /// How loud this visualizer hears the room, where `1.0` is the analysis as it is.
+    ///
+    /// Scales the audio before the visualizer reads it, so one visualizer can be driven harder
+    /// than another from the same input. Unlike `reactivity`, which a kind applies to whichever
+    /// motions it chose, this reaches every level, band, and waveform sample the kind reads.
+    #[serde(default = "unity_gain")]
+    pub audio_gain: f32,
     /// How much audio moves the effect, where `1.0` is the designed response.
     pub reactivity: f32,
     /// How quickly a triggered response falls back, `0.0..=1.0` per frame.
@@ -249,6 +256,7 @@ impl Default for VisualizerParameters {
             amount: 1.0,
             radius: 0.3,
             thickness: 0.01,
+            audio_gain: 1.0,
             reactivity: 1.0,
             decay: 0.1,
             zoom: 1.0,
@@ -282,6 +290,7 @@ impl VisualizerParameters {
             amount: clamp_unit(self.amount, 0.0, 1.0),
             radius: clamp_unit(self.radius, 0.0, 1.0),
             thickness: clamp_unit(self.thickness, 0.0005, 0.5),
+            audio_gain: clamp_unit(self.audio_gain, 0.0, MAXIMUM_AUDIO_GAIN),
             reactivity: clamp_unit(self.reactivity, 0.0, 8.0),
             decay: clamp_unit(self.decay, 0.0, 1.0),
             zoom: clamp_unit(self.zoom, 0.05, 16.0),
@@ -312,6 +321,14 @@ impl VisualizerParameters {
         }
         self.clamped()
     }
+}
+
+/// The loudest an operator can turn one visualizer's audio up.
+pub const MAXIMUM_AUDIO_GAIN: f32 = 8.0;
+
+/// A configuration stored before audio gain existed heard the room as it was.
+const fn unity_gain() -> f32 {
+    1.0
 }
 
 fn clamp_unit(value: f32, low: f32, high: f32) -> f32 {
@@ -580,6 +597,20 @@ mod tests {
                 kind.label()
             );
         }
+    }
+
+    #[test]
+    fn a_visualizer_stored_before_audio_gain_hears_the_room_as_it_is() {
+        let mut stored = serde_json::to_value(VisualizerParameters::default()).unwrap();
+        stored.as_object_mut().unwrap().remove("audioGain");
+        let loaded: VisualizerParameters = serde_json::from_value(stored).unwrap();
+        assert_eq!(loaded.audio_gain, 1.0);
+
+        let absurd = VisualizerParameters {
+            audio_gain: 1_000.0,
+            ..Default::default()
+        };
+        assert_eq!(absurd.clamped().audio_gain, MAXIMUM_AUDIO_GAIN);
     }
 
     #[test]

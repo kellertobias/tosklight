@@ -331,7 +331,12 @@ raw: number,
  * The value in effect on this channel.
  */
 value: number, };
-export type VisualizerParametersView = { count: number, size: number, speed: number, amount: number, radius: number, thickness: number, reactivity: number, decay: number, zoom: number, iterations: number, threshold: number, smoothing: number, gravity: number, lifetime: number, curvature: number, primaryRed: number, primaryGreen: number, primaryBlue: number, secondaryRed: number, secondaryGreen: number, secondaryBlue: number, mirror: boolean, filled: boolean, wireframe: boolean, mode: number, };
+export type VisualizerParametersView = { count: number, size: number, speed: number, amount: number, radius: number, thickness: number,
+/**
+ * Scales the audio this visualizer hears, `0.0..=8.0`, where `1.0` is the room as it is.
+ * A client that predates it leaves the room as it is.
+ */
+audioGain: number, reactivity: number, decay: number, zoom: number, iterations: number, threshold: number, smoothing: number, gravity: number, lifetime: number, curvature: number, primaryRed: number, primaryGreen: number, primaryBlue: number, secondaryRed: number, secondaryGreen: number, secondaryBlue: number, mirror: boolean, filled: boolean, wireframe: boolean, mode: number, };
 export type VisualizerView = { address: AddressView,
 /**
  * Stable across releases and across a reassignment of the address.

@@ -770,7 +770,9 @@ function visualizerControls(
 			disabled,
 		},
 	];
-	for (const parameter of visualizer.uses) {
+	// Audio gain is not one of the kind's parameters (those are its DMX channels), but every
+	// visualizer hears audio, so each one offers it first.
+	for (const parameter of ["audioGain", ...visualizer.uses]) {
 		const number = VISUALIZER_NUMBERS[parameter];
 		if (number) {
 			const label =

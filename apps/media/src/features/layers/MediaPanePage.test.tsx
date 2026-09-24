@@ -936,6 +936,15 @@ describe("the production Media pane", () => {
 		await waitFor(() =>
 			expect(server.outputs[0].layers[0].visualizerParameters?.count).toBe(64),
 		);
+		// Every visualizer offers its own audio gain, though it is not a kind parameter.
+		fireEvent.input(screen.getByRole("slider", { name: "Audio gain" }), {
+			target: { value: "2.5" },
+		});
+		await waitFor(() =>
+			expect(
+				server.outputs[0].layers[0].visualizerParameters?.audioGain,
+			).toBe(2.5),
+		);
 		// The tuning belongs to the layer: no effect slot is addressed or changed.
 		expect(server.writeBodies.at(-1)).not.toHaveProperty("effectSlot");
 		expect(server.outputs[0].layers[0].effects[0].effectType).toBeNull();

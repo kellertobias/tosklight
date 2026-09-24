@@ -393,6 +393,19 @@ impl VisualizerRenderer {
     ) -> Result<&SourceTexture, VisualizerError> {
         self.ensure_pipeline(kind)?;
         let tuned = parameters.clamped();
+        // The visualizer's own audio gain applies before anything reads the analysis, so the
+        // uniform, the analysis texture, and the held levels all hear the same scaled room.
+        let heard;
+        let frame = &if tuned.audio_gain == 1.0 {
+            *frame
+        } else {
+            heard = frame.analysis.scaled(tuned.audio_gain);
+            VisualizerFrame {
+                analysis: &heard,
+                instruments: frame.instruments.scaled(tuned.audio_gain),
+                ..*frame
+            }
+        };
         let memory = self
             .memories
             .entry(layer)

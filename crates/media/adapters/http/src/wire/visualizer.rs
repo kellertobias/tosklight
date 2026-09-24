@@ -98,6 +98,10 @@ pub struct VisualizerParametersView {
     pub amount: f32,
     pub radius: f32,
     pub thickness: f32,
+    /// Scales the audio this visualizer hears, `0.0..=8.0`, where `1.0` is the room as it is.
+    /// A client that predates it leaves the room as it is.
+    #[serde(default = "unity_gain")]
+    pub audio_gain: f32,
     pub reactivity: f32,
     pub decay: f32,
     pub zoom: f32,
@@ -119,6 +123,10 @@ pub struct VisualizerParametersView {
     pub mode: u8,
 }
 
+const fn unity_gain() -> f32 {
+    1.0
+}
+
 impl VisualizerParametersView {
     pub fn of(parameters: &VisualizerParameters) -> Self {
         Self {
@@ -128,6 +136,7 @@ impl VisualizerParametersView {
             amount: parameters.amount,
             radius: parameters.radius,
             thickness: parameters.thickness,
+            audio_gain: parameters.audio_gain,
             reactivity: parameters.reactivity,
             decay: parameters.decay,
             zoom: parameters.zoom,
@@ -228,6 +237,7 @@ impl VisualizerParametersView {
             amount: self.amount,
             radius: self.radius,
             thickness: self.thickness,
+            audio_gain: self.audio_gain,
             reactivity: self.reactivity,
             decay: self.decay,
             zoom: self.zoom,

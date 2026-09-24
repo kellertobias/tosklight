@@ -25,11 +25,15 @@ export interface VisualizerEditorProps {
 	onChange: (edit: UpdateVisualizer) => void;
 }
 
+/// Every visualizer hears audio, so every one offers its own gain ahead of the kind's controls.
+const ALWAYS_SHOWN = ["audioGain"] as const;
+
 /// Which fields each published control name writes, and how it is labelled.
 const NUMBERS: Record<
 	string,
 	{ label: string; field: keyof VisualizerParametersView; step: number }
 > = {
+	audioGain: { label: "Audio gain", field: "audioGain", step: 0.1 },
 	count: { label: "Count", field: "count", step: 1 },
 	size: { label: "Size", field: "size", step: 0.01 },
 	speed: { label: "Speed", field: "speed", step: 0.1 },
@@ -96,7 +100,7 @@ export function VisualizerEditor({
 
 	return (
 		<div className="media-visualizer-editor" aria-busy={busy}>
-			{visualizer.uses.map((control) => {
+			{[...ALWAYS_SHOWN, ...visualizer.uses].map((control) => {
 				if (
 					visualizer.kind === "Grid Landscape" &&
 					(control === "mode" || control === "iterations")

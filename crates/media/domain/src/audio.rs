@@ -40,6 +40,28 @@ pub struct Analysis {
     pub peak: f32,
 }
 
+impl Analysis {
+    /// This analysis as a source turned up or down by `gain` hears it.
+    ///
+    /// Every level scales; the waveform stays inside the `-1..=1` a trace is drawn in, so a
+    /// turned-up oscilloscope clips at its edges rather than leaving the picture.
+    pub fn scaled(&self, gain: f32) -> Self {
+        Self {
+            waveform: self
+                .waveform
+                .iter()
+                .map(|sample| (sample * gain).clamp(-1.0, 1.0))
+                .collect(),
+            spectrum: self.spectrum.iter().map(|band| band * gain).collect(),
+            bass: self.bass * gain,
+            mid: self.mid * gain,
+            treble: self.treble * gain,
+            energy: self.energy * gain,
+            peak: self.peak * gain,
+        }
+    }
+}
+
 /// One instrument the beat detector follows, as a visual reads it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,6 +80,24 @@ pub struct Instruments {
     pub kick: Instrument,
     pub snare: Instrument,
     pub hihat: Instrument,
+}
+
+impl Instruments {
+    /// These instruments with their levels turned up or down by `gain`.
+    ///
+    /// A hit is the detector's decision that an instrument struck, not a level, so it is kept: a
+    /// turned-down source still sees every kick, only smaller.
+    pub fn scaled(self, gain: f32) -> Self {
+        let level = |instrument: Instrument| Instrument {
+            level: instrument.level * gain,
+            ..instrument
+        };
+        Self {
+            kick: level(self.kick),
+            snare: level(self.snare),
+            hihat: level(self.hihat),
+        }
+    }
 }
 
 /// How an operator has tuned the analysis.
@@ -247,6 +287,40 @@ mod tests {
         (0..WINDOW)
             .map(|index| amplitude * (2.0 * PI * frequency * index as f32 / RATE).sin())
             .collect()
+    }
+
+    #[test]
+    fn a_scaled_analysis_moves_every_level_and_keeps_the_trace_in_range() {
+        let heard = Analysis {
+            waveform: vec![0.4, -0.8],
+            spectrum: vec![0.5, 2.0],
+            bass: 0.5,
+            mid: 0.25,
+            treble: 0.1,
+            energy: 0.3,
+            peak: 0.8,
+        };
+        let louder = heard.scaled(2.0);
+        assert_eq!(louder.waveform, vec![0.8, -1.0]);
+        assert_eq!(louder.spectrum, vec![1.0, 4.0]);
+        assert_eq!((louder.bass, louder.mid, louder.energy), (1.0, 0.5, 0.6));
+        assert_eq!(heard.scaled(0.0).peak, 0.0);
+
+        let struck = Instruments {
+            kick: Instrument {
+                level: 0.5,
+                hit: 1.0,
+            },
+            ..Default::default()
+        }
+        .scaled(0.5);
+        assert_eq!(
+            struck.kick,
+            Instrument {
+                level: 0.25,
+                hit: 1.0
+            }
+        );
     }
 
     fn loudest_band(analysis: &Analysis) -> usize {
