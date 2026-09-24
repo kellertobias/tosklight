@@ -575,10 +575,6 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
         assert!(axes.width || axes.height || axes.depth, "{filename}");
     }
 
-    let venue = [
-        ("venue--stage-railing-2-m.toskfixture", 1),
-        ("venue--disco-ball-50-cm.toskfixture", 1),
-    ];
     for filename in [
         "venue--four-point-truss.toskfixture",
         "venue--three-point-truss.toskfixture",
