@@ -997,10 +997,68 @@ describe("CAD plan projections", () => {
 		expect(nosings).toEqual([0, 200, 400, 600]);
 		// A rail post stands on every nosing and the rail follows the climb above them.
 		const railed = flight("both");
-		expect(Math.max(...heights(railed))).toBeCloseTo(1200, 3);
+		// 900 mm over the top step's nosing, as the Visualizer builds it.
+		expect(Math.max(...heights(railed))).toBeCloseTo(1500, 3);
 		expect(railed.lines.length).toBeGreaterThan(plain.lines.length);
 		// One side railed still draws the rail in elevation, where both sides fall on one line.
-		expect(Math.max(...heights(flight("left")))).toBeCloseTo(1200, 3);
+		expect(Math.max(...heights(flight("left")))).toBeCloseTo(1500, 3);
+	});
+
+	it("draws each handrail as one continuous rail on its side, over posts, in plan and elevation", () => {
+		const stairs = (
+			handrails: CadStairHandrails,
+			view: CadViewDirection,
+			size: [number, number, number] = [3000, 1200, 1000],
+		) =>
+			entityPlanGeometry(
+				{
+					...movingLight,
+					name: "Stage Stairs",
+					kind: "venue",
+					fixtureType: "venue",
+					sizeMillimetres: size,
+					scenery: { kind: "stairs", chords: 0, pattern: "standard", handrails },
+				},
+				undefined,
+				view,
+			);
+		const railColour = (geometry: ReturnType<typeof stairs>) =>
+			geometry.triangles.filter((triangle) => triangle.color[0] > 0.5).flatMap(({ points }) => points);
+		// From above, a wide flight climbs +x; each rail is a band the whole run long, on its side.
+		const plain = railColour(stairs("none", "top_down")).length;
+		const railPoints = (handrails: CadStairHandrails) => railColour(stairs(handrails, "top_down")).slice(plain);
+		expect(railPoints("none")).toHaveLength(0);
+		const left = railPoints("left");
+		expect(Math.min(...left.map(([x]) => x))).toBeCloseTo(-1500, 3);
+		expect(Math.max(...left.map(([x]) => x))).toBeCloseTo(1500, 3);
+		// Climbing +x, the climber's left is upstage (+y).
+		expect(Math.min(...left.map(([, y]) => y))).toBeGreaterThan(500);
+		expect(Math.max(...railPoints("right").map(([, y]) => y))).toBeLessThan(-500);
+		expect(railPoints("both")).toHaveLength(left.length * 2);
+
+		// In the front elevation the rail runs from the first nosing to the last, 900 mm up, and
+		// every post reaches it.
+		const side = stairs("left", "front_to_back");
+		const detail = side.triangles.filter((triangle) => triangle.color[0] > 0.5);
+		const all = detail.flatMap(({ points }) => points);
+		expect(Math.min(...all.map(([x]) => x))).toBeCloseTo(-1500 - 20, 3);
+		expect(Math.max(...all.map(([x]) => x))).toBeCloseTo(1500 + 20, 3);
+		// The top of the rail over the top step, and over the bottom one.
+		expect(Math.max(...all.map(([, y]) => y))).toBeCloseTo(1000 + 900, 3);
+		const atBottom = all.filter(([x]) => Math.abs(x + 1500) < 1).map(([, y]) => y);
+		expect(Math.max(...atBottom)).toBeCloseTo(900, 3);
+		// None draws no rail at all.
+		expect(stairs("none", "front_to_back").triangles.some((triangle) => triangle.color[0] > 0.5)).toBe(
+			false,
+		);
+		// End on, each rail is a post on its own side: from house left the viewer looks up the climb,
+		// so the climber's left is the viewer's left.
+		const endOn = (handrails: CadStairHandrails) =>
+			stairs(handrails, "left_to_right")
+				.triangles.filter((triangle) => triangle.color[0] > 0.5)
+				.flatMap(({ points }) => points.map(([x]) => x));
+		expect(Math.max(...endOn("left"))).toBeLessThan(0);
+		expect(Math.min(...endOn("right"))).toBeGreaterThan(0);
 	});
 
 	it("climbs the same way in the plan and in every elevation, however the flight is turned", () => {

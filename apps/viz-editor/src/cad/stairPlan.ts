@@ -24,7 +24,7 @@ const DARK: Colour = [0.13, 0.15, 0.18];
 
 /** The line a tread's nosing is drawn with from above, and the arrow up the flight. */
 const NOSING = 20;
-/** How high a handrail stands above the nosings, in millimetres. */
+/** How high a handrail stands above the nosings, in millimetres, as `push_stairs` builds it. */
 export const STAIR_RAIL_HEIGHT = 900;
 /** The section a rail and its posts are drawn at. */
 const RAIL_SECTION = 40;
@@ -149,7 +149,7 @@ export function stairElevation(
 		if (!railed.length) return polygons;
 		// A post on every nosing up to the rail, and the rail itself along their tops, following the
 		// climb from the first nosing to the last, where it stands one rail-height over the top step.
-		const rail = Math.min(STAIR_RAIL_HEIGHT, Math.max(200, h));
+		const rail = STAIR_RAIL_HEIGHT;
 		for (let index = 0; index <= steps; index += 1) {
 			const x = tread * index;
 			polygons.push(box(x - RAIL_SECTION / 2, x + RAIL_SECTION / 2, rise * index, rise * index + rail, DETAIL));
@@ -173,7 +173,7 @@ export function stairElevation(
 	if (aspect.risers)
 		for (let index = 1; index < steps; index += 1)
 			polygons.push(rect(-across / 2, rise * index - NOSING / 2, across, NOSING, DARK));
-	const rail = Math.min(STAIR_RAIL_HEIGHT, Math.max(200, h));
+	const rail = STAIR_RAIL_HEIGHT;
 	for (const side of railed) {
 		const centre = aspect.left * side * (across / 2 - RAIL_SECTION / 2);
 		polygons.push(rect(centre - RAIL_SECTION / 2, 0, RAIL_SECTION, h + rail, DETAIL));
