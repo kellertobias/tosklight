@@ -46,6 +46,7 @@ mod startup;
 mod text_sources;
 #[cfg(feature = "tray")]
 mod tray;
+mod visualizer_preview;
 
 pub use dmx::SharedState;
 pub use layer_sources::LayerSources;
@@ -202,6 +203,7 @@ fn run_inner() -> anyhow::Result<()> {
         settle: live_settings.settle(),
         previews: Some(shared.previews.clone()),
         snapshot: snapshot_render::start(shared.clone(), shutdown.clone()),
+        visualizer_preview: visualizer_preview::start(shared.clone(), shutdown.clone()),
     };
     // What decides this is whether a desktop is reachable, not whether an output is configured.
     // The Media Server is an application with a menu bar item; a server with nothing assigned to a
@@ -786,6 +788,7 @@ pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> any
         settle: media_http::settles_at_once(),
         previews: None,
         snapshot: media_http::renders_nothing(),
+        visualizer_preview: media_http::previews_no_visualizer(),
     })
     .await
 }
@@ -815,6 +818,8 @@ pub(crate) struct Services {
     pub previews: Option<preview::SharedPreviews>,
     /// Draws a supplied DMX state off-screen for a desk's Cue preview.
     pub snapshot: media_http::RenderSnapshot,
+    /// Draws live frames of a visualizer for its editor.
+    pub visualizer_preview: media_http::RenderVisualizerPreview,
 }
 
 /// Brings the API up, waits for shutdown, and takes it back down.
@@ -833,6 +838,7 @@ pub(crate) async fn serve_with(services: Services) -> anyhow::Result<()> {
         settle,
         previews,
         snapshot,
+        visualizer_preview,
     } = services;
     let configuration = live.load_full();
     let outputs = configuration.outputs.len();
@@ -909,6 +915,7 @@ pub(crate) async fn serve_with(services: Services) -> anyhow::Result<()> {
             })
         }),
         snapshot,
+        visualizer_preview,
         snapshots: std::sync::Arc::new(media_http::SnapshotCache::default()),
         diagnostics,
         replays: std::sync::Arc::new(media_http::Replays::new()),

@@ -35,6 +35,7 @@ pub use routes::snapshot::{
     MAX_SNAPSHOT_EDGE, RenderSnapshot, SnapshotCache, SnapshotFailure, SnapshotImage,
     SnapshotRequest, renders_nothing,
 };
+pub use routes::visualizers::{RenderVisualizerPreview, previews_no_visualizer};
 pub use routes::{
     ApiState, ApplyConfiguration, OutputPreviewFrame, RequestOutputPreview, SettleConfiguration,
     applies_nothing, router, settles_at_once,

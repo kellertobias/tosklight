@@ -90,6 +90,15 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
         settle: crate::routes::settles_at_once(),
         preview: Arc::new(move |_, _, _| requested_preview.lock().unwrap().clone()),
         snapshot: crate::routes::snapshot::renders_nothing(),
+        visualizer_preview: Arc::new(|address, width, height| {
+            Box::pin(std::future::ready(Ok(crate::OutputPreviewFrame {
+                sequence: 1,
+                width,
+                height,
+                content_type: "image/jpeg",
+                bytes: format!("frame of {address}").into_bytes(),
+            })))
+        }),
         snapshots: Arc::new(crate::routes::snapshot::SnapshotCache::default()),
         diagnostics,
         replays: Arc::new(crate::replay::Replays::new()),

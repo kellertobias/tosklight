@@ -23,6 +23,7 @@ import {
 } from "../media-library/GeneratedLibraryBrowserView";
 import { useVisualizerEditing } from "./editing";
 import { BUILTIN_VISUALIZER_KINDS, visualizerPreviewUrl } from "./preview";
+import { LiveVisualizerPreview } from "./LiveVisualizerPreview";
 import { VisualizerEditor } from "./VisualizerEditor";
 
 export function VisualizersPage({
@@ -245,7 +246,10 @@ export function VisualizerDetail({
 							: "aurora"
 					}
 				>
-					<img src={visualizerPreviewUrl(visualizer)} alt="" />
+					<LiveVisualizerPreview
+						visualizer={visualizer}
+						aspectRatio={aspectRatio}
+					/>
 				</MediaPreview>
 			</div>
 			<p className="media-source-address">

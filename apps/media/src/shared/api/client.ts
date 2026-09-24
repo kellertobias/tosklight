@@ -303,6 +303,18 @@ export const api = {
 		}
 		return `${BASE}/outputs/${output}/preview?${query.toString()}`;
 	},
+	/** One live frame of a stored visualizer, drawn from its current parameters. */
+	visualizerPreviewUrl: (
+		folder: number,
+		file: number,
+		frame: number,
+		size: { width: number; height: number },
+	) =>
+		`${BASE}/visualizers/${folder}/${file}/preview?${new URLSearchParams({
+			width: String(size.width),
+			height: String(size.height),
+			frame: String(frame),
+		}).toString()}`,
 	outputLayerPreviewUrl: (
 		output: string,
 		layer: number,

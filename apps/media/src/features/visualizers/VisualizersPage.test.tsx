@@ -108,9 +108,12 @@ describe("the visualizers page", () => {
 			"src",
 			expect.stringMatching(/000-equalizer-bars\.png$/u),
 		);
+		// The editor's own picture is live, drawn by the server at the output's ratio.
 		expect(preview.querySelector("img")).toHaveAttribute(
 			"src",
-			expect.stringMatching(/000-equalizer-bars\.png$/u),
+			expect.stringMatching(
+				/\/visualizers\/250\/1\/preview\?width=480&height=480&frame=0$/u,
+			),
 		);
 	});
 

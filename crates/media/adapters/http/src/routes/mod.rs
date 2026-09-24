@@ -35,7 +35,7 @@ pub mod snapshot;
 mod telemetry;
 mod text;
 mod time;
-mod visualizers;
+pub mod visualizers;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -123,6 +123,8 @@ pub struct ApiState {
     pub preview: RequestOutputPreview,
     /// Renders a supplied DMX state off-screen, without touching the live output.
     pub snapshot: snapshot::RenderSnapshot,
+    /// Draws live frames of a visualizer for its editor.
+    pub visualizer_preview: visualizers::RenderVisualizerPreview,
     /// Snapshots already drawn, keyed by everything that shapes them.
     pub snapshots: Arc<snapshot::SnapshotCache>,
     /// What the running process can tell the API about itself.
@@ -180,6 +182,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v2/logs/level", get(logs::server_level))
         .route("/api/v2/logs/level/update", post(logs::update_server_level))
         .merge(library_router(upload_body_limit))
+        .merge(visualizer_router())
         .route(
             "/api/v2/folder-presentations",
             get(folder_presentations::list),
@@ -231,7 +234,6 @@ pub fn router(state: ApiState) -> Router {
             "/api/v2/text/{folder}/{file}/delete",
             post(text::delete_text),
         )
-        .route("/api/v2/visualizers", get(visualizers::visualizers))
         .route("/api/v2/effects", get(effects::effects))
         .route("/api/v2/models", get(models::models))
         .route(
@@ -245,14 +247,6 @@ pub fn router(state: ApiState) -> Router {
         .route(
             "/api/v2/effects/{slot}/update",
             post(effects::update_effect),
-        )
-        .route(
-            "/api/v2/visualizers/create",
-            post(visualizers::create_visualizer),
-        )
-        .route(
-            "/api/v2/visualizers/{folder}/{file}/update",
-            post(visualizers::update_visualizer),
         )
         .route("/api/v2/outputs", get(outputs::outputs))
         .route(
@@ -301,6 +295,23 @@ pub fn router(state: ApiState) -> Router {
         // Anything the API did not claim is the administration frontend: its shell, its assets,
         // and its client-side routes.
         .fallback(assets::serve)
+}
+
+fn visualizer_router() -> Router<ApiState> {
+    Router::new()
+        .route("/api/v2/visualizers", get(visualizers::visualizers))
+        .route(
+            "/api/v2/visualizers/create",
+            post(visualizers::create_visualizer),
+        )
+        .route(
+            "/api/v2/visualizers/{folder}/{file}/update",
+            post(visualizers::update_visualizer),
+        )
+        .route(
+            "/api/v2/visualizers/{folder}/{file}/preview",
+            get(visualizers::visualizer_preview),
+        )
 }
 
 fn library_router(upload_body_limit: usize) -> Router<ApiState> {

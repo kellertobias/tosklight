@@ -1,14 +1,18 @@
 //! The generated visualizers, and tuning one.
 
-use axum::extract::{Path, State};
+use std::sync::Arc;
+
+use axum::extract::{Path, Query, State};
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_domain::MediaAddress;
 use media_domain::visualizer::{VisualizerConfiguration, VisualizerKind};
 
 use crate::error::ApiError;
-use crate::routes::ApiState;
 use crate::routes::edit::{self, Proceed};
+use crate::routes::snapshot::{MAX_SNAPSHOT_EDGE, SnapshotFailure};
+use crate::routes::{ApiState, OutputPreviewFrame};
 use crate::tolerant::TolerantJson;
 use crate::wire::{CreateVisualizer, UpdateVisualizer, VisualizerView};
 
@@ -18,6 +22,93 @@ use crate::wire::{CreateVisualizer, UpdateVisualizer, VisualizerView};
 /// frame to frame, so it is read once and not polled.
 pub(super) async fn visualizers(State(state): State<ApiState>) -> impl IntoResponse {
     axum::Json(VisualizerView::all(&state.configuration.load().visualizers))
+}
+
+/// Draws one frame of the visualizer at an address, as its stored parameters make it look now.
+///
+/// The renderer keeps each previewed visualizer's memory of the beat between frames, so a client
+/// asking for frame after frame sees it move with the room, and an edit shows on the next frame.
+pub type RenderVisualizerPreview = Arc<
+    dyn Fn(
+            MediaAddress,
+            u16,
+            u16,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = Result<OutputPreviewFrame, SnapshotFailure>>
+                    + Send,
+            >,
+        > + Send
+        + Sync,
+>;
+
+/// A process that renders nothing previews no visualizer.
+pub fn previews_no_visualizer() -> RenderVisualizerPreview {
+    Arc::new(|_, _, _| {
+        Box::pin(std::future::ready(Err(SnapshotFailure::Unavailable(
+            "this Media Server process has no renderer".to_owned(),
+        ))))
+    })
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct PreviewQuery {
+    width: Option<u16>,
+    height: Option<u16>,
+}
+
+/// `GET /api/v2/visualizers/{folder}/{file}/preview`: one live frame, never cached.
+///
+/// A read, not a live-control action: it draws off-screen and changes no output. A client polls
+/// it for as long as an operator is looking at the visualizer's editor.
+pub(super) async fn visualizer_preview(
+    State(state): State<ApiState>,
+    Path((folder, file)): Path<(u8, u8)>,
+    Query(query): Query<PreviewQuery>,
+) -> Result<Response, ApiError> {
+    let address = MediaAddress::new(folder, file);
+    if state
+        .configuration
+        .load()
+        .visualizers
+        .resolve(address)
+        .is_none()
+    {
+        return Err(ApiError::not_found(
+            "unknown-visualizer",
+            format!("no visualizer answers at {address}"),
+        ));
+    }
+    let width = query.width.unwrap_or(480);
+    let height = query.height.unwrap_or(270);
+    if !(1..=MAX_SNAPSHOT_EDGE).contains(&width) || !(1..=MAX_SNAPSHOT_EDGE).contains(&height) {
+        return Err(ApiError::bad_request(
+            "preview-size",
+            format!("width and height must be 1-{MAX_SNAPSHOT_EDGE} pixels"),
+        ));
+    }
+    let frame = (state.visualizer_preview)(address, width, height)
+        .await
+        .map_err(|failure| match failure {
+            SnapshotFailure::Invalid(message) => ApiError::bad_request("preview-invalid", message),
+            SnapshotFailure::Unavailable(message) | SnapshotFailure::NotReady(message) => {
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "preview-unavailable",
+                    message,
+                )
+            }
+        })?;
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CACHE_CONTROL, "no-store")
+        .header(header::CONTENT_TYPE, frame.content_type)
+        .header("x-tosklight-preview-sequence", frame.sequence)
+        .header("x-tosklight-preview-width", frame.width)
+        .header("x-tosklight-preview-height", frame.height)
+        .body(axum::body::Body::from(frame.bytes))
+        .expect("a preview response has valid static headers"))
 }
 
 /// Creates another instance of a shipped visualizer in the empty slot the operator selected.
@@ -252,6 +343,45 @@ mod tests {
                 .unwrap()
                 .contains(&serde_json::json!("speed"))
         );
+    }
+
+    #[tokio::test]
+    async fn a_visualizer_preview_is_a_fresh_frame_of_that_visualizer() {
+        use tower::ServiceExt;
+        let bench = bench();
+        let response = bench
+            .router
+            .clone()
+            .oneshot(get(
+                "/api/v2/visualizers/250/1/preview?width=320&height=180".into(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["content-type"], "image/jpeg");
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        assert_eq!(response.headers()["x-tosklight-preview-width"], "320");
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(&body[..], b"frame of 250/001");
+    }
+
+    #[tokio::test]
+    async fn an_unassigned_or_oversized_preview_is_refused() {
+        let bench = bench();
+        let (status, _) = send(
+            &bench.router,
+            get("/api/v2/visualizers/250/200/preview".into()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (status, _) = send(
+            &bench.router,
+            get("/api/v2/visualizers/250/1/preview?width=5000&height=10".into()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
