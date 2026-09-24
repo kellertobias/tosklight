@@ -95,6 +95,9 @@ const patchFixtures = vi.hoisted(() => ({
 const attributeRegistry = vi.hoisted(() => ({
 	current: [] as AttributeDescriptor[],
 }));
+const colorModel = vi.hoisted(() => ({
+	current: "direct" as "direct" | "intent",
+}));
 vi.mock("../../features/patch/PatchState", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
 	useSelectedPatchedFixtures: (
@@ -153,6 +156,7 @@ vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useHardwareConnected: () => Boolean(server.bootstrap?.hardware_connected),
 	useAttributeRegistry: () => attributeRegistry.current,
+	useColorModel: () => colorModel.current,
 }));
 vi.mock(
 	"../../features/programmerActions/ProgrammerActionsContext",
@@ -789,6 +793,46 @@ describe("ParameterControls projection lifecycle", () => {
 		expect(
 			screen.getByRole("group", { name: "Enc 1 · Gobo 1" }),
 		).toBeInTheDocument();
+	});
+
+	it("offers no fixture-native colour encoder in a Color Intent show", () => {
+		attributeRegistry.current = [
+			attributeDescriptor("intensity", "Intensity", 1, 1),
+		];
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: ["color.red", "color.green", "color.blue"].map(
+								(attribute) => ({ attribute, capabilities: [] }),
+							),
+						},
+					],
+				},
+			},
+		];
+		const { unmount } = render(<ParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Color" }));
+		expect(
+			screen.getAllByRole("group", { name: /^Enc \d+ · / }).length,
+		).toBeGreaterThan(0);
+		unmount();
+
+		colorModel.current = "intent";
+		try {
+			render(<ParameterControls />);
+			fireEvent.click(screen.getByRole("button", { name: "Color" }));
+			expect(screen.queryAllByRole("group", { name: /^Enc \d+ · / })).toEqual(
+				[],
+			);
+		} finally {
+			colorModel.current = "direct";
+		}
 	});
 
 	it("keeps Direct input and Indexed Presets under the semantic encoder", () => {
