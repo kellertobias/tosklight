@@ -212,6 +212,38 @@
 	overflow: hidden;
 }
 
+/* Where an output listens: the protocol, universe and start address a desk must send to. */
+.media-dmx-window .media-dmx-configured {
+	margin: 8px 0 12px;
+	padding: 10px 14px;
+	border: 1px solid var(--ui-accent, #38bdf8);
+	border-radius: 6px;
+	background: rgb(56 189 248 / 8%);
+}
+
+.media-dmx-window .media-dmx-configured h3 {
+	margin: 0 0 6px;
+	font-size: 13px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.media-dmx-window .media-dmx-configured dd {
+	font-size: 18px;
+	font-weight: 600;
+}
+
+/* Nothing set, not a zero address: said in words, dimmed and italic, so it is never read as one. */
+.media-dmx-window .media-dmx-unset {
+	color: var(--ui-muted, #94a3b8);
+	font-style: italic;
+}
+
+.media-dmx-window .media-dmx-explain {
+	max-width: 72ch;
+	color: var(--ui-muted, #94a3b8);
+}
+
 .media-dmx-window .ui-button.media-connect-console {
 	background: #0a252b;
 	color: var(--cyan);

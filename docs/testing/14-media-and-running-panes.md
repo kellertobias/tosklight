@@ -121,6 +121,10 @@ Drag the selected shape on the picture with a mouse or a finger to move it, and 
 
 On an HDMI output, configure the reference layout: a **Centre** display region covering the middle third of the canvas and turned clockwise, and **Left strip** and **Right strip** RGB zones at the canvas edges, one sent over Art-Net and one over sACN. Choose a second, projector output and give it two independent display regions that overlap the HDMI slice. Save both. Each save carries only that output's pixel map, so neither output's resolution, monitor, nor canvas changes. Reload the page: each output reopens with exactly what was saved, and the first output's shapes and rows are unchanged by the second output's edits. Switching to **Desk merge** still offers a desk input patch per zone, and a zone whose universe no enabled route carries still blocks the save with a named problem.
 
+## PIXEL-010 — DMX page names where each output listens
+
+Open Pixel's **DMX** page. For each output, confirm **Listening for DMX on** shows the protocol, universe and start address set in Settings > Network & DMX, and that the page explains the output's name (such as **Main**), the **Master** row and the **Layer** rows. Confirm the table gives each of Master and Layer 1–8 its **DMX patch** as universe and first–last address matching Connect to Console's patch, and that a layer with nothing selected reads **None selected** in **Selected media** rather than 000/000. Change the start address in Settings and confirm the page follows within a few seconds without reopening it; clear the start address and confirm **Not configured** with a note on where to set it.
+
 ## RUNNING-001 — containment, deduplication, and identity
 
 Start one Cuelist through several assignments or control surfaces, with a Dynamic contained in it; start one independent Dynamic, Timecode, and Macro. Running shows exactly four rows. The Cuelist row uses the Cuelist's own number and name plus its current Cue, not an assignment number, and suppresses the contained Dynamic. The other rows use their own stable identities and show **Cue —**.

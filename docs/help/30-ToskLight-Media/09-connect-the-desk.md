@@ -81,6 +81,20 @@ Check in this order:
 
 The Media Server administration interface can take over playback for testing. Release that takeover before judging desk DMX control.
 
+### What the DMX page shows
+
+Each output has its own section, headed by its name — **Main** is the name of the first output, one
+picture this server draws. At the top, **Listening for DMX on** gives the **Protocol**, **Universe**
+and **Start address** a desk must send to, read from the running decoder and refreshed every few
+seconds, so a change in **Settings > Network & DMX** shows without reopening the page. A start
+address that is not set reads **Not configured**, with a note saying where to set it.
+
+The table below it has one row for the **Master** — the whole output's dimmer, volume, tint and mask —
+and one for each **Layer**, Layer 1 at the bottom of the mix. **DMX patch** is the block of channels
+that row answers on, as universe and first–last address. **Selected media** is the folder and file
+the row is showing from the library, which is not a DMX address: a layer showing nothing reads
+**None selected**, and the Master's mask **No mask**, rather than a row of zeros.
+
 ## Connect another console
 
 Open Pixel’s **DMX** page and press **Connect to Console** at the top. Choose **MagicQ**,

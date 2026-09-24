@@ -14,12 +14,14 @@ import type {
 	DmxIngressView,
 	DmxMapView,
 	OutputView,
+	RunningOutputView,
 } from "../../shared/api/generated/media-wire";
-import { useNetwork, useOutputs } from "../../shared/api/queries";
+import { useNetwork, useOutputs, useRuntime } from "../../shared/api/queries";
 import { useTelemetry } from "../../shared/api/telemetry";
 
 export function DmxPage() {
 	const outputs = useOutputs();
+	const runtime = useRuntime();
 	const telemetry = useTelemetry();
 	const [connectOpen, setConnectOpen] = useState(false);
 
@@ -72,6 +74,9 @@ export function DmxPage() {
 							<OutputDmx
 								key={output.id}
 								output={output}
+								configured={runtime.data?.outputs.find(
+									(running) => running.id === output.id,
+								)}
 								ingress={telemetry.frame?.dmx.find(
 									(sample) => sample.outputId === output.id,
 								)}
@@ -397,53 +402,35 @@ function ConsolePatch({ output }: { output: OutputView }) {
 
 function OutputDmx({
 	output,
+	configured,
 	ingress,
 }: {
 	output: OutputView;
+	/** The output's input settings as this server runs them. */
+	configured?: RunningOutputView;
 	ingress?: DmxIngressView;
 }) {
 	const map = useDmxMap(output.id);
 	const active = ingress?.active ?? output.dmxActive;
 	return (
 		<section className="media-output" aria-label={`${output.name} DMX`}>
-			<h2>{output.name}</h2>
+			<h2>Output “{output.name}”</h2>
+			<p className="media-dmx-explain">
+				“{output.name}” is this output’s name: one picture this server draws. Its{" "}
+				<strong>Master</strong> row is the whole output’s dimmer, volume, tint
+				and mask; <strong>Layer 1</strong> to{" "}
+				<strong>Layer {output.layers.length}</strong> are the pictures mixed
+				into it, Layer 1 at the bottom. Each row answers on its own block of DMX
+				channels, its <em>DMX patch</em>.
+			</p>
+			<ConfiguredInput map={map.data} configured={configured} ingress={ingress} />
 			<p className={`media-badge is-${active ? "good" : "neutral"}`}>
 				{active
 					? "A desk is sending to this output"
 					: "No desk has sent to this output recently"}
 			</p>
 			{ingress && <IngressFacts ingress={ingress} />}
-
-			<table className="media-table">
-				<caption className="media-visually-hidden">
-					Layer snapshot when this page opened on {output.name}
-				</caption>
-				<thead>
-					<tr>
-						<th scope="col">Layer</th>
-						<th scope="col">Address</th>
-						<th scope="col">Play mode</th>
-						<th scope="col">Dimmer</th>
-						<th scope="col">Source</th>
-					</tr>
-				</thead>
-				<tbody>
-					{output.layers.map((layer) => {
-						const badge = sourceBadge(layer.sourceStatus);
-						return (
-							<tr key={layer.index}>
-								<td>{layer.index + 1}</td>
-								<td>
-									{addressLabel(layer.address.folder, layer.address.file)}
-								</td>
-								<td>{layer.playMode}</td>
-								<td>{percent(layer.dimmer)}</td>
-								<td>{badge.label}</td>
-							</tr>
-						);
-					})}
-				</tbody>
-			</table>
+			<PatchTable output={output} map={map.data} />
 
 			<p>
 				Decoded layer and master values are a snapshot from opening this page.
@@ -460,12 +447,6 @@ function OutputDmx({
 					{percent(output.master.tintGreen)} · B{" "}
 					{percent(output.master.tintBlue)}
 				</dd>
-				<dt>Master mask</dt>
-				<dd>
-					{output.master.mask.class === "blank"
-						? "none"
-						: addressLabel(output.master.mask.folder, output.master.mask.file)}
-				</dd>
 			</dl>
 
 			{map.failure && (
@@ -476,6 +457,133 @@ function OutputDmx({
 	);
 }
 
+/**
+ * Where this output listens, as the server runs it: the protocol, universe and first address a
+ * desk must send to. The running decoder's map is the authority for the universe and address; the
+ * protocol is what frames arrive on, else what the output is set to.
+ */
+function ConfiguredInput({
+	map,
+	configured,
+	ingress,
+}: {
+	map?: DmxMapView;
+	configured?: RunningOutputView;
+	ingress?: DmxIngressView;
+}) {
+	const protocol = ingress?.protocol ?? configured?.protocol;
+	const universe = map?.universe ?? configured?.universe;
+	const start = map?.startAddress ?? configured?.startAddress;
+	const unset = start === 0;
+	return (
+		<div className="media-dmx-configured" role="group" aria-label="Configured DMX input">
+			<h3>Listening for DMX on</h3>
+			<dl className="media-facts">
+				<dt>Protocol</dt>
+				<dd>{protocol ? (protocol === "art-net" ? "Art-Net" : "sACN") : "—"}</dd>
+				<dt>Universe</dt>
+				<dd>{universe ?? "—"}</dd>
+				<dt>Start address</dt>
+				<dd className={unset ? "media-dmx-unset" : undefined}>
+					{start === undefined ? "—" : unset ? "Not configured" : start}
+				</dd>
+				{map && (
+					<>
+						<dt>Personality</dt>
+						<dd>
+							{map.layerCount} layers, {map.channels.length} DMX slots
+						</dd>
+					</>
+				)}
+			</dl>
+			{unset && (
+				<p role="alert">
+					No start address is set, so this output answers no desk. Set one in
+					Settings › Network &amp; DMX.
+				</p>
+			)}
+		</div>
+	);
+}
+
+/** The first and last address of each row's block in the running map: Master, then each layer. */
+function patchBlocks(map?: DmxMapView): Map<string, { first: number; last: number }> {
+	const blocks = new Map<string, { first: number; last: number }>();
+	for (const channel of map?.channels ?? []) {
+		const key = channel.group.kind === "layer" ? `layer-${channel.group.number}` : "master";
+		const block = blocks.get(key);
+		const at = channel.absoluteChannel;
+		blocks.set(key, block ? { first: Math.min(block.first, at), last: Math.max(block.last, at) } : { first: at, last: at });
+	}
+	return blocks;
+}
+
+/**
+ * Each row's DMX patch beside what it is showing. The media a layer has selected is a folder and
+ * file in the library, not a DMX address, so it has a column of its own — and a layer with none
+ * selected says so rather than showing 000/000.
+ */
+function PatchTable({ output, map }: { output: OutputView; map?: DmxMapView }) {
+	const blocks = patchBlocks(map);
+	const patch = (key: string) => {
+		const block = blocks.get(key);
+		return block && map ? `Universe ${map.universe} · ${block.first}–${block.last}` : "—";
+	};
+	const media = (folder: number, file: number) =>
+		folder === 0 && file === 0 ? (
+			<span className="media-dmx-unset" title="No media is selected; this is not a DMX address.">
+				None selected
+			</span>
+		) : (
+			addressLabel(folder, file)
+		);
+	const mask = output.master.mask;
+	return (
+		<table className="media-table">
+			<caption>DMX patch and selection of each row of {output.name}</caption>
+			<thead>
+				<tr>
+					<th scope="col">Row</th>
+					<th scope="col">DMX patch</th>
+					<th scope="col">Selected media</th>
+					<th scope="col">Play mode</th>
+					<th scope="col">Dimmer</th>
+					<th scope="col">Source</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr>
+					<th scope="row">Master</th>
+					<td>{patch("master")}</td>
+					<td>
+						{mask.class === "blank" ? (
+							<span className="media-dmx-unset">No mask</span>
+						) : (
+							<>Mask {media(mask.folder, mask.file)}</>
+						)}
+					</td>
+					<td>—</td>
+					<td>{percent(output.master.dimmer)}</td>
+					<td>—</td>
+				</tr>
+				{output.layers.map((layer) => (
+					<tr key={layer.index}>
+						<th scope="row">Layer {layer.index + 1}</th>
+						<td>{patch(`layer-${layer.index + 1}`)}</td>
+						<td>{media(layer.address.folder, layer.address.file)}</td>
+						<td>{layer.playMode}</td>
+						<td>{percent(layer.dimmer)}</td>
+						<td>{sourceBadge(layer.sourceStatus).label}</td>
+					</tr>
+				))}
+			</tbody>
+		</table>
+	);
+}
+
+/** How often the page reads the running DMX map again, so a changed patch shows without a reload. */
+const MAP_REFRESH_MS = 3000;
+
 function useDmxMap(output: string): {
 	data?: DmxMapView;
 	failure?: ApiFailure;
@@ -484,19 +592,28 @@ function useDmxMap(output: string): {
 	const [failure, setFailure] = useState<ApiFailure>();
 	useEffect(() => {
 		let current = true;
-		void api
-			.dmxMap(output)
-			.then((next) => current && setData(next))
-			.catch((error: unknown) => {
-				if (current)
-					setFailure(
-						error instanceof ApiFailure
-							? error
-							: new ApiFailure("unexpected-error", String(error), 0),
-					);
-			});
+		const read = () =>
+			void api
+				.dmxMap(output)
+				.then((next) => {
+					if (!current) return;
+					setData(next);
+					setFailure(undefined);
+				})
+				.catch((error: unknown) => {
+					if (current)
+						setFailure(
+							error instanceof ApiFailure
+								? error
+								: new ApiFailure("unexpected-error", String(error), 0),
+						);
+				});
+		read();
+		// The patch applies at once when it is changed in Settings, so the page reads it again.
+		const every = window.setInterval(read, MAP_REFRESH_MS);
 		return () => {
 			current = false;
+			window.clearInterval(every);
 		};
 	}, [output]);
 	return { data, failure };

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -268,5 +268,47 @@ describe("DMX diagnostics", () => {
 		);
 		expect(screen.getByText("25.0 fps")).toBeInTheDocument();
 		expect(screen.getAllByRole("cell", { name: "7" })).toHaveLength(2);
+	});
+
+	it("shows where each output listens, and each row's DMX patch apart from its selected media", async () => {
+		const server = stubServer();
+		vi.stubGlobal("WebSocket", undefined);
+		server.outputs[0].layers[0].address = { folder: 0, file: 0, class: "blank" };
+		render(<DmxPage />);
+		const output = server.outputs[0];
+		const configured = await screen.findByRole("group", { name: "Configured DMX input" });
+		// The running map is the authority for universe and address; the protocol is the output's.
+		await waitFor(() => expect(configured).toHaveTextContent("Start address100"));
+		expect(configured).toHaveTextContent("ProtocolArt-Net");
+		expect(configured).toHaveTextContent("Universe3");
+		expect(screen.getByRole("heading", { name: `Output “${output.name}”` })).toBeInTheDocument();
+		expect(screen.getByText(/is this output’s name: one picture this server draws/u)).toBeInTheDocument();
+		const table = screen.getByRole("table", { name: `DMX patch and selection of each row of ${output.name}` });
+		const layerOne = within(table).getByRole("rowheader", { name: "Layer 1" }).closest("tr") as HTMLElement;
+		expect(within(layerOne).getByText("Universe 3 · 100–100")).toBeInTheDocument();
+		// No media selected reads as none, never as an address of zero.
+		expect(within(layerOne).getByText("None selected")).toHaveClass("media-dmx-unset");
+		expect(within(table).getByRole("rowheader", { name: "Master" })).toBeInTheDocument();
+	});
+
+	it("says when no start address is set, and follows a changed patch without a reload", async () => {
+		stubServer();
+		vi.stubGlobal("WebSocket", undefined);
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		const map = vi.spyOn(api, "dmxMap");
+		const base = aDmxMap("11111111-1111-4111-8111-111111111111", "Main");
+		map.mockResolvedValue({ ...base, startAddress: 0 });
+		render(<DmxPage />);
+		const configured = await screen.findByRole("group", { name: "Configured DMX input" });
+		await waitFor(() => expect(configured).toHaveTextContent("Not configured"));
+		expect(within(configured).getByRole("alert")).toHaveTextContent(/No start address is set/u);
+
+		map.mockResolvedValue({ ...base, universe: 7, startAddress: 200 });
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(3100);
+		});
+		await waitFor(() => expect(configured).toHaveTextContent("Start address200"));
+		expect(configured).toHaveTextContent("Universe7");
+		vi.useRealTimers();
 	});
 });
