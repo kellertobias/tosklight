@@ -20,6 +20,20 @@ Audio-reactive visualizers depend on the Media Server's configured audio input a
 
 Every visualizer has its own **Audio gain**, listed first among its settings on the **Visualizers** page and in a layer's **Effects › Visualizer** group. It scales the audio that one visualizer hears — its levels, spectrum bands, waveform, and instrument levels — before the visualizer reads them, so one visualizer can be driven harder and another held back from the same input. `1` hears the input as the **Audio** page shows it, `0` hears silence, and the maximum is `8`. Beats and instrument hits still land at any gain; only how large they read changes. **Reactivity** is different: it scales only the movements a kind chose to tie to audio. Audio gain is not a Visualizer Parameter channel, and a visualizer saved before it existed keeps a gain of `1`.
 
+Several visualizers can move with the beat instead of the audio's level. A beat here is the Media Server's tempo-locked beat — before a tempo is known, each kick — and one beat heard twice within half a beat still counts once.
+
+| Visualizer | Beat behavior |
+| --- | --- |
+| Rotating 3D Shape | **React to** chooses **Audio** (swells with the bass and turns steadily) or **Beat** (pops and turns an eighth further on each beat). **Smoothing** eases the bass it follows and how softly each turn settles. |
+| Kaleidoscope | **React to** **Beat** turns the pattern half a segment and flashes it on each beat. |
+| Minimalist Shapes | **React to** **Beat** pops shapes into a fresh third of the grid on each beat, which then fade. |
+| Starfield | **Spawn stars** **On beat** launches a volley of stars from the vanishing point on each beat, over a sparse field that keeps drifting; **Continuously** keeps the full drifting field. The drift is much slower than in earlier versions. |
+| Matrix Digital Rain | Each beat sends **Streaks per beat** (0–8, default 2) bright streaks down their own columns. Louder music speeds the rain up smoothly; it never jumps. |
+| City Tunnel | Each beat surges the tunnel's frames one slot nearer and flashes them. |
+| Grid Landscape | Each beat sends a wave of light along the street lamps from the nearest to the farthest, turning their heads white as it passes. |
+
+Fractal Morph shades from **Start colour**, where points escape at once, to **End colour** along and inside the set, and its **Smoothing** eases the bass that morphs it; `0` follows the bass exactly. A visualizer saved before these settings existed keeps following the audio. Starfield's fourth Visualizer Parameter channel is now **Spawn stars**.
+
 If macOS has not decided whether Pixel Media Server may use the microphone, the **Audio** page shows **Request microphone access**. Approve the system prompt and Pixel opens the selected input immediately. If access was denied, enable Pixel Media Server in macOS **System Settings > Privacy & Security > Microphone**, then press **Check microphone access**. If permission is granted but no stream is open, press **Start audio input**.
 
 Triangular Net is carried by the beat rather than by a clock: a kick heaves its big swells and raises them into mountains, a snare shoves the mid-scale chop, and a hi-hat ripples the fine detail, each easing out at the rate **Decay** sets. Between songs it holds its shape and stands still, so a still net on a playing input means the instruments are not being heard — check the lamps on the **Audio** page.

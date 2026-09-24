@@ -132,10 +132,12 @@ impl VisualizerKind {
     /// is what stops an editor offering an operator a control that does nothing.
     pub const fn parameters(self) -> &'static [Parameter] {
         use Parameter::{
-            Amount, Count, Curvature, Decay, Filled, Gravity, Iterations, Lifetime, Mirror, Mode,
-            Primary, Radius, Reactivity, Secondary, Size, Smoothing, Speed, Thickness, Threshold,
-            Wireframe, Zoom,
+            Amount, Burst, Count, Curvature, Decay, Filled, Gravity, Iterations, Lifetime, Mirror,
+            Mode, OnBeat, Primary, Radius, Reactivity, Secondary, Size, Smoothing, Speed,
+            Thickness, Threshold, Wireframe, Zoom,
         };
+        // A parameter a kind gains later is appended, never inserted: the layer's channel bytes
+        // follow this order, so a stored cue keeps moving the parameter it moved.
         match self {
             Self::EqualizerBars => &[Count, Size, Primary, Secondary, Amount, Smoothing, Mirror],
             Self::WaveformOscilloscope => &[Size, Thickness, Amount, Primary, Filled, Smoothing],
@@ -143,11 +145,11 @@ impl VisualizerKind {
             Self::WaveTerrain => &[Speed, Size, Zoom, Primary, Wireframe],
             Self::PulsingCircles => &[Count, Size, Primary, Filled, Reactivity, Decay],
             Self::MorphingPolygon => &[Count, Radius, Thickness, Primary, Filled, Amount],
-            Self::MinimalistShapes => &[Count, Size, Speed, Primary, Mode],
-            Self::Kaleidoscope => &[Count, Speed, Zoom, Primary],
+            Self::MinimalistShapes => &[Count, Size, Speed, Primary, Mode, OnBeat],
+            Self::Kaleidoscope => &[Count, Speed, Zoom, Primary, OnBeat],
             Self::BeatExplosions => &[Count, Speed, Lifetime, Primary, Gravity],
             Self::DancingSwarm => &[Count, Speed, Radius, Primary, Size],
-            Self::Starfield => &[Count, Speed, Primary],
+            Self::Starfield => &[Count, Speed, Primary, OnBeat],
             Self::LightningTendrils => &[Count, Size, Primary, Threshold],
             Self::RadiatingRays => &[Count, Size, Thickness, Speed, Primary],
             Self::StrobeFlash => &[Primary, Threshold, Decay, Mirror],
@@ -155,9 +157,9 @@ impl VisualizerKind {
             Self::CrossingLines => &[Count, Speed, Primary, Secondary, Mode],
             Self::DigitalGlitch => &[Amount, Speed],
             Self::CrtScanline => &[Count, Curvature],
-            Self::MatrixDigitalRain => &[Count, Speed, Amount, Primary, Secondary],
-            Self::RotatingShape => &[Mode, Speed, Size, Primary, Wireframe],
-            Self::FractalMorph => &[Zoom, Iterations],
+            Self::MatrixDigitalRain => &[Count, Speed, Amount, Primary, Secondary, Burst],
+            Self::RotatingShape => &[Mode, Speed, Size, Primary, Wireframe, Smoothing, OnBeat],
+            Self::FractalMorph => &[Zoom, Iterations, Smoothing, Primary, Secondary],
             Self::CityTunnel => &[Speed, Count, Size, Amount, Primary, Secondary],
             Self::GridLandscape => &[
                 Speed, Count, Size, Radius, Amount, Primary, Secondary, Mode, Iterations,
@@ -198,6 +200,10 @@ pub enum Parameter {
     Filled,
     Wireframe,
     Mode,
+    /// Whether the visualizer moves with the beat instead of following the audio's level.
+    OnBeat,
+    /// How many things one beat sends.
+    Burst,
 }
 
 /// The one parameter block every visualizer shares.
@@ -245,6 +251,13 @@ pub struct VisualizerParameters {
     pub wireframe: bool,
     /// A kind-specific variant selector — shape type, reaction mode.
     pub mode: u8,
+    /// Moves with the landed beat instead of with the audio's level, for the kinds that offer
+    /// both. Stored before it existed, a visualizer kept following the audio.
+    #[serde(default)]
+    pub on_beat: bool,
+    /// How many things one beat sends, such as Matrix Digital Rain's streaks.
+    #[serde(default = "default_burst")]
+    pub burst: u32,
 }
 
 impl Default for VisualizerParameters {
@@ -272,6 +285,8 @@ impl Default for VisualizerParameters {
             filled: false,
             wireframe: false,
             mode: 0,
+            on_beat: false,
+            burst: DEFAULT_BURST,
         }
     }
 }
@@ -300,6 +315,7 @@ impl VisualizerParameters {
             gravity: clamp_unit(self.gravity, -4.0, 4.0),
             lifetime: clamp_unit(self.lifetime, 0.05, 60.0),
             curvature: clamp_unit(self.curvature, 0.0, 1.0),
+            burst: self.burst.min(MAXIMUM_BURST),
             ..self
         }
     }
@@ -325,6 +341,15 @@ impl VisualizerParameters {
 
 /// The loudest an operator can turn one visualizer's audio up.
 pub const MAXIMUM_AUDIO_GAIN: f32 = 8.0;
+
+/// The most things one beat can send. Every one is a test per pixel for as long as it travels.
+pub const MAXIMUM_BURST: u32 = 8;
+
+const DEFAULT_BURST: u32 = 2;
+
+const fn default_burst() -> u32 {
+    DEFAULT_BURST
+}
 
 /// A configuration stored before audio gain existed heard the room as it was.
 const fn unity_gain() -> f32 {
@@ -387,6 +412,10 @@ impl VisualizerConfiguration {
             parameters.amount = 0.9;
             parameters.primary = Tint::new(0.25, 1.0, 0.42);
             parameters.secondary = Tint::new(0.01, 0.16, 0.04);
+        } else if kind == VisualizerKind::FractalMorph {
+            // A deep blue interior escaping outward into warm magenta.
+            parameters.primary = Tint::new(0.05, 0.22, 0.95);
+            parameters.secondary = Tint::new(1.0, 0.25, 0.62);
         }
         Self {
             kind,
@@ -611,6 +640,63 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(absurd.clamped().audio_gain, MAXIMUM_AUDIO_GAIN);
+    }
+
+    #[test]
+    fn a_visualizer_stored_before_beat_reaction_keeps_following_the_audio() {
+        let mut stored = serde_json::to_value(VisualizerParameters::default()).unwrap();
+        let fields = stored.as_object_mut().unwrap();
+        fields.remove("onBeat");
+        fields.remove("burst");
+        let loaded: VisualizerParameters = serde_json::from_value(stored).unwrap();
+        assert!(
+            !loaded.on_beat,
+            "an old show must not start reacting to the beat"
+        );
+        assert_eq!(loaded.burst, DEFAULT_BURST);
+
+        let absurd = VisualizerParameters {
+            burst: 1_000,
+            ..Default::default()
+        };
+        assert_eq!(absurd.clamped().burst, MAXIMUM_BURST);
+    }
+
+    #[test]
+    fn beat_choices_are_appended_so_stored_channel_bytes_keep_their_parameter() {
+        // A cue stores the layer's four channel bytes in the kind's parameter order, so what a
+        // kind gains later must come after what it already had.
+        assert_eq!(
+            &VisualizerKind::RotatingShape.parameters()[..5],
+            &[
+                Parameter::Mode,
+                Parameter::Speed,
+                Parameter::Size,
+                Parameter::Primary,
+                Parameter::Wireframe
+            ]
+        );
+        assert_eq!(
+            &VisualizerKind::FractalMorph.parameters()[..2],
+            &[Parameter::Zoom, Parameter::Iterations]
+        );
+        for kind in [
+            VisualizerKind::RotatingShape,
+            VisualizerKind::Kaleidoscope,
+            VisualizerKind::MinimalistShapes,
+            VisualizerKind::Starfield,
+        ] {
+            assert!(
+                kind.parameters().contains(&Parameter::OnBeat),
+                "{}",
+                kind.label()
+            );
+        }
+        assert!(
+            VisualizerKind::MatrixDigitalRain
+                .parameters()
+                .contains(&Parameter::Burst)
+        );
     }
 
     #[test]

@@ -62,10 +62,35 @@ fn main() -> anyhow::Result<()> {
         },
     };
 
-    for kind in ALL_KINDS {
+    // The levels without the spectrum and waveform, so what the warm-up leaves behind is the
+    // beat and the smoothed levels, not a trace of the analysis.
+    let warming = Analysis {
+        waveform: vec![0.0; WAVEFORM_POINTS],
+        spectrum: vec![0.0; BANDS],
+        ..analysis.clone()
+    };
+    for (layer, kind) in ALL_KINDS.into_iter().enumerate() {
         let parameters = VisualizerConfiguration::new(kind).parameters;
+        // Two seconds of a 128 BPM beat first, so whatever a beat sends -- streaks, stars, a lamp
+        // wave -- is in flight on the sheet, and the clocks the music drives have moved.
+        let beat_length = 60.0 / 128.0;
+        let mut seconds = frame.seconds - 2.0;
+        while seconds < frame.seconds - 1.0 / 120.0 {
+            let since = (seconds - 1.0) % beat_length;
+            let warm = VisualizerFrame {
+                seconds,
+                analysis: &warming,
+                beat: 0.5f32.powf(since / 0.1),
+                instruments: media_domain::Instruments::default(),
+                ..frame
+            };
+            renderer
+                .render(layer, kind, &parameters, &warm)
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
+            seconds += 1.0 / 60.0;
+        }
         let texture = renderer
-            .render(0, kind, &parameters, &frame)
+            .render(layer, kind, &parameters, &frame)
             .map_err(|error| anyhow::anyhow!("{error}"))?;
         let pixels = texture
             .read_rgba8(&gpu)

@@ -1,8 +1,10 @@
-// A neon urban corridor that continuously travels toward the viewer. Repeating perspective
-// frames form the tunnel, while window bands and side towers make the enclosure read as a city.
+// A neon urban corridor that travels toward the viewer. Repeating perspective frames form the
+// tunnel, while window bands and side towers make the enclosure read as a city. The frames are the
+// beat: every landed beat surges them one frame nearer and flashes them, on top of a slow cruise.
 fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
-    let travel = seconds() * speed() * 0.7;
-    let pulse = 0.72 + energy() * 0.28;
+    // The surge eases in over the beat, so the frames glide a whole slot rather than jumping.
+    let travel = clock() * 0.25 + beat_steps();
+    let pulse = 0.72 + smooth_energy() * 0.28;
     let density = clamp(count(), 4.0, 96.0);
     let structure = clamp(size() * 8.0, 0.12, 1.0);
 
@@ -34,8 +36,10 @@ fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     let floor_ceiling = ray * smoothstep(0.12, 0.46, abs(p.y));
     let cross_section = transverse_frame * smoothstep(0.10, 0.48, abs(p.y));
 
+    // A landed beat lights the frames fully, easing back to a dimmer glow before the next one.
+    let frame_light = 0.5 + beat_pulse() * 0.5;
     let city_light = clamp(
-        side_frame + cross_section * 0.72 + floor_ceiling * 0.34 + window * 0.86,
+        side_frame + cross_section * frame_light + floor_ceiling * 0.34 + window * 0.86,
         0.0,
         1.0,
     );

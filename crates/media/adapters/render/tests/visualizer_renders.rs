@@ -146,23 +146,25 @@ fn every_visualizer_answers_to_audio() {
     let busy = loud();
     let parameters = VisualizerParameters::default();
 
-    for kind in ALL_KINDS {
-        // The same instant, twice, differing only in what the analysis says. A visualizer that
-        // produces identical pixels is not reacting, whatever it looks like on its own.
-        let at_rest = draw(
-            &gpu,
-            &mut renderer,
-            kind,
-            &parameters,
-            &frame(&quiet, 3.0, 0.0),
-        );
-        let driven = draw(
-            &gpu,
-            &mut renderer,
-            kind,
-            &parameters,
-            &frame(&busy, 3.0, 1.0),
-        );
+    for (index, kind) in ALL_KINDS.into_iter().enumerate() {
+        // The same stretch of time, twice, on two layers of their own, differing only in what the
+        // analysis says. A visualizer that produces identical pixels is not reacting, whatever it
+        // looks like on its own. A stretch rather than one instant, because a smoothed level or a
+        // clock the music speeds up answers over a few frames, not within one.
+        let (quiet_layer, busy_layer) = (100 + index * 2, 101 + index * 2);
+        let mut seconds = 3.0;
+        for step in 0..12 {
+            let beat = if step == 0 { 1.0 } else { 0.8 };
+            renderer
+                .render(quiet_layer, kind, &parameters, &frame(&quiet, seconds, 0.0))
+                .unwrap_or_else(|error| panic!("{} did not render: {error}", kind.label()));
+            renderer
+                .render(busy_layer, kind, &parameters, &frame(&busy, seconds, beat))
+                .unwrap_or_else(|error| panic!("{} did not render: {error}", kind.label()));
+            seconds += 1.0 / 60.0;
+        }
+        let at_rest = read_back(&gpu, renderer.target(quiet_layer).unwrap());
+        let driven = read_back(&gpu, renderer.target(busy_layer).unwrap());
         assert_ne!(
             at_rest,
             driven,
@@ -622,4 +624,51 @@ fn a_visualizers_audio_gain_turns_the_room_up_or_down_for_it_alone() {
         "a visualizer turned all the way down should draw what it draws in silence \
          ({turned_down} against {quiet})"
     );
+}
+
+#[test]
+fn a_landed_beat_sends_streaks_stars_shapes_and_a_lamp_wave() {
+    // Each of these draws something *because* a beat landed: the same stretch of time with and
+    // without one has to differ, and the beat has to add light rather than take it away.
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(128, 128));
+    let quiet = silence();
+    let on_beat = |kind| {
+        let mut parameters = VisualizerConfiguration::new(kind).parameters;
+        parameters.on_beat = true;
+        (kind, parameters)
+    };
+    let cases = [
+        (
+            VisualizerKind::MatrixDigitalRain,
+            VisualizerConfiguration::new(VisualizerKind::MatrixDigitalRain).parameters,
+        ),
+        on_beat(VisualizerKind::Starfield),
+        on_beat(VisualizerKind::MinimalistShapes),
+        (
+            VisualizerKind::GridLandscape,
+            VisualizerConfiguration::new(VisualizerKind::GridLandscape).parameters,
+        ),
+    ];
+    for (index, (kind, parameters)) in cases.into_iter().enumerate() {
+        let (still, beaten) = (200 + index * 2, 201 + index * 2);
+        let mut seconds = 10.0;
+        for step in 0..15 {
+            let beat = if step == 1 { 1.0 } else { 0.0 };
+            renderer
+                .render(still, kind, &parameters, &frame(&quiet, seconds, 0.0))
+                .unwrap();
+            renderer
+                .render(beaten, kind, &parameters, &frame(&quiet, seconds, beat))
+                .unwrap();
+            seconds += 1.0 / 60.0;
+        }
+        let without = brightness(&read_back(&gpu, renderer.target(still).unwrap()));
+        let with = brightness(&read_back(&gpu, renderer.target(beaten).unwrap()));
+        assert!(
+            with > without,
+            "{} drew nothing more after a beat: {with} against {without}",
+            kind.label()
+        );
+    }
 }

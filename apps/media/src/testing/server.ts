@@ -1674,6 +1674,8 @@ export function aVisualizer(
 			filled: false,
 			wireframe: false,
 			mode: 0,
+			onBeat: false,
+			burst: 2,
 		},
 		channels: [
 			visualizerChannel(0, "count", "Count", [1, 512, 1], 32),

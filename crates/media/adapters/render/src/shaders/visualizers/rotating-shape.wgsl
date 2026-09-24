@@ -1,4 +1,6 @@
-// A rotating solid, scaled by audio. Raymarched, so a wireframe is an edge test rather than a mesh.
+// A rotating solid. Following the audio, it swells with the smoothed bass and turns steadily; on
+// beat, it pops on every landed beat and turns an eighth further, easing into place as Smoothing
+// asks. Raymarched, so a wireframe is an edge test rather than a mesh.
 fn rotate_y(point: vec3<f32>, angle: f32) -> vec3<f32> {
     let s = sin(angle);
     let c = cos(angle);
@@ -27,8 +29,14 @@ fn shape_distance(point: vec3<f32>, extent: f32) -> f32 {
 
 fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
     // Sized to read across a whole output: a solid an operator selects should arrive big.
-    let extent = (0.25 + size() * 3.0) * (1.0 + bass() * reactivity() * 0.4);
-    let spin = seconds() * speed();
+    var swell = smooth_bass() * reactivity() * 0.4;
+    var spin = clock();
+    if on_beat() {
+        swell = beat_pulse() * reactivity() * 0.3;
+        // An eighth of a turn per beat at speed one, plus a slow drift so a held note is not dead.
+        spin = beat_steps() * TAU * 0.125 * max(speed(), 0.05) + clock() * 0.1;
+    }
+    let extent = (0.25 + size() * 3.0) * (1.0 + swell);
     var origin = vec3<f32>(p, -2.5);
     let direction = normalize(vec3<f32>(p * 0.6, 1.0));
 

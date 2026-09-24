@@ -121,6 +121,17 @@ pub struct VisualizerParametersView {
     pub filled: bool,
     pub wireframe: bool,
     pub mode: u8,
+    /// Moves with the landed beat instead of the audio's level. A client that predates it keeps
+    /// the visualizer following the audio.
+    #[serde(default)]
+    pub on_beat: bool,
+    /// How many things one beat sends, `0..=8`.
+    #[serde(default = "default_burst")]
+    pub burst: u32,
+}
+
+const fn default_burst() -> u32 {
+    2
 }
 
 const fn unity_gain() -> f32 {
@@ -156,6 +167,8 @@ impl VisualizerParametersView {
             filled: parameters.filled,
             wireframe: parameters.wireframe,
             mode: parameters.mode,
+            on_beat: parameters.on_beat,
+            burst: parameters.burst,
         }
     }
 }
@@ -257,6 +270,8 @@ impl VisualizerParametersView {
             filled: self.filled,
             wireframe: self.wireframe,
             mode: self.mode,
+            on_beat: self.on_beat,
+            burst: self.burst,
         }
         .clamped()
     }

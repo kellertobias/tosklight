@@ -6,6 +6,7 @@
 import {
 	CheckboxField,
 	ColorPickerField,
+	SelectField,
 	SwitchField,
 } from "@tosklight/ui/controls";
 import { NumberField } from "@tosklight/ui/forms";
@@ -18,6 +19,11 @@ import type {
 	VisualizerView,
 } from "../../shared/api/generated/media-wire";
 import { GridLandscapeSceneryFields } from "./GridLandscapeSceneryFields";
+import {
+	ON_BEAT,
+	onBeatOptions,
+	visualizerParameterLabel,
+} from "./parameterLabels";
 
 export interface VisualizerEditorProps {
 	visualizer: VisualizerView;
@@ -50,6 +56,7 @@ const NUMBERS: Record<
 	lifetime: { label: "Lifetime", field: "lifetime", step: 0.1 },
 	curvature: { label: "Curvature", field: "curvature", step: 0.05 },
 	mode: { label: "Variant", field: "mode", step: 1 },
+	burst: { label: "Per beat", field: "burst", step: 1 },
 };
 
 const FLAGS: Record<
@@ -116,12 +123,28 @@ export function VisualizerEditor({
 						/>
 					);
 				}
+				if (control === ON_BEAT) {
+					return (
+						<SelectField
+							key={control}
+							label={visualizerParameterLabel(
+								visualizer.typeId,
+								control,
+								"React to",
+							)}
+							value={String(parameters.onBeat)}
+							options={onBeatOptions(visualizer.typeId)}
+							onChange={(value) => set("onBeat", value === "true")}
+						/>
+					);
+				}
 				const number = NUMBERS[control];
 				if (number) {
-					const label =
-						visualizer.typeId === 0 && control === "amount"
-							? "Bloom"
-							: number.label;
+					const label = visualizerParameterLabel(
+						visualizer.typeId,
+						control,
+						number.label,
+					);
 					return (
 						<NumberField
 							key={control}
@@ -153,7 +176,11 @@ export function VisualizerEditor({
 					return (
 						<Colour
 							key={control}
-							label={control === "primary" ? "Colour" : "Second colour"}
+							label={visualizerParameterLabel(
+								visualizer.typeId,
+								control,
+								control === "primary" ? "Colour" : "Second colour",
+							)}
 							parameters={parameters}
 							prefix={control}
 							onChange={setColour}

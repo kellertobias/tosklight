@@ -24,18 +24,24 @@ struct Visualizer {
     params2: vec4<f32>,
     // gravity, lifetime, curvature, mode
     params3: vec4<f32>,
-    // mirror, filled, wireframe, spare
+    // burst, spare, spare, spare
+    params4: vec4<f32>,
+    // mirror, filled, wireframe, on beat
     flags: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> visualizer: Visualizer;
 // Row 0 is the 512-point waveform. Row 1 holds the 64 spectrum bands in its first texels, then what
-// is held of the kick, snare and hi-hat hits, then how far each of those has carried an animation.
+// is held of the kick, snare and hi-hat hits, then how far each of those has carried an animation,
+// then the rhythm: smoothed levels, beat pulse, eased and whole beat counts, the flow and speed
+// clocks, and the age of each recent beat.
 @group(0) @binding(1) var analysis: texture_2d<f32>;
 
 const WAVEFORM_POINTS: i32 = 512;
 const BANDS: i32 = 64;
 const TAU: f32 = 6.2831853;
+const RHYTHM: i32 = BANDS + 6;
+const BEAT_HISTORY: i32 = 16;
 
 fn seconds() -> f32 { return visualizer.resolution.w; }
 fn aspect() -> f32 { return visualizer.resolution.z; }
@@ -72,6 +78,10 @@ fn mode() -> f32 { return visualizer.params3.w; }
 fn mirrored() -> bool { return visualizer.flags.x > 0.5; }
 fn filled() -> bool { return visualizer.flags.y > 0.5; }
 fn wireframe() -> bool { return visualizer.flags.z > 0.5; }
+/// The operator chose to have this visualizer move with the landed beat, not the audio's level.
+fn on_beat() -> bool { return visualizer.flags.w > 0.5; }
+/// How many things one beat sends.
+fn burst() -> f32 { return visualizer.params4.x; }
 
 fn primary() -> vec3<f32> { return visualizer.primary.rgb; }
 fn secondary() -> vec3<f32> { return visualizer.secondary.rgb; }
@@ -114,6 +124,44 @@ fn hit_turns() -> vec3<f32> {
         textureLoad(analysis, vec2<i32>(BANDS + 4, 1), 0).x,
         textureLoad(analysis, vec2<i32>(BANDS + 5, 1), 0).x,
     );
+}
+
+fn rhythm(index: i32) -> f32 {
+    return textureLoad(analysis, vec2<i32>(RHYTHM + index, 1), 0).x;
+}
+
+/// Bass, mid, treble, energy and peak, eased at the rate `smoothing` asks for. Zero smoothing is
+/// the level as it is.
+fn smooth_bass() -> f32 { return rhythm(0); }
+fn smooth_mid() -> f32 { return rhythm(1); }
+fn smooth_treble() -> f32 { return rhythm(2); }
+fn smooth_energy() -> f32 { return rhythm(3); }
+fn smooth_peak() -> f32 { return rhythm(4); }
+
+/// `1.0` when a beat lands, easing back to zero; `smoothing` sets how slowly.
+fn beat_pulse() -> f32 { return rhythm(5); }
+
+/// The number of landed beats, eased: it climbs by one on every beat, smoothly. A phase read from
+/// it steps forward on the beat and stands still between songs.
+fn beat_steps() -> f32 { return rhythm(6); }
+
+/// The number of landed beats. Beat `beat_count() - i` is the one `beat_age(i)` describes, which
+/// makes it a stable seed for whatever that beat sent.
+fn beat_count() -> f32 { return rhythm(7); }
+
+/// Seconds at `speed`, sped up by the smoothed energy. It only goes forward, so a phase read from
+/// it glides faster when the music is louder instead of jumping the way `seconds() * energy()`
+/// would.
+fn flow() -> f32 { return rhythm(8); }
+
+/// Seconds at `speed`. Moving the speed fader changes the rate and never the position.
+fn clock() -> f32 { return rhythm(9); }
+
+/// Seconds since the `index`-th most recent beat, newest first. Very large for a beat that never
+/// landed, so anything it would have sent is long gone.
+fn beat_age(index: i32) -> f32 {
+    if index < 0 || index >= BEAT_HISTORY { return 1.0e6; }
+    return rhythm(10 + index);
 }
 
 /// One waveform sample, `-1..1`.

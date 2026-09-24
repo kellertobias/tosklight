@@ -253,6 +253,7 @@ function visualizerChannelDisplay(
 ) {
 	if (["mirror", "filled", "wireframe"].includes(channel.parameter))
 		return value >= 0.5 ? "On" : "Off";
+	if (channel.parameter === "on-beat") return value >= 0.5 ? "Beat" : "Audio";
 	if (channel.parameter === "primary" || channel.parameter === "secondary")
 		return `${Math.round(value)}° hue`;
 	if (channel.step >= 1) return String(Math.round(value));
@@ -549,6 +550,7 @@ export const VISUALIZER_NUMBERS: Record<
 		step: 0.01,
 	},
 	mode: { field: "mode", label: "Variant", minimum: 0, maximum: 255, step: 1 },
+	burst: { field: "burst", label: "Per beat", minimum: 0, maximum: 8, step: 1 },
 };
 
 export const VISUALIZER_FLAGS: Record<

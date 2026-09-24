@@ -13,6 +13,7 @@ pub mod compositor;
 mod feedback;
 pub mod gpu;
 pub mod offscreen;
+mod rhythm;
 pub mod texture;
 pub mod visualizer;
 pub mod window;

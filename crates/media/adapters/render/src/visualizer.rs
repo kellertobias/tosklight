@@ -16,6 +16,7 @@ use media_domain::geometry::Size;
 use media_domain::visualizer::{ALL_KINDS, VisualizerKind, VisualizerParameters};
 
 use crate::gpu::Gpu;
+use crate::rhythm::{BEAT_HISTORY, Heard, Rhythm, RhythmMemory};
 use crate::texture::{SourceTexture, TextureError};
 
 const PRELUDE: &str = include_str!("shaders/visualizers/prelude.wgsl");
@@ -101,6 +102,7 @@ struct VisualizerUniform {
     params1: [f32; 4],
     params2: [f32; 4],
     params3: [f32; 4],
+    params4: [f32; 4],
     flags: [f32; 4],
 }
 
@@ -170,11 +172,12 @@ impl VisualizerUniform {
                 parameters.curvature,
                 f32::from(parameters.mode),
             ],
+            params4: [parameters.burst as f32, 0.0, 0.0, 0.0],
             flags: [
                 f32::from(u8::from(parameters.mirror)),
                 f32::from(u8::from(parameters.filled)),
                 f32::from(u8::from(parameters.wireframe)),
-                0.0,
+                f32::from(u8::from(parameters.on_beat)),
             ],
         }
     }
@@ -294,6 +297,7 @@ pub struct VisualizerRenderer {
     analysis_view: wgpu::TextureView,
     targets: HashMap<usize, SourceTexture>,
     memories: HashMap<usize, AudioMemory>,
+    rhythms: HashMap<usize, RhythmMemory>,
 }
 
 impl VisualizerRenderer {
@@ -360,6 +364,7 @@ impl VisualizerRenderer {
             analysis_view,
             targets: HashMap::new(),
             memories: HashMap::new(),
+            rhythms: HashMap::new(),
         }
     }
 
@@ -411,7 +416,26 @@ impl VisualizerRenderer {
             .entry(layer)
             .or_insert_with(AudioMemory::new)
             .advance(&frame.instruments, frame.seconds, tuned.decay, tuned.speed);
-        self.upload_analysis(frame.analysis, &memory);
+        let analysis = frame.analysis;
+        let rhythm = self
+            .rhythms
+            .entry(layer)
+            .or_insert_with(RhythmMemory::new)
+            .advance(Heard {
+                seconds: frame.seconds,
+                levels: [
+                    analysis.bass,
+                    analysis.mid,
+                    analysis.treble,
+                    analysis.energy,
+                    analysis.peak,
+                ],
+                beat: frame.beat,
+                bpm: frame.bpm,
+                speed: tuned.speed,
+                smoothing: tuned.smoothing,
+            });
+        self.upload_analysis(frame.analysis, &memory, &rhythm);
         self.gpu.queue.write_buffer(
             &self.uniform,
             0,
@@ -528,7 +552,7 @@ impl VisualizerRenderer {
     }
 
     /// Puts the newest analysis where the shaders can read it.
-    fn upload_analysis(&self, analysis: &Analysis, memory: &Memory) {
+    fn upload_analysis(&self, analysis: &Analysis, memory: &Memory, rhythm: &Rhythm) {
         let mut rows = vec![0.0f32; WAVEFORM_POINTS * 2];
         for (slot, value) in rows[..WAVEFORM_POINTS]
             .iter_mut()
@@ -551,6 +575,24 @@ impl VisualizerRenderer {
             .zip(memory.held.iter().chain(memory.turns.iter()))
         {
             *slot = *value;
+        }
+        // Then the rhythm: the smoothed levels, the beat pulse, the eased beat count, the beat
+        // count, the flow and speed clocks, and the age of each recent beat.
+        let rhythm_row = rhythm
+            .smoothed
+            .iter()
+            .copied()
+            .chain([
+                rhythm.pulse,
+                rhythm.steps,
+                rhythm.count,
+                rhythm.flow,
+                rhythm.clock,
+            ])
+            .chain(rhythm.ages);
+        let at = beat + 6;
+        for (slot, value) in rows[at..at + 10 + BEAT_HISTORY].iter_mut().zip(rhythm_row) {
+            *slot = value;
         }
 
         self.gpu.queue.write_texture(
@@ -770,7 +812,7 @@ mod tests {
 
     #[test]
     fn the_uniform_is_the_size_the_prelude_declares() {
-        assert_eq!(std::mem::size_of::<VisualizerUniform>(), 192);
+        assert_eq!(std::mem::size_of::<VisualizerUniform>(), 208);
     }
 
     #[test]

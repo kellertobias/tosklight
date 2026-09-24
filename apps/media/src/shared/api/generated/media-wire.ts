@@ -336,7 +336,16 @@ export type VisualizerParametersView = { count: number, size: number, speed: num
  * Scales the audio this visualizer hears, `0.0..=8.0`, where `1.0` is the room as it is.
  * A client that predates it leaves the room as it is.
  */
-audioGain: number, reactivity: number, decay: number, zoom: number, iterations: number, threshold: number, smoothing: number, gravity: number, lifetime: number, curvature: number, primaryRed: number, primaryGreen: number, primaryBlue: number, secondaryRed: number, secondaryGreen: number, secondaryBlue: number, mirror: boolean, filled: boolean, wireframe: boolean, mode: number, };
+audioGain: number, reactivity: number, decay: number, zoom: number, iterations: number, threshold: number, smoothing: number, gravity: number, lifetime: number, curvature: number, primaryRed: number, primaryGreen: number, primaryBlue: number, secondaryRed: number, secondaryGreen: number, secondaryBlue: number, mirror: boolean, filled: boolean, wireframe: boolean, mode: number,
+/**
+ * Moves with the landed beat instead of the audio's level. A client that predates it keeps
+ * the visualizer following the audio.
+ */
+onBeat: boolean,
+/**
+ * How many things one beat sends, `0..=8`.
+ */
+burst: number, };
 export type VisualizerView = { address: AddressView,
 /**
  * Stable across releases and across a reassignment of the address.

@@ -74,11 +74,11 @@ impl VisualizerChannel {
         }
         let fraction = f32::from(raw - 1) / 254.0;
         Some(match self.parameter {
-            Parameter::Mirror | Parameter::Filled | Parameter::Wireframe => {
+            Parameter::Mirror | Parameter::Filled | Parameter::Wireframe | Parameter::OnBeat => {
                 f32::from(u8::from(raw >= 128))
             }
             Parameter::Mode => f32::from(raw - 1),
-            Parameter::Count | Parameter::Iterations => {
+            Parameter::Count | Parameter::Iterations | Parameter::Burst => {
                 (self.minimum + fraction * (self.maximum - self.minimum)).round()
             }
             _ => self.minimum + fraction * (self.maximum - self.minimum),
@@ -180,6 +180,8 @@ impl Parameter {
             Self::Filled => "Filled",
             Self::Wireframe => "Wireframe",
             Self::Mode => "Variant",
+            Self::OnBeat => "React to beat",
+            Self::Burst => "Per beat",
         }
     }
 
@@ -202,8 +204,9 @@ impl Parameter {
             Self::Gravity => (-4.0, 4.0),
             Self::Lifetime => (0.05, 60.0),
             Self::Primary | Self::Secondary => (0.0, 360.0),
-            Self::Mirror | Self::Filled | Self::Wireframe => (0.0, 1.0),
+            Self::Mirror | Self::Filled | Self::Wireframe | Self::OnBeat => (0.0, 1.0),
             Self::Mode => (0.0, 254.0),
+            Self::Burst => (0.0, crate::visualizer::MAXIMUM_BURST as f32),
         }
     }
 
@@ -216,7 +219,9 @@ impl Parameter {
             | Self::Secondary
             | Self::Mirror
             | Self::Filled
-            | Self::Wireframe => 1.0,
+            | Self::Wireframe
+            | Self::OnBeat
+            | Self::Burst => 1.0,
             _ => 0.001,
         }
     }
@@ -245,6 +250,8 @@ fn read(parameter: Parameter, parameters: &VisualizerParameters) -> f32 {
         Parameter::Filled => f32::from(u8::from(parameters.filled)),
         Parameter::Wireframe => f32::from(u8::from(parameters.wireframe)),
         Parameter::Mode => f32::from(parameters.mode),
+        Parameter::OnBeat => f32::from(u8::from(parameters.on_beat)),
+        Parameter::Burst => parameters.burst as f32,
     }
 }
 
@@ -271,6 +278,8 @@ fn write(parameter: Parameter, parameters: &mut VisualizerParameters, value: f32
         Parameter::Filled => parameters.filled = value >= 0.5,
         Parameter::Wireframe => parameters.wireframe = value >= 0.5,
         Parameter::Mode => parameters.mode = value.round().clamp(0.0, 255.0) as u8,
+        Parameter::OnBeat => parameters.on_beat = value >= 0.5,
+        Parameter::Burst => parameters.burst = value.round().max(0.0) as u32,
     }
 }
 
@@ -296,11 +305,11 @@ mod tests {
                 assert_eq!(kind.channel(index), None, "{} byte {index}", kind.label());
             }
         }
-        // Starfield offers three parameters, so its fourth byte does nothing.
-        assert_eq!(VisualizerKind::Starfield.channels().count(), 3);
+        // Color Cycling offers two parameters, so its last two bytes do nothing.
+        assert_eq!(VisualizerKind::ColorCycling.channels().count(), 2);
         let configured = VisualizerParameters::default();
         assert_eq!(
-            configured.with_dmx(VisualizerKind::Starfield, &[0, 0, 0, 255]),
+            configured.with_dmx(VisualizerKind::ColorCycling, &[0, 0, 255, 255]),
             configured.clamped()
         );
     }

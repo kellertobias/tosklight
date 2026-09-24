@@ -5,7 +5,6 @@
     "apps/light-desktop/src-tauri/src/stage_pane.rs": 1246,
     "apps/light-desktop/src/components/control/PlaybackConfigurationTabs.tsx": 1257,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx": 1325,
-    "apps/media/src/features/layers/MediaPanePage.tsx": 1208,
     "apps/viz-editor/src-tauri/src/cad.rs": 1217,
     "apps/viz-renderer/src/app.rs": 1324,
     "crates/light/adapters/headless/src/runtime/macros_v2.rs": 1654,

@@ -58,7 +58,7 @@ describe("the visualizers page", () => {
 					typeId: 42,
 					kind: "Matrix Digital Rain",
 					name: "Matrix Digital Rain",
-					uses: ["count", "speed", "amount", "primary", "secondary"],
+					uses: ["count", "speed", "amount", "primary", "secondary", "burst"],
 				}),
 			],
 		});
@@ -220,6 +220,83 @@ describe("the visualizers page", () => {
 			expect(server.visualizers[0].parameters.iterations).toBe(0),
 		);
 		expect(server.visualizers[0].parameters.mode).toBe(2);
+	});
+
+	it("lets a rotating shape follow the beat instead of the audio", async () => {
+		const server = stubServer({
+			visualizers: [
+				aVisualizer({
+					kind: "Rotating 3D Shape",
+					name: "Rotating 3D Shape",
+					typeId: 50,
+					uses: [
+						"mode",
+						"speed",
+						"size",
+						"primary",
+						"wireframe",
+						"smoothing",
+						"on-beat",
+					],
+				}),
+			],
+		});
+		render(<VisualizersPage />);
+		await screen.findByLabelText("Name");
+
+		expect(screen.getByLabelText("Smoothing")).toBeInTheDocument();
+		await chooseOption("React to", "Beat");
+		await waitFor(() =>
+			expect(server.visualizers[0].parameters.onBeat).toBe(true),
+		);
+	});
+
+	it("names a starfield's beat choice for what it spawns and the rain's streak count", async () => {
+		stubServer({
+			visualizers: [
+				aVisualizer({
+					kind: "Starfield",
+					name: "Starfield",
+					typeId: 22,
+					uses: ["count", "speed", "primary", "on-beat"],
+				}),
+			],
+		});
+		const { unmount } = render(<VisualizersPage />);
+		await screen.findByLabelText("Name");
+		expect(screen.getByText("Spawn stars", { selector: "label" })).toBeVisible();
+		unmount();
+
+		stubServer({
+			visualizers: [
+				aVisualizer({
+					kind: "Matrix Digital Rain",
+					name: "Matrix Digital Rain",
+					typeId: 42,
+					uses: ["count", "speed", "amount", "primary", "secondary", "burst"],
+				}),
+			],
+		});
+		render(<VisualizersPage />);
+		expect(await screen.findByLabelText("Streaks per beat")).toHaveValue("2");
+	});
+
+	it("calls a fractal's two colours where its gradient starts and ends", async () => {
+		stubServer({
+			visualizers: [
+				aVisualizer({
+					kind: "Fractal Morph",
+					name: "Fractal Morph",
+					typeId: 51,
+					uses: ["zoom", "iterations", "smoothing", "primary", "secondary"],
+				}),
+			],
+		});
+		render(<VisualizersPage />);
+		await screen.findByLabelText("Name");
+		expect(screen.getByText("Start colour")).toBeInTheDocument();
+		expect(screen.getByText("End colour")).toBeInTheDocument();
+		expect(screen.getByLabelText("Smoothing")).toBeInTheDocument();
 	});
 
 	it("says why an edit that could not be stored was not applied", async () => {
