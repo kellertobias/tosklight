@@ -198,8 +198,16 @@ const addGroup = (label: string, items: TitleDropdownItem[]): TitleActionGroup =
 	],
 });
 
-/** Info's **Generic** and **Placement** tabs. */
-function infoTabsGroup(active: InfoTab, onChange: (tab: InfoTab) => void): TitleActionGroup {
+/**
+ * Info's **Generic** and **Placement** tabs, which divide a selected element's Info. Picked text has
+ * one section of its own, so with no element selected there are no tabs.
+ */
+function infoTabsGroup(
+	active: InfoTab,
+	onChange: (tab: InfoTab) => void,
+	selectionCount: number,
+): TitleActionGroup | null {
+	if (selectionCount === 0) return null;
 	return {
 		id: "info-tabs",
 		kind: "tabs",
@@ -228,7 +236,8 @@ function titleGroups({
 	tools: CadTools;
 	request(kind: keyof ElementsRequests): void;
 	printPages: PrintPages;
-	infoTabs: TitleActionGroup;
+	/** Absent while Info shows picked text, which has one section of its own and no tabs. */
+	infoTabs: TitleActionGroup | null;
 }): TitleActionGroup[] {
 	if (panel === "elements")
 		return [
@@ -250,7 +259,7 @@ function titleGroups({
 				{ kind: "action", id: "fixture-list", label: "Fixture list", onPress: printPages.addFixtureList },
 			]),
 		];
-	return [infoTabs];
+	return infoTabs ? [infoTabs] : [];
 }
 
 /** The right-click menu, while it is open and names something to act on. */
@@ -490,7 +499,7 @@ export function CadSidePanels({
 		<DeleteSelectionButton count={elements.length} onPress={() => deletion.request()} />
 	);
 
-	const infoTabs = infoTabsGroup(infoTab, setInfoTab);
+	const infoTabs = infoTabsGroup(infoTab, setInfoTab, selectionCount);
 	const request = (kind: keyof ElementsRequests) =>
 		setRequests((current) => ({ ...current, [kind]: current[kind] + 1 }));
 	const title = panel === "print" ? "Plans" : panel === "elements" ? "Elements" : "Info";
@@ -536,7 +545,7 @@ export function CadSidePanels({
 					) : null}
 				</div>
 			) : null}
-			{selectionCount > 0 && scene ? (
+			{infoTabs && scene ? (
 				<InfoSection
 					scene={scene}
 					placements={placements}

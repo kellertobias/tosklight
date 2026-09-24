@@ -50,3 +50,32 @@ describe("Info for picked text", () => {
 		expect(screen.getByLabelText("Position height")).toHaveValue("1.5");
 	});
 });
+
+describe("Info's title for picked text", () => {
+	it("carries no Generic and Placement tabs, which divide only an element's Info", async () => {
+		const { CadSidePanels } = await import("./CadSidePanels");
+		render(
+			<CadToolContext.Provider value={{ annotations: [note], selectedTextId: "note" } as unknown as CadTools}>
+				<CadSidePanels
+					panel={null}
+					scene={{ sceneRevision: 1, entities: [], selectedIds: [] } as never}
+					tools={{ annotations: [note], selectedTextId: "note", change: vi.fn() } as unknown as CadTools}
+					underlayState={{} as never}
+					defaultView="top_down"
+					documentKey={null}
+					printPages={{} as never}
+					exporting={false}
+					onExport={vi.fn()}
+					onSelect={vi.fn()}
+					focusedEntityId={null}
+					onFocusEntity={vi.fn()}
+					onError={vi.fn()}
+					onNotice={vi.fn()}
+				/>
+			</CadToolContext.Provider>,
+		);
+		expect(screen.getByLabelText("Text")).toHaveValue("Stage left");
+		expect(screen.queryByRole("tab", { name: "Generic" })).toBeNull();
+		expect(screen.queryByRole("tab", { name: "Placement" })).toBeNull();
+	});
+});
