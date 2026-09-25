@@ -27,6 +27,7 @@ import {
 } from "../patchUtils";
 import { definitionSplits } from "./patchModel";
 import { usePatchSelection } from "./selection";
+import { positionReferenceColumnAvailable } from "./positionReference";
 import { DEFAULT_PATCH_SORT, type PatchSort, sortPatchFixtures } from "./tableSort";
 
 export type EditKind =
@@ -43,6 +44,7 @@ export type EditKind =
 	| "scenery_colour"
 	| "chain"
 	| "model_scale"
+	| "position_reference"
 	| "mode"
 	| "mib"
 	| "masters"
@@ -405,11 +407,16 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 			onStagePreview: props.onStagePreview,
 			onOpenStageWindow: props.onOpenStageWindow,
 			compact: props.compact ?? false,
-			hiddenColumns: new Set<PatchColumn>(
-				props.compact
+			hiddenColumns: new Set<PatchColumn>([
+				...(props.compact
 					? (props.hiddenColumns ?? [])
-					: (app.state.patchHiddenColumns ?? []),
-			),
+					: (app.state.patchHiddenColumns ?? [])),
+				// The Position Reference column appears once a 3D Point is in the show; until then
+				// there is nothing to reference and the column is left out of the header and rows.
+				...(positionReferenceColumnAvailable(data.all)
+					? []
+					: (["position_reference"] as const)),
+			]),
 		},
 	};
 }

@@ -151,6 +151,7 @@ function mapFixtureProjection(
 		shaperAngle: fixture.shaper_angle,
 		installedAppearance: mapInstalledAppearance(fixture.installed_appearance),
 		modelScale: fixture.model_scale ?? null,
+		positionMaster: fixture.position_master ?? null,
 		moveInBlackEnabled: fixture.move_in_black_enabled,
 		moveInBlackDelayMillis: fixture.move_in_black_delay_millis,
 		highlightOverrides: fixture.highlight_overrides.map((override) => ({

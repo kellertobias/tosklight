@@ -15,6 +15,7 @@ import { Fragment, type ReactNode } from "react";
 import { PATCH_COLUMNS, type PatchColumn } from "../../../types";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
 import { isDmxPatchable, isInternal } from "../patchUtils";
+import { isPositionPoint, positionReferenceLabel } from "./positionReference";
 import { usePatchController } from "./controller";
 import {
 	armEdit,
@@ -367,7 +368,43 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 			<FootprintCells fixture={fixture} />
 			<SceneryOptionCells fixture={fixture} />
 			<ModelScaleCell fixture={fixture} />
+			<PositionReferenceCell fixture={fixture} />
 		</>
+	);
+}
+
+/**
+ * Which 3D Point this fixture or Venue object follows; **None** when it is placed against the
+ * stage. A 3D Point itself shows a dash: it is what others reference, and it follows nothing.
+ * The column is drawn only while the show holds a 3D Point.
+ */
+function PositionReferenceCell({ fixture }: { fixture: PatchedFixture }) {
+	const controller = usePatchController();
+	return (
+		<Shown column="position_reference">
+			{isPositionPoint(fixture) ? (
+				NO_MEASUREMENT
+			) : (
+				<td className="patch-secondary">
+					<Button
+						className="patch-value"
+						aria-label={`Position Reference ${fixtureDisplayId(fixture)}`}
+						onClick={() => armEdit(controller, fixture, "position_reference")}
+						onContextMenu={(event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							beginFixtureEditFromContextMenu(
+								controller,
+								fixture,
+								"position_reference",
+							);
+						}}
+					>
+						{positionReferenceLabel(fixture, controller.data.all)}
+					</Button>
+				</td>
+			)}
+		</Shown>
 	);
 }
 
@@ -678,6 +715,8 @@ function MultiPatchRow({
 			<Shown column="scenery_colour">{NO_MEASUREMENT}</Shown>
 			<Shown column="chain">{NO_MEASUREMENT}</Shown>
 			<Shown column="model_scale">{NO_MEASUREMENT}</Shown>
+			{/* A copy follows the point its fixture follows; the reference is the fixture's. */}
+			<Shown column="position_reference">{NO_MEASUREMENT}</Shown>
 			<Shown column="layer">
 				<td className="patch-secondary">
 					<span>—</span>

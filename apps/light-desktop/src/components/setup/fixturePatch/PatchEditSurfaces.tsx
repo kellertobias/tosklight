@@ -1,3 +1,5 @@
+import { isVisualOnly } from "../patchUtils";
+import { positionPointLabel, positionPoints } from "./positionReference";
 import { SCENERY_AXES } from "./scenerySize";
 import { CHAIN_MODES } from "./sceneryOptions";
 import {
@@ -294,6 +296,7 @@ function FixtureEditFields() {
 	if (edit === "internal_bindings") return <InternalBindingsFields />;
 	if (edit === "scenery_colour") return <SceneryColourFields />;
 	if (edit === "chain") return <ChainModeFields />;
+	if (edit === "position_reference") return <PositionReferenceFields />;
 	if (edit === "masters" || edit === "pan_tilt")
 		return <CombinedPolicySelect kind={edit} />;
 	if (edit === "location" || edit === "rotation")
@@ -349,6 +352,44 @@ function ChainModeFields() {
 					</option>
 				))}
 			</Select>
+		</label>
+	);
+}
+
+/**
+ * Which 3D Point this fixture or Venue object follows. **None** places it against the stage. The
+ * choice is a point in this show, named by its fixture ID and name; a point is never offered to
+ * itself, and a point cannot follow another point.
+ */
+function PositionReferenceFields() {
+	const controller = usePatchController();
+	const selected = controller.data.selected;
+	const points = positionPoints(controller.data.all).filter(
+		(point) => point.fixture_id !== selected?.fixture_id,
+	);
+	return (
+		// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
+		<label>
+			Position Reference
+			<Select
+				autoFocus
+				aria-label="Position Reference"
+				value={controller.ui.editText}
+				onChange={(event) => controller.ui.setEditText(event.target.value)}
+			>
+				<option value="">None</option>
+				{points.map((point) => (
+					<option key={point.fixture_id} value={point.fixture_id}>
+						{positionPointLabel(point)}
+					</option>
+				))}
+			</Select>
+			<small>
+				Moving or rotating the point carries this{" "}
+				{selected && isVisualOnly(selected.definition) ? "object" : "fixture"} with
+				it, relative to the point's own origin. Its location and rotation stay where
+				it sits when the point rests on its origin.
+			</small>
 		</label>
 	);
 }
@@ -586,5 +627,6 @@ function editTitle(
 	if (edit === "scenery_colour") return "Colour";
 	if (edit === "chain") return "Chain";
 	if (edit === "model_scale") return "Scale";
+	if (edit === "position_reference") return "Position Reference";
 	return edit;
 }

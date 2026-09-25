@@ -112,6 +112,9 @@ export function saveEdit(
 		if ("error" in result) controller.ui.setEditError(result.error);
 		else void applyEdit(controller, result);
 	}
+	// None is stored as no reference at all, which is how every fixture placed before points read.
+	if (edit === "position_reference")
+		void applyEdit(controller, { position_master: value.trim() || null });
 	if (edit === "crowd_width" || edit === "crowd_depth")
 		void saveCrowdFootprint(controller, edit, value);
 	if ((edit === "location" || edit === "rotation") && editAxis)

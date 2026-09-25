@@ -142,6 +142,8 @@ export interface PatchFixtureWrite {
 	sceneryOptions?: PatchSceneryOptions | null;
 	/** How many times its built size a placed Venue object is drawn; `null` is its built size. */
 	modelScale?: number | null;
+	/** The 3D Point this fixture follows, by fixture id; `null` places it against the stage. */
+	positionMaster?: string | null;
 }
 
 export interface PatchPlacementOverride {

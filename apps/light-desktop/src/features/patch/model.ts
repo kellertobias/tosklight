@@ -180,6 +180,8 @@ export function patchedFixtureCandidate(
 			installedAppearance: patchAppearance(fixture.installed_appearance),
 			// Every write carries the scale back, so editing anything else never resets it.
 			modelScale: fixture.model_scale ?? null,
+			// The same for the Position Reference: a rename must not unhook a lamp from its truss.
+			positionMaster: fixture.position_master ?? null,
 			moveInBlackEnabled: fixture.move_in_black_enabled ?? true,
 			moveInBlackDelayMillis: fixture.move_in_black_delay_millis ?? 0,
 			highlightOverrides: Object.entries(fixture.highlight_overrides ?? {}).map(
@@ -298,6 +300,7 @@ export function projectionToPatchedFixture(
 		shaper_angle: projection.shaperAngle ?? null,
 		installed_appearance: fixtureAppearance(projection.installedAppearance),
 		model_scale: projection.modelScale ?? null,
+		position_master: projection.positionMaster ?? null,
 		move_in_black_enabled: projection.moveInBlackEnabled,
 		move_in_black_delay_millis: projection.moveInBlackDelayMillis,
 		highlight_overrides: Object.fromEntries(

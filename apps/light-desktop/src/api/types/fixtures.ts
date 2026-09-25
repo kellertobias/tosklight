@@ -43,6 +43,12 @@ export interface PatchedFixture {
 	 * `null` is the size it was built at.
 	 */
 	model_scale?: number | null;
+	/**
+	 * The 3D Point this fixture takes as its Position Reference: the fixture id of a patched
+	 * 3D Point. Moving or rotating that point carries this fixture with it, relative to the
+	 * point's own origin. Absent or `null` leaves the fixture placed against the stage.
+	 */
+	position_master?: string | null;
 	rotation?: { x: number; y: number; z: number };
 	multipatch?: MultiPatchInstance[];
 	group_masters_enabled?: boolean;

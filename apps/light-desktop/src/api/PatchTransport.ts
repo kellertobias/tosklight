@@ -400,6 +400,7 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 			fixture.installedAppearance,
 		),
 		model_scale: fixture.modelScale ?? null,
+		position_master: fixture.positionMaster ?? null,
 		move_in_black_enabled: fixture.moveInBlackEnabled,
 		move_in_black_delay_millis: fixture.moveInBlackDelayMillis,
 		highlight_overrides: fixture.highlightOverrides.map((override) => ({

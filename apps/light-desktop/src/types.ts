@@ -358,6 +358,8 @@ export const PATCH_COLUMNS = [
 	{ id: "scenery_colour", label: "Colour" },
 	{ id: "chain", label: "Chain" },
 	{ id: "model_scale", label: "Scale" },
+	/** Drawn only while the show holds a 3D Point; see `positionReferenceColumnAvailable`. */
+	{ id: "position_reference", label: "Position Reference" },
 	{ id: "layer", label: "Layer" },
 ] as const;
 export type PatchColumn = (typeof PATCH_COLUMNS)[number]["id"];

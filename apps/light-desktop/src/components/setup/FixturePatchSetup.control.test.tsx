@@ -2359,6 +2359,167 @@ describe("Show Patch visible columns", () => {
 	});
 });
 
+describe("Position Reference column", () => {
+	afterEach(() => {
+		state.patchSetArmed = false;
+	});
+
+	/** A 3D Point: the profile's mode carries the point position attribute. */
+	function pointFixture(): PatchedFixture {
+		const point = splitFixture();
+		point.fixture_id = "fixture-point";
+		point.fixture_number = 901;
+		point.name = "Truss point";
+		point.definition = {
+			...point.definition,
+			id: "profile-point",
+			name: "3D Point",
+			model: "3D Point",
+			device_type: "position_point",
+			profile_id: "profile-point",
+			mode_id: "mode-point",
+		};
+		const profile = point.definition.profile_snapshot;
+		if (!profile) throw new Error("point profile is missing");
+		profile.id = "profile-point";
+		profile.name = "3D Point";
+		profile.fixture_type = "position_point";
+		profile.modes[0].id = "mode-point";
+		profile.modes[0].splits = [{ number: 1, footprint: 6 }];
+		profile.modes[0].channels = ["x", "y", "z"].map((axis, index) => ({
+			id: `point-${axis}`,
+			head_id: profile.modes[0].heads[0]?.id ?? "head",
+			split: 1,
+			fixture_attribute: `point.position.${axis}`,
+			attribute: `point.position.${axis}`,
+			canonical_transform: "identity",
+			resolution: "u16",
+			secondary_slots: [index * 2 + 2],
+			default_raw: 32768,
+			highlight_raw: 32768,
+			physical_min: -100,
+			physical_max: 100,
+			unit: "m",
+			invert: false,
+			snap: false,
+			reacts_to_virtual_intensity: false,
+			reacts_to_sequence_master: false,
+			reacts_to_group_master: false,
+			reacts_to_grand_master: false,
+			behavior: "controlled",
+			functions: [],
+		}));
+		point.universe = null;
+		point.address = null;
+		point.split_patches = [{ split: 1, universe: null, address: null }];
+		return point;
+	}
+
+	it("is left out of the table until the show holds a 3D Point", () => {
+		server.patch.fixtures = [splitFixture()];
+		render(<FixturePatchSetup />);
+		expect(
+			screen.queryByRole("columnheader", { name: "Position Reference" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Position Reference 17" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("appears with a point, reads None for a loose fixture and a dash for the point itself", () => {
+		server.patch.fixtures = [splitFixture(), pointFixture()];
+		render(<FixturePatchSetup />);
+
+		const headers = screen
+			.getAllByRole("columnheader")
+			.map((header) => header.getAttribute("aria-label") ?? header.textContent);
+		expect(headers.indexOf("Position Reference")).toBe(headers.indexOf("Scale") + 1);
+		expect(headers.indexOf("Layer")).toBe(headers.indexOf("Position Reference") + 1);
+		expect(
+			screen.getByRole("button", { name: "Position Reference 17" }),
+		).toHaveTextContent("None");
+		expect(
+			screen.queryByRole("button", { name: "Position Reference 901" }),
+		).not.toBeInTheDocument();
+		const pointRow = document.querySelector<HTMLTableRowElement>(
+			'tr[data-fixture-id="fixture-point"]',
+		);
+		expect(pointRow?.cells[headers.indexOf("Position Reference")]).toHaveTextContent(
+			/^—$/,
+		);
+	});
+
+	it("names the point a fixture follows by its ID and name", () => {
+		const slave = splitFixture();
+		slave.position_master = "fixture-point";
+		server.patch.fixtures = [slave, pointFixture()];
+		render(<FixturePatchSetup />);
+		expect(
+			screen.getByRole("button", { name: "Position Reference 17" }),
+		).toHaveTextContent("901 · Truss point");
+	});
+
+	it("assigns a point through armed SET and offers the point but never the fixture itself", async () => {
+		server.patch.fixtures = [splitFixture(), pointFixture()];
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: "Position Reference 17" }));
+		expect(
+			screen.queryByRole("heading", { name: "Set fixture Position Reference" }),
+		).not.toBeInTheDocument();
+
+		state.patchSetArmed = true;
+		fireEvent.click(screen.getByRole("button", { name: "Position Reference 17" }));
+		const dialog = (
+			await screen.findByRole("heading", {
+				name: "Set fixture Position Reference",
+			})
+		).closest("section") as HTMLElement;
+		// The Select's trigger is named by the value it shows, as every other Select in the desk.
+		const select = within(dialog).getByRole("button", { name: "None" });
+		fireEvent.click(select);
+		expect(
+			screen.getAllByRole("option").map((option) => option.textContent),
+		).toEqual(["None", "901 · Truss point"]);
+		fireEvent.click(screen.getByRole("option", { name: "901 · Truss point" }));
+		expect(select).toHaveTextContent("901 · Truss point");
+		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
+
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				position_master: "fixture-point",
+			}),
+		);
+	});
+
+	it("clears a reference with None", async () => {
+		const slave = splitFixture();
+		slave.position_master = "fixture-point";
+		server.patch.fixtures = [slave, pointFixture()];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+
+		fireEvent.click(screen.getByRole("button", { name: "Position Reference 17" }));
+		const dialog = (
+			await screen.findByRole("heading", {
+				name: "Set fixture Position Reference",
+			})
+		).closest("section") as HTMLElement;
+		const select = within(dialog).getByRole("button", {
+			name: "901 · Truss point",
+		});
+		fireEvent.click(select);
+		fireEvent.click(screen.getByRole("option", { name: "None" }));
+		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
+
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				position_master: null,
+			}),
+		);
+	});
+});
+
 describe("DMX address grid dragging", () => {
 	it("fits whole touch cells into the available width", () => {
 		expect(dmxGridColumnCount(360)).toBe(7);

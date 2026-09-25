@@ -180,6 +180,8 @@ export function patchedFixtureCandidate(
 					}
 				: null,
 			modelScale: fixture.model_scale ?? null,
+			// A write from the sheet carries the desk's Position Reference back untouched.
+			positionMaster: fixture.position_master ?? null,
 		},
 	};
 }
@@ -295,6 +297,7 @@ export function projectionToPatchedFixture(
 				}
 			: null,
 		model_scale: projection.modelScale ?? null,
+		position_master: projection.positionMaster ?? null,
 	};
 }
 

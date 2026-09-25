@@ -95,6 +95,9 @@ function beginFixtureEdit(
 		ui.setEditText(sceneryOptionsOf(fixture).colour_srgb ?? "");
 	else if (kind === "chain") ui.setEditText(chainModeOf(fixture));
 	else if (kind === "model_scale") ui.setEditText(String(modelScaleOf(fixture)));
+	// The point's fixture id, or empty for a fixture placed against the stage.
+	else if (kind === "position_reference")
+		ui.setEditText(fixture.position_master ?? "");
 	else if (kind === "location" || kind === "rotation")
 		ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
 	else if (kind === "mode") selectFixtureFamily(controller, fixture);
