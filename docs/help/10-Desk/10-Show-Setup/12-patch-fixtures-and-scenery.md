@@ -54,6 +54,37 @@ Cell rules:
 
 Rows with an unusable cell are listed as **Not imported** with the reason and never block the other rows. Closing after choosing a file asks for confirmation.
 
+## Position Reference: hanging things on a 3D Point
+
+A **3D Point** (manufacturer **ToskLight**) is a reference object you patch like any fixture and
+move from the Position encoders: **Point X**, **Point Y** and **Point Z** in metres and **Point Rot
+X**, **Point Rot Y** and **Point Rot Z** in degrees. Every axis rests at the centre of its range, so
+a freshly patched point sits exactly where you placed it.
+
+As soon as the show holds a 3D Point, Show Patch draws a **Position Reference** column. Select any
+fixture or Venue object, press `[SET]` and touch its **Position Reference** cell, or right-click the
+cell, and choose a point by its fixture ID and name; **None** places it against the stage again. A
+truss and every lamp hung on it can reference the same point: when that point is moved or rotated,
+everything referencing it moves with it, relative to the point's own origin. The location and
+rotation stored for a referencing fixture describe where it sits while the point rests at its
+origin, and they do not change when the point moves. A 3D Point shows a dash in the column and
+cannot reference another point, and nothing can reference itself. The column disappears again when
+the last point leaves the show; a fixture whose point was deleted reads **None** and is drawn
+against the stage.
+
+The Visualizer and the desk's Stage draw a referencing fixture or Venue object where the point puts
+it, and `Fixture 1 AT Fixture 5` aims at the moved object. The Architect's 2D CAD keeps drawing it
+where it was rigged, because a point's live position is desk state rather than the plan; the CAD
+notes **Follows 3D Point** beside the object and in its **Info** panel instead.
+
+Left unpatched, a 3D Point is a programmer-only object. Patched, it sends its pose over DMX so a
+hoist controller or another visualizer can follow the same point. Its modes are **Position 16
+bit**, **Position 24 bit** and **Position 32 bit** (X, Y and Z at that width, no rotation) and
+**Full 16 bit**, **Full 24 bit** and **Full 32 bit** (the same position axes followed by the three
+rotations at 16 bit each). Position is offset binary: the middle value of the channel is no offset,
+values below it move the point negative and values above it positive, reaching ±100 m at the ends of
+the range. Rotation is ±180° about its middle value.
+
 ## Show Patch views
 
 **Fixtures**, **Media Servers**, and **Tracking** are tabs at the top right of Show Patch, next to **⚙** Settings. The tabs and **⚙** stay in the same place on all three views; a narrow window shortens the Fixtures actions instead. Media Servers and Tracking each scroll as one page with the same inner margins as Settings, so their last controls stay reachable on a short display. **⚙** opens the Show Patch Settings on the page for the current view: **Columns** for the Fixtures table, **Media Servers** for the thumbnail cache, and **Tracking** for the PosiStageNet source.

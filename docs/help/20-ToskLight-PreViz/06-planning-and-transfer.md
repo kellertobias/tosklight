@@ -489,6 +489,13 @@ PDF or PNG output rasterizes that SVG at the requested output size rather than m
 separate bitmap asset. Plan composition uses world depth and explicit opaque/empty regions, so its
 occlusion does not depend on package file order or incidental 3D material names.
 
+A fixture or Venue object that follows a **3D Point** on the desk (its **Position Reference** in
+Show Patch) is drawn where it was rigged: the point's live position is desk state the plan does not
+read, and moving the point changes nothing in the CAD. The plan says so instead. **Follows 3D Point
+901 · Truss point** appears beside the object in every viewport, whether or not fixture IDs and DMX
+addresses are shown, and at the top of its **Placement** tab in **Info**. Editing the object here
+keeps its reference; only the desk sets or clears one.
+
 ## Plan orientation
 
 The top-down plan reads like a map: **+X** runs to the right and **+Y** up, so upstage is at the
