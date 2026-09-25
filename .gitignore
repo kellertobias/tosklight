@@ -37,6 +37,7 @@ __pycache__
 /tmp/
 
 # Local tooling and operating-system files
+/.claude/
 .DS_Store
 .env
 .env.*
