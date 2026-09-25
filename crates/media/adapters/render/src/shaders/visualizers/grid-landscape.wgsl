@@ -126,6 +126,13 @@ fn palm_tree(point: vec2<f32>, base: vec2<f32>, side: f32, scale: f32) -> f32 {
     return max(max(body, leaf), solid(nuts - scale * 0.055));
 }
 
+/// How far along the road an object travels before it wraps back to the horizon, where `1` puts
+/// its foot on the bottom edge. Past this its top, the crown of the tallest palm, has left the
+/// bottom of the picture too, so nothing vanishes while it can still be seen.
+const SCENERY_DEPTH: f32 = 1.75;
+/// Objects along one side at once, spaced as seven were over the visible stretch of road.
+const SCENERY_COUNT: f32 = 12.0;
+
 /// The scenery along one side of the road: its colour, and how much it covers.
 ///
 /// Street lamps light up in a wave from the front to the back whenever a beat lands, their heads
@@ -136,9 +143,11 @@ fn roadside(point: vec2<f32>, side: f32, scenery: f32, travel: f32) -> vec4<f32>
     var cover = 0.0;
     var index = 0.0;
     loop {
-        if index >= 7.0 { break; }
-        let depth = fract(index / 7.0 + travel * 0.09);
+        if index >= SCENERY_COUNT { break; }
+        // The same pace as before; only the far end of the journey moved past the picture's edge.
+        let depth = fract(index / SCENERY_COUNT + travel * 0.09 / SCENERY_DEPTH) * SCENERY_DEPTH;
         let perspective = depth * depth;
+        let shade_depth = min(perspective, 1.0);
         let base = vec2<f32>(side * (0.16 + perspective * 0.62), -0.04 + perspective * 1.02);
         let scale = 0.025 + perspective * 0.16;
         // Nothing to test for a pixel well away from this object.
@@ -156,14 +165,14 @@ fn roadside(point: vec2<f32>, side: f32, scenery: f32, travel: f32) -> vec4<f32>
             var landed = 0;
             loop {
                 if landed >= 4 { break; }
-                let front = 1.0 - beat_age(landed) * 2.0;
+                let front = SCENERY_DEPTH - beat_age(landed) * 3.5;
                 if front < -0.3 { break; }
                 let behind = (depth - front) / 0.14;
                 wave = max(wave, exp(-behind * behind));
                 landed += 1;
             }
             let lamp = street_lamp(point, base, side, scale);
-            let body_colour = mix(secondary(), primary(), 0.5 + 0.5 * perspective);
+            let body_colour = mix(secondary(), primary(), 0.5 + 0.5 * shade_depth);
             let head_colour = mix(primary() * 0.7, vec3<f32>(1.0), wave);
             let glow = max(lamp.w - 0.22, 0.0) * wave * 2.2;
             let head = lamp.x * (0.4 + wave * 1.8) + glow;
@@ -172,7 +181,7 @@ fn roadside(point: vec2<f32>, side: f32, scenery: f32, travel: f32) -> vec4<f32>
             cover = max(cover, max(lamp.y, clamp(head + pool, 0.0, 1.0)) * appear);
         } else {
             let palm = palm_tree(point, base, side, scale);
-            let palm_colour = mix(secondary(), primary(), 0.35 + 0.65 * perspective);
+            let palm_colour = mix(secondary(), primary(), 0.35 + 0.65 * shade_depth);
             colour = max(colour, palm_colour * palm * appear);
             cover = max(cover, palm * appear);
         }
