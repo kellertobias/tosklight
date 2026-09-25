@@ -144,19 +144,45 @@ fn run(output: &Path) -> Result<(), String> {
     scene.scenery.extend(objects);
     scene.recompute_bounds();
 
-    let mut values = SceneValues::default();
-    values.resize(scene.emitters.len());
-    values.atmosphere.density = 0.02;
-    for emitter in &mut values.emitters {
-        emitter.intensity = 1.0;
-        emitter.colour = [1.0, 0.86, 0.62];
-        emitter.pan = 0.5;
-        emitter.tilt = 0.5;
-        emitter.zoom = 0.6;
-    }
+    let values = lit_values(&scene);
 
     let mut renderer = viz_render::Renderer::headless(1600, 1000)?;
     let overlay = viz_render::Overlay::default();
+    let cameras = gallery_cameras(y, row_z, stage_z, drape_z);
+    for (name, position, target, fov) in cameras {
+        let mut view = ViewConfiguration {
+            quality: viz_scene::RenderQuality::High,
+            // A lit room rather than a blackout, so the materials are judged rather than the dark.
+            ambient: 0.2,
+            ..ViewConfiguration::default()
+        };
+        view.camera.position = position;
+        view.camera.target = target;
+        view.camera.up = Vec3::Y;
+        view.camera.fov_degrees = fov;
+        for frame in 0..3 {
+            renderer
+                .capture(&scene, &values, &view, &overlay, frame as f32 / 30.0)
+                .map_err(|error| error.to_string())?;
+        }
+        let image = renderer
+            .capture(&scene, &values, &view, &overlay, 0.1)
+            .map_err(|error| error.to_string())?;
+        let path = output.join(format!("{name}.png"));
+        write_png(&path, image.width, image.height, &image.rgba)?;
+        eprintln!("wrote {}", path.display());
+    }
+    Ok(())
+}
+
+/// Where each gallery picture is taken from: a wide shot of the sections, one close shot per
+/// chain, the lamps through the truss, and the staging and drapes.
+fn gallery_cameras(
+    y: f32,
+    row_z: f32,
+    stage_z: f32,
+    drape_z: f32,
+) -> Vec<(&'static str, Vec3, Vec3, f32)> {
     let close = |x: f32| {
         (
             Vec3::new(x + 1.1, y + 0.95, row_z + 1.3),
@@ -169,7 +195,7 @@ fn run(output: &Path) -> Result<(), String> {
     let (apex_up_at, apex_up_to, apex_up_fov) = close(0.0);
     let (apex_down_at, apex_down_to, apex_down_fov) = close(2.0);
     let (box_at, box_to, box_fov) = close(4.0);
-    let cameras = [
+    vec![
         (
             "sections",
             Vec3::new(0.0, 3.4, 4.5),
@@ -234,31 +260,23 @@ fn run(output: &Path) -> Result<(), String> {
             Vec3::new(-1.5, 1.6, drape_z - 2.0),
             40.0,
         ),
-    ];
-    for (name, position, target, fov) in cameras {
-        let mut view = ViewConfiguration {
-            quality: viz_scene::RenderQuality::High,
-            // A lit room rather than a blackout, so the materials are judged rather than the dark.
-            ambient: 0.2,
-            ..ViewConfiguration::default()
-        };
-        view.camera.position = position;
-        view.camera.target = target;
-        view.camera.up = Vec3::Y;
-        view.camera.fov_degrees = fov;
-        for frame in 0..3 {
-            renderer
-                .capture(&scene, &values, &view, &overlay, frame as f32 / 30.0)
-                .map_err(|error| error.to_string())?;
-        }
-        let image = renderer
-            .capture(&scene, &values, &view, &overlay, 0.1)
-            .map_err(|error| error.to_string())?;
-        let path = output.join(format!("{name}.png"));
-        write_png(&path, image.width, image.height, &image.rgba)?;
-        eprintln!("wrote {}", path.display());
+    ]
+}
+
+/// Every lamp full, warm and pointing straight down, in a little haze: the gallery is lit rather
+/// than judged in the dark.
+fn lit_values(scene: &Scene) -> SceneValues {
+    let mut values = SceneValues::default();
+    values.resize(scene.emitters.len());
+    values.atmosphere.density = 0.02;
+    for emitter in &mut values.emitters {
+        emitter.intensity = 1.0;
+        emitter.colour = [1.0, 0.86, 0.62];
+        emitter.pan = 0.5;
+        emitter.tilt = 0.5;
+        emitter.zoom = 0.6;
     }
-    Ok(())
+    values
 }
 
 fn scene_from(path: &Path) -> Result<Scene, String> {

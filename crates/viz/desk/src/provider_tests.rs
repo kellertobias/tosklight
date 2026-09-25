@@ -52,6 +52,7 @@ mod tests {
 #[cfg(test)]
 mod network_rule_tests {
     use super::*;
+    use crate::desk_output_frame::{desk_output_signature, stamp_desk_output_frame};
 
     /// The rule the embedded pane turns off, stated where it can be checked.
     ///
@@ -171,7 +172,7 @@ mod network_rule_tests {
             fallback: None,
         });
         let mut values = viz_scene::SceneValues::default();
-        super::apply_point_poses(
+        super::desk_output::apply_point_poses(
             &scene,
             &[
                 crate::wire::OutputPointPose {
@@ -198,7 +199,7 @@ mod network_rule_tests {
         assert_eq!(pose.offset_metres, [0.0, -1.5, 0.0]);
         assert_eq!(pose.rotation_degrees, [0.0, 90.0, 0.0]);
         // A later read replaces the pose rather than stacking a second one.
-        super::apply_point_poses(
+        super::desk_output::apply_point_poses(
             &scene,
             &[crate::wire::OutputPointPose {
                 fixture_id: point,

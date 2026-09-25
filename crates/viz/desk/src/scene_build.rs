@@ -165,30 +165,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
         binding.invert_pan = false;
         binding.invert_tilt = false;
     }
-    let masters: std::collections::HashMap<_, _> = models
-        .patch
-        .fixtures
-        .iter()
-        .filter_map(|fixture| Some((fixture.fixture_id, fixture.position_master?)))
-        .collect();
-    for instance in &mut plan.scene.fixtures {
-        instance.position_master = masters.get(&instance.fixture_id).copied();
-    }
-    // A generated Venue object is a fixture the scenery pass builds instead of a body, so it
-    // follows the same point its fixture does. The object is keyed by the instance it was built
-    // for, and the instance knows its fixture.
-    let instance_fixtures: std::collections::HashMap<_, _> = plan
-        .scene
-        .fixtures
-        .iter()
-        .map(|instance| (instance.instance_id, instance.fixture_id))
-        .collect();
-    for object in &mut plan.scene.scenery {
-        object.position_master = instance_fixtures
-            .get(&object.id)
-            .and_then(|fixture_id| masters.get(fixture_id))
-            .copied();
-    }
+    slave_to_points(&mut plan, &models.patch);
     plan.warnings.extend(warnings);
     if !placements.is_empty() {
         plan.warnings.push(placement_summary(&placements));
@@ -210,6 +187,32 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     build_media(&mut plan.scene, models, &mut plan.warnings);
     plan.scene.recompute_bounds();
     plan
+}
+
+/// Hand every instance, and every generated Venue object built for one, the 3D Point its fixture
+/// follows. The object is keyed by the instance it was built for, and the instance knows its
+/// fixture, so a truss follows the same point its lamps do.
+fn slave_to_points(plan: &mut ScenePlan, patch: &PatchSnapshot) {
+    let masters: std::collections::HashMap<_, _> = patch
+        .fixtures
+        .iter()
+        .filter_map(|fixture| Some((fixture.fixture_id, fixture.position_master?)))
+        .collect();
+    for instance in &mut plan.scene.fixtures {
+        instance.position_master = masters.get(&instance.fixture_id).copied();
+    }
+    let instance_fixtures: std::collections::HashMap<_, _> = plan
+        .scene
+        .fixtures
+        .iter()
+        .map(|instance| (instance.instance_id, instance.fixture_id))
+        .collect();
+    for object in &mut plan.scene.scenery {
+        object.position_master = instance_fixtures
+            .get(&object.id)
+            .and_then(|fixture_id| masters.get(fixture_id))
+            .copied();
+    }
 }
 
 fn hidden_object_ids(
