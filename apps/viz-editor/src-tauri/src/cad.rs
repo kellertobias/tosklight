@@ -101,6 +101,13 @@ pub struct CadEntity {
     /// A 3D model the operator imported into this show, rather than a shipped Venue object.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub imported_model: bool,
+    /// The 3D Point this placement follows, named as the desk names it: fixture ID, then name.
+    ///
+    /// The plan draws every placement where it was rigged — a point's live pose is desk state the
+    /// plan does not read — so this is a note beside the drawing, not a moved drawing. Absent for
+    /// a placement against the stage, and for a reference to a point the show no longer holds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position_reference: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -460,6 +467,7 @@ fn entities(
         .iter()
         .map(|profile| ((profile.profile_id.0, profile.profile_revision), profile))
         .collect::<HashMap<_, _>>();
+    let points = position_points(snapshot, &profiles);
     snapshot
         .fixtures
         .iter()
@@ -502,6 +510,10 @@ fn entities(
                 .unwrap_or("Unknown mode")
                 .to_owned();
             let note = notes.get(&logical_fixture_id).cloned().unwrap_or_default();
+            let position_reference = fixture
+                .patch
+                .position_master
+                .and_then(|master| points.get(&master).cloned());
             let common = |id: Uuid,
                           name: String,
                           location: &light_fixture::FixtureLocation,
@@ -542,6 +554,7 @@ fn entities(
                 scenery: cad_scenery(snapshot, &fixture.patch.scenery_options),
                 mounting: cad_mounting(snapshot, entity_size(snapshot, &fixture.patch, id)),
                 imported_model: snapshot.is_some_and(imported_model),
+                position_reference: position_reference.clone(),
             };
             let visual_only = profile.is_some_and(|profile| {
                 profile.patch_policy == light_fixture::PatchPolicy::VisualOnly
@@ -595,6 +608,69 @@ fn entities(
             .collect::<Vec<_>>()
         })
         .collect()
+}
+
+/// Every 3D Point in the patch, by fixture id, named the way the desk's Position Reference column
+/// names it. A point is whatever carries the point position attribute in its patched mode — the
+/// same test the desk applies — so the plan and the desk agree on what can be followed.
+fn position_points(
+    snapshot: &PatchSnapshot,
+    profiles: &HashMap<
+        (Uuid, light_core::Revision),
+        &light_application::PatchProfileRevisionProjection,
+    >,
+) -> HashMap<Uuid, String> {
+    snapshot
+        .fixtures
+        .iter()
+        .filter(|fixture| {
+            profiles
+                .get(&(
+                    fixture.profile.profile_id.0,
+                    fixture.profile.profile_revision,
+                ))
+                .is_some_and(|profile| {
+                    mode_is_position_point(&profile.profile_snapshot, fixture.profile.mode_id)
+                })
+        })
+        .map(|fixture| {
+            let display_id = fixture
+                .patch
+                .fixture_number
+                .map(|number| number.to_string())
+                .or_else(|| {
+                    fixture
+                        .patch
+                        .virtual_fixture_number
+                        .map(|number| format!("0.{number}"))
+                })
+                .unwrap_or_else(|| "—".to_owned());
+            (
+                fixture.patch.fixture_id.0,
+                format!("{display_id} · {}", fixture.patch.name),
+            )
+        })
+        .collect()
+}
+
+fn mode_is_position_point(profile: &serde_json::Value, mode_id: Uuid) -> bool {
+    let mode_id = mode_id.to_string();
+    profile
+        .get("modes")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|modes| {
+            modes
+                .iter()
+                .find(|mode| mode.get("id").and_then(serde_json::Value::as_str) == Some(&mode_id))
+        })
+        .and_then(|mode| mode.get("channels"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|channels| {
+            channels.iter().any(|channel| {
+                channel.get("attribute").and_then(serde_json::Value::as_str)
+                    == Some("point.position.x")
+            })
+        })
 }
 
 /// Whether a profile wraps a 3D model the operator imported into this show.

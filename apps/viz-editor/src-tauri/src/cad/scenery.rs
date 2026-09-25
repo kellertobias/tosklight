@@ -489,6 +489,7 @@ mod tests {
             }),
             mounting: None,
             imported_model: false,
+            position_reference: None,
         }
     }
 

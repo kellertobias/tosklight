@@ -59,10 +59,15 @@ export function CadEntityLabels({
 	showFixtureIds: boolean;
 	showDmxAddresses: boolean;
 }) {
-	if (!showFixtureIds && !showDmxAddresses) return null;
+	// A placement that follows a 3D Point is drawn where it was rigged, so the plan says beside it
+	// what the picture will do; that note is shown whether or not the ID and DMX labels are.
+	const referenced = entities.some((entity) => entity.positionReference);
+	if (!showFixtureIds && !showDmxAddresses && !referenced) return null;
 	return (
 		<div className="cad-entity-labels" aria-hidden="true">
 			{entities.map((entity) => {
+				if (!showFixtureIds && !showDmxAddresses && !entity.positionReference)
+					return null;
 				const worldDelta = previewDeltaForEntity(
 					preview,
 					entity.logicalFixtureId,
@@ -86,6 +91,14 @@ export function CadEntityLabels({
 						{showFixtureIds ? `ID ${entity.fixtureDisplayId}` : null}
 						{showFixtureIds && showDmxAddresses ? " · " : null}
 						{showDmxAddresses ? `DMX ${entity.dmxAddress}` : null}
+						{entity.positionReference ? (
+							<>
+								{showFixtureIds || showDmxAddresses ? " · " : null}
+								<span className="cad-entity-label-reference">
+									Follows 3D Point {entity.positionReference}
+								</span>
+							</>
+						) : null}
 					</span>
 				);
 			})}

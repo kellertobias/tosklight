@@ -257,6 +257,15 @@ pub struct FixtureDto {
     /// payload written before it existed, is the size it was built at.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_scale: Option<f32>,
+    /// The desk's own note against this fixture. The sheet never edits it, but a write from here
+    /// carries it back exactly as read, so editing a placement does not erase the paperwork.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The 3D Point this fixture follows, by fixture id. Set on the desk; written back exactly as
+    /// read so a move in the plan does not unhook a lamp from its truss. The plan draws the fixture
+    /// where it was rigged and says that it follows a point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_master: Option<Uuid>,
     /// Read-only projections the sheet displays but never writes.
     #[serde(default, skip_deserializing)]
     pub fixture_revision: u64,
@@ -479,6 +488,8 @@ impl From<PatchFixtureProjection> for FixtureDto {
             scenery_size_metres: patch.scenery_size_metres.as_ref().map(VectorDto::from),
             scenery_options: SceneryOptionsDto::from(&patch.scenery_options),
             model_scale: patch.model_scale,
+            note: patch.note,
+            position_master: patch.position_master,
             fixture_revision: projection.fixture_revision,
             logical_heads: patch
                 .logical_heads
@@ -678,9 +689,10 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                 address: dto.split_patches.first().and_then(|split| split.address),
                 split_patches: dto.split_patches.iter().map(SplitPatch::from).collect(),
                 layer_id: dto.layer_id,
-                // The CAD editor places a rig against the stage; points are a desk-side relation.
-                note: None,
-                position_master: None,
+                // Written back exactly as read: the note and the 3D Point a fixture follows are
+                // set on the desk, and an edit made in the plan must not erase either.
+                note: dto.note,
+                position_master: dto.position_master,
                 // An unparseable address drops the endpoint rather than failing the whole patch;
                 // direct control is an optional extra, not the fixture's identity.
                 direct_control: dto.direct_control.and_then(|value| {

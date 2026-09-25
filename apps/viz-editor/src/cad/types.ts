@@ -46,6 +46,11 @@ export interface CadEntity {
 	mounting?: CadMounting;
 	/** A 3D model imported into this show (manufacturer "Imported models"), not a shipped Venue object. */
 	importedModel?: boolean;
+	/**
+	 * The 3D Point this placement follows on the desk, as "ID · name". The plan draws the placement
+	 * where it was rigged, not where the point has moved it, and says so beside it.
+	 */
+	positionReference?: string;
 }
 
 export interface CadScenery {

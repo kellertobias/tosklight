@@ -429,6 +429,12 @@ function PlacementFields({
 	};
 	return (
 		<fieldset disabled={!placement}>
+			{entity.positionReference ? (
+				<p className="cad-info-reference" role="note">
+					Follows 3D Point {entity.positionReference}. The plan shows where this is
+					rigged; the Visualizer moves it with the point.
+				</p>
+			) : null}
 			<VectorFields
 				label="Position"
 				unit="m"

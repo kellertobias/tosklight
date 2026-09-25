@@ -3362,3 +3362,8 @@ body {
 	stroke: #8d99a4;
 	stroke-width: 0.7;
 }
+
+/* The note beside a placement that follows a 3D Point on the desk: drawn where it was rigged. */
+.cad-entity-label-reference {
+	color: #f0c674;
+}
