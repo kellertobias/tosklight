@@ -3,11 +3,12 @@
 //! Generated from the canonical personality on request rather than shipped as files, so a channel
 //! cannot exist on the wire and be missing from what an operator patches.
 
-use axum::extract::Path;
+use axum::extract::{Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
 use crate::error::ApiError;
+use crate::routes::ApiState;
 
 pub(super) async fn fixtures() -> Result<impl IntoResponse, ApiError> {
     let names: Vec<String> = media_application::gdtf::packages()
@@ -28,8 +29,18 @@ fn generation_error(error: std::io::Error) -> ApiError {
 }
 
 /// One console personality in its native download format.
-pub(super) async fn fixture(Path(name): Path<String>) -> Result<Response, ApiError> {
-    let packaged = media_application::gdtf::packages().map_err(generation_error)?;
+pub(super) async fn fixture(
+    State(state): State<ApiState>,
+    Path(name): Path<String>,
+) -> Result<Response, ApiError> {
+    let layer_count = state
+        .active_configuration
+        .outputs
+        .first()
+        .map(|output| output.personality.layer_count())
+        .unwrap_or(8);
+    let packaged = media_application::gdtf::packages_with_layer_count(layer_count)
+        .map_err(generation_error)?;
     let (_, bytes) = packaged
         .into_iter()
         .find(|(candidate, _)| *candidate == name)
@@ -137,7 +148,7 @@ mod tests {
         let bench = bench();
         let (_, listing) = send(&bench.router, get("/api/v2/fixtures".into())).await;
         let names: Vec<String> = serde_json::from_value(listing).unwrap();
-        let packages = media_application::gdtf::packages().unwrap();
+        let packages = media_application::gdtf::packages_with_layer_count(2).unwrap();
         assert_eq!(names.len(), packages.len());
         for (name, expected) in packages {
             assert!(names.contains(&name));

@@ -117,8 +117,12 @@ must start at address 1. A two-layer output occupies 158 slots and can start any
 
 - **MagicQ:** download the two native `.hed` files and copy them into MagicQ’s `show/heads`
   directory. Open a new empty show, open **PATCH**, choose manufacturer **ToskLight**, and
-  patch eight **Pixel Layer** heads and one **Pixel Master** head at the advertised addresses.
-  Rescan or restart MagicQ if newly copied heads are not listed.
+  patch the advertised number of **Pixel Layer** heads and one **Pixel Master** head at the
+  advertised addresses. The Layer HED identifies itself as **CITP MSEX** and carries the
+  running output's layer count, so MagicQ creates its Media server row when the first Layer
+  is patched. Rescan or restart MagicQ if newly copied heads are not listed. If an older
+  version of the head was already patched in a show, start a new show or replace the patched
+  head; MagicQ keeps a copy of the personality inside each show.
 - **grandMA2:** place both XML files in `gma2/library` on the selected drive. In
   **Setup > Patch & Fixture Schedule**, import both fixture types and add eight Layer fixtures
   plus one Master fixture.
@@ -134,12 +138,14 @@ use **sACN**. In MagicQ, enable the patched universe’s sACN output in **SETUP 
 and send to Pixel’s address. Other consoles have their own network output configuration.
 For Art-Net, check the console’s zero-based wire-universe convention; sACN universes start at 1.
 
-In MagicQ’s **SETUP > View System > Media**, configure a server slot as **CITP MSEX**,
-using Pixel’s reachable address and advertised CITP port. Use consecutive Layer head numbers **1–8**, set the first layer head to **1** and
-**Layers** to **8**; patch Master as head **9**. Set **Thumbs** to **Enabled** and
-**Live prev** to **Yes**, then press **GET THUMBS**. Consoles supporting CITP/MSEX need an equivalent media-server association;
-importing a GDTF or personality file alone does not establish this connection. Consult the
-console’s media-server settings where CITP is not supported by its current software.
+In MagicQ’s **SETUP > View System > Media**, confirm the row created by patching the Layer
+head shows **CITP MSEX**, the first patched Layer head number, and the correct **Layers** count.
+Enter Pixel’s reachable IP address and advertised CITP port. Set **Thumb con** to **Enabled**
+and **Live prev** to **Yes**, then press **GET THUMBS**. The HED cannot embed the server's
+network address or turn on these show settings. Consoles supporting CITP/MSEX need an
+equivalent media-server association; importing a GDTF alone does not establish this
+connection. Consult the console’s media-server settings where CITP is not supported by its
+current software.
 
 ### Same computer and LAN
 
@@ -178,7 +184,7 @@ takeover, raise Master Dimmer and the selected Layer Dimmer, choose a Play Mode,
 image with the console’s Media Folder/File attributes. Pixel’s DMX diagnostics must identify the
 sender and show changing raw values; the visible output must show the selected image.
 
-In MagicQ’s Media window, select each of the eight layers. All eight must present the same
+In MagicQ’s Media window, select each of the configured layers. Each must present the same
 encoder arrangement, and unused positions must be blank:
 
 | Page | A | B | C | D | E | F | Y | X |
@@ -190,7 +196,10 @@ encoder arrangement, and unused positions must be blank:
 | FX1 | FX1 Param 1 | FX1 Param 2 | FX1 Param 3 | FX1 Param 4 | | | FX1 Mix | FX1 Select |
 | FX2 | FX2 Param 1 | FX2 Param 2 | FX2 Param 3 | FX2 Param 4 | | | FX2 Mix | FX2 Select |
 | Visualizer | Vis Param 1 | Vis Param 2 | Vis Param 3 | Vis Param 4 | | | | |
-| Frame | Mask Position X | Mask Position Y | Mask Scale X | Mask Scale Y | Mask Invert | Mask Opacity | Mask Folder | Mask File |
+| Beam page 5 | Mask Position X | Mask Position Y | Mask Scale X | Mask Scale Y | Mask Invert | Mask Opacity | Mask Folder | Mask File |
+
+The **Frame** tile in MagicQ's Media window shows its built-in framing controls. Pixel's mask
+controls are on **BEAM > PAGE 5**; selecting the Frame tile does not select those channels.
 
 MagicQ’s normal preview shows the master/program output. Hold **SHIFT** and press
 **VIEW SERVERS** (the soft button becomes **PREVIEW LAYER**) to switch to the selected layer’s
@@ -201,8 +210,12 @@ Use visibly different moving content on the selected layer and the program outpu
 the two sources.
 
 Media Folder/File and Mask Folder/File are indexed 0–255; moving an encoder must advance one
-index at a time. Confirm identifiable thumbnail images, a visibly updating master/program
-preview, and eight separate layer previews showing the correct layers. A successful connection,
+index at a time. MagicQ activates each modified channel separately with its default
+**Activate Chans/Head = Chans** setting: changing a Folder alone does not put the corresponding
+File into the programmer, and changing a File alone does not put its Folder there. Set both
+values before recording a cue that needs the pair. Confirm identifiable thumbnail images, a
+visibly updating master/program preview, and separate layer previews showing the correct
+layers. A successful connection,
 downloaded files, or **Finished retrieving thumbnails** does not establish that images are
 visible. Patch/select Master and verify its dimmer and fixed **Layer Opacity Cycle** affect the
 shared output without shifting any layer’s channels. Repeat from a second computer using Pixel’s

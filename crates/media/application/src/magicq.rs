@@ -166,13 +166,19 @@ fn ascii(text: &str) -> String {
 }
 
 pub fn layer() -> Vec<u8> {
-    encode(&description(LAYER_CHANNELS, false))
+    layer_with_count(8)
+}
+/// Encode the media-server association for the active output. MagicQ creates its Media
+/// entry while patching this head only when both the CITP type and layer count are present.
+pub fn layer_with_count(layer_count: u16) -> Vec<u8> {
+    assert!(matches!(layer_count, 2 | 8));
+    encode(&description(LAYER_CHANNELS, false, layer_count))
 }
 pub fn master() -> Vec<u8> {
-    encode(&description(MASTER_CHANNELS, true))
+    encode(&description(MASTER_CHANNELS, true, 0))
 }
 
-fn description(table: &[ChannelSpec], master: bool) -> String {
+fn description(table: &[ChannelSpec], master: bool, layer_count: u16) -> String {
     let name = if master { "Master" } else { "Layer" };
     let ranges = ranges(table);
     let highest_start = 513 - table.len();
@@ -250,7 +256,10 @@ fn description(table: &[ChannelSpec], master: bool) -> String {
     } else {
         crate::gdtf::layer_fixture().id
     };
-    text.push_str(&format!("\"ToskLight Pixel {name}\",\n0000,\"\",\"\",\"\",0000,0000,0000,0000,0000,00000000,\n{native_metadata_marker:08x},\n\"\",\"\",\"\",\n0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,\n\"\",0000,\n0,0,0,0,0,0,0,0,0.000000,\n0,0,0,0,0,0,0,0,0,0,0,\n0,0,0,\n0,\n"));
+    // The native Head Editor writes CITP MSEX as type 0005 and Num of layers into
+    // this footer. Head number remains zero so MagicQ uses the first patched head.
+    let media_type = if master { 0 } else { 5 };
+    text.push_str(&format!("\"ToskLight Pixel {name}\",\n0000,\"\",\"\",\"\",0000,{media_type:04x},0000,0000,{layer_count:04x},00000000,\n{native_metadata_marker:08x},\n\"\",\"\",\"\",\n0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,\n\"\",0000,\n0,0,0,0,0,0,0,0,0.000000,\n0,0,0,0,0,0,0,0,0,0,0,\n0,0,0,\n0,\n"));
     text.push_str("00000000,00000000,");
     text.push_str(&"0000,".repeat(table.len() + 1));
     text.push_str(&format!("\n0000,0000,0000,00000007,00000000,0,\n\"Pixel {name}\",\n0,\n\"{{{fixture_id}}}\",\n1.000000,0000,0000,\n0000,\n0.800000,0.800000,0.000000,0.000000,\n0.000000,0.000000,0.000000,0.000000,0,0,\n0,\n;\n\n"));
@@ -416,6 +425,24 @@ mod tests {
             assert_eq!(lines[footer + 12], format!("\"Pixel {name}\","));
             assert!(lines[footer + 14].starts_with("\"{746f736b-6c69-6768-745f-"));
         }
+    }
+
+    #[test]
+    fn layer_footer_registers_citp_media_server_with_the_patched_layer_count() {
+        for count in [2, 8] {
+            let text = decode(&layer_with_count(count));
+            let lines: Vec<_> = text.lines().collect();
+            let footer = lines
+                .iter()
+                .position(|line| *line == "\"ToskLight Pixel Layer\",")
+                .unwrap();
+            assert_eq!(
+                lines[footer + 1],
+                format!("0000,\"\",\"\",\"\",0000,0005,0000,0000,{count:04x},00000000,")
+            );
+        }
+        let master = decode(&master());
+        assert!(master.contains("0000,\"\",\"\",\"\",0000,0000,0000,0000,0000,00000000,"));
     }
 
     #[test]

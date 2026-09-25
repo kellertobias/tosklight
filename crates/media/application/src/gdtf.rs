@@ -58,12 +58,21 @@ pub fn master_fixture() -> FixtureType {
 
 /// Native console personalities, MagicQ's editable channel source, and the two GDTF fixtures.
 pub fn packages() -> std::io::Result<Vec<(String, Vec<u8>)>> {
+    packages_with_layer_count(8)
+}
+
+/// Generate the Layer HED for the running output's actual layer count. The remaining
+/// formats share the same channel layout for compact and full personalities.
+pub fn packages_with_layer_count(layer_count: u16) -> std::io::Result<Vec<(String, Vec<u8>)>> {
     let layer = layer_fixture();
     let master = master_fixture();
     Ok(vec![
         ("ToskLight Pixel Layer.gdtf".into(), package(&layer)?),
         ("ToskLight Pixel Master.gdtf".into(), package(&master)?),
-        ("ToskLight Pixel Layer.hed".into(), crate::magicq::layer()),
+        (
+            "ToskLight Pixel Layer.hed".into(),
+            crate::magicq::layer_with_count(layer_count),
+        ),
         ("ToskLight Pixel Master.hed".into(), crate::magicq::master()),
         (
             "ToskLight Pixel Layer Channels.csv".into(),
