@@ -568,7 +568,6 @@ mod tests {
                 roughness: 0.8,
                 kind: SceneryKind::Riser,
                 ..SceneryObject::default()
-                position_master: None,
             }],
             ..Scene::default()
         };
@@ -612,7 +611,6 @@ mod tests {
             roughness: 0.95,
             kind,
             ..SceneryObject::default()
-            position_master: None,
         });
         scene.recompute_bounds();
         (scene, values, view)
