@@ -16,6 +16,10 @@ pub struct WheelTarget {
     pub deceleration: f32,
 }
 
+/// How far a 3D Point's offset reaches along one axis, in metres. The desk writes the axis
+/// against the same figure, so the picture puts the point where the desk says it is.
+pub const POINT_AXIS_METRES: f64 = 100.0;
+
 /// One channel resolved to absolute universe and slot addresses.
 #[derive(Clone, Debug)]
 pub struct ChannelRef {
@@ -103,6 +107,25 @@ impl ChannelRef {
         } else {
             fraction
         }
+    }
+
+    /// A 3D Point's offset along one axis, in metres, from a channel of any width.
+    ///
+    /// The point's contract is offset binary about the centre of the channel's range: the middle
+    /// raw value is no offset, below it is negative and above it positive, and the ends of the
+    /// range are the point's reach of ±100 m. That is exactly how the desk writes the axis — the
+    /// normalized value `(metres + 100) / 200` scaled to the channel — so a 16-, 24- or 32-bit
+    /// mode reads back to within one step of what was sent.
+    pub fn point_axis_metres(&self, frame: &[u8; DMX_SLOTS]) -> f32 {
+        let fraction = f64::from(self.raw(frame)) / f64::from(self.max_raw.max(1));
+        (fraction * 2.0 * POINT_AXIS_METRES - POINT_AXIS_METRES) as f32
+    }
+
+    /// A 3D Point's turn about one axis, in degrees, from a channel of any width: the middle raw
+    /// value is no turn and the ends of the range are ±180°.
+    pub fn point_angle_degrees(&self, frame: &[u8; DMX_SLOTS]) -> f32 {
+        let fraction = f64::from(self.raw(frame)) / f64::from(self.max_raw.max(1));
+        (fraction * 360.0 - 180.0) as f32
     }
 
     /// Absolute camera position in metres from an unsigned 24-bit offset-binary channel.

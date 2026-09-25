@@ -118,6 +118,27 @@ pub struct ExternalCameraBinding {
     pub universes: Vec<u16>,
 }
 
+/// One patched 3D Point's axes, so a renderer on the network can read the point's pose out of
+/// the universes exactly as it reads a lantern's level.
+///
+/// A point is a reference object other placements are slaved to. It carries no light, and its
+/// pose is not something a renderer may invent: an unpatched point reports nothing here and its
+/// slaves stay where the rig put them until the desk states the pose another way.
+#[derive(Clone, Debug)]
+pub struct PositionPointBinding {
+    pub fixture_id: Uuid,
+    pub instance_id: Uuid,
+    /// Where the point itself was rigged, in renderer world metres. Its offset is measured from
+    /// here and its slaves turn about it.
+    pub origin: Vec3,
+    /// Offset along each renderer world axis, in the desk's `x`, `y`, `z` order — across the
+    /// stage, upstage and up — before the axes are turned into the renderer's.
+    pub position: [Option<ChannelRef>; 3],
+    /// Turn about each axis, in the same desk order.
+    pub rotation: [Option<ChannelRef>; 3],
+    pub universes: Vec<u16>,
+}
+
 /// A laser fixture's raw DMX footprint, resolved to absolute addresses.
 #[derive(Clone, Debug)]
 pub struct LaserWindow {
@@ -248,6 +269,8 @@ pub struct ScenePlan {
     pub scene: Scene,
     pub bindings: Vec<EmitterBinding>,
     pub external_camera: Option<ExternalCameraBinding>,
+    /// Every 3D Point with a DMX address, for a renderer that reads the point off the wire.
+    pub position_points: Vec<PositionPointBinding>,
     /// Actionable reason no DMX camera was selected when camera fixtures were ambiguous/invalid.
     pub external_camera_issue: Option<String>,
     pub warnings: Vec<String>,
@@ -308,6 +331,7 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
     let mut bindings = Vec::new();
     let mut external_camera = None;
     let mut external_camera_issue = None;
+    let mut position_points = Vec::new();
     let mut warnings = Vec::new();
     let mut models: std::collections::HashMap<(light_core::FixtureId, Uuid), Option<u32>> =
         std::collections::HashMap::new();
@@ -417,6 +441,7 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             &mut bindings,
             &mut external_camera,
             &mut external_camera_issue,
+            &mut position_points,
             &mut warnings,
             fixture,
             mode,
@@ -439,8 +464,59 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
         bindings,
         external_camera,
         external_camera_issue,
+        position_points,
         warnings,
     }
+}
+
+/// The DMX axes of a 3D Point, when this instance has an address for them.
+///
+/// Only the axes the mode carries are read: a position-only mode leaves the rotation channels
+/// absent and the point keeps no turn. A point with no address at all reports nothing, which is
+/// not a fault — an operator may keep a point purely as a programmer object.
+fn position_point_binding(
+    fixture: &PatchedFixture,
+    instance: &PhysicalInstance,
+    mode: &FixtureMode,
+    channels: &HashMap<Uuid, ChannelRef>,
+) -> Option<PositionPointBinding> {
+    let axis = |identity: &str| -> Option<ChannelRef> {
+        mode.channels
+            .iter()
+            .find(|channel| {
+                &*channel.attribute.0 == identity || &*channel.fixture_attribute.0 == identity
+            })
+            .and_then(|channel| channels.get(&channel.id).cloned())
+    };
+    let position = [
+        axis("point.position.x"),
+        axis("point.position.y"),
+        axis("point.position.z"),
+    ];
+    let rotation = [
+        axis("point.rotation.x"),
+        axis("point.rotation.y"),
+        axis("point.rotation.z"),
+    ];
+    if position.iter().chain(&rotation).all(Option::is_none) {
+        return None;
+    }
+    let mut universes = position
+        .iter()
+        .chain(&rotation)
+        .flatten()
+        .map(|reference| reference.logical_universe)
+        .collect::<Vec<_>>();
+    universes.sort_unstable();
+    universes.dedup();
+    Some(PositionPointBinding {
+        fixture_id: fixture.fixture_id,
+        instance_id: instance.instance_id,
+        origin: instance.position,
+        position,
+        rotation,
+        universes,
+    })
 }
 
 fn apply_model_source_face(

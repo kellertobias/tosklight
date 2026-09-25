@@ -450,6 +450,67 @@ pub fn profile_with_modes(
     )
 }
 
+/// One profile with two modes: the first makes its fixture a 3D Point, the second is a plain
+/// one-channel lamp. One profile is all the rig resolves, and the difference between a point and
+/// a lantern is the mode, so this is enough to slave the one to the other.
+pub fn point_and_lamp_profile() -> (
+    FixtureProfileRevision,
+    PatchedFixtureProfileReference,
+    PatchedFixtureProfileReference,
+) {
+    let mut profile = FixtureProfile::blank();
+    profile.revision = 3;
+    profile.manufacturer = "ToskLight".into();
+    profile.name = "Point or lamp".into();
+    profile.short_name = "Point".into();
+    let mut lamp = profile.modes[0].clone();
+    lamp.id = Uuid::from_u128(20_001);
+    lamp.name = "Lamp".into();
+    let mut point = profile.modes[0].clone();
+    point.id = Uuid::from_u128(20_000);
+    point.name = "Point".into();
+    point.splits[0].footprint = 2;
+    point.channels.push(light_fixture::FixtureChannel {
+        id: Uuid::from_u128(20_010),
+        head_id: point.heads[0].id,
+        split: 1,
+        fixture_attribute: light_core::AttributeKey("point.position.x".into()),
+        attribute: light_core::AttributeKey("point.position.x".into()),
+        canonical_transform: Default::default(),
+        resolution: light_fixture::ChannelResolution::U16,
+        secondary_slots: vec![2],
+        default_raw: 32_768,
+        highlight_raw: 32_768,
+        physical_min: Some(-100.0),
+        physical_max: Some(100.0),
+        unit: Some("m".into()),
+        invert: false,
+        snap: false,
+        reacts_to_virtual_intensity: false,
+        virtual_intensity_inverted: false,
+        reacts_to_sequence_master: false,
+        reacts_to_group_master: false,
+        reacts_to_grand_master: false,
+        behavior: Default::default(),
+        functions: Vec::new(),
+    });
+    profile.modes = vec![point, lamp];
+    let profile_id = profile.id;
+    let profile_revision = Revision::from(profile.revision);
+    let reference = |mode_id| PatchedFixtureProfileReference {
+        profile_id,
+        profile_revision,
+        mode_id,
+    };
+    let stored =
+        FixtureProfileRevision::from_profile(serde_json::to_value(profile).unwrap()).unwrap();
+    (
+        stored,
+        reference(Uuid::from_u128(20_000)),
+        reference(Uuid::from_u128(20_001)),
+    )
+}
+
 pub fn patch_batch(
     show_id: ShowId,
     profile: PatchedFixtureProfileReference,

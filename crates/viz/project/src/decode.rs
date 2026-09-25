@@ -4,7 +4,7 @@
 //! parameters reach the render scene.
 
 use crate::colour;
-use crate::plan::{ColourBinding, EmitterBinding, ExternalCameraBinding};
+use crate::plan::{ColourBinding, EmitterBinding, ExternalCameraBinding, PositionPointBinding};
 use std::collections::HashMap;
 use viz_dmx::{DMX_SLOTS, UniverseFrame};
 use viz_scene::{
@@ -16,6 +16,8 @@ use viz_scene::{
 pub struct Decoder {
     bindings: Vec<EmitterBinding>,
     external_camera: Option<ExternalCameraBinding>,
+    /// The 3D Points with a DMX address, read off the wire like any lantern.
+    position_points: Vec<PositionPointBinding>,
     frames: HashMap<u16, [u8; DMX_SLOTS]>,
     stale: HashMap<u16, bool>,
     /// Emitter indices reading each logical universe.
@@ -45,6 +47,7 @@ impl Decoder {
         Self {
             bindings,
             external_camera,
+            position_points: Vec::new(),
             frames: HashMap::new(),
             stale: HashMap::new(),
             readers,
@@ -54,11 +57,21 @@ impl Decoder {
         }
     }
 
+    /// Read the show's patched 3D Points off the wire as well.
+    #[must_use]
+    pub fn with_position_points(mut self, points: Vec<PositionPointBinding>) -> Self {
+        self.position_points = points;
+        self
+    }
+
     /// Logical universes this show actually reads, used to configure the receivers.
     pub fn required_universes(&self) -> Vec<u16> {
         let mut universes: Vec<u16> = self.readers.keys().copied().collect();
         if let Some(camera) = &self.external_camera {
             universes.extend(camera.universes.iter().copied());
+        }
+        for point in &self.position_points {
+            universes.extend(point.universes.iter().copied());
         }
         universes.sort_unstable();
         universes.dedup();
@@ -132,6 +145,11 @@ impl Decoder {
                 .iter()
                 .any(|frame| camera.universes.contains(&frame.logical_universe))
         });
+        let points_affected = self.position_points.iter().any(|point| {
+            received
+                .iter()
+                .any(|frame| point.universes.contains(&frame.logical_universe))
+        });
         for frame in received {
             self.frames.insert(frame.logical_universe, frame.slots);
             self.stale.insert(frame.logical_universe, frame.stale);
@@ -202,11 +220,58 @@ impl Decoder {
         if camera_affected {
             self.decode_external_camera(values);
         }
+        if points_affected {
+            self.decode_position_points(values);
+        }
         self.last_time_seconds = Some(time_seconds);
         self.frame_counter += 1;
         values.frame = self.frame_counter;
         values.newest_input_micros = self.newest_input_micros;
         affected.len() + usize::from(camera_affected)
+    }
+
+    /// Every patched 3D Point's pose, read from the universes it is patched to.
+    ///
+    /// The desk writes each axis in its own axes — across the stage, upstage, up — and the
+    /// renderer keeps `x` across, `y` up and `z` towards the audience, so the offset is turned by
+    /// `(x, z, -y)` and the rotation by `(x, z, y)`, the same conversion every placement takes.
+    /// An axis the mode does not carry, or whose universe has not arrived, reads as no movement:
+    /// a point is never put somewhere nothing said it was.
+    fn decode_position_points(&self, values: &mut SceneValues) {
+        for point in &self.position_points {
+            let read = |channel: &Option<crate::binding::ChannelRef>, metres: bool| -> f32 {
+                let Some(channel) = channel else {
+                    return 0.0;
+                };
+                if !self.frames.contains_key(&channel.logical_universe) {
+                    return 0.0;
+                }
+                let frame = self.slots(channel.logical_universe);
+                if metres {
+                    channel.point_axis_metres(&frame)
+                } else {
+                    channel.point_angle_degrees(&frame)
+                }
+            };
+            let [x, y, z] = &point.position;
+            let [rx, ry, rz] = &point.rotation;
+            let offset = [read(x, true), read(y, true), read(z, true)];
+            let turn = [read(rx, false), read(ry, false), read(rz, false)];
+            let pose = viz_scene::PointPose {
+                fixture_id: point.fixture_id,
+                origin_metres: point.origin.to_array(),
+                offset_metres: [offset[0], offset[2], -offset[1]],
+                rotation_degrees: [turn[0], turn[2], turn[1]],
+            };
+            match values
+                .position_points
+                .iter_mut()
+                .find(|held| held.fixture_id == point.fixture_id)
+            {
+                Some(held) => *held = pose,
+                None => values.position_points.push(pose),
+            }
+        }
     }
 
     fn decode_external_camera(&self, values: &mut SceneValues) {

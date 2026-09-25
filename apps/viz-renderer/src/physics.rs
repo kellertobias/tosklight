@@ -368,6 +368,7 @@ mod tests {
                     kind: SceneryKind::Curtain,
                     chords: 1,
                     detail: Default::default(),
+                    position_master: None,
                 },
                 program: PhysicsProgram {
                     script: Some(Arc::from(

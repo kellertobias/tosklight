@@ -91,6 +91,7 @@ mod network_rule_tests {
                 universe: 1,
                 slots: vec![slot; viz_dmx::DMX_SLOTS],
             }],
+            points: Vec::new(),
         };
         let same = desk_output_signature(&snapshot(7), None, 3);
         assert_eq!(same, desk_output_signature(&snapshot(7), None, 3));
@@ -119,12 +120,95 @@ mod network_rule_tests {
         let empty = crate::wire::OutputDmxSnapshot {
             revision: 1,
             universes: vec![],
+            points: Vec::new(),
         };
         assert_ne!(
             desk_output_signature(&empty, None, 3),
             same,
             "an unpatched rig is its own picture, and still a first frame"
         );
+        let moved = crate::wire::OutputDmxSnapshot {
+            points: vec![crate::wire::OutputPointPose {
+                fixture_id: uuid::Uuid::nil(),
+                offset_metres: [0.0, 0.0, -1.5],
+                rotation_degrees: [0.0; 3],
+            }],
+            ..snapshot(7)
+        };
+        assert_ne!(
+            desk_output_signature(&moved, None, 3),
+            same,
+            "a 3D Point flown down moves everything hung on it without touching a slot"
+        );
+    }
+
+    /// The desk states a point's pose in its own axes; the Stage draws it in the renderer's. A
+    /// point flown 1.5 m down and turned a quarter about the up axis lands as a negative renderer
+    /// `y` and a turn about renderer `y`, and its origin is where its own instance stands.
+    #[test]
+    fn desk_point_poses_reach_the_values_in_renderer_axes() {
+        use viz_scene::glam::Vec3;
+        let point = uuid::Uuid::from_u128(5);
+        let mut scene = viz_scene::Scene::default();
+        scene.fixtures.push(viz_scene::FixtureInstance {
+            instance_id: uuid::Uuid::from_u128(6),
+            fixture_id: point,
+            name: "Truss point".into(),
+            number: Some(901),
+            position: Vec3::new(2.0, 6.0, -1.0),
+            rotation_degrees: Vec3::ZERO,
+            bracket_degrees: 0.0,
+            bracket_hinge: None,
+            shaper_degrees: None,
+            installed_colour: [1.0; 3],
+            installed_shaper_angles_degrees: [0.0; 4],
+            body: viz_scene::FixtureBody::default(),
+            drawn_as_scenery: false,
+            position_master: None,
+            patched: false,
+            address: None,
+            model: None,
+            fallback: None,
+        });
+        let mut values = viz_scene::SceneValues::default();
+        super::apply_point_poses(
+            &scene,
+            &[
+                crate::wire::OutputPointPose {
+                    fixture_id: point,
+                    offset_metres: [0.0, 0.0, -1.5],
+                    rotation_degrees: [0.0, 0.0, 90.0],
+                },
+                crate::wire::OutputPointPose {
+                    fixture_id: uuid::Uuid::from_u128(99),
+                    offset_metres: [1.0; 3],
+                    rotation_degrees: [0.0; 3],
+                },
+            ],
+            &mut values,
+        );
+        assert_eq!(
+            values.position_points.len(),
+            1,
+            "an unknown point is dropped"
+        );
+        let pose = values.position_points[0];
+        assert_eq!(pose.fixture_id, point);
+        assert_eq!(pose.origin_metres, [2.0, 6.0, -1.0]);
+        assert_eq!(pose.offset_metres, [0.0, -1.5, 0.0]);
+        assert_eq!(pose.rotation_degrees, [0.0, 90.0, 0.0]);
+        // A later read replaces the pose rather than stacking a second one.
+        super::apply_point_poses(
+            &scene,
+            &[crate::wire::OutputPointPose {
+                fixture_id: point,
+                offset_metres: [0.0; 3],
+                rotation_degrees: [0.0; 3],
+            }],
+            &mut values,
+        );
+        assert_eq!(values.position_points.len(), 1);
+        assert_eq!(values.position_points[0].offset_metres, [0.0; 3]);
     }
 
     #[test]

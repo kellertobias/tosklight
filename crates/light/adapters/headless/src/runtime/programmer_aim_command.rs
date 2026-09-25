@@ -55,47 +55,78 @@ pub(super) struct PointTransform {
 }
 
 impl PointTransform {
-    /// Turn a slave about the point's own origin, then move it. Same order as the visualizer, so
-    /// the beam is aimed at the object an operator can see.
+    /// Turn a slave about the point's own origin, then move it.
+    ///
+    /// The maths is [`viz_project::viz_scene::slaved_to_point`], the one implementation the renderer draws
+    /// with, so the beam is aimed at the object an operator can see rather than at a second
+    /// opinion of where it is. The desk keeps `x` across, `y` upstage and `z` up while the
+    /// renderer keeps `x` across, `y` up and `z` towards the audience, so the placement crosses
+    /// into renderer axes by `(x, z, -y)`, its rotation by `(x, z, y)`, and the answer comes back
+    /// the same way.
     fn carry(&self, position: [f32; 3], rotation: [f32; 3]) -> light_core::Mount {
-        let local = [
-            position[0] - self.origin[0],
-            position[1] - self.origin[1],
-            position[2] - self.origin[2],
-        ];
-        let turned = rotate(local, self.rotation_degrees);
+        let pose = viz_project::viz_scene::PointPose {
+            fixture_id: uuid::Uuid::nil(),
+            origin_metres: to_renderer(self.origin),
+            offset_metres: to_renderer(self.offset),
+            rotation_degrees: rotation_to_renderer(self.rotation_degrees),
+        };
+        let (placed, turned) = viz_project::viz_scene::slaved_to_point(
+            to_renderer(position).into(),
+            rotation_to_renderer(rotation).into(),
+            &pose,
+        );
         light_core::Mount {
-            position: [
-                self.origin[0] + turned[0] + self.offset[0],
-                self.origin[1] + turned[1] + self.offset[1],
-                self.origin[2] + turned[2] + self.offset[2],
-            ],
-            rotation_degrees: [
-                rotation[0] + self.rotation_degrees[0],
-                rotation[1] + self.rotation_degrees[1],
-                rotation[2] + self.rotation_degrees[2],
-            ],
+            position: from_renderer(placed.to_array()),
+            rotation_degrees: rotation_from_renderer(turned.to_array()),
         }
     }
 }
 
-/// `Rx * Ry * Rz`, matching how a mounting rotation is applied everywhere else.
-fn rotate(v: [f32; 3], degrees: [f32; 3]) -> [f32; 3] {
-    let [rx, ry, rz] = degrees;
-    let (sz, cz) = rz.to_radians().sin_cos();
-    let after_z = [v[0] * cz - v[1] * sz, v[0] * sz + v[1] * cz, v[2]];
-    let (sy, cy) = ry.to_radians().sin_cos();
-    let after_y = [
-        after_z[0] * cy + after_z[2] * sy,
-        after_z[1],
-        -after_z[0] * sy + after_z[2] * cy,
-    ];
-    let (sx, cx) = rx.to_radians().sin_cos();
-    [
-        after_y[0],
-        after_y[1] * cx - after_y[2] * sx,
-        after_y[1] * sx + after_y[2] * cx,
-    ]
+/// Desk metres to renderer metres: across stays across, up becomes `y`, upstage becomes `-z`.
+fn to_renderer([x, y, z]: [f32; 3]) -> [f32; 3] {
+    [x, z, -y]
+}
+
+fn from_renderer([x, y, z]: [f32; 3]) -> [f32; 3] {
+    [x, -z, y]
+}
+
+/// Desk rotation to renderer rotation, the Stage's `(rx, rz, ry)` mapping.
+fn rotation_to_renderer([x, y, z]: [f32; 3]) -> [f32; 3] {
+    [x, z, y]
+}
+
+fn rotation_from_renderer([x, y, z]: [f32; 3]) -> [f32; 3] {
+    [x, z, y]
+}
+
+/// One 3D Point's live pose as the desk reports it to a Stage, in desk axes and metres.
+///
+/// A point may carry no DMX, so a renderer cannot always read it out of the universes the way it
+/// reads a lantern; the desk states the pose instead, and the renderer moves everything slaved to
+/// the point. What is reported is the resolved value, without the quantisation a DMX mode adds.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+pub(super) struct PointPoseReport {
+    pub fixture_id: uuid::Uuid,
+    pub offset_metres: [f32; 3],
+    pub rotation_degrees: [f32; 3],
+}
+
+/// Every 3D Point's live pose, in fixture-number order so two reads of the same state agree.
+pub(super) fn point_poses(
+    snapshot: &light_engine::EngineSnapshot,
+    resolved: &light_engine::ResolvedValues,
+) -> Vec<PointPoseReport> {
+    let mut poses: Vec<_> = point_transforms(snapshot, resolved)
+        .into_iter()
+        .map(|(fixture_id, transform)| PointPoseReport {
+            fixture_id: fixture_id.0,
+            offset_metres: transform.offset,
+            rotation_degrees: transform.rotation_degrees,
+        })
+        .collect();
+    poses.sort_by_key(|pose| pose.fixture_id);
+    poses
 }
 
 /// The live poses of every 3D Point in the show.
@@ -258,27 +289,53 @@ mod tests {
         let master = uuid::Uuid::from_u128(4);
         let points = HashMap::from([(
             light_core::FixtureId(master),
-            // Two metres up the stage and a quarter turn about the point's own origin.
-            point([2.0, 6.0, 0.0], [0.0, -1.0, 0.0], [0.0, 90.0, 0.0]),
+            // One metre downstage and a quarter turn about the up axis, about the point's own
+            // origin: a truss point flown in and swung round.
+            point([2.0, 6.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 90.0]),
         )]);
         let mount = placed([4.0, 6.0, 0.0], [0.0; 3], Some(master), &points);
-        // The same answer the visualizer gives: turned about the point, then moved with it.
-        assert!(
-            (mount.position[0] - 2.0).abs() < 1e-4,
-            "{:?}",
-            mount.position
+        // Two metres stage-right of the point becomes two metres upstage of it, then the whole
+        // assembly comes one metre downstage. Turned about the point first, then moved with it.
+        let expected = [2.0, 7.0, 0.0];
+        for axis in 0..3 {
+            assert!(
+                (mount.position[axis] - expected[axis]).abs() < 1e-4,
+                "{:?}",
+                mount.position
+            );
+        }
+        assert!((mount.rotation_degrees[2] - 90.0).abs() < 1e-4);
+    }
+
+    /// The desk and the renderer answer where a slaved fixture is with one implementation. This
+    /// pins the axis conversion between them for a turn about every axis at once, which is where
+    /// two separate implementations used to disagree.
+    #[test]
+    fn the_desk_places_a_slave_exactly_where_the_renderer_draws_it() {
+        let transform = point([1.0, 2.0, 3.0], [0.5, -0.25, 0.75], [20.0, 35.0, -50.0]);
+        let mount = transform.carry([4.0, 1.0, 5.0], [5.0, 10.0, 15.0]);
+        let renderer = viz_project::viz_scene::slaved_to_point(
+            viz_project::viz_scene::glam::Vec3::new(4.0, 5.0, -1.0),
+            viz_project::viz_scene::glam::Vec3::new(5.0, 15.0, 10.0),
+            &viz_project::viz_scene::PointPose {
+                fixture_id: uuid::Uuid::nil(),
+                origin_metres: [1.0, 3.0, -2.0],
+                offset_metres: [0.5, 0.75, 0.25],
+                rotation_degrees: [20.0, -50.0, 35.0],
+            },
         );
-        assert!(
-            (mount.position[1] - 5.0).abs() < 1e-4,
-            "{:?}",
-            mount.position
+        let drawn = [renderer.0.x, -renderer.0.z, renderer.0.y];
+        for axis in 0..3 {
+            assert!(
+                (mount.position[axis] - drawn[axis]).abs() < 1e-4,
+                "desk {:?} renderer {drawn:?}",
+                mount.position
+            );
+        }
+        assert_eq!(
+            mount.rotation_degrees,
+            [renderer.1.x, renderer.1.z, renderer.1.y]
         );
-        assert!(
-            (mount.position[2] + 2.0).abs() < 1e-4,
-            "{:?}",
-            mount.position
-        );
-        assert!((mount.rotation_degrees[1] - 90.0).abs() < 1e-4);
     }
 
     #[test]

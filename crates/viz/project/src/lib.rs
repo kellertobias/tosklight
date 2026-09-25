@@ -22,7 +22,7 @@ pub use appearance::{
     MAX_COLOUR_TEMPERATURE_KELVIN, MIN_COLOUR_TEMPERATURE_KELVIN, apply_installed_appearance,
     colour_temperature_linear_rgb, installed_appearance_linear_rgb, parse_srgb_hex_linear,
 };
-pub use binding::ChannelRef;
+pub use binding::{ChannelRef, POINT_AXIS_METRES};
 pub use bracket_hinge::{
     bracket_hinge, fixture_bracket_hinge_millimetres, manifest_bracket_hinge,
     patched_bracket_hinge_millimetres, read_shipped_model,
@@ -42,7 +42,7 @@ pub use model_drawing::{
 };
 pub use plan::{
     ColourBinding, EmitterBinding, ExternalCameraBinding, GOBO_ARTWORK_EDGE, PatchedFixture,
-    PhysicalInstance, ScenePlan, compile, decode_gobo_artwork,
+    PhysicalInstance, PositionPointBinding, ScenePlan, compile, decode_gobo_artwork,
 };
 pub use projection::{
     GENERATOR_ID as FIXTURE_PROJECTION_GENERATOR,
@@ -51,5 +51,8 @@ pub use projection::{
     generate_live_projection_meshes, generate_live_projection_meshes_for_mode,
     generate_profile_projections, projection_cache_is_current,
 };
+/// The scene model this plan compiles into, so a caller that only depends on the plan can name
+/// its types and share its maths.
+pub use viz_scene;
 mod plan_drawing;
 pub use plan_drawing::has_model_drawing;

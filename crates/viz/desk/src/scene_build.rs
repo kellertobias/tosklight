@@ -174,6 +174,21 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     for instance in &mut plan.scene.fixtures {
         instance.position_master = masters.get(&instance.fixture_id).copied();
     }
+    // A generated Venue object is a fixture the scenery pass builds instead of a body, so it
+    // follows the same point its fixture does. The object is keyed by the instance it was built
+    // for, and the instance knows its fixture.
+    let instance_fixtures: std::collections::HashMap<_, _> = plan
+        .scene
+        .fixtures
+        .iter()
+        .map(|instance| (instance.instance_id, instance.fixture_id))
+        .collect();
+    for object in &mut plan.scene.scenery {
+        object.position_master = instance_fixtures
+            .get(&object.id)
+            .and_then(|fixture_id| masters.get(fixture_id))
+            .copied();
+    }
     plan.warnings.extend(warnings);
     if !placements.is_empty() {
         plan.warnings.push(placement_summary(&placements));
@@ -610,6 +625,7 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
         kind: SceneryKind::Floor,
         chords: 0,
         detail: Default::default(),
+        position_master: None,
     });
     // No backdrop is invented. A show that wants one places a `Venue` object; anything else
     // would put a surface in the picture that the operator never rigged.
@@ -655,6 +671,7 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
             kind,
             chords,
             detail: Default::default(),
+            position_master: None,
         });
     }
     scenery

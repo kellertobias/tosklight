@@ -83,6 +83,7 @@ fn rig() -> (Scene, SceneValues) {
         kind: SceneryKind::Floor,
         chords: 0,
         detail: Default::default(),
+        position_master: None,
     });
     scene.scenery.push(SceneryObject {
         id: Uuid::new_v4(),
@@ -95,6 +96,7 @@ fn rig() -> (Scene, SceneValues) {
         kind: SceneryKind::Truss,
         chords: 4,
         detail: Default::default(),
+        position_master: None,
     });
     scene.recompute_bounds();
 

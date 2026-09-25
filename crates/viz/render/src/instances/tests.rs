@@ -942,6 +942,7 @@ mod lines_view {
             kind,
             chords: 4,
             detail: Default::default(),
+            position_master: None,
         }
     }
 

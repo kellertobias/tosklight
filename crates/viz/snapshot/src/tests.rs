@@ -72,6 +72,7 @@ fn rig() -> (Scene, SceneValues) {
         kind: SceneryKind::Floor,
         chords: 0,
         detail: Default::default(),
+        position_master: None,
     });
     scene.recompute_bounds();
     let mut values = SceneValues::default();

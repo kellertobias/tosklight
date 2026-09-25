@@ -59,6 +59,9 @@ pub fn pick(scene: &Scene, ray: &Ray, reach: f32, points: &[viz_scene::PointPose
     }
 
     for (index, object) in scene.scenery.iter().enumerate() {
+        // Hit the object where it is drawn: a Venue object slaved to a 3D Point that moved is
+        // no longer where the rig put it.
+        let object = object.posed_by(points);
         let half = (object.size * 0.5).max(Vec3::splat(1e-3));
         let orientation = euler_degrees(object.rotation_degrees);
         let Some(distance) = box_hit(ray, object.position, half, orientation) else {
@@ -187,6 +190,7 @@ mod tests {
             kind: SceneryKind::Floor,
             chords: 0,
             detail: Default::default(),
+            position_master: None,
         });
         scene.recompute_bounds();
         scene

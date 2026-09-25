@@ -164,6 +164,7 @@ fn push_demo_scenery(scene: &mut Scene) {
         kind: SceneryKind::Floor,
         chords: 0,
         detail: Default::default(),
+        position_master: None,
     });
     scene.scenery.push(SceneryObject {
         id: Uuid::nil(),
@@ -176,6 +177,7 @@ fn push_demo_scenery(scene: &mut Scene) {
         kind: SceneryKind::Wall,
         chords: 0,
         detail: Default::default(),
+        position_master: None,
     });
     scene.scenery.push(SceneryObject {
         id: Uuid::nil(),
@@ -188,6 +190,7 @@ fn push_demo_scenery(scene: &mut Scene) {
         kind: SceneryKind::Riser,
         chords: 0,
         detail: Default::default(),
+        position_master: None,
     });
 }
 

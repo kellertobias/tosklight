@@ -80,6 +80,7 @@ enum Message {
         plan: Box<viz_scene::Scene>,
         bindings: Vec<viz_project::EmitterBinding>,
         external_camera: Option<viz_project::ExternalCameraBinding>,
+        position_points: Vec<viz_project::PositionPointBinding>,
         mappings: Vec<viz_dmx::InputMapping>,
         diagnostics: Box<ProviderDiagnostics>,
     },
@@ -89,6 +90,7 @@ enum Message {
         plan: Box<viz_scene::Scene>,
         bindings: Vec<viz_project::EmitterBinding>,
         external_camera: Option<viz_project::ExternalCameraBinding>,
+        position_points: Vec<viz_project::PositionPointBinding>,
         mappings: Vec<viz_dmx::InputMapping>,
         diagnostics: Box<ProviderDiagnostics>,
     },
@@ -230,6 +232,7 @@ impl DeskProvider {
         scene: viz_scene::Scene,
         bindings: Vec<viz_project::EmitterBinding>,
         external_camera: Option<viz_project::ExternalCameraBinding>,
+        position_points: Vec<viz_project::PositionPointBinding>,
         mappings: Vec<viz_dmx::InputMapping>,
         diagnostics: ProviderDiagnostics,
     ) {
@@ -242,7 +245,8 @@ impl DeskProvider {
             (!self.connection.values_from_desk_output)
                 .then_some(external_camera)
                 .flatten(),
-        );
+        )
+        .with_position_points(position_points);
         let mut diagnostics = diagnostics;
         let mappings = self.resolved_mappings(mappings, &decoder, &mut diagnostics);
         self.receivers = self
@@ -272,12 +276,20 @@ impl DeskProvider {
         scene: viz_scene::Scene,
         bindings: Vec<viz_project::EmitterBinding>,
         external_camera: Option<viz_project::ExternalCameraBinding>,
+        position_points: Vec<viz_project::PositionPointBinding>,
         mappings: Vec<viz_dmx::InputMapping>,
         diagnostics: ProviderDiagnostics,
     ) {
         let Some(previous) = self.scene.take() else {
             // Nothing is displayed yet, so there is nothing to preserve.
-            self.adopt_scene(scene, bindings, external_camera, mappings, diagnostics);
+            self.adopt_scene(
+                scene,
+                bindings,
+                external_camera,
+                position_points,
+                mappings,
+                diagnostics,
+            );
             return;
         };
         let decoder = Decoder::with_external_camera(
@@ -285,7 +297,8 @@ impl DeskProvider {
             (!self.connection.values_from_desk_output)
                 .then_some(external_camera)
                 .flatten(),
-        );
+        )
+        .with_position_points(position_points);
         let mut diagnostics = diagnostics;
         let mappings = self.resolved_mappings(mappings, &decoder, &mut diagnostics);
         if mappings != self.mappings || self.receivers.is_none() {
@@ -398,19 +411,35 @@ impl DeskProvider {
                     plan,
                     bindings,
                     external_camera,
+                    position_points,
                     mappings,
                     diagnostics,
                 }) => {
-                    self.adopt_scene(*plan, bindings, external_camera, mappings, *diagnostics);
+                    self.adopt_scene(
+                        *plan,
+                        bindings,
+                        external_camera,
+                        position_points,
+                        mappings,
+                        *diagnostics,
+                    );
                 }
                 Ok(Message::Delta {
                     plan,
                     bindings,
                     external_camera,
+                    position_points,
                     mappings,
                     diagnostics,
                 }) => {
-                    self.apply_delta(*plan, bindings, external_camera, mappings, *diagnostics);
+                    self.apply_delta(
+                        *plan,
+                        bindings,
+                        external_camera,
+                        position_points,
+                        mappings,
+                        *diagnostics,
+                    );
                 }
                 Ok(Message::Diagnostics(value)) => self.diagnostics = *value,
                 Ok(Message::Preview(value)) => self.preview = *value,
@@ -529,6 +558,10 @@ impl DeskProvider {
                     self.epoch.elapsed().as_secs_f32(),
                 );
             }
+            // The desk's own word on where its 3D Points are. A point patched to a universe was
+            // also just decoded from its slots; the resolved pose the desk states is the same
+            // number without the quantisation, and a point with no address has only this.
+            apply_point_poses(scene, &output.points, &mut self.values);
             // The preload sits on top of the live picture rather than replacing it: a fixture
             // nobody preloaded goes on showing what it is doing. This also applies when the desk
             // has no patched universes; unpatched fixtures are still part of the show.
@@ -801,6 +834,7 @@ async fn connect_once(
         plan: Box::new(plan.scene),
         bindings: plan.bindings,
         external_camera: plan.external_camera,
+        position_points: plan.position_points,
         mappings,
         diagnostics: Box::new(diagnostics),
     });
@@ -1090,6 +1124,7 @@ async fn watch(
                     plan: Box::new(plan.scene),
                     bindings: plan.bindings,
                     external_camera: plan.external_camera,
+                    position_points: plan.position_points,
                     mappings,
                     diagnostics: Box::new(diagnostics),
                 });
@@ -1103,6 +1138,45 @@ async fn watch(
                 )));
                 return;
             }
+        }
+    }
+}
+
+/// Put the desk's 3D Point poses onto the values, in renderer axes.
+///
+/// A point's origin is where its own fixture instance stands in the scene, which is the same
+/// resolution every placement takes, so the point and its slaves agree on where "here" is. The
+/// desk's `(x, y, z)` — across, upstage, up — becomes the renderer's `(x, z, -y)`, and its
+/// rotation `(x, z, y)`, exactly as [`crate::transform`] converts a placement. A pose for a point
+/// the scene does not hold is dropped: nothing can be slaved to a fixture that is not there.
+fn apply_point_poses(
+    scene: &viz_scene::Scene,
+    points: &[crate::wire::OutputPointPose],
+    values: &mut SceneValues,
+) {
+    for point in points {
+        let Some(instance) = scene
+            .fixtures
+            .iter()
+            .find(|instance| instance.fixture_id == point.fixture_id)
+        else {
+            continue;
+        };
+        let [x, y, z] = point.offset_metres;
+        let [rx, ry, rz] = point.rotation_degrees;
+        let pose = viz_scene::PointPose {
+            fixture_id: point.fixture_id,
+            origin_metres: instance.position.to_array(),
+            offset_metres: crate::transform::to_world(x, y, z).to_array(),
+            rotation_degrees: crate::transform::rotation_to_world(rx, ry, rz).to_array(),
+        };
+        match values
+            .position_points
+            .iter_mut()
+            .find(|held| held.fixture_id == point.fixture_id)
+        {
+            Some(held) => *held = pose,
+            None => values.position_points.push(pose),
         }
     }
 }

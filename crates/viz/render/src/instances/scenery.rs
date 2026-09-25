@@ -2,8 +2,8 @@
 //!
 //! Scenery is drawn from the same procedural meshes a fixture proxy uses, so an operator gets a
 //! recognisable venue without the show carrying geometry for it. It is structural rather than
-//! live: none of it moves with a DMX frame, which is why it is rebuilt only when the scene
-//! revision changes.
+//! live: nothing in it answers a DMX frame directly. The one thing that moves it is a 3D Point an
+//! object is slaved to, whose pose arrives with the values, so the pass reads the posed objects.
 
 use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind, Surface};
 use glam::{Mat4, Quat, Vec3};
@@ -18,19 +18,23 @@ pub(super) fn push_scenery(
     values: &SceneValues,
     style: &FrameStyle,
 ) {
-    // A chain end is made fast to the nearest truss chord, by a steelflex or a pipe clamp as that
-    // chord's truss calls for, so a chain needs every chord in the room.
-    let chords = if scene
+    // A Venue object slaved to a 3D Point stands where the point puts it, so everything below
+    // reads the posed objects: a truss flown on a point takes its chords, and the chains made fast
+    // to them, along with it.
+    let posed: Vec<SceneryObject> = scene
         .scenery
         .iter()
-        .any(|object| object.kind == SceneryKind::Chain)
-    {
-        truss::chord_lines(&scene.scenery)
+        .map(|object| object.posed_by(&values.position_points))
+        .collect();
+    // A chain end is made fast to the nearest truss chord, by a steelflex or a pipe clamp as that
+    // chord's truss calls for, so a chain needs every chord in the room.
+    let chords = if posed.iter().any(|object| object.kind == SceneryKind::Chain) {
+        truss::chord_lines(&posed)
     } else {
         Vec::new()
     };
     let selected = selected_instances(scene, values, style);
-    for object in &scene.scenery {
+    for object in &posed {
         push_object(
             frame,
             object,

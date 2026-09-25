@@ -606,6 +606,109 @@ fn venue_objects_are_accepted_as_scenery() {
     );
 }
 
+/// A generated Venue object slaved to a 3D Point follows the point exactly as a lantern does: the
+/// object the scenery pass builds for it names the same master its fixture does, so the renderer
+/// can move it with the point's live pose.
+#[test]
+fn a_venue_object_slaved_to_a_point_carries_the_master_onto_its_scenery() {
+    let point = shipped_profile("tosklight--3d-point");
+    let truss = shipped_profile("venue--four-point-truss");
+    let point_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    let truss_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    let lamp_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    let patch: PatchSnapshot = serde_json::from_value(json!({
+        "show_id": "22222222-2222-4222-8222-222222222222",
+        "show_revision": 7,
+        "patch_revision": 3,
+        "fixtures": [{
+            "fixture_id": point_id,
+            "fixture_number": 901,
+            "name": "Truss point",
+            "profile_id": point["id"],
+            "profile_revision": 1,
+            "mode_id": point["modes"][0]["id"],
+            "split_patches": [{"split": 1}],
+            "location": {"x": 0, "y": 4_000, "z": 6_000},
+            "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "multipatch": [],
+        }, {
+            "fixture_id": truss_id,
+            "virtual_fixture_number": 1,
+            "name": "Truss",
+            "profile_id": truss["id"],
+            "profile_revision": 1,
+            "mode_id": truss["modes"][0]["id"],
+            "split_patches": [{"split": 1}],
+            "location": {"x": 0, "y": 4_000, "z": 6_000},
+            "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "position_master": point_id,
+            "multipatch": [],
+        }, {
+            "fixture_id": lamp_id,
+            "virtual_fixture_number": 2,
+            "name": "Loose truss",
+            "profile_id": truss["id"],
+            "profile_revision": 1,
+            "mode_id": truss["modes"][0]["id"],
+            "split_patches": [{"split": 1}],
+            "location": {"x": 6_000, "y": 4_000, "z": 6_000},
+            "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "multipatch": [],
+        }],
+        "profile_revisions": [{
+            "profile_id": point["id"],
+            "profile_revision": 1,
+            "manufacturer": point["manufacturer"],
+            "name": point["name"],
+            "fixture_type": point["fixture_type"],
+            "patch_policy": point["patch_policy"],
+            "profile_snapshot": point,
+        }, {
+            "profile_id": truss["id"],
+            "profile_revision": 1,
+            "manufacturer": truss["manufacturer"],
+            "name": truss["name"],
+            "fixture_type": truss["fixture_type"],
+            "patch_policy": "visual_only",
+            "profile_snapshot": truss,
+        }],
+    }))
+    .expect("patch snapshot");
+    let mut models = models(
+        shipped_profile("claypaky--sharpy"),
+        StageLayoutBody::default(),
+    );
+    models.patch = patch;
+    let plan = scene_build::build(&models);
+    let master = uuid::Uuid::parse_str(point_id).unwrap();
+    let slaved = plan
+        .scene
+        .scenery
+        .iter()
+        .find(|object| object.name == "Truss")
+        .expect("the slaved truss is built as scenery");
+    assert_eq!(slaved.position_master, Some(master));
+    let loose = plan
+        .scene
+        .scenery
+        .iter()
+        .find(|object| object.name == "Loose truss")
+        .expect("the loose truss is built as scenery");
+    assert_eq!(loose.position_master, None);
+    // The point itself, with no address, is bound to no universe: the desk states its pose.
+    assert!(plan.position_points.is_empty());
+    // Flown down a metre and a half, the truss's drawn object follows the point.
+    let pose = viz_scene::PointPose {
+        fixture_id: master,
+        origin_metres: [0.0, 6.0, -4.0],
+        offset_metres: [0.0, -1.5, 0.0],
+        rotation_degrees: [0.0; 3],
+    };
+    let drawn = slaved.posed_by(&[pose]);
+    assert!((drawn.position.y - (slaved.position.y - 1.5)).abs() < 1e-4);
+    assert_eq!(loose.posed_by(&[pose]).position, loose.position);
+}
+
 #[test]
 fn authored_disco_balls_curtains_railings_and_stairs_keep_their_scenery_kinds() {
     let mut models = models(

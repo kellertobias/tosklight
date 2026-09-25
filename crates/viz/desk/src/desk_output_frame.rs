@@ -2,8 +2,9 @@
 
 use viz_scene::SceneValues;
 
-/// What a desk-output read would put on screen, as one number: every universe's slots, the
-/// preload overlay while it is followed, and the scene the slots are decoded through.
+/// What a desk-output read would put on screen, as one number: every universe's slots, every 3D
+/// Point's pose, the preload overlay while it is followed, and the scene the slots are decoded
+/// through.
 pub(crate) fn desk_output_signature(
     output: &crate::wire::OutputDmxSnapshot,
     preload: Option<&crate::wire::PreloadProjection>,
@@ -16,6 +17,15 @@ pub(crate) fn desk_output_signature(
     for universe in &output.universes {
         universe.universe.hash(&mut hasher);
         universe.slots.hash(&mut hasher);
+    }
+    // A 3D Point moved from the encoders changes the picture without changing a single slot, so
+    // its pose is part of what makes a read a new frame.
+    output.points.len().hash(&mut hasher);
+    for point in &output.points {
+        point.fixture_id.hash(&mut hasher);
+        for value in point.offset_metres.iter().chain(&point.rotation_degrees) {
+            value.to_bits().hash(&mut hasher);
+        }
     }
     if let Some(preload) = preload {
         preload.fixture_values.len().hash(&mut hasher);

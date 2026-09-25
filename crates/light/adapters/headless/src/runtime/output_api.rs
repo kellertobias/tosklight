@@ -5,9 +5,16 @@ pub(super) async fn dmx_snapshot(
     show: ShowContext,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     show.verify(&state)?;
-    Ok(Json(
-        state.output.dmx_snapshot(state.output.snapshot().revision),
+    let snapshot = state.output.snapshot();
+    let mut output = state.output.dmx_snapshot(snapshot.revision);
+    // The Stage draws everything slaved to a 3D Point where the point is, and a point may carry
+    // no DMX to read that from. The desk states each point's resolved pose beside the universes.
+    let resolved = state.output.resolved_values();
+    output["points"] = serde_json::to_value(super::programmer_aim_command::point_poses(
+        &snapshot, &resolved,
     ))
+    .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(Json(output))
 }
 pub(super) async fn update_dmx_override(
     State(state): State<AppState>,

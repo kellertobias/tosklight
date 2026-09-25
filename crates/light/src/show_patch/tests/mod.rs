@@ -11,7 +11,10 @@ use light_core::Revision;
 use light_show::FixtureProfileRevision;
 use light_show::PortableShowRevision;
 use serde_json::json;
-use support::{CounterSnapshot, FailurePoint, TestRig, envelope, patch_batch, profile_with_modes};
+use support::{
+    CounterSnapshot, FailurePoint, TestRig, envelope, patch_batch, point_and_lamp_profile,
+    profile_with_modes,
+};
 use uuid::Uuid;
 
 #[test]
@@ -1435,4 +1438,158 @@ fn group_mutation(
             }],
         },
     }
+}
+
+/// Slaving a lantern to a 3D Point is stored as the point's identity, and a point is what the
+/// mode says it is. The same command can patch the point and the fixture slaved to it.
+#[test]
+fn a_fixture_can_take_a_patched_point_as_its_position_reference() {
+    let (profile, point_mode, lamp_mode) = point_and_lamp_profile();
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut command = patch_batch(rig.ports.show_id(), lamp_mode, 2);
+    command.fixtures[0].profile = point_mode;
+    let point = command.fixtures[0].patch.fixture_id;
+    // The point's two slots sit at 1-2; the lamp is patched clear of them.
+    command.fixtures[1].patch.address = Some(11);
+    command.fixtures[1].patch.split_patches[0].address = Some(11);
+    command.fixtures[1].patch.position_master = Some(point.0);
+
+    let result = rig
+        .service
+        .handle(envelope(command, "slave", 0), &rig.ports)
+        .unwrap();
+
+    let slave = result
+        .change
+        .fixtures
+        .iter()
+        .find(|fixture| fixture.patch.fixture_id != point)
+        .expect("the slaved fixture is in the change");
+    assert_eq!(slave.patch.position_master, Some(point.0));
+    let stored = rig.portable_document();
+    let stored = stored
+        .objects_of_kind("patched_fixture")
+        .find(|object| object.key().id() == slave.patch.fixture_id.0.to_string())
+        .expect("stored slave");
+    assert_eq!(
+        stored.body()["position_master"],
+        json!(point.0),
+        "the reference is persisted with the fixture"
+    );
+}
+
+/// A position reference has to name a 3D Point: a lantern hung from another lantern would be moved
+/// by attributes the other lantern does not have. The refusal stops before anything is written.
+#[test]
+fn a_position_reference_that_is_not_a_point_is_refused() {
+    let (profile, _point_mode, lamp_mode) = point_and_lamp_profile();
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut command = patch_batch(rig.ports.show_id(), lamp_mode, 2);
+    command.fixtures[1].patch.position_master = Some(command.fixtures[0].patch.fixture_id.0);
+
+    let error = rig
+        .service
+        .handle(envelope(command, "lamp-master", 0), &rig.ports)
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(
+        error.message.contains("is not a 3D Point"),
+        "{}",
+        error.message
+    );
+    rig.assert_empty_show();
+}
+
+/// Nothing follows itself, and a point follows nothing: the desk and the visualizer apply one
+/// level of slaving, and a chain of points would be a picture that disagreed with the aim.
+#[test]
+fn a_fixture_cannot_reference_itself_and_a_point_cannot_take_a_reference() {
+    let (profile, point_mode, lamp_mode) = point_and_lamp_profile();
+    let rig = TestRig::new(profile, FailurePoint::None);
+
+    let mut own = patch_batch(rig.ports.show_id(), lamp_mode, 1);
+    own.fixtures[0].patch.position_master = Some(own.fixtures[0].patch.fixture_id.0);
+    let error = rig
+        .service
+        .handle(envelope(own, "self", 0), &rig.ports)
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(
+        error.message.contains("its own position reference"),
+        "{}",
+        error.message
+    );
+
+    let mut chained = patch_batch(rig.ports.show_id(), point_mode, 2);
+    chained.fixtures[1].patch.address = Some(11);
+    chained.fixtures[1].patch.split_patches[0].address = Some(11);
+    chained.fixtures[1].patch.position_master = Some(chained.fixtures[0].patch.fixture_id.0);
+    let error = rig
+        .service
+        .handle(envelope(chained, "chain", 0), &rig.ports)
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(
+        error.message.contains("cannot take a position reference"),
+        "{}",
+        error.message
+    );
+    rig.assert_empty_show();
+}
+
+/// Deleting a point does not make every fixture that followed it uneditable. The next write of
+/// such a fixture stores it placed against the stage, which is exactly how it is drawn once its
+/// point is gone.
+#[test]
+fn a_reference_to_a_point_the_show_no_longer_holds_reads_as_no_reference() {
+    let (profile, point_mode, lamp_mode) = point_and_lamp_profile();
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut command = patch_batch(rig.ports.show_id(), lamp_mode, 2);
+    command.fixtures[0].profile = point_mode;
+    let point = command.fixtures[0].patch.fixture_id;
+    command.fixtures[1].patch.address = Some(11);
+    command.fixtures[1].patch.split_patches[0].address = Some(11);
+    command.fixtures[1].patch.position_master = Some(point.0);
+    let slave = command.fixtures[1].clone();
+    let first = rig
+        .service
+        .handle(envelope(command, "slave", 0), &rig.ports)
+        .unwrap();
+
+    let remove = crate::PatchFixturesCommand {
+        show_id: rig.ports.show_id(),
+        fixtures: Vec::new(),
+        remove_fixture_ids: vec![point],
+        placements: Vec::new(),
+        vector_spreads: Vec::new(),
+        fixture_updates: Vec::new(),
+    };
+    let second = rig
+        .service
+        .handle(
+            envelope(remove, "remove-point", first.change.patch_revision.value()),
+            &rig.ports,
+        )
+        .unwrap();
+
+    // Renaming the slave writes it back with the reference it still carries.
+    let mut rename = crate::PatchFixturesCommand {
+        show_id: rig.ports.show_id(),
+        fixtures: vec![slave],
+        remove_fixture_ids: Vec::new(),
+        placements: Vec::new(),
+        vector_spreads: Vec::new(),
+        fixture_updates: Vec::new(),
+    };
+    rename.fixtures[0].patch.name = "Renamed".into();
+    let third = rig
+        .service
+        .handle(
+            envelope(rename, "rename", second.change.patch_revision.value()),
+            &rig.ports,
+        )
+        .unwrap();
+    assert_eq!(third.change.fixtures[0].patch.name, "Renamed");
+    assert_eq!(third.change.fixtures[0].patch.position_master, None);
 }

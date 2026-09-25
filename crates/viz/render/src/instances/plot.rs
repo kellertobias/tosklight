@@ -14,6 +14,7 @@ pub(super) fn push_plot(
     style: &FrameStyle,
 ) {
     for object in &scene.scenery {
+        let object = object.posed_by(&values.position_points);
         frame.mesh(MeshKind::Cube).push(MeshInstance::new(
             Mat4::from_rotation_translation(
                 euler_degrees(object.rotation_degrees),

@@ -9,6 +9,7 @@ pub(super) fn compile_instances(
     bindings: &mut Vec<EmitterBinding>,
     external_camera: &mut Option<ExternalCameraBinding>,
     external_camera_issue: &mut Option<String>,
+    position_points: &mut Vec<PositionPointBinding>,
     warnings: &mut Vec<String>,
     fixture: &PatchedFixture,
     mode: &FixtureMode,
@@ -95,6 +96,9 @@ pub(super) fn compile_instances(
         if let Some(object) = generated_scenery {
             scene.scenery.push(object);
         }
+        if let Some(point) = position_point_binding(fixture, instance, mode, &channels) {
+            position_points.push(point);
+        }
         match external_camera_binding(fixture, instance, mode, &channels) {
             Ok(Some(candidate)) if external_camera.is_none() && external_camera_issue.is_none() => {
                 *external_camera = Some(candidate);
@@ -173,6 +177,7 @@ fn push_physics_scenery(
             kind,
             chords: 1,
             detail: Default::default(),
+            position_master: None,
         },
         program: physics.clone().unwrap_or_default(),
         body: PhysicsBody {
@@ -433,5 +438,6 @@ fn generated_scenery(
         kind: scenery_kind(declared.kind),
         chords: declared.chords,
         detail: scenery_detail(declared, &instance.scenery_options),
+        position_master: None,
     })
 }

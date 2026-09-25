@@ -86,7 +86,11 @@ impl OperationalScenario {
             .oneshot(Request::get("/api/v2/output/dmx").body(Body::empty()).unwrap())
             .await
             .unwrap();
-        assert_eq!(json(dmx).await["overrides"].as_array().unwrap().len(), 1);
+        let dmx = json(dmx).await;
+        assert_eq!(dmx["overrides"].as_array().unwrap().len(), 1);
+        // The Stage reads every 3D Point's pose beside the universes; a show without a point
+        // states so rather than leaving the field out.
+        assert_eq!(dmx["points"], serde_json::json!([]));
         let session = authenticate_token(&self.state, &self.token).unwrap();
         assert_eq!(
             execute_programmer_command(&self.state, &session, "FIXTURE 1 AT 50 TIME 0").unwrap(),

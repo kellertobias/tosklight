@@ -1054,48 +1054,96 @@ fn assert_play_mode_is_named(functions: &[crate::ChannelFunction]) {
 }
 
 #[test]
-fn shipped_three_d_point_is_a_zero_dmx_reference_object_on_six_position_axes() {
+fn shipped_three_d_point_offers_offset_binary_position_modes_with_and_without_rotation() {
     let profile = shipped_profile("tosklight--3d-point.toskfixture");
     assert_eq!(profile.manufacturer, "ToskLight");
     assert_eq!(profile.name, "3D Point");
-    // A point is never patched to a universe: it is a reference an operator moves, not an output.
-    assert_eq!(profile.patch_policy, PatchPolicy::Internal);
-    assert_eq!(profile.modes.len(), 1);
-    let mode = &profile.modes[0];
-    assert_eq!(
-        mode.splits,
-        [FixtureSplit {
-            number: 1,
-            footprint: 0
-        }]
-    );
-    assert_eq!(mode.heads.len(), 1);
-    assert_eq!(
-        mode.channels
+    assert_eq!(profile.fixture_type, "position_point");
+    // A point is an ordinary DMX fixture: left unpatched it is a programmer-only reference an
+    // operator moves, patched it sends its pose so a hoist controller or another visualizer can
+    // follow the same point.
+    assert_eq!(profile.patch_policy, PatchPolicy::Dmx);
+    let position = ["point.position.x", "point.position.y", "point.position.z"];
+    let rotation = ["point.rotation.x", "point.rotation.y", "point.rotation.z"];
+    let expected: [(&str, u16, ChannelResolution, bool); 6] = [
+        ("Position 16 bit", 6, ChannelResolution::U16, false),
+        ("Position 24 bit", 9, ChannelResolution::U24, false),
+        ("Position 32 bit", 12, ChannelResolution::U32, false),
+        ("Full 16 bit", 12, ChannelResolution::U16, true),
+        ("Full 24 bit", 15, ChannelResolution::U24, true),
+        ("Full 32 bit", 18, ChannelResolution::U32, true),
+    ];
+    assert_eq!(profile.modes.len(), expected.len());
+    for (mode, (name, footprint, resolution, turns)) in profile.modes.iter().zip(expected) {
+        assert_eq!(mode.name, name);
+        assert_eq!(
+            mode.splits,
+            [FixtureSplit {
+                number: 1,
+                footprint
+            }],
+            "{name}"
+        );
+        assert_eq!(mode.heads.len(), 1, "{name}");
+        let attributes: Vec<&str> = mode
+            .channels
             .iter()
             .map(|channel| &*channel.attribute.0)
-            .collect::<Vec<_>>(),
-        [
-            "point.position.x",
-            "point.position.y",
-            "point.position.z",
-            "point.rotation.x",
-            "point.rotation.y",
-            "point.rotation.z",
-        ]
+            .collect();
+        let mut wanted = position.to_vec();
+        if turns {
+            wanted.extend(rotation);
+        }
+        assert_eq!(attributes, wanted, "{name}");
+        // Position is offset binary at the mode's width: the middle value is no offset, below it
+        // negative and above it positive, ±100 m at the ends. Rotation is always 16 bit, ±180°.
+        for channel in &mode.channels {
+            let is_position = position.contains(&&*channel.attribute.0);
+            let width = if is_position {
+                resolution
+            } else {
+                ChannelResolution::U16
+            };
+            assert_eq!(channel.resolution, width, "{name} {}", channel.attribute.0);
+            assert_eq!(
+                channel.secondary_slots.len() + 1,
+                width.bytes(),
+                "{name} {} carries every byte of its width",
+                channel.attribute.0
+            );
+            let centre = (width.max_raw() / 2) + 1;
+            assert_eq!(
+                channel.default_raw, centre,
+                "{name} {}",
+                channel.attribute.0
+            );
+            assert_eq!(
+                channel.highlight_raw, centre,
+                "{name} {}",
+                channel.attribute.0
+            );
+            let (low, high) = if is_position {
+                (-100.0, 100.0)
+            } else {
+                (-180.0, 180.0)
+            };
+            assert_eq!(channel.physical_min, Some(low));
+            assert_eq!(channel.physical_max, Some(high));
+            // It emits no light, so nothing about it reacts to a master.
+            assert!(!channel.reacts_to_virtual_intensity);
+            assert!(!channel.reacts_to_grand_master);
+        }
+        // The desk encodes a normalized value as `round(n * max)`, so the centre it rests at is
+        // exactly what a resting point sends, and the mode's slots are the mode's footprint.
+        let slots = mode.primary_slots().expect("valid DMX slots");
+        assert_eq!(slots.len(), mode.channels.len());
+    }
+    // The mode a show patched against revision 2 keeps its identity, so a fixture update carries
+    // an existing point across rather than refusing it.
+    assert_eq!(
+        profile.modes[4].id.to_string(),
+        "f40090dc-aaaa-4b59-8bc0-6ec5ec1157e2"
     );
-    // Every axis rests at the centre of its range, so a freshly patched point sits exactly on
-    // its own origin rather than jumping the rig the moment it is added.
-    for channel in &mode.channels {
-        assert_eq!(channel.default_raw, 8_388_608);
-        assert_eq!(channel.highlight_raw, 8_388_608);
-        assert!(channel.secondary_slots.is_empty());
-    }
-    // It emits no light, so nothing about it reacts to a master.
-    for channel in &mode.channels {
-        assert!(!channel.reacts_to_virtual_intensity);
-        assert!(!channel.reacts_to_grand_master);
-    }
 }
 
 #[test]

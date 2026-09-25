@@ -670,6 +670,33 @@ pub struct SceneryObject {
     /// Bracing pattern and chain ends. Every kind reads only its own parts of it.
     #[serde(default)]
     pub detail: SceneryDetail,
+    /// The 3D Point this object is slaved to, if any. A generated Venue object is a fixture the
+    /// scenery pass builds instead of a body, so it follows a point exactly as a lantern does: its
+    /// live pose arrives with the values, and an absent or silent point leaves it where it was
+    /// rigged.
+    #[serde(default)]
+    pub position_master: Option<Uuid>,
+}
+
+impl SceneryObject {
+    /// This object once the 3D Point it is slaved to has been applied: the same object, standing
+    /// where the point puts it. An object with no master, or whose point has not reported, is
+    /// returned unchanged.
+    pub fn posed_by(&self, points: &[crate::PointPose]) -> SceneryObject {
+        let Some(master) = self.position_master else {
+            return self.clone();
+        };
+        let Some(pose) = points.iter().find(|pose| pose.fixture_id == master) else {
+            return self.clone();
+        };
+        let (position, rotation_degrees) =
+            crate::slaved_to_point(self.position, self.rotation_degrees, pose);
+        SceneryObject {
+            position,
+            rotation_degrees,
+            ..self.clone()
+        }
+    }
 }
 
 /// One reusable constrained rigid body represented as scenery rather than as a light emitter.
@@ -1083,6 +1110,7 @@ mod tests {
             kind: SceneryKind::Floor,
             chords: 0,
             detail: Default::default(),
+            position_master: None,
         });
         scene.recompute_bounds();
         assert!(scene.bounds.radius() > 100.0);

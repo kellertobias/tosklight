@@ -1,9 +1,11 @@
 use super::legacy_profiles::materialize_touched_legacy_profiles;
 use super::placement::assign_placement_addresses;
-use super::profiles::ResolvedProfiles;
+use super::profiles::{ResolvedMode, ResolvedProfiles, profile_mode_is_position_point};
 use super::projection::build_change;
 use super::record_index::StoredFixtureRecords;
-use super::records::{build_records, stage_group_pruning, stage_records, stage_removals};
+use super::records::{
+    PositionReferences, build_records, stage_group_pruning, stage_records, stage_removals,
+};
 use super::update::resolve_fixture_updates;
 use super::vector_spread::apply_vector_spreads;
 use super::{PatchChange, PatchFixturesCommand, PatchPerformancePhase, ShowPatchPorts};
@@ -84,7 +86,8 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
         vector_spreads: Vec::new(),
         fixture_updates: Vec::new(),
     };
-    let fixtures = build_records(&stored, &profiles, &assigned_command)?;
+    let references = position_references(document, &stored, &profiles, &assigned_command);
+    let fixtures = build_records(&stored, &profiles, &assigned_command, &references)?;
     let mut transaction = document.transaction();
     let modes = profiles.stage(&mut transaction)?;
     stage_records(&mut transaction, &fixtures);
@@ -110,6 +113,52 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
         change,
         group_changes,
     })))
+}
+
+/// Every fixture the show holds once the command is applied, and which of them are 3D Points.
+///
+/// A candidate's mode is already resolved. A stored fixture the command does not touch is judged
+/// by the profile revision the show carries for it; a legacy inline record, which predates points
+/// entirely, is known but is not a point.
+fn position_references(
+    document: &PortableShowDocument,
+    stored: &StoredFixtureRecords,
+    profiles: &ResolvedProfiles,
+    command: &PatchFixturesCommand,
+) -> PositionReferences {
+    let removed: std::collections::HashSet<_> = command.remove_fixture_ids.iter().collect();
+    let mut known = std::collections::HashSet::new();
+    let mut points = std::collections::HashSet::new();
+    for fixture in &command.fixtures {
+        known.insert(fixture.patch.fixture_id);
+        if profiles
+            .mode(fixture.profile)
+            .is_ok_and(ResolvedMode::is_position_point)
+        {
+            points.insert(fixture.patch.fixture_id);
+        }
+    }
+    for record in stored.iter() {
+        let Ok(fixture_id) = record.record.fixture_id() else {
+            continue;
+        };
+        if removed.contains(&fixture_id) || known.contains(&fixture_id) {
+            continue;
+        }
+        known.insert(fixture_id);
+        let Ok(Some(reference)) = record.record.profile_reference() else {
+            continue;
+        };
+        let is_point = document
+            .fixture_profile_revision(reference.profile_id, reference.profile_revision)
+            .is_some_and(|profile| {
+                profile_mode_is_position_point(profile.profile(), reference.mode_id)
+            });
+        if is_point {
+            points.insert(fixture_id);
+        }
+    }
+    PositionReferences::new(known, points)
 }
 
 fn pruned_group_changes(

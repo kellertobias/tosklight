@@ -22,6 +22,9 @@ pub(super) struct ResolvedModes {
 pub(super) struct ResolvedMode {
     logical_heads: Vec<ResolvedLogicalHead>,
     projection: PatchModeProjection,
+    /// Whether this mode makes its fixture a 3D Point: a reference object other placements can
+    /// take as their position reference.
+    position_point: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -128,7 +131,13 @@ impl ResolvedMode {
                 name: required_string(mode, "name")?,
                 splits,
             },
+            position_point: mode_is_position_point(mode),
         })
+    }
+
+    /// Whether a fixture patched to this mode is a 3D Point.
+    pub(super) fn is_position_point(&self) -> bool {
+        self.position_point
     }
 
     pub(super) fn logical_heads(&self) -> &[ResolvedLogicalHead] {
@@ -193,6 +202,30 @@ where
         .collect::<Result<_, _>>()?;
     Ok(ResolvedModes { by_reference })
 }
+
+/// Whether a stored profile's selected mode makes its fixture a 3D Point.
+///
+/// The desk decides what counts as a point by the attribute the mode carries, exactly as the
+/// programmer and the tracking receiver do, rather than by the profile's name or type: a point is
+/// whatever can be moved from the Position encoders' point page.
+pub(super) fn profile_mode_is_position_point(profile: &Value, mode_id: Uuid) -> bool {
+    referenced_mode(profile, mode_id).is_ok_and(mode_is_position_point)
+}
+
+fn mode_is_position_point(mode: &Value) -> bool {
+    mode.get("channels")
+        .and_then(Value::as_array)
+        .is_some_and(|channels| {
+            channels.iter().any(|channel| {
+                channel.get("attribute").and_then(Value::as_str) == Some(POINT_POSITION_ATTRIBUTE)
+                    || channel.get("fixture_attribute").and_then(Value::as_str)
+                        == Some(POINT_POSITION_ATTRIBUTE)
+            })
+        })
+}
+
+/// The attribute that makes a fixture a 3D Point.
+const POINT_POSITION_ATTRIBUTE: &str = "point.position.x";
 
 fn referenced_mode(profile: &Value, mode_id: Uuid) -> Result<&Value, ActionError> {
     let mode_id = mode_id.to_string();

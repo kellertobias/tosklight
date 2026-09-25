@@ -1003,6 +1003,7 @@ mod fixture_label_tests {
             kind: SceneryKind::Curtain,
             chords: 0,
             detail: Default::default(),
+            position_master: None,
         });
         hidden.recompute_bounds();
         assert!(

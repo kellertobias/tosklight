@@ -376,6 +376,26 @@ pub struct OutputDmxSnapshot {
     pub revision: u64,
     #[serde(default)]
     pub universes: Vec<PreviewUniverse>,
+    /// The live pose of every 3D Point in the show, as the desk resolves it.
+    ///
+    /// A point carries no light and may carry no DMX at all, so the Stage cannot always read it out
+    /// of the universes. The desk states the poses here, in its own axes and metres, and the Stage
+    /// draws everything slaved to a point where the desk says the point is. Absent from a desk
+    /// written before points reported, which leaves every slave where it was rigged.
+    #[serde(default)]
+    pub points: Vec<OutputPointPose>,
+}
+
+/// One 3D Point's live pose, in desk axes: `x` across the stage, `y` upstage, `z` up.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct OutputPointPose {
+    pub fixture_id: Uuid,
+    /// How far the operator has moved the point from where it was patched, in metres.
+    #[serde(default)]
+    pub offset_metres: [f32; 3],
+    /// How far the operator has turned it about its own origin, in degrees.
+    #[serde(default)]
+    pub rotation_degrees: [f32; 3],
 }
 
 #[derive(Clone, Debug, Deserialize)]
