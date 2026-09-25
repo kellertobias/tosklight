@@ -280,11 +280,16 @@ fn scenery_kind(kind: light_fixture::ProfileSceneryKind) -> SceneryKind {
 /// The same materials the desk's own scenery uses, so a patched truss and a legacy one match.
 fn scenery_colour(kind: light_fixture::ProfileSceneryKind) -> [f32; 3] {
     match kind {
-        light_fixture::ProfileSceneryKind::Truss => [0.2, 0.205, 0.215],
+        // Mill-finish aluminium: a light, slightly cool grey.
+        light_fixture::ProfileSceneryKind::Truss => [0.33, 0.335, 0.345],
         // Stage drape is black wool serge, not the generic prop grey.
         light_fixture::ProfileSceneryKind::Curtain => [0.008, 0.008, 0.01],
         // Galvanised rigging chain.
         light_fixture::ProfileSceneryKind::Chain => [0.32, 0.32, 0.33],
+        // Staging is film-faced multiplex: the dark brown phenolic face of a deck.
+        light_fixture::ProfileSceneryKind::Riser | light_fixture::ProfileSceneryKind::Stairs => {
+            [0.036, 0.019, 0.009]
+        }
         // A primitive is a stand-in shape an operator colours; neutral grey until they do.
         light_fixture::ProfileSceneryKind::Box
         | light_fixture::ProfileSceneryKind::Cylinder
@@ -300,9 +305,11 @@ fn scenery_colour(kind: light_fixture::ProfileSceneryKind) -> [f32; 3] {
 fn scenery_roughness(kind: light_fixture::ProfileSceneryKind) -> f32 {
     match kind {
         light_fixture::ProfileSceneryKind::Curtain => 0.96,
-        light_fixture::ProfileSceneryKind::Truss
-        | light_fixture::ProfileSceneryKind::Railing
-        | light_fixture::ProfileSceneryKind::Chain => 0.45,
+        // Mill-finish aluminium: a soft, broad highlight rather than a polished one.
+        light_fixture::ProfileSceneryKind::Truss => 0.6,
+        light_fixture::ProfileSceneryKind::Railing | light_fixture::ProfileSceneryKind::Chain => {
+            0.45
+        }
         _ => 0.8,
     }
 }

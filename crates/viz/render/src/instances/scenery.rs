@@ -5,7 +5,7 @@
 //! live: none of it moves with a DMX frame, which is why it is rebuilt only when the scene
 //! revision changes.
 
-use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind};
+use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind, Surface};
 use glam::{Mat4, Quat, Vec3};
 use std::collections::HashMap;
 use viz_scene::{
@@ -126,11 +126,17 @@ fn push_object(
         SceneryKind::FlightRack => equipment::push_flight_rack(frame, object, orientation, colour),
         SceneryKind::PaTop => equipment::push_pa_top(frame, object, orientation, colour),
         SceneryKind::LineArray => equipment::push_line_array(frame, object, orientation, colour),
-        SceneryKind::Floor
-        | SceneryKind::Wall
-        | SceneryKind::Riser
-        | SceneryKind::Prop
-        | SceneryKind::Box => push_primitive(frame, object, orientation, MeshKind::Cube),
+        // A deck with nothing under it is still a staging deck: film-faced multiplex.
+        SceneryKind::Riser => push_primitive_of(
+            frame,
+            object,
+            orientation,
+            MeshKind::Cube,
+            Surface::Multiplex,
+        ),
+        SceneryKind::Floor | SceneryKind::Wall | SceneryKind::Prop | SceneryKind::Box => {
+            push_primitive(frame, object, orientation, MeshKind::Cube)
+        }
     }
 }
 
@@ -158,14 +164,28 @@ fn push_primitive(
     orientation: Quat,
     mesh: MeshKind,
 ) {
+    push_primitive_of(frame, object, orientation, mesh, Surface::Plain);
+}
+
+/// [`push_primitive`], finished as `surface`.
+fn push_primitive_of(
+    frame: &mut FrameInstances,
+    object: &SceneryObject,
+    orientation: Quat,
+    mesh: MeshKind,
+    surface: Surface,
+) {
     let model = Mat4::from_scale_rotation_translation(object.size, orientation, object.position);
-    frame.mesh(mesh).push(MeshInstance::new(
-        model,
-        Vec3::from(object.colour),
-        object.roughness,
-        Vec3::ZERO,
-        0.0,
-    ));
+    frame.mesh(mesh).push(
+        MeshInstance::new(
+            model,
+            Vec3::from(object.colour),
+            object.roughness,
+            Vec3::ZERO,
+            0.0,
+        )
+        .with_surface(surface),
+    );
 }
 
 /// One tube between two points, for a truss chord or a brace.
@@ -176,6 +196,30 @@ fn push_tube(
     radius: f32,
     colour: Vec3,
     roughness: f32,
+) {
+    push_tube_of(
+        frame,
+        from,
+        to,
+        radius,
+        colour,
+        roughness,
+        0.55,
+        Surface::Plain,
+    );
+}
+
+/// One tube between two points, made of `surface` with the given metallic share.
+#[allow(clippy::too_many_arguments)]
+fn push_tube_of(
+    frame: &mut FrameInstances,
+    from: Vec3,
+    to: Vec3,
+    radius: f32,
+    colour: Vec3,
+    roughness: f32,
+    metallic: f32,
+    surface: Surface,
 ) {
     let axis = to - from;
     let length = axis.length();
@@ -189,13 +233,9 @@ fn push_tube(
         rotation,
         (from + to) * 0.5,
     );
-    frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
-        model,
-        colour,
-        roughness,
-        Vec3::ZERO,
-        0.55,
-    ));
+    frame.mesh(MeshKind::Cylinder).push(
+        MeshInstance::new(model, colour, roughness, Vec3::ZERO, metallic).with_surface(surface),
+    );
 }
 
 // A box drawn where a truss hangs tells an operator nothing. What they read a rig by is the
@@ -234,26 +274,23 @@ fn push_curtain(
 ) {
     let size = object.size.max(Vec3::splat(0.02));
     let width = size.x;
-    let folds = ((width / 0.45).round() as usize).clamp(2, 80);
+    // Serge hung at fullness gathers into folds about 30 cm apart.
+    let folds = ((width / 0.32).round() as usize).clamp(2, 120);
     let fold_width = width / folds as f32;
     let across = orientation * Vec3::X;
     let depth = size.z.max(0.08);
     for index in 0..folds {
         let offset = -width * 0.5 + fold_width * (index as f32 + 0.5);
         // Alternating depth is what makes a drape read as gathered rather than painted on.
-        let bulge = if index % 2 == 0 { depth } else { depth * 0.45 };
+        let bulge = if index % 2 == 0 { depth } else { depth * 0.55 };
         let model = Mat4::from_scale_rotation_translation(
             Vec3::new(fold_width * FOLD_OVERLAP, size.y, bulge),
             orientation,
             object.position + across * offset,
         );
-        frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
-            model,
-            colour,
-            0.95,
-            Vec3::ZERO,
-            0.0,
-        ));
+        frame.mesh(MeshKind::Cylinder).push(
+            MeshInstance::new(model, colour, 0.95, Vec3::ZERO, 0.0).with_surface(Surface::Fabric),
+        );
     }
 }
 

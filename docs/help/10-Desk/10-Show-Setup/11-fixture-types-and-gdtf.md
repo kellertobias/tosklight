@@ -49,15 +49,18 @@ Three more columns hold what each placed object is made of, in **Show Patch** an
 
 - **Colour** — any generated Venue object: a curtain in red serge, a truss in black. Choose a colour
   in the picker, or **Default colour** to return the object to its own material — black serge for
-  a curtain, raw aluminium for truss, grey for staging. Every object placed before this keeps its
-  default.
+  a curtain, mill-finish aluminium for truss, dark brown film-faced multiplex for staging. Every
+  object placed before this keeps its default.
 - **Chain** — how a chain is rigged: **Plain chain**, just the chain; **Motor on top**, a chain
   hoist hanging at its top; or **Motor on bottom**, the hoist at its bottom. The end without the
-  hoist is fixed by what it hangs from: on a three- or four-point truss, a 22 mm steelflex wrapped
-  round the nearest chord, its two legs meeting at 45°; on a pipe or a two-point truss, a flange
-  clamped round the tube; with nothing within half a metre, just the shackle. Every fixing ends in
-  a bow shackle — a U with its walls drawn out and a bolt straight through their ends — and the
-  chain's last link hangs on that bolt.
+  hoist is fixed by a 22 mm steelflex round the chords of the truss it hangs from, on the side
+  the chain comes from — the top chords for a chain from the roof. Where one chord is uppermost
+  (a pipe, a two-point truss on edge, a three-point truss with its apex up) the sling is choked
+  round that chord alone and goes straight up to the shackle; where two chords are level (a
+  four-point truss, a three-point truss with its flat side up) it is basketed under both, up the
+  outside of each, and its legs meet at the shackle at 45°. With nothing within half a metre,
+  just the shackle. Every fixing ends in a bow shackle — a U with its walls drawn out and a bolt
+  straight through their ends — and the chain's last link hangs on that bolt.
 
 A chain nobody chose a mode for has its motor on top. A chain whose ends were chosen before the
 modes existed keeps its hoist where it was and gets its fixing at the other end. Anything the
@@ -74,8 +77,9 @@ show a dash.
 A chain is drawn as real hoist chain, in the Visualizer and in the PreViz plan and elevations: links
 of 7 mm wire, 35 mm long, each turned a quarter to the next and overlapping it by the wire's
 thickness. From above, a chain is two crossed rounded rectangles, and a motor on top hides it. In
-the Visualizer the steelflex is purple and snaps round the nearest chord of the truss at that end of
-the chain, and the flange clamps the nearest pipe.
+the Visualizer the steelflex is purple and snaps to the truss at that end of the chain, round its
+top chord or under its two top chords as the section calls for; the PreViz elevations draw it
+schematically round one chord.
 
 The trusses are drawn the way square truss is built, in the Visualizer and in the PreViz plan and
 elevations alike. The diagonals run at close to 45°, with a node about every chord spacing, so a

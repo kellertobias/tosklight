@@ -1,6 +1,13 @@
 //! A rigging chain as it is hung: real hoist-chain links, a hoist body at one end and, at the
-//! other, a bow shackle on the last link made fast to the truss: a steelflex round a chord of
-//! three- or four-point truss, a pipe clamp on a pipe or ladder truss, or the shackle alone.
+//! other, a bow shackle on the last link with a steelflex made fast to the truss, or the shackle
+//! alone when nothing is in reach.
+//!
+//! The steelflex goes round the chords on the side of the truss the chain comes from — the top
+//! chords for a chain from the roof. Where one chord is uppermost (a pipe, a ladder truss on
+//! edge, a triangle with its apex up) the sling is choked round that chord alone and its legs go
+//! up to the shackle. Where two chords are level (a box, a triangle with its flat side up, a
+//! ladder lying flat) the sling is basketed under both, up the outside of each, and the legs
+//! meet at the shackle at 45° once the chain is hung at its working height.
 //!
 //! The links follow round-link hoist chain of 7 mm wire: 21 mm inside length, which is the pitch
 //! because each link sits inside its neighbour by one wire thickness, 35 mm outside length and
@@ -11,7 +18,7 @@
 use super::super::{FrameInstances, MeshInstance, MeshKind};
 use super::push_tube;
 use super::truss::ChordLine;
-use glam::{Mat3, Mat4, Quat, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use viz_scene::{ChainRig, SceneryObject};
 
 /// Diameter of the wire a link is bent from.
@@ -36,6 +43,8 @@ const SLING_RADIUS: f32 = 0.011;
 const SNAP_DISTANCE: f32 = 0.5;
 /// Tubes round the chord in one wrap.
 const WRAP_SEGMENTS: usize = 10;
+/// Tubes in each quarter turn a basket makes under a chord.
+const BASKET_QUARTER_SEGMENTS: usize = 4;
 /// A clear saturated purple, sRGB #7B2FBE in linear light, so a sling reads at a glance.
 const STEELFLEX: Vec3 = Vec3::new(0.1981, 0.0284, 0.5149);
 
@@ -53,22 +62,6 @@ const BOLT_PROTRUSION: f32 = 0.010;
 const BOLT_HEAD_RADIUS: f32 = 0.013;
 /// Tubes in the shackle's half-circle bow.
 const BOW_SEGMENTS: usize = 6;
-
-/// Flat steel a pipe clamp's band is bent from.
-const CLAMP_THICKNESS: f32 = 0.008;
-/// Width of the clamp band along the tube.
-const CLAMP_WIDTH: f32 = 0.030;
-/// Clearance between the tube and the inside of the band.
-const CLAMP_GAP: f32 = 0.001;
-/// Flat pieces round the tube, six to each half-ring.
-const CLAMP_SEGMENTS: usize = 12;
-/// How far the bolted ears at the band's split stand off the band.
-const CLAMP_EAR: f32 = 0.016;
-/// The clamp's eye plate: width, length out from the band, thickness.
-const PLATE: Vec3 = Vec3::new(0.040, 0.050, 0.008);
-/// Diameter of the eye through the plate, and how far its centre is from the plate's tip.
-const EYE_DIAMETER: f32 = 0.020;
-const EYE_FROM_TIP: f32 = 0.020;
 
 /// How many links a chain `length` long is drawn with. The pitch stays the real one, so a longer
 /// chain gets more links rather than longer ones.
@@ -105,9 +98,9 @@ pub(super) fn push_chain(
     push_hoist(frame, motor, -outward, orientation, colour, rough);
     let shackle = Shackle::on_link(object.position, &axes, count, last, outward);
     push_shackle(frame, &shackle, colour, rough);
-    match fixing_for(fixed, chords) {
-        Fixing::Steelflex(tube) => push_steelflex(frame, &shackle, tube),
-        Fixing::Flange(tube) => push_flange(frame, &shackle, tube, colour, rough),
+    match fixing_for(fixed, outward, chords) {
+        Fixing::Wrap(tube) => push_steelflex(frame, &shackle, tube),
+        Fixing::Basket(near, far) => push_basket(frame, &shackle, near, far),
         Fixing::Shackle => {}
     }
 }
@@ -223,35 +216,61 @@ impl Tube {
 /// What the non-motor end of a chain is made fast to.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Fixing {
-    /// A steelflex round a chord of three- or four-point truss.
-    Steelflex(Tube),
-    /// A pipe clamp on a pipe or a chord of two-point ladder truss.
-    Flange(Tube),
+    /// A steelflex choked round the one chord nearest the chain: a pipe, the top chord of a
+    /// ladder truss on edge, the apex of a triangle.
+    Wrap(Tube),
+    /// A steelflex basketed under the two level chords on the chain's side of the truss: the
+    /// top chords of a box, of a triangle with its flat side up, or of a ladder lying flat.
+    Basket(Tube, Tube),
     /// Nothing in reach: the shackle alone, made fast to the steel.
     Shackle,
 }
 
-/// How the chain end `end` is made fast: by the kind of truss its nearest chord within reach
-/// belongs to.
-pub(super) fn fixing_for(end: Vec3, chords: &[ChordLine]) -> Fixing {
+/// How the chain end `end` is made fast, `outward` being the direction the chain leaves it in:
+/// by the chords of the nearest truss within reach that face the chain.
+///
+/// The chords facing the chain are the ones nearest the chain along its own line — the top
+/// chords for a chain from the roof, the bottom chords for a climbing hoist under a roof truss.
+/// One chord alone there is wrapped; two level ones are basketed; more than two (a truss stood on
+/// end, whose every chord is as near as the next) fall back to wrapping the nearest.
+pub(super) fn fixing_for(end: Vec3, outward: Vec3, chords: &[ChordLine]) -> Fixing {
     let nearest = chords
         .iter()
         .map(|chord| (chord, closest_on_segment(end, chord.start, chord.end)))
         .map(|(chord, point)| (chord, point, point.distance(end)))
         .filter(|(_, _, distance)| *distance <= SNAP_DISTANCE)
         .min_by(|a, b| a.2.total_cmp(&b.2));
-    let Some((chord, point, _)) = nearest else {
+    let Some((nearest, _, _)) = nearest else {
         return Fixing::Shackle;
     };
-    let tube = Tube {
-        centre: point,
+    let tube_of = |chord: &ChordLine| Tube {
+        centre: closest_on_segment(end, chord.start, chord.end),
         axis: (chord.end - chord.start).normalize_or(Vec3::X),
         radius: chord.radius,
     };
-    if chord.chords >= 3 {
-        Fixing::Steelflex(tube)
-    } else {
-        Fixing::Flange(tube)
+    // Height of each chord of that truss towards the chain, measured where the chain reaches it.
+    let facing = -outward;
+    let mut ranked: Vec<(f32, Tube)> = chords
+        .iter()
+        .filter(|chord| chord.truss == nearest.truss)
+        .map(|chord| {
+            let tube = tube_of(chord);
+            (tube.centre.dot(facing), tube)
+        })
+        .collect();
+    ranked.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let Some(&(top, _)) = ranked.first() else {
+        return Fixing::Shackle;
+    };
+    let level: Vec<Tube> = ranked
+        .iter()
+        .take_while(|(height, tube)| top - height <= tube.radius)
+        .map(|(_, tube)| *tube)
+        .collect();
+    match level.as_slice() {
+        [one] => Fixing::Wrap(*one),
+        [first, second] => Fixing::Basket(*first, *second),
+        _ => Fixing::Wrap(tube_of(nearest)),
     }
 }
 
@@ -297,11 +316,6 @@ impl Shackle {
     fn bow_centre(&self) -> Vec3 {
         let inside = SHACKLE_INSIDE_WIDTH * 0.5;
         self.bolt + self.outward * (BOLT_RADIUS + SHACKLE_INSIDE_LENGTH - inside)
-    }
-
-    /// The centre line of the bow's bottom wire, where a flange's eye takes it.
-    fn bow_bottom(&self) -> Vec3 {
-        self.bow_centre() + self.outward * Self::wall_offset()
     }
 
     /// Where a sling bearing on the inside of the bow's bottom has its centre line.
@@ -381,111 +395,96 @@ fn push_steelflex(frame: &mut FrameInstances, shackle: &Shackle, tube: Tube) {
     }
 }
 
-/// A pipe clamp: two half-rings of flat steel round the tube with a bolted ear at each split, and
-/// an eye plate standing out from the band towards the shackle, whose bow passes through the eye.
-fn push_flange(
-    frame: &mut FrameInstances,
-    shackle: &Shackle,
-    tube: Tube,
-    colour: Vec3,
-    roughness: f32,
-) {
-    let toward = tube.toward(shackle.bow_bottom(), -shackle.outward);
-    let sideways = tube.axis.cross(toward);
-    let inner = tube.radius + CLAMP_GAP;
-    let outer = inner + CLAMP_THICKNESS;
-    let half = std::f32::consts::PI / CLAMP_SEGMENTS as f32;
-    let length = 2.0 * outer * half.tan();
-    for step in 0..CLAMP_SEGMENTS {
-        let angle = half * (2 * step + 1) as f32;
-        let radial = toward * angle.cos() + sideways * angle.sin();
-        let tangent = tube.axis.cross(radial);
-        let centre = tube.centre + radial * (inner + CLAMP_THICKNESS * 0.5);
-        let size = Vec3::new(CLAMP_THICKNESS, length, CLAMP_WIDTH);
-        push_block(
-            frame,
-            centre,
-            [radial, tangent, tube.axis],
-            size,
-            colour,
-            roughness,
-        );
+/// A steelflex basketed under two level chords: a leg from the shackle's seat down the outside
+/// of each chord, a quarter turn under each, and the run between them under the truss.
+///
+/// The legs leave the seat tangent to the chords, so a chain hung at its working height — the
+/// seat a chord spacing above the chords — has 45° between them; hung lower, the legs open out,
+/// as a sling pulled tight does.
+fn push_basket(frame: &mut FrameInstances, shackle: &Shackle, first: Tube, second: Tube) {
+    let seat = shackle.sling_seat();
+    let axis = first.axis;
+    // The plane the basket lies in is square to the chords: across from one to the other, and
+    // up from between them towards the chain.
+    let across = (second.centre - first.centre)
+        .reject_from_normalized(axis)
+        .normalize_or(axis.any_orthonormal_vector());
+    let middle = (first.centre + second.centre) * 0.5;
+    let toward = (seat - middle)
+        .reject_from_normalized(axis)
+        .reject_from_normalized(across)
+        .normalize_or(axis.cross(across));
+    // The sling's centre line runs one sling radius off the chord's surface.
+    let radius = first.radius.max(second.radius) + SLING_RADIUS;
+    let quarter = std::f32::consts::FRAC_PI_2;
+    let mut undersides = [Vec3::ZERO; 2];
+    // The first chord is on the negative `across` side, so its outside is at π; the second's is
+    // at 0. Each is wrapped from its outside round through its underside.
+    for (index, (tube, outside)) in [(&first, std::f32::consts::PI), (&second, 0.0)]
+        .into_iter()
+        .enumerate()
+    {
+        // The leg comes down from the seat tangent to the outside of the chord: of the two
+        // tangents from the seat, the one further from the other chord. A seat too close for a
+        // tangent meets the chord at its outside.
+        let outer = tube.centre + across * (outside.cos() * radius);
+        let flat = (seat - tube.centre).reject_from_normalized(axis);
+        let distance = flat.length();
+        let tangent = if distance > radius {
+            let towards_seat = flat / distance;
+            let sideways = axis.cross(towards_seat);
+            let cosine = radius / distance;
+            let sine = (1.0 - cosine * cosine).sqrt();
+            [
+                tube.centre + (towards_seat * cosine + sideways * sine) * radius,
+                tube.centre + (towards_seat * cosine - sideways * sine) * radius,
+            ]
+            .into_iter()
+            .min_by(|a, b| a.distance(outer).total_cmp(&b.distance(outer)))
+            .unwrap_or(outer)
+        } else {
+            outer
+        };
+        // Where the leg meets the chord as an angle round it in the (across, toward) plane,
+        // then the turn on to the underside: from π to 3π/2 on the first chord, from 0 back to
+        // -π/2 on the second.
+        let local = tangent - tube.centre;
+        let start = local.dot(toward).atan2(local.dot(across));
+        let (from, to) = if outside > 1.0 {
+            (start.rem_euclid(std::f32::consts::TAU), quarter * 3.0)
+        } else {
+            let start = if start > quarter {
+                start - std::f32::consts::TAU
+            } else {
+                start
+            };
+            (start, -quarter)
+        };
+        // Straight tubes between corners cut inside the circle; pushing the corners out keeps
+        // the middle of every tube at the hugging radius, so none passes into the chord. The
+        // leg ends on the first corner too, so the tube after it stays outside as well.
+        let step = (to - from) / BASKET_QUARTER_SEGMENTS as f32;
+        let corner = radius / (step * 0.5).cos();
+        let point =
+            |angle: f32| tube.centre + (across * angle.cos() + toward * angle.sin()) * corner;
+        let mut last = point(from);
+        push_tube(frame, seat, last, SLING_RADIUS, STEELFLEX, 0.35);
+        for count in 1..=BASKET_QUARTER_SEGMENTS {
+            let next = point(from + step * count as f32);
+            push_tube(frame, last, next, SLING_RADIUS, STEELFLEX, 0.35);
+            last = next;
+        }
+        undersides[index] = last;
     }
-    // The halves meet at the sides, where each carries an ear the clamp bolt goes through.
-    for side in [sideways, -sideways] {
-        let centre = tube.centre + side * (outer + CLAMP_EAR * 0.5);
-        let size = Vec3::new(CLAMP_EAR, CLAMP_THICKNESS * 2.0, CLAMP_WIDTH);
-        push_block(
-            frame,
-            centre,
-            [side, toward, tube.axis],
-            size,
-            colour,
-            roughness,
-        );
-    }
-    push_eye_plate(
+    // The run under the truss, from one chord's underside to the other's.
+    push_tube(
         frame,
-        shackle,
-        tube.centre + toward * outer,
-        toward,
-        colour,
-        roughness,
+        undersides[0],
+        undersides[1],
+        SLING_RADIUS,
+        STEELFLEX,
+        0.35,
     );
-}
-
-/// The clamp's eye plate from `root` on the band out along `toward`, flat across the shackle's
-/// bow so the bow's bottom wire runs through the eye. It is drawn as the four strips round the
-/// eye, so the eye reads as a hole.
-fn push_eye_plate(
-    frame: &mut FrameInstances,
-    shackle: &Shackle,
-    root: Vec3,
-    toward: Vec3,
-    colour: Vec3,
-    roughness: f32,
-) {
-    let normal = shackle
-        .bolt_axis
-        .reject_from_normalized(toward)
-        .normalize_or(toward.any_orthonormal_vector());
-    let width = normal.cross(toward);
-    let basis = [toward, width, normal];
-    let eye = PLATE.y - EYE_FROM_TIP;
-    let hole = EYE_DIAMETER * 0.5;
-    let (near, far) = (eye - hole, eye + hole);
-    let side = (PLATE.x - EYE_DIAMETER) * 0.5;
-    // (from, to) along the plate, (centre, width) across it.
-    let strips = [
-        ((0.0, near), (0.0, PLATE.x)),
-        ((far, PLATE.y), (0.0, PLATE.x)),
-        ((near, far), ((hole + side * 0.5), side)),
-        ((near, far), (-(hole + side * 0.5), side)),
-    ];
-    for ((from, to), (across, wide)) in strips {
-        let centre = root + toward * ((from + to) * 0.5) + width * across;
-        let size = Vec3::new(to - from, wide, PLATE.z);
-        push_block(frame, centre, basis, size, colour, roughness);
-    }
-}
-
-/// A steel block `size` along the three unit directions of a right-handed `basis`.
-fn push_block(
-    frame: &mut FrameInstances,
-    centre: Vec3,
-    [x, y, z]: [Vec3; 3],
-    size: Vec3,
-    colour: Vec3,
-    roughness: f32,
-) {
-    let rotation = Quat::from_mat3(&Mat3::from_cols(x, y, z));
-    frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-        Mat4::from_scale_rotation_translation(size, rotation, centre),
-        colour,
-        roughness,
-        Vec3::ZERO,
-        0.55,
-    ));
 }
 
 #[cfg(test)]
@@ -515,55 +514,161 @@ mod tests {
         }
     }
 
-    fn tube_of(fixing: Fixing) -> Tube {
-        match fixing {
-            Fixing::Steelflex(tube) | Fixing::Flange(tube) => tube,
-            Fixing::Shackle => panic!("nothing in reach"),
-        }
+    fn rolled(mut object: SceneryObject, roll: f32) -> SceneryObject {
+        object.rotation_degrees.x = roll;
+        object
     }
 
-    /// A chain end below square truss takes a steelflex round the nearest chord, centred on that
-    /// chord's axis; out of reach, it takes the shackle alone.
+    /// A chain from above a box truss is basketed under its two top chords, whichever chord is
+    /// nearest; out of reach, it takes the shackle alone.
     #[test]
-    fn a_chain_end_near_four_point_truss_takes_a_steelflex_round_the_nearest_chord() {
+    fn a_chain_from_above_four_point_truss_baskets_the_two_top_chords() {
         let chords = chord_lines(&[truss(4)]);
         assert_eq!(chords.len(), 4);
         assert!(chords.iter().all(|chord| chord.chords == 4));
-        let end = Vec3::new(0.7, 4.7, 0.05);
-        let fixing = fixing_for(end, &chords);
-        assert!(matches!(fixing, Fixing::Steelflex(_)), "{fixing:?}");
-        let tube = tube_of(fixing);
-        let chord = chords
-            .iter()
-            .min_by(|a, b| {
-                let distance =
-                    |c: &ChordLine| closest_on_segment(end, c.start, c.end).distance(end);
-                distance(a).total_cmp(&distance(b))
-            })
-            .unwrap();
-        let on_axis = closest_on_segment(tube.centre, chord.start, chord.end);
-        assert!(on_axis.distance(tube.centre) < 1e-5, "{tube:?}");
-        assert!(tube.centre.y < 5.0, "a bottom chord, not a top one");
-        assert!((tube.axis.dot(Vec3::X)).abs() > 0.99);
-        assert_eq!(tube.radius, chord.radius);
+        // Nearer a bottom chord than a top one, and still the top chords take it.
+        let end = Vec3::new(0.7, 4.85, 0.16);
+        let fixing = fixing_for(end, -Vec3::Y, &chords);
+        let Fixing::Basket(first, second) = fixing else {
+            panic!("{fixing:?}");
+        };
+        for tube in [first, second] {
+            assert!(tube.centre.y > 5.0, "a top chord: {tube:?}");
+            assert!(
+                (tube.centre.x - 0.7).abs() < 1e-5,
+                "where the chain reaches it"
+            );
+            assert!(tube.axis.dot(Vec3::X).abs() > 0.99);
+            assert_eq!(tube.radius, chords[0].radius);
+        }
+        assert!(
+            (first.centre.z - second.centre.z).abs() > 0.2,
+            "both top chords"
+        );
 
-        let far = fixing_for(Vec3::new(0.7, 3.0, 0.0), &chords);
+        let far = fixing_for(Vec3::new(0.7, 3.0, 0.0), -Vec3::Y, &chords);
         assert_eq!(far, Fixing::Shackle, "no truss in reach");
     }
 
-    /// A pipe or two-point ladder truss takes a pipe clamp; a triangle takes a steelflex.
+    /// A climbing hoist under a roof truss baskets the two chords facing it: the bottom ones.
     #[test]
-    fn a_pipe_or_ladder_truss_takes_a_flange_and_a_triangle_a_steelflex() {
+    fn a_chain_from_below_baskets_the_bottom_chords() {
+        let chords = chord_lines(&[truss(4)]);
+        let fixing = fixing_for(Vec3::new(0.7, 4.7, 0.0), Vec3::Y, &chords);
+        let Fixing::Basket(first, second) = fixing else {
+            panic!("{fixing:?}");
+        };
+        assert!(first.centre.y < 5.0 && second.centre.y < 5.0, "{fixing:?}");
+    }
+
+    /// One chord uppermost is wrapped alone: a pipe, a ladder on edge, a triangle apex up. Two
+    /// level chords are basketed: a triangle flat side up, a ladder lying flat.
+    #[test]
+    fn one_top_chord_is_wrapped_and_two_level_ones_are_basketed() {
         let end = Vec3::new(0.7, 4.8, 0.0);
-        for (count, flange) in [(1, true), (2, true), (3, false), (4, false)] {
-            let fixing = fixing_for(end, &chord_lines(&[truss(count)]));
+        let cases = [
+            (truss(1), true),
+            (truss(2), true),
+            (truss(3), true),
+            (rolled(truss(3), 180.0), false),
+            (rolled(truss(2), 90.0), false),
+            (truss(4), false),
+        ];
+        for (object, wrapped) in cases {
+            let fixing = fixing_for(end, -Vec3::Y, &chord_lines(std::slice::from_ref(&object)));
             assert_eq!(
-                matches!(fixing, Fixing::Flange(_)),
-                flange,
-                "{count} chords: {fixing:?}"
+                matches!(fixing, Fixing::Wrap(_)),
+                wrapped,
+                "{} chords rolled {}°: {fixing:?}",
+                object.chords,
+                object.rotation_degrees.x
             );
-            assert_ne!(fixing, Fixing::Shackle, "{count} chords");
+            assert_ne!(fixing, Fixing::Shackle);
+            if let Fixing::Wrap(tube) = fixing {
+                let top = chord_lines(std::slice::from_ref(&object))
+                    .iter()
+                    .map(|chord| chord.start.y)
+                    .fold(f32::MIN, f32::max);
+                assert!(
+                    (tube.centre.y - top).abs() < 1e-4,
+                    "the top chord: {tube:?}"
+                );
+            }
         }
+    }
+
+    /// A truss stood on end has no top chord, so the chain wraps whichever is nearest.
+    #[test]
+    fn a_truss_on_end_wraps_the_nearest_chord() {
+        let mut upright = truss(4);
+        upright.size = Vec3::new(0.29, 4.0, 0.29);
+        let chords = chord_lines(std::slice::from_ref(&upright));
+        let fixing = fixing_for(Vec3::new(0.16, 6.0, 0.12), -Vec3::Y, &chords);
+        assert!(matches!(fixing, Fixing::Wrap(_)), "{fixing:?}");
+    }
+
+    /// A basket's sling never passes into either chord, its run under the truss lies below both,
+    /// and its legs are symmetrical about the chain.
+    #[test]
+    fn the_basket_hugs_both_chords_and_runs_under_them() {
+        let radius = 0.025;
+        let first = Tube {
+            centre: Vec3::new(0.0, 5.0, -0.12),
+            axis: Vec3::X,
+            radius,
+        };
+        let second = Tube {
+            centre: Vec3::new(0.0, 5.0, 0.12),
+            axis: Vec3::X,
+            radius,
+        };
+        let mut shackle = Shackle {
+            bolt: Vec3::ZERO,
+            bolt_axis: Vec3::X,
+            outward: -Vec3::Y,
+        };
+        let seat = Vec3::new(0.0, 5.3, 0.0);
+        shackle.bolt = seat - (shackle.sling_seat() - shackle.bolt);
+        let mut frame = FrameInstances::default();
+        push_basket(&mut frame, &shackle, first, second);
+        let hugging = radius + SLING_RADIUS;
+        let middles: Vec<Vec3> = frame
+            .meshes
+            .iter()
+            .flat_map(|(_, entries)| entries.iter())
+            .map(|instance| {
+                Vec3::from_array([
+                    instance.model[3][0],
+                    instance.model[3][1],
+                    instance.model[3][2],
+                ])
+            })
+            .collect();
+        assert_eq!(middles.len(), 2 + BASKET_QUARTER_SEGMENTS * 2 + 1);
+        for middle in &middles {
+            for tube in [first, second] {
+                let off_axis = (*middle - tube.centre).reject_from_normalized(tube.axis);
+                assert!(
+                    off_axis.length() > hugging - 1e-4,
+                    "{middle} is inside {tube:?}"
+                );
+            }
+        }
+        let run = middles[middles.len() - 1];
+        assert!(
+            (run.y - (5.0 - hugging)).abs() < 2e-3,
+            "under both chords: {run}"
+        );
+        // The legs mirror each other across the chain.
+        let (left, right) = (middles[0], middles[1 + BASKET_QUARTER_SEGMENTS]);
+        assert!(
+            (left.y - right.y).abs() < 1e-4 && (left.z + right.z).abs() < 1e-4,
+            "{left} {right}"
+        );
+        assert!(
+            left.y < seat.y && left.y > 5.0,
+            "the leg comes down to the chord: {left}"
+        );
     }
 
     fn straight_axes() -> ChainAxes {
@@ -592,7 +697,7 @@ mod tests {
                 let centre = axes.link_centre(position, count, last);
                 let bearing = (shackle.bolt - centre).dot(outward) + BOLT_RADIUS;
                 assert!((bearing - PITCH * 0.5).abs() < 1e-5, "{bearing}");
-                assert!(shackle.bow_bottom().dot(outward) > shackle.bolt.dot(outward));
+                assert!(shackle.sling_seat().dot(outward) > shackle.bolt.dot(outward));
                 bolts.push(shackle.bolt_axis.abs());
             }
         }

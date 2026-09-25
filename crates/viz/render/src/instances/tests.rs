@@ -1169,53 +1169,74 @@ mod lines_view {
         build(&scene, &SceneValues::default(), &FrameStyle::default())
     }
 
-    /// A steelflex under square truss wraps its chord rather than a tube of its own, hugging it
-    /// at the chord's radius plus the sling's 11 mm.
+    /// A chain under square truss baskets the two chords facing it — the bottom ones — with a
+    /// sling that hugs each at the chord's radius plus its own 11 mm and, coming from below,
+    /// runs over both, through the truss.
     #[test]
-    fn a_chain_under_four_point_truss_takes_a_steelflex_hugging_the_chord() {
+    fn a_chain_under_four_point_truss_baskets_the_two_bottom_chords() {
         let frame = chain_under_truss(4);
         let slings: Vec<Vec3> = instances(&frame, MeshKind::Cylinder)
             .iter()
             .filter(|instance| is_steelflex(instance))
             .map(centre)
             .collect();
-        // Two legs, then the wrap; its segments sit evenly round the chord.
-        assert_eq!(slings.len(), 12);
-        let wrap = &slings[2..];
-        let middle = wrap.iter().copied().sum::<Vec3>() / wrap.len() as f32;
-        let parts_chord_y = 5.0 - (0.29 - 0.29 * 0.17) * 0.5;
-        let parts_chord_z = (0.29 - 0.29 * 0.17) * 0.5;
-        assert!((middle.y - parts_chord_y).abs() < 0.03, "{middle}");
-        assert!((middle.z - parts_chord_z).abs() < 0.03, "{middle}");
-        assert!((middle.x - 0.5).abs() < 0.03, "{middle}");
-        let axis = Vec3::new(0.5, parts_chord_y, parts_chord_z);
+        // A leg and a quarter turn on each chord, and the run between them.
+        assert_eq!(slings.len(), 2 * (1 + 4) + 1);
+        let chord_y = 5.0 - (0.29 - 0.29 * 0.17) * 0.5;
+        let chord_z = (0.29 - 0.29 * 0.17) * 0.5;
         let hugging = 0.29 * 0.17 * 0.5 + 0.011;
-        for segment in wrap {
-            let off_axis = (*segment - axis) * Vec3::new(0.0, 1.0, 1.0);
-            assert!((off_axis.length() - hugging).abs() < 1e-3, "{off_axis}");
+        for segment in &slings {
+            for z in [chord_z, -chord_z] {
+                let off_axis = (*segment - Vec3::new(0.5, chord_y, z)) * Vec3::new(0.0, 1.0, 1.0);
+                assert!(
+                    off_axis.length() > hugging - 1e-3,
+                    "{segment} is inside the chord"
+                );
+            }
+            assert!(
+                (segment.x - 0.5).abs() < 0.03,
+                "where the chain reaches: {segment}"
+            );
         }
-        assert_eq!(instances(&frame, MeshKind::Cube).len(), 1, "no flange");
+        let run = slings[slings.len() - 1];
+        assert!(
+            (run.y - (chord_y + hugging)).abs() < 3e-3,
+            "over both chords: {run}"
+        );
+        assert!(run.z.abs() < 1e-3, "between them: {run}");
+        assert_eq!(
+            instances(&frame, MeshKind::Cube).len(),
+            1,
+            "the hoist alone"
+        );
     }
 
-    /// A pipe, or a chord of two-point ladder truss, takes a pipe clamp and no purple sling.
+    /// A pipe, or two-point ladder truss on edge, takes the steelflex round its one facing chord
+    /// and no clamp of any kind.
     #[test]
-    fn a_chain_under_a_pipe_or_ladder_takes_a_flange_and_no_sling() {
+    fn a_chain_under_a_pipe_or_ladder_wraps_the_chord_and_needs_no_clamp() {
         for chords in [1, 2] {
             let frame = chain_under_truss(chords);
-            let tubes = instances(&frame, MeshKind::Cylinder);
-            assert!(!tubes.iter().any(is_steelflex), "{chords} chords");
-            let blocks: Vec<Vec3> = instances(&frame, MeshKind::Cube)
+            let slings: Vec<Vec3> = instances(&frame, MeshKind::Cylinder)
                 .iter()
+                .filter(|instance| is_steelflex(instance))
                 .map(centre)
                 .collect();
-            // The hoist, twelve band pieces, two ears and the plate's four strips.
-            assert_eq!(blocks.len(), 1 + 12 + 2 + 4, "{chords} chords");
-            let clamp = &blocks[1..];
+            // Two legs and the wrap.
+            assert_eq!(slings.len(), 12, "{chords} chords");
             assert!(
-                clamp.iter().all(|block| (block.x - 0.5).abs() < 0.03),
-                "the clamp sits on the chord nearest the chain end: {clamp:?}"
+                slings.iter().all(|sling| (sling.x - 0.5).abs() < 0.03),
+                "the sling sits where the chain reaches the chord: {slings:?}"
             );
-            assert!(clamp.iter().all(|block| block.y > 4.6), "{clamp:?}");
+            assert!(
+                slings[2..].iter().all(|sling| sling.y > 4.6),
+                "{chords} chords: {slings:?}"
+            );
+            assert_eq!(
+                instances(&frame, MeshKind::Cube).len(),
+                1,
+                "{chords} chords: the hoist alone"
+            );
         }
     }
 

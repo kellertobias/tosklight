@@ -42,13 +42,17 @@ choices existed open unchanged.
 ## Chains
 
 1. Add **Chain** and set **Footprint height** to 3 m. Confirm **Chain** reads **Motor on top**, and
-   that the Visualizer draws a hoist body above the chain and a purple steelflex below it: a wrap,
-   two legs meeting at 45° and a shackle on the end link.
-2. Hang the chain so its bottom end is on a four-point truss's top chord. Confirm a 22 mm steelflex
-   wraps round that chord and ends in a bow shackle whose bolt the last link hangs on. Move the end
-   onto a pipe and confirm a flange clamps the pipe instead, with no steelflex; move it clear of any
-   truss and confirm only the shackle remains. Confirm the PreViz front and side elevations draw
-   the same fixing.
+   that the Visualizer draws a hoist body above the chain and, with no truss in reach, a bow
+   shackle alone on the end link.
+2. Hang the chain so its bottom end is a hand's width above a four-point truss. Confirm a 22 mm
+   purple steelflex is basketed under both top chords — down the outside of each, under them and
+   across — with its two legs rising at 45° to a bow shackle whose bolt the last link hangs on;
+   confirm no part of it goes round a bottom chord. Move the end over a three-point truss with
+   its apex up, a two-point truss on edge, and a pipe, and confirm the sling is choked round the
+   one top chord alone and goes straight up. Turn the three-point truss apex down and confirm the
+   sling is basketed under its two top chords. Move the end clear of any truss and confirm only
+   the shackle remains. Confirm the PreViz front and side elevations draw the steelflex
+   schematically round one chord.
 3. Set **Chain** to **Motor on bottom**. Confirm the hoist moves to the bottom and the steelflex to
    the top. Set **Plain chain** and confirm only the chain is drawn.
 4. In the PreViz plan, confirm the chain is two crossed rounded rectangles from above, and that a

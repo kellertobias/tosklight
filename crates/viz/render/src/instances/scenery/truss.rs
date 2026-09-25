@@ -10,8 +10,8 @@
 //! The 2D plan (`apps/viz-editor/src/cad/trussPlan.ts`) draws from the same rules, so both views of
 //! one truss agree.
 
-use super::super::{FrameInstances, MeshInstance, MeshKind};
-use super::push_tube;
+use super::super::{FrameInstances, MeshInstance, MeshKind, Surface};
+use super::push_tube_of;
 use glam::{Mat4, Quat, Vec3};
 use viz_scene::SceneryObject;
 
@@ -131,6 +131,31 @@ impl TrussLayout {
     }
 }
 
+/// How much of a truss member is metal: extruded aluminium, nearly all of it, with the mill finish
+/// keeping it matt rather than mirror-like.
+const ALUMINIUM_METALLIC: f32 = 0.8;
+
+/// One truss member, in aluminium.
+fn push_member(
+    frame: &mut FrameInstances,
+    from: Vec3,
+    to: Vec3,
+    radius: f32,
+    colour: Vec3,
+    roughness: f32,
+) {
+    push_tube_of(
+        frame,
+        from,
+        to,
+        radius,
+        colour,
+        roughness,
+        ALUMINIUM_METALLIC,
+        Surface::Aluminium,
+    );
+}
+
 /// One truss chord as a line in the world, for rigging that wraps round it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct ChordLine {
@@ -141,6 +166,8 @@ pub(super) struct ChordLine {
     /// How many chords the truss this chord belongs to has: 1 for a pipe, 2 for ladder truss,
     /// 3 or 4 for a triangle or square section.
     pub chords: u8,
+    /// Which truss this chord belongs to, so rigging can find the chord's neighbours.
+    pub truss: usize,
 }
 
 /// Every chord of every truss in `scenery`, drawn where [`push_truss`] draws it.
@@ -148,7 +175,8 @@ pub(super) fn chord_lines(scenery: &[SceneryObject]) -> Vec<ChordLine> {
     scenery
         .iter()
         .filter(|object| object.kind == viz_scene::SceneryKind::Truss)
-        .flat_map(|object| {
+        .enumerate()
+        .flat_map(|(truss, object)| {
             let layout =
                 TrussLayout::new(object, viz_scene::euler_degrees(object.rotation_degrees));
             let radius = layout.parts.chord * 0.5;
@@ -159,6 +187,7 @@ pub(super) fn chord_lines(scenery: &[SceneryObject]) -> Vec<ChordLine> {
                 end: end + offset,
                 radius,
                 chords: count,
+                truss,
             })
         })
         .collect()
@@ -181,7 +210,7 @@ pub(super) fn push_truss(
     let rough = object.roughness;
 
     for offset in &chords {
-        push_tube(
+        push_member(
             frame,
             start + *offset,
             end + *offset,
@@ -197,7 +226,7 @@ pub(super) fn push_truss(
         for (face, inward) in [(start, run), (end, -run)] {
             let at = face + *offset;
             let receiver = parts.chord * 0.6;
-            push_tube(
+            push_member(
                 frame,
                 at,
                 at + inward * parts.receiver,
@@ -213,12 +242,12 @@ pub(super) fn push_truss(
         let at = start + run * along;
         for &(first, second) in &faces {
             let (from, to) = (at + chords[first], at + chords[second]);
-            push_tube(frame, from, to, parts.brace * 0.5, colour, rough);
+            push_member(frame, from, to, parts.brace * 0.5, colour, rough);
         }
         if chords.len() == 4 {
             // A box's end frame carries one diagonal across it, as the end elevation shows.
             let (from, to) = (at + chords[0], at + chords[2]);
-            push_tube(frame, from, to, parts.brace * 0.5, colour, rough);
+            push_member(frame, from, to, parts.brace * 0.5, colour, rough);
         }
     }
     let bays = parts.bays(length);
@@ -242,7 +271,7 @@ pub(super) fn push_truss(
                 } else {
                     (near + chords[second], far + chords[first])
                 };
-                push_tube(frame, from, to, parts.brace * 0.5, colour, rough);
+                push_member(frame, from, to, parts.brace * 0.5, colour, rough);
             }
         }
     }

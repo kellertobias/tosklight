@@ -633,18 +633,23 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
             rotation_degrees,
             size,
             colour: match kind {
-                SceneryKind::Truss => [0.2, 0.205, 0.215],
+                // Mill-finish aluminium: a light, slightly cool grey.
+                SceneryKind::Truss => [0.33, 0.335, 0.345],
                 SceneryKind::Wall => [0.1, 0.1, 0.11],
                 // Stage drape is black wool serge. The generic prop grey made the canonical
                 // black legs and backcloth look like painted scenery in PreViz.
                 SceneryKind::Curtain => [0.008, 0.008, 0.01],
+                // Staging is film-faced multiplex: the dark brown phenolic face of a deck.
+                SceneryKind::Riser | SceneryKind::Stairs => MULTIPLEX,
                 _ => [0.14, 0.14, 0.15],
             },
             // Wool serge is the matt-est thing in a venue and aluminium the least: a drape
             // that catches the same highlight as the truss over it reads as painted board.
+            // Truss is mill-finish aluminium, not polished: a soft, broad highlight.
             roughness: match kind {
                 SceneryKind::Curtain => 0.96,
-                SceneryKind::Truss | SceneryKind::Railing => 0.45,
+                SceneryKind::Truss => 0.6,
+                SceneryKind::Railing => 0.45,
                 _ => 0.8,
             },
             kind,
@@ -654,6 +659,9 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
     }
     scenery
 }
+
+/// The dark brown phenolic film on a staging deck, in linear light.
+const MULTIPLEX: [f32; 3] = [0.036, 0.019, 0.009];
 
 fn venue_vector(body: &serde_json::Value, key: &str) -> Option<Vec3> {
     let value = body.get(key)?;

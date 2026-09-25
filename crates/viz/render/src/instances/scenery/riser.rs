@@ -10,7 +10,7 @@
 //! A flight of stairs climbs to the same height in fixed rises, with a rail up each side when it
 //! carries them, and stands on its own steps rather than on anything under it.
 
-use super::super::{FrameInstances, MeshInstance, MeshKind};
+use super::super::{FrameInstances, MeshInstance, MeshKind, Surface};
 use super::push_tube;
 use glam::{Mat4, Quat, Vec3};
 use viz_scene::SceneryObject;
@@ -54,14 +54,23 @@ pub(super) fn push_fixed_legs(
     let along = orientation * Vec3::X;
     let beside = orientation * Vec3::Z;
     let floor = object.position - up * (height * 0.5);
-    let cube = |frame: &mut FrameInstances, scale: Vec3, centre: Vec3, colour, rough, metal| {
-        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-            Mat4::from_scale_rotation_translation(scale, orientation, centre),
-            colour,
-            rough,
-            Vec3::ZERO,
-            metal,
-        ));
+    let cube = |frame: &mut FrameInstances,
+                scale: Vec3,
+                centre: Vec3,
+                colour,
+                rough,
+                metal,
+                surface: Surface| {
+        frame.mesh(MeshKind::Cube).push(
+            MeshInstance::new(
+                Mat4::from_scale_rotation_translation(scale, orientation, centre),
+                colour,
+                rough,
+                Vec3::ZERO,
+                metal,
+            )
+            .with_surface(surface),
+        );
     };
 
     let top = TOP.min(height * 0.4);
@@ -72,6 +81,7 @@ pub(super) fn push_fixed_legs(
         colour,
         object.roughness,
         0.0,
+        Surface::Multiplex,
     );
 
     let leg = LEG.min(size.x * 0.4).min(size.z * 0.4);
@@ -85,7 +95,15 @@ pub(super) fn push_fixed_legs(
                 + along * ((size.x - leg) * 0.5 * x)
                 + beside * ((size.z - leg) * 0.5 * z)
                 + up * (rise * 0.5);
-            cube(frame, Vec3::new(leg, rise, leg), corner, STEEL, 0.5, 0.6);
+            cube(
+                frame,
+                Vec3::new(leg, rise, leg),
+                corner,
+                STEEL,
+                0.5,
+                0.6,
+                Surface::Plain,
+            );
         }
     }
 }
@@ -108,14 +126,23 @@ pub(super) fn push_scissor_stage(
     let along = orientation * if long_x { Vec3::X } else { Vec3::Z };
     let beside = orientation * if long_x { Vec3::Z } else { Vec3::X };
     let floor = object.position - up * (height * 0.5);
-    let cube = |frame: &mut FrameInstances, scale: Vec3, centre: Vec3, colour, rough, metal| {
-        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-            Mat4::from_scale_rotation_translation(scale, orientation, centre),
-            colour,
-            rough,
-            Vec3::ZERO,
-            metal,
-        ));
+    let cube = |frame: &mut FrameInstances,
+                scale: Vec3,
+                centre: Vec3,
+                colour,
+                rough,
+                metal,
+                surface: Surface| {
+        frame.mesh(MeshKind::Cube).push(
+            MeshInstance::new(
+                Mat4::from_scale_rotation_translation(scale, orientation, centre),
+                colour,
+                rough,
+                Vec3::ZERO,
+                metal,
+            )
+            .with_surface(surface),
+        );
     };
 
     let deck = (height * 0.25).min(DECK);
@@ -126,6 +153,7 @@ pub(super) fn push_scissor_stage(
         colour,
         object.roughness,
         0.0,
+        Surface::Multiplex,
     );
 
     let rail = (height * 0.1).min(RAIL);
@@ -140,9 +168,25 @@ pub(super) fn push_scissor_stage(
     let lift = floor + up * (rail * 0.5);
     for sign in [1.0, -1.0] {
         let side = lift + beside * ((depth - width) * 0.5 * sign);
-        cube(frame, local(length, width), side, STEEL, 0.5, 0.6);
+        cube(
+            frame,
+            local(length, width),
+            side,
+            STEEL,
+            0.5,
+            0.6,
+            Surface::Plain,
+        );
         let end = lift + along * ((length - width) * 0.5 * sign);
-        cube(frame, local(width, depth), end, STEEL, 0.5, 0.6);
+        cube(
+            frame,
+            local(width, depth),
+            end,
+            STEEL,
+            0.5,
+            0.6,
+            Surface::Plain,
+        );
     }
 
     let low = rail;
@@ -246,21 +290,24 @@ pub(super) fn push_stairs(
         // Each step is a block from the floor to its own nosing, so the flight reads as solid.
         let top = rise * (index + 1) as f32;
         let centre = floor + along * (-run * 0.5 + tread * (index as f32 + 0.5)) + up * (top * 0.5);
-        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-            Mat4::from_scale_rotation_translation(
-                Vec3::new(
-                    if long_x { tread } else { width },
-                    top,
-                    if long_x { width } else { tread },
+        frame.mesh(MeshKind::Cube).push(
+            MeshInstance::new(
+                Mat4::from_scale_rotation_translation(
+                    Vec3::new(
+                        if long_x { tread } else { width },
+                        top,
+                        if long_x { width } else { tread },
+                    ),
+                    orientation,
+                    centre,
                 ),
-                orientation,
-                centre,
-            ),
-            colour,
-            object.roughness,
-            Vec3::ZERO,
-            0.0,
-        ));
+                colour,
+                object.roughness,
+                Vec3::ZERO,
+                0.0,
+            )
+            .with_surface(Surface::Multiplex),
+        );
     }
     // A rail up each chosen side, its posts standing on the nosings and its rail following the
     // climb. Left and right are as seen climbing: up the flight, with the steps rising ahead.

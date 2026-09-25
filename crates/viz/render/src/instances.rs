@@ -58,6 +58,26 @@ pub struct MeshInstance {
     pub base_colour: [f32; 4],
     /// `rgb` emissive radiance, `w` metallic.
     pub emissive: [f32; 4],
+    /// `x` the [`Surface`] the shader textures this instance with, `yzw` spare.
+    pub surface: [f32; 4],
+}
+
+/// What a surface is made of beyond its colour: the procedural finish the surface shader draws on
+/// it, in the instance's own local space so it stays put as the object moves.
+///
+/// A plain surface is lit by colour, roughness and metallic alone. The others add the structure an
+/// operator reads a venue by — the mill finish of aluminium truss, the film face and ply edges of
+/// a staging deck, the nap of wool serge — which a flat-shaded solid cannot show.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Surface {
+    #[default]
+    Plain = 0,
+    /// Extruded aluminium tube: fine streaks along the tube, a matt mill finish.
+    Aluminium = 1,
+    /// Film-faced multiplex: a dark phenolic anti-slip face and plies showing on every edge.
+    Multiplex = 2,
+    /// Wool serge or velvet: a fine nap with a soft sheen at grazing angles.
+    Fabric = 3,
 }
 
 impl MeshInstance {
@@ -67,7 +87,7 @@ impl MeshInstance {
         attributes: &wgpu::vertex_attr_array![
             3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x4,
             7 => Float32x4, 8 => Float32x4, 9 => Float32x4,
-            10 => Float32x4, 11 => Float32x4
+            10 => Float32x4, 11 => Float32x4, 12 => Float32x4
         ],
     };
 
@@ -80,7 +100,14 @@ impl MeshInstance {
             normal2: normal.z_axis.extend(0.0).to_array(),
             base_colour: base_colour.extend(roughness).to_array(),
             emissive: emissive.extend(metallic).to_array(),
+            surface: [0.0; 4],
         }
+    }
+
+    /// The same instance finished as `surface`.
+    fn with_surface(mut self, surface: Surface) -> Self {
+        self.surface[0] = surface as u8 as f32;
+        self
     }
 }
 
