@@ -140,7 +140,7 @@ pub fn run_event_loop(
         entering_fullscreen: Vec::new(),
         worker: None,
         models,
-        worker_failed: false,
+        worker_failure: None,
         expects_outputs: needs_a_window(configuration),
         #[cfg(feature = "tray")]
         tray: None,
@@ -148,11 +148,11 @@ pub fn run_event_loop(
         bulk_import,
     };
     let result = event_loop.run_app(&mut host);
-    let worker_failed = host.worker_failed;
+    let worker_failure = host.worker_failure.take();
     host.stop_worker();
     result?;
-    if worker_failed {
-        anyhow::bail!("Media presentation worker stopped unexpectedly");
+    if let Some(detail) = worker_failure {
+        anyhow::bail!("Media presentation worker stopped unexpectedly: {detail}");
     }
     Ok(())
 }
@@ -270,7 +270,7 @@ struct PresentationHost {
     worker: Option<PresentationWorker>,
     /// The 3D model library, handed to the render worker.
     models: crate::model_store::Models,
-    worker_failed: bool,
+    worker_failure: Option<String>,
     /// Whether this configuration asked for output windows at all. A server with none is a normal
     /// state — it still runs, and it still has a menu bar item — so an empty output list only
     /// means failure when outputs were expected.
@@ -1112,23 +1112,24 @@ impl ApplicationHandler for PresentationHost {
             .is_some_and(std::thread::JoinHandle::is_finished)
         {
             let mut worker = self.worker.take().expect("finished worker was present");
-            match worker
+            let detail = match worker
                 .join
                 .take()
                 .expect("finished worker has a handle")
                 .join()
             {
-                Ok(()) => tracing::error!("Media presentation worker stopped unexpectedly"),
+                Ok(()) => "worker returned without a shutdown request".to_owned(),
                 Err(payload) => {
                     let detail = payload
                         .downcast_ref::<String>()
                         .map(String::as_str)
                         .or_else(|| payload.downcast_ref::<&str>().copied())
                         .unwrap_or("unknown panic");
-                    tracing::error!(%detail, "Media presentation worker panicked");
+                    format!("worker panicked: {detail}")
                 }
-            }
-            self.worker_failed = true;
+            };
+            tracing::error!(%detail, "Media presentation worker stopped unexpectedly");
+            self.worker_failure = Some(detail);
             self.shutdown.request(ShutdownReason::Requested);
             event_loop.exit();
             return;
