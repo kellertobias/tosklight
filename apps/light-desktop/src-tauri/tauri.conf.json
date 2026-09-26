@@ -28,6 +28,11 @@
     ],
     "resources": {
       "../../../assets/fixture-library/": "fixture-library/"
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows-installer-hooks.nsh"
+      }
     }
   }
 }
