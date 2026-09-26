@@ -470,7 +470,10 @@ mod tests {
                 )
                 .expect("test window"),
         );
-        let monitor = window.available_monitors().nth(1).or_else(|| window.current_monitor());
+        let monitor = window
+            .available_monitors()
+            .nth(1)
+            .or_else(|| window.current_monitor());
         window.set_decorations(false);
         window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(monitor)));
         assert!(!window.is_decorated());
@@ -493,7 +496,10 @@ mod tests {
             .configure(&output.gpu.device, &output.configuration);
         drop(frame);
         assert!(pollster::block_on(scope.pop()).is_some());
-        assert!(matches!(output.acquire_frame(), Err(SurfaceLost::Recovered)));
+        assert!(matches!(
+            output.acquire_frame(),
+            Err(SurfaceLost::Recovered)
+        ));
         assert!(!output.surface_configured);
         drop(
             output
@@ -532,7 +538,10 @@ mod tests {
     #[test]
     fn an_hdr_format_does_not_override_the_eight_bit_preview_format() {
         assert_eq!(
-            present_format(&[wgpu::TextureFormat::Rgba16Float, wgpu::TextureFormat::Bgra8Unorm]),
+            present_format(&[
+                wgpu::TextureFormat::Rgba16Float,
+                wgpu::TextureFormat::Bgra8Unorm
+            ]),
             Some(wgpu::TextureFormat::Bgra8Unorm)
         );
         assert_eq!(present_format(&[wgpu::TextureFormat::Rgba16Float]), None);

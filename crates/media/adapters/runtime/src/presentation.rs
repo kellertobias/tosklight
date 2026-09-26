@@ -471,7 +471,9 @@ impl PresentationHost {
             ))
             .with_position(selected.position())
             .with_fullscreen(if *fullscreen && cfg!(target_os = "windows") {
-                Some(winit::window::Fullscreen::Borderless(Some(selected.clone())))
+                Some(winit::window::Fullscreen::Borderless(Some(
+                    selected.clone(),
+                )))
             } else {
                 None
             })

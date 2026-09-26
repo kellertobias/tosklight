@@ -69,7 +69,8 @@ impl OffScreenOutput {
 
     /// Reads the rendered image back as tightly packed 8-bit RGBA.
     pub fn read_image(&self) -> Vec<u8> {
-        self.try_read_image().expect("off-screen readback succeeded")
+        self.try_read_image()
+            .expect("off-screen readback succeeded")
     }
 
     /// Reports failed transfers and discards their buffer so a later capture can retry.

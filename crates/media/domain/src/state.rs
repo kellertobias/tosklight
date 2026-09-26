@@ -223,29 +223,7 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             target.reset_trigger_id = target.reset_trigger_id.wrapping_add(1);
             Applied::Changed
         }
-        CommandKind::TakeOverPlayback { take_over, .. } => {
-            if *take_over
-                && !output.ownership.web_takeover
-                && output.ownership.dmx.is_some()
-                && output.master.dimmer == 0.0
-                && output.master.scale_x == -4.0
-                && output.master.scale_y == -4.0
-                && output.layers.iter().all(|layer| {
-                    layer.address == crate::address::MediaAddress::BLANK
-                        && layer.dimmer == 0.0
-                        && layer.scale_x == 0.0
-                        && layer.scale_y == 0.0
-                        && layer.position_x == -2.0
-                        && layer.position_y == -2.0
-                })
-            {
-                // An empty desk universe overwrites the startup homes with invisible geometry.
-                // Local playback should start from usable homes when no media look exists.
-                output.master = MasterState::default();
-                output.layers.fill(LayerState::default());
-            }
-            changed_or_not(replace(&mut output.ownership.web_takeover, *take_over))
-        }
+        CommandKind::TakeOverPlayback { take_over, .. } => apply_takeover(output, *take_over),
         CommandKind::ReportSourceStatus { layer, status, .. } => {
             let Some(target) = output.layers.get_mut(*layer) else {
                 return Applied::RejectedUnknownLayer;
@@ -253,6 +231,30 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             changed_or_not(replace(&mut target.source_status, *status))
         }
     }
+}
+
+fn apply_takeover(output: &mut OutputState, take_over: bool) -> Applied {
+    if take_over
+        && !output.ownership.web_takeover
+        && output.ownership.dmx.is_some()
+        && output.master.dimmer == 0.0
+        && output.master.scale_x == -4.0
+        && output.master.scale_y == -4.0
+        && output.layers.iter().all(|layer| {
+            layer.address == crate::address::MediaAddress::BLANK
+                && layer.dimmer == 0.0
+                && layer.scale_x == 0.0
+                && layer.scale_y == 0.0
+                && layer.position_x == -2.0
+                && layer.position_y == -2.0
+        })
+    {
+        // An empty desk universe overwrites the startup homes with invisible geometry.
+        // Local playback should start from usable homes when no media look exists.
+        output.master = MasterState::default();
+        output.layers.fill(LayerState::default());
+    }
+    changed_or_not(replace(&mut output.ownership.web_takeover, take_over))
 }
 
 fn apply_master_controls(
