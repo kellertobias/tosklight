@@ -72,6 +72,13 @@ export function FileBar({
 					>
 						New Show
 					</Button>
+					<Button
+						disabled={busy}
+						title="Open a fresh copy of the demo rig that ships with ToskLight"
+						onClick={() => void run("Opening", actions.openDemoShow)}
+					>
+						Open Demo Show
+					</Button>
 				</section>
 				<section>
 					<h2>Open</h2>
@@ -103,13 +110,6 @@ export function FileBar({
 							</Button>
 						))
 					)}
-					<Button
-						disabled={busy}
-						title="Open a fresh copy of the demo rig that ships with ToskLight"
-						onClick={() => void run("Opening", actions.openDemoShow)}
-					>
-						Open Demo Show
-					</Button>
 				</section>
 				<section>
 					<h2>Save As</h2>

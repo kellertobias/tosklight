@@ -4,7 +4,8 @@ import { type DeskPeer, documentSession } from "./document/session";
 /**
  * The desks on the network worth loading from.
  *
- * Nothing is offered when nothing is found: a button that can only fail is worse than no button.
+ * When nothing is found the file bar keeps the option in place, disabled, so the operator can see
+ * that no running ToskLight Control answered rather than wonder where the option went.
  * A desk that starts after this window did should still appear, and one that goes should stop
  * being offered — the browse already keeps that list, and this is only how often the bar reads it.
  */

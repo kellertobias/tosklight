@@ -9,7 +9,7 @@ the same rig, and neither side should have to go looking for a file to get from 
 
 ## Open Demo Show
 
-The editor's file bar has an **Open Demo Show** button, and it needs nothing else: no file to find,
+The editor's file bar has an **Open Demo Show** button beside **New Show**, and it needs nothing else: no file to find,
 no desk on the network, and no rig to patch first. It opens a full demonstration rig — front-of-house
 profiles and PAR cans, moving washes and profiles, beams, strobes, scanners, Sunstrips, blinders, a
 hazer, three lasers, six cold-spark fountains, four flame jets and two media servers — as an
@@ -39,9 +39,10 @@ see what the Visualizer draws, and the rig the product demonstration video is sh
 ## The Show screen
 
 **Show**, at the top of the dock, is the open show as a document. It is available with no show open,
-because it is where a show is created or opened. Its file actions run across the top: **New Show**,
-**Load Show from Disk**, **Get Show from Running ToskLight Control** for each desk found on the
-network, **Open Demo Show**, **Save As**, **Import MVR** and **Export MVR**.
+because it is where a show is created or opened. Its file actions run across the top: **New Show**
+and **Open Demo Show** under **New Show**; **Load Show from Disk** and **Get Show from Running
+ToskLight Control** for each desk found on the network under **Open**; then **Save As**, **Import
+MVR** and **Export MVR**.
 
 Below them the show is seen from both sides at once. The left half draws the rig from above, with the
 show's name over it. The right half is **Show information**, which titles every printed CAD page, in

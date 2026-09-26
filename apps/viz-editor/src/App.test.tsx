@@ -487,6 +487,20 @@ describe("the Viz editor window", () => {
 		]) {
 			expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
 		}
+		// Open is only for existing shows: the disk, then a running Control. The demo is a way to
+		// start a show, so it sits with New Show.
+		const section = (heading: string) =>
+			screen.getByRole("heading", { name: heading }).closest("section") as HTMLElement;
+		expect(
+			within(section("Open"))
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["Load Show from Disk", "Get Show from Running ToskLight Control"]);
+		expect(
+			within(section("New Show"))
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["New Show", "Open Demo Show"]);
 	});
 
 	it("describes the show beside its rig, under the file actions, on the Show screen", async () => {

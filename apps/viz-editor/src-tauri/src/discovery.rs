@@ -327,21 +327,10 @@ fn discovery_client(timeout: std::time::Duration) -> Answer<reqwest::Client> {
         .map_err(|error| error.to_string())
 }
 
-#[derive(Deserialize)]
-struct Bootstrap {
-    users: Vec<BootstrapUser>,
-}
-
-#[derive(Deserialize)]
-struct BootstrapUser {
-    name: String,
-    enabled: bool,
-}
-
 async fn reachable_base(client: &reqwest::Client, desk: &Peer) -> Answer<String> {
     let mut failures = Vec::new();
     for base in desk.base_urls() {
-        match enabled_session_user(client, &base).await {
+        match desk_answers(client, &base).await {
             Ok(_) => return Ok(base),
             Err(error) => failures.push(format!("{base}: {error}")),
         }
@@ -349,25 +338,28 @@ async fn reachable_base(client: &reqwest::Client, desk: &Peer) -> Answer<String>
     Err(failures.join("; "))
 }
 
-async fn enabled_session_user(client: &reqwest::Client, base: &str) -> Answer<String> {
-    let bootstrap: Bootstrap = client
-        .get(format!("{base}/api/v2/bootstrap"))
+/// Whether a ToskLight desk answers at `base`.
+///
+/// Readiness is the desk's unauthenticated health route, so asking it opens no session and
+/// changes nothing on the desk.
+async fn desk_answers(client: &reqwest::Client, base: &str) -> Answer<()> {
+    client
+        .get(format!("{base}/api/v2/readiness"))
         .send()
         .await
         .map_err(|error| format!("did not answer: {error}"))?
         .error_for_status()
-        .map_err(|error| format!("did not provide API v2 bootstrap: {error}"))?
-        .json()
+        .map_err(|error| format!("did not provide API v2 readiness: {error}"))?
+        .json::<serde_json::Value>()
         .await
-        .map_err(|error| format!("returned an invalid API v2 bootstrap: {error}"))?;
-    preferred_enabled_user(bootstrap.users)
+        .map_err(|error| format!("returned an invalid API v2 readiness: {error}"))?;
+    Ok(())
 }
 
 async fn open_read_only_session(client: &reqwest::Client, base: &str) -> Answer<String> {
-    let username = enabled_session_user(client, base).await?;
     let session: serde_json::Value = client
         .post(format!("{base}/api/v2/sessions"))
-        .json(&serde_json::json!({"username": username, "role": "visualizer"}))
+        .json(&serde_json::json!({"role": "visualizer"}))
         .send()
         .await
         .map_err(|error| format!("did not answer while creating a read-only session: {error}"))?
@@ -381,21 +373,6 @@ async fn open_read_only_session(client: &reqwest::Client, base: &str) -> Answer<
         .and_then(|token| token.as_str())
         .map(str::to_owned)
         .ok_or_else(|| "that desk answered without a session token".to_owned())
-}
-
-fn preferred_enabled_user(users: Vec<BootstrapUser>) -> Answer<String> {
-    let mut enabled = users
-        .into_iter()
-        .filter(|user| user.enabled)
-        .map(|user| user.name)
-        .collect::<Vec<_>>();
-    enabled.sort_by_key(|name| name.to_lowercase());
-    enabled
-        .iter()
-        .find(|name| name.eq_ignore_ascii_case("Operator"))
-        .cloned()
-        .or_else(|| enabled.into_iter().next())
-        .ok_or_else(|| "has no enabled user for a read-only Visualizer session".to_owned())
 }
 
 async fn fetch_from(
@@ -563,23 +540,6 @@ mod tests {
     }
 
     #[test]
-    fn the_clean_install_operator_is_used_for_the_read_only_session() {
-        let selected = preferred_enabled_user(vec![
-            BootstrapUser {
-                name: "Disabled".into(),
-                enabled: false,
-            },
-            BootstrapUser {
-                name: "Operator".into(),
-                enabled: true,
-            },
-        ])
-        .expect("clean installation has an enabled user");
-        assert_eq!(selected, "Operator");
-        assert!(preferred_enabled_user(Vec::new()).is_err());
-    }
-
-    #[test]
     fn one_advertised_desk_is_deduplicated_across_address_representations() {
         let peer = |address: &str| DeskPeer {
             instance: "tosklight-desk-kmp5._tosklight._tcp.local.".into(),
@@ -646,13 +606,13 @@ mod tests {
             .expect("IPv4 listener");
         let port = listener.local_addr().unwrap().port();
         let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.expect("bootstrap request");
+            let (mut stream, _) = listener.accept().await.expect("readiness request");
             let mut request = [0_u8; 2048];
             let count = stream.read(&mut request).await.expect("request bytes");
             assert!(
-                String::from_utf8_lossy(&request[..count]).starts_with("GET /api/v2/bootstrap")
+                String::from_utf8_lossy(&request[..count]).starts_with("GET /api/v2/readiness")
             );
-            let body = r#"{"users":[{"name":"Operator","enabled":true}]}"#;
+            let body = r#"{"status":"ready","active_show":null}"#;
             stream
                 .write_all(
                     format!(
@@ -662,7 +622,7 @@ mod tests {
                     .as_bytes(),
                 )
                 .await
-                .expect("bootstrap response");
+                .expect("readiness response");
         });
         let peer = Peer {
             role: Role::Desk,
@@ -690,13 +650,6 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         let show_id = uuid::Uuid::new_v4();
         let server = tokio::spawn(async move {
-            answer_http(
-                &listener,
-                "GET /api/v2/bootstrap",
-                br#"{"users":[{"name":"Operator","enabled":true}]}"#,
-                "content-type: application/json\r\n",
-            )
-            .await;
             let session = answer_http(
                 &listener,
                 "POST /api/v2/sessions",
@@ -704,7 +657,7 @@ mod tests {
                 "content-type: application/json\r\n",
             )
             .await;
-            assert!(session.contains(r#""username":"Operator""#));
+            assert!(!session.contains("username"));
             assert!(session.contains(r#""role":"visualizer""#));
             answer_http(
                 &listener,
@@ -742,13 +695,6 @@ mod tests {
             .expect("IPv4 listener");
         let port = listener.local_addr().unwrap().port();
         let server = tokio::spawn(async move {
-            answer_http(
-                &listener,
-                "GET /api/v2/bootstrap",
-                br#"{"users":[{"name":"Operator","enabled":true}]}"#,
-                "content-type: application/json\r\n",
-            )
-            .await;
             let session = answer_http(
                 &listener,
                 "POST /api/v2/sessions",
