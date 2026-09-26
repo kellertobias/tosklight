@@ -525,6 +525,16 @@ pub(crate) fn build_scene() -> Scene {
         }
     }
 
+    push_demo_pixel_bars(&mut scene);
+
+    push_demo_laser(&mut scene);
+    push_demo_effect(&mut scene);
+    push_demo_hazer(&mut scene);
+
+    scene
+}
+
+fn push_demo_pixel_bars(scene: &mut Scene) {
     for slot in 0..6 {
         let index = scene.fixtures.len();
         let x = -5.0 + slot as f32 * 2.0;
@@ -581,12 +591,6 @@ pub(crate) fn build_scene() -> Scene {
             live_shaper_rotation_role: false,
         });
     }
-
-    push_demo_laser(&mut scene);
-    push_demo_effect(&mut scene);
-    push_demo_hazer(&mut scene);
-
-    scene
 }
 
 /// The scan engine the built-in look's laser runs.

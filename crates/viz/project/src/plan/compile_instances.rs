@@ -101,30 +101,12 @@ pub(super) fn compile_instances(
         if let Some(binding) = position_point_binding(fixture, instance, mode, &channels) {
             position_points.push(binding);
         }
-        match external_camera_binding(fixture, instance, mode, &channels) {
-            Ok(Some(candidate)) if external_camera.is_none() && external_camera_issue.is_none() => {
-                *external_camera = Some(candidate);
-            }
-            Ok(Some(candidate)) => {
-                let first = external_camera
-                    .as_ref()
-                    .map(|binding: &ExternalCameraBinding| binding.label.as_str())
-                    .unwrap_or("another camera fixture");
-                let detail = format!(
-                    "{} and {} both request the dedicated external 3D Visualizer camera; only one is supported, so DMX camera routing is disabled",
-                    first, candidate.label
-                );
-                *external_camera = None;
-                *external_camera_issue = Some(detail.clone());
-                warnings.push(detail);
-            }
-            Ok(None) => {}
-            Err(detail) => {
-                *external_camera = None;
-                *external_camera_issue = Some(detail.clone());
-                warnings.push(detail);
-            }
-        }
+        merge_external_camera(
+            external_camera,
+            external_camera_issue,
+            warnings,
+            external_camera_binding(fixture, instance, mode, &channels),
+        );
         // A 3D Point sends no light: the fallback projector a model-less profile gets would put a
         // beam where there is only a reference.
         if point {
@@ -155,6 +137,39 @@ pub(super) fn compile_instances(
                 logical_universe: window.logical_universe,
                 slots: window.slots,
             });
+        }
+    }
+}
+
+/// Keep camera routing disabled after conflicting or invalid camera declarations.
+fn merge_external_camera(
+    external_camera: &mut Option<ExternalCameraBinding>,
+    external_camera_issue: &mut Option<String>,
+    warnings: &mut Vec<String>,
+    candidate: Result<Option<ExternalCameraBinding>, String>,
+) {
+    match candidate {
+        Ok(Some(candidate)) if external_camera.is_none() && external_camera_issue.is_none() => {
+            *external_camera = Some(candidate);
+        }
+        Ok(Some(candidate)) => {
+            let first = external_camera
+                .as_ref()
+                .map(|binding: &ExternalCameraBinding| binding.label.as_str())
+                .unwrap_or("another camera fixture");
+            let detail = format!(
+                "{} and {} both request the dedicated external 3D Visualizer camera; only one is supported, so DMX camera routing is disabled",
+                first, candidate.label
+            );
+            *external_camera = None;
+            *external_camera_issue = Some(detail.clone());
+            warnings.push(detail);
+        }
+        Ok(None) => {}
+        Err(detail) => {
+            *external_camera = None;
+            *external_camera_issue = Some(detail.clone());
+            warnings.push(detail);
         }
     }
 }
