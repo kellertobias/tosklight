@@ -64,6 +64,7 @@ pub struct WindowedOutput {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     configuration: wgpu::SurfaceConfiguration,
+    surface_configured: bool,
     compositor: Compositor,
     clock: RenderClock,
     /// Built the first time a console subscribes to a preview, and only then: an output nobody is
@@ -96,7 +97,15 @@ impl WindowedOutput {
         // One frame of latency keeps the presented image as close to the newest packet as the
         // platform allows.
         configuration.desired_maximum_frame_latency = 1;
-        surface.configure(&gpu.device, &configuration);
+        let surface_configured = match configure_surface(&surface, &gpu, &configuration) {
+            Ok(()) => true,
+            Err(error) if error.is_transient() => false,
+            Err(error) => {
+                return Err(GpuError::SurfaceCreation {
+                    detail: error.to_string(),
+                });
+            }
+        };
 
         let compositor = Compositor::new(&gpu, Size::new(width, height), configuration.format);
 
@@ -106,6 +115,7 @@ impl WindowedOutput {
             window,
             surface,
             configuration,
+            surface_configured,
             compositor,
             clock: RenderClock::new(presentation),
             preview: None,
@@ -155,15 +165,17 @@ impl WindowedOutput {
     /// Resizes, monitor changes, refresh-rate changes, and waking from sleep all land here, and
     /// all of them affect only this output.
     pub fn resize(&mut self, size: Size) {
-        if size.is_empty()
-            || (size.width == self.configuration.width && size.height == self.configuration.height)
-        {
+        if size.is_empty() {
+            return;
+        }
+        // A fullscreen/monitor transition can invalidate the swapchain even when its size is
+        // unchanged. Reconfigure on the presentation thread before acquiring the next frame.
+        self.surface_configured = false;
+        if size.width == self.configuration.width && size.height == self.configuration.height {
             return;
         }
         self.configuration.width = size.width;
         self.configuration.height = size.height;
-        self.surface
-            .configure(&self.gpu.device, &self.configuration);
         self.compositor.resize(size);
         // The cadence measured before the change says nothing about the cadence after it.
         self.clock.reset();
@@ -188,35 +200,63 @@ impl WindowedOutput {
         now: Timestamp,
         region: Option<&media_domain::display_region::DisplayRegion>,
     ) -> Result<(), SurfaceLost> {
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            // Suboptimal still presents. A window mid-resize is briefly suboptimal on some
-            // backends, and dropping those frames would stutter the output for no gain.
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                self.surface.configure(&self.gpu.device, &self.configuration);
-                self.clock.reset();
-                return Err(SurfaceLost::Recovered);
-            }
-            // Occluded means nobody can see it. Skipping is correct, not a failure.
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Err(SurfaceLost::Timeout);
-            }
-            other => return Err(SurfaceLost::Fatal { detail: format!("{other:?}") }),
-        };
+        let frame = self.acquire_frame()?;
 
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         self.compositor
             .render(layers, master, master_mask, &view, self.id, now, region);
-        // macOS does not use winit's pre-present notification, and calling it from the render
-        // worker would still enqueue a no-op on Cocoa's main queue for every frame.
         #[cfg(not(target_os = "macos"))]
         self.window.pre_present_notify();
         self.gpu.queue.present(frame);
         self.clock.record_present(now);
         Ok(())
+    }
+
+    fn acquire_frame(&mut self) -> Result<wgpu::SurfaceTexture, SurfaceLost> {
+        if !self.surface_configured {
+            configure_surface(&self.surface, &self.gpu, &self.configuration)?;
+            self.surface_configured = true;
+        }
+        // wgpu reports an unconfigured surface as a validation error, which otherwise invokes
+        // its default panic handler before returning CurrentSurfaceTexture::Validation.
+        let scope = self
+            .gpu
+            .device
+            .push_error_scope(wgpu::ErrorFilter::Validation);
+        let frame = self.surface.get_current_texture();
+        if let Some(error) = pollster::block_on(scope.pop()) {
+            if error
+                .to_string()
+                .contains("Surface is not configured for presentation")
+            {
+                self.surface_configured = false;
+                self.clock.reset();
+                return Err(SurfaceLost::Recovered);
+            }
+            return Err(SurfaceLost::Fatal {
+                detail: error.to_string(),
+            });
+        }
+        match frame {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            // Suboptimal still presents. A window mid-resize is briefly suboptimal on some
+            // backends, and dropping those frames would stutter the output for no gain.
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => Ok(frame),
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                self.surface_configured = false;
+                self.clock.reset();
+                Err(SurfaceLost::Recovered)
+            }
+            // Occluded means nobody can see it. Skipping is correct, not a failure.
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                Err(SurfaceLost::Timeout)
+            }
+            other => Err(SurfaceLost::Fatal {
+                detail: format!("{other:?}"),
+            }),
+        }
     }
 
     /// Presents one frame with a transient operator overlay above all authored media layers.
@@ -230,24 +270,7 @@ impl WindowedOutput {
         region: Option<&media_domain::display_region::DisplayRegion>,
         overlay: LayerDraw<'_>,
     ) -> Result<(), SurfaceLost> {
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                self.surface
-                    .configure(&self.gpu.device, &self.configuration);
-                self.clock.reset();
-                return Err(SurfaceLost::Recovered);
-            }
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Err(SurfaceLost::Timeout);
-            }
-            other => {
-                return Err(SurfaceLost::Fatal {
-                    detail: format!("{other:?}"),
-                });
-            }
-        };
+        let frame = self.acquire_frame()?;
 
         let view = frame
             .texture
@@ -274,6 +297,30 @@ impl WindowedOutput {
     pub fn request_redraw(&self) {
         self.window.request_redraw();
     }
+}
+
+fn configure_surface(
+    surface: &wgpu::Surface<'_>,
+    gpu: &Gpu,
+    configuration: &wgpu::SurfaceConfiguration,
+) -> Result<(), SurfaceLost> {
+    let validation = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let internal = gpu.device.push_error_scope(wgpu::ErrorFilter::Internal);
+    let memory = gpu.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+    surface.configure(&gpu.device, configuration);
+    let errors = [
+        pollster::block_on(memory.pop()),
+        pollster::block_on(internal.pop()),
+        pollster::block_on(validation.pop()),
+    ];
+    if let Some(error) = errors.into_iter().flatten().next() {
+        let detail = error.to_string();
+        if detail.contains("Invalid surface") || detail.contains("Failed to wait for GPU") {
+            return Err(SurfaceLost::Recovered);
+        }
+        return Err(SurfaceLost::Fatal { detail });
+    }
+    Ok(())
 }
 
 /// The surface format to present through.
@@ -365,8 +412,8 @@ impl WindowedOutput {
 /// What went wrong presenting a frame.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SurfaceLost {
-    /// The surface was out of date or lost and has been reconfigured. The next frame will draw.
-    #[error("the surface was reconfigured; this frame was dropped")]
+    /// The surface needs reconfiguration. A later frame retries after the transition settles.
+    #[error("the surface needs reconfiguration; this frame was dropped")]
     Recovered,
     /// The platform did not hand back a frame in time. Transient.
     #[error("the surface did not provide a frame in time")]
@@ -386,6 +433,74 @@ impl SurfaceLost {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[allow(deprecated)]
+    fn an_unconfigured_windows_surface_recovers_without_panicking() {
+        use winit::platform::windows::EventLoopBuilderExtWindows;
+        let event_loop = winit::event_loop::EventLoop::builder()
+            .with_any_thread(true)
+            .build()
+            .expect("Windows event loop");
+        let window = Arc::new(
+            event_loop
+                .create_window(
+                    Window::default_attributes()
+                        .with_title("Pixel surface recovery check")
+                        .with_inner_size(winit::dpi::PhysicalSize::new(320, 200)),
+                )
+                .expect("test window"),
+        );
+        let mut output = WindowedOutput::open(OutputId::new(), window, PresentationMode::Unlocked)
+            .expect("configured output");
+        let frame = output.acquire_frame().expect("first frame");
+        // wgpu removes its presentation state before reporting this failed reconfiguration.
+        // This gives us a real unconfigured swapchain with the device's error sink attached.
+        let scope = output
+            .gpu
+            .device
+            .push_error_scope(wgpu::ErrorFilter::Validation);
+        output
+            .surface
+            .configure(&output.gpu.device, &output.configuration);
+        drop(frame);
+        assert!(pollster::block_on(scope.pop()).is_some());
+        assert!(matches!(output.acquire_frame(), Err(SurfaceLost::Recovered)));
+        assert!(!output.surface_configured);
+        drop(
+            output
+                .acquire_frame()
+                .expect("surface reconfigured for the next frame"),
+        );
+        let size = output.size();
+        output.resize(size);
+        assert!(
+            !output.surface_configured,
+            "same-size transitions also rebuild the swapchain"
+        );
+        drop(output.acquire_frame().expect("same-size reconfiguration"));
+        output
+            .present(&[], &MasterState::default(), None, Timestamp::ZERO, None)
+            .expect("normal presentation after recovery");
+        let source = crate::SourceTexture::solid(output.gpu(), Size::new(2, 2), [0, 0, 0, 255])
+            .expect("overlay texture");
+        let layer = media_domain::LayerState::default();
+        output
+            .present_with_overlay(
+                &[],
+                &MasterState::default(),
+                None,
+                Timestamp::ZERO,
+                None,
+                LayerDraw {
+                    state: &layer,
+                    source: &source,
+                    mask: None,
+                },
+            )
+            .expect("overlay presentation after recovery");
+    }
 
     #[test]
     fn a_non_srgb_surface_format_is_preferred_so_the_window_matches_a_reference_render() {
