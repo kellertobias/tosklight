@@ -100,9 +100,16 @@ export class ShowOperatorAdapter {
 				.getByRole("button", { name: "Keep as Separate Show", exact: true })
 				.click();
 		} else {
-			await expect(menu).toContainText(
-				"Changes are saved automatically as they are made.",
+			await expect(menu.getByRole("status")).toContainText(
+				`Current show: ${active.name}`,
 			);
+			await expect(menu.getByRole("status")).toContainText("Last saved:");
+			await expect(menu.getByRole("status")).not.toContainText(
+				"Last saved: Unknown",
+			);
+			await expect(
+				menu.getByRole("button", { name: "Save", exact: true }),
+			).toHaveCount(0);
 		}
 		await this.assertAutosaved();
 		return showHandle({ id: active.id, name: active.name });
