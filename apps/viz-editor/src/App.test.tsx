@@ -809,9 +809,15 @@ describe("the Viz editor window", () => {
 		});
 		renderApp();
 		await openSettingsPage("DMX");
-		fireEvent.change(await screen.findByRole("combobox", { name: "Desk" }), {
-			target: { value: "desk-backup" },
-		});
+		const source = await screen.findByRole("combobox", { name: "Desk" });
+		// Discovery renders the choices before its effect initializes the selection.
+		await waitFor(() => expect(source).toHaveValue("desk-foh"));
+		expect(invoke).not.toHaveBeenCalledWith(
+			"take_live_dmx_inputs_from_desk",
+			expect.anything(),
+		);
+		fireEvent.change(source, { target: { value: "desk-backup" } });
+		expect(source).toHaveValue("desk-backup");
 		fireEvent.click(
 			screen.getByRole("button", { name: "Take from Desk · backup" }),
 		);

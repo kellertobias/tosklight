@@ -567,10 +567,7 @@ mod tests {
         ] {
             let c = control(name, false);
             assert_eq!((c.attribute, c.encoder), (attribute, encoder), "{name}");
-            let spec = LAYER_CHANNELS
-                .iter()
-                .find(|s| s.name == name)
-                .unwrap();
+            let spec = LAYER_CHANNELS.iter().find(|s| s.name == name).unwrap();
             let row: Vec<_> = lines[4 + usize::from(spec.offset)].split(',').collect();
             assert_eq!(
                 u32::from_str_radix(row[2], 16).unwrap(),
