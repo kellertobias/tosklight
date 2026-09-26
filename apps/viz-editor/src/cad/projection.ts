@@ -133,6 +133,7 @@ function orientedPlanGeometry(
 	mountingHardware: boolean,
 ): PlanGeometry {
 	const type = entityType(entity);
+	if (isPositionPoint(entity)) return positionPointMarker();
 	// Crowd-area models describe a procedural volume and read as an unexplained block in plan.
 	// Modeled fixtures and venue objects—including trusses—keep their canonical generated SVG.
 	if (isSemanticPlanSymbol(type)) return typedGeometry(entity, view, type);
@@ -457,6 +458,15 @@ function entityType(entity: CadEntity): string {
 
 function isSemanticPlanSymbol(type: string): boolean {
 	return /crowd/.test(type);
+}
+
+/**
+ * Whether an entity is a 3D Point: a reference other placements follow, not a lantern. It has no
+ * body, so the plan draws a marker for it rather than the lamp the Visualizer's fallback would
+ * pick for a profile without a model.
+ */
+export function isPositionPoint(entity: Pick<CadEntity, "fixtureType">): boolean {
+	return entity.fixtureType === "position_point";
 }
 
 export function parseProjection(
@@ -1097,6 +1107,21 @@ function venueProp(width: number, height: number): Polygon[] {
 			20,
 		),
 	];
+}
+
+/**
+ * A 3D Point: a ring with a crosshair through its centre, the same in every view and at every
+ * size, because a point has no body whose extent it could show.
+ */
+function positionPointMarker(): PlanGeometry {
+	const radius = 120;
+	const reach = 200;
+	const geometry = fromPolygons("typed", [ellipse(0, 0, radius, radius, BASE, 24)]);
+	geometry.lines.push(
+		{ points: [[-reach, 0], [reach, 0]] },
+		{ points: [[0, -reach], [0, reach]] },
+	);
+	return geometry;
 }
 
 function unknownBox(width: number, height: number): PlanGeometry {

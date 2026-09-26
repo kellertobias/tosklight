@@ -24,7 +24,7 @@ import {
 	titleMark,
 } from "./printPdfOps";
 import { parseCompanyLogo } from "../document/companyLogo";
-import { entityPlanGeometry, type PlanPoint } from "./projection";
+import { entityPlanGeometry, isPositionPoint, type PlanPoint } from "./projection";
 import {
 	annotationLabels,
 	annotationRuns,
@@ -216,13 +216,16 @@ function entityCommands(
 			),
 		);
 	if (entity.kind === "venue") return commands;
-	const [start, end] = directionIndicator(
-		entity,
-		centre,
-		page.view,
-		page.rotationQuarterTurns,
-	);
-	commands.push(path([point(start), point(end)], false, false));
+	// A 3D Point sends no light, so it has no beam direction to show; its labels still print.
+	if (!isPositionPoint(entity)) {
+		const [start, end] = directionIndicator(
+			entity,
+			centre,
+			page.view,
+			page.rotationQuarterTurns,
+		);
+		commands.push(path([point(start), point(end)], false, false));
+	}
 	const labels = [
 		page.showFixtureIds ? `ID ${entity.fixtureDisplayId}` : "",
 		page.showDmxAddresses && entity.dmxAddress !== "—"

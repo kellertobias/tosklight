@@ -39,6 +39,30 @@ const movingLight: CadEntity = {
 };
 
 describe("CAD plan projections", () => {
+	it("draws a 3D Point as a marker, never as the lamp its model-less profile falls back to", () => {
+		const point: CadEntity = {
+			...movingLight,
+			name: "3D Point",
+			kind: "position_point",
+			fixtureType: "position_point",
+			sizeMillimetres: [280, 400, 340],
+		};
+		// The drawing a model-less profile gets is the Visualizer's fallback lamp body.
+		const lampDrawing: CadDrawing = {
+			id: "profile:1",
+			projections: [],
+			liveMeshes: [],
+			modelDrawing: { model: "PAR can", scale: 1, views: [] },
+		};
+		for (const view of ["top_down", "front_to_back", "left_to_right"] as CadViewDirection[]) {
+			const geometry = entityPlanGeometry(point, lampDrawing, view);
+			expect(geometry.source).toBe("typed");
+			expect(geometry.lines).toHaveLength(2);
+			const points = geometry.triangles.flatMap((triangle) => triangle.points);
+			expect(Math.max(...points.map((each) => Math.hypot(each[0], each[1])))).toBeCloseTo(120, 0);
+		}
+	});
+
 	it("draws a box, a cylinder and a ball filling their size in every view", () => {
 		const shape = (kind: string, view: CadViewDirection) => {
 			const geometry = entityPlanGeometry(

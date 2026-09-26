@@ -10,7 +10,12 @@
  * and rebuilt only when the rig, the selection or the view changes, and a drag rebuilds just the
  * elements it moves.
  */
-import { entityPlanGeometry, type PlanGeometry, type PlanPoint } from "./projection";
+import {
+	entityPlanGeometry,
+	isPositionPoint,
+	type PlanGeometry,
+	type PlanPoint,
+} from "./projection";
 import { rotateArc } from "./gizmoRotation";
 import {
 	gizmoGeometry,
@@ -355,7 +360,8 @@ function paintEntities(
 		);
 		centre[0] += entityPreview[0];
 		centre[1] += entityPreview[1];
-		if (entity.kind !== "venue") {
+		// A 3D Point sends no light, so it has no beam direction to show.
+		if (entity.kind !== "venue" && !isPositionPoint(entity)) {
 			const [start, end] = directionIndicator(
 				entity,
 				centre,
