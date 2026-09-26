@@ -223,15 +223,17 @@ fn run_inner() -> anyhow::Result<()> {
         result
     });
 
+    // Release the diagnostics lock before entering the long-lived native event loop.
+    let has_network_warnings = !network_warnings
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .is_empty();
     let presented = presentation::run_event_loop(
         &configuration,
         shared,
         shutdown.clone(),
         active_configuration,
-        !network_warnings
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .is_empty(),
+        has_network_warnings,
         diagnostics_arguments,
         available_monitors,
         started,
