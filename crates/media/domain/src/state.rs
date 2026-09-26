@@ -224,6 +224,26 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             Applied::Changed
         }
         CommandKind::TakeOverPlayback { take_over, .. } => {
+            if *take_over
+                && !output.ownership.web_takeover
+                && output.ownership.dmx.is_some()
+                && output.master.dimmer == 0.0
+                && output.master.scale_x == -4.0
+                && output.master.scale_y == -4.0
+                && output.layers.iter().all(|layer| {
+                    layer.address == crate::address::MediaAddress::BLANK
+                        && layer.dimmer == 0.0
+                        && layer.scale_x == 0.0
+                        && layer.scale_y == 0.0
+                        && layer.position_x == -2.0
+                        && layer.position_y == -2.0
+                })
+            {
+                // An empty desk universe overwrites the startup homes with invisible geometry.
+                // Local playback should start from usable homes when no media look exists.
+                output.master = MasterState::default();
+                output.layers.fill(LayerState::default());
+            }
             changed_or_not(replace(&mut output.ownership.web_takeover, *take_over))
         }
         CommandKind::ReportSourceStatus { layer, status, .. } => {
@@ -317,6 +337,89 @@ mod tests {
 
     fn command(kind: CommandKind, source: CommandSource, millis: u64) -> Command {
         Command::new(kind, source, Timestamp::from_millis(millis))
+    }
+
+    #[test]
+    fn local_takeover_homes_an_empty_dmx_frame_and_release_returns_to_dmx() {
+        let (mut media, id) = state(LayerPersonality::EightLayers);
+        let decoded =
+            crate::personality::decode::frame(LayerPersonality::EightLayers, 1, &[0; 512]).unwrap();
+        let packet = command(
+            CommandKind::SetDmxFrame {
+                output: id,
+                frame: Box::new(decoded),
+            },
+            CommandSource::Sacn,
+            1_000,
+        );
+        assert_eq!(apply(&mut media, &packet), Applied::Changed);
+        let takeover = command(
+            CommandKind::TakeOverPlayback {
+                output: id,
+                take_over: true,
+            },
+            CommandSource::Web,
+            1_100,
+        );
+        assert_eq!(apply(&mut media, &takeover), Applied::Changed);
+        let output = media.output(id).unwrap();
+        assert_eq!(output.master, MasterState::default());
+        assert!(
+            output
+                .layers
+                .iter()
+                .all(|layer| *layer == LayerState::default())
+        );
+        assert_eq!(apply(&mut media, &packet), Applied::RejectedNotOwner);
+        assert_eq!(apply(&mut media, &takeover), Applied::Unchanged);
+        apply(
+            &mut media,
+            &command(
+                CommandKind::TakeOverPlayback {
+                    output: id,
+                    take_over: false,
+                },
+                CommandSource::Web,
+                1_200,
+            ),
+        );
+        assert_eq!(apply(&mut media, &packet), Applied::Changed);
+        assert_eq!(media.output(id).unwrap().master.dimmer, 0.0);
+    }
+
+    #[test]
+    fn local_takeover_preserves_a_selected_media_look() {
+        let (mut media, id) = state(LayerPersonality::EightLayers);
+        let mut decoded =
+            crate::personality::decode::frame(LayerPersonality::EightLayers, 1, &[0; 512]).unwrap();
+        decoded.layers[0].address = MediaAddress::new(1, 2);
+        apply(
+            &mut media,
+            &command(
+                CommandKind::SetDmxFrame {
+                    output: id,
+                    frame: Box::new(decoded),
+                },
+                CommandSource::Sacn,
+                1_000,
+            ),
+        );
+        let before = media.output(id).unwrap().clone();
+        apply(
+            &mut media,
+            &command(
+                CommandKind::TakeOverPlayback {
+                    output: id,
+                    take_over: true,
+                },
+                CommandSource::Web,
+                1_100,
+            ),
+        );
+        let after = media.output(id).unwrap();
+        assert_eq!(after.layers, before.layers);
+        assert_eq!(after.master, before.master);
+        assert!(after.ownership.web_takeover);
     }
 
     #[test]
