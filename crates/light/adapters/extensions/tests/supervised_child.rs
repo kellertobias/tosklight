@@ -531,12 +531,20 @@ fn repeated_crashes_reach_terminal_health_until_explicit_restart() {
 #[test]
 fn queues_and_logs_remain_bounded_and_overflow_faults_instead_of_guessing() {
     let ports = FakePorts::at_revision(7);
+    // Hold the application consumer until the reader has filled the inbound queue. A fast
+    // supervisor can otherwise consume the entire flood without overflowing (notably on
+    // Windows, where the child's interleaved stderr writes can pace its stdout writes).
+    let telemetry_consumer = ports.telemetry.lock().expect("telemetry mutex");
     let mut tiny = limits();
     tiny.inbound_queue = 2;
     tiny.stderr_queue = 2;
     tiny.log_bytes = 160;
     tiny.log_lines = 2;
-    let mut flooded = start("flood", ports, tiny);
+    let mut flooded = start("flood", Arc::clone(&ports), tiny);
+    wait_for(&flooded, Duration::from_secs(3), |health| {
+        health.inbound_drops > 0
+    });
+    drop(telemetry_consumer);
     let health = wait_for(&flooded, Duration::from_secs(3), |health| {
         matches!(health.state, ExtensionState::Terminal { .. })
     });
