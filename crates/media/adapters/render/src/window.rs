@@ -65,6 +65,7 @@ pub struct WindowedOutput {
     surface: wgpu::Surface<'static>,
     configuration: wgpu::SurfaceConfiguration,
     surface_configured: bool,
+    reveal_after_present: bool,
     compositor: Compositor,
     clock: RenderClock,
     /// Built the first time a console subscribes to a preview, and only then: an output nobody is
@@ -109,6 +110,7 @@ impl WindowedOutput {
 
         let compositor = Compositor::new(&gpu, Size::new(width, height), configuration.format);
 
+        let reveal_after_present = !window.is_visible().unwrap_or(true);
         Ok(Self {
             id,
             gpu,
@@ -116,6 +118,7 @@ impl WindowedOutput {
             surface,
             configuration,
             surface_configured,
+            reveal_after_present,
             compositor,
             clock: RenderClock::new(presentation),
             preview: None,
@@ -210,6 +213,10 @@ impl WindowedOutput {
         #[cfg(not(target_os = "macos"))]
         self.window.pre_present_notify();
         self.gpu.queue.present(frame);
+        if self.reveal_after_present {
+            self.window.set_visible(true);
+            self.reveal_after_present = false;
+        }
         self.clock.record_present(now);
         Ok(())
     }
@@ -288,6 +295,10 @@ impl WindowedOutput {
         #[cfg(not(target_os = "macos"))]
         self.window.pre_present_notify();
         self.gpu.queue.present(frame);
+        if self.reveal_after_present {
+            self.window.set_visible(true);
+            self.reveal_after_present = false;
+        }
         self.clock.record_present(now);
         Ok(())
     }
@@ -331,11 +342,16 @@ fn configure_surface(
 /// render of the same state disagree — and would brighten every show against what the legacy
 /// application put on screen.
 pub fn present_format(available: &[wgpu::TextureFormat]) -> Option<wgpu::TextureFormat> {
-    available
-        .iter()
-        .copied()
-        .find(|format| !format.is_srgb())
-        .or_else(|| available.first().copied())
+    // Readback and preview encoding use four 8-bit channels; HDR formats need a conversion
+    // pass and must not be selected merely because the adapter lists them first.
+    [
+        wgpu::TextureFormat::Bgra8Unorm,
+        wgpu::TextureFormat::Rgba8Unorm,
+        wgpu::TextureFormat::Bgra8UnormSrgb,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+    ]
+    .into_iter()
+    .find(|format| available.contains(format))
 }
 
 impl WindowedOutput {
@@ -349,7 +365,7 @@ impl WindowedOutput {
         size: Size,
         master: &MasterState,
         master_mask: Option<&crate::SourceTexture>,
-    ) -> Vec<u8> {
+    ) -> Result<Vec<u8>, crate::offscreen::ReadbackError> {
         // The master pipeline is built for this window's surface format, so the preview target
         // has to be in that format too — a mismatch is a validation failure, not a wrong colour.
         let format = self.configuration.format;
@@ -361,7 +377,7 @@ impl WindowedOutput {
         self.compositor
             .render_master_into(master, master_mask, target.view());
 
-        let mut pixels = target.read_image();
+        let mut pixels = target.try_read_image()?;
         if matches!(
             format,
             wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
@@ -371,7 +387,7 @@ impl WindowedOutput {
                 pixel.swap(0, 2);
             }
         }
-        pixels
+        Ok(pixels)
     }
 
     /// Renders one layer through the real layer pipeline into the preview target. Unlike a
@@ -383,7 +399,7 @@ impl WindowedOutput {
         layer: crate::LayerDraw<'_>,
         output: media_domain::OutputId,
         now: media_domain::Timestamp,
-    ) -> Vec<u8> {
+    ) -> Result<Vec<u8>, crate::offscreen::ReadbackError> {
         let format = self.configuration.format;
         let target = self
             .preview
@@ -391,7 +407,7 @@ impl WindowedOutput {
         target.resize(size);
         self.compositor
             .render_layer_preview(layer, target.view(), output, now);
-        let mut pixels = target.read_image();
+        let mut pixels = target.try_read_image()?;
         if matches!(
             format,
             wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
@@ -400,7 +416,7 @@ impl WindowedOutput {
                 pixel.swap(0, 2);
             }
         }
-        pixels
+        Ok(pixels)
     }
 
     /// Lets go of the preview target once nothing is watching.
@@ -448,12 +464,23 @@ mod tests {
                 .create_window(
                     Window::default_attributes()
                         .with_title("Pixel surface recovery check")
+                        .with_visible(false)
+                        .with_window_level(winit::window::WindowLevel::Normal)
                         .with_inner_size(winit::dpi::PhysicalSize::new(320, 200)),
                 )
                 .expect("test window"),
         );
-        let mut output = WindowedOutput::open(OutputId::new(), window, PresentationMode::Unlocked)
-            .expect("configured output");
+        let monitor = window.available_monitors().nth(1).or_else(|| window.current_monitor());
+        window.set_decorations(false);
+        window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(monitor)));
+        assert!(!window.is_decorated());
+        assert!(window.fullscreen().is_some());
+        let mut output = WindowedOutput::open(
+            OutputId::new(),
+            window,
+            PresentationMode::DisplaySynchronized,
+        )
+        .expect("configured output");
         let frame = output.acquire_frame().expect("first frame");
         // wgpu removes its presentation state before reporting this failed reconfiguration.
         // This gives us a real unconfigured swapchain with the device's error sink attached.
@@ -500,6 +527,15 @@ mod tests {
                 },
             )
             .expect("overlay presentation after recovery");
+    }
+
+    #[test]
+    fn an_hdr_format_does_not_override_the_eight_bit_preview_format() {
+        assert_eq!(
+            present_format(&[wgpu::TextureFormat::Rgba16Float, wgpu::TextureFormat::Bgra8Unorm]),
+            Some(wgpu::TextureFormat::Bgra8Unorm)
+        );
+        assert_eq!(present_format(&[wgpu::TextureFormat::Rgba16Float]), None);
     }
 
     #[test]

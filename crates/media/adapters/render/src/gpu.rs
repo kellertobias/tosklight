@@ -159,7 +159,14 @@ impl Gpu {
 
 fn new_instance() -> Instance {
     let mut descriptor = InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = Backends::from_env().unwrap_or(Backends::PRIMARY);
+    // Use the native Windows presentation backend. Vulkan's Windows swapchain can lose the
+    // device during monitor transitions, leaving both presentation and readback buffers invalid.
+    let default_backends = if cfg!(target_os = "windows") {
+        Backends::DX12
+    } else {
+        Backends::PRIMARY
+    };
+    descriptor.backends = Backends::from_env().unwrap_or(default_backends);
     Instance::new(descriptor)
 }
 

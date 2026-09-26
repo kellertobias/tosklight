@@ -69,8 +69,17 @@ impl OffScreenOutput {
 
     /// Reads the rendered image back as tightly packed 8-bit RGBA.
     pub fn read_image(&self) -> Vec<u8> {
+        self.try_read_image().expect("off-screen readback succeeded")
+    }
+
+    /// Reports failed transfers and discards their buffer so a later capture can retry.
+    pub fn try_read_image(&self) -> Result<Vec<u8>, ReadbackError> {
         let mut readback = self.readback.lock().expect("readback lock is not poisoned");
-        read_rgba8_with_buffer(&self.gpu, &self.texture, self.size, &mut readback)
+        let result = read_rgba8_with_buffer(&self.gpu, &self.texture, self.size, &mut readback);
+        if result.is_err() {
+            *readback = None;
+        }
+        result
     }
 
     /// The pixel at a position, as 8-bit RGBA. Convenience for reference-render assertions.
@@ -90,66 +99,97 @@ impl OffScreenOutput {
 /// The copy itself needs 256-byte-aligned rows, so the padding is added for the transfer and
 /// removed again here; callers see width × height × 4 bytes and nothing else.
 pub fn read_rgba8(gpu: &Gpu, texture: &wgpu::Texture, size: Size) -> Vec<u8> {
-    read_rgba8_with_buffer(gpu, texture, size, &mut None)
+    read_rgba8_with_buffer(gpu, texture, size, &mut None).expect("off-screen readback succeeded")
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("GPU readback failed: {0}")]
+pub struct ReadbackError(pub String);
 
 fn read_rgba8_with_buffer(
     gpu: &Gpu,
     texture: &wgpu::Texture,
     size: Size,
     readback: &mut Option<wgpu::Buffer>,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, ReadbackError> {
+    if size.is_empty() {
+        return Err(ReadbackError("empty capture size".into()));
+    }
     let unpadded_row = size.width as usize * 4;
     let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize;
     let padded_row = unpadded_row.div_ceil(alignment) * alignment;
     let buffer_size = (padded_row * size.height as usize) as u64;
-    let buffer = readback.get_or_insert_with(|| {
-        gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("media-readback"),
-            size: buffer_size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        })
-    });
-
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("media-readback"),
+    if buffer_size > gpu.device.limits().max_buffer_size {
+        return Err(ReadbackError("capture exceeds the GPU buffer limit".into()));
+    }
+    checked_transfer(gpu, || {
+        let buffer = readback.get_or_insert_with(|| {
+            gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("media-readback"),
+                size: buffer_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            })
         });
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_row as u32),
-                rows_per_image: Some(size.height),
-            },
-        },
-        wgpu::Extent3d {
-            width: size.width,
-            height: size.height,
-            depth_or_array_layers: 1,
-        },
-    );
-    gpu.queue.submit([encoder.finish()]);
 
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("media-readback"),
+            });
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_row as u32),
+                    rows_per_image: Some(size.height),
+                },
+            },
+            wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        gpu.queue.submit([encoder.finish()]);
+    })?;
+
+    let buffer = readback
+        .as_ref()
+        .expect("checked transfer created the buffer");
     let slice = buffer.slice(..);
-    slice.map_async(wgpu::MapMode::Read, |_| {});
-    let _ = gpu.device.poll(wgpu::PollType::Wait {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    checked_transfer(gpu, || {
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+    })?;
+    if let Err(error) = gpu.device.poll(wgpu::PollType::Wait {
         submission_index: None,
-        timeout: None,
-    });
+        timeout: Some(std::time::Duration::from_secs(5)),
+    }) {
+        buffer.unmap();
+        return Err(ReadbackError(error.to_string()));
+    }
+    let result = receiver
+        .try_recv()
+        .map_err(|error| ReadbackError(error.to_string()))
+        .and_then(|result| result.map_err(|error| ReadbackError(error.to_string())));
+    if let Err(error) = result {
+        buffer.unmap();
+        return Err(error);
+    }
 
     let mapped = slice
         .get_mapped_range()
-        .expect("the readback buffer was mapped and the device polled to completion");
+        .map_err(|error| ReadbackError(error.to_string()))?;
     let mut pixels = Vec::with_capacity(unpadded_row * size.height as usize);
     for row in 0..size.height as usize {
         let start = row * padded_row;
@@ -157,7 +197,23 @@ fn read_rgba8_with_buffer(
     }
     drop(mapped);
     buffer.unmap();
-    pixels
+    Ok(pixels)
+}
+
+fn checked_transfer<T>(gpu: &Gpu, transfer: impl FnOnce() -> T) -> Result<T, ReadbackError> {
+    let validation = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let internal = gpu.device.push_error_scope(wgpu::ErrorFilter::Internal);
+    let memory = gpu.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+    let result = transfer();
+    let errors = [
+        pollster::block_on(memory.pop()),
+        pollster::block_on(internal.pop()),
+        pollster::block_on(validation.pop()),
+    ];
+    if let Some(error) = errors.into_iter().flatten().next() {
+        return Err(ReadbackError(error.to_string()));
+    }
+    Ok(result)
 }
 
 fn target(
@@ -181,4 +237,42 @@ fn target(
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     (texture, view)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_readback_is_reported_and_replaced_on_next_capture() {
+        let gpu = Gpu::off_screen().expect("test GPU");
+        let output = OffScreenOutput::new(&gpu, Size::new(3, 2));
+        let scope = gpu.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let invalid = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("media-readback"),
+            size: 512,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::VERTEX,
+            mapped_at_creation: false,
+        });
+        assert!(pollster::block_on(scope.pop()).is_some());
+        *output.readback.lock().unwrap() = Some(invalid);
+        assert!(output.try_read_image().is_err());
+        assert!(output.readback.lock().unwrap().is_none());
+        assert_eq!(output.try_read_image().unwrap().len(), 3 * 2 * 4);
+    }
+
+    #[test]
+    fn resizing_and_repeated_padded_readbacks_work() {
+        let gpu = Gpu::off_screen().expect("test GPU");
+        let mut output = OffScreenOutput::new(&gpu, Size::new(3, 2));
+        for size in [Size::new(3, 2), Size::new(320, 180), Size::new(5, 3)] {
+            output.resize(size);
+            for _ in 0..3 {
+                assert_eq!(
+                    output.try_read_image().unwrap().len(),
+                    size.width as usize * size.height as usize * 4
+                );
+            }
+        }
+    }
 }

@@ -94,7 +94,13 @@ pub(super) fn map_pixels(
         return;
     }
     let size = output.size();
-    let frame = output.capture_preview(size, master, master_mask);
+    let frame = match output.capture_preview(size, master, master_mask) {
+        Ok(frame) => frame,
+        Err(error) => {
+            tracing::warn!(%error, "pixel map capture failed; skipping this frame");
+            return;
+        }
+    };
     pixels.send(
         configuration,
         media_domain::pixel_map::CanvasImage {

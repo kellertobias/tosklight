@@ -48,12 +48,15 @@ fn application_icon() -> Option<Icon> {
     if info.color_type != png::ColorType::Rgba || info.bit_depth != png::BitDepth::Eight {
         return None;
     }
-    Icon::from_rgba(
-        buffer[..info.buffer_size()].to_vec(),
+    // Native caption icons must be small. Passing the full branding artwork to Windows
+    // creates an oversized HICON and can distort the window's non-client area.
+    let source = image::RgbaImage::from_raw(
         info.width,
         info.height,
-    )
-    .ok()
+        buffer[..info.buffer_size()].to_vec(),
+    )?;
+    let scaled = image::imageops::resize(&source, 32, 32, image::imageops::FilterType::Triangle);
+    Icon::from_rgba(scaled.into_raw(), 32, 32).ok()
 }
 
 /// Whether this configuration asks for output windows.
@@ -461,19 +464,23 @@ impl PresentationHost {
         let attributes = Window::default_attributes()
             .with_title(format!("ToskLight Pixel — {}", configuration.name))
             .with_window_icon(application_icon())
+            .with_visible(!cfg!(target_os = "windows"))
             .with_inner_size(winit::dpi::PhysicalSize::new(
                 configuration.resolution.width,
                 configuration.resolution.height,
             ))
             .with_position(selected.position())
+            .with_fullscreen(if *fullscreen && cfg!(target_os = "windows") {
+                Some(winit::window::Fullscreen::Borderless(Some(selected.clone())))
+            } else {
+                None
+            })
+            // Keep Windows outputs hidden until their first rendered frame is ready.
             // Windows otherwise briefly exposes a caption and frame before Winit completes its
             // borderless transition. A configured full-screen output must never have either.
             .with_decorations(!(*fullscreen && cfg!(target_os = "windows")))
-            .with_window_level(if *fullscreen && cfg!(target_os = "windows") {
-                WindowLevel::AlwaysOnTop
-            } else {
-                WindowLevel::Normal
-            });
+            // Topmost windows fail swapchain creation on some Windows drivers.
+            .with_window_level(WindowLevel::Normal);
 
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
@@ -483,7 +490,7 @@ impl PresentationHost {
             }
         };
 
-        if *fullscreen {
+        if *fullscreen && !cfg!(target_os = "windows") {
             // Full screen is asked for once the window is on screen, not in its attributes.
             // Asking at creation goes through a window that does not exist yet, and macOS
             // answers by handing back the plain window and leaving full screen behind.
@@ -496,6 +503,8 @@ impl PresentationHost {
                     output = %configuration.name,
                     id = %configuration.id,
                     refresh_millihertz = output.monitor_refresh_millihertz(),
+                    adapter = %output.gpu().capabilities.adapter_name,
+                    backend = %output.gpu().capabilities.backend,
                     "output presenting"
                 );
                 // The pattern must be uploaded to this output's own device: two devices cannot
@@ -742,7 +751,7 @@ impl PresentationHost {
         window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(
             monitors[index].clone(),
         ))));
-        window.set_window_level(WindowLevel::AlwaysOnTop);
+        window.set_window_level(WindowLevel::Normal);
     }
 
     fn handle_left_click(&mut self, window_id: WindowId) {
@@ -947,7 +956,10 @@ fn capture_previews(
     if let Some(preview) = program.filter(|preview| preview.wanted()) {
         let size = preview.requested_size();
         let captured = output.capture_preview(size, master, master_mask);
-        preview.publish_pixels(&captured, size, size, false);
+        match captured {
+            Ok(captured) => preview.publish_pixels(&captured, size, size, false),
+            Err(error) => tracing::warn!(%error, "program preview capture failed"),
+        }
     }
     for (layer_index, _) in state.layers.iter().enumerate() {
         let Some(preview) = sinks
@@ -966,7 +978,10 @@ fn capture_previews(
                 .copied()
         }) {
             let captured = output.capture_layer_preview(size, draw, output_id, now);
-            preview.publish_pixels(&captured, size, size, true);
+            match captured {
+                Ok(captured) => preview.publish_pixels(&captured, size, size, true),
+                Err(error) => tracing::warn!(%error, "layer preview capture failed"),
+            }
         } else {
             preview.publish_pixels(
                 &vec![0; size.width as usize * size.height as usize * 4],
@@ -1142,7 +1157,7 @@ impl ApplicationHandler for PresentationHost {
             window.set_decorations(false);
             window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(monitor))));
             #[cfg(target_os = "windows")]
-            window.set_window_level(WindowLevel::AlwaysOnTop);
+            window.set_window_level(WindowLevel::Normal);
         }
         // Shutdown can originate on a service thread. This tiny timed wake observes it without
         // putting any rendering or resize work back onto the native event loop.
