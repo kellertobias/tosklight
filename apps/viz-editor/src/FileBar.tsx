@@ -81,6 +81,28 @@ export function FileBar({
 					>
 						Load Show from Disk
 					</Button>
+					{desks.length === 0 ? (
+						<Button
+							disabled
+							title="No running ToskLight Control was found on the network"
+						>
+							Get Show from Running ToskLight Control
+						</Button>
+					) : (
+						desks.map((desk) => (
+							<Button
+								key={desk.instance}
+								disabled={busy}
+								title={`${desk.name} at ${desk.address}`}
+								onClick={() =>
+									void run("Loading", () => actions.loadFrom(desk))
+								}
+							>
+								Get Show from Running ToskLight Control · {desk.name}:{" "}
+								{desk.show}
+							</Button>
+						))
+					)}
 					<Button
 						disabled={busy}
 						title="Open a fresh copy of the demo rig that ships with ToskLight"
@@ -88,16 +110,6 @@ export function FileBar({
 					>
 						Open Demo Show
 					</Button>
-					{desks.map((desk) => (
-						<Button
-							key={desk.instance}
-							disabled={busy}
-							title={`${desk.name} at ${desk.address}`}
-							onClick={() => void run("Loading", () => actions.loadFrom(desk))}
-						>
-							Load from Desk · {desk.name}: {desk.show}
-						</Button>
-					))}
 				</section>
 				<section>
 					<h2>Save As</h2>

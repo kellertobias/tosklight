@@ -479,6 +479,7 @@ describe("the Viz editor window", () => {
 		for (const label of [
 			"New Show",
 			"Load Show from Disk",
+			"Get Show from Running ToskLight Control",
 			"Open Demo Show",
 			"Save As",
 			"Import MVR",
@@ -601,7 +602,7 @@ describe("the Viz editor window", () => {
 		});
 		renderApp();
 		const load = await screen.findByRole("button", {
-			name: "Load from Desk · front-of-house: Summer Tour",
+			name: "Get Show from Running ToskLight Control · front-of-house: Summer Tour",
 		});
 		expect(load).toHaveAttribute("title", "front-of-house at 10.0.0.4:5000");
 
@@ -679,9 +680,17 @@ describe("the Viz editor window", () => {
 
 	it("offers no desk when there is none on the network", async () => {
 		renderApp();
+		// The option stays in place, so the operator sees why nothing can be taken.
+		const get = screen.getByRole("button", {
+			name: "Get Show from Running ToskLight Control",
+		});
+		expect(get).toBeDisabled();
+		expect(get).toHaveAttribute(
+			"title",
+			"No running ToskLight Control was found on the network",
+		);
 		await openSettingsPage("DMX");
 		await screen.findByRole("heading", { name: "Live DMX Inputs" });
-		expect(screen.queryByText(/Load from Desk/)).not.toBeInTheDocument();
 		expect(
 			screen.queryByRole("button", { name: /Take from Desk/ }),
 		).not.toBeInTheDocument();

@@ -18,8 +18,8 @@ The ToskLight bundle contains three operator products:
 - **ToskLight Architect** combines CAD-based venue and rig planning with a standalone 3D visualizer. Its Rig Editor plans and patches a rig; its renderer draws it from live Art-Net or sACN, from the editor's preview, or from its built-in demonstration source.
 - **ToskLight Pixel** is the media server. It plays video, pictures, text, generated visuals, and effects on configured displays. Control operates its master and layers through patched Media fixtures and can use CITP/MSEX for names, thumbnails, libraries, and previews.
 
-Control and Architect use the same portable `.show` format. **Load from Desk** and **Load from
-Visualizer** transfer a copy, not a shared live file. For live visualization, send the matching
+Control and Architect use the same portable `.show` format. **Get Show from Running ToskLight Control**
+and **Load from Visualizer** transfer a copy, not a shared live file. For live visualization, send the matching
 Art-Net or sACN universe to Architect. For Pixel, patch the Media fixture and configure its CITP
 address under **Show Patch → Media Servers**; numeric control remains available without CITP.
 
@@ -78,7 +78,7 @@ Media Server settings save automatically. DMX protocol, universe and start addre
 ### First Architect rig
 
 1. Start **ToskLight Architect**. A standalone launch opens the **PreViz Rig Editor** first.
-2. Use its writable Demo Show copy, open another `.show` file, import MVR, or choose a discovered Desk and **Load from Desk**.
+2. Use its writable Demo Show copy, open another `.show` file, import MVR, or choose a discovered Desk with **Get Show from Running ToskLight Control**.
 3. Patch and position fixtures in the Rig Editor, then choose **Open Viz** to start the PreViz Renderer against that planning document.
 4. Use the editor's fixture preview for a quick check without a lighting desk. For live operation, configure the Art-Net or sACN inputs and send the matching universes from the Desk or another console.
 5. If discovery is unavailable, open the same portable show file directly or enter the Desk host and port manually. Discovery is a convenience, not a requirement.

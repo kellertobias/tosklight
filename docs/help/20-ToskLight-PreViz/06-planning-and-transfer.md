@@ -40,8 +40,8 @@ see what the Visualizer draws, and the rig the product demonstration video is sh
 
 **Show**, at the top of the dock, is the open show as a document. It is available with no show open,
 because it is where a show is created or opened. Its file actions run across the top: **New Show**,
-**Load Show from Disk**, **Open Demo Show**, **Load from Desk** for each desk found on the network,
-**Save As**, **Import MVR** and **Export MVR**.
+**Load Show from Disk**, **Get Show from Running ToskLight Control** for each desk found on the
+network, **Open Demo Show**, **Save As**, **Import MVR** and **Export MVR**.
 
 Below them the show is seen from both sides at once. The left half draws the rig from above, with the
 show's name over it. The right half is **Show information**, which titles every printed CAD page, in
@@ -307,12 +307,14 @@ The visualizer's status line says which is happening: **No DMX in — the Viz ed
 fixtures** when the preview plane is lighting the rig, and the ordinary **Waiting for DMX** when
 nothing is driving it at all.
 
-## Load from Desk
+## Get Show from Running ToskLight Control
 
-When a ToskLight desk with a show open is on the same network, the editor's file bar gains a
-**Load from Desk** button naming that desk and the show it is running. Pressing it takes a copy of
-that show, keeps it beside the editor's own documents, and opens it. Two desks are two buttons,
-each naming its own machine; hovering one shows the address it was found at.
+**Get Show from Running ToskLight Control** is the second option under **Open**, after **Load Show
+from Disk**. When a ToskLight desk with a show open is on the same network, the button names that
+desk and the show it is running. Pressing it takes a copy of that show, keeps it beside the
+editor's own documents, and opens it. Two desks are two buttons, each naming its own machine;
+hovering one shows the address it was found at. While no running ToskLight Control is found, the
+button stays in place but is disabled.
 
 What arrives is a copy. Patching it here does not reach the desk, and the desk does not know the
 copy exists. To send work back, use **Load from Visualizer** in the desk's **Load Show** menu.
