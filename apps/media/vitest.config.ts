@@ -8,6 +8,7 @@ const isCi = Boolean(
 );
 
 export default defineConfig({
+	define: { __LIGHT_BUILD__: JSON.stringify("test") },
 	cacheDir: `${artifactPaths.viteCache}/media-vitest`,
 	plugins: [react()],
 	resolve: { dedupe: ["react", "react-dom"] },

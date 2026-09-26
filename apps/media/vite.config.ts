@@ -1,10 +1,12 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { artifactPaths } from "../../tools/artifact-paths.mjs";
+import packageJson from "./package.json";
 
 // The build output is what the Rust server embeds, so it goes to the canonical frontend
 // artifact directory rather than a local `dist/`.
 export default defineConfig({
+	define: { __LIGHT_BUILD__: JSON.stringify(`${packageJson.version} · ${new Date().toISOString()}`) },
 	cacheDir: `${artifactPaths.viteCache}/media`,
 	plugins: [react()],
 	build: {

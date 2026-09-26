@@ -446,7 +446,12 @@ test("the Windows Pixel release is a branded launcher installer", () => {
 	assert.match(launcher, /windows_subsystem = "windows"/u);
 	assert.match(launcher, /CREATE_NO_WINDOW/u);
 	assert.match(launcher, /\/api\/v2\/health/u);
-	assert.match(launcher, /FileProtocolHandler/u);
+	assert.match(launcher, /wait_for_health\(port, launched\.as_mut\(\)\)\?/u);
+	assert.doesNotMatch(
+		launcher,
+		/FileProtocolHandler|Command::new\("(?:rundll32|cmd|explorer)(?:\.exe)?"\)/u,
+		"Pixel starts its server without opening a browser; the standby picture supplies the administration address",
+	);
 	assert.match(launcherBuild, /ToskLight Pixel\.png/u);
 	assert.match(launcherBuild, /FileVersion/u);
 	assert.match(installer, /Icon "\$\{ICON_FILE\}"/u);

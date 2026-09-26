@@ -273,10 +273,11 @@ describe("the production Media pane", () => {
 		document.body.append(dock);
 		render(<MediaPanePage />);
 
-		await screen.findByRole("switch", { name: "Take over playback" });
-		expect(dock).toHaveTextContent(/^Take over playback$/u);
+		await within(dock).findByRole("switch", { name: "Take over playback" });
+		expect(within(dock).getAllByRole("switch")).toHaveLength(1);
+		expect(dock).toHaveTextContent(/^Take over playbackWeb playback control off$/u);
+		expect(within(dock).getByText("Web playback control off")).toBeVisible();
 		expect(dock).not.toHaveTextContent("Release");
-		dock.remove();
 	});
 
 	it("release locks browsing and discards an uncommitted folder draft", async () => {

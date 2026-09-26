@@ -311,7 +311,10 @@ mod tests {
 
     #[test]
     fn any_valid_dmx_frame_clears_the_waiting_picture() {
-        assert_eq!(reason(true, false, false, false, false), Some(Reason::WaitingForDmx));
+        assert_eq!(
+            reason(true, false, false, false, false),
+            Some(Reason::WaitingForDmx)
+        );
         assert_eq!(reason(true, true, false, false, false), None);
         assert_eq!(reason(false, false, false, false, false), None);
     }
@@ -323,8 +326,14 @@ mod tests {
 
     #[test]
     fn library_and_configuration_problems_are_named_even_when_dmx_arrives() {
-        assert_eq!(reason(true, true, false, true, false), Some(Reason::EmptyLibrary));
-        assert_eq!(reason(true, true, false, false, true), Some(Reason::ConfigurationIssue));
+        assert_eq!(
+            reason(true, true, false, true, false),
+            Some(Reason::EmptyLibrary)
+        );
+        assert_eq!(
+            reason(true, true, false, false, true),
+            Some(Reason::ConfigurationIssue)
+        );
     }
 
     #[test]

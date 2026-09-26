@@ -15,9 +15,9 @@ describe("Media Server library layout contract", () => {
 	});
 
 	it("centres the bare playback takeover without an outer control outline", () => {
-		expect(mediaServerCss).toContain(`.media-playback-takeover-dock {
-	display: flex;
-	justify-content: center;`);
+		expect(mediaServerCss).toMatch(
+			/\.media-playback-takeover-dock \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*align-items: center;[^}]*justify-content: center;/,
+		);
 		expect(mediaServerCss).toMatch(
 			/\.media-playback-takeover > \.ui-switch-control \{[^}]*border: 0;[^}]*background: transparent;/,
 		);

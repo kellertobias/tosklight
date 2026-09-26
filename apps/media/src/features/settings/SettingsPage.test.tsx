@@ -616,7 +616,7 @@ describe("the settings page", () => {
 			name: "Main output settings",
 		});
 		expect(within(picture).getByRole("status")).toHaveTextContent(
-			"Saved automatically · Applies on restart",
+			"Saved automatically · Display moves now; other changes need a restart",
 		);
 
 		await openSettings("Libraries");

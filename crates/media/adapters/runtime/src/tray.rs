@@ -63,8 +63,7 @@ pub fn show(
     bulk_import: crate::bulk_import::BulkImport,
     #[cfg(target_os = "windows")]
     outputs: &[media_application::configuration::OutputConfiguration],
-    #[cfg(target_os = "windows")]
-    monitors: &[media_http::MonitorDevice],
+    #[cfg(target_os = "windows")] monitors: &[media_http::MonitorDevice],
 ) -> Option<Tray> {
     let icon = match icon() {
         Ok(icon) => icon,
@@ -202,6 +201,10 @@ pub fn show(
         handle(&event.id, &quit_id, &requested);
     }));
 
+    build_tray(menu, icon)
+}
+
+fn build_tray(menu: Menu, icon: Icon) -> Option<Tray> {
     let built = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_tooltip("ToskLight Pixel")
@@ -231,9 +234,8 @@ fn select_display(endpoint: &str, output: &str, monitor: u32) -> std::io::Result
             .unwrap_or_default()
             .as_nanos()
     );
-    let body = format!(
-        r#"{{"requestId":"{request_id}","monitorBy":"index","monitorValue":"{monitor}"}}"#
-    );
+    let body =
+        format!(r#"{{"requestId":"{request_id}","monitorBy":"index","monitorValue":"{monitor}"}}"#);
     write!(
         stream,
         "POST /api/v2/outputs/{output}/configuration/update HTTP/1.1\r\nHost: {endpoint}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -241,7 +243,11 @@ fn select_display(endpoint: &str, output: &str, monitor: u32) -> std::io::Result
     )?;
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
-    if response.lines().next().is_some_and(|line| line.starts_with("HTTP/1.1 200 ")) {
+    if response
+        .lines()
+        .next()
+        .is_some_and(|line| line.starts_with("HTTP/1.1 200 "))
+    {
         Ok(())
     } else {
         Err(std::io::Error::other(format!(

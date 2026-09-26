@@ -343,20 +343,31 @@ mod tests {
             layers: output.layers.clone(),
             master: output.master,
         };
-        let packet = |millis| command(
-            CommandKind::SetDmxFrame { output: id, frame: Box::new(frame.clone()) },
-            CommandSource::Sacn,
-            millis,
-        );
+        let packet = |millis| {
+            command(
+                CommandKind::SetDmxFrame {
+                    output: id,
+                    frame: Box::new(frame.clone()),
+                },
+                CommandSource::Sacn,
+                millis,
+            )
+        };
         assert_eq!(apply(&mut media, &packet(1_000)), Applied::Changed);
         assert!(media.output(id).unwrap().ownership.dmx.is_some());
         assert_eq!(apply(&mut media, &packet(1_100)), Applied::Changed);
         assert_eq!(
-            apply(&mut media, &command(
-                CommandKind::TakeOverPlayback { output: id, take_over: true },
-                CommandSource::Web,
-                1_200,
-            )),
+            apply(
+                &mut media,
+                &command(
+                    CommandKind::TakeOverPlayback {
+                        output: id,
+                        take_over: true
+                    },
+                    CommandSource::Web,
+                    1_200,
+                )
+            ),
             Applied::Changed
         );
         assert_eq!(apply(&mut media, &packet(1_300)), Applied::RejectedNotOwner);

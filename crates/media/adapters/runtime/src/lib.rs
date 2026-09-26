@@ -114,12 +114,7 @@ fn run_inner() -> anyhow::Result<()> {
     let state: dmx::SharedState = std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
         initial_state(&configuration),
     ));
-    // One catalog, read by the API and by the outputs. A second copy is a second truth, and the
-    // picker would eventually offer something the compositor could not resolve.
-    let catalog: presentation::SharedCatalog =
-        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
-            media_library::discover(&configuration.library.root).unwrap_or_default(),
-        ));
+    let catalog = discover_catalog(&configuration);
 
     let catalog_edits = std::sync::Arc::new(std::sync::Mutex::new(()));
     let importer = start_importer(&configuration, &catalog, &catalog_edits);
@@ -248,6 +243,13 @@ fn run_inner() -> anyhow::Result<()> {
     stop_background(importer, off_screen, audio);
     presented?;
     served.map_err(|error| anyhow::anyhow!("administration task failed: {error}"))?
+}
+
+/// The picker, API and compositor share one discovered catalog.
+fn discover_catalog(configuration: &MediaConfiguration) -> presentation::SharedCatalog {
+    std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
+        media_library::discover(&configuration.library.root).unwrap_or_default(),
+    ))
 }
 
 /// Brings up the DMX and CITP listeners on the background runtime, recording any network warnings

@@ -14,7 +14,9 @@ pub(crate) fn set_current_window_fullscreen(
 ) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let monitor = if fullscreen {
-        window.current_monitor().map_err(|error| error.to_string())?
+        window
+            .current_monitor()
+            .map_err(|error| error.to_string())?
     } else {
         None
     };
