@@ -35,7 +35,9 @@ import { tauriDesktopBridge } from "./tauriDesktopBridge";
 describe("Tauri desktop bridge", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		mocks.invoke.mockResolvedValue(undefined);
+		mocks.invoke.mockImplementation(async (command: string) =>
+			command === "current_window_fullscreen" ? true : undefined,
+		);
 		mocks.currentWindow.outerPosition.mockResolvedValue({ x: 200, y: 100 });
 		mocks.currentWindow.outerSize.mockResolvedValue({
 			width: 1600,
@@ -105,6 +107,21 @@ describe("Tauri desktop bridge", () => {
 			bounds: { x: 100, y: 50, width: 800, height: 450 },
 			fullscreen: true,
 		});
+		expect(mocks.invoke).toHaveBeenCalledWith("current_window_fullscreen");
+	});
+
+	it("uses the native window command for both fullscreen transitions", async () => {
+		await expect(tauriDesktopBridge.currentWindowFullscreen()).resolves.toBe(
+			true,
+		);
+		await tauriDesktopBridge.setCurrentWindowFullscreen(true);
+		await tauriDesktopBridge.setCurrentWindowFullscreen(false);
+		expect(mocks.invoke.mock.calls).toEqual([
+			["current_window_fullscreen"],
+			["set_current_window_fullscreen", { fullscreen: true }],
+			["set_current_window_fullscreen", { fullscreen: false }],
+		]);
+		expect(mocks.currentWindow.setFullscreen).not.toHaveBeenCalled();
 	});
 
 	it("owns native close prevention before notifying the application", async () => {

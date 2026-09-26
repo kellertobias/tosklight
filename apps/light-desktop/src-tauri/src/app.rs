@@ -5,6 +5,8 @@ pub(crate) fn run() {
         .manage(crate::stage_pane::StagePanes::default())
         .on_menu_event(crate::menu::handle_event)
         .invoke_handler(tauri::generate_handler![
+            crate::windows::current_window_fullscreen,
+            crate::windows::set_current_window_fullscreen,
             crate::windows::list_console_displays,
             crate::windows::open_console_screen,
             crate::windows::close_console_screen,

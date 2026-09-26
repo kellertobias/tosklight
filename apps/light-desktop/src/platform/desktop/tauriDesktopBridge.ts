@@ -43,7 +43,7 @@ async function currentWindowState(): Promise<DesktopWindowState> {
 		current.outerPosition(),
 		current.outerSize(),
 		current.scaleFactor(),
-		current.isFullscreen(),
+		currentWindowFullscreen(),
 		api.currentMonitor(),
 	]);
 	return {
@@ -59,13 +59,12 @@ async function currentWindowState(): Promise<DesktopWindowState> {
 }
 
 async function currentWindowFullscreen() {
-	const api = await windowApi();
-	return api.getCurrentWindow().isFullscreen();
+	const api = await coreApi();
+	return api.invoke<boolean>("current_window_fullscreen");
 }
 
 async function setCurrentWindowFullscreen(fullscreen: boolean) {
-	const api = await windowApi();
-	await api.getCurrentWindow().setFullscreen(fullscreen);
+	await invoke("set_current_window_fullscreen", { fullscreen });
 }
 
 async function closeCurrentWindow() {

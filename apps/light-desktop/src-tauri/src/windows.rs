@@ -2,6 +2,43 @@ use serde::Serialize;
 use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::{LogicalPosition, LogicalSize, Manager};
 
+#[tauri::command]
+pub(crate) fn current_window_fullscreen(window: tauri::Window) -> Result<bool, String> {
+    window.is_fullscreen().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn set_current_window_fullscreen(
+    window: tauri::Window,
+    fullscreen: bool,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    let monitor = if fullscreen {
+        window.current_monitor().map_err(|error| error.to_string())?
+    } else {
+        None
+    };
+
+    window
+        .set_fullscreen(fullscreen)
+        .map_err(|error| error.to_string())?;
+
+    // Tauri queues the fullscreen request on Windows. Explicitly apply the
+    // current monitor bounds to the native window as well, so the child webview
+    // has a full-size parent even if the queued transition leaves old bounds.
+    #[cfg(target_os = "windows")]
+    if let Some(monitor) = monitor {
+        window
+            .set_position(*monitor.position())
+            .map_err(|error| error.to_string())?;
+        window
+            .set_size(*monitor.size())
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
 #[derive(Serialize)]
 pub(crate) struct ConsoleDisplay {
     id: String,
