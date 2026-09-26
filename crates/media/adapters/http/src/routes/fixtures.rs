@@ -35,6 +35,7 @@ pub(super) async fn fixture(
 ) -> Result<Response, ApiError> {
     let layer_count = state
         .active_configuration
+        .load()
         .outputs
         .first()
         .map(|output| output.personality.layer_count())

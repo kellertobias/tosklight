@@ -96,12 +96,13 @@ impl RenderWorkerState {
         };
         hosted.output.resize(size);
         hosted.pipeline.resize(size);
-        hosted.standby = crate::standby::render(size, &self.administration_endpoint)
-            .and_then(|frame| {
+        hosted.standby = hosted.standby_reason.and_then(|reason| {
+            crate::standby::render(size, &self.administration_endpoint, reason).and_then(|frame| {
                 SourceTexture::from_rgba8(hosted.output.gpu(), frame.size, &frame.pixels)
                     .map_err(anyhow::Error::from)
             })
-            .ok();
+            .ok()
+        });
         hosted.fullscreen_hint = crate::fullscreen_hint::render(size)
             .and_then(|frame| {
                 SourceTexture::from_rgba8(hosted.output.gpu(), frame.size, &frame.pixels)

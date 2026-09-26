@@ -3,6 +3,7 @@
 // Every setting saves automatically. Most of them reach the running server at once; the few that
 // need a restart — a window, a device, a personality, CITP and this interface's own address — say
 // so beside the section heading only while such a change is actually waiting.
+// Selecting another monitor moves an open output while Pixel is running.
 
 import { Button } from "@tosklight/ui/controls";
 import { useState } from "react";

@@ -150,6 +150,9 @@ export function PlaybackTakeoverToggle({ preview = false }: { preview?: boolean 
 					onChange={(event) => void libraryPreview.setEnabled(event.target.checked)}
 				/>
 			)}
+			<small role="status">
+				{output?.playbackTakeover ? "Web playback control active" : "Web playback control off"}
+			</small>
 		</div>
 	);
 }

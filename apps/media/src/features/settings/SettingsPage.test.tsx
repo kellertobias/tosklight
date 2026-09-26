@@ -255,7 +255,7 @@ describe("the settings page", () => {
 		await openSettings("Picture");
 		await screen.findByRole("article", { name: "Main output settings" });
 		expect(
-			screen.queryByText(/Saved output changes take effect/u),
+			screen.queryByText(/Other saved output changes take effect/u),
 		).not.toBeInTheDocument();
 		await choose("Off-screen (no window)", "Monitor");
 		await choose(
@@ -275,7 +275,7 @@ describe("the settings page", () => {
 		expect(output.writes[0]).not.toHaveProperty("soundOutputKind");
 		expect(output.writes[0]).not.toHaveProperty("personality");
 		expect(
-			await screen.findByText(/Saved output changes take effect/u),
+			await screen.findByText(/Display selection changes take effect/u),
 		).toBeVisible();
 	});
 

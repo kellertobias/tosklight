@@ -74,6 +74,8 @@ pub fn run_event_loop(
     configuration: &MediaConfiguration,
     shared: Shared,
     shutdown: Shutdown,
+    active_configuration: SharedConfiguration,
+    configuration_issue: bool,
     diagnostics: Diagnostics,
     available_monitors: Arc<std::sync::RwLock<Vec<media_http::MonitorDevice>>>,
     // The same reference point the network listeners stamp against, so a packet's arrival and a
@@ -104,6 +106,8 @@ pub fn run_event_loop(
     let _ = importer;
     let mut host = PresentationHost {
         configuration: live,
+        active_configuration,
+        configuration_issue,
         catalog,
         analysis,
         speed_groups,
@@ -129,11 +133,13 @@ pub fn run_event_loop(
         administration_endpoint,
         data_directory: crate::startup::current_portable_data_directory(configuration),
         windows: Vec::new(),
+        output_windows: std::collections::HashMap::new(),
         window_modes: std::collections::HashMap::new(),
         modifiers: ModifiersState::empty(),
         entering_fullscreen: Vec::new(),
         worker: None,
         models,
+        worker_failed: false,
         expects_outputs: needs_a_window(configuration),
         #[cfg(feature = "tray")]
         tray: None,
@@ -141,8 +147,13 @@ pub fn run_event_loop(
         bulk_import,
     };
     let result = event_loop.run_app(&mut host);
+    let worker_failed = host.worker_failed;
     host.stop_worker();
-    result.map_err(Into::into)
+    result?;
+    if worker_failed {
+        anyhow::bail!("Media presentation worker stopped unexpectedly");
+    }
+    Ok(())
 }
 
 /// Diagnostics an operator can ask for at launch.
@@ -183,8 +194,8 @@ pub type SharedCatalog = Arc<arc_swap::ArcSwap<media_domain::catalog::CatalogSna
 
 /// The live configuration, shared with the API so both read one document.
 ///
-/// What an output *is* — its monitor, its resolution, its presentation mode — is settled when the
-/// surface opens, so changing those still needs a restart. What it *shows* is read every frame.
+/// Resolution and presentation mode are settled when the surface opens. Monitor selection can
+/// move the existing window; what the output shows is read every frame.
 pub type SharedConfiguration = Arc<arc_swap::ArcSwap<MediaConfiguration>>;
 
 struct HostedOutput {
@@ -204,6 +215,7 @@ struct HostedOutput {
     beat_form_flash: crate::beat_form_flash::BeatFormFlash,
     outline_beat: crate::outline_beat::OutlineBeat,
     standby: Option<SourceTexture>,
+    standby_reason: Option<crate::standby::Reason>,
     fullscreen_hint: Option<SourceTexture>,
     hint_visible_until: Option<std::time::Instant>,
     /// This output's GPU copy of the 3D models.
@@ -221,6 +233,8 @@ struct DirectClip {
 
 struct PresentationHost {
     configuration: SharedConfiguration,
+    active_configuration: SharedConfiguration,
+    configuration_issue: bool,
     catalog: SharedCatalog,
     /// The newest audio analysis, which generated sources react to.
     analysis: media_audio::SharedAnalysis,
@@ -244,6 +258,7 @@ struct PresentationHost {
     data_directory: Option<std::path::PathBuf>,
     /// Main-thread references ensure the final native-window drop happens on the Cocoa thread.
     windows: Vec<Arc<Window>>,
+    output_windows: std::collections::HashMap<media_domain::OutputId, WindowId>,
     window_modes: std::collections::HashMap<WindowId, WindowMode>,
     modifiers: ModifiersState,
     /// Windows configured for full screen, waiting for their first turn through the event loop.
@@ -254,6 +269,7 @@ struct PresentationHost {
     worker: Option<PresentationWorker>,
     /// The 3D model library, handed to the render worker.
     models: crate::model_store::Models,
+    worker_failed: bool,
     /// Whether this configuration asked for output windows at all. A server with none is a normal
     /// state — it still runs, and it still has a menu bar item — so an empty output list only
     /// means failure when outputs were expected.
@@ -299,6 +315,7 @@ struct RenderWorkerState {
     loader: AsyncClipLoader,
     direct: Option<DirectClip>,
     administration_endpoint: String,
+    configuration_issue: bool,
     operator_overlay_layer: media_domain::LayerState,
     models: crate::model_store::Models,
 }
@@ -317,6 +334,58 @@ fn test_pattern_layer() -> media_domain::LayerState {
 }
 
 impl PresentationHost {
+    /// Apply a saved monitor selection to an existing window on the native event-loop thread.
+    fn sync_monitor_selections(&mut self, event_loop: &ActiveEventLoop) {
+        let stored = self.configuration.load();
+        let active = self.active_configuration.load();
+        let mut next = None;
+        for desired in &stored.outputs {
+            let Some(current) = active.output(desired.id) else {
+                continue;
+            };
+            let (
+                OutputTarget::Monitor {
+                    monitor: wanted, ..
+                },
+                OutputTarget::Monitor { monitor: shown, .. },
+            ) = (&desired.target, &current.target)
+            else {
+                continue;
+            };
+            if wanted == shown {
+                continue;
+            }
+            let Some(window_id) = self.output_windows.get(&desired.id) else {
+                continue;
+            };
+            let Some(window) = self.windows.iter().find(|window| window.id() == *window_id) else {
+                continue;
+            };
+            let Some(selected) = select_monitor(wanted, event_loop.available_monitors()) else {
+                continue;
+            };
+            if self
+                .window_modes
+                .get(window_id)
+                .is_some_and(|mode| mode.fullscreen)
+            {
+                window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(selected))));
+            } else {
+                window.set_outer_position(selected.position());
+            }
+            let updated = next.get_or_insert_with(|| MediaConfiguration::clone(&active));
+            if let Some(output) = updated.outputs.iter_mut().find(|output| output.id == desired.id) {
+                if let OutputTarget::Monitor { monitor, .. } = &mut output.target {
+                    *monitor = wanted.clone();
+                }
+            }
+            tracing::info!(output = %desired.name, ?wanted, "output moved to display");
+        }
+        if let Some(next) = next {
+            self.active_configuration.store(Arc::new(next));
+        }
+    }
+
     /// Loads the clip named at launch, reporting as it goes.
     fn load_direct_clip(&mut self) {
         let Some(path) = self.diagnostics.play.clone() else {
@@ -442,7 +511,12 @@ impl PresentationHost {
                     output.size(),
                 );
                 pipeline.validate_visualizers();
-                let standby = crate::standby::render(output.size(), &self.administration_endpoint)
+                let standby_reason = Some(crate::standby::Reason::WaitingForDmx);
+                let standby = crate::standby::render(
+                    output.size(),
+                    &self.administration_endpoint,
+                    crate::standby::Reason::WaitingForDmx,
+                )
                     .and_then(|frame| {
                         SourceTexture::from_rgba8(output.gpu(), frame.size, &frame.pixels)
                             .map_err(anyhow::Error::from)
@@ -475,6 +549,7 @@ impl PresentationHost {
                     beat_form_flash: crate::beat_form_flash::BeatFormFlash::default(),
                     outline_beat: Default::default(),
                     standby,
+                    standby_reason,
                     fullscreen_hint,
                     hint_visible_until: None,
                     models: Default::default(),
@@ -490,6 +565,7 @@ impl PresentationHost {
                         last_left_click: None,
                     },
                 );
+                self.output_windows.insert(configuration.id, window.id());
                 self.windows.push(window);
             }
             Err(error) => {
@@ -529,6 +605,7 @@ impl PresentationHost {
             loader,
             direct: self.direct.take(),
             administration_endpoint: self.administration_endpoint.clone(),
+            configuration_issue: self.configuration_issue,
             operator_overlay_layer: media_domain::LayerState {
                 address: media_domain::MediaAddress::new(1, 1),
                 source_status: media_domain::SourceStatus::Ready,
@@ -780,13 +857,37 @@ impl RenderWorkerState {
             let status_overlay = configuration
                 .output(output_state.id)
                 .is_some_and(|output| output.status_overlay);
+            let standby_reason = crate::standby::reason(
+                status_overlay,
+                output_state.ownership.dmx_is_active(now),
+                output_state.ownership.web_takeover,
+                catalog.item_count() == 0,
+                self.configuration_issue,
+            );
+            if standby_reason != hosted.standby_reason {
+                hosted.standby_reason = standby_reason;
+                hosted.standby = standby_reason.and_then(|reason| {
+                    crate::standby::render(
+                        hosted.output.size(),
+                        &self.administration_endpoint,
+                        reason,
+                    )
+                    .and_then(|frame| {
+                        SourceTexture::from_rgba8(hosted.output.gpu(), frame.size, &frame.pixels)
+                            .map_err(anyhow::Error::from)
+                    })
+                    .map_err(|error| {
+                        tracing::error!(%error, "cannot update the Media standby surface")
+                    })
+                    .ok()
+                });
+            }
             if present_standby(
                 &mut self.sinks,
                 &self.test_pattern_layer,
                 &self.operator_overlay_layer,
                 hosted,
                 output_state,
-                status_overlay,
                 now,
                 region,
             ) {
@@ -1080,19 +1181,6 @@ pub(crate) fn with_reports(
 
 impl ApplicationHandler for PresentationHost {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        // The status item cannot be created before the application has finished launching, which
-        // is exactly what reaching this callback means.
-        #[cfg(feature = "tray")]
-        if self.tray.is_none() {
-            self.tray = crate::tray::show(
-                &self.shutdown,
-                self.data_directory.as_deref(),
-                #[cfg(any(target_os = "macos", target_os = "windows"))]
-                &self.administration_endpoint,
-                #[cfg(any(target_os = "macos", target_os = "windows"))]
-                self.bulk_import.clone(),
-            );
-        }
         let monitors = media_render::monitors(event_loop.available_monitors())
             .into_iter()
             .map(|(index, name, handle)| {
@@ -1105,9 +1193,25 @@ impl ApplicationHandler for PresentationHost {
                     refresh_millihertz: handle.refresh_rate_millihertz(),
                 }
             })
-            .collect();
+            .collect::<Vec<_>>();
         if let Ok(mut available) = self.available_monitors.write() {
-            *available = monitors;
+            *available = monitors.clone();
+        }
+        // Native menu creation and window movement both belong to this event-loop thread.
+        #[cfg(feature = "tray")]
+        if self.tray.is_none() {
+            self.tray = crate::tray::show(
+                &self.shutdown,
+                self.data_directory.as_deref(),
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                &self.administration_endpoint,
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                self.bulk_import.clone(),
+                #[cfg(target_os = "windows")]
+                &self.active_configuration.load().outputs,
+                #[cfg(target_os = "windows")]
+                &monitors,
+            );
         }
         if self.worker.is_some() {
             return; // Already open; this is a wake, not a first start.
@@ -1170,6 +1274,34 @@ impl ApplicationHandler for PresentationHost {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if self.shutdown.reason().is_some() {
+            event_loop.exit();
+            return;
+        }
+        if self
+            .worker
+            .as_ref()
+            .and_then(|worker| worker.join.as_ref())
+            .is_some_and(std::thread::JoinHandle::is_finished)
+        {
+            let mut worker = self.worker.take().expect("finished worker was present");
+            match worker.join.take().expect("finished worker has a handle").join() {
+                Ok(()) => tracing::error!("Media presentation worker stopped unexpectedly"),
+                Err(payload) => {
+                    let detail = payload
+                        .downcast_ref::<String>()
+                        .map(String::as_str)
+                        .or_else(|| payload.downcast_ref::<&str>().copied())
+                        .unwrap_or("unknown panic");
+                    tracing::error!(%detail, "Media presentation worker panicked");
+                }
+            }
+            self.worker_failed = true;
+            self.shutdown.request(ShutdownReason::Requested);
+            event_loop.exit();
+            return;
+        }
+        self.sync_monitor_selections(event_loop);
         // The window exists and has been through one pass of the loop, so the platform can now
         // take it into its own full screen — the same transition the maximize button performs.
         for (window, monitor) in self.entering_fullscreen.drain(..) {
@@ -1178,10 +1310,6 @@ impl ApplicationHandler for PresentationHost {
             window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(monitor))));
             #[cfg(target_os = "windows")]
             window.set_window_level(WindowLevel::AlwaysOnTop);
-        }
-        if self.shutdown.reason().is_some() {
-            event_loop.exit();
-            return;
         }
         // Shutdown can originate on a service thread. This tiny timed wake observes it without
         // putting any rendering or resize work back onto the native event loop.

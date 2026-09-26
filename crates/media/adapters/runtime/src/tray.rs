@@ -5,10 +5,12 @@
 //! operator assigned, and with none assigned it draws nothing at all — so without this the process
 //! is invisible, and the only way to stop it is Activity Monitor.
 //!
-//! The menu keeps only process-level actions plus a shortcut to the administration interface.
+//! The menu also offers direct display selection for monitor outputs on Windows.
 
 use crate::shutdown::{Shutdown, ShutdownReason};
 use muda::{Menu, MenuEvent, MenuItem};
+#[cfg(target_os = "windows")]
+use std::io::{Read, Write};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
 #[cfg(target_os = "windows")]
@@ -59,6 +61,10 @@ pub fn show(
     #[cfg(any(target_os = "macos", target_os = "windows"))] administration_endpoint: &str,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     bulk_import: crate::bulk_import::BulkImport,
+    #[cfg(target_os = "windows")]
+    outputs: &[media_application::configuration::OutputConfiguration],
+    #[cfg(target_os = "windows")]
+    monitors: &[media_http::MonitorDevice],
 ) -> Option<Tray> {
     let icon = match icon() {
         Ok(icon) => icon,
@@ -95,6 +101,33 @@ pub fn show(
     if let Err(error) = menu.append(&open_settings) {
         tracing::warn!(%error, "the menu bar menu could not be built; running without one");
         return None;
+    }
+    #[cfg(target_os = "windows")]
+    let mut display_actions = Vec::new();
+    #[cfg(target_os = "windows")]
+    for output in outputs.iter().filter(|output| {
+        output.enabled
+            && matches!(
+                output.target,
+                media_application::configuration::OutputTarget::Monitor { .. }
+            )
+    }) {
+        for monitor in monitors {
+            let item = MenuItem::new(
+                format!(
+                    "Move {} to Display {} · {}",
+                    output.name,
+                    monitor.index + 1,
+                    monitor.name
+                ),
+                true,
+                None,
+            );
+            display_actions.push((item.id().clone(), output.id.to_string(), monitor.index));
+            if let Err(error) = menu.append(&item) {
+                tracing::warn!(%error, "a display menu item could not be added");
+            }
+        }
     }
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     let convert_multiple = MenuItem::new(CONVERT_MULTIPLE_LABEL, true, None);
@@ -147,6 +180,20 @@ pub fn show(
             }
             return;
         }
+        #[cfg(target_os = "windows")]
+        if let Some((_, output, monitor)) =
+            display_actions.iter().find(|(id, _, _)| *id == event.id)
+        {
+            let endpoint = administration_endpoint.clone();
+            let output = output.clone();
+            let monitor = *monitor;
+            std::thread::spawn(move || {
+                if let Err(error) = select_display(&endpoint, &output, monitor) {
+                    tracing::error!(%error, %output, monitor, "the display change could not be saved");
+                }
+            });
+            return;
+        }
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         if event.id == convert_multiple_id {
             bulk_import.prompt();
@@ -169,6 +216,38 @@ pub fn show(
             tracing::warn!(%error, "the menu bar icon could not be shown; running without one");
             None
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn select_display(endpoint: &str, output: &str, monitor: u32) -> std::io::Result<()> {
+    let mut stream = std::net::TcpStream::connect(endpoint)?;
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
+    let request_id = format!(
+        "tray-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
+    let body = format!(
+        r#"{{"requestId":"{request_id}","monitorBy":"index","monitorValue":"{monitor}"}}"#
+    );
+    write!(
+        stream,
+        "POST /api/v2/outputs/{output}/configuration/update HTTP/1.1\r\nHost: {endpoint}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )?;
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+    if response.lines().next().is_some_and(|line| line.starts_with("HTTP/1.1 200 ")) {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "Pixel refused the display change: {}",
+            response.lines().next().unwrap_or("no response")
+        )))
     }
 }
 
@@ -321,6 +400,45 @@ mod tests {
             administration_url("127.0.0.1:8080"),
             "http://127.0.0.1:8080"
         );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn display_action_saves_the_selected_monitor_through_the_pixel_api() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = listener.local_addr().unwrap().to_string();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                .unwrap();
+            let mut reader = std::io::BufReader::new(&mut stream);
+            let mut request = String::new();
+            let mut length = 0;
+            loop {
+                let mut line = String::new();
+                std::io::BufRead::read_line(&mut reader, &mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length: ") {
+                    length = value.trim().parse::<usize>().unwrap();
+                }
+                request.push_str(&line);
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            request.push_str(&String::from_utf8(body).unwrap());
+            drop(reader);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .unwrap();
+            request
+        });
+        select_display(&endpoint, "00000000-0000-0000-0000-000000000001", 2).unwrap();
+        let request = server.join().unwrap();
+        assert!(request.starts_with("POST /api/v2/outputs/00000000-0000-0000-0000-000000000001/configuration/update HTTP/1.1"));
+        assert!(request.contains("\"monitorBy\":\"index\",\"monitorValue\":\"2\""));
     }
 
     #[test]

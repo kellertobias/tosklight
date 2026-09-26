@@ -100,6 +100,7 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
 
     let output = state.output_mut(id).expect("looked up immediately above");
 
+    let previous_ownership = output.ownership;
     if command.source.is_external_dmx() {
         output.ownership.observe_dmx(command.source, command.at);
     }
@@ -108,7 +109,7 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
         CommandKind::SetDmxFrame { frame, .. } => {
             // A frame carries exactly the personality's layer count. A desk cannot add layers by
             // sending a longer one.
-            let mut changed = false;
+            let mut changed = output.ownership != previous_ownership;
             for (existing, incoming) in output.layers.iter_mut().zip(&frame.layers) {
                 // Runtime status belongs to playback, not to the wire. A desk repeating the same
                 // address must not reset a layer that has already failed or completed. Effect
@@ -332,6 +333,33 @@ mod tests {
                 .len(),
             8
         );
+    }
+
+    #[test]
+    fn unchanged_dmx_values_still_publish_activity_and_allow_takeover() {
+        let (mut media, id) = state(LayerPersonality::TwoLayers);
+        let output = media.output(id).unwrap();
+        let frame = DecodedFrame {
+            layers: output.layers.clone(),
+            master: output.master,
+        };
+        let packet = |millis| command(
+            CommandKind::SetDmxFrame { output: id, frame: Box::new(frame.clone()) },
+            CommandSource::Sacn,
+            millis,
+        );
+        assert_eq!(apply(&mut media, &packet(1_000)), Applied::Changed);
+        assert!(media.output(id).unwrap().ownership.dmx.is_some());
+        assert_eq!(apply(&mut media, &packet(1_100)), Applied::Changed);
+        assert_eq!(
+            apply(&mut media, &command(
+                CommandKind::TakeOverPlayback { output: id, take_over: true },
+                CommandSource::Web,
+                1_200,
+            )),
+            Applied::Changed
+        );
+        assert_eq!(apply(&mut media, &packet(1_300)), Applied::RejectedNotOwner);
     }
 
     #[test]

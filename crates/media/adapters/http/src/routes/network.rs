@@ -14,7 +14,7 @@ use crate::wire::{NetworkView, UpdateNetwork};
 pub(super) async fn network(State(state): State<ApiState>) -> impl IntoResponse {
     axum::Json(NetworkView::of(
         &state.configuration.load().network,
-        &state.active_configuration.network,
+        &state.active_configuration.load().network,
         state.administration_listen,
         (state.diagnostics.network_warnings)(),
     ))
@@ -45,7 +45,7 @@ pub(super) async fn update_network(
     (state.settle)().await;
     let view = NetworkView::of(
         &state.configuration.load().network,
-        &state.active_configuration.network,
+        &state.active_configuration.load().network,
         state.administration_listen,
         (state.diagnostics.network_warnings)(),
     );

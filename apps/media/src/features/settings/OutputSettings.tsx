@@ -1,9 +1,8 @@
 // One output's stored identity: where it opens, how it presents, and which DMX block feeds it.
 //
 // The DMX protocol, universe, start address and tempo source reach the running output as soon as
-// they are saved. The picture target, size and frame clock, the sound device, and the personality
-// are created when the output opens, so the server keeps the running output as it is and the page
-// says those wait for the next start.
+// they are saved. A monitor selection moves the running output. Other picture settings, the sound
+// device, and the personality take effect on the next start.
 
 import {
 	Button,
@@ -30,7 +29,7 @@ interface ConfigurationResource {
 }
 
 /** Reads one independently addressed output without adding a singleton output cache. */
-function useOutputConfiguration(outputId: string): ConfigurationResource {
+function useOutputConfiguration(outputId: string, poll: boolean): ConfigurationResource {
 	const [data, setData] = useState<OutputConfigurationView>();
 	const [failure, setFailure] = useState<ApiFailure>();
 	const [revision, setRevision] = useState(0);
@@ -56,6 +55,11 @@ function useOutputConfiguration(outputId: string): ConfigurationResource {
 			current = false;
 		};
 	}, [outputId, revision]);
+	useEffect(() => {
+		if (!poll) return;
+		const timer = window.setInterval(() => setRevision((value) => value + 1), 1_000);
+		return () => window.clearInterval(timer);
+	}, [poll]);
 
 	return {
 		data,
@@ -75,7 +79,7 @@ export function OutputSettings({
 	mode?: "all" | "picture" | "sound" | "dmx";
 	direct?: boolean;
 }) {
-	const configuration = useOutputConfiguration(outputId);
+	const configuration = useOutputConfiguration(outputId, mode === "picture");
 	const editing = useEditing(configuration.reload);
 	useFailureToast(editing.failure);
 
@@ -119,7 +123,8 @@ export function OutputSettings({
 					<SettingsSaveState
 						busy={editing.busy}
 						failed={editing.failure !== undefined}
-						restartBound={mode !== "dmx" || output.dmxPendingRestart}
+						restartBound={pendingRestart}
+						note={mode === "picture" ? "Display moves now; other changes need a restart" : undefined}
 					/>
 				)}
 			</div>
@@ -255,6 +260,8 @@ function RestartNotice({
 		<p className="media-state is-notice">
 			{mode === "dmx"
 				? "A saved personality takes effect the next time this server starts. Protocol, universe and start address already apply."
+				: mode === "picture" || mode === "all"
+					? "Display selection changes take effect while Pixel is running. Other saved output changes take effect the next time this server starts."
 				: "Saved output changes take effect the next time this server starts. The output running now stays as it is."}
 		</p>
 	);

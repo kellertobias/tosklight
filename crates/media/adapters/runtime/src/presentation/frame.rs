@@ -21,15 +21,10 @@ pub(super) fn present_standby(
     operator_overlay_layer: &media_domain::LayerState,
     hosted: &mut HostedOutput,
     output_state: &media_domain::OutputState,
-    status_overlay: bool,
     now: Timestamp,
     region: Option<&media_domain::display_region::DisplayRegion>,
 ) -> bool {
-    if !crate::standby::visible(
-        status_overlay,
-        output_state.ownership.dmx.is_some(),
-        output_state.ownership.web_takeover,
-    ) {
+    if hosted.standby_reason.is_none() {
         return false;
     }
     let Some(standby) = hosted.standby.as_ref() else {

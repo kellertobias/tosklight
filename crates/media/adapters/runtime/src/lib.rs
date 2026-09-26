@@ -60,7 +60,6 @@ pub use startup::{
 
 use media_application::MediaConfiguration;
 use media_domain::{MediaState, OutputState, Timestamp};
-use std::sync::Arc;
 
 use library_runtime::{RuntimeUpload, edit_library, imports_of, update_folder_presentation};
 use startup::administration_endpoint;
@@ -143,6 +142,8 @@ fn run_inner() -> anyhow::Result<()> {
     // reaches the outputs on their next frame.
     let models = model_store::Models::new(&configuration.library.root);
     let speed_groups = speed_groups::shared();
+    let active_configuration =
+        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(configuration.clone()));
     let diagnostics = diagnostics_of(
         &models,
         &live,
@@ -194,6 +195,7 @@ fn run_inner() -> anyhow::Result<()> {
 
     let services = Services {
         configuration: shared.configuration.clone(),
+        active_configuration: active_configuration.clone(),
         shutdown: shutdown.clone(),
         administration,
         state: Some(shared.state.clone()),
@@ -230,6 +232,11 @@ fn run_inner() -> anyhow::Result<()> {
         &configuration,
         shared,
         shutdown.clone(),
+        active_configuration,
+        !network_warnings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .is_empty(),
         diagnostics_arguments,
         available_monitors,
         started,
@@ -778,6 +785,9 @@ pub fn initial_state(configuration: &MediaConfiguration) -> MediaState {
 pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> anyhow::Result<()> {
     let administration = admin_listener::bind(configuration.network.resolved().http_listen).await?;
     serve_with(Services {
+        active_configuration: std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
+            configuration.clone(),
+        )),
         configuration: std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(configuration)),
         shutdown,
         administration,
@@ -801,6 +811,8 @@ pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> any
 pub(crate) struct Services {
     /// The live configuration document, shared with the outputs.
     pub configuration: SharedConfiguration,
+    /// Startup settings with live monitor moves applied after the window actually moves.
+    pub active_configuration: SharedConfiguration,
     pub shutdown: Shutdown,
     /// The administration socket, already bound. See [`admin_listener`] for why it arrives bound
     /// rather than as an address.
@@ -829,6 +841,7 @@ pub(crate) struct Services {
 pub(crate) async fn serve_with(services: Services) -> anyhow::Result<()> {
     let Services {
         configuration: live,
+        active_configuration,
         shutdown,
         administration,
         state,
@@ -875,7 +888,7 @@ pub(crate) async fn serve_with(services: Services) -> anyhow::Result<()> {
     let open_data_directory = data_directory.clone();
     let api = media_http::ApiState {
         configuration: live,
-        active_configuration: Arc::clone(&configuration),
+        active_configuration,
         administration_endpoint: administration_endpoint(administration.address),
         administration_listen: administration.address,
         configuration_path: configuration_path_for_view,

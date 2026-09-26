@@ -25,7 +25,7 @@ pub(super) async fn catalog(State(state): State<ApiState>) -> impl IntoResponse 
 
 pub(super) async fn runtime(State(state): State<ApiState>) -> impl IntoResponse {
     axum::Json(RunningServerView::of(
-        &state.active_configuration,
+        &state.active_configuration.load(),
         &state.administration_endpoint,
         &state.configuration_path,
         state.data_directory.as_deref(),

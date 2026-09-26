@@ -93,12 +93,12 @@ pub type OpenDataDirectory = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
 pub struct ApiState {
     /// The live configuration. Swapped when an edit is accepted, so a read after a write sees it.
     pub configuration: Arc<ArcSwap<MediaConfiguration>>,
-    /// The immutable configuration this process actually started with.
+    /// The configuration currently active in this process.
     ///
-    /// Stored output/network edits are published through `configuration` immediately but do not
-    /// rebuild ingress or presentation until restart. Runtime-facing reads must therefore use
-    /// this snapshot instead of presenting next-start values as active facts.
-    pub active_configuration: Arc<MediaConfiguration>,
+    /// Stored edits are published through `configuration` immediately. The presentation host
+    /// updates this snapshot when it moves an existing window; other startup-bound settings stay
+    /// at their running values until restart.
+    pub active_configuration: Arc<ArcSwap<MediaConfiguration>>,
     /// The literal, usable administration endpoint selected for this running process.
     pub administration_endpoint: String,
     /// The address the administration interface is actually bound to for this run.

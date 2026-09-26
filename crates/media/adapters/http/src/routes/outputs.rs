@@ -137,7 +137,8 @@ pub(super) async fn output_configuration(
     let id = parse_output(&output)?;
     let configuration = state.configuration.load();
     let found = configuration.output(id).ok_or_else(|| unknown_output(id))?;
-    let active = state.active_configuration.output(id).unwrap_or(found);
+    let active_configuration = state.active_configuration.load();
+    let active = active_configuration.output(id).unwrap_or(found);
     Ok(axum::Json(OutputConfigurationView::of(
         found,
         active,
@@ -183,9 +184,10 @@ pub(super) async fn update_output_configuration(
     *found = body.applied(found).map_err(|error| {
         ApiError::bad_request("output-configuration-invalid", error.to_string())
     })?;
+    let active_configuration = state.active_configuration.load();
     let view = OutputConfigurationView::of(
         found,
-        state.active_configuration.output(id).unwrap_or(found),
+        active_configuration.output(id).unwrap_or(found),
         (state.diagnostics.monitors)(),
         (state.diagnostics.output_devices)(),
     );

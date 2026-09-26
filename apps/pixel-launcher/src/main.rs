@@ -59,7 +59,6 @@ fn launch() -> anyhow::Result<()> {
         launched = Some(command.spawn()?);
     }
     wait_for_health(port, launched.as_mut())?;
-    open_administration(port)?;
     Ok(())
 }
 
@@ -167,20 +166,6 @@ fn healthy_response(response: &str) -> bool {
     status_ok
         && named("product").as_deref() == Some(PRODUCT)
         && named("status").as_deref() == Some("ok")
-}
-
-#[cfg(target_os = "windows")]
-fn open_administration(port: u16) -> anyhow::Result<()> {
-    let url = administration_url(port);
-    let status = Command::new("rundll32.exe")
-        .args(["url.dll,FileProtocolHandler", &url])
-        .creation_flags(CREATE_NO_WINDOW)
-        .status()?;
-    anyhow::ensure!(
-        status.success(),
-        "the browser launcher exited with {status}"
-    );
-    Ok(())
 }
 
 #[cfg(test)]

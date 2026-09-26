@@ -67,7 +67,7 @@ pub(crate) fn bench_with(diagnostics: Diagnostics) -> Bench {
 
     let api = ApiState {
         configuration: Arc::clone(&configuration),
-        active_configuration,
+        active_configuration: Arc::new(ArcSwap::from(active_configuration)),
         administration_endpoint: "127.0.0.1:18080".to_owned(),
         administration_listen: "127.0.0.1:8080".parse().unwrap(),
         configuration_path: "/tmp/tosklight-media/media-server.json".into(),

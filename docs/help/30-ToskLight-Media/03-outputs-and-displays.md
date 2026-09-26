@@ -6,6 +6,8 @@ Each Media output combines a rendering destination, presentation configuration, 
 
 Choose either a physical monitor or an off-screen output. A monitor output stores the exact monitor selector and whether it is fullscreen. Configure the render resolution independently from the desktop's apparent size, then choose the supported presentation mode and frame rate for the destination.
 
+Change **Monitor** in **Settings > Picture** to move a running output without restarting Pixel. The selection is saved for the next launch. On Windows, the Pixel notification-area menu also offers a **Move [output] to Display [number]** action for every connected display.
+
 Use the test pattern after every monitor, cable, resolution, refresh-rate, or fullscreen change. A browser preview proves that the engine rendered a frame; only the physical test pattern proves that the intended display received it.
 
 On Windows, fullscreen picture outputs are borderless, have no title bar or window frame, and stay above other windows on their display. Click a fullscreen output to show its short recovery hint. Double-click the picture, or press **Ctrl + Shift + -**, to return that output to a normal decorated window. Press **Ctrl + Shift + an arrow key** to move the still-fullscreen output to the nearest display in that direction; at the edge of the desktop, the output stays on its current display.

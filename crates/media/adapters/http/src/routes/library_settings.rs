@@ -13,7 +13,7 @@ use crate::wire::{LibrarySettingsView, UpdateLibrarySettings};
 pub(super) async fn settings(State(state): State<ApiState>) -> impl IntoResponse {
     axum::Json(LibrarySettingsView::of(
         &state.configuration.load().library,
-        &state.active_configuration.library,
+        &state.active_configuration.load().library,
     ))
 }
 
@@ -31,7 +31,7 @@ pub(super) async fn update_settings(
     configuration.library = body
         .applied(&configuration.library)
         .map_err(|error| ApiError::bad_request("library-directory-invalid", error.to_string()))?;
-    let view = LibrarySettingsView::of(&configuration.library, &state.active_configuration.library);
+    let view = LibrarySettingsView::of(&configuration.library, &state.active_configuration.load().library);
     edit::commit(&state, configuration, &body.request_id, &view)
 }
 

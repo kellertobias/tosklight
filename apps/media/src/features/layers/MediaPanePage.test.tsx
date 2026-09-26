@@ -133,6 +133,7 @@ describe("the production Media pane", () => {
 		// Painting before the held request resolves is the operator contract. A wall-clock budget
 		// would measure the shared CI runner's React render instead of the pane's own behaviour.
 		expect(takeover).toBeChecked();
+		expect(screen.getByText("Web playback control active")).toBeVisible();
 		expect(paintedAt).toBeGreaterThanOrEqual(inputAt);
 		expect(server.outputs[0].playbackTakeover).toBe(false);
 

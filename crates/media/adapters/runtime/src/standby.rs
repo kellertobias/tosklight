@@ -1,4 +1,4 @@
-//! The projector-alignment and connection surface shown until this process sees valid DMX.
+//! The projector-alignment and diagnostic surface shown until Pixel can present a show.
 
 use media_domain::{Alignment, Size, TextStyle, Tint};
 
@@ -16,8 +16,31 @@ pub struct Frame {
     pub pixels: Vec<u8>,
 }
 
-pub fn visible(status_overlay: bool, received_dmx: bool, web_takeover: bool) -> bool {
-    status_overlay && !received_dmx && !web_takeover
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reason {
+    ConfigurationIssue,
+    EmptyLibrary,
+    WaitingForDmx,
+}
+
+pub fn reason(
+    status_overlay: bool,
+    received_dmx: bool,
+    web_takeover: bool,
+    library_empty: bool,
+    configuration_issue: bool,
+) -> Option<Reason> {
+    if !status_overlay {
+        None
+    } else if configuration_issue {
+        Some(Reason::ConfigurationIssue)
+    } else if library_empty {
+        Some(Reason::EmptyLibrary)
+    } else if !received_dmx && !web_takeover {
+        Some(Reason::WaitingForDmx)
+    } else {
+        None
+    }
 }
 
 /// One line of the standby block.
@@ -39,7 +62,7 @@ const LINE_GAPS: [u32; 3] = [36, 52, 24];
 const BAND_RATIO: u32 = 2;
 const TEXT_SIZE: f32 = 0.5;
 
-pub fn render(size: Size, endpoint: &str) -> anyhow::Result<Frame> {
+pub fn render(size: Size, endpoint: &str, reason: Reason) -> anyhow::Result<Frame> {
     let mut frame = Frame {
         size,
         pixels: vec![0; size.width as usize * size.height as usize * 4],
@@ -49,7 +72,20 @@ pub fn render(size: Size, endpoint: &str) -> anyhow::Result<Frame> {
     }
     draw_guides(&mut frame);
 
-    let connect = format!("Connect your browser to {endpoint}");
+    let (guidance, detail) = match reason {
+        Reason::ConfigurationIssue => (
+            format!("Check Pixel settings in your browser at {endpoint}"),
+            "A configuration problem needs attention in the browser.",
+        ),
+        Reason::EmptyLibrary => (
+            format!("Add media in your browser at {endpoint}"),
+            "The media library is empty.",
+        ),
+        Reason::WaitingForDmx => (
+            format!("Open your browser at {endpoint}"),
+            "Waiting for DMX. Any valid frame clears this message.",
+        ),
+    };
     let lines = [
         Line {
             text: "ToskLight Pixel",
@@ -62,12 +98,12 @@ pub fn render(size: Size, endpoint: &str) -> anyhow::Result<Frame> {
             colour: Tint::new(0.62, 0.68, 0.78),
         },
         Line {
-            text: &connect,
+            text: &guidance,
             height: 40,
             colour: Tint::new(0.40, 0.72, 1.0),
         },
         Line {
-            text: "This message disappears once ToskLight Pixel receives DMX.",
+            text: detail,
             height: 26,
             colour: Tint::new(0.62, 0.68, 0.78),
         },
@@ -274,15 +310,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn standby_ends_permanently_after_the_first_valid_dmx() {
-        assert!(visible(true, false, false));
-        assert!(!visible(true, true, false));
-        assert!(!visible(false, false, false));
+    fn any_valid_dmx_frame_clears_the_waiting_picture() {
+        assert_eq!(reason(true, false, false, false, false), Some(Reason::WaitingForDmx));
+        assert_eq!(reason(true, true, false, false, false), None);
+        assert_eq!(reason(false, false, false, false, false), None);
     }
 
     #[test]
     fn browser_takeover_exposes_program_output_without_waiting_for_dmx() {
-        assert!(!visible(true, false, true));
+        assert_eq!(reason(true, false, true, false, false), None);
+    }
+
+    #[test]
+    fn library_and_configuration_problems_are_named_even_when_dmx_arrives() {
+        assert_eq!(reason(true, true, false, true, false), Some(Reason::EmptyLibrary));
+        assert_eq!(reason(true, true, false, false, true), Some(Reason::ConfigurationIssue));
     }
 
     #[test]
