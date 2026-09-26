@@ -85,7 +85,7 @@ impl Scene {
     /// it stands that much further back and fills the frame with floor.
     pub fn rig_bounds(&self) -> Aabb {
         let mut bounds = Aabb::empty();
-        for fixture in &self.fixtures {
+        for fixture in self.fixtures.iter().filter(|fixture| !fixture.invisible) {
             bounds.expand(fixture.position);
         }
         if bounds.is_empty() {
@@ -97,7 +97,7 @@ impl Scene {
 
     pub fn recompute_bounds(&mut self) {
         let mut bounds = Aabb::empty();
-        for fixture in &self.fixtures {
+        for fixture in self.fixtures.iter().filter(|fixture| !fixture.invisible) {
             bounds.expand(fixture.position);
         }
         for object in &self.scenery {
@@ -136,7 +136,7 @@ impl Scene {
     /// leaves the rig a speck in the middle of an empty picture.
     pub fn framing_bounds(&self) -> Aabb {
         let mut rig = Aabb::empty();
-        for fixture in &self.fixtures {
+        for fixture in self.fixtures.iter().filter(|fixture| !fixture.invisible) {
             rig.expand(fixture.position);
         }
         if rig.is_empty() {
@@ -286,6 +286,13 @@ pub struct FixtureInstance {
     /// addressed and reported on; what it does not have is a second body over the top.
     #[serde(default)]
     pub drawn_as_scenery: bool,
+    /// A 3D Point: a reference other placements follow, not a thing on stage.
+    ///
+    /// It stays in the scene so its pose resolves against where it was rigged and everything
+    /// slaved to it moves, but it has no body, no beam and no plan symbol, cannot be clicked, and
+    /// does not frame the rig.
+    #[serde(default)]
+    pub invisible: bool,
     /// The 3D Point this instance is slaved to, if any. Its live pose arrives with the values
     /// rather than the scene, because an operator moves a point far more often than they repatch.
     #[serde(default)]
@@ -923,6 +930,7 @@ mod tests {
     fn the_bracket_angle_turns_the_fixture_about_its_own_transverse_axis() {
         let mut fixture = FixtureInstance {
             drawn_as_scenery: false,
+            invisible: false,
             instance_id: Uuid::nil(),
             fixture_id: Uuid::nil(),
             name: "Lantern".into(),
@@ -962,6 +970,7 @@ mod tests {
     fn a_fixture_with_no_bracket_angle_keeps_its_mounting_rotation_exactly() {
         let fixture = FixtureInstance {
             drawn_as_scenery: false,
+            invisible: false,
             instance_id: Uuid::nil(),
             fixture_id: Uuid::nil(),
             name: "Lantern".into(),
@@ -1020,6 +1029,7 @@ mod tests {
     fn rigged_spot(position: Vec3) -> FixtureInstance {
         FixtureInstance {
             drawn_as_scenery: false,
+            invisible: false,
             instance_id: Uuid::nil(),
             fixture_id: Uuid::nil(),
             name: "Spot".into(),
@@ -1081,6 +1091,7 @@ mod tests {
         let mut scene = Scene::default();
         scene.fixtures.push(FixtureInstance {
             drawn_as_scenery: false,
+            invisible: false,
             instance_id: Uuid::nil(),
             fixture_id: Uuid::nil(),
             name: "Spot".into(),

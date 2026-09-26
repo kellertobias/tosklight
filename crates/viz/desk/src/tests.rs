@@ -697,6 +697,23 @@ fn a_venue_object_slaved_to_a_point_carries_the_master_onto_its_scenery() {
     assert_eq!(loose.position_master, None);
     // The point itself, with no address, is bound to no universe: the desk states its pose.
     assert!(plan.position_points.is_empty());
+    // The point stays in the scene, so its pose resolves where it was rigged, but it is a
+    // reference and not a lantern: nothing draws it and it sends no beam.
+    let (index, point_instance) = plan
+        .scene
+        .fixtures
+        .iter()
+        .enumerate()
+        .find(|(_, fixture)| fixture.fixture_id == master)
+        .expect("the point is in the scene");
+    assert!(point_instance.invisible);
+    assert!(
+        plan.scene
+            .emitters
+            .iter()
+            .all(|emitter| emitter.fixture_index as usize != index),
+        "a 3D Point has no beam"
+    );
     // Flown down a metre and a half, the truss's drawn object follows the point.
     let pose = viz_scene::PointPose {
         fixture_id: master,

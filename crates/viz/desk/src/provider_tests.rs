@@ -165,6 +165,7 @@ mod network_rule_tests {
             installed_shaper_angles_degrees: [0.0; 4],
             body: viz_scene::FixtureBody::default(),
             drawn_as_scenery: false,
+            invisible: false,
             position_master: None,
             patched: false,
             address: None,

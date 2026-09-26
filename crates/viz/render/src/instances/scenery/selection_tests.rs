@@ -13,6 +13,7 @@ fn venue_object(scene: &mut Scene, id: u128, x: f32) {
         fixture_id: Uuid::from_u128(id),
         instance_id,
         drawn_as_scenery: true,
+        invisible: false,
         position: Vec3::new(x, 1.0, 0.0),
         ..FixtureInstance::default()
     });

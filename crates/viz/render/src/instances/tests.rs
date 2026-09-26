@@ -236,6 +236,7 @@ use viz_scene::{EmitterLayoutCells, EmitterOptics, FixtureBody, LightSource, Mot
 fn fixture() -> FixtureInstance {
     FixtureInstance {
         drawn_as_scenery: false,
+        invisible: false,
         instance_id: viz_scene::uuid::Uuid::nil(),
         fixture_id: viz_scene::uuid::Uuid::nil(),
         name: "Test".into(),

@@ -40,6 +40,10 @@ pub fn pick(scene: &Scene, ray: &Ray, reach: f32, points: &[viz_scene::PointPose
     let mut nearest_distance = f32::INFINITY;
 
     for (index, fixture) in scene.fixtures.iter().enumerate() {
+        // Nothing is drawn for a 3D Point, so there is nothing there to click.
+        if fixture.invisible {
+            continue;
+        }
         let half = (fixture.body.size * 0.5).max(Vec3::splat(MINIMUM_HALF_EXTENT));
         // Hit the fixture where it is drawn. A fixture slaved to a 3D Point that moved is no
         // longer where the rig put it, and an operator must be able to click the thing they see.
@@ -164,6 +168,7 @@ mod tests {
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
             drawn_as_scenery: false,
+            invisible: false,
             body: FixtureBody {
                 size: Vec3::new(0.3, 0.4, 0.3),
                 kind: BodyKind::MovingHead,

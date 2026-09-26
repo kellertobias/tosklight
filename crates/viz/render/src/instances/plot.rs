@@ -80,6 +80,10 @@ pub(super) fn push_plot(
 
     let grouped = super::grouped_selection(scene, &values.selected_fixtures);
     for (index, fixture) in scene.fixtures.iter().enumerate() {
+        // A 3D Point is a reference, not a lantern: the plan draws no symbol for it.
+        if fixture.invisible {
+            continue;
+        }
         let lights = makes_light.get(index).copied().unwrap_or(false);
         let selected = values.selected_fixtures.contains(&fixture.fixture_id);
         let selected_ink = super::selection_ink(style, &grouped, fixture.fixture_id);

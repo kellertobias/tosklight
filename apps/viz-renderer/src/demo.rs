@@ -221,6 +221,7 @@ fn push_demo_laser(scene: &mut Scene) {
     let laser = scene.fixtures.len();
     scene.fixtures.push(FixtureInstance {
         drawn_as_scenery: false,
+        invisible: false,
         instance_id: Uuid::from_u128(0x1a5e_0000_0000_0000_0000_0000_0000_0001),
         fixture_id: Uuid::from_u128(0x1a5e_0000_0000_0000_0000_0000_0000_0001),
         name: "Laser".into(),
@@ -288,6 +289,7 @@ fn push_demo_effect(scene: &mut Scene) {
     let identity = Uuid::from_u128(0xefec_7000_0000_0000_0000_0000_0000_0001);
     scene.fixtures.push(FixtureInstance {
         drawn_as_scenery: false,
+        invisible: false,
         instance_id: identity,
         fixture_id: identity,
         name: "Cold Spark".into(),
@@ -340,6 +342,7 @@ fn push_demo_hazer(scene: &mut Scene) {
     let hazer = scene.fixtures.len();
     scene.fixtures.push(FixtureInstance {
         drawn_as_scenery: false,
+        invisible: false,
         instance_id: Uuid::nil(),
         fixture_id: Uuid::nil(),
         name: "Hazer".into(),
@@ -468,6 +471,7 @@ pub(crate) fn build_scene() -> Scene {
             let index = scene.fixtures.len();
             scene.fixtures.push(FixtureInstance {
                 drawn_as_scenery: false,
+                invisible: false,
                 instance_id: Uuid::nil(),
                 fixture_id: Uuid::nil(),
                 name: format!("Moving head {}.{}", truss + 1, slot + 1),
@@ -526,6 +530,7 @@ pub(crate) fn build_scene() -> Scene {
         let x = -5.0 + slot as f32 * 2.0;
         scene.fixtures.push(FixtureInstance {
             drawn_as_scenery: false,
+            invisible: false,
             instance_id: Uuid::nil(),
             fixture_id: Uuid::nil(),
             name: format!("Pixel bar {}", slot + 1),

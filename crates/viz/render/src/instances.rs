@@ -566,8 +566,9 @@ fn push_bodies(
 ) {
     let grouped = grouped_selection(scene, selection);
     for (fixture_index, fixture) in scene.fixtures.iter().enumerate() {
-        // Built at the size it was placed by the scenery pass, so it has no body here.
-        if fixture.drawn_as_scenery {
+        // Built at the size it was placed by the scenery pass, so it has no body here; a 3D Point
+        // has none at all.
+        if fixture.drawn_as_scenery || fixture.invisible {
             continue;
         }
         let (fixture_position, fixture_orientation) = fixture.placed_by(points);

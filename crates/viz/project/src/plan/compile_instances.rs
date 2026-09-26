@@ -26,6 +26,7 @@ pub(super) fn compile_instances(
     physics: Option<PhysicsProgram>,
 ) {
     let geometry = fixture.profile.mode_geometry(mode);
+    let point = is_position_point(mode);
     let shared_addresses = fixture
         .instances
         .iter()
@@ -50,6 +51,7 @@ pub(super) fn compile_instances(
             .and_then(|drawn| Some(drawn.bracket_hinge? * drawn.scale_to(size)));
         scene.fixtures.push(FixtureInstance {
             drawn_as_scenery: generated_scenery.is_some(),
+            invisible: point,
             instance_id: instance.instance_id,
             fixture_id: fixture.fixture_id,
             name: instance.name.clone(),
@@ -96,8 +98,8 @@ pub(super) fn compile_instances(
         if let Some(object) = generated_scenery {
             scene.scenery.push(object);
         }
-        if let Some(point) = position_point_binding(fixture, instance, mode, &channels) {
-            position_points.push(point);
+        if let Some(binding) = position_point_binding(fixture, instance, mode, &channels) {
+            position_points.push(binding);
         }
         match external_camera_binding(fixture, instance, mode, &channels) {
             Ok(Some(candidate)) if external_camera.is_none() && external_camera_issue.is_none() => {
@@ -122,6 +124,11 @@ pub(super) fn compile_instances(
                 *external_camera_issue = Some(detail.clone());
                 warnings.push(detail);
             }
+        }
+        // A 3D Point sends no light: the fallback projector a model-less profile gets would put a
+        // beam where there is only a reference.
+        if point {
+            continue;
         }
         build_emitters(
             scene,
@@ -439,5 +446,14 @@ fn generated_scenery(
         chords: declared.chords,
         detail: scenery_detail(declared, &instance.scenery_options),
         position_master: None,
+    })
+}
+
+/// Whether the mode is a 3D Point's: it carries the point's position, the same test the desk and
+/// the Architect apply.
+fn is_position_point(mode: &FixtureMode) -> bool {
+    mode.channels.iter().any(|channel| {
+        &*channel.attribute.0 == "point.position.x"
+            || &*channel.fixture_attribute.0 == "point.position.x"
     })
 }

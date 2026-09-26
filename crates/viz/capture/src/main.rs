@@ -510,6 +510,7 @@ mod tests {
 
         let fixture = |name: &str, position: Vec3| FixtureInstance {
             drawn_as_scenery: false,
+            invisible: false,
             instance_id: Uuid::new_v4(),
             fixture_id: Uuid::new_v4(),
             name: name.to_owned(),

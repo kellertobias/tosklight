@@ -148,6 +148,7 @@ mod tests {
         let mut scene = Scene::default();
         scene.fixtures.push(viz_scene::FixtureInstance {
             drawn_as_scenery: false,
+            invisible: false,
             instance_id: nil,
             fixture_id: nil,
             name: "Spot".into(),
