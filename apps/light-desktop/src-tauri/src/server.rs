@@ -32,7 +32,20 @@ impl ServerProcess {
             let _ = child.kill();
             let _ = child.wait();
         }
+        // `launch` can reuse a server that was already listening on the desk port. In that case
+        // there is no Child handle to reap, but the reused process is still the desk's server and
+        // must not outlive the desktop application (or keep its sidecar locked during an update).
+        #[cfg(target_os = "windows")]
+        stop_windows_sidecar();
     }
+}
+
+#[cfg(target_os = "windows")]
+fn stop_windows_sidecar() {
+    let _ = Command::new("taskkill")
+        .args(["/F", "/IM", "light-headless.exe"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .status();
 }
 
 impl Drop for ServerProcess {

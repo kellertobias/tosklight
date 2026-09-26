@@ -345,6 +345,21 @@ function desktopFolder(platform) {
 function quitInstalled(platform, installed) {
 	if (platform === "darwin" && fs.existsSync(installed))
 		spawnSync("osascript", ["-e", `quit app "${installed}"`], { stdio: "ignore" });
+	if (platform === "win32") {
+		const executable = path.win32.basename(installed).replace(/\.exe$/iu, "");
+		const script = [
+			`$names=@('${executable.replaceAll("'", "''")}','light-headless')`,
+			"$names | ForEach-Object { Get-Process -Name $_ -ErrorAction SilentlyContinue | Stop-Process -Force }",
+			"$deadline=(Get-Date).AddSeconds(10)",
+			"while ((Get-Process -Name $names -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }",
+			"if (Get-Process -Name $names -ErrorAction SilentlyContinue) { exit 1 }",
+		].join("; ");
+		const result = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
+			stdio: "ignore",
+		});
+		if (result.status !== 0)
+			throw new Error(`could not stop ${path.win32.basename(installed)} and its Light server before installation`);
+	}
 }
 
 function installAppImage(image, destination) {

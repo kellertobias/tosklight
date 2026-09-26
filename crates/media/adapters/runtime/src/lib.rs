@@ -365,6 +365,13 @@ fn prepare_configuration() -> Result<MediaConfiguration, StartupError> {
 /// Makes a Finder-launch failure actionable even though no Terminal window exists.
 fn show_startup_error(error: &anyhow::Error) {
     tracing::error!(%error, "ToskLight Pixel could not start");
+    #[cfg(all(target_os = "windows", feature = "tray"))]
+    let _ = rfd::MessageDialog::new()
+        .set_title("ToskLight Pixel")
+        .set_description(format!("ToskLight Pixel could not start.\n\n{error}"))
+        .set_level(rfd::MessageLevel::Error)
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
     #[cfg(target_os = "macos")]
     if running_from_macos_app_bundle() {
         let message = format!("ToskLight Pixel could not start.\n\n{error}");
