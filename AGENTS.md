@@ -122,6 +122,10 @@ If the app looks stale, verify the bundle opened by the current `build` script b
 
 - `origin` is the private Forgejo at `git.tokenet.de`. It is the normal upstream: push there, and
   do not ask whether to push.
+- On Tobias's Windows machine, default SSH does not select the existing ToskLight key. Before
+  fetch/push, use the verified setup in the parent project `AGENTS.md` under "Git on this Windows
+  machine". Preserve its nested known-hosts quoting and strict host verification. Fetch first,
+  preserve other agents' remote commits, and verify the pushed hash; never force push to main.
 - **CI does not run on Forgejo.** Forgejo mirrors to GitHub internally, and the pipeline runs there
   as GitHub Actions on `kellertobias/tosklight`. The mirror lags a push by a minute or two.
 - Read CI with `gh`, which is already authenticated, and always name the mirror explicitly because
