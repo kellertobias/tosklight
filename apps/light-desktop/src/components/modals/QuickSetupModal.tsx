@@ -25,6 +25,15 @@ import { screenForAddAction } from "../setup/screenConfiguration";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useSelectiveImport } from "../../features/selectiveImport/SelectiveImportContext";
 import { QuickSetupDialogs } from "./QuickSetupDialogs";
+import { usePatchedFixturesView } from "../../features/patch/PatchState";
+import { configuredServerUrl } from "../../api/client/serverLocation";
+import { showPatchSummary } from "./showSummary";
+
+function showDate(value?: string | null): string {
+	if (!value) return "Unknown";
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
+}
 
 interface QuickSetupKeyboardOptions {
 	enabled: boolean;
@@ -319,6 +328,8 @@ function useQuickSetupModel() {
 	);
 	const flashDriveConnected = false;
 	const showIndicator = useShowIndicator();
+	const patchedFixtures = usePatchedFixturesView(state.setupOpen);
+	const patchSummary = showPatchSummary(patchedFixtures);
 	const activeShow = bootstrap?.active_show;
 	const activeShowIsProvisional = /^New Empty Show(?: [1-9]\d*)?$/.test(
 		activeShow?.name ?? "",
@@ -435,6 +446,7 @@ function useQuickSetupModel() {
 			revisionCopy,
 			revisionsByShow,
 			showIndicator,
+			patchSummary,
 		},
 	};
 }
@@ -493,13 +505,14 @@ function QuickSetupTitleBar({ model }: { model: QuickSetupModel }) {
 }
 
 function QuickSetupShowDetails({ model }: { model: QuickSetupModel }) {
-	const { activeRevisions, activeShow, revisionCopy, showIndicator } =
+	const { activeRevisions, activeShow, revisionCopy, showIndicator, patchSummary } =
 		model.view;
-	const { session } = model.authorities;
+	const { bootstrap } = model.authorities;
 	const dialogs = model.dialogs;
+	const latestRevision = activeRevisions[0];
+	const serverAddress = new URL(configuredServerUrl()).hostname;
 	return (
 		<div className="show-details">
-			<b>{activeShow?.name ?? "No active show"}</b>
 			{revisionCopy && (
 				<div className="revision-copy-notice" role="status">
 					<strong>Separate revision copy</strong>
@@ -514,32 +527,27 @@ function QuickSetupShowDetails({ model }: { model: QuickSetupModel }) {
 				</div>
 			)}
 			<div
-				className={`show-status-explanation ${showIndicator.className}`}
+				className={`show-status-explanation ${activeShow ? "show-status-connected" : "show-status-warning"}`}
 				role="status"
 			>
 				<span className="show-status-dot" aria-hidden="true">
 					●
 				</span>
 				<span>
-					<strong>{showIndicator.label}</strong>
-					<small>{showIndicator.detail}</small>
+					<strong>Current show: {activeShow?.name ?? "None"}</strong>
+					<small>Created: {showDate(activeShow?.created_at)}</small>
+					<small>Previously loaded: {showDate(activeShow?.last_loaded_at)}</small>
+					<small>Last saved: {showDate(activeShow?.updated_at)}</small>
+					<small>Last named revision: {latestRevision ? `${latestRevision.name} · ${showDate(latestRevision.created_at)}` : "None"}</small>
 				</span>
 			</div>
-			<span>
-				Server connected{" "}
-				<strong>{showIndicator.connected ? "Yes" : "No"}</strong>
-			</span>
-			<span>
-				Latest named revision{" "}
-				<strong>
-					{activeRevisions[0]
-						? `${activeRevisions[0].revision} · ${activeRevisions[0].name}`
-						: "None"}
-				</strong>
-			</span>
-			<span>
-				Operator <strong>{session ? "connected" : "—"}</strong>
-			</span>
+			<div className="show-status-line"><strong>Status</strong><span>Server {showIndicator.connected ? "connected" : "disconnected"} · Hardware {bootstrap?.hardware_connected ? "connected" : "disconnected"}</span></div>
+			<div className="show-facts">
+				<span>DMX universes <strong>{patchSummary.universes}</strong></span>
+				<span>IP address <strong>{serverAddress}</strong></span>
+				<span>Parameters sent <strong>{patchSummary.parameters}</strong></span>
+				<span>Software build <strong>{__LIGHT_BUILD__}</strong></span>
+			</div>
 			<div className="show-primary-actions">
 				<Button onClick={() => dialogs.setRevisionOpen(true)}>
 					<span aria-hidden="true">💾</span> Save Named Revision

@@ -410,6 +410,8 @@ mod tests {
             path: "standalone.show".into(),
             revision: 3,
             updated_at: String::new(),
+            created_at: None,
+            last_loaded_at: None,
             revision_copy: None,
         };
 

@@ -1,6 +1,9 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { artifactPaths } from "../../tools/artifact-paths.mjs";
+import packageJson from "./package.json";
+
+const build = `${packageJson.version} · ${new Date().toISOString()}`;
 
 const isCi = Boolean(
   (globalThis as { process?: { env?: Record<string, string | undefined> } })
@@ -8,6 +11,7 @@ const isCi = Boolean(
 );
 
 export default defineConfig({
+  define: { __LIGHT_BUILD__: JSON.stringify(build) },
   cacheDir: `${artifactPaths.viteCache}/light-desktop`,
   plugins: [react()],
   build: { outDir: artifactPaths.controlFrontend, emptyOutDir: true },

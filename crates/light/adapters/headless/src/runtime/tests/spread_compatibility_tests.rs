@@ -84,6 +84,8 @@ fn legacy_spread_show(
         path: path.display().to_string(),
         revision,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     // Settle the seeded patch once through the committed startup path (the inline fixture

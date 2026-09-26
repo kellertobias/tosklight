@@ -38,6 +38,8 @@ pub(super) fn show(show: ShowEntry) -> wire::RuntimeShowEntry {
         path: show.path,
         revision: show.revision,
         updated_at: show.updated_at,
+        created_at: show.created_at,
+        last_loaded_at: show.last_loaded_at,
         revision_copy: show
             .revision_copy
             .map(|source| wire::RuntimeRevisionCopySource {

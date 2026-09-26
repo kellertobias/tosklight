@@ -534,6 +534,8 @@ fn extension_feedback_context_reaches_the_desk_and_carries_show_generation() {
         path: data_dir.join("feedback.show").display().to_string(),
         revision: 19,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     state.active_show.replace_current(Some(show.clone()));

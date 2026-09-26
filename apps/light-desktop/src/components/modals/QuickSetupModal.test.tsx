@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
         name: "Tour-rev-3-2026-07-17",
         revision: 1,
         updated_at: "2026-07-17T12:00:00Z",
+        created_at: "2026-07-01T10:00:00Z",
+        last_loaded_at: "2026-07-16T09:00:00Z",
         path: "copy.show",
         revision_copy: {
           show_id: "original",
@@ -130,6 +132,20 @@ afterEach(() => {
 });
 
 describe("QuickSetupModal show workflows", () => {
+  it("shows the current show, history, connection state, patch size, address, and build", () => {
+    render(<QuickSetupModal />);
+    const menu = screen.getByRole("dialog", { name: "Show" });
+    expect(menu).toHaveTextContent("Current show: Tour-rev-3-2026-07-17");
+    expect(menu).toHaveTextContent("Created:");
+    expect(menu).toHaveTextContent("Previously loaded:");
+    expect(menu).toHaveTextContent("Last saved:");
+    expect(menu).toHaveTextContent("Last named revision:");
+    expect(menu).toHaveTextContent("Server disconnected · Hardware disconnected");
+    expect(menu).toHaveTextContent("DMX universes 0");
+    expect(menu).toHaveTextContent("IP address localhost");
+    expect(menu).toHaveTextContent("Parameters sent 0");
+    expect(menu).toHaveTextContent("Software build");
+  });
   it("identifies the active copy and requires confirmation before overwriting the original", async () => {
     render(<QuickSetupModal />);
     const menu = screen.getByRole("dialog", { name: "Show" });

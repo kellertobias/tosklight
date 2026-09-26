@@ -168,6 +168,8 @@ fn explicit_profile_preset_generation_writes_portable_show_objects() {
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     let store = ShowStore::open(&show_path).unwrap();

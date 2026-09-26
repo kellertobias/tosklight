@@ -1,5 +1,17 @@
 use super::*;
 
+pub(super) fn record_explicit_show_load(
+    state: &AppState,
+    id: light_core::ShowId,
+) -> Result<ShowEntry, ApiError> {
+    let entry = state
+        .installation
+        .mark_show_loaded(id)
+        .map_err(ApiError::store)?;
+    state.active_show.replace_current(Some(entry.clone()));
+    Ok(entry)
+}
+
 pub(super) async fn open_show(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -44,6 +56,7 @@ pub(super) async fn open_show(
         .installation
         .set_active_show(Some(entry.id))
         .map_err(ApiError::store)?;
+    let entry = record_explicit_show_load(&state, entry.id)?;
     emit(
         &state,
         "show_opened",
@@ -114,6 +127,7 @@ pub(super) async fn open_clean_default_show(
             .set_setting("previous_active_show_id", &previous.id.0.to_string())
             .map_err(ApiError::store)?;
     }
+    let entry = record_explicit_show_load(&state, entry.id)?;
     emit(
         &state,
         "show_opened",
@@ -167,6 +181,7 @@ pub(super) async fn rollback_show(
             .set_setting("previous_active_show_id", &current.id.0.to_string())
             .map_err(ApiError::store)?;
     }
+    let entry = record_explicit_show_load(&state, entry.id)?;
     emit(
         &state,
         "show_rolled_back",

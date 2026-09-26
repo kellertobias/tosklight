@@ -4,6 +4,8 @@ export interface ShowEntry {
 	path: string;
 	revision: number;
 	updated_at: string;
+	created_at?: string | null;
+	last_loaded_at?: string | null;
 	revision_copy?: RevisionCopySource;
 }
 

@@ -582,6 +582,8 @@ impl ActiveObjectScenario {
             path: show_path.display().to_string(),
             revision: 0,
             updated_at: String::new(),
+            created_at: None,
+            last_loaded_at: None,
             revision_copy: None,
         };
         state.active_show.replace_current(Some(entry.clone()));

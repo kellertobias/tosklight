@@ -23,6 +23,7 @@ pub(super) async fn apply_legacy_mvr_import(
         new_definitions,
         resolutions,
     } = import;
+    let mut entry = entry;
     let temporary = state
         .installation
         .data_dir()
@@ -91,6 +92,7 @@ pub(super) async fn apply_legacy_mvr_import(
             .installation
             .set_active_show(Some(entry.id))
             .map_err(ApiError::store)?;
+        entry = record_explicit_show_load(state, entry.id)?;
     }
     drop(show_change);
     emit(

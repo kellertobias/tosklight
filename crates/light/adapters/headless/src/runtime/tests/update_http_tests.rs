@@ -175,6 +175,8 @@ fn locked_desk_can_preview_update_but_cannot_apply_it() {
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     }));
     ShowStore::open(&show_path)

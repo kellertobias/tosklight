@@ -27,6 +27,8 @@ impl CommandContractScenario {
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     let store = ActiveShowRepository::open(&show_path).unwrap();

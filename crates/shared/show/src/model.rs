@@ -229,6 +229,10 @@ pub struct ShowEntry {
     pub revision: Revision,
     pub updated_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_loaded_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision_copy: Option<RevisionCopySource>,
 }
 

@@ -92,6 +92,10 @@ pub struct RuntimeShowEntry {
     pub revision: u64,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_loaded_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub revision_copy: Option<RuntimeRevisionCopySource>,
 }
 

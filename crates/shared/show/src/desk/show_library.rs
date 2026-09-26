@@ -8,7 +8,7 @@ use uuid::Uuid;
 impl DeskStore {
     pub fn library(&self) -> Result<Vec<ShowEntry>, StoreError> {
         let mut statement = self.conn.prepare(
-            "SELECT id,name,path,revision,updated_at,revision_source_show_id,revision_source_show_name,revision_source_revision,revision_source_name,revision_copy_created_at FROM show_library ORDER BY name COLLATE NOCASE",
+            "SELECT id,name,path,revision,updated_at,created_at,last_loaded_at,revision_source_show_id,revision_source_show_name,revision_source_revision,revision_source_name,revision_copy_created_at FROM show_library ORDER BY name COLLATE NOCASE",
         )?;
         let rows = statement.query_map([], |row| {
             Ok((
@@ -19,9 +19,11 @@ impl DeskStore {
                 row.get::<_, String>(4)?,
                 row.get::<_, Option<String>>(5)?,
                 row.get::<_, Option<String>>(6)?,
-                row.get::<_, Option<i64>>(7)?,
+                row.get::<_, Option<String>>(7)?,
                 row.get::<_, Option<String>>(8)?,
-                row.get::<_, Option<String>>(9)?,
+                row.get::<_, Option<i64>>(9)?,
+                row.get::<_, Option<String>>(10)?,
+                row.get::<_, Option<String>>(11)?,
             ))
         })?;
         rows.map(|row| {
@@ -31,6 +33,8 @@ impl DeskStore {
                 path,
                 revision,
                 updated_at,
+                created_at,
+                last_loaded_at,
                 source_show_id,
                 source_show_name,
                 source_revision,
@@ -63,6 +67,8 @@ impl DeskStore {
                 path,
                 revision: revision as u64,
                 updated_at,
+                created_at,
+                last_loaded_at,
                 revision_copy,
             })
         })
@@ -112,7 +118,7 @@ impl DeskStore {
         } else {
             let id = ShowId::new();
             self.conn.execute(
-                "INSERT INTO show_library (id,name,path,revision,updated_at,revision_source_show_id,revision_source_show_name,revision_source_revision,revision_source_name,revision_copy_created_at) VALUES (?1,?2,?3,1,?4,?5,?6,?7,?8,?9)",
+                "INSERT INTO show_library (id,name,path,revision,updated_at,created_at,revision_source_show_id,revision_source_show_name,revision_source_revision,revision_source_name,revision_copy_created_at) VALUES (?1,?2,?3,1,?4,?4,?5,?6,?7,?8,?9)",
                 params![
                     id.0.to_string(),
                     name,
@@ -134,6 +140,19 @@ impl DeskStore {
     pub fn mark_show_updated(&self, id: ShowId) -> Result<ShowEntry, StoreError> {
         if self.conn.execute(
             "UPDATE show_library SET revision=revision+1,updated_at=?1 WHERE id=?2",
+            params![Utc::now().to_rfc3339(), id.0.to_string()],
+        )? != 1
+        {
+            return Err(StoreError::Invalid("show does not exist".into()));
+        }
+        self.show(id)?
+            .ok_or_else(|| StoreError::Invalid("show index update failed".into()))
+    }
+
+    /// Records an operator-initiated load. Startup restoration deliberately does not call this.
+    pub fn mark_show_loaded(&self, id: ShowId) -> Result<ShowEntry, StoreError> {
+        if self.conn.execute(
+            "UPDATE show_library SET last_loaded_at=?1 WHERE id=?2",
             params![Utc::now().to_rfc3339(), id.0.to_string()],
         )? != 1
         {

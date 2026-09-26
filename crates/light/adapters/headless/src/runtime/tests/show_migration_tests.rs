@@ -13,6 +13,8 @@ fn migration_test_entry(
         path: path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     }
 }

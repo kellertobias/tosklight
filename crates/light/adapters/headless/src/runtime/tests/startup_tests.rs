@@ -240,6 +240,8 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     let page = light_playback::PlaybackPage {
@@ -355,6 +357,8 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
         path: data_dir.join("shows/restored-exclusions.show").display().to_string(),
         revision: 7,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     state.active_show.replace_current(Some(show.clone()));
@@ -485,6 +489,8 @@ fn automatic_chaser_transition_checkpoints_its_order_before_restart() {
             .to_string(),
         revision: 1,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     state.active_show.replace_current(Some(show.clone()));
@@ -562,6 +568,8 @@ fn restored_exclusions_replay_each_activation_against_show_owned_zones() {
             path: data_dir.join("shows/desk-exact.show").display().to_string(),
             revision: 1,
             updated_at: String::new(),
+            created_at: None,
+            last_loaded_at: None,
             revision_copy: None,
         };
         state.active_show.replace_current(Some(show.clone()));
@@ -642,6 +650,8 @@ fn timed_preload_release_restart_keeps_the_original_activation_order() {
         path: data_dir.join("shows/timed-preload.show").display().to_string(),
         revision: 1,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     state.active_show.replace_current(Some(show.clone()));

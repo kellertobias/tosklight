@@ -10,6 +10,8 @@ fn invalid_active_show_enters_recovery_instead_of_aborting_startup() {
             .to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     let error = compile_active_show_for_startup(&engine, &entry, &std::env::temp_dir(), 5)
@@ -104,6 +106,8 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     let mut snapshot = load_engine_snapshot(&entry).unwrap();
@@ -256,6 +260,8 @@ fn assign_group_at_page_slot_assigns_a_group_master_and_set_rejects_assignment()
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     let store = ShowStore::open(&show_path).unwrap();
@@ -369,6 +375,8 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     let store = ShowStore::open(&show_path).unwrap();
@@ -496,6 +504,8 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     let fixtures = (0..4)

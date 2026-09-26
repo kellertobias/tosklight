@@ -72,6 +72,13 @@ impl InstallationResource {
         self.desk.lock().mark_show_updated(id)
     }
 
+    pub(in crate::runtime) fn mark_show_loaded(
+        &self,
+        id: light_core::ShowId,
+    ) -> Result<ShowEntry, light_show::StoreError> {
+        self.desk.lock().mark_show_loaded(id)
+    }
+
     pub(in crate::runtime) fn rename_show(
         &self,
         id: light_core::ShowId,

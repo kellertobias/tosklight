@@ -103,6 +103,8 @@ fn command_line_update_all_adds_new_group_content_without_using_a_desk_default()
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     state.active_show.replace_current(Some(entry));
@@ -306,6 +308,8 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     };
     state.active_show.replace_current(Some(entry.clone()));

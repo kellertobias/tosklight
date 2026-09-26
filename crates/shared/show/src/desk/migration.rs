@@ -6,7 +6,7 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction()?;
     tx.execute_batch(
         r#"CREATE TABLE IF NOT EXISTS schema_info(version INTEGER NOT NULL); INSERT INTO schema_info(version) SELECT 0 WHERE NOT EXISTS(SELECT 1 FROM schema_info);
-      CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,revision_source_show_id TEXT,revision_source_show_name TEXT,revision_source_revision INTEGER,revision_source_name TEXT,revision_copy_created_at TEXT);
+      CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,created_at TEXT,last_loaded_at TEXT,revision_source_show_id TEXT,revision_source_show_name TEXT,revision_source_revision INTEGER,revision_source_name TEXT,revision_copy_created_at TEXT);
       CREATE TABLE IF NOT EXISTS show_revisions(show_id TEXT NOT NULL,revision INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(show_id,revision),FOREIGN KEY(show_id) REFERENCES show_library(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,playback_layout_json TEXT,client_id TEXT,last_connected_at TEXT);
@@ -106,6 +106,9 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
         "revision_copy_created_at",
         "revision_copy_created_at TEXT",
     )?;
+    // Existing shows have no trustworthy creation or prior load timestamp.
+    add_column_if_missing(&tx, "show_library", "created_at", "created_at TEXT")?;
+    add_column_if_missing(&tx, "show_library", "last_loaded_at", "last_loaded_at TEXT")?;
     set_schema_version(&tx, DESK_SCHEMA_VERSION)?;
     tx.commit()?;
     drop_desk_osc_alias(conn)?;

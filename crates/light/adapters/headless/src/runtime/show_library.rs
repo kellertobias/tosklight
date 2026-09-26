@@ -138,6 +138,7 @@ pub(super) async fn open_show_revision(
             .set_setting("previous_active_show_id", &previous.id.0.to_string())
             .map_err(ApiError::store)?;
     }
+    let copy = record_explicit_show_load(&state, copy.id)?;
     emit(
         &state,
         "show_opened",

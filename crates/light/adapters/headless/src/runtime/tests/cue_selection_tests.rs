@@ -72,6 +72,8 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
         path: data_dir.join("selection.show").display().to_string(),
         revision: 0,
         updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     }));
     let list_id = light_core::CueListId::new();

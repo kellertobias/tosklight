@@ -65,6 +65,28 @@ fn named_show_revisions_are_numbered_and_survive_reopen() {
 }
 
 #[test]
+fn show_creation_and_explicit_load_times_survive_reopen_without_changing_last_save() {
+    let path = temporary("show-history");
+    let show_id = {
+        let desk = DeskStore::open(&path).unwrap();
+        let created = desk.upsert_show("Tour", "tour.show", false).unwrap();
+        assert!(created.created_at.is_some());
+        assert_eq!(created.last_loaded_at, None);
+        let loaded = desk.mark_show_loaded(created.id).unwrap();
+        assert!(loaded.last_loaded_at.is_some());
+        assert_eq!(loaded.created_at, created.created_at);
+        assert_eq!(loaded.updated_at, created.updated_at);
+        created.id
+    };
+    let desk = DeskStore::open(&path).unwrap();
+    let reopened = desk.show(show_id).unwrap().unwrap();
+    assert!(reopened.created_at.is_some());
+    assert!(reopened.last_loaded_at.is_some());
+    drop(desk);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
 fn revision_copy_provenance_survives_reopen_and_source_deletion() {
     let desk_path = temporary("revision-copy-desk");
     let source_path = temporary("revision-copy-source");
@@ -143,6 +165,8 @@ fn desk_schema_six_migrates_existing_shows_without_copy_provenance() {
     let legacy = desk.show(show_id).unwrap().unwrap();
     assert_eq!(legacy.name, "Legacy");
     assert!(legacy.revision_copy.is_none());
+    assert_eq!(legacy.created_at, None);
+    assert_eq!(legacy.last_loaded_at, None);
     let version: i64 = desk
         .conn
         .query_row("SELECT version FROM schema_info", [], |row| row.get(0))

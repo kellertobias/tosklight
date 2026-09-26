@@ -307,6 +307,8 @@ fn enable_highlight_test_feedback(state: &AppState) {
             .to_string(),
         revision: 0,
         updated_at: chrono::Utc::now().to_rfc3339(),
+        created_at: None,
+        last_loaded_at: None,
         revision_copy: None,
     }));
 }
