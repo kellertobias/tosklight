@@ -505,9 +505,9 @@ mod tests {
             "Model Tilt,LTP,3,P1B",
             "Vis Param 1,LTP,20,B4A",
             "Vis Param 4,LTP,23,B4D",
-            "Speed Multiplier,LTP,11,B1E",
-            "Play Mode,LTP,10,B1F",
-            "Media Folder,LTP,9,B1Y",
+            "Speed Multiplier,LTP,59,B1E",
+            "Play Mode,LTP,58,B1F",
+            "Media Folder,LTP,10,B1Y",
             "Media File,LTP,8,B1X",
             "Cyan,LTP,16,C1E",
             "Magenta,LTP,17,C1F",
@@ -535,8 +535,8 @@ mod tests {
             "Mask Scale Y,LTP,55,B5D",
             "Mask Invert,LTP,56,B5E",
             "Mask Opacity,LTP,57,B5F",
-            "Mask Folder,LTP,58,B5Y",
-            "Mask File,LTP,59,B5X",
+            "Mask Folder,LTP,11,B5Y",
+            "Mask File,LTP,9,B5X",
         ] {
             assert!(csv.contains(mapping), "missing MagicQ mapping {mapping}");
         }

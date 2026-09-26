@@ -17,10 +17,12 @@ struct Control {
 fn control(name: &str, master: bool) -> Control {
     let (label, attribute, encoder) = if !master {
         match name {
-            "Folder" => ("Media Folder", 9, 0xc6),
+            // IPC B Split activates each Gobo/Rotate pair at its current output. Keep
+            // the two libraries in separate pairs, with independent transport controls.
+            "Folder" => ("Media Folder", 10, 0xc6),
             "File" => ("Media File", 8, 0xc7),
-            "Play mode" => ("Play Mode", 10, 0xc5),
-            "Speed multiplier" => ("Speed Multiplier", 11, 0xc4),
+            "Play mode" => ("Play Mode", 58, 0xc5),
+            "Speed multiplier" => ("Speed Multiplier", 59, 0xc4),
             "In point" => ("In Point", 12, 0xc0),
             "Out point" => ("Out Point", 14, 0xc1),
             "Blend mode" => ("Blend Mode", 15, 0xc2),
@@ -41,8 +43,8 @@ fn control(name: &str, master: bool) -> Control {
             // Generic Col1 stays available with CMY mixing. White (19) is an emitter
             // and MagicQ hides it when the fixture declares only three colour emitters.
             "Grayscale" => ("Greyscale", 6, 0x87),
-            "Mask folder" => ("Mask Folder", 58, 0xe6),
-            "Mask file" => ("Mask File", 59, 0xe7),
+            "Mask folder" => ("Mask Folder", 11, 0xe6),
+            "Mask file" => ("Mask File", 9, 0xe7),
             "Mask position X" => ("Mask Position X", 52, 0xe0),
             "Mask position Y" => ("Mask Position Y", 53, 0xe1),
             "Mask scale X" => ("Mask Scale X", 54, 0xe2),
@@ -547,6 +549,46 @@ mod tests {
                 vec![&(spec.offset, "Dynamic".to_owned(), 0, 255, false)]
             );
             assert_eq!(spec.default_value, 0);
+        }
+    }
+
+    #[test]
+    fn ipc_b_split_has_only_the_two_library_pairs_and_keeps_separate_encoders() {
+        let text = decode(&layer());
+        let lines: Vec<_> = text.lines().collect();
+        assert_eq!(LAYER_CHANNELS.len(), 59);
+        for (name, attribute, encoder) in [
+            ("File", 8, 0xc7),
+            ("Folder", 10, 0xc6),
+            ("Mask file", 9, 0xe7),
+            ("Mask folder", 11, 0xe6),
+            ("Play mode", 58, 0xc5),
+            ("Speed multiplier", 59, 0xc4),
+        ] {
+            let c = control(name, false);
+            assert_eq!((c.attribute, c.encoder), (attribute, encoder), "{name}");
+            let spec = LAYER_CHANNELS
+                .iter()
+                .find(|s| s.name == name)
+                .unwrap();
+            let row: Vec<_> = lines[4 + usize::from(spec.offset)].split(',').collect();
+            assert_eq!(
+                u32::from_str_radix(row[2], 16).unwrap(),
+                attribute,
+                "{name} HED"
+            );
+        }
+        for attribute in [8, 10, 9, 11] {
+            let assigned: Vec<_> = LAYER_CHANNELS
+                .iter()
+                .filter(|s| control(source(LAYER_CHANNELS, s).name, false).attribute == attribute)
+                .collect();
+            assert_eq!(
+                assigned.len(),
+                1,
+                "library attribute {attribute} must not activate unrelated channels"
+            );
+            assert!(indexed(assigned[0].name));
         }
     }
 
