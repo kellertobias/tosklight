@@ -16,6 +16,7 @@ import {
 	UpdateDefaultsFields,
 } from "../../components/setup/ProgrammerDefaults";
 import { PoolPaletteSettings } from "../../components/shared/PoolColorSettings";
+import { useApp } from "../../state/AppContext";
 import { AttributeRegistrySettings } from "./AttributeRegistrySettings";
 import type { SetupWindowController } from "./controller";
 
@@ -366,9 +367,24 @@ export function DefaultsSection({
 }: {
 	controller: SetupWindowController;
 }) {
+	const { state, dispatch } = useApp();
 	if (controller.defaultsTab === "pools")
 		return (
-			<PreferencesPage title="Pool color defaults" controller={controller}>
+			<PreferencesPage title="Pools" controller={controller}>
+				<article>
+					<NumberField
+						label="Minimum pool tile width (px)"
+						min="56"
+						max="320"
+						value={state.poolGridMinimumWidth}
+						onChange={(event) =>
+							dispatch({
+								type: "SET_POOL_GRID_MINIMUM_WIDTH",
+								value: Number(event.target.value),
+							})
+						}
+					/>
+				</article>
 				<article className="pool-color-defaults-card">
 					<PoolPaletteSettings hideTitle />
 				</article>

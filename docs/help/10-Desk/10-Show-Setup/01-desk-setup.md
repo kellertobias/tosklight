@@ -14,7 +14,7 @@ Work through these pages in order:
 4. [Operators, Sessions, and Recovery](05-users-sessions-and-recovery.md)
 5. [Media Server](../../30-ToskLight-Media/09-connect-the-desk.md)
 
-**Preferences** contains the focused **Defaults**, **Attributes & encoders**, **Highlight**, and **Others** pages. **Defaults** selects **Record & Update**, **Playback**, or **Pool colors** from the window title. Desk Setup saves each change immediately through the service that owns that setting; there is no separate Save changes step.
+**Preferences** contains the focused **Defaults**, **Attributes & encoders**, **Highlight**, and **Others** pages. **Defaults** selects **Record & Update**, **Playback**, or **Pools** from the window title. The Pools tab sets the minimum tile width for the shared Group, Preset, Cuelist, Macro, and Dynamics pools, as well as their default colors. Desk Setup saves each change immediately through the service that owns that setting; there is no separate Save changes step.
 
 **Attributes & encoders** selects its section from the window title: **Encoder groups**, **Attribute
 activation groups**, and **Attributes**.

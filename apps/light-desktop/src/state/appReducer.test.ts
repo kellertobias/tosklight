@@ -1338,6 +1338,37 @@ describe("appReducer Fixture Sheet and preset pane migrations", () => {
 });
 
 describe("appReducer pool and Set configuration", () => {
+	it("keeps the pool grid minimum in desk settings and tolerates old layouts", () => {
+		const changed = appReducer(initialState, {
+			type: "SET_POOL_GRID_MINIMUM_WIDTH",
+			value: 180,
+		});
+		expect(changed.poolGridMinimumWidth).toBe(180);
+		expect(
+			appReducer(changed, {
+				type: "HYDRATE_LAYOUT",
+				desks: changed.desks,
+				activeDeskId: changed.activeDeskId,
+				windowSettings: { poolGridMinimumWidth: 180 },
+			}).poolGridMinimumWidth,
+		).toBe(180);
+		expect(
+			appReducer(initialState, {
+				type: "HYDRATE_LAYOUT",
+				desks: initialState.desks,
+				activeDeskId: initialState.activeDeskId,
+				windowSettings: {},
+			}).poolGridMinimumWidth,
+		).toBe(72);
+		expect(
+			appReducer(initialState, {
+				type: "HYDRATE_LAYOUT",
+				desks: initialState.desks,
+				activeDeskId: initialState.activeDeskId,
+				windowSettings: { poolGridMinimumWidth: Number.NaN },
+			}).poolGridMinimumWidth,
+		).toBe(72);
+	});
 	it("keeps pool colors and Set configuration mode independently configurable", () => {
 		const plain = appReducer(initialState, {
 			type: "SET_PRESET_POOL_COLORS",

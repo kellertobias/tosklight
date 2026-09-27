@@ -26,6 +26,7 @@ import {
 } from "../features/macros/MacroActionsContext";
 import { MacroEditor } from "../features/macros/MacroEditor";
 import { resolveMacroPoolGesture } from "../features/macros/poolGesture";
+import { useApp } from "../state/AppContext";
 import type { WindowProps } from "./windowTypes";
 import "./MacrosWindow.css";
 
@@ -35,6 +36,7 @@ const MACRO_COLOR = "#8f3541";
 type MacroObject = VersionedObject<MacroDefinition>;
 
 export function MacrosWindow({ active = true, compact = false }: WindowProps) {
+	const { state } = useApp();
 	const showId = useActiveShowId();
 	const command = useCommandLineSurface({
 		enabled: active,
@@ -236,6 +238,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 			)}
 			<WindowScrollArea>
 				<MacroPool
+					minimumCardWidth={state.poolGridMinimumWidth}
 					macros={macros}
 					slots={slots}
 					byNumber={byNumber}
@@ -259,6 +262,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 }
 
 function MacroPool({
+	minimumCardWidth,
 	macros,
 	slots,
 	byNumber,
@@ -274,6 +278,7 @@ function MacroPool({
 	onRun,
 	onOff,
 }: {
+	minimumCardWidth: number;
 	macros: MacroObject[];
 	slots: PoolSlotViewModel<number>[];
 	byNumber: Map<number, MacroObject>;
@@ -291,6 +296,7 @@ function MacroPool({
 }) {
 	return (
 		<PoolGrid
+			minimumCardWidth={minimumCardWidth}
 			slots={slots}
 			slotCount={Math.max(
 				MACRO_POOL_SIZE,

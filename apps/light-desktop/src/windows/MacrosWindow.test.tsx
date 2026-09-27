@@ -30,6 +30,9 @@ vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
 vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
 	useActiveShowId: () => "show-a",
 }));
+vi.mock("../state/AppContext", () => ({
+	useApp: () => ({ state: { poolGridMinimumWidth: 72 } }),
+}));
 vi.mock("../features/macros/MacroActionsContext", () => ({
 	useMacroActions: () => ({
 		macros: {

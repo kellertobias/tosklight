@@ -23,6 +23,7 @@ export const initialState: AppState = {
 	),
 	presetFamily: "Mixed",
 	presetPoolColors: true,
+	poolGridMinimumWidth: 72,
 	presetSetArmed: false,
 	cuelistBuiltInView: "pool",
 	cuelistBuiltInNumber: null,

@@ -321,6 +321,7 @@ function usePresetsWindowModel({
 		showId,
 		paneId,
 		legacyColorsEnabled,
+		gridMinimumWidth: state.poolGridMinimumWidth,
 		cards,
 		fixtureCounts,
 		customizations,
@@ -365,6 +366,7 @@ export function PresetsWindow(props: WindowProps) {
 			<PresetCardGrid
 				cards={model.cards}
 				family={model.family}
+				minimumCardWidth={model.gridMinimumWidth}
 				customizations={model.customizations}
 				poolPresentation={model.poolPresentation}
 				showId={model.showId}

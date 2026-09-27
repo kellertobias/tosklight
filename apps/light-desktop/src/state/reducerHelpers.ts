@@ -10,6 +10,12 @@ import { PATCH_COLUMNS } from "../types";
 export const clamp = (value: number, minimum: number, maximum: number) =>
 	Math.max(minimum, Math.min(maximum, value));
 
+export function normalizePoolGridMinimumWidth(value: unknown, fallback: number): number {
+	return typeof value === "number" && Number.isFinite(value)
+		? clamp(Math.round(value), 56, 320)
+		: fallback;
+}
+
 export const normalizeFixtureSheetIncludedHeads = (
 	value: unknown,
 	legacyShowSubheads: unknown,

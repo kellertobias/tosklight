@@ -95,7 +95,7 @@ describe("Desk Setup focused title tabs", () => {
 
 		const defaults = controller({ section: "preferences-defaults" });
 		rerender(<SetupHeader controller={defaults} />);
-		for (const label of ["Record & Update", "Playback", "Pool colors"])
+		for (const label of ["Record & Update", "Playback", "Pools"])
 			expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
 		expect(
 			screen.queryByRole("button", { name: "Save changes" }),

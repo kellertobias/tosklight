@@ -1,7 +1,6 @@
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { ModalFrame } from "@tosklight/ui/modals";
 import {
-	DEFAULT_POOL_CARD_MINIMUM_WIDTH,
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
@@ -474,6 +473,7 @@ function resolveCuelistPresentation({
 function CuelistPoolCards({
 	slots,
 	search,
+	minimumCardWidth,
 	configuration,
 	showId,
 	surfaceKey,
@@ -492,6 +492,7 @@ function CuelistPoolCards({
 }: {
 	slots: readonly CuelistPoolItem[];
 	search: string;
+	minimumCardWidth: number;
 	configuration: PoolPresentationConfiguration;
 	showId: string;
 	surfaceKey: string;
@@ -561,7 +562,7 @@ function CuelistPoolCards({
 		>
 			<PoolGrid
 				className="cuelist-pool-grid"
-				minimumCardWidth={DEFAULT_POOL_CARD_MINIMUM_WIDTH}
+				minimumCardWidth={minimumCardWidth}
 				slots={poolSlots}
 				slotCount={search ? undefined : 1000}
 				fillEmptySlots={!search}
@@ -701,6 +702,7 @@ export function CuelistPool(props: CuelistPoolProps) {
 			<CuelistPoolCards
 				slots={filteredPool}
 				search={search}
+				minimumCardWidth={state.poolGridMinimumWidth}
 				configuration={poolPresentation}
 				showId={showId}
 				surfaceKey={surfaceKey}

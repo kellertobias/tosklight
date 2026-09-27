@@ -1,6 +1,6 @@
 import type { AppState } from "../../types";
 import type { Action } from "../appActions";
-import { clamp } from "../reducerHelpers";
+import { clamp, normalizePoolGridMinimumWidth } from "../reducerHelpers";
 
 export function reduceControls(
 	state: AppState,
@@ -24,6 +24,14 @@ export function reduceControls(
 			return { ...state, presetFamily: action.family };
 		case "SET_PRESET_POOL_COLORS":
 			return { ...state, presetPoolColors: action.value };
+		case "SET_POOL_GRID_MINIMUM_WIDTH":
+			return {
+				...state,
+				poolGridMinimumWidth: normalizePoolGridMinimumWidth(
+					action.value,
+					state.poolGridMinimumWidth,
+				),
+			};
 		case "SET_PRESET_SET_ARMED":
 			return { ...state, presetSetArmed: action.value };
 		case "OPEN_BUILTIN_CUELIST":

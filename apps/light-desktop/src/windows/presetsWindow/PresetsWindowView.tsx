@@ -8,7 +8,6 @@ import {
 	TextField,
 } from "@tosklight/ui";
 import {
-	DEFAULT_POOL_CARD_MINIMUM_WIDTH,
 	INDIVIDUAL_POOL_COLOR_FALLBACK,
 	PoolCard,
 	type PoolColorMode,
@@ -95,6 +94,7 @@ export function PresetWindowHeader({
 interface PresetCardGridProps {
 	cards: readonly (PresetCard | null)[];
 	family: PresetFamily;
+	minimumCardWidth: number;
 	customizations: Record<string, PresetCustomization>;
 	poolPresentation: PoolPresentationConfiguration;
 	showId: string;
@@ -115,6 +115,7 @@ interface PresetCardGridProps {
 export function PresetCardGrid({
 	cards,
 	family,
+	minimumCardWidth,
 	customizations,
 	poolPresentation,
 	showId,
@@ -147,7 +148,7 @@ export function PresetCardGrid({
 	return (
 		<WindowScrollArea>
 			<PoolGrid
-				minimumCardWidth={DEFAULT_POOL_CARD_MINIMUM_WIDTH}
+				minimumCardWidth={minimumCardWidth}
 				slots={slots}
 				slotCount={cards.length}
 				emptySlot={(index) => ({
@@ -289,7 +290,7 @@ export function PresetSettings({
 					content: (
 						<>
 							<h3>Preset family</h3>
-							<div className="button-group">
+						<div className="button-group">
 								{PRESET_FAMILIES.map((name) => (
 									<Button
 										key={name}
@@ -299,8 +300,8 @@ export function PresetSettings({
 										{name}
 									</Button>
 								))}
-							</div>
-							<PoolColorSettings
+						</div>
+						<PoolColorSettings
 								objectType="preset"
 								paneId={paneId}
 								presetFamily={family.toLowerCase() as Lowercase<PresetFamily>}

@@ -81,7 +81,7 @@ const DEFAULTS_SETTINGS_TABS: ReadonlyArray<{
 }> = [
 	{ id: "record-update", label: "Record & Update" },
 	{ id: "playback", label: "Playback" },
-	{ id: "pools", label: "Pool colors" },
+	{ id: "pools", label: "Pools" },
 	{ id: "new-shows", label: "New shows" },
 ];
 

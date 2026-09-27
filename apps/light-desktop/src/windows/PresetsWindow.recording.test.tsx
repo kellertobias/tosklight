@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 	state: {
 		presetFamily: "Color",
 		presetPoolColors: true,
+		poolGridMinimumWidth: 72,
 		presetGroupsVisible: false,
 		updateArmed: false,
 		presetSetArmed: false,
@@ -94,6 +95,9 @@ vi.mock(
 	() => ({ useVisualizationRuntimeSnapshot: () => mocks.visualization }),
 );
 vi.mock("../components/shared/GroupStrip", () => ({ GroupStrip: () => null }));
+vi.mock("../components/shared/PoolColorSettings", () => ({
+	PoolColorSettings: () => null,
+}));
 
 function firstPresetCell() {
 	const cell = document.querySelector<HTMLButtonElement>(".preset-card");
@@ -110,6 +114,7 @@ beforeEach(() => {
 	mocks.presets = [];
 	mocks.visualization = null;
 	mocks.state.presetFamily = "Color";
+	mocks.state.poolGridMinimumWidth = 72;
 	mocks.dispatch.mockClear();
 	mocks.record.mockReset();
 	mocks.record.mockResolvedValue(null);
@@ -125,6 +130,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("PresetsWindow normal recording boundary", () => {
+	it("uses the configured minimum for the Preset grid", () => {
+		mocks.state.poolGridMinimumWidth = 160;
+		const { container } = render(<PresetsWindow compact />);
+		expect(
+			(container.querySelector(".preset-pool-window .ui-button-grid") as HTMLElement)
+				.style.getPropertyValue("--grid-cell-min"),
+		).toBe("160px");
+	});
+
 	it("keeps 200 family-numbered slots and their stable qualified identities", () => {
 		mocks.state.storeArmed = false;
 		mocks.presets = [

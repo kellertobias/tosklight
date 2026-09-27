@@ -202,6 +202,7 @@ export function DynamicsWindow({
 				dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
 			}}
 			shiftArmed={appState.shiftArmed}
+			minimumCardWidth={appState.poolGridMinimumWidth}
 			updateArmed={appState.updateArmed}
 			storeArmed={appState.storeArmed}
 			setArmed={
@@ -531,6 +532,7 @@ function ConnectedDynamicEditor({
 }
 
 interface DynamicsPoolProps {
+	minimumCardWidth: number;
 	dynamics: readonly DynamicObject[];
 	runtime: DynamicRuntimeSnapshotProjection | null;
 	compact: boolean;
@@ -590,6 +592,7 @@ function DynamicsPool(props: DynamicsPoolProps) {
 			)}
 			<WindowScrollArea>
 				<PoolGrid
+					minimumCardWidth={props.minimumCardWidth}
 					slots={slots}
 					slotCount={slotCount}
 					emptySlot={(index) => ({

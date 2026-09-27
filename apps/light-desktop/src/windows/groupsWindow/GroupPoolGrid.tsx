@@ -1,5 +1,4 @@
 import {
-	DEFAULT_POOL_CARD_MINIMUM_WIDTH,
 	PoolGrid,
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
@@ -285,7 +284,7 @@ export function GroupPoolGrid({
 		<WindowScrollArea>
 			<PoolGrid
 				columns={columns}
-				minimumCardWidth={DEFAULT_POOL_CARD_MINIMUM_WIDTH}
+				minimumCardWidth={state.poolGridMinimumWidth}
 				slots={slots}
 				slotCount={cards.length}
 				emptySlot={(index) => ({

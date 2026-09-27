@@ -9,6 +9,7 @@ import {
 	normalizeFixtureSheetColumns,
 	normalizeFixtureSheetCompactMode,
 	normalizeFixtureSheetIncludedHeads,
+	normalizePoolGridMinimumWidth,
 } from "../reducerHelpers";
 
 /**
@@ -173,6 +174,10 @@ export function reduceHydration(
 				presetFamily: normalizePresetFamily(
 					action.windowSettings?.presetFamily,
 					state.presetFamily,
+				),
+				poolGridMinimumWidth: normalizePoolGridMinimumWidth(
+					action.windowSettings?.poolGridMinimumWidth,
+					state.poolGridMinimumWidth,
 				),
 				// Persisted layouts predating the Setup-positions removal may still carry it.
 				stageMode:

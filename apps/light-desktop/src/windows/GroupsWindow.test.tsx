@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
 	setGroupMaster: vi.fn(),
 	commandLine: "",
 	state: {
+		poolGridMinimumWidth: 72,
 		storeArmed: false,
 		groupsReturnToStage: false,
 		controlMode: "programmer" as "programmer" | "playbacks",
@@ -133,6 +134,15 @@ function buttonForText(text: string, index = 0) {
 }
 
 describe("GroupsWindow action routing", () => {
+	it("uses the configured shared pool tile width", () => {
+		mocks.state.poolGridMinimumWidth = 80;
+		const { container } = render(<GroupsWindow compact />);
+		expect(
+			(container.querySelector(".group-pool-window .ui-button-grid") as HTMLElement)
+				.style.getPropertyValue("--grid-cell-min"),
+		).toBe("80px");
+		mocks.state.poolGridMinimumWidth = 72;
+	});
 	afterEach(() => {
 		cleanup();
 		vi.useRealTimers();

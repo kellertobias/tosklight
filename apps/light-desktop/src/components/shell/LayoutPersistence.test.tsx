@@ -84,12 +84,21 @@ describe("LayoutPersistence", () => {
 		await act(async () => vi.advanceTimersByTimeAsync(700));
 		expect(mocks.server.saveDeskLayout).not.toHaveBeenCalled();
 
-		mocks.app.state = { ...mocks.app.state, activeDeskId: "operator-change" };
+		mocks.app.state = {
+			...mocks.app.state,
+			activeDeskId: "operator-change",
+			poolGridMinimumWidth: 180,
+		};
 		view.rerender(<LayoutPersistence />);
 		await act(async () => vi.advanceTimersByTimeAsync(700));
 		expect(mocks.server.saveDeskLayout).toHaveBeenCalledTimes(1);
 		expect(mocks.server.saveDeskLayout).toHaveBeenCalledWith(
-			expect.objectContaining({ activeDeskId: "operator-change" }),
+			expect.objectContaining({
+				activeDeskId: "operator-change",
+				windowSettings: expect.objectContaining({
+					poolGridMinimumWidth: 180,
+				}),
+			}),
 		);
 	});
 
