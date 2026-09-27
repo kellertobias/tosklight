@@ -154,8 +154,16 @@ for (const hardwareConnected of [false, true]) {
 			await save.getByRole("button", { name: `📁 ${folder}`, exact: true }).click();
 			const copyName = "Operator folder copy";
 			await save.getByRole("textbox", { name: "Show name", exact: true }).fill(copyName);
-			const base = save.getByRole("switch", { name: "Save as a base show", exact: true });
+			const base = save.getByRole("switch", { name: "Save as Template", exact: true });
 			await expect(base).not.toBeChecked();
+            const template = save.locator(".show-save-template");
+            const labelBox = await template.locator(":scope > label[for]").boundingBox();
+            const toggleBox = await template.locator(".ui-switch-track").boundingBox();
+            const fieldsBox = await save.locator(".show-save-fields").boundingBox();
+            if (!labelBox || !toggleBox || !fieldsBox) throw new Error("Template toggle must be visible");
+            expect(labelBox.x + labelBox.width).toBeLessThan(toggleBox.x);
+            expect(Math.abs(toggleBox.y + toggleBox.height / 2 - labelBox.y - labelBox.height / 2)).toBeLessThanOrEqual(1);
+            expect(Math.abs(fieldsBox.x + fieldsBox.width - 16 - toggleBox.x - toggleBox.width)).toBeLessThanOrEqual(1);
 			await base.locator("..").click();
 			await expect(base).toBeChecked();
 			await save.getByRole("button", { name: "Save as New Show", exact: true }).click();

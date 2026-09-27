@@ -1102,7 +1102,8 @@
 .ui-modal-stack-layer > .save-show-modal[role="dialog"] { width: min(1120px, calc(100vw - 36px)); max-height: 90vh; padding: 0; }
 .save-show-modal > .ui-modal-titlebar { margin: 0; }
 .show-save-body { padding: 0; overflow: auto; min-height: 0; }
-.show-save-body .show-name-input { margin: 16px 0; }
+.show-save-body .show-name-input { height: 48px; min-height: 48px; margin: 0; font-size: inherit; }
+.show-save-fields > .ui-text-control { margin-top: 16px; }
 
 .show-save-location-section { margin: 16px; border: 1px solid var(--line2); border-radius: 8px; overflow: hidden; }
 .show-save-location { display: flex; justify-content: space-between; gap: 16px; width: 100%; margin: 0; border: 0; border-radius: 0; text-align: left; min-height: 48px; }
@@ -1123,7 +1124,11 @@
 .save-show-modal > .ui-modal-titlebar { padding: 0; }
 .save-show-modal .ui-modal-title-copy { max-width: none; flex: 1; padding: 12px 32px; }
 .save-show-modal .ui-modal-title-heading { padding: 0; max-width: none; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
-.show-save-fields > .show-row-actions { margin-top: 16px; }
+.show-save-fields > .show-row-actions { margin-top: 16px; justify-content: flex-end; }
+.show-save-template { display: flex; align-items: center; gap: 12px; }
+.show-save-template > label { cursor: pointer; }
+.show-save-template .ui-switch-control { padding: 0; border: 0; background: transparent; }
+.show-save-template .ui-switch-states { display: none; }
 #show-save-folders { border-top: 1px solid var(--line2); }
 #show-save-folders .show-save-folder-toolbar { padding-top: 12px; }
 

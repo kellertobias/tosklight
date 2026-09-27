@@ -193,14 +193,14 @@ describe("QuickSetupModal show workflows", () => {
     expect(dialog).not.toHaveTextContent("Latest Autosave");
     expect(dialog).not.toHaveTextContent("Original show");
     expect(dialog).not.toHaveTextContent("Approved focus");
-    expect(within(dialog).getByRole("switch", {name: "Save as a base show"})).not.toBeChecked();
+    expect(within(dialog).getByRole("switch", {name: "Save as Template"})).not.toBeChecked();
   });
 
   it("initializes the save designation from an existing base", async () => {
     mocks.server.bootstrap.active_show.is_base_show = true;
     render(<QuickSetupModal />);
     fireEvent.click(screen.getByRole("button", {name: "Save As"}));
-    await waitFor(() => expect(screen.getByRole("switch", {name: "Save as a base show"})).toBeChecked());
+    await waitFor(() => expect(screen.getByRole("switch", {name: "Save as Template"})).toBeChecked());
     delete mocks.server.bootstrap.active_show.is_base_show;
   });
 
@@ -211,7 +211,7 @@ describe("QuickSetupModal show workflows", () => {
     const dialog = screen.getByRole("dialog", {name:"Save show"});
     const source = within(dialog).getByRole("button", {name:"Source: Internal"});
     expect(source.closest(".ui-title-chrome")).not.toBeNull();
-    expect(within(dialog).getByRole("switch", {name:"Save as a base show"})).not.toBeChecked();
+    expect(within(dialog).getByRole("switch", {name:"Save as Template"})).not.toBeChecked();
     const location = await within(dialog).findByRole("button", {name:/Location: Shows/});
     expect(within(dialog).getByRole("textbox", {name:"Show name"})).toHaveValue(mocks.server.bootstrap.active_show.name);
     expect(mocks.files.fileEntries).not.toHaveBeenCalled();
@@ -228,8 +228,8 @@ describe("QuickSetupModal show workflows", () => {
     fireEvent.click(await within(dialog).findByRole("button", {name:"📁 Tour folder"}));
     fireEvent.change(within(dialog).getByRole("textbox",{name:"Show name"}),{target:{value:"Folder copy"}});
     await waitFor(() => expect(within(dialog).getByRole("button", {name:"Save as New Show"})).toBeEnabled());
-    fireEvent.click(within(dialog).getByRole("switch",{name:"Save as a base show"}));
-    expect(within(dialog).getByRole("switch",{name:"Save as a base show"})).toBeChecked();
+    fireEvent.click(within(dialog).getByRole("switch",{name:"Save as Template"}));
+    expect(within(dialog).getByRole("switch",{name:"Save as Template"})).toBeChecked();
     fireEvent.click(within(dialog).getByRole("button",{name:"Save as New Show"}));
     await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenCalledWith("Folder copy",{rootId:"shows",path:"Tour folder"},true));
     await waitFor(() => expect(within(dialog).getByRole("button",{name:"Export MVR"})).toBeEnabled());

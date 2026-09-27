@@ -142,7 +142,7 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
             <div className="show-save-fields">
             <TextInput clearable className="show-name-input" autoFocus value={dialogs.showName} onChange={event=>dialogs.setShowName(event.target.value)} onKeyboardCommit={()=>void save()} placeholder="New show name" aria-label="Show name" disabled={saving} />
             <div className="show-row-actions">
-                <SwitchField bare label="Save as a base show" checked={dialogs.baseShow} disabled={saving} onChange={event=>dialogs.setBaseShow(event.target.checked)} />
+                <SwitchField bare className="show-save-template" label="Save as Template" checked={dialogs.baseShow} disabled={saving} onChange={event=>dialogs.setBaseShow(event.target.checked)} />
             </div>
             </div>
         </div>
