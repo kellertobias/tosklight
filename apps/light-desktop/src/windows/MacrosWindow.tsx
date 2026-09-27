@@ -35,6 +35,16 @@ const MACRO_COLOR = "#8f3541";
 
 type MacroObject = VersionedObject<MacroDefinition>;
 
+function runningMacroIds(executions: MacroExecution[]): Set<string> {
+	return new Set(
+		executions
+			.filter((execution) =>
+				["queued", "validating", "running"].includes(execution.state),
+			)
+			.map((execution) => execution.macro_id),
+	);
+}
+
 export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 	const { state } = useApp();
 	const showId = useActiveShowId();
@@ -197,13 +207,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 		}
 		return true;
 	};
-	const running = new Set(
-		executions
-			.filter((execution) =>
-				["queued", "validating", "running"].includes(execution.state),
-			)
-			.map((execution) => execution.macro_id),
-	);
+	const running = runningMacroIds(executions);
 	const slots: PoolSlotViewModel<number>[] = macros.map((macro) => ({
 		id: macro.body.number,
 		position: macro.body.number - 1,

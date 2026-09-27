@@ -197,6 +197,20 @@ function usePresetPoolCards(
 	return { cards, fixtureCounts: usePresetFixtureCounts(active, cards) };
 }
 
+function usePresetCustomizations(
+	items: ReturnType<typeof usePoolPresentationSettings>["configuration"]["items"],
+	showId: string,
+) {
+	return useMemo(() => {
+		const prefix = `show:${showId}:preset:`;
+		return Object.fromEntries(
+			Object.entries(items)
+				.filter(([key]) => key.startsWith(prefix))
+				.map(([key, value]) => [key.slice(prefix.length), value]),
+		) as Record<string, PresetCustomization>;
+	}, [items, showId]);
+}
+
 function usePresetsWindowModel({
 	active = true,
 	compact,
@@ -230,14 +244,10 @@ function usePresetsWindowModel({
 	const colorMode =
 		poolSettings.configuration.modes[colorSurfaceKey] ??
 		(legacyColorsEnabled ? "type" : "individual");
-	const customizations = useMemo(() => {
-		const prefix = `show:${showId}:preset:`;
-		return Object.fromEntries(
-			Object.entries(poolSettings.configuration.items)
-				.filter(([key]) => key.startsWith(prefix))
-				.map(([key, value]) => [key.slice(prefix.length), value]),
-		) as Record<string, PresetCustomization>;
-	}, [poolSettings.configuration.items, showId]);
+	const customizations = usePresetCustomizations(
+		poolSettings.configuration.items,
+		showId,
+	);
 	const [configureIndex, setConfigureIndex] = useState<number | null>(null);
 	const [configureDraft, setConfigureDraft] = useState<PresetCustomization>({});
 	const [recordPresetIndex, setRecordPresetIndex] = useState<number | null>(

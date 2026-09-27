@@ -1,8 +1,7 @@
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { Button, ModalFrame, SelectField, SwitchField, TextInput } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
-import type { FileEntry, FileRoot } from "../../api/types";
-import type { NetworkShowPeer } from "../../api/generated/light-wire";
+import type { FileEntry, FileRoot, NetworkShowPeer } from "../../api/types";
 import { useFiles } from "../../features/files/FilesContext";
 import type { QuickSetupModel } from "./QuickSetupModal";
 

@@ -4,6 +4,7 @@ import type {
 	MvrApplyResult,
 	MvrExportPreview,
 	MvrImportPreview,
+	NetworkShowCatalog,
 	ShowEntry,
 	ShowRevision,
 } from "../../api/types";
@@ -26,7 +27,7 @@ export interface ShowLifecycleActions {
     networkSaveFolders: (instance: string, rootId: string, path: string) => Promise<import("../../api/client/shows").ShowSaveFolders>;
     saveShowCopy: (name: string, target: import("../../api/client/shows").ShowSaveTarget, baseShow: boolean) => Promise<ShowEntry>;
     exportMvrFile: (name: string, target: import("../../api/client/shows").ShowSaveTarget) => Promise<import("../../api/client/shows").SavedShowFile>;
-    networkShows: () => Promise<import("../../api/generated/light-wire").NetworkShowCatalog>;
+    networkShows: () => Promise<NetworkShowCatalog>;
     importRemoteShow: (instance: string, showId: string | null, revision: number | null, open: boolean) => Promise<ShowEntry | null>;
     prepareShowRevision: (id: string, revision: number) => Promise<ShowEntry | null>;
     prepareShowFile: (root: string, path: string, name: string) => Promise<ShowEntry | null>;

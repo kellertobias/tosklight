@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **264 root cases across 105 files**.
+Default catalog: **266 root cases across 106 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -279,6 +279,8 @@ Default catalog: **264 root cases across 105 files**.
 | 99-media-server-discovery.spec.ts | MEDIA-006 @ui Show Patch tells a configured, outdated, and unavailable Media Server apart | repository contract | @ui | media-server-discovery | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
+| show-load-browser.spec.ts | TL-542 @ui › folder browser and revision actions preserve source shows (software only) | repository contract | @ui | show-load-browser | standard failure evidence | parallel | pending-semantic-migration |
+| show-load-browser.spec.ts | TL-542 @ui › folder browser and revision actions preserve source shows (hardware connected) | repository contract | @ui | show-load-browser | standard failure evidence | parallel | pending-semantic-migration |
 
 ## Serial generated entrypoints
 
