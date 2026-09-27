@@ -11,7 +11,7 @@ test.describe("docs/help/10-Desk/10-Show-Setup/index.md", () => {
 		await openDefaults(page);
 
 		await expect(
-			page.getByRole("tab", { name: "Pool colors", exact: true }),
+			page.getByRole("tab", { name: "Pools", exact: true }),
 		).toBeVisible();
 		await expect(
 			page.getByRole("button", { name: "Save changes", exact: true }),
@@ -29,10 +29,12 @@ test.describe("docs/help/10-Desk/10-Show-Setup/index.md", () => {
 		expect(Math.round(updateBox.x - (recordBox.x + recordBox.width))).toBe(8);
 		await expectNoSetupContentOverflow(page);
 
-		await page.getByRole("tab", { name: "Pool colors", exact: true }).click();
+		await page.getByRole("tab", { name: "Pools", exact: true }).click();
 		await expect(
-			page.getByRole("heading", { name: "Pool color defaults", exact: true }),
+			page.getByRole("heading", { name: "Pools", exact: true }),
 		).toBeVisible();
+		await expect(page.getByLabel("Minimum pool tile width (px)")).toBeVisible();
+		await expect(page.getByRole("region", { name: "Pool color defaults" })).toBeVisible();
 		await expect(
 			page.getByRole("heading", { name: "Defaults", exact: true }),
 		).toHaveCount(0);
@@ -44,7 +46,12 @@ test.describe("docs/help/10-Desk/10-Show-Setup/index.md", () => {
 						getComputedStyle(node).gridTemplateColumns.split(" ").length,
 				),
 		).toBe(3);
-		await expectNoSetupContentOverflow(page);
+		await page
+			.getByRole("button", { name: "Reset all pool colors" })
+			.scrollIntoViewIfNeeded();
+		await expect(
+			page.getByRole("button", { name: "Reset all pool colors" }),
+		).toBeInViewport();
 
 		const setupNavigation = page.locator(".setup-window nav");
 		await setupNavigation
