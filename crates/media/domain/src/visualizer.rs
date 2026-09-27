@@ -377,7 +377,38 @@ pub struct VisualizerConfiguration {
 impl VisualizerConfiguration {
     pub fn new(kind: VisualizerKind) -> Self {
         let mut parameters = VisualizerParameters::default();
-        if kind == VisualizerKind::GridLandscape {
+        // The old server drew on a 1920x1080 canvas. Convert its pixel defaults
+        // to output fractions while keeping the existing parameter and DMX order.
+        if kind == VisualizerKind::CrossingLines {
+            parameters.count = 20;
+            parameters.primary = Tint::new(0.0, 100.0 / 255.0, 1.0);
+            parameters.secondary = Tint::new(1.0, 0.0, 100.0 / 255.0);
+        } else if kind == VisualizerKind::RadiatingRays {
+            parameters.size = 400.0 / 1080.0;
+            parameters.thickness = 5.0 / 1080.0;
+            parameters.primary = Tint::new(1.0, 1.0, 100.0 / 255.0);
+        } else if kind == VisualizerKind::PulsingCircles {
+            parameters.count = 5;
+            parameters.size = 100.0 / 1080.0;
+            parameters.decay = 0.9;
+            parameters.primary = Tint::new(1.0, 0.0, 80.0 / 255.0);
+        } else if kind == VisualizerKind::MorphingPolygon {
+            parameters.count = 5;
+            parameters.radius = 800.0 / 1080.0;
+            // Radius and outline width use the renderer's centred coordinates (2 per height).
+            parameters.thickness = 10.0 / 1080.0;
+            parameters.primary = Tint::new(1.0, 100.0 / 255.0, 100.0 / 255.0);
+        } else if kind == VisualizerKind::MinimalistShapes {
+            parameters.count = 10;
+            parameters.size = 100.0 / 1080.0;
+            parameters.speed = 2.0;
+            parameters.on_beat = true;
+            parameters.primary = Tint::new(1.0, 1.0, 1.0);
+        } else if kind == VisualizerKind::WaveTerrain {
+            parameters.size = 100.0 / 1080.0;
+            parameters.wireframe = true;
+            parameters.primary = Tint::new(0.0, 1.0, 1.0);
+        } else if kind == VisualizerKind::GridLandscape {
             parameters.count = 24;
             parameters.size = 0.4;
             parameters.radius = 0.5;

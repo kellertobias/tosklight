@@ -20,6 +20,9 @@ const CULL_WGSL: &str = include_str!("shaders/cull.wgsl");
 const POST_WGSL: &str = include_str!("shaders/post.wgsl");
 const OVERLAY_WGSL: &str = include_str!("shaders/overlay.wgsl");
 const SHADOW_WGSL: &str = include_str!("shaders/shadow.wgsl");
+
+#[cfg(test)]
+mod optics_tests;
 /// Bindings the depth-only pass needs, kept beside it rather than in the shared prelude, which
 /// the passes that sample the atlas use instead.
 /// The single-sampled scene-depth declaration in `beam.wgsl`, swapped for the multisampled type
@@ -1043,10 +1046,23 @@ mod tests {
         let culling_fields = light_fields(CULL_WGSL);
 
         assert_eq!(culling_fields, surface_fields);
-        assert_eq!(
-            std::mem::size_of::<GpuLight>(),
-            surface_fields.len() * std::mem::size_of::<[f32; 4]>()
-        );
+        for source in [COMMON_WGSL, CULL_WGSL] {
+            let module = naga::front::wgsl::parse_str(source).expect("lighting layout parses");
+            let span = module
+                .types
+                .iter()
+                .find_map(|(_, ty)| {
+                    if ty.name.as_deref() != Some("Light") {
+                        return None;
+                    }
+                    match ty.inner {
+                        naga::TypeInner::Struct { span, .. } => Some(span),
+                        _ => None,
+                    }
+                })
+                .expect("Light storage struct");
+            assert_eq!(std::mem::size_of::<GpuLight>(), span as usize);
+        }
         assert_eq!(
             std::mem::align_of::<GpuLight>(),
             std::mem::align_of::<f32>()
@@ -1089,6 +1105,93 @@ mod tests {
         assert_eq!(budget.settings(), *ULTRA_LADDER.last().unwrap());
         budget.observe(11_000);
         assert_eq!(budget.settings(), ULTRA_LADDER[ULTRA_LADDER.len() - 2]);
+    }
+
+    #[test]
+    fn room_light_separates_venue_faces_and_respects_blackout() {
+        let shader = naga::front::wgsl::parse_str(&format!("{COMMON_WGSL}\n{SURFACE_WGSL}"))
+            .expect("surface WGSL parses");
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        )
+        .validate(&shader)
+        .expect("surface WGSL validates");
+        let Ok(mut renderer) = Renderer::headless(256, 256) else {
+            eprintln!("GPU capture unavailable; validated surface shader only");
+            return;
+        };
+        let mut scene = viz_scene::Scene::default();
+        scene.scenery.push(viz_scene::SceneryObject {
+            kind: viz_scene::SceneryKind::Box,
+            position: glam::Vec3::ZERO,
+            size: glam::Vec3::splat(2.0),
+            colour: [0.5; 3],
+            roughness: 1.0,
+            ..Default::default()
+        });
+        scene.recompute_bounds();
+        let mut view = viz_scene::ViewConfiguration {
+            ambient: 0.06,
+            floor_grid: false,
+            background: Some([0.0; 3]),
+            ..Default::default()
+        };
+        view.camera.position = glam::Vec3::new(5.0, 3.0, 5.0);
+        view.camera.target = glam::Vec3::ZERO;
+        let camera =
+            crate::camera::ResolvedCamera::resolve(&view.camera, view.mode, 1.0, scene.bounds);
+        let samples = [glam::Vec3::X, glam::Vec3::Z].map(|point| {
+            let (x, y) = camera.project(point, 256.0, 256.0).unwrap();
+            (x as usize, y as usize)
+        });
+        let capture = |renderer: &mut Renderer, view: &viz_scene::ViewConfiguration| {
+            renderer
+                .capture(
+                    &scene,
+                    &viz_scene::SceneValues::default(),
+                    view,
+                    &crate::Overlay::default(),
+                    0.0,
+                )
+                .unwrap()
+        };
+        let image = capture(&mut renderer, &view);
+        if let Some(path) = std::env::var_os("VIZ_ROOM_LIGHT_CAPTURE") {
+            let mut ppm = b"P6\n256 256\n255\n".to_vec();
+            for pixel in image.rgba.chunks_exact(4) {
+                ppm.extend_from_slice(&pixel[..3]);
+            }
+            std::fs::write(path, ppm).expect("write room lighting inspection capture");
+        }
+        let level = |image: &CapturedImage, (x, y): (usize, usize)| {
+            let pixel = (y * image.width as usize + x) * 4;
+            image.rgba[pixel..pixel + 3]
+                .iter()
+                .map(|v| *v as f32)
+                .sum::<f32>()
+                / 3.0
+        };
+        let levels = samples.map(|sample| level(&image, sample));
+        eprintln!("venue face samples {samples:?}: {levels:?}");
+        assert!(
+            (levels[0] - levels[1]).abs() > 8.0,
+            "equally camera-facing venue sides must have distinct room illumination: {levels:?}"
+        );
+        view.ambient = 0.0;
+        let dark = capture(&mut renderer, &view);
+        for sample in samples {
+            assert!(level(&dark, sample) <= 1.0, "unlit scenery must black out");
+        }
+        // A diagram stays flat ink even though its camera sees the same solid faces.
+        view.mode = viz_scene::ViewMode::Lines3d;
+        let plot_dark = capture(&mut renderer, &view);
+        view.ambient = 0.06;
+        let plot_bright = capture(&mut renderer, &view);
+        assert_eq!(
+            plot_dark.rgba, plot_bright.rgba,
+            "room light must not shade diagrams"
+        );
     }
 
     #[test]

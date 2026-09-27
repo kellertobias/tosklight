@@ -705,7 +705,7 @@ export type VisualizerConnectionNotification = { connected: boolean, };
 export type HighlightChange = { revision: number, desk_id: string, action: string | null, source: string | null, state: RuntimeHighlightState, };
 export type ScreenNotificationKind = "configuration" | "screen_page" | "playback_page";
 export type ScreenNotification = { revision: number, kind: ScreenNotificationKind, };
-export type ShowLibraryNotificationKind = "show_opened" | "show_renamed" | "show_rolled_back" | "show_uploaded" | "show_deleted";
+export type ShowLibraryNotificationKind = "show_opened" | "show_renamed" | "show_base_changed" | "show_rolled_back" | "show_uploaded" | "show_deleted";
 export type ShowLibraryNotification = { revision: number, kind: ShowLibraryNotificationKind, };
 export type FixtureLibraryNotificationKind = "library" | "profile";
 export type FixtureLibraryNotification = { revision: number, kind: FixtureLibraryNotificationKind, };
@@ -1168,7 +1168,7 @@ export type RuntimePlaybackSurfaceLayout = { playbacks_per_row: number, rows: Ar
 export type RuntimeControlDesk = { hardware_led_brightness: number, hardware_gooseneck_brightness: number, hardware_gooseneck_color: number, id: string, name: string, columns: number, rows: number, buttons: number, playback_layout: RuntimePlaybackSurfaceLayout | null, };
 export type RuntimeSessionResponse = { role: RuntimeSessionRole, session_id: string, client_id: string, token: string, desk: RuntimeControlDesk, };
 export type RuntimeRevisionCopySource = { show_id: string, show_name: string, revision: number, revision_name: string, copied_at: string, };
-export type RuntimeShowEntry = { id: string, name: string, path: string, revision: number, updated_at: string, created_at: string | null, last_loaded_at: string | null, revision_copy: RuntimeRevisionCopySource | null, };
+export type RuntimeShowEntry = { is_base_show: boolean, id: string, name: string, path: string, revision: number, updated_at: string, created_at: string | null, last_loaded_at: string | null, revision_copy: RuntimeRevisionCopySource | null, };
 export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], scheduler_utilization: number, recent_window_seconds: number, recent_frame_hz_minimum: number, recent_frame_hz_maximum: number, recent_frame_hz_average: number, recent_frame_rate_bucket_bounds_hz: Array<number>, recent_frame_rate_bucket_counts: number[], recent_send_errors: number,
 /**
  * Inclusive upper bounds, in hertz, of the frame-rate bands below.
@@ -1425,17 +1425,28 @@ export type SelectiveImportOutcomeObjectChange = { key: SelectiveImportObjectKey
 export type SelectiveImportProfileChange = { source: SelectiveImportProfileKey, destination: SelectiveImportProfileKey, digest: string, };
 export type SelectiveImportOutcome = { request_id: string, correlation_id: string, changed: boolean, show_id: string, show_revision: number, event_sequence?: number | null, outcomes: Array<SelectiveImportObjectPreview>, objects: Array<SelectiveImportOutcomeObjectChange>, profiles: Array<SelectiveImportProfileChange>, managed_assets: Array<SelectiveImportAssetReference>, };
 export type SelectiveImportErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };
+export type NetworkShowCatalog = { browsing: boolean, peers: Array<NetworkShowPeer>, };
+export type NetworkShowPeer = { instance: string, name: string, address: string, role: DiscoveredRole, shows: Array<NetworkShow>, error: string | null, };
+export type NetworkShow = {
+/**
+ * Editors advertise one open document, without a desk-library identity.
+ */
+id: string | null, name: string, updated_at: string | null, revisions: Array<ShowLibraryRevision>, };
+export type NetworkSaveFolders = { roots: Array<NetworkSaveRoot>, root_id: string | null, path: string, entries: Array<NetworkSaveEntry>, };
+export type NetworkSaveRoot = { id: string, label: string, icon: string, removable: boolean, writable: boolean, };
+export type NetworkSaveEntry = { name: string, path: string, kind: NetworkSaveEntryKind, size: number, modified_millis: number | null, created_millis: number | null, hidden: boolean, writable: boolean, };
+export type NetworkSaveEntryKind = "folder" | "file";
 export type ShowLibrarySnapshot = { shows: Array<ShowLibraryEntry>, };
-export type ShowLibraryEntry = { revisions: Array<ShowLibraryRevision>, id: string, name: string, path: string, revision: number, updated_at: string, created_at: string | null, last_loaded_at: string | null, revision_copy: RuntimeRevisionCopySource | null, };
+export type ShowLibraryEntry = { revisions: Array<ShowLibraryRevision>, is_base_show: boolean, id: string, name: string, path: string, revision: number, updated_at: string, created_at: string | null, last_loaded_at: string | null, revision_copy: RuntimeRevisionCopySource | null, };
 export type ShowLibraryRevision = { show_id: string, revision: number, name: string, created_at: string, };
 export type ShowLibraryActionRequest = { request_id: string, action: ShowLibraryAction, };
-export type ShowLibraryAction = { "type": "create", name: string, data_base64: string | null, overwrite: boolean, } | { "type": "open", show_id: string, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "open_default", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rollback", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rename", show_id: string, name: string, } | { "type": "overwrite", source_show_id: string, destination_show_id: string, } | { "type": "save_revision", show_id: string, name: string, } | { "type": "open_revision", show_id: string, revision: number, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "import_from_visualizer", instance: string, open: boolean, } | { "type": "apply_mvr", token: string, destination: MvrImportDestination, resolutions: Array<MvrImportResolution>, };
+export type ShowLibraryAction = { "type": "create", name: string, data_base64: string | null, overwrite: boolean, } | { "type": "save_copy", source_show_id: string | null, data_base64: string | null, name: string, root_id: string, path: string, is_base_show: boolean, } | { "type": "export_mvr_file", show_id: string | null, data_base64: string | null, name: string, root_id: string, path: string, } | { "type": "save_copy_to_peer", instance: string, source_show_id: string, name: string, root_id: string, path: string, is_base_show: boolean, } | { "type": "export_mvr_to_peer", instance: string, show_id: string, name: string, root_id: string, path: string, } | { "type": "set_base_show", show_id: string, is_base_show: boolean, } | { "type": "create_from_base", show_id: string, name: string, } | { "type": "prepare_revision", show_id: string, revision: number, } | { "type": "import_from_desk", instance: string, show_id: string, revision: number | null, open: boolean, } | { "type": "open", show_id: string, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "open_default", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rollback", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rename", show_id: string, name: string, } | { "type": "overwrite", source_show_id: string, destination_show_id: string, } | { "type": "update_document", destination_show_id: string, expected_revision: number, data_base64: string, } | { "type": "save_revision", show_id: string, name: string, } | { "type": "open_revision", show_id: string, revision: number, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "import_from_visualizer", instance: string, open: boolean, } | { "type": "apply_mvr", token: string, destination: MvrImportDestination, resolutions: Array<MvrImportResolution>, };
 export type ShowOpenTransition = "hold_current" | "timed_fade" | "safe_blackout";
 export type MvrImportDestination = { "type": "new_show", name: string, open_after_import: boolean, } | { "type": "existing_show", show_id: string, };
 export type MvrImportResolution = { fixture_id: string, action: MvrImportResolutionAction, };
 export type MvrImportResolutionAction = { "type": "import" } | { "type": "skip" } | { "type": "import_unpatched" } | { "type": "replace" } | { "type": "address", universe: number, address: number, };
 export type ShowLibraryActionOutcome = { request_id: string, replayed: boolean, result: ShowLibraryActionResult, };
-export type ShowLibraryActionResult = { "type": "show", show: RuntimeShowEntry, } | { "type": "revision", revision: ShowLibraryRevision, } | { "type": "mvr_apply", result: MvrApplyOutcome, };
+export type ShowLibraryActionResult = { "type": "file_saved", root_id: string, path: string, } | { "type": "show", show: RuntimeShowEntry, } | { "type": "document_updated", show: RuntimeShowEntry, document_revision: number, } | { "type": "revision", revision: ShowLibraryRevision, } | { "type": "mvr_apply", result: MvrApplyOutcome, };
 export type MvrApplyOutcome = { show: RuntimeShowEntry, imported_fixtures: number, unresolved_fixtures: number, imported_scenery: number, opened: boolean, warnings: Array<string>, };
 export type MvrImportPreview = { token: string, fixtures: Array<MvrPreviewFixture>, scenery: number, missing_profiles: Array<string>, warnings: Array<string>, address_conflicts: Array<string>, };
 export type MvrPreviewFixture = { uuid: string, name: string, gdtf_spec: string, gdtf_mode: string, universe: number | null, address: number | null, matched: boolean, };

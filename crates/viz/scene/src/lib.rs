@@ -53,15 +53,15 @@ pub use scene::{
     EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody, FixtureInstance,
     FixturePlanBinding, GoboArtwork, GoboSlot, LaserOptics, LightSource, MediaCrop, MediaProjector,
     MediaSection, MediaSectionKind, MediaSourceBinding, MotionAxis, PhysicsBody,
-    PhysicsConstraints, PhysicsProgram, PhysicsSceneryObject, PlanArtwork, PlanFallback, RiserFeet,
-    Scene, SceneryDetail, SceneryKind, SceneryObject, SourceForm, euler_degrees,
+    PhysicsConstraints, PhysicsProgram, PhysicsSceneryObject, PlanArtwork, PlanFallback, PrismSlot,
+    RiserFeet, Scene, SceneryDetail, SceneryKind, SceneryObject, SourceForm, euler_degrees,
 };
 pub use stair_rails::StairRails;
 pub use uuid;
 pub use values::{
-    CellValue, EffectFrame, EmitterValues, ExternalCameraState, LaserScan, ParticleEmitter,
-    ParticleFamily, ParticleTrigger, PhysicalMotionState, PhysicalMotionTarget, PhysicsFrame,
-    ScanPoint, SceneValues, WheelMotionState,
+    CellValue, EffectFrame, EmitterValues, ExternalCameraState, LaserScan, OpticalWheelValues,
+    ParticleEmitter, ParticleFamily, ParticleTrigger, PhysicalMotionState, PhysicalMotionTarget,
+    PhysicsFrame, ScanPoint, SceneValues, WheelMotionState,
 };
 pub use view::{
     Camera, DEFAULT_FOG_VARIATION, FogVariation, ProjectionView, RenderQuality, Theme,

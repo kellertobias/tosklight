@@ -190,6 +190,11 @@ impl Default for MediaResource {
 }
 
 impl ReplayResource {
+    pub(in crate::runtime) async fn acquire_show_library_action(
+        &self,
+    ) -> tokio::sync::MutexGuard<'_, ()> {
+        self.show_library_action.lock().await
+    }
     pub(in crate::runtime) async fn lookup_show_library(
         &self,
         key: &show_library_v2::ReplayKey,

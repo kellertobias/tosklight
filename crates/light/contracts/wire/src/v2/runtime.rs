@@ -85,6 +85,8 @@ pub struct RuntimeRevisionCopySource {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeShowEntry {
+    #[serde(default)]
+    pub is_base_show: bool,
     pub id: Uuid,
     pub name: String,
     pub path: String,
@@ -317,6 +319,14 @@ pub struct RuntimePerformanceDiagnosticsSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_runtime_show_defaults_to_an_ordinary_show() {
+        let entry: RuntimeShowEntry = serde_json::from_value(serde_json::json!({
+            "id":Uuid::new_v4(),"name":"Legacy","path":"legacy.show","revision":1,"updated_at":"saved"
+        })).unwrap();
+        assert!(!entry.is_base_show);
+    }
 
     #[test]
     fn session_request_accepts_unknown_fields_and_validates_known_fields() {

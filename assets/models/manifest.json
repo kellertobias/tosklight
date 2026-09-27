@@ -3781,7 +3781,17 @@
           "finish": "paint"
         },
         {
-          "name": "source-array",
+          "name": "source-red",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "source-green",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "source-blue",
           "kind": "base",
           "finish": "glass"
         },
@@ -3841,7 +3851,17 @@
           "finish": "paint"
         },
         {
-          "name": "source-array",
+          "name": "source-red",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "source-green",
+          "kind": "base",
+          "finish": "glass"
+        },
+        {
+          "name": "source-blue",
           "kind": "base",
           "finish": "glass"
         },

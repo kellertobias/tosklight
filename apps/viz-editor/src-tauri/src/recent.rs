@@ -29,27 +29,38 @@ impl RecentShow {
         }
     }
 
-    /// The last show, if it is still there.
-    pub fn read(&self) -> Option<PathBuf> {
-        let recorded = std::fs::read_to_string(&self.file).ok().or_else(|| {
+    /// All surviving recent files, newest first. The old single-path record remains readable.
+    pub fn list(&self) -> Vec<PathBuf> {
+        let Some(recorded) = std::fs::read_to_string(&self.file).ok().or_else(|| {
             self.legacy_file
                 .as_ref()
                 .and_then(|legacy| std::fs::read_to_string(legacy).ok())
-        })?;
-        let path = PathBuf::from(recorded.trim());
-        if path.is_file() {
-            self.remember(&path);
-            Some(path)
-        } else {
-            None
-        }
+        }) else {
+            return Vec::new();
+        };
+        let paths: Vec<PathBuf> = serde_json::from_str(&recorded)
+            .unwrap_or_else(|_| vec![PathBuf::from(recorded.trim())]);
+        paths.into_iter().filter(|path| path.is_file()).collect()
+    }
+
+    /// The last show, if it is still there.
+    pub fn read(&self) -> Option<PathBuf> {
+        let path = self.list().into_iter().next()?;
+        self.remember(&path);
+        Some(path)
     }
 
     pub fn remember(&self, path: &Path) {
+        let mut paths = self.list();
+        paths.retain(|previous| previous != path);
+        paths.insert(0, path.to_owned());
+        paths.truncate(30);
         if let Some(parent) = self.file.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        let _ = std::fs::write(&self.file, path.display().to_string());
+        if let Ok(recorded) = serde_json::to_vec(&paths) {
+            let _ = std::fs::write(&self.file, recorded);
+        }
     }
 }
 
@@ -84,6 +95,26 @@ mod tests {
             "a show that has been moved away is forgotten, not reported as broken"
         );
         let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn recent_list_keeps_multiple_files_in_opening_order() {
+        let directory = scratch();
+        std::fs::create_dir_all(&directory).unwrap();
+        let first = directory.join("first.show");
+        let second = directory.join("second.show");
+        for path in [&first, &second] {
+            std::fs::write(path, "show").unwrap();
+        }
+        let recent = RecentShow::at(directory.join("recent"));
+        recent.remember(&first);
+        recent.remember(&second);
+        assert_eq!(recent.list(), vec![second.clone(), first.clone()]);
+        recent.remember(&first);
+        assert_eq!(recent.list(), vec![first.clone(), second.clone()]);
+        std::fs::remove_file(first).unwrap();
+        assert_eq!(recent.list(), vec![second]);
+        let _ = std::fs::remove_dir_all(directory);
     }
 
     #[test]

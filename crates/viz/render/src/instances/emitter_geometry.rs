@@ -98,6 +98,21 @@ pub fn semantic_lights(scene: &Scene, values: &SceneValues) -> Vec<SemanticLight
             value.zoom,
             &values.position_points,
         );
+        if let Some(model) = fixture
+            .model
+            .and_then(|index| scene.models.get(index as usize))
+            && let Some(scanner_pose) = fixture_appearance::scanner_emitter_pose(
+                model,
+                fixture,
+                emitter,
+                pan,
+                tilt,
+                value.zoom,
+                &values.position_points,
+            )
+        {
+            pose = scanner_pose;
+        }
         pose.half_angle = optics.half_angle;
         let cells = cell_states(emitter, value, installed_colour);
         let aperture = aperture_size(emitter);

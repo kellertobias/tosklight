@@ -39,6 +39,7 @@ impl FixtureProfile {
             scenery: None,
             mounting: None,
             gobos: Vec::new(),
+            prisms: Vec::new(),
             modes: vec![FixtureMode {
                 id: mode_id,
                 name: "Default".into(),

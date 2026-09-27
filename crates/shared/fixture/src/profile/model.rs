@@ -176,6 +176,9 @@ pub struct FixtureProfile {
     /// The fixture's gobo wheel, slot by slot, when the package carries one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gobos: Vec<ProfileGobo>,
+    /// Optical representations, selected by the matching prism wheel and slot.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prisms: Vec<ProfilePrism>,
     pub modes: Vec<FixtureMode>,
     #[serde(default)]
     pub hazardous: bool,
@@ -289,6 +292,8 @@ struct FixtureProfileCanonical {
     mounting: Option<ProfileMounting>,
     #[serde(default)]
     gobos: Vec<ProfileGobo>,
+    #[serde(default)]
+    prisms: Vec<ProfilePrism>,
     modes: Vec<FixtureMode>,
     #[serde(default)]
     hazardous: bool,
@@ -549,6 +554,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             scenery: canonical.scenery,
             mounting: canonical.mounting,
             gobos: canonical.gobos,
+            prisms: canonical.prisms,
             modes: canonical.modes,
             hazardous: canonical.hazardous,
             direct_control_protocols: canonical.direct_control_protocols,
@@ -921,8 +927,14 @@ fn default_effect_result_version() -> u16 {
 ///
 /// A profile that declares no wheel keeps the old behaviour exactly: the drawn patterns, evenly
 /// divided. A wheel that declares slots but no artwork still gets the right number of them.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProfileGobo {
+    /// The one-based gobo wheel, corresponding to `gobo.N`. Old profiles use wheel one.
+    #[serde(
+        default = "default_optical_wheel",
+        skip_serializing_if = "is_first_optical_wheel"
+    )]
+    pub wheel: u32,
     /// Which slot this is, counting the open slot as zero. Slots need not be contiguous and the
     /// open slot need not be declared; the wheel is as long as its highest slot.
     pub slot: u32,
@@ -937,6 +949,49 @@ pub struct ProfileGobo {
     /// the colour of whatever the fixture is putting through it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artwork_asset: Option<String>,
+}
+
+fn default_optical_wheel() -> u32 {
+    1
+}
+fn is_first_optical_wheel(wheel: &u32) -> bool {
+    *wheel == 1
+}
+
+impl Default for ProfileGobo {
+    fn default() -> Self {
+        Self {
+            wheel: 1,
+            slot: 0,
+            name: None,
+            artwork_asset: None,
+        }
+    }
+}
+
+/// Package-owned visual representation of one selected prism wheel slot.
+/// Slot zero is open; declare only inserted prisms. Omission preserves generic legacy optics.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProfilePrism {
+    #[serde(
+        default = "default_optical_wheel",
+        skip_serializing_if = "is_first_optical_wheel"
+    )]
+    pub wheel: u32,
+    pub slot: u32,
+    pub representation: PrismRepresentation,
+    /// Number of projected copies, including the centre copy for an odd linear arrangement.
+    pub facets: u32,
+    /// Angular distance from the optical axis to the outermost copies.
+    pub spread_degrees: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PrismRepresentation {
+    #[default]
+    Radial,
+    Linear,
 }
 
 /// The shape and size of the emitting surface.

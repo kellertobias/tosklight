@@ -7,8 +7,10 @@ import {
 	TextInput,
 	type TitleAction,
 } from "@tosklight/ui";
-import { useEffect, useState } from "react";
-import type { DiscoveredPeer } from "../../api/client/discovery";
+
+import { useEffect } from "react";
+import { ShowSaveBrowser } from "./ShowSaveBrowser";
+import { ShowLoadBrowser } from "./ShowLoadBrowser";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 import type { QuickSetupModel } from "./QuickSetupModal";
 import { SelectiveShowImportModal } from "./SelectiveShowImportModal";
@@ -100,114 +102,8 @@ function CopySaveDialog({ model }: ModelProps) {
 	);
 }
 
-function SaveAsDestinations({ model }: ModelProps) {
-	const { activeShowId, revisionCopy } = model.view;
-	const { lifecycle } = model.authorities;
-	const { requestOverwrite } = model.actions;
-	const shows = lifecycle?.shows ?? [];
-	const destinations = shows.filter((show) => show.id !== activeShowId);
-	if (model.view.activeShowIsProvisional || destinations.length === 0)
-		return null;
-	return (
-		<>
-			<h4>Or replace an existing Latest Autosave</h4>
-			<div className="show-library overwrite-destination-list">
-				{destinations.map((show) => (
-					<article key={show.id}>
-						<span>
-							<b>{show.name}</b>
-							<small>
-								{show.id === revisionCopy?.show_id
-									? "Original show"
-									: "Existing show"}
-							</small>
-						</span>
-						<Button onClick={() => requestOverwrite(show)}>
-							Choose Destination
-						</Button>
-					</article>
-				))}
-			</div>
-		</>
-	);
-}
-
 function SaveAsDialog({ model }: ModelProps) {
-	const { activeShowIsProvisional, flashDriveConnected } = model.view;
-	const { openMvrExport } = model.mvr;
-	const { saveAs } = model.actions;
-	const dialogs = model.dialogs;
-	if (!dialogs.saveAsOpen) return null;
-	return (
-		<StackedModal onClose={() => dialogs.setSaveAsOpen(false)}>
-			<div
-				className="nested-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Save show"
-			>
-				<ModalTitleBar
-					title={activeShowIsProvisional ? "Name Empty Show" : "Save Show As"}
-					groups={[
-						{
-							id: "export",
-							actions: [
-								{
-									id: "export-mvr",
-									label: "Export as MVR",
-									onPress: openMvrExport,
-								},
-							],
-						},
-					]}
-					accept={{
-						id: "save",
-						label: activeShowIsProvisional
-							? "Name Empty Show"
-							: "Save as New Show",
-						variant: "primary",
-						disabled: !dialogs.showName.trim(),
-						onPress: () => void saveAs(),
-					}}
-					closeLabel="Close Save Show"
-					onClose={() => dialogs.setSaveAsOpen(false)}
-				/>
-				{activeShowIsProvisional && (
-					<p>
-						This empty show is already autosaved. Naming it keeps the same show
-						and all current programming.
-					</p>
-				)}
-				<div className="save-destination">
-					<Button
-						className={dialogs.destination === "local" ? "active" : ""}
-						onClick={() => dialogs.setDestination("local")}
-					>
-						This desk
-					</Button>
-					{flashDriveConnected && (
-						<Button
-							className={dialogs.destination === "flash" ? "active" : ""}
-							onClick={() => dialogs.setDestination("flash")}
-						>
-							Connected flash drive
-						</Button>
-					)}
-				</div>
-				<TextInput
-					clearable
-					className="show-name-input"
-					autoFocus
-					value={dialogs.showName}
-					onChange={(event) => dialogs.setShowName(event.target.value)}
-					onKeyboardCommit={(value) => void saveAs(value)}
-					placeholder="New show name"
-					aria-label="Show name"
-				/>
-				<SaveAsDestinations model={model} />
-			</div>
-		</StackedModal>
-	);
+    return model.dialogs.saveAsOpen ? <ShowSaveBrowser model={model} /> : null;
 }
 
 function OverwriteDialog({ model }: ModelProps) {
@@ -254,193 +150,9 @@ function OverwriteDialog({ model }: ModelProps) {
 	);
 }
 
-function NamedRevisionList({ model, showId }: ModelProps & { showId: string }) {
-	const revisions = model.view.revisionsByShow[showId] ?? [];
-	if (revisions.length === 0) return <small>No manually saved revisions</small>;
-	return revisions.map((revision) => (
-		<Button
-			key={revision.revision}
-			onClick={() =>
-				void model.actions.loadNamedRevision(showId, revision.revision)
-			}
-		>
-			<span>
-				<b>
-					Revision {revision.revision} · {revision.name}
-				</b>
-				<small>{new Date(revision.created_at).toLocaleString()}</small>
-			</span>
-			<i>Load Revision as Copy</i>
-		</Button>
-	));
-}
-
-/**
- * The Viz editors on the network, offered as somewhere to load a rig from.
- *
- * Nothing is rendered when there is nothing to load: an operator with no visualizer running
- * should not be shown a button that can only fail. Two editors are two buttons, told apart by
- * name and — in the tooltip — address, because that is what distinguishes them.
- */
-function useLoadFromVisualizerActions(model: QuickSetupModel): TitleAction[] {
-	const { lifecycle } = model.authorities;
-	const open = model.dialogs.loadOpen;
-	const [visualizers, setVisualizers] = useState<DiscoveredPeer[]>([]);
-	useEffect(() => {
-		if (!open || !lifecycle) {
-			setVisualizers([]);
-			return;
-		}
-		let current = true;
-		// Read once as the menu opens: a peer that leaves while it is open is caught by the
-		// load itself failing, which is honest, rather than by a list that flickers.
-		void lifecycle
-			.discoveredVisualizers()
-			.then((found) => current && setVisualizers(found));
-		return () => {
-			current = false;
-		};
-	}, [open, lifecycle]);
-	return visualizers.map((visualizer) => ({
-		id: `visualizer-${visualizer.instance}`,
-		label: `Load from Visualizer · ${visualizer.name}: ${visualizer.show}`,
-		ariaLabel: `Load from ${visualizer.name} at ${visualizer.address}`,
-		onPress: async () => {
-			if (await lifecycle?.loadFromVisualizer(visualizer.instance))
-				model.dialogs.setLoadOpen(false);
-		},
-	}));
-}
-
-function LoadShowLibrary({ model }: ModelProps) {
-	const { lifecycle } = model.authorities;
-	const { activeShowId, revisionsByShow } = model.view;
-	return (
-		<div className="show-library revision-show-library">
-			<article className="built-in-default-show">
-				<span>
-					<b>Built-in Default Stage Show</b>
-					<small>Untouched completed demo show</small>
-				</span>
-				<Button
-					variant="primary"
-					onClick={async () => {
-						if (await lifecycle?.openCleanDefaultShow())
-							model.dialogs.setLoadOpen(false);
-					}}
-				>
-					Load Clean Built-in Default
-				</Button>
-			</article>
-			{(lifecycle?.shows ?? []).map((show) => (
-				<article
-					key={show.id}
-					className={show.id === activeShowId ? "active" : ""}
-				>
-					<span>
-						<b>{show.name}</b>
-						<small>
-							{(revisionsByShow[show.id] ?? []).length} named revisions
-						</small>
-					</span>
-					<Button
-						onClick={() => {
-							void lifecycle?.openShow(show.id);
-							model.dialogs.setLoadOpen(false);
-						}}
-					>
-						Load Latest Autosave
-					</Button>
-					<div className="named-revision-list">
-						<NamedRevisionList model={model} showId={show.id} />
-					</div>
-				</article>
-			))}
-		</div>
-	);
-}
-
 function LoadDialog({ model }: ModelProps) {
-	const { lifecycle } = model.authorities;
-	const dialogs = model.dialogs;
-	const visualizerActions = useLoadFromVisualizerActions(model);
-	if (!dialogs.loadOpen) return null;
-	return (
-		<StackedModal onClose={() => dialogs.setLoadOpen(false)}>
-			<div
-				className="nested-modal load-show-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Load show"
-			>
-				<ModalTitleBar
-					title="Load Show"
-					groups={[
-						{
-							id: "load",
-							actions: [
-								{
-									id: "partial",
-									label: "Partial Show Load",
-									onPress: () => {
-										dialogs.setLoadOpen(false);
-										dialogs.setSelectiveImportOpen(true);
-									},
-								},
-								{
-									id: "mvr",
-									label: "Load from MVR",
-									onPress: () =>
-										model.mvr.openMvrImport(() => dialogs.setLoadOpen(false)),
-								},
-								...visualizerActions,
-								{
-									id: "usb",
-									label: "Show from USB",
-									onPress: () => dialogs.usbShowPickerTrigger.current?.(),
-								},
-								{
-									id: "os",
-									label: "Show from OS",
-									onPress: () => dialogs.osShowPickerInput.current?.click(),
-								},
-							],
-						},
-					]}
-					closeLabel="Close Load Show"
-					onClose={() => dialogs.setLoadOpen(false)}
-				/>
-				<Input
-					ref={dialogs.osShowPickerInput}
-					hidden
-					type="file"
-					accept=".show"
-					onChange={(event) => {
-						const file = event.target.files?.[0];
-						if (file) void lifecycle?.uploadShow(file);
-						event.target.value = "";
-					}}
-				/>
-				<p>
-					Load Latest Autosave always resumes that show&apos;s newest work. Load
-					Clean Built-in Default creates a separate show from the untouched
-					built-in rig. Load Revision as Copy creates and activates a separate
-					autosaved show without changing the original.
-				</p>
-				<LoadShowLibrary model={model} />
-				<RootConfinedFilePickerButton
-					hideButton
-					triggerRef={dialogs.usbShowPickerTrigger}
-					label="Show from USB"
-					allowedExtensions={["show"]}
-					onFiles={(files) => {
-						const file = files[0];
-						if (file) return lifecycle?.uploadShow(file);
-					}}
-				/>
-			</div>
-		</StackedModal>
-	);
+    if (!model.dialogs.loadOpen) return null;
+    return <ShowLoadBrowser model={model} />;
 }
 
 function SelectiveImportDialog({ model }: ModelProps) {
@@ -452,7 +164,8 @@ function SelectiveImportDialog({ model }: ModelProps) {
 		<StackedModal onClose={() => dialogs.selectiveImportClose.current?.()}>
 			<SelectiveShowImportModal
 				activeShow={activeShow}
-				shows={lifecycle?.shows ?? []}
+				shows={model.dialogs.partialSource ? [model.dialogs.partialSource, ...(lifecycle?.shows ?? []).filter(show => show.id !== model.dialogs.partialSource?.id)] : lifecycle?.shows ?? []}
+                initialSourceShowId={model.dialogs.partialSource?.id}
 				closeTriggerRef={dialogs.selectiveImportClose}
 				onClose={() => dialogs.setSelectiveImportOpen(false)}
 				loadCatalog={selectiveImport.catalog}
@@ -484,6 +197,13 @@ function NewShowDialog({ model }: ModelProps) {
 					Create and open a new empty show. The current show remains saved on
 					this desk.
 				</p>
+                <Button onClick={async () => {if (await lifecycle?.openCleanDefaultShow()) setNewShowOpen(false);}}>Load Clean Built-in Default</Button>
+                {(lifecycle?.shows ?? []).filter(show => show.is_base_show).length > 0 && <section className="base-show-list">
+                    <h4>Start from a base show</h4>
+                    {(lifecycle?.shows ?? []).filter(show => show.is_base_show).map(show => <Button key={show.id} onClick={async () => {
+                        if (await lifecycle?.initializeEmptyShow(show.id)) setNewShowOpen(false);
+                    }}>Use {show.name}</Button>)}
+                </section>}
 				<Button
 					className="primary"
 					onClick={async () => {

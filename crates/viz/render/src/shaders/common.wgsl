@@ -41,8 +41,10 @@ struct Light {
     optics: vec4<f32>,            // gobo slot, gobo rotation, prism facets, prism rotation
     shapers: vec4<f32>,           // blade insertions: +u, -u, +v, -v
     shaper_angles: vec4<f32>,     // per-blade rotation in radians
-    gate: vec4<f32>,              // gobo artwork layer or -1, spare
+    gate: vec4<f32>,              // first artwork layer or -1, gobo wheel count, prism wheel count, spare
     shadow: vec4<f32>,            // atlas tile index or -1, tile origin u, v, tile size
+    gobo_wheels: array<vec4<f32>, 8>, // slot, rotation, artwork layer or -1, spare
+    prism_wheels: array<vec4<f32>, 8>, // facets, rotation, linear flag, spread
 };
 
 @group(2) @binding(0) var shadow_atlas: texture_depth_2d;
@@ -104,11 +106,6 @@ fn shadow_factor(light: Light, world: vec3<f32>) -> f32 {
 const TILE_SIZE: u32 = 16u;
 const MAX_LIGHTS_PER_TILE: u32 = 96u;
 const PI: f32 = 3.14159265359;
-/// How far each prism copy sits from the beam axis, in gate radii.
-const PRISM_SPREAD: f32 = 0.62;
-/// The radius each copy occupies once it is out there. Copies just touching at the default
-/// spread is what a prism looks like at its most useful.
-const PRISM_COPY_RADIUS: f32 = 0.55;
 
 fn light_count() -> u32 {
     return u32(globals.params2.x);
@@ -259,12 +256,17 @@ fn beam_profile(light: Light, to_light: vec3<f32>) -> f32 {
         profile = edge * core;
     }
 
-    let gobo_slot = select(0u, u32(light.optics.x), gobos_enabled());
-    let facets = light.optics.z;
+    let gobo_count = select(0u, min(u32(light.gate.y), 8u), gobos_enabled());
+    let prism_count = min(u32(light.gate.z), 8u);
     let shaped = select(0.0, light.shapers.x + light.shapers.y + light.shapers.z + light.shapers.w, gobos_enabled());
-    if (gobo_slot == 0u && facets < 2.0 && shaped <= 0.001) {
-        return profile;
+    var optics_active = shaped > 0.001;
+    for (var wheel = 0u; wheel < gobo_count; wheel += 1u) {
+        optics_active = optics_active || light.gobo_wheels[wheel].x > 0.0;
     }
+    for (var wheel = 0u; wheel < prism_count; wheel += 1u) {
+        optics_active = optics_active || light.prism_wheels[wheel].x >= 2.0;
+    }
+    if (!optics_active) { return profile; }
 
     // Everything a head puts in front of its lamp lives in the gate: a flat disc across the
     // beam, turning with the head. `gate` is a point on that disc with the field edge at one.
@@ -276,42 +278,57 @@ fn beam_profile(light: Light, to_light: vec3<f32>) -> f32 {
     let scale = max(sqrt(max(1.0 - cos_outer * cos_outer, 1e-6)) / max(cos_outer, 1e-3), 1e-4);
     var gate = vec2<f32>(dot(across, tangent), dot(across, bitangent)) / (along * scale);
 
-    // A prism deviates the beam into one copy per facet, arranged around the axis. Folding the
-    // gate into a single wedge draws every copy from one evaluation, which is what keeps this
-    // affordable inside the march; recentring on the wedge's own axis is what separates the
-    // copies instead of stacking them.
+    // Each authored prism is a separate gate transform. Copies carry the combined gobos;
+    // wheel rotation belongs to its prism rather than rotating every optic together.
     var prism_aperture = 1.0;
-    if (facets >= 2.0) {
-        let wedge = 2.0 * PI / facets;
-        let angle = atan2(gate.y, gate.x) + light.optics.w;
-        let folded = (angle - floor(angle / wedge) * wedge) - wedge * 0.5;
-        let radius = length(gate);
-        let copy = vec2<f32>(cos(folded), sin(folded)) * radius;
-        // Each facet's copy sits out along its own axis and is magnified to fill the field it
-        // now occupies, so a prism spreads the beam rather than shrinking what is in it.
-        gate = (copy - vec2<f32>(PRISM_SPREAD, 0.0)) / PRISM_COPY_RADIUS;
-        // A facet passes nothing outside its own copy. That gap is what makes a prism read as
-        // several beams rather than one — with a gobo in the gate and without one.
-        prism_aperture = 1.0 - smoothstep(0.82, 1.0, length(gate));
+    for (var wheel = 0u; wheel < prism_count; wheel += 1u) {
+        let prism = light.prism_wheels[wheel];
+        if (prism.x < 2.0) { continue; }
+        let angle = prism.y;
+        let rotated = vec2<f32>(gate.x * cos(angle) - gate.y * sin(angle),
+            gate.x * sin(angle) + gate.y * cos(angle));
+        var copy: vec2<f32>;
+        if (prism.z > 0.5) {
+            // Linear copies evenly spaced along the rotating prism's own axis.
+            let spacing = max(2.0 * prism.w / max(prism.x - 1.0, 1.0), 0.0001);
+            let index = clamp(round(rotated.x / spacing + (prism.x - 1.0) * 0.5), 0.0, prism.x - 1.0);
+            let centre = (index - (prism.x - 1.0) * 0.5) * spacing;
+            let copy_radius = clamp(spacing * 0.42, 0.025, 0.35);
+            copy = vec2<f32>(rotated.x - centre, rotated.y) / copy_radius;
+        } else {
+            let wedge = 2.0 * PI / prism.x;
+            let heading = atan2(rotated.y, rotated.x);
+            let folded = (heading - floor(heading / wedge) * wedge) - wedge * 0.5;
+            let copy_radius = clamp(prism.w * sin(PI / prism.x) * 0.85, 0.025, 0.35);
+            copy = (vec2<f32>(cos(folded), sin(folded)) * length(rotated)
+                - vec2<f32>(prism.w, 0.0)) / copy_radius;
+        }
+        // Return to the common gate axes: gobo indexing is independent of prism rotation.
+        gate = vec2<f32>(copy.x * cos(angle) + copy.y * sin(angle),
+            -copy.x * sin(angle) + copy.y * cos(angle));
+        prism_aperture *= 1.0 - smoothstep(0.82, 1.0, length(copy));
     }
 
     let frost = light.tangent_frost.w;
-    if (gobo_slot > 0u) {
-        let turn = light.optics.y;
-        let rotated = vec2<f32>(
-            gate.x * cos(turn) - gate.y * sin(turn),
-            gate.x * sin(turn) + gate.y * cos(turn),
-        );
-        // Frost is a diffuser: it does not remove the gobo, it stops it holding an edge.
-        let layer = i32(light.gate.x);
-        var pattern = 0.0;
+    var transmission = 1.0;
+    for (var wheel = 0u; wheel < gobo_count; wheel += 1u) {
+        let gobo = light.gobo_wheels[wheel];
+        let slot = u32(gobo.x);
+        if (slot == 0u) { continue; }
+        let turn = gobo.y;
+        let rotated = vec2<f32>(gate.x * cos(turn) - gate.y * sin(turn),
+            gate.x * sin(turn) + gate.y * cos(turn));
+        let layer = i32(gobo.z);
+        var pattern: f32;
         if (layer >= 0) {
             pattern = gobo_artwork_transmission(layer, rotated);
         } else {
-            pattern = gobo_transmission(gobo_slot, rotated);
+            pattern = gobo_transmission(slot, rotated);
         }
-        profile *= mix(pattern, 1.0, clamp(frost * 1.4, 0.0, 0.95));
+        // Wheels in series mask one another. An open wheel passes the preceding pattern.
+        transmission *= pattern;
     }
+    profile *= mix(transmission, 1.0, clamp(frost * 1.4, 0.0, 0.95));
     if (shaped > 0.001) {
         profile *= shaper_transmission(light, gate, light.params.y + frost);
     }

@@ -290,6 +290,9 @@ fn typed_capability_event(
         }),
         "show_opened" => show_library_event(revision, ShowLibraryNotificationKind::ShowOpened),
         "show_renamed" => show_library_event(revision, ShowLibraryNotificationKind::ShowRenamed),
+        "show_updated" => {
+            show_library_event(revision, ShowLibraryNotificationKind::ShowBaseChanged)
+        }
         "show_rolled_back" => {
             show_library_event(revision, ShowLibraryNotificationKind::ShowRolledBack)
         }

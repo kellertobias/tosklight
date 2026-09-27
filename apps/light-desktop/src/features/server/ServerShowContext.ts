@@ -4,24 +4,28 @@ import type { StoredDeskLayout } from "./contracts";
 
 export interface ServerShowContext {
 	createShow: (name: string) => Promise<void>;
-	saveShowAs: (name: string) => Promise<boolean>;
+    networkSaveFolders: (instance: string, rootId: string, path: string) => Promise<import("../../api/client/shows").ShowSaveFolders>;
+    saveShowCopy: (name: string, target: import("../../api/client/shows").ShowSaveTarget, baseShow: boolean) => Promise<ShowEntry>;
+    exportMvrFile: (name: string, target: import("../../api/client/shows").ShowSaveTarget) => Promise<import("../../api/client/shows").SavedShowFile>;
+    networkShows: () => Promise<import("../../api/generated/light-wire").NetworkShowCatalog>;
+    importRemoteShow: (instance: string, showId: string | null, revision: number | null, open: boolean) => Promise<ShowEntry | null>;
+    prepareShowRevision: (id: string, revision: number) => Promise<ShowEntry | null>;
+    prepareShowFile: (root: string, path: string, name: string) => Promise<ShowEntry | null>;
+    openShowFile: (root: string, path: string, name: string) => Promise<boolean>;
+	saveShowAs: (name: string, options?: { baseShow?: boolean; latest?: boolean }) => Promise<boolean>;
 	overwriteShow: (destinationId: string) => Promise<boolean>;
-	initializeEmptyShow: () => Promise<boolean>;
+	initializeEmptyShow: (baseShowId?: string) => Promise<boolean>;
 	uploadShow: (file: File, overwrite?: boolean) => Promise<void>;
 	openShow: (
 		id: string,
 		transition?: "hold_current" | "timed_fade" | "safe_blackout",
-	) => Promise<void>;
+	) => Promise<boolean>;
 	openCleanDefaultShow: () => Promise<boolean>;
 	/** The Viz editors on the network that currently hold a document worth loading. */
 	discoveredVisualizers: () => Promise<DiscoveredPeer[]>;
 	/** Import and open the document one of them has open. */
 	loadFromVisualizer: (instance: string) => Promise<boolean>;
-	openShowFile: (
-		rootId: string,
-		path: string,
-		name: string,
-	) => Promise<boolean>;
+
 	listShowRevisions: (
 		id: string,
 	) => Promise<import("../../api/types").ShowRevision[]>;

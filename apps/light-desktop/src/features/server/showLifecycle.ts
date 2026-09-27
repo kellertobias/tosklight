@@ -4,6 +4,13 @@ import type { ServerCapabilities } from "./capabilityContracts";
 
 type ShowLifecycleActions = Pick<
 	ServerCapabilities,
+	| "networkShows"
+    | "networkSaveFolders"
+    | "saveShowCopy"
+    | "exportMvrFile"
+    | "importRemoteShow"
+    | "prepareShowRevision"
+    | "prepareShowFile"
 	| "createShow"
 	| "saveShowAs"
 	| "overwriteShow"
@@ -62,11 +69,14 @@ function createShowCreationActions(
 				setError(reason instanceof Error ? reason.message : String(reason));
 			}
 		},
-		saveShowAs: async (name) => {
+		saveShowAs: async (name, options = {}) => {
 			try {
 				let created: ShowEntry;
 				let shouldOpen = true;
-				if (
+				if (options.latest && bootstrap?.active_show) {
+                    created = bootstrap.active_show;
+                    shouldOpen = false;
+                } else if (
 					bootstrap?.active_show &&
 					/^New Empty Show(?: [1-9]\d*)?$/.test(bootstrap.active_show.name)
 				) {
@@ -79,6 +89,7 @@ function createShowCreationActions(
 					for (const byte of bytes) binary += String.fromCharCode(byte);
 					created = await api.shows.createShow(name, btoa(binary), false);
 				} else created = await api.shows.createShow(name);
+				created = await api.shows.setBaseShow(created.id, options.baseShow ?? false);
 				if (shouldOpen)
 					await whileLoadingShow(model, `Loading show ${name}…`, async () => {
 						await api.shows.openShow(created.id, "hold_current");
@@ -112,14 +123,15 @@ function createShowCreationActions(
 				return false;
 			}
 		},
-		initializeEmptyShow: async () => {
+		initializeEmptyShow: async (baseShowId) => {
 			try {
 				const names = new Set(shows.map((show) => show.name.toLowerCase()));
-				let name = "New Empty Show";
+				const prefix = baseShowId ? "New Show from Base" : "New Empty Show";
+				let name = prefix;
 				for (let suffix = 2; names.has(name.toLowerCase()); suffix += 1)
-					name = `New Empty Show ${suffix}`;
+					name = `${prefix} ${suffix}`;
 				await whileLoadingShow(model, `Initializing show ${name}…`, async () => {
-					const created = await api.shows.createShow(name);
+					const created = baseShowId ? await api.shows.createFromBase(baseShowId, name) : await api.shows.createShow(name);
 					await api.shows.openShow(created.id, "hold_current");
 					await refresh();
 				});
@@ -136,6 +148,42 @@ function createShowCreationActions(
 function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 	const { api, setError, shows, setShows, refresh } = model;
 	return {
+        networkSaveFolders: (instance, rootId, path) => api.shows.networkSaveFolders(instance, rootId, path),
+        saveShowCopy: async (name, target, baseShow) => {
+            const source = model.bootstrap?.active_show;
+            if (!source) throw new Error("Open a show before saving a copy");
+            const saved = await api.shows.saveShowCopy(source.id, name, target, baseShow);
+            if (!target.instance) setShows(await api.shows.shows());
+            return saved;
+        },
+        exportMvrFile: async (name, target) => {
+            const source = model.bootstrap?.active_show;
+            if (!source) throw new Error("Open a show before exporting MVR");
+            return api.shows.exportMvrFile(source.id, name, target);
+        },
+        networkShows: () => api.shows.networkShows(),
+        importRemoteShow: async (instance, id, revision, open) => {
+            try {
+                const show = await api.shows.importRemoteShow(instance, id, revision, open);
+                if (open) await refresh();
+                setShows(await api.shows.shows()); setError(null); return show;
+            } catch(reason) {setError(reason instanceof Error ? reason.message : String(reason)); return null;}
+        },
+        prepareShowRevision: async (id, revision) => {
+            try { const show = await api.shows.prepareRevision(id, revision); setShows(await api.shows.shows()); setError(null); return show; }
+            catch(reason) {setError(reason instanceof Error ? reason.message : String(reason)); return null;}
+        },
+        prepareShowFile: async (root, path, name) => {
+            try {
+                const entry = root === "shows" ? shows.find(show => show.path.replaceAll("\\", "/").endsWith(`/${path}`)) : undefined;
+                if (entry) return entry;
+                const blob = await api.files.fileContent(root, path);
+                const bytes = new Uint8Array(await blob.arrayBuffer());
+                let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
+                const imported = await api.shows.createShow(name.replace(/\.show$/i, ""), btoa(binary), false);
+                setShows(await api.shows.shows()); setError(null); return imported;
+            } catch(reason) {setError(reason instanceof Error ? reason.message : String(reason)); return null;}
+        },
 		uploadShow: async (file, overwrite = false) => {
 			try {
 				const bytes = new Uint8Array(await file.arrayBuffer());
@@ -193,8 +241,10 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 					},
 				);
 				setError(null);
+                return true;
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
+                return false;
 			}
 		},
 		openCleanDefaultShow: async () => {
@@ -218,15 +268,9 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 			try {
 				const showName = name.replace(/\.show$/i, "");
 				await whileLoadingShow(model, `Loading show ${showName}…`, async () => {
-					let entry =
-						rootId === "shows"
-							? shows.find(
-									(show) =>
-										show.name.localeCompare(showName, undefined, {
-											sensitivity: "accent",
-										}) === 0,
-								)
-							: undefined;
+                    let entry = rootId === "shows"
+                        ? shows.find(show => show.path.replaceAll("\\", "/").endsWith(`/${path}`) || show.path === path)
+                        : undefined;
 					if (!entry) {
 						const blob = await api.files.fileContent(rootId, path);
 						const bytes = new Uint8Array(await blob.arrayBuffer());

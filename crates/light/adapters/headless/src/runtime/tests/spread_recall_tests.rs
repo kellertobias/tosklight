@@ -30,6 +30,7 @@ impl SpreadRecallRig {
         let show_path = data_dir.join(format!("shows/{name}.show"));
         let show_id = default_show::initialise_legacy_test_show(&show_path).unwrap();
         let entry = ShowEntry {
+            is_base_show: false,
             id: show_id,
             name: name.into(),
             path: show_path.display().to_string(),

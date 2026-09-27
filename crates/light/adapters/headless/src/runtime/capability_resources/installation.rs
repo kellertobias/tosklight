@@ -65,6 +65,14 @@ impl InstallationResource {
             .upsert_show_with_revision_copy(name, path, overwrite, revision_copy)
     }
 
+    pub(in crate::runtime) fn set_show_base(
+        &self,
+        id: light_core::ShowId,
+        is_base_show: bool,
+    ) -> Result<ShowEntry, light_show::StoreError> {
+        self.desk.lock().set_show_base(id, is_base_show)
+    }
+
     pub(in crate::runtime) fn mark_show_updated(
         &self,
         id: light_core::ShowId,

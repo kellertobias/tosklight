@@ -80,6 +80,7 @@ impl FixtureProfile {
             scenery: None,
             mounting: None,
             gobos: Vec::new(),
+            prisms: Vec::new(),
             modes,
             hazardous: first.hazardous,
             direct_control_protocols: first.direct_control_protocols.clone(),

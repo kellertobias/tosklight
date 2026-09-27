@@ -577,6 +577,7 @@ impl ActiveObjectScenario {
         let store = ShowStore::open(&show_path).unwrap();
         seed(&store);
         let entry = ShowEntry {
+            is_base_show: false,
             id: show_id,
             name: name.into(),
             path: show_path.display().to_string(),

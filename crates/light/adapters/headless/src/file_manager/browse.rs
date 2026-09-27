@@ -17,6 +17,7 @@ pub(super) struct RootInfo {
     label: String,
     icon: String,
     removable: bool,
+    network: bool,
     writable: bool,
     capabilities: FileSystemCapabilities,
 }
@@ -70,6 +71,8 @@ pub(super) async fn roots(
         configured_roots(&state)
             .into_iter()
             .map(|(root, removable)| RootInfo {
+                network: root.icon.as_deref() == Some("network")
+                    || support::is_network_path(&root.path),
                 writable: fs::metadata(&root.path)
                     .map(|metadata| !metadata.permissions().readonly())
                     .unwrap_or(false),

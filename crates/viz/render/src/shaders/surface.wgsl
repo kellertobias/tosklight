@@ -79,8 +79,6 @@ struct Finish {
     normal: vec3<f32>,
     // A sheen the base colour does not control: the nap of fabric catching grazing light.
     sheen: f32,
-    // 1.0 for a surface whose shape is what an operator reads it by, like a gathered drape.
-    folded: f32,
 };
 
 // The finish of this pixel: colour, roughness and normal after the surface's own structure.
@@ -90,7 +88,6 @@ fn finish(input: VertexOutput, normal: vec3<f32>) -> Finish {
     out.roughness = clamp(input.base_colour.w, 0.045, 1.0);
     out.normal = normal;
     out.sheen = 0.0;
-    out.folded = 0.0;
     let material = i32(input.surface.x + 0.5);
     if (material == SURFACE_PLAIN) {
         return out;
@@ -164,7 +161,6 @@ fn finish(input: VertexOutput, normal: vec3<f32>) -> Finish {
         // The nap catches light along the grain of the folds: the soft grazing sheen velvet has.
         // A few percent at most: black serge stays black except right on a fold's edge.
         out.sheen = 0.03 + nap * 0.015;
-        out.folded = 1.0;
         return out;
     }
     return out;
@@ -205,22 +201,29 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let n_dot_v = max(dot(normal, view_direction), 1e-4);
 
     var radiance = input.emissive.rgb;
-    // The room's own light is not flat: a venue is lit from above, the floor throws less back
-    // than the roof lets down, and what faces the operator is seen a little brighter than what
-    // turns away. Without that every solid is one tone and a truss is a silhouette. Metal takes
-    // it as a reflection rather than as a diffuse tint, which is what makes it read as metal.
+    // A fixed room, rather than a camera headlight: side faces and folds must keep their
+    // lighting as the operator orbits. Broad overhead/side sources give metal something to
+    // reflect, with roughness widening the reflection. This analytic environment needs no
+    // extra lights, shadow maps or per-fixture work and goes dark with environment brightness.
     let ambient = globals.params2.z;
     if (flat_ink()) {
         radiance += albedo * ambient;
     } else {
-        let hemisphere = mix(0.55, 1.2, normal.y * 0.5 + 0.5);
-        // Cloth is seen by its folds, which face every way, so it takes the facing term twice.
-        let facing = mix(0.7 + 0.3 * n_dot_v, 0.25 + 0.75 * n_dot_v, surface.folded);
-        let room = ambient * hemisphere * facing;
+        let key_direction = normalize(vec3<f32>(-0.6, 0.8, 0.5));
+        let fill_direction = normalize(vec3<f32>(0.8, 0.35, -0.6));
+        let hemisphere = mix(0.12, 0.38, normal.y * 0.5 + 0.5);
+        let room = ambient * (hemisphere
+            + 0.95 * max(dot(normal, key_direction), 0.0)
+            + 0.20 * max(dot(normal, fill_direction), 0.0));
+        let reflected = reflect(-view_direction, normal);
+        let reflection_width = mix(48.0, 2.0, roughness * roughness);
+        let reflected_room = ambient * (0.12
+            + 2.5 * pow(max(dot(reflected, key_direction), 0.0), reflection_width)
+            + 0.65 * pow(max(dot(reflected, fill_direction), 0.0), reflection_width));
         let ambient_fresnel = fresnel_schlick_roughness(n_dot_v, f0, roughness);
-        radiance += albedo * (1.0 - metallic) * room;
-        radiance += ambient_fresnel * room * (1.0 - roughness * 0.6);
-        radiance += vec3<f32>(surface.sheen) * pow(1.0 - n_dot_v, 4.0) * ambient * 2.0;
+        radiance += (vec3<f32>(1.0) - ambient_fresnel) * albedo * (1.0 - metallic) * room;
+        radiance += ambient_fresnel * reflected_room * (1.0 - roughness * 0.6);
+        radiance += vec3<f32>(surface.sheen) * pow(1.0 - n_dot_v, 4.0) * room * 2.0;
     }
 
     let tile = tile_index_for(input.clip_position.xy);

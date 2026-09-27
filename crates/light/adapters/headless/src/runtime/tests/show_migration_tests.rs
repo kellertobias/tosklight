@@ -8,6 +8,7 @@ fn migration_test_entry(
     name: &str,
 ) -> ShowEntry {
     ShowEntry {
+        is_base_show: false,
         id,
         name: name.into(),
         path: path.display().to_string(),

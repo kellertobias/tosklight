@@ -23,6 +23,10 @@ impl ActiveShowRepository {
         ShowStore::open(path).map(|store| Self { store })
     }
 
+    pub(crate) fn checkpoint_for_replacement(&self) -> Result<(), StoreError> {
+        self.store.checkpoint_for_replacement()
+    }
+
     pub(crate) fn backup_to(&self, destination: impl AsRef<Path>) -> Result<(), StoreError> {
         self.store.backup_to(destination)
     }
@@ -50,6 +54,20 @@ impl ActiveShowRepository {
 
     pub(crate) fn portable_revision(&self) -> Result<PortableShowRevision, StoreError> {
         self.store.portable_revision()
+    }
+
+    pub(crate) fn portable_patch_revision(
+        &self,
+    ) -> Result<light_show::PortablePatchRevision, StoreError> {
+        self.store.portable_patch_revision()
+    }
+
+    pub(crate) fn advance_replacement_revisions(
+        &self,
+        show: u64,
+        patch: u64,
+    ) -> Result<(), StoreError> {
+        self.store.advance_replacement_revisions(show, patch)
     }
 
     pub(crate) fn apply_portable_transaction(

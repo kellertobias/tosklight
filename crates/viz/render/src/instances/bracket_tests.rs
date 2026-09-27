@@ -35,7 +35,17 @@ fn fresnel_scene(bracket: f32, yaw: f32) -> (Scene, viz_scene::FixtureModel, f32
 
 fn part_transforms(scene: &Scene, model: &viz_scene::FixtureModel) -> Vec<(String, Mat4)> {
     let mut frame = FrameInstances::default();
-    push_model(&mut frame, scene, &scene.fixtures[0], 0, 0, model, &[], &[]);
+    push_model(
+        &mut frame,
+        scene,
+        &scene.fixtures[0],
+        0,
+        0,
+        model,
+        &[],
+        &SceneValues::default(),
+        &[],
+    );
     model
         .parts
         .iter()

@@ -182,16 +182,40 @@ impl FixtureProfile {
         // would otherwise silently drop one of them.
         let mut gobo_slots = HashSet::new();
         for gobo in &self.gobos {
+            if !(1..=8).contains(&gobo.wheel) {
+                return Err(ProfileError::Invalid(
+                    "gobo wheel must be between 1 and 8".into(),
+                ));
+            }
             if gobo.slot > MAX_GOBO_SLOT {
                 return Err(ProfileError::Invalid(format!(
                     "gobo slot {} is beyond the {MAX_GOBO_SLOT} a wheel can hold",
                     gobo.slot
                 )));
             }
-            if !gobo_slots.insert(gobo.slot) {
+            if !gobo_slots.insert((gobo.wheel, gobo.slot)) {
                 return Err(ProfileError::Invalid(format!(
                     "gobo slot {} is declared twice",
                     gobo.slot
+                )));
+            }
+        }
+        let mut prism_slots = HashSet::new();
+        for prism in &self.prisms {
+            if !(1..=8).contains(&prism.wheel)
+                || !(1..=MAX_GOBO_SLOT).contains(&prism.slot)
+                || !(2..=16).contains(&prism.facets)
+                || !prism.spread_degrees.is_finite()
+                || !(0.0..=45.0).contains(&prism.spread_degrees)
+            {
+                return Err(ProfileError::Invalid(
+                    "prism wheel, slot, facets or spread is outside its supported range".into(),
+                ));
+            }
+            if !prism_slots.insert((prism.wheel, prism.slot)) {
+                return Err(ProfileError::Invalid(format!(
+                    "prism wheel {} slot {} is declared twice",
+                    prism.wheel, prism.slot
                 )));
             }
         }

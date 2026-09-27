@@ -75,17 +75,23 @@ def apply_wheel(package: pathlib.Path, wheel: list[tuple[int, str, str]], check:
         gobos.append({"slot": slot, "name": name, "artwork_asset": path})
         artwork[path] = (ARTWORK / f"{pattern}.png").read_bytes()
 
-    current_matches = profile.get("gobos") == gobos and all(
+    # This generator owns wheel one only. Preserve later manufacturer-authored wheels.
+    later_gobos = [gobo for gobo in profile.get("gobos", []) if gobo.get("wheel", 1) != 1]
+    current_first = [{key: value for key, value in gobo.items() if key != "wheel"}
+                     for gobo in profile.get("gobos", []) if gobo.get("wheel", 1) == 1]
+    current_matches = current_first == gobos and all(
         entries.get(path) == data for path, data in artwork.items()
     )
     if check or current_matches:
         return current_matches
 
-    profile["gobos"] = gobos
+    profile["gobos"] = gobos + later_gobos
     entries["fixture.json"] = json.dumps(manifest, indent=2).encode() + b"\n"
     # Drop any wheel a previous run wrote before adding this one, so a shortened wheel does not
     # leave an orphan file behind — the reader refuses an archive entry nothing references.
-    for name in [name for name in entries if name.startswith("assets/gobo-")]:
+    retained_artwork = {gobo.get("artwork_asset") for gobo in later_gobos}
+    for name in [name for name in entries
+                 if name.startswith("assets/gobo-") and name not in retained_artwork]:
         del entries[name]
     entries.update(artwork)
 

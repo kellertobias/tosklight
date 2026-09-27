@@ -1,52 +1,70 @@
-// Shapes in a loose grid, each rotating and fading out. Following the audio, every cell keeps its
-// own cycle and the bass sizes the shapes; on beat, every landed beat pops shapes into a fresh
-// handful of cells, which then fade.
-
-fn shape_distance(local: vec2<f32>, extent: f32, spin: f32) -> f32 {
+// Randomly scattered boxes/circles, each with its own size, rotation and rotation speed.
+// A landed beat sends one shape; its birth seed stays stable while it rotates and fades.
+fn minimalist_shape(p: vec2<f32>, seed: f32, age: f32, fade: f32) -> f32 {
+    let centre = (hash22(vec2<f32>(seed, 4.71)) - 0.5) * vec2<f32>(aspect(), 1.0) * 2.0;
+    let initial = hash11(seed + 8.23) * TAU;
+    let spin = initial + age * speed() * (hash11(seed + 17.43) - 0.5) * 10.47;
+    let local = p - centre;
     let turned = vec2<f32>(
-        local.x * cos(spin) - local.y * sin(spin),
-        local.x * sin(spin) + local.y * cos(spin),
+        local.x * cos(spin) + local.y * sin(spin),
+        -local.x * sin(spin) + local.y * cos(spin),
     );
+    // Size remains fixed during the fade; bass expands it, just like the old shapes.
+    let extent = size() * (0.5 + hash11(seed + 29.17)) * (1.0 + bass() * 2.0);
+    var distance = length(turned) - extent;
     if mode() < 0.5 {
-        // Boxes.
         let corner = abs(turned) - vec2<f32>(extent);
-        return length(max(corner, vec2<f32>(0.0))) + min(max(corner.x, corner.y), 0.0);
+        distance = length(max(corner, vec2<f32>(0.0))) + min(max(corner.x, corner.y), 0.0);
     }
-    return length(turned) - extent;
+    return solid(distance) * fade;
 }
 
 fn shade(p: vec2<f32>, uv: vec2<f32>) -> vec4<f32> {
-    let cells = max(floor(sqrt(count())), 1.0);
-    let cell = floor(uv * cells);
-    let local = fract(uv * cells) - 0.5;
-    let seed = hash21(cell);
-    let period = max(2.0 / max(speed(), 0.05), 0.2);
-    let spin = seconds() * speed() * (seed - 0.5) * 4.0;
-
+    let duration = 2.125 / max(speed(), 0.01);
+    var alpha = 0.0;
+    var index = 0;
     if on_beat() {
-        // A beat lights about a third of the cells, a different third each time. The shape pops
-        // big and shrinks as it fades over one period.
-        var coverage = 0.0;
-        var landed = 0;
+        // The runtime reproduces the old spawn-capacity gate and keeps every live shape.
+        // Unlike a beat-history reconstruction this cannot replace a still-living shape.
+        let base = RHYTHM + 10 + BEAT_HISTORY;
+        let live_count = i32(textureLoad(analysis, vec2<i32>(base + 1, 1), 0).x);
         loop {
-            if landed >= BEAT_HISTORY { break; }
-            let age = beat_age(landed) / period;
-            if age >= 1.0 { break; }
-            let beat_seed = beat_count() - f32(landed);
-            if hash21(cell + vec2<f32>(beat_seed * 0.731, beat_seed * 1.117)) < 0.34 {
-                let fade = 1.0 - age;
-                let pop = 1.0 + (1.0 - smoothstep(0.0, 0.25, age)) * 0.35 * reactivity();
-                let extent = (0.08 + size() * 2.0) * pop * fade;
-                coverage = max(coverage, solid(shape_distance(local, extent, spin)) * fade);
+            if index >= live_count { break; }
+            let shape_base = base + 2 + index * 5;
+            let centre_uv = vec2<f32>(
+                textureLoad(analysis, vec2<i32>(shape_base, 1), 0).x,
+                textureLoad(analysis, vec2<i32>(shape_base + 1, 1), 0).x,
+            );
+            let centre = (centre_uv - 0.5) * vec2<f32>(aspect(), 1.0) * 2.0;
+            let extent = textureLoad(analysis, vec2<i32>(shape_base + 2, 1), 0).x * (1.0 + bass() * 2.0);
+            let spin = textureLoad(analysis, vec2<i32>(shape_base + 3, 1), 0).x;
+            let fade = textureLoad(analysis, vec2<i32>(shape_base + 4, 1), 0).x;
+            let local = p - centre;
+            let turned = vec2<f32>(
+                local.x * cos(spin) + local.y * sin(spin),
+                -local.x * sin(spin) + local.y * cos(spin),
+            );
+            var distance = length(turned) - extent;
+            if mode() < 0.5 {
+                let corner = abs(turned) - vec2<f32>(extent);
+                distance = length(max(corner, vec2<f32>(0.0))) + min(max(corner.x, corner.y), 0.0);
             }
-            landed += 1;
+            let coverage = solid(distance) * fade;
+            alpha = 1.0 - (1.0 - alpha) * (1.0 - coverage);
+            index += 1;
         }
-        return vec4<f32>(primary(), coverage);
+    } else {
+        // The existing continuous option keeps a full population in staggered cycles.
+        loop {
+            if f32(index) >= count() { break; }
+            let slot = f32(index);
+            let cycle = clock() / 2.125 + slot / count();
+            let age = fract(cycle) * duration;
+            let seed = slot + floor(cycle) * count();
+            let coverage = minimalist_shape(p, seed, age, 1.0 - fract(cycle));
+            alpha = 1.0 - (1.0 - alpha) * (1.0 - coverage);
+            index += 1;
+        }
     }
-
-    // Each cell keeps its own phase, so they do not all appear and vanish together.
-    let age = fract(seconds() / period + seed);
-    let fade = 1.0 - age;
-    let extent = (0.08 + size() * 2.0) * (0.5 + bass() * reactivity()) * fade;
-    return vec4<f32>(primary(), solid(shape_distance(local, extent, spin)) * fade);
+    return vec4<f32>(primary(), alpha);
 }

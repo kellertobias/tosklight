@@ -110,3 +110,20 @@
 .cad-project-make-default {
 	min-height: 36px;
 }
+
+.viz-show-browser { width: min(960px, 92vw); max-height: 85vh; display: flex; flex-direction: column; }
+.viz-show-browser-scroll { overflow: auto; min-height: 0; max-height: 65vh; padding: 0; margin: 0; }
+.viz-show-browser table { width: 100%; margin: 0; table-layout: fixed; border-collapse: collapse; }
+.viz-show-browser th, .viz-show-browser td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border-color, #555); overflow-wrap: anywhere; }
+.viz-show-browser th { position: sticky; top: 0; background: var(--panel-bg, #202329); }
+
+.viz-show-browser th:first-child { width: 26%; }
+.viz-show-browser th:last-child { width: 112px; }
+.viz-show-browser th:last-child, .viz-show-browser td:last-child { white-space: nowrap; overflow-wrap: normal; }
+.viz-show-browser td:last-child .ui-button { min-width: 88px; white-space: nowrap; }
+.viz-show-browser-scroll > .viz-editor-status:empty { display: none; }
+.viz-show-browser-scroll > .viz-editor-status:not(:empty), .viz-show-browser-scroll > p { margin: 0; padding: 12px; }
+
+.ui-modal-stack-layer > .viz-show-browser[role="dialog"] { padding: 0; width: min(960px, calc(100vw - 36px)); overflow: hidden; }
+.viz-show-browser > .ui-modal-titlebar { margin: 0; flex-shrink: 0; }
+.viz-show-browser-scroll > .viz-show-browser-empty { margin: 32px 20px; padding: 0; color: var(--muted, #98a5ae); text-align: center; }

@@ -12,8 +12,8 @@ use uuid::Uuid;
 mod platform;
 
 pub(crate) use platform::{
-    capabilities, discover_removable_paths, is_hidden, native_notes_supported, read_native_note,
-    trash_path, trash_supported, write_native_note,
+    capabilities, discover_removable_paths, is_hidden, is_network_path, native_notes_supported,
+    read_native_note, trash_path, trash_supported, write_native_note,
 };
 #[cfg(test)]
 use platform::{

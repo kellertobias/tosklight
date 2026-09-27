@@ -194,11 +194,15 @@ export class BrowserOperatorShell {
 				.getByRole("button", { name: "Load", exact: true })
 				.click();
 			const loadShow = this.page.getByRole("dialog", { name: "Load show" });
-			await loadShow
-				.getByRole("button", { name: "Show from USB", exact: true })
-				.click();
-			await this.expectPickerConstraint(files.invalid, files.show);
-			await loadShow
+			await expect(loadShow.getByRole("row").filter({ hasText: files.show.replace(/\.show$/, "") })).toBeVisible();
+			for (const name of [files.invalid, files.mvr, files.gdtf, files.wallpaper, files.scene]) {
+				await expect(loadShow.getByRole("row").filter({ hasText: name })).toHaveCount(0);
+			}
+			await expect(loadShow.getByRole("button", { name: "Load from MVR", exact: true })).toHaveCount(0);
+			await loadShow.getByRole("button", { name: "Close Load Show", exact: true }).click();
+			await this.page.getByRole("dialog", { name: "Show", exact: true })
+				.getByRole("button", { name: "New Show", exact: true }).click();
+			await this.page.getByRole("dialog", { name: "New show", exact: true })
 				.getByRole("button", { name: "Load from MVR", exact: true })
 				.click();
 			const mvr = this.page.getByRole("dialog", {

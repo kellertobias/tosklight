@@ -198,6 +198,7 @@ fn matter_fader_explicitly_starts_and_stops_when_authored_policies_are_disabled(
 fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
     let (state, data_dir) = test_state();
     let show = ShowEntry {
+        is_base_show: false,
         id: light_core::ShowId::new(),
         name: "Matter restart scope".into(),
         path: data_dir.join("shows/matter-restart.show").display().to_string(),

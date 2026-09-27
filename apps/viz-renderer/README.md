@@ -342,9 +342,13 @@ floor and in the shaft of haze at the same time and from the same geometry:
 - **Focus** is sharp in the middle of its travel and soft at either end, the way a lens moved
   either side of the gate behaves.
 - **Frost** widens the field, destroys the edge, and stops a gobo holding its shape.
-- **Gobo** and **gobo rotation** project a pattern that turns with the wheel and with the head.
-- **Prism** deviates the beam into one copy per facet, arranged around the axis and turning with
-  the wheel. Each copy carries whatever is in the gate — a gobo appears in every one of them — and
+- **Gobo wheels** select and rotate independently, including indexed positions and continuous
+  rotation declared by the profile's channel functions. Their masks combine in series; an open
+  wheel passes the other wheels' patterns. Up to eight numbered wheels are supported.
+- **Prism wheels** select their own optical representation from the profile's Simulation tab:
+  radial or linear copies, copy count, and angular spread for each slot. Each rotates independently.
+  Profiles without authored prism slots retain the generic radial representation.
+  Each copy carries whatever is in the gate — the combined gobos appear in every one of them — and
   a facet passes nothing outside its own copy, which is what makes a prism read as several beams
   rather than one wider one. Frost fills the gaps back in, because a diffuser in front of a prism
   does exactly that.

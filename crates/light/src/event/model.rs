@@ -258,6 +258,7 @@ pub struct ScreenNotification {
 pub enum ShowLibraryNotificationKind {
     ShowOpened,
     ShowRenamed,
+    ShowBaseChanged,
     ShowRolledBack,
     ShowUploaded,
     ShowDeleted,

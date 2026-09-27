@@ -119,17 +119,7 @@ function useShowRevisionController(options: ShowRevisionControllerOptions) {
 		current.setRevisionName("");
 		current.setRevisionOpen(false);
 	};
-	const openLoadMenu = async () => {
-		const current = optionsRef.current;
-		current.setLoadOpen(true);
-		const entries = await Promise.all(
-			current.shows.map(
-				async (show) =>
-					[show.id, await current.listShowRevisions(show.id)] as const,
-			),
-		);
-		setByShow(Object.fromEntries(entries));
-	};
+    const openLoadMenu = async () => optionsRef.current.setLoadOpen(true);
 	const loadNamed = async (showId: string, revision: number) => {
 		const current = optionsRef.current;
 		if (await current.openShowRevision(showId, revision))
@@ -267,6 +257,7 @@ function useMvrController(
 
 function useQuickSetupDialogState() {
 	const [showName, setShowName] = useState("");
+	const [baseShow, setBaseShow] = useState(false);
 	const [revisionOpen, setRevisionOpen] = useState(false);
 	const [revisionName, setRevisionName] = useState("");
 	const [saveAsOpen, setSaveAsOpen] = useState(false);
@@ -277,13 +268,18 @@ function useQuickSetupDialogState() {
 	const [overwriteBusy, setOverwriteBusy] = useState(false);
 	const [loadOpen, setLoadOpen] = useState(false);
 	const [selectiveImportOpen, setSelectiveImportOpen] = useState(false);
+    const [partialSource, setPartialSource] = useState<ShowEntry | null>(null);
 	const selectiveImportClose = useRef<(() => void) | null>(null);
 	const usbShowPickerTrigger = useRef<(() => void) | null>(null);
 	const osShowPickerInput = useRef<HTMLInputElement | null>(null);
 	const [newShowOpen, setNewShowOpen] = useState(false);
 	const [confirmShutdown, setConfirmShutdown] = useState(false);
+	const saveDestinationSubmit = useRef<{save(): Promise<void>; busy: boolean} | null>(null);
 	const [destination, setDestination] = useState<"local" | "flash">("local");
 	return {
+		saveDestinationSubmit,
+		baseShow,
+		setBaseShow,
 		confirmShutdown,
 		copySaveOpen,
 		destination,
@@ -295,6 +291,8 @@ function useQuickSetupDialogState() {
 		revisionName,
 		revisionOpen,
 		saveAsOpen,
+		partialSource,
+		setPartialSource,
 		selectiveImportClose,
 		selectiveImportOpen,
 		setConfirmShutdown,
@@ -335,6 +333,9 @@ function useQuickSetupModel() {
 		activeShow?.name ?? "",
 	);
 	const activeShowId = activeShow?.id;
+    useEffect(() => {
+        if (dialogs.saveAsOpen) dialogs.setBaseShow(activeShow?.is_base_show ?? false);
+    }, [dialogs.saveAsOpen, activeShowId, activeShow?.is_base_show]);
 	const revisionCopy = activeShow?.revision_copy;
 	const originalShow = revisionCopy
 		? (lifecycle?.shows ?? []).find((show) => show.id === revisionCopy.show_id)
@@ -364,7 +365,7 @@ function useQuickSetupModel() {
 			dialogs.setOverwriteTarget(null);
 		else if (dialogs.copySaveOpen) dialogs.setCopySaveOpen(false);
 		else if (dialogs.revisionOpen) dialogs.setRevisionOpen(false);
-		else if (dialogs.saveAsOpen) dialogs.setSaveAsOpen(false);
+		else if (dialogs.saveAsOpen) { if (!dialogs.saveDestinationSubmit.current?.busy) dialogs.setSaveAsOpen(false); }
 		else if (dialogs.selectiveImportOpen)
 			dialogs.selectiveImportClose.current?.();
 		else if (dialogs.loadOpen) dialogs.setLoadOpen(false);
@@ -378,18 +379,19 @@ function useQuickSetupModel() {
 		saveAsOpen: dialogs.saveAsOpen,
 		closeTopLayer,
 		saveNamedRevision,
-		saveAs: () => saveAs(),
+		saveAs: async () => { if (dialogs.saveDestinationSubmit.current) await dialogs.saveDestinationSubmit.current.save(); else await saveAs(); },
 		setRevisionName: dialogs.setRevisionName,
 		setShowName: dialogs.setShowName,
 	});
-	async function saveAs(value = dialogs.showName) {
+	async function saveAs(value = dialogs.showName, latest = false) {
 		const name = value.trim();
-		if (!name) return;
-		if (!(await lifecycle?.saveShowAs(name))) return;
+		if (!name) return false;
+		if (!(await lifecycle?.saveShowAs(name, {baseShow: dialogs.baseShow, latest}))) return false;
 		if (dialogs.destination === "flash" && bootstrap?.active_show)
 			await lifecycle?.downloadShow({ ...bootstrap.active_show, name });
 		dialogs.setSaveAsOpen(false);
 		dialogs.setShowName("");
+        return true;
 	}
 	function requestOverwrite(show: ShowEntry) {
 		dialogs.setSaveAsOpen(false);

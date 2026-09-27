@@ -22,6 +22,8 @@ mod portable;
 mod profile_update;
 mod recent;
 mod session;
+#[cfg(test)]
+mod session_source_tests;
 mod underlay;
 mod venue_groups;
 mod venue_models;
@@ -392,8 +394,13 @@ fn main() {
             session::export_mvr,
             session::preview_mvr,
             session::import_mvr,
+            session::recent_documents,
             discovery::discovered_desks,
-            discovery::load_from_desk,
+            discovery::show_library::load_from_desk,
+            discovery::show_library::desk_shows,
+            discovery::show_library::load_desk_show,
+            discovery::show_library::source_desk,
+            discovery::show_library::save_to_source_desk,
             discovery::take_live_dmx_inputs_from_desk,
             dmx_input::received_dmx,
             dmx_input::stop_received_dmx,

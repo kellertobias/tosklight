@@ -161,6 +161,8 @@ impl OpticalClass {
         EmitterOptics {
             output: 1.0,
             gobo_wheel: Vec::new(),
+            gobo_wheels: Vec::new(),
+            prism_wheels: Vec::new(),
             sharpness: self.sharpness(),
             uniformity: self.uniformity(),
             source: self.light_source(),

@@ -172,6 +172,10 @@ export function useSelectiveImportWorkflow(
 		);
 	}
 
+    useEffect(() => {
+        if (options.initialSourceShowId && !options.initialCatalog) void chooseSource(options.initialSourceShowId);
+    }, [options.initialSourceShowId]);
+
 	async function inspectSelection() {
 		if (!state.sourceId || selection.selectedObjects.length === 0) return;
 		patch({ previewKey: "" });

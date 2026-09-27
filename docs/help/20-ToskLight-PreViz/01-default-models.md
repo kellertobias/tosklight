@@ -95,3 +95,12 @@ When the profile says nothing — which is the common case — the declared fixt
 bounded by two things it can never exceed: the body of the fixture that carries it, and the
 spacing between neighbouring lamps of the same fixture, so a bank of lamps stays a row of
 lamps instead of merging into one bright tube.
+
+The scanner models keep their chassis still. Only the mirror and its gimbal move, around
+the mirror's centre, while the outgoing beam steers from that centre. This draws the
+scanner's visible mechanics without calculating reflections inside the fixture.
+
+The **LED PAR, pizza lamp** model has separate red, green and blue diode faces. Each set
+follows its corresponding colour channel and the dimmer and shutter; their combined
+colour still produces one beam. The Generic **Dimmer RGB Control PAR** uses this model.
+Selecting a pizza model does not turn its diode faces into separately addressable pixels.

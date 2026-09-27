@@ -405,6 +405,7 @@ mod tests {
             SelectiveShowImportService::new(service),
         );
         let show = ShowEntry {
+            is_base_show: false,
             id: light_core::ShowId::new(),
             name: "Standalone".into(),
             path: "standalone.show".into(),

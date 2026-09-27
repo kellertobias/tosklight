@@ -235,6 +235,7 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
     let show_path = data_dir.join("shows/page-advance.show");
     let show_id = initialise_show(&show_path, "Page advance").unwrap();
     let entry = ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Page advance".into(),
         path: show_path.display().to_string(),
@@ -352,6 +353,7 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
     let (state, data_dir) = test_state();
     assert!(!state.output.has_network_output());
     let show = ShowEntry {
+        is_base_show: false,
         id: light_core::ShowId::new(),
         name: "Restored exclusions".into(),
         path: data_dir.join("shows/restored-exclusions.show").display().to_string(),
@@ -481,6 +483,7 @@ fn automatic_chaser_transition_checkpoints_its_order_before_restart() {
     let engine = Engine::new(ProgrammerRegistry::with_clock(clock.clone()));
     let (state, data_dir) = test_state();
     let show = ShowEntry {
+        is_base_show: false,
         id: light_core::ShowId::new(),
         name: "Automatic transition persistence".into(),
         path: data_dir
@@ -563,6 +566,7 @@ fn restored_exclusions_replay_each_activation_against_show_owned_zones() {
     for configured_desk_activates_last in [false, true] {
         let (state, data_dir) = test_state();
         let show = ShowEntry {
+            is_base_show: false,
             id: light_core::ShowId::new(),
             name: "Desk exact restored exclusions".into(),
             path: data_dir.join("shows/desk-exact.show").display().to_string(),
@@ -645,6 +649,7 @@ fn restored_exclusions_replay_each_activation_against_show_owned_zones() {
 fn timed_preload_release_restart_keeps_the_original_activation_order() {
     let (state, data_dir) = test_state();
     let show = ShowEntry {
+        is_base_show: false,
         id: light_core::ShowId::new(),
         name: "Timed Preload restart".into(),
         path: data_dir.join("shows/timed-preload.show").display().to_string(),

@@ -27,6 +27,8 @@ struct Light {
     shaper_angles: vec4<f32>,
     gate: vec4<f32>,
     shadow: vec4<f32>,
+    gobo_wheels: array<vec4<f32>, 8>,
+    prism_wheels: array<vec4<f32>, 8>,
 };
 
 @group(0) @binding(0) var<uniform> globals: Globals;

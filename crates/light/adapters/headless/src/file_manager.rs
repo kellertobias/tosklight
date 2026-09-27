@@ -88,3 +88,28 @@ fn intent_value<T: serde::Serialize>(
 #[cfg(test)]
 #[path = "file_manager/tests.rs"]
 mod tests;
+
+/// Resolve a writable selected folder through the File Manager's root confinement.
+pub(crate) fn writable_show_folder(
+    state: &AppState,
+    root_id: &str,
+    relative_path: &str,
+) -> Result<std::path::PathBuf, super::ApiError> {
+    let (root, _) = paths::root(state, root_id)?;
+    let directory = paths::confined(&root.path, relative_path, false)?;
+    if !directory.is_dir() {
+        return Err(super::ApiError::bad_request("destination must be a folder"));
+    }
+    for path in [&root.path, &directory] {
+        if std::fs::metadata(path)
+            .map_err(super::ApiError::io)?
+            .permissions()
+            .readonly()
+        {
+            return Err(super::ApiError::forbidden(
+                "destination folder is read-only",
+            ));
+        }
+    }
+    Ok(directory)
+}

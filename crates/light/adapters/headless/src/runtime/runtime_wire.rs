@@ -33,6 +33,7 @@ pub(super) fn desk(desk: ControlDesk) -> wire::RuntimeControlDesk {
 
 pub(super) fn show(show: ShowEntry) -> wire::RuntimeShowEntry {
     wire::RuntimeShowEntry {
+        is_base_show: show.is_base_show,
         id: show.id.0,
         name: show.name,
         path: show.path,

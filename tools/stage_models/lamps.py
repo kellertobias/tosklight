@@ -1056,12 +1056,22 @@ def led_par_pizza() -> Model:
     )
     plate = model.part("source-plate", HOUSING_BLACK)
     plate.cylinder(158, 10, (0, 0, front + 18))
-    sources = model.part("source-array", LENS_CLEAR, finish=GLASS)
+    # The generic pizza front has separate single-colour diodes. Name each real
+    # dome's primary so the visualizer can illuminate the glass independently;
+    # the optical beam still uses the fixture's aggregate RGB mix.
+    sources = {
+        primary: model.part(f"source-{primary}", LENS_CLEAR, finish=GLASS)
+        for primary in ("red", "green", "blue")
+    }
+    diode = 0
     for radius, count in ((0.0, 1), (42.0, 12), (70.0, 18)):
         for x, y in _ring_positions(radius, count) if count > 1 else [(0.0, 0.0)]:
             # Domes standing clear of the plate and just proud of the rim, not spheres
             # half sunk into it: the separate sources are the whole point of this front.
-            sources.dome(16, 22, (x, y, front + 14), segments=8, rotation=(180, 0, 0))
+            sources[("red", "green", "blue")[diode % 3]].dome(
+                16, 22, (x, y, front + 14), segments=8, rotation=(180, 0, 0)
+            )
+            diode += 1
     hang_from_bracket(model, bar_depth=54.0, arm_thickness=18.0, colour=HOUSING_DARK, finish=PAINT, hug=True)
     return model
 

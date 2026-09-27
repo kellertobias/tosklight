@@ -7020,6 +7020,7 @@
       "enum": [
         "show_opened",
         "show_renamed",
+        "show_base_changed",
         "show_rolled_back",
         "show_uploaded",
         "show_deleted"

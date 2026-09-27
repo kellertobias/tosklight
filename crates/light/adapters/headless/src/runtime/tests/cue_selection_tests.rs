@@ -67,6 +67,7 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
     let second_desk = state.installation.desk().unwrap();
     let show_id = light_core::ShowId::new();
     state.active_show.replace_current(Some(ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Selection".into(),
         path: data_dir.join("selection.show").display().to_string(),

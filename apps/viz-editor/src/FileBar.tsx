@@ -1,6 +1,6 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { Button } from "@tosklight/ui";
-import { type ReactNode, useState } from "react";
+import { Button, ModalFrame } from "@tosklight/ui";
+import { type ReactNode, useEffect, useState } from "react";
 import type { DeskPeer, DocumentSummary, MvrPreview } from "./document/session";
 import { documentSession } from "./document/session";
 import { MvrImport } from "./MvrImport";
@@ -8,6 +8,13 @@ import { useDiscoveredDesks } from "./useDiscoveredDesks";
 
 const SHOW_FILTER = [{ name: "ToskLight show", extensions: ["show"] }];
 const MVR_FILTER = [{ name: "MVR", extensions: ["mvr"] }];
+
+function displayShowPath(path: string): string {
+    const normalized = path.replaceAll("\\", "/");
+    const marker = "/de.tokenet.tosklight.visualizer/shows/";
+    const internal = normalized.indexOf(marker);
+    return internal >= 0 ? `<internal>/${normalized.slice(internal + marker.length)}` : path;
+}
 
 export function FileBar({
 	document,
@@ -28,6 +35,20 @@ export function FileBar({
 	const [status, setStatus] = useState("");
 	const [busy, setBusy] = useState(false);
 	const desks = useDiscoveredDesks();
+	const [browser, setBrowser] = useState<"recent" | "desks" | null>(null);
+	const [recent, setRecent] = useState<string[]>([]);
+	const [sourceDesk, setSourceDesk] = useState<string | null>(null);
+	const activeDesks = desks.filter((desk) => Boolean(desk.show?.trim()));
+	useEffect(() => { void documentSession.sourceDesk().then(setSourceDesk).catch(() => setSourceDesk(null)); }, [document]);
+	async function browseRecent() {
+		setBrowser("recent");
+		setRecent(await documentSession.recentDocuments());
+		return null;
+	}
+	async function browseDesks() {
+		setBrowser("desks");
+		return null;
+	}
 	/** The archive the operator is deciding about, and what is in it. */
 	const [pendingMvr, setPendingMvr] = useState<{
 		path: string;
@@ -54,7 +75,7 @@ export function FileBar({
 			const result = await action();
 			setStatus(result ?? "");
 		} catch (reason) {
-			setStatus("");
+			setStatus(`${label} failed: ${String(reason)}`);
 			onError(reason);
 		} finally {
 			setBusy(false);
@@ -88,31 +109,12 @@ export function FileBar({
 					>
 						Load Show from Disk
 					</Button>
-					{desks.length === 0 ? (
-						<Button
-							disabled
-							title="No running ToskLight Control was found on the network"
-						>
-							Get Show from Running ToskLight Control
-						</Button>
-					) : (
-						desks.map((desk) => (
-							<Button
-								key={desk.instance}
-								disabled={busy}
-								title={`${desk.name} at ${desk.address}`}
-								onClick={() =>
-									void run("Loading", () => actions.loadFrom(desk))
-								}
-							>
-								Get Show from Running ToskLight Control · {desk.name}:{" "}
-								{desk.show}
-							</Button>
-						))
-					)}
+					<Button disabled={busy} onClick={() => void run("Reading recent shows", browseRecent)}>Load Recent Shows</Button>
+					<Button disabled={busy} onClick={() => void run("Reading desk shows", browseDesks)}>Load from TOSca Light Control Desk</Button>
 				</section>
 				<section>
 					<h2>Save As</h2>
+					{sourceDesk && <Button disabled={busy} onClick={() => void run(`Saving to ${sourceDesk}`, documentSession.saveToSourceDesk)}>Save to {sourceDesk}</Button>}
 					<Button
 						disabled={busy || !document}
 						onClick={() => void run("Saving", actions.saveShowAs)}
@@ -137,7 +139,35 @@ export function FileBar({
 				</section>
 			</div>
 			{children}
-			<output className="viz-editor-status">{status}</output>
+			{browser && <ModalFrame
+				title={browser === "recent" ? "Recent shows" : "Control desk shows"}
+				ariaLabel={browser === "recent" ? "Recent shows" : "Control desk shows"}
+				closeLabel={browser === "recent" ? "Close Recent shows" : "Close Control desk shows"}
+				dialogClassName="viz-show-browser"
+				closeDisabled={busy}
+				policy={{ escape: !busy, backdrop: !busy }}
+				onClose={() => { if (!busy) setBrowser(null); }}
+			>
+				<div className="viz-show-browser-scroll" aria-busy={busy}>
+                    <output aria-live="polite" className="viz-editor-status">{status}</output>
+				{browser === "recent" ? <>
+					{recent.length === 0 && <p>No recent shows are available.</p>}
+					<table><thead><tr><th>Show</th><th>Location</th><th>Actions</th></tr></thead><tbody>
+					{recent.map((path) => <tr key={path}><td>{path.split(/[\\/]/).pop()}</td><td title={path}>{displayShowPath(path)}</td><td><Button aria-label={`Open ${displayShowPath(path)}`} disabled={busy} onClick={() => void run("Opening", async () => {
+						const summary = await documentSession.open(path); onDocument(summary); onReloadProfiles(); onReloadDocument(); setBrowser(null); return `Opened ${summary.name}`;
+					})}>Open</Button></td></tr>)}
+					</tbody></table>
+				</> : <>
+					{activeDesks.length === 0 ? <p className="viz-show-browser-empty">No announced control desks have an active show.</p> : <table><thead><tr><th>Desk</th><th>Active show</th><th>Actions</th></tr></thead><tbody>
+					{activeDesks.map((desk) => <tr key={desk.instance}><td>{desk.name}</td><td>{desk.show}</td><td><Button aria-label={`Load ${desk.show} from ${desk.name}`} disabled={busy} onClick={() => void run("Loading", async () => {
+						const summary = await documentSession.loadFromDesk(desk.instance); onDocument(summary); onReloadProfiles(); onReloadDocument(); setSourceDesk(desk.name); setBrowser(null); return `Loaded ${summary.name} from ${desk.name}`;
+					})}>Load</Button></td></tr>)}
+					</tbody></table>}
+				</>}
+				</div>
+			</ModalFrame>}
+
+			{!browser && <output aria-live="polite" className="viz-editor-status">{status}</output>}
 			{pendingMvr && (
 				<MvrImport
 					// Keyed by the archive, so choosing another one starts its own decisions
@@ -190,6 +220,8 @@ function useFileActions(
 			const path = await save({ filters: SHOW_FILTER });
 			if (!path) return null;
 			await documentSession.saveAs(path);
+			const desk = await documentSession.sourceDesk();
+			if (desk) return `Saved to ${path}; ${await documentSession.saveToSourceDesk()}`;
 			return `Saved to ${path}`;
 		},
 		readMvr: async () => {

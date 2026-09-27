@@ -59,6 +59,12 @@ pub struct PatchedFixture {
     pub instances: Vec<PhysicalInstance>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct OpticalWheelBinding {
+    pub selection: Option<ChannelRef>,
+    pub rotation: Option<ChannelRef>,
+}
+
 /// Everything one emitter needs from DMX.
 #[derive(Clone, Debug, Default)]
 pub struct EmitterBinding {
@@ -73,6 +79,8 @@ pub struct EmitterBinding {
     pub strobe: Option<ChannelRef>,
     /// Gobo wheel position and its rotation, from the first gobo wheel the mode carries.
     pub gobo: Option<ChannelRef>,
+    pub gobo_wheels: Vec<OpticalWheelBinding>,
+    pub prism_wheels: Vec<OpticalWheelBinding>,
     pub gobo_rotation: Option<ChannelRef>,
     pub prism: Option<ChannelRef>,
     pub prism_rotation: Option<ChannelRef>,
@@ -407,7 +415,9 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
         // The wheel this fixture turns, if its package carries one. Artwork is shared by handle:
         // one piece of glass declared by twenty fixtures is decoded once and lives in the scene
         // once.
-        optics.gobo_wheel = gobo_wheel(&fixture.profile, &mut scene, &mut artwork, &mut warnings);
+        optics.gobo_wheels = gobo_wheels(&fixture.profile, &mut scene, &mut artwork, &mut warnings);
+        optics.gobo_wheel = optics.gobo_wheels.first().cloned().unwrap_or_default();
+        optics.prism_wheels = prism_wheels(&fixture.profile);
         // Where this fixture's light leaves it, taken from the body being drawn. Only used when
         // the profile does not describe its own optics, which is the common case.
         let mount = model
@@ -1173,7 +1183,7 @@ mod head_geometry;
 mod reference_bindings;
 
 pub use assets::{GOBO_ARTWORK_EDGE, decode_gobo_artwork};
-use assets::{decode_script, gobo_wheel, resolve_model, script_key};
+use assets::{decode_script, gobo_wheels, prism_wheels, resolve_model, script_key};
 use bindings::{build_binding, cell_bindings, group_by_head, layout_cells};
 use compile_instances::{compile_instances, vector};
 use head_geometry::{fitted_to_head_pitch, head_offset, head_span, pan_axis, tilt_axis};

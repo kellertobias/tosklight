@@ -277,6 +277,8 @@ fn push_projector(
         shaper_angles: [0.0; 4],
         gate: [-1.0, 0.0, 0.0, 0.0],
         shadow: [-1.0, 0.0, 0.0, 0.0],
+        gobo_wheels: [[0.0; 4]; MAX_OPTICAL_WHEELS],
+        prism_wheels: [[0.0; 4]; MAX_OPTICAL_WHEELS],
     });
     let total = projector.cone_length_metres;
     let model = Mat4::from_scale_rotation_translation(

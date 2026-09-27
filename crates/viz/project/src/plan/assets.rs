@@ -242,17 +242,29 @@ pub const GOBO_ARTWORK_EDGE: u32 = 256;
 /// A profile that declares no wheel gets an empty one, which is the renderer's signal to divide
 /// the channel into its own drawn patterns. A slot whose artwork cannot be read keeps its place
 /// on the wheel — the slot still exists on the fixture — and says why.
-pub(super) fn gobo_wheel(
+pub(super) fn gobo_wheels(
     profile: &light_fixture::FixtureProfile,
     scene: &mut Scene,
     artwork: &mut std::collections::HashMap<String, Option<u32>>,
     warnings: &mut Vec<String>,
-) -> Vec<viz_scene::GoboSlot> {
-    let Some(highest) = profile.gobos.iter().map(|gobo| gobo.slot).max() else {
-        return Vec::new();
-    };
-    let mut wheel = vec![viz_scene::GoboSlot::default(); highest as usize + 1];
+) -> Vec<Vec<viz_scene::GoboSlot>> {
+    let highest_wheel = profile
+        .gobos
+        .iter()
+        .map(|gobo| gobo.wheel)
+        .filter(|wheel| (1..=8).contains(wheel))
+        .max()
+        .unwrap_or(0);
+    let mut wheels = vec![Vec::new(); highest_wheel as usize];
     for gobo in &profile.gobos {
+        if !(1..=8).contains(&gobo.wheel) {
+            continue;
+        }
+        let wheel = &mut wheels[gobo.wheel as usize - 1];
+        wheel.resize_with(
+            wheel.len().max(gobo.slot as usize + 1),
+            viz_scene::GoboSlot::default,
+        );
         let slot = &mut wheel[gobo.slot as usize];
         slot.name = gobo.name.clone().unwrap_or_default();
         let Some(asset) = gobo.artwork_asset.as_ref() else {
@@ -280,7 +292,39 @@ pub(super) fn gobo_wheel(
         };
         slot.artwork = index;
     }
-    wheel
+    wheels
+}
+
+pub(super) fn prism_wheels(
+    profile: &light_fixture::FixtureProfile,
+) -> Vec<Vec<viz_scene::PrismSlot>> {
+    let highest = profile
+        .prisms
+        .iter()
+        .map(|prism| prism.wheel)
+        .filter(|wheel| (1..=8).contains(wheel))
+        .max()
+        .unwrap_or(0);
+    let mut wheels = vec![Vec::new(); highest as usize];
+    for prism in &profile.prisms {
+        if !(1..=8).contains(&prism.wheel) {
+            continue;
+        }
+        let wheel = &mut wheels[prism.wheel as usize - 1];
+        wheel.resize_with(
+            wheel.len().max(prism.slot as usize + 1),
+            viz_scene::PrismSlot::default,
+        );
+        wheel[prism.slot as usize] = viz_scene::PrismSlot {
+            facets: prism.facets,
+            linear: matches!(
+                prism.representation,
+                light_fixture::PrismRepresentation::Linear
+            ),
+            spread_degrees: prism.spread_degrees,
+        };
+    }
+    wheels
 }
 
 /// Read one slot's artwork, which the fixture library stores as a data URL, into a square mask.
@@ -472,5 +516,38 @@ mod tests {
         let error = read_model_asset("data:model/gltf-binary;base64,bm90IGEgbW9kZWw=")
             .expect_err("refused");
         assert!(error.contains("GLB"), "{error}");
+    }
+}
+
+#[cfg(test)]
+mod optical_metadata_tests {
+    use super::*;
+    #[test]
+    fn artwork_slots_are_scoped_to_their_declared_wheel() {
+        let mut profile = light_fixture::FixtureProfile::blank();
+        profile.gobos = vec![
+            light_fixture::ProfileGobo {
+                wheel: 1,
+                slot: 1,
+                name: Some("first".into()),
+                ..Default::default()
+            },
+            light_fixture::ProfileGobo {
+                wheel: 2,
+                slot: 1,
+                name: Some("second".into()),
+                ..Default::default()
+            },
+        ];
+        let wheels = gobo_wheels(
+            &profile,
+            &mut Scene::default(),
+            &mut Default::default(),
+            &mut Vec::new(),
+        );
+        assert_eq!(wheels.len(), 2);
+        assert_eq!(wheels[0][1].name, "first");
+        assert_eq!(wheels[1][1].name, "second");
+        assert!(wheels[0][0].artwork.is_none());
     }
 }

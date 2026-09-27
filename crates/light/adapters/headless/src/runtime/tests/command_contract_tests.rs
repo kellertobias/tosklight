@@ -22,6 +22,7 @@ impl CommandContractScenario {
     let show_path = data_dir.join("shows/commands.show");
     let show_id = initialise_show(&show_path, "Commands").unwrap();
     let entry = ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Commands".into(),
         path: show_path.display().to_string(),

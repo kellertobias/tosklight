@@ -96,6 +96,7 @@ impl FixtureProfile {
             scenery: self.scenery,
             mounting: self.mounting,
             gobos: self.gobos.clone(),
+            prisms: self.prisms.clone(),
             modes,
             hazardous: self.hazardous,
             direct_control_protocols: self.direct_control_protocols.clone(),

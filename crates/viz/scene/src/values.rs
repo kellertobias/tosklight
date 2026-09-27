@@ -83,6 +83,15 @@ impl SceneValues {
         }
 
         for (next, previous) in self.emitters.iter_mut().zip(&previous.emitters) {
+            for (next, previous) in next
+                .gobo_wheels
+                .iter_mut()
+                .zip(&previous.gobo_wheels)
+                .chain(next.prism_wheels.iter_mut().zip(&previous.prism_wheels))
+            {
+                retain_kinematics(&mut next.rotation_motion, &previous.rotation_motion);
+                retain_kinematics(&mut next.wheel_motion.motion, &previous.wheel_motion.motion);
+            }
             retain_kinematics(&mut next.pan_motion, &previous.pan_motion);
             retain_kinematics(&mut next.tilt_motion, &previous.tilt_motion);
             retain_kinematics(
@@ -152,6 +161,13 @@ impl SceneValues {
     /// states are rate limited, so output and network semantics are never delayed by a renderer.
     pub fn apply_physical_motion(&mut self, elapsed: f32) {
         for emitter in &mut self.emitters {
+            for wheel in emitter
+                .gobo_wheels
+                .iter_mut()
+                .chain(&mut emitter.prism_wheels)
+            {
+                wheel.advance(elapsed);
+            }
             emitter.pan_motion.advance(elapsed);
             emitter.tilt_motion.advance(elapsed);
             emitter.gobo_rotation_motion.advance(elapsed);
@@ -183,6 +199,13 @@ impl SceneValues {
                         .cells
                         .iter()
                         .any(|cell| cell.held_intensity > cell.intensity + f32::EPSILON)))
+                || emitter
+                    .gobo_wheels
+                    .iter()
+                    .chain(&emitter.prism_wheels)
+                    .any(|wheel| {
+                        wheel.rotation_motion.is_moving() || wheel.wheel_motion.motion.is_moving()
+                    })
                 || emitter.pan_motion.is_moving()
                 || emitter.tilt_motion.is_moving()
                 || emitter.gobo_rotation_motion.is_moving()
@@ -317,12 +340,41 @@ pub enum ParticleTrigger {
 }
 
 /// One emitter's decoded semantic parameters.
+/// One independently selected and rotated optical wheel. Index zero is wheel one.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct OpticalWheelValues {
+    pub position: f32,
+    pub rotation: f32,
+    pub wheel_motion: WheelMotionState,
+    pub rotation_motion: PhysicalMotionState,
+}
+
+impl OpticalWheelValues {
+    pub fn slot(&self, slots: u32) -> u32 {
+        if self.position <= 0.004 || slots <= 1 {
+            return 0;
+        }
+        ((self.position * slots as f32).floor() as u32).min(slots - 1)
+    }
+
+    fn advance(&mut self, elapsed: f32) {
+        self.rotation_motion.advance(elapsed);
+        self.wheel_motion.advance(elapsed);
+        if let Some(index) = self.wheel_motion.visible_slot() {
+            self.position = (index as f32 + 0.5) / self.wheel_motion.slot_count.max(1) as f32;
+        }
+    }
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EmitterValues {
     /// Dimmer after shutter and strobe gating, `0..=1`.
     pub intensity: f32,
     /// Linear RGB, `0..=1` per component.
     pub colour: [f32; 3],
+    /// Raw additive primary drive, independent of mixed beam colour.
+    #[serde(default)]
+    pub source_primaries: [f32; 3],
     /// Pan parameter `0..=1` mapped through the emitter's pan axis.
     pub pan: f32,
     /// Simulated physical Pan. Its authored zero is the geometry node's local transform.
@@ -343,6 +395,10 @@ pub struct EmitterValues {
     pub focus: f32,
     /// Gobo wheel position `0..=1`. `0` is the open slot.
     pub gobo: f32,
+    #[serde(default)]
+    pub gobo_wheels: Vec<OpticalWheelValues>,
+    #[serde(default)]
+    pub prism_wheels: Vec<OpticalWheelValues>,
     /// Physical ordered-slot traversal for the first gobo wheel.
     #[serde(default)]
     pub gobo_wheel_motion: WheelMotionState,
@@ -391,6 +447,7 @@ impl Default for EmitterValues {
         Self {
             intensity: 0.0,
             colour: [1.0, 1.0, 1.0],
+            source_primaries: [0.0; 3],
             pan: 0.5,
             pan_motion: PhysicalMotionState::default(),
             tilt: 0.5,
@@ -400,6 +457,8 @@ impl Default for EmitterValues {
             frost: 0.0,
             focus: 0.5,
             gobo: 0.0,
+            gobo_wheels: Vec::new(),
+            prism_wheels: Vec::new(),
             gobo_wheel_motion: WheelMotionState::default(),
             gobo_rotation: 0.0,
             gobo_rotation_motion: PhysicalMotionState::default(),
@@ -944,6 +1003,28 @@ mod tests {
         assert!(visited.contains(&1));
         assert!(visited.contains(&2));
         assert_eq!(visited.last(), Some(&3));
+    }
+
+    #[test]
+    fn independent_optical_wheels_traverse_without_resetting_each_other() {
+        let mut slow = OpticalWheelValues::default();
+        slow.wheel_motion.set_target(3, 4, 90.0, 360.0, 360.0);
+        let mut fast = OpticalWheelValues::default();
+        fast.wheel_motion.set_target(1, 4, 360.0, 1440.0, 1440.0);
+        let mut values = SceneValues::default();
+        values.resize(1);
+        values.emitters[0].gobo_wheels = vec![slow, fast];
+        let mut visited = Vec::new();
+        for _ in 0..50 {
+            values.apply_physical_motion(0.1);
+            let slot = values.emitters[0].gobo_wheels[0].slot(4);
+            if visited.last() != Some(&slot) {
+                visited.push(slot);
+            }
+        }
+        assert!(visited.contains(&1) && visited.contains(&2));
+        assert_eq!(values.emitters[0].gobo_wheels[0].slot(4), 3);
+        assert_eq!(values.emitters[0].gobo_wheels[1].slot(4), 1);
     }
 
     #[test]

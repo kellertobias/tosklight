@@ -79,6 +79,7 @@ fn legacy_spread_show(
         .unwrap();
     drop(store);
     let entry = |revision| ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Legacy spread show".into(),
         path: path.display().to_string(),

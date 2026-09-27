@@ -163,6 +163,7 @@ fn explicit_profile_preset_generation_writes_portable_show_objects() {
     let show_path = data_dir.join("shows/generated-presets.show");
     let show_id = initialise_show(&show_path, "Generated presets").unwrap();
     let entry = ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Generated presets".into(),
         path: show_path.display().to_string(),

@@ -35,6 +35,8 @@ export interface FixtureProfile {
 	projection_assets?: FixtureProjectionSet | null;
 	physical: FixtureProfilePhysical;
 	optics?: FixtureProfileOptics;
+	gobos?: FixtureProfileGobo[];
+	prisms?: FixtureProfilePrism[];
 	crowd?: FixtureProfileCrowd | null;
 	/** How the fixture is hung; absent on a profile written before clips were declared. */
 	mounting?: FixtureProfileMounting | null;
@@ -424,7 +426,6 @@ export type EmitterLayout =
 	| { type: "strip"; count: number; spacing_millimetres: number }
 	| { type: "explicit_pixels"; positions: Vector3Value[] };
 
-
 /**
  * The desk's canonical attribute registry entry. A profile channel names one of these as its
  * canonical identity, so the editor needs the same list Control and Architect resolve against.
@@ -471,7 +472,6 @@ export interface AttributeDescriptor {
 	push_turn_of?: string | null;
 }
 
-
 /** One generic body an operator can draw a fixture as, as the desk offers it. */
 export interface FixtureBodyModel {
 	id: string;
@@ -513,4 +513,20 @@ export interface FixtureProfileScenery {
 	adjustable: { width: boolean; height: boolean; depth: boolean };
 	minimum_size_metres: Vector3Value;
 	maximum_size_metres: Vector3Value;
+}
+
+/** Package-owned artwork selected by gobo.N; omitted wheel means wheel one. */
+export interface FixtureProfileGobo {
+	wheel?: number;
+	slot: number;
+	name?: string | null;
+	artwork_asset?: string | null;
+}
+/** Visual beam copies selected by prism.N. Slot zero is open. */
+export interface FixtureProfilePrism {
+	wheel?: number;
+	slot: number;
+	representation: "radial" | "linear";
+	facets: number;
+	spread_degrees: number;
 }

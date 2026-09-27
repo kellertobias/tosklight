@@ -119,6 +119,8 @@ export interface ProfileUpdate {
 	name: string;
 }
 
+export interface DeskShow { id: string; name: string; updated_at: string; }
+
 export interface DeskPeer {
 	instance: string;
 	name: string;
@@ -489,6 +491,7 @@ export const documentSession = {
 		invoke<LightingDesignerDefault>("save_lighting_designer_default", {
 			default: value,
 		}),
+	recentDocuments: () => invoke<string[]>("recent_documents"),
 	saveAs: (path: string) => invoke<void>("save_document_as", { path }),
 	rename: (name: string) => invoke<void>("rename_document", { name }),
 	exportMvr: (path: string) => invoke<number>("export_mvr", { path }),
@@ -496,6 +499,11 @@ export const documentSession = {
 	importMvr: (path: string, resolutions: Record<string, MvrResolution> = {}) =>
 		invoke<MvrImportReport>("import_mvr", { path, resolutions }),
 	/** The desks on the network that have a show to offer. */
+	deskShows: (address: string) => invoke<DeskShow[]>("desk_shows", { address }),
+	loadDeskShow: (address: string, name: string, showId: string) =>
+		invoke<DocumentSummary>("load_desk_show", { address, name, showId }),
+	sourceDesk: () => invoke<string | null>("source_desk"),
+	saveToSourceDesk: () => invoke<string>("save_to_source_desk"),
 	discoveredDesks: () => invoke<DeskPeer[]>("discovered_desks"),
 	liveDmxInputs: () => invoke<LiveDmxInputs>("live_dmx_inputs"),
 	saveLiveDmxInputs: (inputs: LiveDmxInputs) =>

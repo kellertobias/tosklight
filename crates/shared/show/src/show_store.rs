@@ -260,6 +260,19 @@ impl ShowStore {
         self.put_object("user_layout", DESK_LAYOUT_ID, layout, expected)
     }
 
+    /// A replaced main database must have no uncheckpointed pages under its old pathname.
+    pub fn checkpoint_for_replacement(&self) -> Result<(), StoreError> {
+        let busy: i64 = self
+            .conn
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| row.get(0))?;
+        if busy != 0 {
+            return Err(StoreError::Invalid(
+                "show is busy in another reader; retry saving when it finishes".into(),
+            ));
+        }
+        Ok(())
+    }
+
     pub fn backup_to(&self, destination: impl AsRef<Path>) -> Result<(), StoreError> {
         self.conn.execute_batch("PRAGMA wal_checkpoint(FULL)")?;
         self.conn.backup(MAIN_DB, destination, None)?;

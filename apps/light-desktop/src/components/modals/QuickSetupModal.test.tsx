@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
   fileContent: vi.fn(),
   openFileManagerPicker: vi.fn(),
+  files: {
+    fileRoots: vi.fn().mockResolvedValue([{id:"shows",label:"Shows",writable:true,removable:false}]),
+    fileEntries: vi.fn().mockResolvedValue({entries:[{name:"tour.show",path:"tour.show",kind:"file",modified_millis:0},{name:"festival.show",path:"festival.show",kind:"file",modified_millis:0}]}),
+    fileOperation: vi.fn(),
+  },
   server: {
     status: "connected" as const,
     bootstrap: {
@@ -44,7 +49,15 @@ const mocks = vi.hoisted(() => ({
     overwriteShow: vi.fn(),
     saveShowRevision: vi.fn(),
     saveShowAs: vi.fn(),
-    openShow: vi.fn(),
+    saveShowCopy: vi.fn(),
+    exportMvrFile: vi.fn(),
+    networkSaveFolders: vi.fn(),
+    openShow: vi.fn().mockResolvedValue(true),
+    networkShows: vi.fn().mockResolvedValue({peers:[]}),
+    prepareShowRevision: vi.fn(),
+    prepareShowFile: vi.fn(),
+    importRemoteShow: vi.fn(),
+    openShowFile: vi.fn(),
     uploadShow: vi.fn(),
     discoveredVisualizers: vi.fn(),
     loadFromVisualizer: vi.fn(),
@@ -62,6 +75,8 @@ const mocks = vi.hoisted(() => ({
 	applySelectiveImport: vi.fn(),
   },
 }));
+
+
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => mocks.server }));
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", async (importOriginal) => ({
@@ -90,7 +105,7 @@ vi.mock("../../features/screens/ScreensContext", () => ({
 	}),
 }));
 vi.mock("../../features/files/FilesContext", () => ({
-  useFiles: () => ({ fileContent: mocks.fileContent }),
+  useFiles: () => mocks.files,
 }));
 vi.mock("../../windows/FileManagerPickerHost", () => ({
 	openFileManagerPicker: mocks.openFileManagerPicker,
@@ -117,6 +132,12 @@ beforeEach(() => {
       { id: "copy", name: "Tour-rev-3-2026-07-17", revision: 1, updated_at: "", path: "copy.show" },
       { id: "other", name: "Festival", revision: 2, updated_at: "", path: "festival.show" },
     ];
+    mocks.files.fileRoots.mockReset().mockResolvedValue([{id:"shows",label:"Shows",writable:true,removable:false}]);
+    mocks.files.fileEntries.mockReset().mockResolvedValue({entries:[{name:"tour.show",path:"tour.show",kind:"file",modified_millis:0},{name:"festival.show",path:"festival.show",kind:"file",modified_millis:0}]});
+    mocks.server.networkShows.mockReset().mockResolvedValue({peers:[]});
+    mocks.server.saveShowCopy.mockReset().mockResolvedValue({name:"Folder copy"});
+    mocks.server.exportMvrFile.mockReset().mockResolvedValue({path:"Folder copy.mvr"});
+    mocks.server.networkSaveFolders.mockReset().mockResolvedValue({root_id:"shows",roots:[{id:"shows",label:"Desk shows",writable:true,removable:false}],entries:[]});
     mocks.server.listShowRevisions.mockReset().mockImplementation(async (id: string) => id === "original" ? [{ show_id: id, revision: 3, name: "Approved focus", created_at: "2026-07-16T10:00:00Z" }] : []);
     mocks.server.openShowRevision.mockReset().mockResolvedValue(true);
     mocks.server.overwriteShow.mockReset().mockResolvedValue(true);
@@ -165,16 +186,76 @@ describe("QuickSetupModal show workflows", () => {
     await waitFor(() => expect(mocks.server.overwriteShow).toHaveBeenCalledWith("original"));
   });
 
-  it("offers every existing Save As destination but keeps cancel as the safe default", () => {
+  it("offers only the current timestamped autosave and saves its base designation", async () => {
     render(<QuickSetupModal />);
     fireEvent.click(screen.getByRole("button", { name: "Save As" }));
-    const saveAs = screen.getByRole("dialog", { name: "Save show" });
-    expect(saveAs).toHaveTextContent("Original show");
-    const festival = within(saveAs).getByText("Festival").closest("article")!;
-    fireEvent.click(within(festival).getByRole("button", { name: "Choose Destination" }));
-    const confirmation = screen.getByRole("alertdialog", { name: "Confirm overwrite Festival" });
-    fireEvent.click(within(confirmation).getByRole("button", { name: "Cancel" }));
-    expect(mocks.server.overwriteShow).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Save show" });
+    expect(dialog).not.toHaveTextContent("Festival");
+    expect(dialog).not.toHaveTextContent("Original show");
+    expect(dialog).toHaveTextContent(new Date("2026-07-17T12:00:00Z").toLocaleString());
+    fireEvent.click(within(dialog).getByRole("button", {name: "Save as a base show"}));
+    await waitFor(() => expect(within(dialog).getByRole("button", {name:"Save to Latest Autosave"})).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole("button", {name: "Save to Latest Autosave"}));
+    await waitFor(() => expect(mocks.server.saveShowAs).toHaveBeenCalledWith("Tour-rev-3-2026-07-17", {baseShow: true, latest: true}));
+  });
+
+  it("initializes the save designation from an existing base", async () => {
+    mocks.server.bootstrap.active_show.is_base_show = true;
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", {name: "Save As"}));
+    await waitFor(() => expect(screen.getByRole("button", {name: "Save as a base show"})).toHaveAttribute("aria-pressed", "true"));
+    delete mocks.server.bootstrap.active_show.is_base_show;
+  });
+
+  it("saves and exports into the selected folder with Source in the title", async () => {
+    mocks.files.fileEntries.mockImplementation(async (_root: string, path: string) => ({entries:path ? [] : [{kind:"folder",name:"Tour folder",path:"Tour folder"}]}));
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", {name:"Save As"}));
+    const dialog = screen.getByRole("dialog", {name:"Save show"});
+    const source = within(dialog).getByRole("button", {name:"Source"});
+    expect(source.closest(".ui-title-chrome")).not.toBeNull();
+    expect(within(dialog).getByRole("button", {name:"Save as a base show"})).toHaveAttribute("aria-pressed","false");
+    fireEvent.click(await within(dialog).findByRole("button", {name:"📁 Tour folder"}));
+    fireEvent.change(within(dialog).getByRole("textbox",{name:"Show name"}),{target:{value:"Folder copy"}});
+    await waitFor(() => expect(within(dialog).getByRole("button", {name:"Save as New Show"})).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole("button",{name:"Save as a base show"}));
+    expect(within(dialog).getByRole("button",{name:"Save as a base show"})).toHaveAttribute("aria-pressed","true");
+    fireEvent.click(within(dialog).getByRole("button",{name:"Save as New Show"}));
+    await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenCalledWith("Folder copy",{rootId:"shows",path:"Tour folder"},true));
+    await waitFor(() => expect(within(dialog).getByRole("button",{name:"Export MVR"})).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole("button",{name:"Export MVR"}));
+    await waitFor(() => expect(mocks.server.exportMvrFile).toHaveBeenCalledWith("Folder copy",{rootId:"shows",path:"Tour folder"}));
+    expect(mocks.server.saveShowAs).not.toHaveBeenCalled();
+  });
+
+  it("offers network shares and Control desks as save destinations", async () => {
+    mocks.files.fileRoots.mockResolvedValue([{id:"shows",label:"Shows",writable:true,removable:false},{id:"share",label:"Show share",writable:true,removable:false,network:true}]);
+    mocks.server.networkShows.mockResolvedValue({peers:[{instance:"desk-one",name:"Lighting desk",role:"desk",shows:[],error:null},{instance:"architect-one",name:"Architect",role:"architect",shows:[],error:null}]});
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button",{name:"Save As"}));
+    const dialog = screen.getByRole("dialog",{name:"Save show"});
+    await waitFor(() => expect(within(dialog).getByRole("button",{name:"Source"})).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole("button",{name:"Source"}));
+    fireEvent.click(screen.getByRole("menuitem",{name:"Network"}));
+    await waitFor(() => expect(within(dialog).getByRole("button",{name:"Lighting desk"})).toBeEnabled());
+    expect(within(dialog).getByRole("button",{name:"Show share"})).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button",{name:"Architect"})).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button",{name:"Lighting desk"}));
+    fireEvent.change(within(dialog).getByRole("textbox",{name:"Show name"}),{target:{value:"Tour-rev-3-2026-07-17"}});
+    await waitFor(() => expect(within(dialog).getByRole("button",{name:"Save as New Show"})).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole("button",{name:"Save as New Show"}));
+    await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenCalledWith("Tour-rev-3-2026-07-17",{rootId:"shows",path:"",instance:"desk-one"},false));
+  });
+
+  it("offers saved bases through New Show without opening the original", async () => {
+    mocks.server.shows[2].is_base_show = true;
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", {name: "New Show"}));
+    const dialog = screen.getByRole("dialog", {name: "New show"});
+    fireEvent.click(within(dialog).getByRole("button", {name: "Use Festival"}));
+    await waitFor(() => expect(mocks.server.initializeEmptyShow).toHaveBeenCalledWith("other"));
+    expect(mocks.server.openShow).not.toHaveBeenCalled();
+    delete mocks.server.shows[2].is_base_show;
   });
 
   it("closes the top dialog on Escape before closing the Show menu", () => {
@@ -203,103 +284,49 @@ describe("QuickSetupModal show workflows", () => {
     render(<QuickSetupModal />);
     fireEvent.click(screen.getByRole("button", { name: "Save As" }));
     const dialog = screen.getByRole("dialog", { name: "Save show" });
-    expect(dialog).toHaveTextContent("This empty show is already autosaved");
+    expect(within(dialog).getByRole("heading", {name:"Name Empty Show"})).toBeInTheDocument();
     const titleBar = dialog.querySelector(".ui-modal-titlebar") as HTMLElement;
     expect(within(titleBar).getByRole("button", { name: "Name Empty Show" })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "Rename Show" })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     expect(within(dialog).queryByText("Or replace an existing Latest Autosave")).not.toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText("Show name"), { target: { value: "Opening Night" } });
+    await waitFor(() => expect(within(titleBar).getByRole("button", {name:"Name Empty Show"})).toBeEnabled());
     fireEvent.click(within(titleBar).getByRole("button", { name: "Name Empty Show" }));
-    await waitFor(() => expect(mocks.server.saveShowAs).toHaveBeenCalledWith("Opening Night"));
+    await waitFor(() => expect(mocks.server.saveShowAs).toHaveBeenCalledWith("Opening Night", {baseShow: false, latest: false}));
   });
 
-  it("loads a named revision through the explicit copy action", async () => {
+  it("opens a separate revision chooser and loads named history as a copy", async () => {
     render(<QuickSetupModal />);
-    fireEvent.click(screen.getByRole("button", { name: "Load" }));
-    const load = await screen.findByRole("dialog", { name: "Load show" });
-    const original = within(load).getByText("Tour").closest("article")!;
-    const action = await within(original).findByText("Load Revision as Copy");
-    fireEvent.click(action.closest("button")!);
-    await waitFor(() => expect(mocks.server.openShowRevision).toHaveBeenCalledWith("original", 3));
+    fireEvent.click(screen.getByRole("button", {name:/^Load$/}));
+    fireEvent.click(await screen.findByRole("button", {name:"Revisions for Tour"}));
+    const revisions = screen.getByRole("dialog", {name:"Revisions for Tour"});
+    await waitFor(() => expect(within(revisions).getByRole("row", {name:/Approved focus/})).toBeInTheDocument());
+    expect(revisions.querySelector("tbody tr:first-child")).toHaveTextContent("Latest Autosave");
+    for (const row of revisions.querySelectorAll("tbody tr")) {
+      expect(within(row as HTMLElement).getByRole("button", {name:/^Load$/})).toBeInTheDocument();
+      expect(within(row as HTMLElement).getByRole("button", {name:"Partial Load"})).toBeInTheDocument();
+    }
+    fireEvent.click(within(within(revisions).getByRole("row", {name:/Approved focus/})).getByRole("button", {name:/^Load$/}));
+    await waitFor(() => expect(mocks.server.openShowRevision).toHaveBeenCalledWith("original",3));
   });
 
-  it("offers USB and operating-system show sources in the Load Show title bar", async () => {
+  it("offers sources in the title without folder creation or MVR and keeps MVR in New Show", async () => {
     render(<QuickSetupModal />);
-    fireEvent.click(screen.getByRole("button", { name: "Load" }));
-    const load = await screen.findByRole("dialog", { name: "Load show" });
-    const titleBar = load.querySelector(".ui-modal-titlebar") as HTMLElement;
-
-    expect(within(titleBar).getByRole("button", { name: "Show from USB" })).toBeInTheDocument();
-    expect(within(titleBar).getByRole("button", { name: "Show from OS" })).toBeInTheDocument();
-    expect(within(load).queryByRole("button", { name: "Load from flash drive" })).not.toBeInTheDocument();
-
-    const input = load.querySelector<HTMLInputElement>('input[type="file"]')!;
-    expect(input).toHaveAttribute("accept", ".show");
-    const showFile = new File(["portable show"], "tour.show", { type: "application/octet-stream" });
-    fireEvent.change(input, { target: { files: [showFile] } });
-
-    await waitFor(() => expect(mocks.server.uploadShow).toHaveBeenCalledWith(showFile));
+    fireEvent.click(screen.getByRole("button", {name:/^Load$/}));
+    const browser = screen.getByRole("dialog", {name:"Load show"});
+    await waitFor(() => expect(within(browser).getByRole("button", {name:"Source"})).toBeEnabled());
+    const source = within(browser).getByRole("button", {name:"Source"});
+    expect(source.closest(".ui-title-chrome")).not.toBeNull();
+    expect(within(browser).queryByRole("button", {name:"Create New Folder"})).not.toBeInTheDocument();
+    fireEvent.click(source);
+    for (const name of ["Internal", "USB", "Network"]) expect(screen.getByRole("menuitem", {name})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", {name:"Internal"}));
+    expect(within(browser).queryByRole("button",{name:/MVR/})).not.toBeInTheDocument();
+    fireEvent.click(within(browser).getByRole("button", {name:"Close Load Show"}));
+    fireEvent.click(screen.getByRole("button", {name:"New Show"}));
+    expect(within(screen.getByRole("dialog",{name:"New show"})).getByRole("button",{name:"Load from MVR"})).toBeInTheDocument();
   });
-
-  it("offers every discovered visualizer that has a document, and loads the one chosen", async () => {
-    mocks.server.discoveredVisualizers.mockResolvedValue([
-      { instance: "editor-a", name: "Viz Editor on booth", show: "Summer Tour rig", address: "10.0.0.4:5310" },
-      { instance: "editor-b", name: "Viz Editor on studio", show: "Studio rig", address: "10.0.0.9:5310" },
-    ]);
-    render(<QuickSetupModal />);
-    fireEvent.click(screen.getByRole("button", { name: "Load" }));
-    const load = await screen.findByRole("dialog", { name: "Load show" });
-    const titleBar = load.querySelector(".ui-modal-titlebar") as HTMLElement;
-
-    const booth = await within(titleBar).findByRole("button", {
-      name: "Load from Viz Editor on booth at 10.0.0.4:5310",
-    });
-    // Two editors are two offers, told apart by name and address rather than collapsed into one.
-    expect(booth).toHaveTextContent("Load from Visualizer · Viz Editor on booth: Summer Tour rig");
-    expect(within(titleBar).getByRole("button", {
-      name: "Load from Viz Editor on studio at 10.0.0.9:5310",
-    })).toBeInTheDocument();
-
-    fireEvent.click(booth);
-    await waitFor(() => expect(mocks.server.loadFromVisualizer).toHaveBeenCalledWith("editor-a"));
-  });
-
-  it("offers no visualizer when none is on the network", async () => {
-    render(<QuickSetupModal />);
-    fireEvent.click(screen.getByRole("button", { name: "Load" }));
-    const load = await screen.findByRole("dialog", { name: "Load show" });
-    await waitFor(() => expect(mocks.server.discoveredVisualizers).toHaveBeenCalled());
-    expect(within(load).queryByText(/Load from Visualizer/)).not.toBeInTheDocument();
-  });
-
-	it("opens Partial Show Load from the Load Show title bar", async () => {
-		render(<QuickSetupModal />);
-		fireEvent.click(screen.getByRole("button", { name: "Load" }));
-		const load = await screen.findByRole("dialog", { name: "Load show" });
-
-		fireEvent.click(within(load).getByRole("button", { name: "Partial Show Load" }));
-
-		expect(await screen.findByRole("dialog", { name: "Partial Show Load" }))
-			.toHaveTextContent("lists every dependency, conflict, fixture profile, and managed asset");
-	});
-
-	it("opens the MVR file chooser directly from Load Show", async () => {
-		render(<QuickSetupModal />);
-		fireEvent.click(screen.getByRole("button", { name: "Load" }));
-		const load = await screen.findByRole("dialog", { name: "Load show" });
-
-		fireEvent.click(within(load).getByRole("button", { name: "Load from MVR" }));
-
-		await waitFor(() =>
-			expect(mocks.openFileManagerPicker).toHaveBeenCalledWith({
-				purpose: "Choose MVR file",
-				target: "files",
-				multiple: false,
-				allowedExtensions: ["mvr"],
-			}),
-		);
-	});
 
   it("keeps an orphaned revision copy usable without an overwrite-original action", () => {
     mocks.server.shows = mocks.server.shows.filter((show) => show.id !== "original");

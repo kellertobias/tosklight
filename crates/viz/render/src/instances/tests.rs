@@ -1,7 +1,7 @@
 //! Behaviour of the per-frame instance build.
 use super::*;
 
-fn head() -> EmitterInstance {
+pub(super) fn head() -> EmitterInstance {
     EmitterInstance {
         fixture_index: 0,
         head_index: 0,
@@ -122,6 +122,7 @@ fn tilt_turns_the_head_about_its_trunnions_and_leaves_the_base_alone() {
             0,
             &model,
             &[(pan, tilt)],
+            &SceneValues::default(),
             &[],
         );
         let take = |part_index: u32| {

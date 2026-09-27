@@ -221,7 +221,12 @@ pub fn write_fixture_package(profile: &FixtureProfile) -> Result<Vec<u8>, Fixtur
     // Every slot is its own file, named for the slot it is in: a wheel is read by a person as
     // often as by the codec, and `assets/gobo-3.png` says which one it is without opening it.
     for index in 0..portable.gobos.len() {
-        let stem = format!("assets/gobo-{}", portable.gobos[index].slot);
+        let gobo = &portable.gobos[index];
+        let stem = if gobo.wheel == 1 {
+            format!("assets/gobo-{}", gobo.slot)
+        } else {
+            format!("assets/gobo-wheel-{}-{}", gobo.wheel, gobo.slot)
+        };
         extract_asset_field(
             &mut portable.gobos[index].artwork_asset,
             AssetKind::Gobo,

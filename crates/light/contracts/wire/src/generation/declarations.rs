@@ -41,6 +41,7 @@ use crate::v2::schedules::*;
 use crate::v2::screen_configuration::*;
 use crate::v2::selective_import::*;
 use crate::v2::show_library::*;
+use crate::v2::show_network::*;
 use crate::v2::show_objects::*;
 use crate::v2::speed_group::*;
 use crate::v2::stage_layout::*;
@@ -478,6 +479,13 @@ fn screen_configuration(config: &Config) -> Vec<String> {
 
 fn show_library(config: &Config) -> Vec<String> {
     vec![
+        NetworkShowCatalog::decl(config),
+        NetworkShowPeer::decl(config),
+        NetworkShow::decl(config),
+        crate::v2::show_network::NetworkSaveFolders::decl(config),
+        crate::v2::show_network::NetworkSaveRoot::decl(config),
+        crate::v2::show_network::NetworkSaveEntry::decl(config),
+        crate::v2::show_network::NetworkSaveEntryKind::decl(config),
         ShowLibrarySnapshot::decl(config),
         ShowLibraryEntry::decl(config),
         ShowLibraryRevision::decl(config),

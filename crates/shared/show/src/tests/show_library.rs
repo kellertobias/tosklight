@@ -164,6 +164,7 @@ fn desk_schema_six_migrates_existing_shows_without_copy_provenance() {
     let desk = DeskStore::open(&path).unwrap();
     let legacy = desk.show(show_id).unwrap().unwrap();
     assert_eq!(legacy.name, "Legacy");
+    assert!(!legacy.is_base_show);
     assert!(legacy.revision_copy.is_none());
     assert_eq!(legacy.created_at, None);
     assert_eq!(legacy.last_loaded_at, None);
@@ -174,4 +175,119 @@ fn desk_schema_six_migrates_existing_shows_without_copy_provenance() {
     assert_eq!(version, crate::desk::DESK_SCHEMA_VERSION);
     drop(desk);
     let _ = fs::remove_file(path);
+}
+
+#[test]
+fn base_show_designation_survives_reopen_rename_and_overwrite_without_marking_copies() {
+    let path = temporary("base-show-library");
+    let id = {
+        let mut desk = DeskStore::open(&path).unwrap();
+        let entry = desk.upsert_show("Base", "base.show", false).unwrap();
+        assert!(!entry.is_base_show);
+        desk.add_show_revision(entry.id, "Approved", "approved.show")
+            .unwrap();
+        let marked = desk.set_show_base(entry.id, true).unwrap();
+        assert!(marked.is_base_show);
+        assert_eq!(marked.revision, entry.revision + 1);
+        let repeated = desk.set_show_base(entry.id, true).unwrap();
+        assert_eq!(repeated.revision, marked.revision);
+        assert_eq!(repeated.updated_at, marked.updated_at);
+        assert!(
+            desk.rename_show(entry.id, "Renamed base", "renamed.show")
+                .unwrap()
+                .is_base_show
+        );
+        assert!(
+            desk.upsert_show("Renamed base", "renamed.show", true)
+                .unwrap()
+                .is_base_show
+        );
+        assert!(
+            !desk
+                .upsert_show("Working copy", "copy.show", false)
+                .unwrap()
+                .is_base_show
+        );
+        assert_eq!(desk.show_revisions(entry.id).unwrap()[0].name, "Approved");
+        assert!(desk.set_show_base(ShowId::new(), true).is_err());
+        entry.id
+    };
+    let desk = DeskStore::open(&path).unwrap();
+    assert!(desk.show(id).unwrap().unwrap().is_base_show);
+    assert!(!desk.set_show_base(id, false).unwrap().is_base_show);
+    assert_eq!(desk.show_revisions(id).unwrap().len(), 1);
+    drop(desk);
+    assert!(
+        !DeskStore::open(&path)
+            .unwrap()
+            .show(id)
+            .unwrap()
+            .unwrap()
+            .is_base_show
+    );
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn schema_fifteen_base_migration_preserves_library_identity_history_and_active_show() {
+    let path = temporary("base-show-legacy-fifteen");
+    let id = ShowId::new();
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("CREATE TABLE schema_info(version INTEGER NOT NULL);
+            INSERT INTO schema_info VALUES(15);
+            CREATE TABLE show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,created_at TEXT,last_loaded_at TEXT);
+            CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+            CREATE TABLE show_revisions(show_id TEXT NOT NULL,revision INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(show_id,revision));").unwrap();
+        conn.execute("INSERT INTO show_library(id,name,path,revision,updated_at,created_at,last_loaded_at) VALUES(?1,'Legacy base candidate','legacy.show',7,'saved','created','loaded')", [id.0.to_string()]).unwrap();
+        conn.execute(
+            "INSERT INTO show_revisions(show_id,revision,name,path,created_at) VALUES(?1,3,'Approved legacy','approved.show','saved')",
+            [id.0.to_string()],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO settings(key,value) VALUES('active_show_id',?1)",
+            [id.0.to_string()],
+        )
+        .unwrap();
+    }
+    let desk = DeskStore::open(&path).unwrap();
+    let entry = desk.show(id).unwrap().unwrap();
+    assert!(!entry.is_base_show);
+    assert_eq!(entry.revision, 7);
+    assert_eq!(entry.path, "legacy.show");
+    assert_eq!(entry.updated_at, "saved");
+    assert_eq!(entry.created_at.as_deref(), Some("created"));
+    assert_eq!(entry.last_loaded_at.as_deref(), Some("loaded"));
+    let active: String = desk
+        .conn
+        .query_row(
+            "SELECT value FROM settings WHERE key='active_show_id'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(active, id.0.to_string());
+    let revision = desk.show_revision(id, 3).unwrap().unwrap();
+    assert_eq!(revision.name, "Approved legacy");
+    assert_eq!(revision.path, "approved.show");
+    assert!(desk.set_show_base(id, true).unwrap().is_base_show);
+    drop(desk);
+    assert!(
+        DeskStore::open(&path)
+            .unwrap()
+            .show(id)
+            .unwrap()
+            .unwrap()
+            .is_base_show
+    );
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn legacy_show_entry_json_defaults_to_an_ordinary_show() {
+    let entry: crate::ShowEntry = serde_json::from_value(serde_json::json!({
+        "id":ShowId::new(),"name":"Legacy","path":"legacy.show","revision":1,"updated_at":"saved"
+    }))
+    .unwrap();
+    assert!(!entry.is_base_show);
 }

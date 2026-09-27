@@ -71,7 +71,7 @@ export class ShowOperatorAdapter {
 		} else {
 			const dialog = await this.openLoadDialog();
 			await this.libraryCard(dialog, resolved.name)
-				.getByRole("button", { name: "Load Latest Autosave", exact: true })
+				.getByRole("button", { name: "Load Latest", exact: true })
 				.click();
 			await expect(dialog).toBeHidden();
 		}
@@ -201,10 +201,11 @@ export class ShowOperatorAdapter {
 			);
 		} else {
 			const dialog = await this.openLoadDialog();
-			const revisionButton = this.libraryCard(dialog, resolved.name)
-				.locator(".named-revision-list button")
-				.filter({ hasText: `Revision ${revision} ·` });
-			await revisionButton.click();
+			await this.libraryCard(dialog, resolved.name)
+				.getByRole("button", { name: `Revisions for ${resolved.name}`, exact: true }).click();
+			const revisions = this.browser().getByRole("dialog", { name: `Revisions for ${resolved.name}`, exact: true });
+			await revisions.getByRole("row").filter({ hasText: new RegExp(`Revision ${revision} ·`) })
+				.getByRole("button", { name: "Load", exact: true }).click();
 			await expect(dialog).toBeHidden();
 			await expect
 				.poll(async () => (await this.active()).revision_copy?.revision)
@@ -232,9 +233,12 @@ export class ShowOperatorAdapter {
 			const recovery = this.browser().getByRole("alertdialog", {
 				name: "Show recovery required",
 			});
-			const surface = (await recovery.isVisible())
-				? recovery
-				: await this.openLoadDialog();
+			let surface = recovery;
+			if (!(await recovery.isVisible())) {
+				const menu = await this.openShowMenu();
+				await menu.getByRole("button", { name: "New Show", exact: true }).click();
+				surface = this.browser().getByRole("dialog", { name: "New show", exact: true });
+			}
 			await surface
 				.getByRole("button", {
 					name: "Load Clean Built-in Default",
@@ -344,7 +348,7 @@ export class ShowOperatorAdapter {
 
 	private libraryCard(dialog: Locator, name: string): Locator {
 		return dialog
-			.locator(".revision-show-library article")
+			.getByRole("row")
 			.filter({ has: this.browser().getByText(name, { exact: true }) });
 	}
 

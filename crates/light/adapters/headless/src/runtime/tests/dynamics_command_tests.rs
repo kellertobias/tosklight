@@ -191,6 +191,7 @@ fn fix_at_command_accepts_a_named_preset_batch_with_timing() {
     let show_path = data_dir.join("shows/fix-at-preset.show");
     let show_id = default_show::initialise_legacy_test_show(&show_path).unwrap();
     let entry = ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "FixAT Preset".into(),
         path: show_path.display().to_string(),

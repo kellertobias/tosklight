@@ -8,6 +8,8 @@
 //! the thing the contract asks for: when a backend cannot compile one effect, that effect is
 //! reported by name instead of taking the other nineteen down with it.
 
+mod terrain;
+
 use std::collections::HashMap;
 
 use bytemuck::{Pod, Zeroable};
@@ -286,6 +288,118 @@ impl AudioMemory {
     }
 }
 
+// The old openFrameworks effects kept their radius and individual shape lifetimes between
+// frames. Keep that state per layer; analytic beat-age approximations lose the old spawn gate.
+const LEGACY_SHAPES: usize = 50;
+const LEGACY_FLOATS: usize = 254;
+
+#[derive(Debug, Clone)]
+struct LegacyShape {
+    centre: [f32; 2],
+    extent: f32,
+    rotation: f32,
+    rotation_per_frame: f32,
+    alpha: f32,
+}
+
+#[derive(Debug, Clone)]
+struct LegacyMemory {
+    kind: VisualizerKind,
+    seconds: Option<f32>,
+    radius: f32,
+    clock: f32,
+    last_beat: f32,
+    last_kick: f32,
+    random: u64,
+    shapes: Vec<LegacyShape>,
+}
+
+impl LegacyMemory {
+    fn new(kind: VisualizerKind, layer: usize) -> Self {
+        Self {
+            kind,
+            seconds: None,
+            radius: 0.0,
+            clock: 0.0,
+            last_beat: 0.0,
+            last_kick: 0.0,
+            random: (layer as u64).wrapping_add(0x9e3779b97f4a7c15),
+            shapes: Vec::new(),
+        }
+    }
+
+    fn random_unit(&mut self) -> f32 {
+        self.random ^= self.random << 13;
+        self.random ^= self.random >> 7;
+        self.random ^= self.random << 17;
+        (self.random >> 40) as f32 / 16_777_216.0
+    }
+
+    fn advance(
+        &mut self,
+        parameters: &VisualizerParameters,
+        frame: &VisualizerFrame<'_>,
+    ) -> [f32; LEGACY_FLOATS] {
+        // Reproduce the legacy 60 Hz update rates without tying lifetimes to output FPS.
+        let elapsed = self.seconds.map_or(1.0 / 60.0, |previous| {
+            (frame.seconds - previous).clamp(0.0, 1.0)
+        });
+        self.seconds = Some(frame.seconds);
+        let frames = elapsed * 60.0;
+        let beat_landed = frame.beat >= 0.5 && frame.beat > self.last_beat + 0.02;
+        let kick = frame.instruments.kick.hit;
+        let kick_landed = kick >= 0.5 && kick > self.last_kick + 0.02;
+        self.last_beat = frame.beat;
+        self.last_kick = kick;
+        self.clock += elapsed * parameters.speed * (1.0 + frame.analysis.energy);
+
+        let target = (frame.analysis.bass * 200.0 + if kick_landed { 100.0 } else { 0.0 })
+            * parameters.reactivity
+            * (2.0 / 1080.0);
+        self.radius += (target - self.radius) * (1.0 - parameters.decay.powf(frames));
+
+        if self.kind == VisualizerKind::MinimalistShapes
+            && beat_landed
+            && self.shapes.len() < (parameters.count as usize).min(LEGACY_SHAPES)
+        {
+            let centre = [self.random_unit(), self.random_unit()];
+            let extent = parameters.size * (0.5 + self.random_unit());
+            let rotation = self.random_unit() * std::f32::consts::TAU;
+            let rotation_per_frame =
+                (-5.0 + self.random_unit() * 10.0) * parameters.speed * std::f32::consts::PI
+                    / 180.0;
+            self.shapes.push(LegacyShape {
+                centre,
+                extent,
+                rotation,
+                rotation_per_frame,
+                alpha: 1.0,
+            });
+        }
+        for shape in &mut self.shapes {
+            shape.rotation += shape.rotation_per_frame * frames;
+            shape.alpha -= 2.0 * parameters.speed * frames / 255.0;
+        }
+        self.shapes.retain(|shape| shape.alpha > 0.0);
+
+        let mut data = [0.0; LEGACY_FLOATS];
+        data[0] = self.radius;
+        data[1] = self.shapes.len() as f32;
+        for (index, shape) in self.shapes.iter().enumerate() {
+            data[2 + index * 5..7 + index * 5].copy_from_slice(&[
+                shape.centre[0],
+                shape.centre[1],
+                shape.extent,
+                shape.rotation,
+                shape.alpha,
+            ]);
+        }
+        data[252] = self.clock;
+        data[253] = f32::from(u8::from(kick_landed));
+        data
+    }
+}
+
 /// One output's visualizer pipelines and per-layer targets.
 pub struct VisualizerRenderer {
     gpu: Gpu,
@@ -298,6 +412,7 @@ pub struct VisualizerRenderer {
     targets: HashMap<usize, SourceTexture>,
     memories: HashMap<usize, AudioMemory>,
     rhythms: HashMap<usize, RhythmMemory>,
+    legacy: HashMap<usize, LegacyMemory>,
 }
 
 impl VisualizerRenderer {
@@ -342,7 +457,7 @@ impl VisualizerRenderer {
             label: Some("media-analysis"),
             size: wgpu::Extent3d {
                 width: WAVEFORM_POINTS as u32,
-                height: 2,
+                height: 7,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -365,6 +480,7 @@ impl VisualizerRenderer {
             targets: HashMap::new(),
             memories: HashMap::new(),
             rhythms: HashMap::new(),
+            legacy: HashMap::new(),
         }
     }
 
@@ -435,7 +551,23 @@ impl VisualizerRenderer {
                 speed: tuned.speed,
                 smoothing: tuned.smoothing,
             });
-        self.upload_analysis(frame.analysis, &memory, &rhythm);
+        let legacy_memory = self
+            .legacy
+            .entry(layer)
+            .or_insert_with(|| LegacyMemory::new(kind, layer));
+        if legacy_memory.kind != kind {
+            *legacy_memory = LegacyMemory::new(kind, layer);
+        }
+        let legacy = legacy_memory.advance(&tuned, frame);
+        let terrain_heights = (kind == VisualizerKind::WaveTerrain)
+            .then(|| terrain::heights(rhythm.clock, frame.analysis.bass));
+        self.upload_analysis(
+            frame.analysis,
+            &memory,
+            &rhythm,
+            &legacy,
+            terrain_heights.as_ref(),
+        );
         self.gpu.queue.write_buffer(
             &self.uniform,
             0,
@@ -552,8 +684,15 @@ impl VisualizerRenderer {
     }
 
     /// Puts the newest analysis where the shaders can read it.
-    fn upload_analysis(&self, analysis: &Analysis, memory: &Memory, rhythm: &Rhythm) {
-        let mut rows = vec![0.0f32; WAVEFORM_POINTS * 2];
+    fn upload_analysis(
+        &self,
+        analysis: &Analysis,
+        memory: &Memory,
+        rhythm: &Rhythm,
+        legacy: &[f32; LEGACY_FLOATS],
+        terrain: Option<&[f32; 2500]>,
+    ) {
+        let mut rows = vec![0.0f32; WAVEFORM_POINTS * 7];
         for (slot, value) in rows[..WAVEFORM_POINTS]
             .iter_mut()
             .zip(analysis.waveform.iter())
@@ -595,6 +734,12 @@ impl VisualizerRenderer {
             *slot = value;
         }
 
+        let legacy_at = at + 10 + BEAT_HISTORY;
+        rows[legacy_at..legacy_at + LEGACY_FLOATS].copy_from_slice(legacy);
+        if let Some(heights) = terrain {
+            rows[WAVEFORM_POINTS * 2..WAVEFORM_POINTS * 2 + heights.len()].copy_from_slice(heights);
+        }
+
         self.gpu.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.analysis,
@@ -606,11 +751,11 @@ impl VisualizerRenderer {
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(WAVEFORM_POINTS as u32 * 4),
-                rows_per_image: Some(2),
+                rows_per_image: Some(7),
             },
             wgpu::Extent3d {
                 width: WAVEFORM_POINTS as u32,
-                height: 2,
+                height: 7,
                 depth_or_array_layers: 1,
             },
         );
@@ -621,6 +766,87 @@ impl VisualizerRenderer {
 mod tests {
     use super::*;
     use media_domain::Tint;
+
+    fn legacy_frame(
+        seconds: f32,
+        analysis: &Analysis,
+        beat: f32,
+        kick: f32,
+    ) -> VisualizerFrame<'_> {
+        VisualizerFrame {
+            seconds,
+            analysis,
+            beat,
+            bpm: 120.0,
+            beat_phase: 0.0,
+            instruments: struck(kick, 0.0, 0.0),
+        }
+    }
+
+    #[test]
+    fn legacy_shape_capacity_is_a_spawn_gate_and_held_beats_do_not_respawn() {
+        let analysis = Analysis::default();
+        let mut parameters = VisualizerParameters::default();
+        parameters.count = 1;
+        parameters.speed = 0.5;
+        let mut memory = LegacyMemory::new(VisualizerKind::MinimalistShapes, 0);
+        memory.advance(&parameters, &legacy_frame(0.0, &analysis, 1.0, 0.0));
+        let first = memory.shapes[0].centre;
+        memory.advance(&parameters, &legacy_frame(0.02, &analysis, 1.0, 0.0));
+        assert_eq!(memory.shapes.len(), 1);
+        memory.advance(&parameters, &legacy_frame(0.04, &analysis, 0.0, 0.0));
+        memory.advance(&parameters, &legacy_frame(0.06, &analysis, 1.0, 0.0));
+        assert_eq!(memory.shapes.len(), 1);
+        assert_eq!(memory.shapes[0].centre, first);
+        // Lowering capacity does not evict the existing shape; it lives until its fade expires.
+        parameters.count = 0;
+        memory.advance(&parameters, &legacy_frame(0.08, &analysis, 0.0, 0.0));
+        assert_eq!(memory.shapes.len(), 1);
+        for second in 1..=5 {
+            memory.advance(
+                &parameters,
+                &legacy_frame(second as f32, &analysis, 0.0, 0.0),
+            );
+        }
+        assert!(memory.shapes.is_empty());
+    }
+
+    #[test]
+    fn legacy_shape_fade_and_rotation_are_independent_of_output_frame_rate() {
+        let analysis = Analysis::default();
+        let parameters = VisualizerParameters::default();
+        let sample = |fps: u32| {
+            let mut memory = LegacyMemory::new(VisualizerKind::MinimalistShapes, 7);
+            memory.advance(&parameters, &legacy_frame(0.0, &analysis, 1.0, 0.0));
+            for frame in 1..=fps {
+                memory.advance(
+                    &parameters,
+                    &legacy_frame(frame as f32 / fps as f32, &analysis, 0.0, 0.0),
+                );
+            }
+            (memory.shapes[0].alpha, memory.shapes[0].rotation)
+        };
+        let at30 = sample(30);
+        let at120 = sample(120);
+        assert!((at30.0 - at120.0).abs() < 0.00001);
+        assert!((at30.1 - at120.1).abs() < 0.0001);
+    }
+
+    #[test]
+    fn legacy_radius_uses_old_lerp_and_binary_kick_edge() {
+        let mut analysis = Analysis::default();
+        analysis.bass = 0.5;
+        let mut parameters = VisualizerParameters::default();
+        parameters.decay = 0.8;
+        parameters.reactivity = 1.0;
+        let mut memory = LegacyMemory::new(VisualizerKind::PulsingCircles, 0);
+        let first = memory.advance(&parameters, &legacy_frame(0.0, &analysis, 0.0, 1.0));
+        assert!((first[0] - 200.0 * 2.0 / 1080.0 * 0.2).abs() < 0.00001);
+        assert_eq!(first[253], 1.0);
+        let held = memory.advance(&parameters, &legacy_frame(1.0 / 60.0, &analysis, 0.0, 1.0));
+        assert_eq!(held[253], 0.0);
+        assert!((held[0] - (first[0] * 0.8 + 100.0 * 2.0 / 1080.0 * 0.2)).abs() < 0.00001);
+    }
 
     fn struck(kick: f32, snare: f32, hihat: f32) -> media_domain::Instruments {
         let strike = |hit: f32| media_domain::Instrument { level: hit, hit };
@@ -793,6 +1019,22 @@ mod tests {
                 "{} lost the shared entry point",
                 kind.label()
             );
+        }
+    }
+
+    #[test]
+    fn every_visualizer_passes_wgsl_validation() {
+        for kind in ALL_KINDS {
+            let source = shader_source(kind);
+            let module = naga::front::wgsl::parse_str(&source).unwrap_or_else(|error| {
+                panic!("{}: {}", kind.label(), error.emit_to_string(&source))
+            });
+            naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::all(),
+            )
+            .validate(&module)
+            .unwrap_or_else(|error| panic!("{}: {error}", kind.label()));
         }
     }
 

@@ -400,3 +400,40 @@ pub(crate) fn discover_directories_under(
     }
     result
 }
+
+/// Classify a configured folder on a mounted SMB/NFS/AFP share for show-source browsing.
+pub(crate) fn is_network_path(path: &Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        path.to_string_lossy().starts_with(r"\\")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let Ok(canonical) = fs::canonicalize(path) else {
+            return false;
+        };
+        let mounts = Command::new("mount")
+            .output()
+            .ok()
+            .filter(|output| output.status.success());
+        let Some(mounts) = mounts else {
+            return false;
+        };
+        let text = String::from_utf8_lossy(&mounts.stdout);
+        text.lines().any(|line| {
+            let Some((_, location)) = line.split_once(" on ") else {
+                return false;
+            };
+            let Some((mount_path, kind)) = location
+                .split_once(" (")
+                .or_else(|| location.split_once(" type "))
+            else {
+                return false;
+            };
+            let network = ["smbfs", "cifs", "nfs", "afpfs", "fuse.sshfs"]
+                .iter()
+                .any(|name| kind.starts_with(name));
+            network && canonical.starts_with(Path::new(mount_path))
+        })
+    }
+}

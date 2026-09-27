@@ -27,8 +27,13 @@ use viz_planning::SceneSource;
 #[derive(Default)]
 pub struct Session {
     source: SceneSource,
+    document_lifecycle: Mutex<()>,
+    pub(crate) desk_save_gate: tokio::sync::Mutex<()>,
+    pub(crate) pending_desk_save: Mutex<Option<crate::discovery::show_library::PendingDeskSave>>,
+    document_generation: std::sync::atomic::AtomicU64,
     library_path: Mutex<Option<PathBuf>>,
     recent: Mutex<Option<RecentShow>>,
+    pub(crate) desk_source: Mutex<Option<crate::discovery::DeskSource>>,
 }
 
 /// What the window title bar and the file menu need to know.
@@ -123,6 +128,101 @@ impl Session {
         *self.recent.lock() = Some(recent);
     }
 
+    pub(crate) fn open_from_desk(
+        &self,
+        path: &Path,
+        mut source: crate::discovery::DeskSource,
+    ) -> Answer<DocumentSummary> {
+        let _lifecycle = self.document_lifecycle.lock();
+        let summary = self.open_path_locked(path, None)?;
+        source.revision =
+            self.with(|document| document.portable_revision().map_err(|e| e.to_string()))?;
+        self.set_desk_source(Some(source))?;
+        Ok(summary)
+    }
+
+    pub(crate) fn desk_save_snapshot(
+        &self,
+    ) -> Answer<(crate::discovery::DeskSource, u64, Vec<u8>, u64)> {
+        let _lifecycle = self.document_lifecycle.lock();
+        let source = self
+            .desk_source
+            .lock()
+            .clone()
+            .ok_or("This show was not opened from a desk")?;
+        let generation = self
+            .document_generation
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let (bytes, local_revision) = self.with(|document| {
+            if document.show_id().0.to_string() != source.show_id {
+                return Err("The open show does not match its source desk".into());
+            }
+            let staged = document
+                .path()
+                .with_file_name(format!(".desk-save-{}.show", Uuid::new_v4()));
+            let result = document
+                .save_as(&staged)
+                .map_err(|e| e.to_string())
+                .and_then(|_| std::fs::read(&staged).map_err(|e| e.to_string()));
+            let _ = std::fs::remove_file(staged);
+            let bytes = result?;
+            let revision = document.portable_revision().map_err(|e| e.to_string())?;
+            Ok((bytes, revision))
+        })?;
+        Ok((source, generation, bytes, local_revision))
+    }
+
+    pub(crate) fn confirm_desk_save(&self, generation: u64, revision: u64) -> Answer<()> {
+        let _lifecycle = self.document_lifecycle.lock();
+        if self
+            .document_generation
+            .load(std::sync::atomic::Ordering::Relaxed)
+            != generation
+        {
+            return Ok(());
+        }
+        if let Some(source) = self.desk_source.lock().as_mut() {
+            source.revision = revision;
+        }
+        self.persist_desk_source()
+    }
+
+    pub(crate) fn set_desk_source(
+        &self,
+        source: Option<crate::discovery::DeskSource>,
+    ) -> Answer<()> {
+        *self.desk_source.lock() = source;
+        self.persist_desk_source()
+    }
+
+    pub(crate) fn persist_desk_source(&self) -> Answer<()> {
+        let source = self.desk_source.lock().clone();
+        if let Some(source) = source {
+            let path =
+                self.with(|document| Ok(document.path().with_extension("show.desk-source.json")))?;
+            std::fs::write(
+                path,
+                serde_json::to_vec(&source).map_err(|e| e.to_string())?,
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    pub fn recent_paths(&self) -> Vec<String> {
+        self.recent
+            .lock()
+            .as_ref()
+            .map(|recent| {
+                recent
+                    .list()
+                    .into_iter()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Reopens the show this window had open last time, if it is still there.
     pub fn reopen_recent(&self) {
         let path = self.recent.lock().as_ref().and_then(RecentShow::read);
@@ -160,6 +260,11 @@ impl Session {
     }
 
     fn open_path(&self, path: &Path, created: Option<&str>) -> Answer<DocumentSummary> {
+        let _lifecycle = self.document_lifecycle.lock();
+        self.open_path_locked(path, created)
+    }
+
+    fn open_path_locked(&self, path: &Path, created: Option<&str>) -> Answer<DocumentSummary> {
         let document = match created {
             Some(name) => PlanningDocument::create(path, name),
             None => PlanningDocument::open(path),
@@ -168,6 +273,11 @@ impl Session {
         let document = self.attach_library(document)?;
         let summary = summarize(&document)?;
         self.source.open(document);
+        self.document_generation
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        *self.desk_source.lock() = std::fs::read(path.with_extension("show.desk-source.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
         if let Some(recent) = self.recent.lock().as_ref() {
             recent.remember(path);
         }
@@ -1077,4 +1187,9 @@ pub struct MvrImportReport {
     pub imported_fixtures: usize,
     pub unresolved_fixtures: usize,
     pub warnings: Vec<String>,
+}
+
+#[tauri::command]
+pub fn recent_documents(session: tauri::State<'_, Session>) -> Vec<String> {
+    session.recent_paths()
 }

@@ -8,7 +8,7 @@ use uuid::Uuid;
 impl DeskStore {
     pub fn library(&self) -> Result<Vec<ShowEntry>, StoreError> {
         let mut statement = self.conn.prepare(
-            "SELECT id,name,path,revision,updated_at,created_at,last_loaded_at,revision_source_show_id,revision_source_show_name,revision_source_revision,revision_source_name,revision_copy_created_at FROM show_library ORDER BY name COLLATE NOCASE",
+            "SELECT id,name,path,revision,updated_at,created_at,last_loaded_at,revision_source_show_id,revision_source_show_name,revision_source_revision,revision_source_name,revision_copy_created_at,is_base_show FROM show_library ORDER BY name COLLATE NOCASE",
         )?;
         let rows = statement.query_map([], |row| {
             Ok((
@@ -24,6 +24,7 @@ impl DeskStore {
                 row.get::<_, Option<i64>>(9)?,
                 row.get::<_, Option<String>>(10)?,
                 row.get::<_, Option<String>>(11)?,
+                row.get::<_, bool>(12)?,
             ))
         })?;
         rows.map(|row| {
@@ -40,6 +41,7 @@ impl DeskStore {
                 source_revision,
                 source_revision_name,
                 copied_at,
+                is_base_show,
             ) = row?;
             let revision_copy = match source_show_id {
                 None => None,
@@ -62,6 +64,7 @@ impl DeskStore {
                 }),
             };
             Ok(ShowEntry {
+                is_base_show,
                 id: ShowId(Uuid::parse_str(&id)?),
                 name,
                 path,
@@ -133,6 +136,22 @@ impl DeskStore {
             )?;
             id
         };
+        self.show(id)?
+            .ok_or_else(|| StoreError::Invalid("show index update failed".into()))
+    }
+
+    /// Change only this desk's catalog designation, preserving the portable document and history.
+    pub fn set_show_base(&self, id: ShowId, is_base_show: bool) -> Result<ShowEntry, StoreError> {
+        let entry = self
+            .show(id)?
+            .ok_or_else(|| StoreError::Invalid("show does not exist".into()))?;
+        if entry.is_base_show == is_base_show {
+            return Ok(entry);
+        }
+        self.conn.execute(
+            "UPDATE show_library SET is_base_show=?1,revision=revision+1,updated_at=?2 WHERE id=?3",
+            params![is_base_show, Utc::now().to_rfc3339(), id.0.to_string()],
+        )?;
         self.show(id)?
             .ok_or_else(|| StoreError::Invalid("show index update failed".into()))
     }

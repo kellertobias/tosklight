@@ -514,6 +514,11 @@ pub struct EmitterOptics {
     /// its own default number of drawn patterns — which is what every profile did before packages
     /// could carry artwork.
     pub gobo_wheel: Vec<GoboSlot>,
+    /// Independent wheels, with wheel one at index zero. The legacy field mirrors wheel one.
+    #[serde(default)]
+    pub gobo_wheels: Vec<Vec<GoboSlot>>,
+    #[serde(default)]
+    pub prism_wheels: Vec<Vec<PrismSlot>>,
 }
 
 impl Default for EmitterOptics {
@@ -524,6 +529,8 @@ impl Default for EmitterOptics {
             uniformity: 0.7,
             source: LightSource::default(),
             gobo_wheel: Vec::new(),
+            gobo_wheels: Vec::new(),
+            prism_wheels: Vec::new(),
         }
     }
 }
@@ -536,6 +543,14 @@ pub struct GoboSlot {
     pub artwork: Option<u32>,
     /// What the profile calls this slot, for the surfaces that name one.
     pub name: String,
+}
+
+/// Authored optical representation of one prism wheel slot. Zero facets means open.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PrismSlot {
+    pub facets: u32,
+    pub linear: bool,
+    pub spread_degrees: f32,
 }
 
 /// The shape and size of the light-emitting surface.

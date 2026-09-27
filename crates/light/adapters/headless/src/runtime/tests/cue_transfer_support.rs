@@ -80,6 +80,7 @@ impl CueTransferScenario {
                 .unwrap();
         }
         let entry = ShowEntry {
+            is_base_show: false,
             id: show_id,
             name: "Cue transfer".into(),
             path: show_path.display().to_string(),

@@ -4,9 +4,8 @@
 //! between them: the editor says it is here and what it has open, listens for desks doing the
 //! same, and can pull one desk's active show down as an ordinary file to open.
 //!
-//! What crosses is always a copy. Opening a desk's show here does not join that desk's session,
-//! does not hold its file open, and does not send anything back — patching afterwards is patching
-//! this document, and the desk never notices.
+//! Library browsing and source-desk saving live in `show_library`; the document stays local
+//! while an explicit Save writes it back with the desk's current revision guard.
 
 use crate::session::{DocumentSummary, Session};
 use light_discovery::{Advertisement, Advertiser, Browser, Peer, Role};
@@ -94,7 +93,6 @@ pub async fn discovered_desks(discovery: tauri::State<'_, Discovery>) -> Answer<
     let checks = discovery
         .desks()
         .into_iter()
-        .filter(|desk| desk.show.is_some())
         .map(|desk| {
             let client = client.clone();
             tokio::spawn(async move {
@@ -129,34 +127,8 @@ fn deduplicate_desk_peers(peers: Vec<DeskPeer>) -> Vec<DeskPeer> {
         .collect()
 }
 
-/// Take a copy of that desk's active show and open it here.
-#[tauri::command]
-pub async fn load_from_desk(
-    app: tauri::AppHandle,
-    window: tauri::Window,
-    discovery: tauri::State<'_, Discovery>,
-    session: tauri::State<'_, Session>,
-    instance: String,
-) -> Answer<DocumentSummary> {
-    let desk = discovery
-        .desks()
-        .into_iter()
-        .find(|desk| desk.instance == instance)
-        .ok_or("that desk is no longer on the network")?;
-    let directory = discovery
-        .downloads
-        .lock()
-        .clone()
-        .ok_or("this editor has nowhere to keep a downloaded show")?;
-    let (name, bytes) = fetch_active_show(&desk).await?;
-    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    let path = unique_path(&directory, &name);
-    std::fs::write(&path, bytes).map_err(|error| error.to_string())?;
-    let summary = session.open(&path)?;
-    discovery.announce_document(Some(summary.name.clone()));
-    crate::session::announce_document_change(&app, &window)?;
-    Ok(summary)
-}
+pub(crate) mod show_library;
+pub(crate) use show_library::DeskSource;
 
 /// Preview only the selected desk's compatible output routes as this document's live inputs.
 ///
@@ -296,6 +268,7 @@ fn destination_port(destination: &str) -> Option<u16> {
 ///
 /// A desk answers on every interface its machine has, and only one of them may be the network
 /// this editor is on, so each is tried in turn rather than failing on the first.
+#[cfg(test)]
 async fn fetch_active_show(desk: &Peer) -> Answer<(String, Vec<u8>)> {
     let client = discovery_client(std::time::Duration::from_secs(60))?;
     let mut failures = Vec::new();
@@ -375,6 +348,7 @@ async fn open_read_only_session(client: &reqwest::Client, base: &str) -> Answer<
         .ok_or_else(|| "that desk answered without a session token".to_owned())
 }
 
+#[cfg(test)]
 async fn fetch_from(
     client: &reqwest::Client,
     desk: &Peer,
@@ -421,6 +395,7 @@ async fn fetch_from(
 }
 
 /// The name the desk gave the file, so the copy is called what the show is called.
+#[cfg(test)]
 fn file_name(response: &reqwest::Response) -> Option<String> {
     let disposition = response
         .headers()

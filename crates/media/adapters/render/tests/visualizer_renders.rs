@@ -672,3 +672,360 @@ fn a_landed_beat_sends_streaks_stars_shapes_and_a_lamp_wave() {
         );
     }
 }
+
+#[test]
+fn rebuilt_terrain_projects_a_mesh_and_wireframe_exposes_its_cells() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(192, 108));
+    let analysis = loud();
+    let input = frame(&analysis, 1.0, 1.0);
+    let mut parameters = VisualizerParameters {
+        size: 0.12,
+        ..Default::default()
+    };
+    let filled = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::WaveTerrain,
+        &parameters,
+        &input,
+    );
+    parameters.wireframe = true;
+    let grid = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::WaveTerrain,
+        &parameters,
+        &input,
+    );
+    assert!(coverage(&grid) > 0.01, "terrain grid vanished");
+    assert!(
+        brightness(&grid) < brightness(&filled),
+        "wireframe did not expose the mesh cells"
+    );
+    parameters.size = 0.4;
+    let raised = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::WaveTerrain,
+        &parameters,
+        &input,
+    );
+    assert_ne!(grid, raised, "height did not move the mesh");
+    parameters.zoom = 0.5;
+    let narrow = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::WaveTerrain,
+        &parameters,
+        &input,
+    );
+    assert_ne!(raised, narrow, "zoom did not move the mesh");
+}
+
+#[test]
+fn rebuilt_rays_have_finite_ends_and_length_and_width_controls() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(192, 108));
+    let analysis = silence();
+    let input = frame(&analysis, 0.0, 0.0);
+    let mut parameters = VisualizerParameters {
+        count: 8,
+        size: 0.15,
+        thickness: 0.01,
+        ..Default::default()
+    };
+    let short = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::RadiatingRays,
+        &parameters,
+        &input,
+    );
+    assert!(
+        short.as_chunks::<4>().0[..192]
+            .iter()
+            .all(|pixel| pixel[3] == 0),
+        "short rays reached the upper edge"
+    );
+    parameters.size = 0.4;
+    let long = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::RadiatingRays,
+        &parameters,
+        &input,
+    );
+    assert!(
+        coverage(&long) > coverage(&short),
+        "length did not extend spokes"
+    );
+    parameters.thickness = 0.04;
+    let wide = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::RadiatingRays,
+        &parameters,
+        &input,
+    );
+    assert!(
+        coverage(&wide) > coverage(&long),
+        "width did not widen spokes"
+    );
+}
+
+#[test]
+fn rebuilt_crossing_lines_are_a_centre_fan_in_every_variant() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(192, 108));
+    let analysis = silence();
+    let input = frame(&analysis, 0.0, 0.0);
+    for mode in 0..3 {
+        let parameters = VisualizerParameters {
+            count: 8,
+            mode,
+            ..Default::default()
+        };
+        let pixels = draw(
+            &gpu,
+            &mut renderer,
+            VisualizerKind::CrossingLines,
+            &parameters,
+            &input,
+        );
+        let centre = (54 * 192 + 96) * 4;
+        assert!(
+            pixels[centre + 3] > 100,
+            "variant {mode} lost its centre crossing"
+        );
+        assert!(
+            coverage(&pixels) < 0.5,
+            "variant {mode} filled the output instead of drawing lines"
+        );
+    }
+}
+
+fn geometry_alpha_at(pixels: &[u8], width: usize, x: usize, y: usize) -> u8 {
+    pixels[(y * width + x) * 4 + 3]
+}
+
+#[test]
+fn rebuilt_pulsing_circles_have_spaced_fading_rings_and_a_fill_control() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(128, 128));
+    let quiet = silence();
+    let parameters = VisualizerParameters {
+        count: 3,
+        size: 0.15,
+        reactivity: 0.0,
+        filled: false,
+        ..Default::default()
+    };
+    let rings = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::PulsingCircles,
+        &parameters,
+        &frame(&quiet, 1.0, 0.0),
+    );
+    // With no pulse the innermost radius is zero. The two visible radii are .3 and .6,
+    // separated by a transparent gap, and the outer ring carries less alpha.
+    let inner = geometry_alpha_at(&rings, 128, 83, 64);
+    let outer = geometry_alpha_at(&rings, 128, 102, 64);
+    assert!(
+        inner > outer && outer > 0,
+        "outer rings must fade: {inner} then {outer}"
+    );
+    assert_eq!(
+        geometry_alpha_at(&rings, 128, 92, 64),
+        0,
+        "ring spacing must leave a gap"
+    );
+    assert_eq!(
+        geometry_alpha_at(&rings, 128, 64, 64),
+        0,
+        "outlines must leave the centre empty"
+    );
+    let filled = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::PulsingCircles,
+        &VisualizerParameters {
+            filled: true,
+            ..parameters
+        },
+        &frame(&quiet, 1.0, 0.0),
+    );
+    assert!(
+        geometry_alpha_at(&filled, 128, 64, 64) > 0,
+        "Fill must cover the centre"
+    );
+    assert!(
+        coverage(&filled) > coverage(&rings),
+        "filled circles must cover more than outlines"
+    );
+}
+
+#[test]
+fn rebuilt_morphing_polygon_uses_straight_vertices_and_low_spectrum_deformation() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(128, 128));
+    let quiet = silence();
+    let parameters = VisualizerParameters {
+        count: 3,
+        radius: 0.6,
+        amount: 1.0,
+        thickness: 0.02,
+        filled: true,
+        ..Default::default()
+    };
+    let triangle = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::MorphingPolygon,
+        &parameters,
+        &frame(&quiet, 1.0, 0.0),
+    );
+    // Its left edge joins the two rear vertices at x=-radius/2, rather than a
+    // curved radial envelope. A point beyond that edge lies outside the triangle.
+    assert_eq!(geometry_alpha_at(&triangle, 128, 38, 64), 0);
+    assert!(geometry_alpha_at(&triangle, 128, 64, 64) > 0);
+    let hexagon = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::MorphingPolygon,
+        &VisualizerParameters {
+            count: 6,
+            ..parameters
+        },
+        &frame(&quiet, 1.0, 0.0),
+    );
+    assert!(
+        geometry_alpha_at(&hexagon, 128, 38, 64) > 0,
+        "Vertices must change the actual polygon boundary"
+    );
+    let outline = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::MorphingPolygon,
+        &VisualizerParameters {
+            filled: false,
+            ..parameters
+        },
+        &frame(&quiet, 1.0, 0.0),
+    );
+    assert_eq!(geometry_alpha_at(&outline, 128, 64, 64), 0);
+    assert!(coverage(&triangle) > coverage(&outline));
+
+    let mut upper_bands = silence();
+    upper_bands.spectrum[BANDS / 2..].fill(1.0);
+    let high_only = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::MorphingPolygon,
+        &parameters,
+        &frame(&upper_bands, 1.0, 0.0),
+    );
+    assert_eq!(
+        triangle, high_only,
+        "high spectrum bands must not deform the low-band vertices"
+    );
+    let mut lower_bands = silence();
+    lower_bands.spectrum[..BANDS / 4].fill(0.5);
+    let low_only = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::MorphingPolygon,
+        &parameters,
+        &frame(&lower_bands, 1.0, 0.0),
+    );
+    assert!(
+        coverage(&low_only) > coverage(&triangle),
+        "low bands must expand the polygon"
+    );
+    let undeformed = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::MorphingPolygon,
+        &VisualizerParameters {
+            amount: 0.0,
+            ..parameters
+        },
+        &frame(&lower_bands, 1.0, 0.0),
+    );
+    assert_eq!(
+        triangle, undeformed,
+        "zero Deform must preserve the base polygon on live audio"
+    );
+}
+
+#[test]
+fn rebuilt_minimalist_shapes_spawn_on_a_beat_switch_type_and_expire() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(128, 128));
+    let quiet = silence();
+    let parameters = VisualizerParameters {
+        count: 4,
+        size: 0.15,
+        speed: 1.0,
+        mode: 0,
+        on_beat: true,
+        ..Default::default()
+    };
+    let before = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::MinimalistShapes,
+        &parameters,
+        &frame(&quiet, 1.0, 0.0),
+    );
+    assert_eq!(
+        coverage(&before),
+        0.0,
+        "beat mode must not invent shapes before a beat"
+    );
+    let box_shape = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::MinimalistShapes,
+        &parameters,
+        &frame(&quiet, 1.1, 1.0),
+    );
+    assert!(
+        coverage(&box_shape) > 0.0,
+        "a landed beat must send a visible shape"
+    );
+    let circle = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::MinimalistShapes,
+        &VisualizerParameters {
+            mode: 1,
+            ..parameters
+        },
+        &frame(&quiet, 1.1, 0.0),
+    );
+    assert_ne!(
+        box_shape, circle,
+        "Type must change the spawned shape geometry"
+    );
+    assert!(
+        coverage(&box_shape) > coverage(&circle),
+        "a box covers more than the circle with the same diameter"
+    );
+    let mut expired = circle;
+    for step in 1..=12 {
+        expired = draw(
+            &gpu,
+            &mut renderer,
+            VisualizerKind::MinimalistShapes,
+            &parameters,
+            &frame(&quiet, 1.1 + step as f32 * 0.25, 0.0),
+        );
+    }
+    assert_eq!(
+        coverage(&expired),
+        0.0,
+        "a shape must fade away after its lifetime without another beat"
+    );
+}

@@ -41,6 +41,7 @@ impl UpdateRouteScenario {
         let show_path = data_dir.join("shows/programming-update-v2.show");
         let show_id = initialise_show(&show_path, "Programming Update v2").unwrap();
         state.active_show.replace_current(Some(ShowEntry {
+            is_base_show: false,
             id: show_id,
             name: "Programming Update v2".into(),
             path: show_path.display().to_string(),

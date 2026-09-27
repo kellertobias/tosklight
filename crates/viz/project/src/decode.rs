@@ -98,6 +98,19 @@ impl Decoder {
                 emitter.tilt.as_ref(),
                 binding.invert_tilt,
             );
+            for (bindings, wheels) in [
+                (&binding.gobo_wheels, &mut value.gobo_wheels),
+                (&binding.prism_wheels, &mut value.prism_wheels),
+            ] {
+                wheels.resize_with(bindings.len(), viz_scene::OpticalWheelValues::default);
+                for (binding, wheel) in bindings.iter().zip(wheels) {
+                    set_declared_rotation_default(
+                        &mut wheel.rotation_motion,
+                        binding.rotation.as_ref(),
+                    );
+                    set_wheel_default(&mut wheel.wheel_motion, binding.selection.as_ref());
+                }
+            }
             set_declared_rotation_default(
                 &mut value.gobo_rotation_motion,
                 binding.gobo_rotation.as_ref(),
@@ -253,6 +266,11 @@ impl Decoder {
 
         let colour = colour::resolve(&binding.colour, &reader);
         value.colour = colour.rgb;
+        value.source_primaries = [
+            read(&binding.colour.red).unwrap_or(0.0),
+            read(&binding.colour.green).unwrap_or(0.0),
+            read(&binding.colour.blue).unwrap_or(0.0),
+        ];
 
         // Additive colour is normalized to hue by the resolver, so its level must still
         // modulate an explicit dimmer. Otherwise RGB black becomes full-brightness white.
@@ -286,6 +304,22 @@ impl Decoder {
         value.iris = read(&binding.iris).unwrap_or(0.0);
         value.frost = read(&binding.frost).unwrap_or(0.0);
         value.focus = read(&binding.focus).unwrap_or(0.5);
+        for (bindings, wheels) in [
+            (&binding.gobo_wheels, &mut value.gobo_wheels),
+            (&binding.prism_wheels, &mut value.prism_wheels),
+        ] {
+            wheels.resize_with(bindings.len(), viz_scene::OpticalWheelValues::default);
+            for (binding, wheel) in bindings.iter().zip(wheels) {
+                wheel.position = read(&binding.selection).unwrap_or(0.0);
+                wheel.rotation = read(&binding.rotation).unwrap_or(0.0);
+                set_wheel_target(&mut wheel.wheel_motion, binding.selection.as_ref(), &reader);
+                set_declared_rotation_target(
+                    &mut wheel.rotation_motion,
+                    binding.rotation.as_ref(),
+                    &reader,
+                );
+            }
+        }
         value.gobo = read(&binding.gobo).unwrap_or(0.0);
         set_wheel_target(&mut value.gobo_wheel_motion, binding.gobo.as_ref(), &reader);
         value.gobo_rotation = read(&binding.gobo_rotation).unwrap_or(0.0);
@@ -541,6 +575,10 @@ fn set_declared_rotation_target<F>(
     let frame = reader(channel.logical_universe);
     if let Some(target) = channel.angular_motion_target(&frame, false) {
         state.set_target(target);
+    } else {
+        // Returning from a spin function to an unannotated index must stop the old spin.
+        state.target = None;
+        state.velocity_degrees_per_second = 0.0;
     }
 }
 
@@ -710,6 +748,104 @@ mod tests {
             default_raw: 0,
             functions: Vec::new(),
         }
+    }
+
+    #[test]
+    fn independent_optical_wheels_keep_selection_and_position_velocity_rotation() {
+        use crate::plan::OpticalWheelBinding;
+        let rotation = |slot, kind, max| {
+            let mut channel = channel(slot);
+            channel.functions = vec![ChannelFunction {
+                id: uuid::Uuid::new_v4(),
+                name: "rotation".into(),
+                dmx_from: 0,
+                dmx_to: 255,
+                attribute: AttributeKey("gobo.2.rotation".into()),
+                priority: 0,
+                angular_motion: Some(AngularMotion {
+                    kind,
+                    max_speed_degrees_per_second: Some(720.0),
+                    acceleration_degrees_per_second_squared: Some(10000.0),
+                    deceleration_degrees_per_second_squared: Some(10000.0),
+                }),
+                behavior: ChannelFunctionBehavior::Continuous {
+                    physical_min: 0.0,
+                    physical_max: max,
+                    unit: Some("deg".into()),
+                },
+            }];
+            channel
+        };
+        let binding = EmitterBinding {
+            gobo_wheels: vec![
+                OpticalWheelBinding {
+                    selection: Some(channel(1)),
+                    rotation: Some(rotation(3, AngularMotionKind::AbsolutePosition, 360.0)),
+                },
+                OpticalWheelBinding {
+                    selection: Some(channel(2)),
+                    rotation: Some(rotation(4, AngularMotionKind::AngularVelocity, 90.0)),
+                },
+            ],
+            prism_wheels: vec![OpticalWheelBinding {
+                selection: Some(channel(5)),
+                rotation: Some(rotation(6, AngularMotionKind::AngularVelocity, 45.0)),
+            }],
+            universes: vec![1],
+            ..EmitterBinding::default()
+        };
+        let mut decoder = Decoder::new(vec![binding]);
+        let scene = scene(&[EmitterKind::Beam]);
+        let mut values = SceneValues::default();
+        decoder.apply(
+            &scene,
+            &[frame(&[
+                (0, 64),
+                (1, 200),
+                (2, 128),
+                (3, 255),
+                (4, 180),
+                (5, 255),
+            ])],
+            &mut values,
+            0.0,
+        );
+        assert_eq!(values.emitters[0].gobo_wheels[0].slot(8), 2);
+        assert_eq!(values.emitters[0].gobo_wheels[1].slot(8), 6);
+        assert_eq!(values.emitters[0].prism_wheels[0].slot(4), 2);
+        values.apply_physical_motion(1.0);
+        assert!(
+            values.emitters[0].gobo_wheels[0]
+                .rotation_motion
+                .position_degrees
+                > 0.0
+        );
+        assert!(
+            values.emitters[0].gobo_wheels[1]
+                .rotation_motion
+                .position_degrees
+                > 0.0
+        );
+        let previous = values.clone();
+        decoder.apply(
+            &scene,
+            &[frame(&[(0, 0), (1, 255), (2, 128), (3, 255)])],
+            &mut values,
+            1.0,
+        );
+        values.retain_visual_motion_runtime_from(&previous);
+        let before = values.emitters[0].gobo_wheels[1]
+            .rotation_motion
+            .position_degrees;
+        values.apply_physical_motion(0.1);
+        assert!(
+            values.emitters[0].gobo_wheels[1]
+                .rotation_motion
+                .position_degrees
+                > before
+        );
+        assert_eq!(values.emitters[0].gobo_wheels[0].slot(8), 0);
+        assert_eq!(values.emitters[0].gobo_wheels[1].slot(8), 7);
     }
 
     fn camera_channel(first_slot: u16, bytes: usize) -> ChannelRef {

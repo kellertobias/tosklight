@@ -338,6 +338,10 @@ impl PlanningDocument {
     ///
     /// The result is an ordinary portable show file: the desk opens it through its own show
     /// library with no import step.
+    pub fn portable_revision(&self) -> Result<u64, DocumentError> {
+        Ok(self.store()?.portable_revision()?.value())
+    }
+
     pub fn save_as(&self, destination: impl AsRef<Path>) -> Result<(), DocumentError> {
         Ok(self.store()?.backup_to(destination)?)
     }

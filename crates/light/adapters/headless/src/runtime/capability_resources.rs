@@ -452,6 +452,7 @@ impl EventResource {
 
 #[derive(Clone)]
 pub(in crate::runtime) struct ReplayResource {
+    show_library_action: Arc<tokio::sync::Mutex<()>>,
     show_library: Arc<tokio::sync::Mutex<show_library_v2::ShowLibraryReplayCache>>,
     fixture_library: Arc<tokio::sync::Mutex<fixture_api_replay::FixtureLibraryReplayCache>>,
     show_object: Arc<tokio::sync::Mutex<show_objects_v2::ShowObjectReplayCache>>,
@@ -475,6 +476,7 @@ pub(in crate::runtime) struct ReplayResource {
 impl Default for ReplayResource {
     fn default() -> Self {
         Self {
+            show_library_action: Arc::default(),
             show_library: Arc::default(),
             fixture_library: Arc::default(),
             show_object: Arc::default(),

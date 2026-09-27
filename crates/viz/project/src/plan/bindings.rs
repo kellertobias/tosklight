@@ -135,6 +135,24 @@ fn assign(binding: &mut EmitterBinding, attribute: &AttributeKey, reference: &Ch
             *target = Some(reference.clone());
         }
     };
+    let parts: Vec<_> = key.split('.').collect();
+    if matches!(parts.first(), Some(&"gobo") | Some(&"prism"))
+        && let Some(wheel) = parts.get(1).and_then(|part| part.parse::<usize>().ok())
+        && (1..=8).contains(&wheel)
+        && (parts.len() == 2 || (parts.len() == 3 && parts[2] == "rotation"))
+    {
+        let wheels = if parts[0] == "gobo" {
+            &mut binding.gobo_wheels
+        } else {
+            &mut binding.prism_wheels
+        };
+        wheels.resize_with(wheels.len().max(wheel), super::OpticalWheelBinding::default);
+        if parts.len() == 2 {
+            slot(&mut wheels[wheel - 1].selection);
+        } else {
+            slot(&mut wheels[wheel - 1].rotation);
+        }
+    }
     if attribute.is_intensity() {
         slot(&mut binding.intensity);
         return;
@@ -148,9 +166,6 @@ fn assign(binding: &mut EmitterBinding, attribute: &AttributeKey, reference: &Ch
         "frost" | "softness" => slot(&mut binding.frost),
         "shutter" => slot(&mut binding.shutter),
         "strobe" => slot(&mut binding.strobe),
-        // Only the first wheel of each kind drives the picture. A fixture with two gobo wheels
-        // still projects one pattern at a time, and inventing a combination of both would be
-        // guessing at optics the profile does not describe.
         "gobo.1" => slot(&mut binding.gobo),
         "gobo.1.rotation" => slot(&mut binding.gobo_rotation),
         "prism.1" => slot(&mut binding.prism),
@@ -284,4 +299,42 @@ pub(super) fn cell_bindings(
             binding
         })
         .collect()
+}
+
+#[cfg(test)]
+mod optical_wheel_tests {
+    use super::*;
+    #[test]
+    fn numbered_wheels_and_rotations_are_bound_independently() {
+        let reference = ChannelRef {
+            logical_universe: 1,
+            slots: vec![1],
+            max_raw: 255,
+            invert: false,
+            physical_min: 0.0,
+            physical_max: 1.0,
+            physical_unit: None,
+            snap: false,
+            default_raw: 0,
+            functions: Vec::new(),
+        };
+        let mut binding = EmitterBinding::default();
+        for key in [
+            "gobo.1",
+            "gobo.2",
+            "gobo.2.rotation",
+            "prism.3",
+            "prism.3.rotation",
+        ] {
+            assign(&mut binding, &AttributeKey(key.into()), &reference);
+        }
+        assert!(binding.gobo.is_some());
+        assert_eq!(binding.gobo_wheels.len(), 2);
+        assert!(binding.gobo_wheels[1].selection.is_some());
+        assert!(binding.gobo_wheels[1].rotation.is_some());
+        assert!(binding.gobo_wheels[0].rotation.is_none());
+        assert_eq!(binding.prism_wheels.len(), 3);
+        assert!(binding.prism_wheels[2].selection.is_some());
+        assert!(binding.prism_wheels[2].rotation.is_some());
+    }
 }

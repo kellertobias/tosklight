@@ -1,4 +1,5 @@
 export interface ShowEntry {
+	is_base_show?: boolean;
 	id: string;
 	name: string;
 	path: string;

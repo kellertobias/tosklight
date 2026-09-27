@@ -28,13 +28,15 @@ Several visualizers can move with the beat instead of the audio's level. A beat 
 | --- | --- |
 | Rotating 3D Shape | **React to** chooses **Audio** (swells with the bass and turns steadily) or **Beat** (pops and turns an eighth further on each beat). **Smoothing** eases the bass it follows and how softly each turn settles. |
 | Kaleidoscope | **React to** **Beat** turns the pattern half a segment and flashes it on each beat. |
-| Minimalist Shapes | **React to** **Beat** pops shapes into a fresh third of the grid on each beat, which then fade. |
+| Minimalist Shapes | **React to** **Beat** spawns one randomly placed, rotating box or circle per beat while there is room under **Count** (up to 50). Each shape keeps its position and fades away; bass expands it. New presets select Beat. |
 | Starfield | **Spawn stars** **On beat** launches a volley of stars from the vanishing point on each beat, over a sparse field that keeps drifting; **Continuously** keeps the full drifting field. The drift is much slower than in earlier versions. |
 | Matrix Digital Rain | Each beat sends **Streaks per beat** (0–8, default 2) bright streaks down their own columns. Louder music speeds the rain up smoothly; it never jumps. |
 | City Tunnel | Each beat surges the tunnel's frames one slot nearer and flashes them. |
 | Grid Landscape | Each beat sends a wave of light along the street lamps from the nearest to the farthest, turning their heads white as it passes. |
 
 Fractal Morph shades from **Start colour**, where points escape at once, to **End colour** along and inside the set, and its **Smoothing** eases the bass that morphs it; `0` follows the bass exactly. A visualizer saved before these settings existed keeps following the audio. Starfield's fourth Visualizer Parameter channel is now **Spawn stars**.
+
+Crossing Lines, Radiating Rays, Pulsing Circles, Morphing Polygon, Minimalist Shapes, and Wave Terrain recreate the original Media Server's geometric visualizers. Crossing Lines draws a centre-crossing fan with Rotate, Scale, and Shift variants. Radiating Rays draws finite, constant-width spokes whose length follows bass. Pulsing Circles shares one smoothed bass-driven radius across evenly spaced, progressively fainter rings; **Decay** near 1 makes the radius follow more slowly. Morphing Polygon joins individual low-frequency spectrum vertices with straight edges. Wave Terrain draws a tilted 50-by-50 mesh; **Wireframe** shows its rows and columns, and **Size** sets elevation. New presets use the original colors and proportions. Existing saved settings and folder/file assignments remain in place.
 
 If macOS has not decided whether Pixel Media Server may use the microphone, the **Audio** page shows **Request microphone access**. Approve the system prompt and Pixel opens the selected input immediately. If access was denied, enable Pixel Media Server in macOS **System Settings > Privacy & Security > Microphone**, then press **Check microphone access**. If permission is granted but no stream is open, press **Start audio input**.
 

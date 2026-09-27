@@ -12,7 +12,11 @@ use viz_scene::{
 };
 
 mod effects;
+mod fixture_appearance;
 mod floor_grid;
+mod optical_wheels;
+
+pub const MAX_OPTICAL_WHEELS: usize = 8;
 
 /// Which procedural mesh an instance draws.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -139,6 +143,10 @@ pub struct GpuLight {
     pub gate: [f32; 4],
     /// `x` shadow-map index or `-1`, `yz` its tile origin in the atlas, `w` the tile size.
     pub shadow: [f32; 4],
+    /// Per wheel: selected slot, rotation radians, artwork layer or -1, reserved.
+    pub gobo_wheels: [[f32; 4]; MAX_OPTICAL_WHEELS],
+    /// Per wheel: facets, rotation radians, linear (1) or radial (0), spread in gate coordinates.
+    pub prism_wheels: [[f32; 4]; MAX_OPTICAL_WHEELS],
 }
 
 /// One beam volume drawn as an instanced cone.
@@ -435,6 +443,7 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
         &mut frame,
         scene,
         &head_angles,
+        values,
         style,
         &values.selected_fixtures,
         &values.position_points,
@@ -483,6 +492,7 @@ fn push_model(
     model_index: u32,
     model: &viz_scene::FixtureModel,
     head_angles: &[(f32, f32)],
+    values: &SceneValues,
     points: &[viz_scene::PointPose],
 ) {
     let (pan, tilt) = scene
@@ -491,6 +501,11 @@ fn push_model(
         .position(|emitter| emitter.fixture_index == fixture_index as u32)
         .and_then(|index| head_angles.get(index).copied())
         .unwrap_or((0.0, 0.0));
+    let emitter_value = scene
+        .emitters
+        .iter()
+        .position(|emitter| emitter.fixture_index == fixture_index as u32)
+        .and_then(|index| values.emitters.get(index));
     let pan_rotation = Quat::from_rotation_y(pan.to_radians());
     let tilt_rotation = Quat::from_rotation_x(tilt.to_radians());
     // A model authored at another size is scaled to the profile's physical dimensions, so a rig
@@ -524,13 +539,27 @@ fn push_model(
                 base * Mat4::from_quat(pan_rotation) * tilt_about_trunnions
             }
         };
+        let transform = if part.kind == viz_scene::ModelPartKind::Base {
+            transform
+        } else {
+            fixture_appearance::scanner_part_transform(model, part, base, pan, tilt)
+                .unwrap_or(transform)
+        };
+        let emission = emitter_value.map_or(Vec3::ZERO, |value| {
+            fixture_appearance::source_part_emission(
+                part,
+                value.source_primaries,
+                value.held_intensity.max(value.visible_intensity()),
+                Vec3::from(fixture.installed_colour),
+            )
+        });
         frame
             .mesh(MeshKind::ModelPart(model_index, part_index as u32))
             .push(MeshInstance::new(
                 transform,
                 Vec3::from(part.colour),
                 part.roughness,
-                Vec3::ZERO,
+                emission,
                 part.metallic,
             ));
     }
@@ -560,6 +589,7 @@ fn push_bodies(
     frame: &mut FrameInstances,
     scene: &Scene,
     head_angles: &[(f32, f32)],
+    values: &SceneValues,
     style: &FrameStyle,
     selection: &std::collections::HashSet<viz_scene::uuid::Uuid>,
     points: &[viz_scene::PointPose],
@@ -603,6 +633,7 @@ fn push_bodies(
                 model_index,
                 model,
                 head_angles,
+                values,
                 points,
             );
             if selected {
@@ -818,6 +849,22 @@ fn push_emitters(
             value.zoom,
             &values.position_points,
         );
+        let model = fixture
+            .model
+            .and_then(|index| scene.models.get(index as usize));
+        if let Some(scanner_pose) = model.and_then(|model| {
+            fixture_appearance::scanner_emitter_pose(
+                model,
+                fixture,
+                emitter,
+                pan,
+                tilt,
+                value.zoom,
+                &values.position_points,
+            )
+        }) {
+            pose = scanner_pose;
+        }
         pose.half_angle = optics.half_angle;
         // What an observer still has, not what the desk is sending this instant. For most heads
         // the two agree; for a strobe or a laser they are the whole point of the difference.
@@ -854,7 +901,12 @@ fn push_emitters(
              * was an ambient-lit solid at every lamp, which is the brightest thing in a picture
              * whose whole point is that the lines are the picture.
              */
-            if style.emitter_apertures {
+            if style.emitter_apertures
+                && !model.is_some_and(|model| {
+                    fixture_appearance::has_discrete_rgb_sources(model)
+                        || fixture_appearance::scanner_mirror_pivot(model).is_some()
+                })
+            {
                 push_aperture(
                     frame,
                     origin,
@@ -926,20 +978,7 @@ fn push_gpu_light(
     apex_offset: f32,
 ) -> u32 {
     let light_index = frame.lights.len() as u32;
-    // Which slot is in the beam, and what is etched on it. A profile that declares its own
-    // wheel is divided into the slots it actually has and projects its own glass; one that
-    // declares none keeps the drawn patterns, evenly divided.
-    let wheel = &emitter.optics.gobo_wheel;
-    let slots = if wheel.is_empty() {
-        GOBO_SLOTS
-    } else {
-        wheel.len() as u32
-    };
-    let slot = value.gobo_slot(slots);
-    let artwork = wheel
-        .get(slot as usize)
-        .and_then(|entry| entry.artwork)
-        .map_or(-1.0, |layer| layer as f32);
+    let wheels = optical_wheels::pack(emitter, value, pose.half_angle);
     // The beam's own right axis: every pattern the head projects turns with the head.
     let tangent = (pose.orientation * Vec3::X).normalize_or(Vec3::X);
     // Where the blades sit is either the installed module pose or the desk's live pose.
@@ -979,16 +1018,23 @@ fn push_gpu_light(
             .extend(value.frost.clamp(0.0, 1.0))
             .to_array(),
         optics: [
-            slot as f32,
-            value.gobo_rotation * std::f32::consts::TAU,
-            value.prism_facets() as f32,
-            value.prism_rotation * std::f32::consts::TAU,
+            wheels.gobos[0][0],
+            wheels.gobos[0][1],
+            wheels.prisms[0][0],
+            wheels.prisms[0][1],
         ],
         shapers: value.shaper_blades,
         shaper_angles,
-        gate: [artwork, 0.0, 0.0, 0.0],
+        gate: [
+            wheels.gobos[0][2],
+            wheels.gobo_count as f32,
+            wheels.prism_count as f32,
+            0.0,
+        ],
         // Filled in once the frame knows which lights are worth a map.
         shadow: [-1.0, 0.0, 0.0, 0.0],
+        gobo_wheels: wheels.gobos,
+        prism_wheels: wheels.prisms,
     });
     light_index
 }

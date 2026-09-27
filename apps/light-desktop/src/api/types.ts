@@ -190,6 +190,7 @@ export interface HelpTopic {
 	live: boolean;
 }
 export interface FileRoot {
+    network?: boolean;
 	id: string;
 	label: string;
 	icon: string;

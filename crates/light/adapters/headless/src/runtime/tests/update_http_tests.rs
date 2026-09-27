@@ -170,6 +170,7 @@ fn locked_desk_can_preview_update_but_cannot_apply_it() {
     let show_path = data_dir.join("shows/locked-update-preview.show");
     let show_id = initialise_show(&show_path, "Locked Update preview").unwrap();
     state.active_show.replace_current(Some(ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Locked Update preview".into(),
         path: show_path.display().to_string(),

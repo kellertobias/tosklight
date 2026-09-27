@@ -40,9 +40,20 @@ see what the Visualizer draws, and the rig the product demonstration video is sh
 
 **Show**, at the top of the dock, is the open show as a document. It is available with no show open,
 because it is where a show is created or opened. Its file actions run across the top: **New Show**
-and **Open Demo Show** under **New Show**; **Load Show from Disk** and **Get Show from Running
-ToskLight Control** for each desk found on the network under **Open**; then **Save As**, **Import
+and **Open Demo Show** under **New Show**; **Load Show from Disk**, **Load Recent Shows**, and **Load from TOSca Light Control Desk** under **Open**; then **Save As**, **Import
 MVR** and **Export MVR**.
+
+
+**Load Recent Shows** opens a modal with a scrollable table of files opened on this computer,
+newest first. Files moved or deleted are omitted. Use the modal close control to dismiss it.
+**Load from TOSca Light Control Desk** lists only active shows announced by discovered desks.
+There is no manual host or IP input.
+
+A show loaded from a desk keeps that desk and show as its save destination. **Save to** the desk
+writes the edited document back there, and **Save As** writes a portable copy and also saves to
+the originating desk. Progress and confirmation appear in the file bar. If the desk has changed
+the show since it was opened, saving is refused and the local edits remain available: keep a local
+copy and reopen the desk show before applying those edits. Named revisions on the desk are retained.
 
 Below them the show is seen from both sides at once. The left half draws the rig from above, with the
 show's name over it. The right half is **Show information**, which titles every printed CAD page, in
@@ -308,17 +319,21 @@ The visualizer's status line says which is happening: **No DMX in — the Viz ed
 fixtures** when the preview plane is lighting the rig, and the ordinary **Waiting for DMX** when
 nothing is driving it at all.
 
-## Get Show from Running ToskLight Control
+## Load from TOSca Light Control Desk
 
-**Get Show from Running ToskLight Control** is the second option under **Open**, after **Load Show
-from Disk**. When a ToskLight desk with a show open is on the same network, the button names that
-desk and the show it is running. Pressing it takes a copy of that show, keeps it beside the
-editor's own documents, and opens it. Two desks are two buttons, each naming its own machine;
-hovering one shows the address it was found at. While no running ToskLight Control is found, the
-button stays in place but is disabled.
+The third action under **Open** opens a modal listing the currently active shows announced by
+control desks on the network. Desks without an active show are omitted. Select **Load** beside
+a show to copy the desk's currently active show into Architect. There is no IP address input or
+manual desk configuration. The list follows network discovery as desks arrive and disappear.
 
-What arrives is a copy. Patching it here does not reach the desk, and the desk does not know the
-copy exists. To send work back, use **Load from Visualizer** in the desk's **Load Show** menu.
+The local document keeps its source desk association on this computer. **Save to** that desk and
+**Save As** send changes back to the selected source show, preserving its identity and named
+revisions. An active source show also refreshes the desk's rig without releasing its playback.
+If another operator has changed that show since it was opened, the save is refused with a clear
+message so newer desk programming is preserved. Keep the local copy and reopen the source show
+to apply the edits against its current state. A portable copy transferred to another computer
+does not carry this computer's desk connection.
+
 
 ## The Patch screen's DMX tab
 

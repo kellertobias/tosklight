@@ -31,6 +31,10 @@ export interface MvrApplyInput {
 	>;
 }
 
+export interface ShowSaveTarget { rootId: string; path: string; instance?: string; }
+export interface ShowSaveFolders { roots: import("../types").FileRoot[]; entries: import("../types").FileEntry[]; root_id?: string | null; path?: string; }
+export interface SavedShowFile { root_id: string; path: string; }
+
 export class ShowApiClient {
 	constructor(private readonly transport: ClientTransport) {}
 
@@ -54,6 +58,38 @@ export class ShowApiClient {
 		});
 	}
 
+    networkSaveFolders(instance: string, rootId: string, path: string): Promise<ShowSaveFolders> {
+        const query = new URLSearchParams({path});
+        if (rootId) query.set("root_id", rootId);
+        return this.transport.request(`/api/v2/shows/network/${encodeURIComponent(instance)}/folders?${query}`);
+    }
+    saveShowCopy(sourceId: string, name: string, target: ShowSaveTarget, baseShow: boolean): Promise<ShowEntry> {
+        return this.showAction(target.instance
+            ? {type:"save_copy_to_peer",instance:target.instance,source_show_id:sourceId,name,root_id:target.rootId,path:target.path,is_base_show:baseShow}
+            : {type:"save_copy",source_show_id:sourceId,data_base64:null,name,root_id:target.rootId,path:target.path,is_base_show:baseShow});
+    }
+    async exportMvrFile(showId: string, name: string, target: ShowSaveTarget): Promise<SavedShowFile> {
+        const outcome = await this.action(target.instance
+            ? {type:"export_mvr_to_peer",instance:target.instance,show_id:showId,name,root_id:target.rootId,path:target.path}
+            : {type:"export_mvr_file",show_id:showId,data_base64:null,name,root_id:target.rootId,path:target.path});
+        if (outcome.type !== "file_saved") throw new Error("The export did not return a saved file");
+        return outcome;
+    }
+    networkShows(): Promise<import("../generated/light-wire").NetworkShowCatalog> {
+        return this.transport.request("/api/v2/shows/network");
+    }
+    prepareRevision(id: string, revision: number): Promise<ShowEntry> {
+        return this.showAction({type:"prepare_revision",show_id:id,revision});
+    }
+    importRemoteShow(instance: string, id: string | null, revision: number | null, open: boolean): Promise<ShowEntry> {
+        return this.showAction(id ? {type:"import_from_desk",instance,show_id:id,revision,open} : {type:"import_from_visualizer",instance,open});
+    }
+	setBaseShow(id: string, isBaseShow: boolean): Promise<ShowEntry> {
+        return this.showAction({ type: "set_base_show", show_id: id, is_base_show: isBaseShow });
+    }
+    createFromBase(id: string, name: string): Promise<ShowEntry> {
+        return this.showAction({ type: "create_from_base", show_id: id, name });
+    }
 	openShow(
 		id: string,
 		transition: ShowOpenTransition = "safe_blackout",

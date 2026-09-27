@@ -2,6 +2,7 @@
 fn invalid_active_show_enters_recovery_instead_of_aborting_startup() {
     let engine = Engine::new(ProgrammerRegistry::default());
     let entry = ShowEntry {
+        is_base_show: false,
         id: light_core::ShowId::new(),
         name: "Damaged Show".into(),
         path: std::env::temp_dir()
@@ -101,6 +102,7 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
     let show_path = data_dir.join("shows/mixed-selection.show");
     let show_id = default_show::initialise_legacy_test_show(&show_path).unwrap();
     let entry = ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Mixed selection".into(),
         path: show_path.display().to_string(),
@@ -255,6 +257,7 @@ fn assign_group_at_page_slot_assigns_a_group_master_and_set_rejects_assignment()
     let show_path = data_dir.join("shows/group-master-command.show");
     let show_id = initialise_show(&show_path, "Group Master Command").unwrap();
     let entry = ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Group Master Command".into(),
         path: show_path.display().to_string(),
@@ -370,6 +373,7 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
     let show_path = data_dir.join("shows/assign-cuelist-command.show");
     let show_id = initialise_show(&show_path, "Assign Cuelist Command").unwrap();
     let entry = ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Assign Cuelist Command".into(),
         path: show_path.display().to_string(),
@@ -499,6 +503,7 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
     let show_path = data_dir.join("shows/record-group.show");
     let show_id = initialise_show(&show_path, "Record Group").unwrap();
     let entry = ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Record Group".into(),
         path: show_path.display().to_string(),

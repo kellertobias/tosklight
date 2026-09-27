@@ -24,6 +24,7 @@ import {
 	precisionMessage,
 } from "../sheet/fixtureProfileModel";
 import { AssetField } from "./assets";
+import { OpticalWheelsSection } from "./opticalWheels";
 import { BodyPickerField } from "./bodyPicker";
 
 const FIXTURE_TYPES = [
@@ -553,6 +554,7 @@ export function SimulationProfileTab({
 			<PhysicalSection draft={draft} onChange={onChange} />
 			<MountingSection draft={draft} onChange={onChange} />
 			<OpticsSection draft={draft} onChange={onChange} />
+			<OpticalWheelsSection draft={draft} onChange={onChange} />
 		</div>
 	);
 }

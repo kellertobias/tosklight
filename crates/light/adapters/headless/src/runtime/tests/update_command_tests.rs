@@ -98,6 +98,7 @@ fn command_line_update_all_adds_new_group_content_without_using_a_desk_default()
     let show_path = data_dir.join("shows/update-enter-default.show");
     let show_id = initialise_show(&show_path, "Update Enter default").unwrap();
     let entry = ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Update Enter default".into(),
         path: show_path.display().to_string(),
@@ -303,6 +304,7 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
     let show_path = data_dir.join("shows/update-confirmation.show");
     let show_id = initialise_show(&show_path, "Update confirmation").unwrap();
     let entry = ShowEntry {
+        is_base_show: false,
         id: show_id,
         name: "Update confirmation".into(),
         path: show_path.display().to_string(),

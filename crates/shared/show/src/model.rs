@@ -223,6 +223,9 @@ pub struct ProgrammerControlSurfaceConfiguration {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ShowEntry {
+    /// This desk offers the show as a starting template; spawned copies remain ordinary shows.
+    #[serde(default)]
+    pub is_base_show: bool,
     pub id: ShowId,
     pub name: String,
     pub path: String,

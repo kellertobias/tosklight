@@ -18,12 +18,20 @@ export interface ShowLifecycleActions {
 	openShow: (
 		id: string,
 		transition?: "hold_current" | "timed_fade" | "safe_blackout",
-	) => Promise<void>;
+	) => Promise<boolean>;
 	openCleanDefaultShow: () => Promise<boolean>;
 	discoveredVisualizers: () => Promise<DiscoveredPeer[]>;
 	loadFromVisualizer: (instance: string) => Promise<boolean>;
-	initializeEmptyShow: () => Promise<boolean>;
-	saveShowAs: (name: string) => Promise<boolean>;
+	initializeEmptyShow: (baseShowId?: string) => Promise<boolean>;
+    networkSaveFolders: (instance: string, rootId: string, path: string) => Promise<import("../../api/client/shows").ShowSaveFolders>;
+    saveShowCopy: (name: string, target: import("../../api/client/shows").ShowSaveTarget, baseShow: boolean) => Promise<ShowEntry>;
+    exportMvrFile: (name: string, target: import("../../api/client/shows").ShowSaveTarget) => Promise<import("../../api/client/shows").SavedShowFile>;
+    networkShows: () => Promise<import("../../api/generated/light-wire").NetworkShowCatalog>;
+    importRemoteShow: (instance: string, showId: string | null, revision: number | null, open: boolean) => Promise<ShowEntry | null>;
+    prepareShowRevision: (id: string, revision: number) => Promise<ShowEntry | null>;
+    prepareShowFile: (root: string, path: string, name: string) => Promise<ShowEntry | null>;
+    openShowFile: (root: string, path: string, name: string) => Promise<boolean>;
+	saveShowAs: (name: string, options?: { baseShow?: boolean; latest?: boolean }) => Promise<boolean>;
 	overwriteShow: (destinationId: string) => Promise<boolean>;
 	uploadShow: (file: File, overwrite?: boolean) => Promise<void>;
 	downloadShow: (show: ShowEntry) => Promise<void>;

@@ -10,6 +10,14 @@ The shipped library includes separate conventional **Dimmer PAR Can**, **Dimmer 
 
 ToskLight has no fixture definitions compiled into the application. Every fixture supplied with the desk is an ordinary `.toskfixture` package, loaded through the same package reader used by **Import fixture**. You can export it, move it to another desk, keep it with a test, unpack and edit it, or replace it with a corrected package without rebuilding ToskLight.
 
+The Simulation tab's **Optical wheels** section assigns gobo artwork and prism appearances to
+individual wheel and slot numbers. Wheel 1 matches **Gobo 1** or **Prism 1**, wheel 2 matches
+**Gobo 2** or **Prism 2**, and so on. Gobo slot zero is open; later slots may carry a name and
+an image mask, where white passes light. Each wheel may reuse another wheel's slot numbers.
+Prism slots choose **Radial** or **Linear**, the number of copies, and their spread in degrees
+from the beam axis. Slot zero stays open. An empty prism list retains the generic appearance.
+Export carries these settings and artwork with the fixture revision.
+
 Select a fixture and choose **Export fixture** to download its complete immutable revision. On another desk, choose **Import fixture** and select that file. A package keeps the stable fixture, mode, head, channel, function, split, and geometry IDs. Importing identical content is a no-op; importing changed content with the same fixture ID and manufacturer/name creates the next local revision. Reusing an existing ID for a different fixture family is rejected.
 
 The shipped package directory currently provides an operator-focused Generic family and these manufacturer profiles with complete ordered mode lists:

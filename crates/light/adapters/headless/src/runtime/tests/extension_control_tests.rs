@@ -529,6 +529,7 @@ fn extension_feedback_context_reaches_the_desk_and_carries_show_generation() {
     let (state, data_dir) = test_state();
     let desk = state.installation.desk().unwrap();
     let show = ShowEntry {
+        is_base_show: false,
         id: light_core::ShowId::new(),
         name: "Feedback show".into(),
         path: data_dir.join("feedback.show").display().to_string(),

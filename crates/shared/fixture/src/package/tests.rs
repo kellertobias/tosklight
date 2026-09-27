@@ -2851,17 +2851,20 @@ fn round_trips_a_gobo_wheel() {
     let mut profile = profile();
     profile.gobos = vec![
         crate::ProfileGobo {
+            wheel: 1,
             slot: 1,
             name: Some("Breakup".into()),
             artwork_asset: Some(format!("data:image/png;base64,{PNG_1X1}")),
         },
         crate::ProfileGobo {
+            wheel: 1,
             slot: 4,
             name: Some("Rings".into()),
             artwork_asset: Some(format!("data:image/png;base64,{PNG_1X1}")),
         },
         // A slot the manual names but nothing is etched on: still part of the wheel.
         crate::ProfileGobo {
+            wheel: 1,
             slot: 5,
             name: Some("Open".into()),
             artwork_asset: None,
@@ -2901,11 +2904,13 @@ fn rejects_a_wheel_with_a_slot_declared_twice() {
     let mut profile = profile();
     profile.gobos = vec![
         crate::ProfileGobo {
+            wheel: 1,
             slot: 2,
             name: Some("Breakup".into()),
             artwork_asset: None,
         },
         crate::ProfileGobo {
+            wheel: 1,
             slot: 2,
             name: Some("Rings".into()),
             artwork_asset: None,
@@ -3975,4 +3980,78 @@ fn shipped_stage_access_parts_declare_their_own_kinds() {
     assert!(rail.adjustable.width && !rail.adjustable.height && !rail.adjustable.depth);
     assert_eq!(rail.default_size_metres.y, 1.0);
     assert!(rail.minimum_size_metres.x <= 0.4 && rail.maximum_size_metres.x >= 24.0);
+}
+
+#[test]
+fn multiple_optical_wheels_round_trip_without_asset_collisions() {
+    let mut profile = profile();
+    profile.gobos = (1..=2)
+        .map(|wheel| crate::ProfileGobo {
+            wheel,
+            slot: 1,
+            name: Some(format!("Wheel {wheel}")),
+            artwork_asset: Some(format!("data:image/png;base64,{PNG_1X1}")),
+        })
+        .collect();
+    profile.prisms = vec![
+        crate::ProfilePrism {
+            wheel: 1,
+            slot: 1,
+            representation: crate::PrismRepresentation::Radial,
+            facets: 8,
+            spread_degrees: 4.0,
+        },
+        crate::ProfilePrism {
+            wheel: 2,
+            slot: 1,
+            representation: crate::PrismRepresentation::Linear,
+            facets: 5,
+            spread_degrees: 8.0,
+        },
+    ];
+    let bytes = write_fixture_package(&profile).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes.clone())).unwrap();
+    assert!(zip.by_name("assets/gobo-1.png").is_ok());
+    assert!(zip.by_name("assets/gobo-wheel-2-1.png").is_ok());
+    let restored = read_fixture_package(&bytes).unwrap();
+    assert_eq!(restored.gobos, profile.gobos);
+    assert_eq!(restored.prisms, profile.prisms);
+}
+
+#[test]
+fn legacy_gobo_metadata_defaults_to_first_wheel() {
+    let gobo: crate::ProfileGobo =
+        serde_json::from_value(serde_json::json!({"slot": 3, "name": "Breakup"})).unwrap();
+    assert_eq!(gobo.wheel, 1);
+    let original = profile();
+    let mut value = serde_json::to_value(&original).unwrap();
+    value.as_object_mut().unwrap().remove("prisms");
+    let restored: crate::FixtureProfile = serde_json::from_value(value).unwrap();
+    assert_eq!(
+        serde_json::to_value(restored).unwrap(),
+        serde_json::to_value(original).unwrap()
+    );
+}
+
+#[test]
+fn invalid_optical_wheel_metadata_is_rejected() {
+    let mut profile = profile();
+    profile.gobos = vec![crate::ProfileGobo {
+        wheel: 0,
+        ..Default::default()
+    }];
+    assert!(write_fixture_package(&profile).is_err());
+    profile.gobos.clear();
+    let prism = crate::ProfilePrism {
+        wheel: 1,
+        slot: 1,
+        representation: crate::PrismRepresentation::Radial,
+        facets: 8,
+        spread_degrees: 4.0,
+    };
+    profile.prisms = vec![prism.clone(), prism];
+    assert!(write_fixture_package(&profile).is_err());
+    profile.prisms.truncate(1);
+    profile.prisms[0].spread_degrees = f32::NAN;
+    assert!(write_fixture_package(&profile).is_err());
 }

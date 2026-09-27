@@ -54,6 +54,63 @@ pub enum ShowLibraryAction {
         #[serde(default)]
         overwrite: bool,
     },
+    SaveCopy {
+        #[serde(default)]
+        source_show_id: Option<Uuid>,
+        #[serde(default)]
+        data_base64: Option<String>,
+        name: String,
+        root_id: String,
+        path: String,
+        #[serde(default)]
+        is_base_show: bool,
+    },
+    ExportMvrFile {
+        #[serde(default)]
+        show_id: Option<Uuid>,
+        #[serde(default)]
+        data_base64: Option<String>,
+        name: String,
+        root_id: String,
+        path: String,
+    },
+    SaveCopyToPeer {
+        instance: String,
+        source_show_id: Uuid,
+        name: String,
+        root_id: String,
+        path: String,
+        is_base_show: bool,
+    },
+    ExportMvrToPeer {
+        instance: String,
+        show_id: Uuid,
+        name: String,
+        root_id: String,
+        path: String,
+    },
+    SetBaseShow {
+        show_id: Uuid,
+        is_base_show: bool,
+    },
+    CreateFromBase {
+        show_id: Uuid,
+        name: String,
+    },
+    PrepareRevision {
+        show_id: Uuid,
+        #[ts(type = "number")]
+        revision: u64,
+    },
+    ImportFromDesk {
+        instance: String,
+        show_id: Uuid,
+        #[serde(default)]
+        #[ts(type = "number | null")]
+        revision: Option<u64>,
+        #[serde(default = "crate::v2::show_library::opens_by_default")]
+        open: bool,
+    },
     Open {
         show_id: Uuid,
         #[serde(default)]
@@ -80,6 +137,13 @@ pub enum ShowLibraryAction {
     Overwrite {
         source_show_id: Uuid,
         destination_show_id: Uuid,
+    },
+    /// Save an edited portable document back to its originating library entry.
+    UpdateDocument {
+        destination_show_id: Uuid,
+        #[ts(type = "number")]
+        expected_revision: u64,
+        data_base64: String,
     },
     SaveRevision {
         show_id: Uuid,
@@ -161,9 +225,24 @@ pub struct ShowLibraryActionOutcome {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ShowLibraryActionResult {
-    Show { show: RuntimeShowEntry },
-    Revision { revision: ShowLibraryRevision },
-    MvrApply { result: MvrApplyOutcome },
+    FileSaved {
+        root_id: String,
+        path: String,
+    },
+    Show {
+        show: RuntimeShowEntry,
+    },
+    DocumentUpdated {
+        show: RuntimeShowEntry,
+        #[ts(type = "number")]
+        document_revision: u64,
+    },
+    Revision {
+        revision: ShowLibraryRevision,
+    },
+    MvrApply {
+        result: MvrApplyOutcome,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

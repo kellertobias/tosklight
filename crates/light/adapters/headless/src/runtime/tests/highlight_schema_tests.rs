@@ -298,6 +298,7 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
 
 fn enable_highlight_test_feedback(state: &AppState) {
     state.active_show.replace_current(Some(ShowEntry {
+        is_base_show: false,
         id: light_core::ShowId::new(),
         name: "Highlight feedback test".into(),
         path: state

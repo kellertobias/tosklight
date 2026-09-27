@@ -20,6 +20,24 @@ impl ShowStore {
         Ok(document)
     }
 
+    /// A replacement document advances both guards beyond the destination's previous state.
+    pub fn advance_replacement_revisions(&self, show: u64, patch: u64) -> Result<(), StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let show = show.max(current_revision(&tx)?.value());
+        let patch = patch.max(current_patch_revision(&tx)?.value());
+        for (key, value) in [
+            (REVISION_METADATA_KEY, show),
+            (PATCH_REVISION_METADATA_KEY, patch),
+        ] {
+            let next = value
+                .checked_add(1)
+                .ok_or_else(|| StoreError::Invalid("show revision overflow".into()))?;
+            tx.execute("INSERT INTO metadata(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, next.to_string()))?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Reads the O(1) whole-document revision used by portable transactions.
     pub fn portable_revision(&self) -> Result<PortableShowRevision, StoreError> {
         current_revision(&self.conn)

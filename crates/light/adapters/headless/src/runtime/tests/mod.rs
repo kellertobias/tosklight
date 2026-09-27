@@ -158,3 +158,9 @@ include!("malformed_show_tests.rs");
 include!("template_group_support.rs");
 include!("template_group_tests.rs");
 include!("spread_compatibility_tests.rs");
+
+#[path = "show_revision_source_tests.rs"]
+mod show_revision_source_tests;
+
+#[path = "show_save_destination_tests.rs"]
+mod show_save_destination_tests;

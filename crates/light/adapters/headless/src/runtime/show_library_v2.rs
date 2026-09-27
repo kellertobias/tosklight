@@ -9,6 +9,8 @@ const REQUEST_CACHE_ENTRY_LIMIT: usize = 1_024;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
+        .merge(super::show_network::router())
+        .merge(super::show_revision_source::router())
         .route(
             "/api/v2/shows",
             get(show_library_snapshot).post(show_library_action),
@@ -48,16 +50,44 @@ async fn show_library_action(
     TolerantJson(request): TolerantJson<wire::ShowLibraryActionRequest>,
 ) -> Result<Json<wire::ShowLibraryActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let remote_save = matches!(
+        &request.action,
+        wire::ShowLibraryAction::SaveCopyToPeer { .. }
+            | wire::ShowLibraryAction::ExportMvrToPeer { .. }
+    );
+    // A discovered desk may be this server: remote forwarding must leave its local gate free.
+    let _intent = if remote_save {
+        None
+    } else {
+        Some(state.replay.acquire_show_library_action().await)
+    };
+    let _remote_intent = if remote_save {
+        Some(super::show_network::REMOTE_SAVE_LOCK.lock().await)
+    } else {
+        None
+    };
     validate_request_id(&request.request_id)?;
     let key = ReplayKey {
         session_id: session.id.0,
         request_id: request.request_id.clone(),
     };
     let signature = action_signature(&request.action)?;
+    // Serialize replacement and replay lookup together, including concurrent retries.
+    let _document_update = if matches!(
+        &request.action,
+        wire::ShowLibraryAction::UpdateDocument { .. }
+            | wire::ShowLibraryAction::CreateFromBase { .. }
+            | wire::ShowLibraryAction::SetBaseShow { .. }
+            | wire::ShowLibraryAction::PrepareRevision { .. }
+    ) {
+        Some(state.active_show.acquire_show_change().await)
+    } else {
+        None
+    };
     if let Some(outcome) = state.replay.lookup_show_library(&key, &signature).await? {
         return Ok(Json(outcome));
     }
-    let result = execute_action(&state, &headers, request.action).await?;
+    let result = execute_action(&state, &headers, &request.request_id, request.action).await?;
     let outcome = wire::ShowLibraryActionOutcome {
         request_id: request.request_id,
         replayed: false,
@@ -73,15 +103,168 @@ async fn show_library_action(
 async fn execute_action(
     state: &AppState,
     headers: &HeaderMap,
+    request_id: &str,
     action: wire::ShowLibraryAction,
 ) -> Result<wire::ShowLibraryActionResult, ApiError> {
     use wire::ShowLibraryAction as Action;
     match action {
+        Action::SaveCopy {
+            source_show_id,
+            data_base64,
+            name,
+            root_id,
+            path,
+            is_base_show,
+        } => {
+            let show = super::show_save_destination::save_copy(
+                state,
+                source_show_id,
+                data_base64,
+                name,
+                root_id,
+                path,
+                is_base_show,
+            )?;
+            Ok(show_result(show))
+        }
+        Action::ExportMvrFile {
+            show_id,
+            data_base64,
+            name,
+            root_id,
+            path,
+        } => {
+            let (root_id, path) = super::show_save_destination::export_mvr_file(
+                state,
+                show_id,
+                data_base64,
+                name,
+                root_id,
+                path,
+            )?;
+            Ok(wire::ShowLibraryActionResult::FileSaved { root_id, path })
+        }
+        Action::SaveCopyToPeer {
+            instance,
+            source_show_id,
+            name,
+            root_id,
+            path,
+            is_base_show,
+        } => {
+            let show = super::show_network::save_copy_to_peer(
+                state,
+                request_id,
+                &instance,
+                source_show_id,
+                &name,
+                &root_id,
+                &path,
+                is_base_show,
+            )
+            .await?;
+            Ok(wire::ShowLibraryActionResult::Show { show })
+        }
+        Action::ExportMvrToPeer {
+            instance,
+            show_id,
+            name,
+            root_id,
+            path,
+        } => {
+            let (root_id, path) = super::show_network::export_mvr_to_peer(
+                state, request_id, &instance, show_id, &name, &root_id, &path,
+            )
+            .await?;
+            Ok(wire::ShowLibraryActionResult::FileSaved { root_id, path })
+        }
         Action::Create {
             name,
             data_base64,
             overwrite,
         } => execute_create(state, headers, name, data_base64, overwrite).await,
+        Action::PrepareRevision { show_id, revision } => Ok(show_result(
+            super::show_revision_source::prepare_named_revision_source(state, show_id, revision)?,
+        )),
+        Action::ImportFromDesk {
+            instance,
+            show_id,
+            revision,
+            open,
+        } => {
+            let (source_name, data) =
+                super::show_network::fetch_desk_document(state, &instance, show_id, revision)
+                    .await?;
+            let name = unique_import_name(state, &source_name)?;
+            let imported =
+                execute_create(state, headers, name, Some(STANDARD.encode(data)), false).await?;
+            if !open {
+                return Ok(imported);
+            }
+            let wire::ShowLibraryActionResult::Show { show } = imported else {
+                unreachable!()
+            };
+            execute_open(
+                state,
+                headers,
+                show.id,
+                wire::ShowOpenTransition::SafeBlackout,
+                None,
+            )
+            .await
+        }
+        Action::SetBaseShow {
+            show_id,
+            is_base_show,
+        } => {
+            let _session = authenticate(state, headers)?;
+            let show = state
+                .installation
+                .set_show_base(light_core::ShowId(show_id), is_base_show)
+                .map_err(ApiError::store)?;
+            if state
+                .active_show
+                .current()
+                .is_some_and(|active| active.id == show.id)
+            {
+                state.active_show.replace_current(Some(show.clone()));
+            }
+            emit(state, "show_updated", serde_json::json!({"show":show}));
+            Ok(show_result(show))
+        }
+        Action::CreateFromBase { show_id, name } => {
+            validate_show_name(&name)?;
+            let source = state
+                .installation
+                .show(light_core::ShowId(show_id))
+                .map_err(ApiError::store)?
+                .ok_or_else(|| ApiError::not_found("base show"))?;
+            if !source.is_base_show {
+                return Err(ApiError::conflict("This show is no longer a base show"));
+            }
+            let export = state
+                .installation
+                .data_dir()
+                .join(format!(".base-{}.show", Uuid::new_v4()));
+            ActiveShowRepository::open(&source.path)
+                .map_err(ApiError::store)?
+                .backup_to(&export)
+                .map_err(ApiError::store)?;
+            ActiveShowRepository::open(&export)
+                .map_err(ApiError::store)?
+                .set_identity(source.id, &source.name, None)
+                .map_err(ApiError::store)?;
+            let bytes = std::fs::read(&export);
+            let _ = std::fs::remove_file(&export);
+            execute_create(
+                state,
+                headers,
+                name,
+                Some(STANDARD.encode(bytes.map_err(ApiError::io)?)),
+                false,
+            )
+            .await
+        }
         Action::Open {
             show_id,
             transition,
@@ -100,6 +283,20 @@ async fn execute_action(
             source_show_id,
             destination_show_id,
         } => execute_overwrite(state, headers, source_show_id, destination_show_id).await,
+        Action::UpdateDocument {
+            destination_show_id,
+            expected_revision,
+            data_base64,
+        } => {
+            execute_document_update(
+                state,
+                headers,
+                destination_show_id,
+                expected_revision,
+                data_base64,
+            )
+            .await
+        }
         Action::SaveRevision { show_id, name } => {
             execute_save_revision(state, headers, show_id, name).await
         }
@@ -128,6 +325,21 @@ async fn execute_action(
             resolutions,
         } => execute_mvr_apply(state, headers, token, destination, resolutions).await,
     }
+}
+
+pub(super) fn unique_import_name(state: &AppState, source_name: &str) -> Result<String, ApiError> {
+    let shows = state.installation.show_library().map_err(ApiError::store)?;
+    let mut name = source_name.to_owned();
+    for suffix in 2.. {
+        if !shows
+            .iter()
+            .any(|show| show.name.eq_ignore_ascii_case(&name))
+        {
+            return Ok(name);
+        }
+        name = format!("{source_name} {suffix}");
+    }
+    unreachable!()
 }
 
 async fn execute_create(
@@ -162,6 +374,7 @@ async fn execute_import_from_visualizer(
     open: bool,
 ) -> Result<wire::ShowLibraryActionResult, ApiError> {
     let (name, data) = discovery_http::fetch_visualizer_document(state, &instance).await?;
+    let name = unique_import_name(state, &name)?;
     let encoded = base64::engine::general_purpose::STANDARD.encode(&data);
     let imported = execute_create(state, headers, name, Some(encoded), false).await?;
     if !open {
@@ -498,4 +711,123 @@ impl ShowLibraryReplayCache {
             }
         }
     }
+}
+
+/// Replace precisely the originating entry, refusing a stale desk document before any write.
+async fn execute_document_update(
+    state: &AppState,
+    headers: &HeaderMap,
+    destination_id: Uuid,
+    expected_revision: u64,
+    data_base64: String,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    let session = authenticate(state, headers)?;
+    let _activation = state.active_show.acquire().await;
+    let entry = state
+        .installation
+        .show(light_core::ShowId(destination_id))
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("source desk show"))?;
+    let current = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
+    let revision = current
+        .portable_revision()
+        .map_err(ApiError::store)?
+        .value();
+    let patch_revision = current
+        .portable_patch_revision()
+        .map_err(ApiError::store)?
+        .value();
+    drop(current);
+    if revision != expected_revision {
+        return Err(ApiError::conflict(
+            "The source desk show changed. Reopen it before saving to the desk; your local edits remain available.",
+        ));
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_base64)
+        .map_err(|_| ApiError::bad_request("data_base64 must contain a portable show"))?;
+    let staged = state
+        .installation
+        .data_dir()
+        .join("shows")
+        .join(format!(".architect-{}.show", Uuid::new_v4()));
+    std::fs::write(&staged, bytes).map_err(ApiError::io)?;
+    let result = (|| {
+        validate_show_file(&staged).map_err(ApiError::store)?;
+        ActiveShowRepository::open(&staged)
+            .map_err(ApiError::store)?
+            .set_identity(entry.id, &entry.name, entry.revision_copy.as_ref())
+            .map_err(ApiError::store)?;
+        ActiveShowRepository::open(&staged)
+            .map_err(ApiError::store)?
+            .advance_replacement_revisions(revision, patch_revision)
+            .map_err(ApiError::store)?;
+        let document_revision = ActiveShowRepository::open(&staged)
+            .map_err(ApiError::store)?
+            .portable_revision()
+            .map_err(ApiError::store)?
+            .value();
+        let mut probe = entry.clone();
+        probe.path = staged.display().to_string();
+        let prepared = if state
+            .active_show
+            .current()
+            .as_ref()
+            .is_some_and(|active| active.id == entry.id)
+        {
+            Some(
+                state
+                    .output
+                    .prepare_snapshot(load_engine_snapshot(&probe).map_err(ApiError::bad_request)?)
+                    .map_err(|error| ApiError::internal(error.to_string()))?,
+            )
+        } else {
+            None
+        };
+        let recovery = backup_show(state, &entry)?;
+        ActiveShowRepository::open(&entry.path)
+            .map_err(ApiError::store)?
+            .checkpoint_for_replacement()
+            .map_err(|error| ApiError::conflict(error.to_string()))?;
+        std::fs::rename(&staged, &entry.path).map_err(ApiError::io)?;
+        let updated = match state.installation.mark_show_updated(entry.id) {
+            Ok(updated) => updated,
+            Err(error) => {
+                std::fs::copy(&recovery, &staged).map_err(ApiError::io)?;
+                std::fs::rename(&staged, &entry.path).map_err(ApiError::io)?;
+                return Err(ApiError::store(error));
+            }
+        };
+        if let Some(prepared) = prepared {
+            let context = operator_action_context(&session, light_application::ActionSource::Http);
+            install_prepared_snapshot_with_selection_refresh(
+                state,
+                &context,
+                prepared,
+                None,
+                PlaybackInstallPolicy::Preserve,
+                HighlightInstallPolicy::Reconcile,
+            );
+            invalidate_active_show_document(state);
+            state.active_show.replace_current(Some(updated.clone()));
+            state.attributes.install_entry(Some(&updated));
+            state
+                .output
+                .engine()
+                .set_color_model(state.attributes.color_model());
+            state.active_show.set_error(None);
+            emit(state, "show_opened", serde_json::json!({"show":updated}));
+        }
+        emit(
+            state,
+            "show_overwritten",
+            serde_json::json!({"destination_show":updated}),
+        );
+        Ok(wire::ShowLibraryActionResult::DocumentUpdated {
+            show: runtime_wire::show(updated),
+            document_revision,
+        })
+    })();
+    let _ = std::fs::remove_file(staged);
+    result
 }
