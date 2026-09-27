@@ -336,6 +336,9 @@ function useQuickSetupModel() {
     useEffect(() => {
         if (dialogs.saveAsOpen) dialogs.setBaseShow(activeShow?.is_base_show ?? false);
     }, [dialogs.saveAsOpen, activeShowId, activeShow?.is_base_show]);
+    useEffect(() => {
+        if (dialogs.saveAsOpen) dialogs.setShowName(activeShow?.name ?? "");
+    }, [dialogs.saveAsOpen, activeShowId]);
 	const revisionCopy = activeShow?.revision_copy;
 	const originalShow = revisionCopy
 		? (lifecycle?.shows ?? []).find((show) => show.id === revisionCopy.show_id)

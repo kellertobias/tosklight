@@ -1057,6 +1057,74 @@
 .show-revisions-modal {width:min(720px,calc(100vw - 54px));}
 .show-revisions-modal .ui-field {min-width:0;}
 
-.save-show-modal { width: min(900px, 94vw); max-height: 90vh; }
-.show-save-body { padding: 16px; overflow: auto; min-height: 0; }
+/* Load and history tables share the title's inset while filling the dialog frame. */
+.ui-modal-stack-layer > .load-show-modal[role="dialog"],
+.ui-modal-stack-layer > .show-revisions-modal[role="dialog"] {
+	width: min(1120px, calc(100vw - 36px));
+	padding: 0;
+}
+.load-show-modal > .ui-modal-titlebar,
+.show-revisions-modal > .ui-modal-titlebar { margin: 0; padding: 0; }
+.load-show-modal > .ui-modal-titlebar .ui-modal-title-copy,
+.show-revisions-modal > .ui-modal-titlebar .ui-modal-title-copy {
+	max-width: none;
+	flex: 1;
+	padding: 12px 32px;
+}
+.load-show-modal .ui-modal-title-heading,
+.show-revisions-modal .ui-modal-title-heading {
+	padding: 0;
+	max-width: none;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	text-overflow: clip;
+}
+.load-show-modal > p,
+.show-revisions-modal > p,
+.load-show-modal > .show-browser-toolbar { margin: 12px 32px; }
+.load-show-modal > .show-browser-toolbar:empty { display: none; }
+ .load-show-modal > .show-browser-table-scroll,
+.show-revisions-modal > .show-browser-table-scroll { overflow: hidden; max-height: none; }
+.load-show-modal > .show-browser-table-scroll > .ui-window-scroller,
+.show-revisions-modal > .show-browser-table-scroll > .ui-window-scroller { height: auto; max-height: 50vh; }
+.load-show-modal .show-browser-table :is(th,td):first-child,
+.show-revisions-modal .show-browser-table :is(th,td):first-child { padding-left: 32px; }
+.load-show-modal .show-browser-table :is(th,td):last-child,
+.show-revisions-modal .show-browser-table :is(th,td):last-child { padding-right: 32px; }
+.load-show-modal .show-browser-table th:last-child,
+.show-revisions-modal .show-browser-table th:last-child { text-align: right; width: 260px; }
+.load-show-modal .show-row-actions,
+.show-revisions-modal .show-row-actions { flex-wrap: nowrap; justify-content: flex-end; }
+.load-show-modal .show-row-actions .ui-button,
+.show-revisions-modal .show-row-actions .ui-button { white-space: nowrap; flex-shrink: 0; }
+.load-show-modal .show-browser-table td[colspan] > .ui-button { padding-inline: 0; }
+
+.ui-modal-stack-layer > .save-show-modal[role="dialog"] { width: min(1120px, calc(100vw - 36px)); max-height: 90vh; padding: 0; }
+.save-show-modal > .ui-modal-titlebar { margin: 0; }
+.show-save-body { padding: 0; overflow: auto; min-height: 0; }
 .show-save-body .show-name-input { margin: 16px 0; }
+
+.show-save-location-section { margin: 16px; border: 1px solid var(--line2); border-radius: 8px; overflow: hidden; }
+.show-save-location { display: flex; justify-content: space-between; gap: 16px; width: 100%; margin: 0; border: 0; border-radius: 0; text-align: left; min-height: 48px; }
+.show-save-location > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.show-save-location > span:last-child { flex-shrink: 0; }
+.show-save-fields, .show-save-folder-toolbar { padding: 0 16px 16px; }
+.show-save-folder-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.show-save-folder-toolbar .ui-field { min-width: 170px; flex: 1; }
+.show-save-message { margin: 12px 32px; }
+.show-save-folder-scroll { overflow: hidden; max-height: none; }
+.show-save-folder-scroll > .ui-window-scroller { height: auto; max-height: 32vh; }
+.show-save-folder-scroll .show-browser-table :is(th,td):first-child { padding-left: 15px; width: 50%; }
+.show-save-folder-scroll .show-browser-table :is(th,td):last-child { padding-right: 15px; width: 50%; }
+.load-show-modal .overflowing .show-browser-table :is(th,td):last-child,
+.show-revisions-modal .overflowing .show-browser-table :is(th,td):last-child,
+.show-save-folder-scroll.overflowing .show-browser-table :is(th,td):last-child { padding-right: 10px; }
+.show-save-folder-scroll .show-browser-table td:first-child > .ui-button { padding-inline: 0; }
+.save-show-modal > .ui-modal-titlebar { padding: 0; }
+.save-show-modal .ui-modal-title-copy { max-width: none; flex: 1; padding: 12px 32px; }
+.save-show-modal .ui-modal-title-heading { padding: 0; max-width: none; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+.show-save-fields > .show-row-actions { margin-top: 16px; }
+#show-save-folders { border-top: 1px solid var(--line2); }
+#show-save-folders .show-save-folder-toolbar { padding-top: 12px; }
+
+.show-browser-error { display: flex; align-items: center; justify-content: center; min-height: 180px; margin: 0; padding: 24px 32px; text-align: center; overflow-wrap: anywhere; color: var(--muted); }

@@ -13,11 +13,20 @@ async fn get_json(app: &Router, path: &str) -> (StatusCode, serde_json::Value) {
 #[tokio::test]
 async fn runtime_v2_readiness_and_bootstrap_expose_the_current_contract() {
     let (state, data_dir) = test_state();
+    let expected_last_loaded = state
+        .active_show
+        .current()
+        .and_then(|show| show.last_loaded_at);
     let app = router(state);
 
     let (status, readiness) = get_json(&app, "/api/v2/readiness").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(readiness["status"], "ready");
+    assert!(readiness.get("active_show_last_loaded_at").is_some());
+    assert_eq!(
+        readiness["active_show_last_loaded_at"],
+        serde_json::to_value(expected_last_loaded).unwrap()
+    );
 
     let (status, bootstrap) = get_json(&app, "/api/v2/bootstrap").await;
     assert_eq!(status, StatusCode::OK);

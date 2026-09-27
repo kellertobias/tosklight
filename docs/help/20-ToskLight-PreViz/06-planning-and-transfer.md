@@ -40,14 +40,14 @@ see what the Visualizer draws, and the rig the product demonstration video is sh
 
 **Show**, at the top of the dock, is the open show as a document. It is available with no show open,
 because it is where a show is created or opened. Its file actions run across the top: **New Show**
-and **Open Demo Show** under **New Show**; **Load Show from Disk**, **Load Recent Shows**, and **Load from TOSca Light Control Desk** under **Open**; then **Save As**, **Import
+and **Open Demo Show** under **New Show**; **Load Show from Disk**, **Load Recent Shows**, and **Load from ToskLight Control** under **Open**; then **Save As**, **Import
 MVR** and **Export MVR**.
 
 
 **Load Recent Shows** opens a modal with a scrollable table of files opened on this computer,
-newest first. Files moved or deleted are omitted. Use the modal close control to dismiss it.
-**Load from TOSca Light Control Desk** lists only active shows announced by discovered desks.
-There is no manual host or IP input.
+newest first. Names omit the `.show` extension; Location shows an Internal badge for internal files, and Last saved shows the file timestamp. Files moved or deleted are omitted. Use the modal close control to dismiss it.
+**Load from ToskLight Control** lists only active shows announced by discovered desks.
+The table includes the desk IP address and operating system when announced. There is no manual host or IP input.
 
 A show loaded from a desk keeps that desk and show as its save destination. **Save to** the desk
 writes the edited document back there, and **Save As** writes a portable copy and also saves to
@@ -319,7 +319,7 @@ The visualizer's status line says which is happening: **No DMX in — the Viz ed
 fixtures** when the preview plane is lighting the rig, and the ordinary **Waiting for DMX** when
 nothing is driving it at all.
 
-## Load from TOSca Light Control Desk
+## Load from ToskLight Control
 
 The third action under **Open** opens a modal listing the currently active shows announced by
 control desks on the network. Desks without an active show are omitted. Select **Load** beside

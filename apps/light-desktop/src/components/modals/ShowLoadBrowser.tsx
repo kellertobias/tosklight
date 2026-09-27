@@ -1,4 +1,5 @@
-import { Button, ModalFrame, SelectField } from "@tosklight/ui";
+import { WindowScrollArea } from "@tosklight/ui/window-kit";
+import { Button, ModalFrame } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import type { FileEntry, FileRoot, ShowEntry, ShowRevision } from "../../api/types";
 import type { NetworkShowPeer, NetworkShow } from "../../api/generated/light-wire";
@@ -31,6 +32,7 @@ export function ShowLoadBrowser({model}: {model: QuickSetupModel}) {
     useEffect(() => { let current = true; void files.fileRoots().then(found => current && setRoots(found)).catch(reason => current && setError(String(reason))); return () => {current = false;}; }, [files]);
     useEffect(() => {
         let current = true; setError(""); setEntries([]); setPeers([]); setBusy(true);
+        if (source === "usb" && !rootId) { setBusy(false); return; }
         const task = source === "network"
             ? lifecycle?.networkShows().then(catalog => {if(current) setPeers(catalog.peers);})
             : files.fileEntries(rootId, path).then(directory => {if(current) setEntries(directory.entries);});
@@ -38,6 +40,8 @@ export function ShowLoadBrowser({model}: {model: QuickSetupModel}) {
         return () => {current = false;};
     }, [source, rootId, path, files, lifecycle]);
     const root = roots.find(root => root.id === rootId);
+    const sourceLabel = source === "internal" ? "Internal" : source === "usb" ? `USB: ${root?.label ?? "No drive connected"}` : "Network";
+    const folderTitle = source === "network" ? "Network shows" : `${root?.label ?? (source === "usb" ? "USB" : "Shows")} / ${path}`;
     const folders = entries.filter(entry => entry.kind === "folder").sort((a,b) => a.name.localeCompare(b.name));
     const rows: Row[] = source === "network" ? peers.flatMap(peer => peer.shows.map(show => ({key:`${peer.instance}:${show.id ?? "current"}`,name:show.name,updated:show.updated_at,peer,remote:show})))
         : entries.filter(entry => entry.kind === "file" && /\.show$/i.test(entry.name)).map(file => {
@@ -48,9 +52,9 @@ export function ShowLoadBrowser({model}: {model: QuickSetupModel}) {
         setBusy(true); setError("");
         try {await task();} catch(reason) {setError(reason instanceof Error ? reason.message : String(reason));} finally {setBusy(false);}
     }
-    function switchSource(next: Source) {
+    function switchSource(next: Source, driveId?: string) {
         setSource(next); setPath(""); setSelected(null);
-        setRootId(next === "usb" ? roots.find(root => root.removable)?.id ?? "" : "shows");
+        setRootId(next === "usb" ? driveId ?? roots.find(root => root.removable)?.id ?? "" : "shows");
     }
     async function revisionsFor(row: Row) {
         setSelected(row); setRevisions([]);
@@ -77,38 +81,38 @@ export function ShowLoadBrowser({model}: {model: QuickSetupModel}) {
             }
         });
     }
-    return <ModalFrame title="Load Show" ariaLabel="Load show" dialogClassName="nested-modal load-show-modal"
+    return <ModalFrame title={folderTitle} ariaLabel="Load show" dialogClassName="nested-modal load-show-modal"
         closeLabel="Close Load Show" closeDisabled={busy} onClose={() => !busy && model.dialogs.setLoadOpen(false)}
-        groups={[{id:"show-source", actions:[{id:"source", kind:"dropdown", label:"Source", disabled:busy,
-            dropdown:{kind:"items", ariaLabel:"Show source", items:([
-                ["internal","Internal"],["usb","USB"],["network","Network"]
-            ] as const).map(([id,label]) => ({kind:"action" as const,id,label,disabled:busy,onPress:() => switchSource(id)}))}
+        groups={[{id:"show-source", actions:[{id:"source", kind:"dropdown", ariaLabel:`Source: ${sourceLabel}`, label:<>Source: {sourceLabel} <span aria-hidden="true">⌄</span></>, disabled:busy,
+            dropdown:{kind:"items", ariaLabel:"Show source", items:[{kind:"action",id:"internal",label:"Internal",onPress:()=>switchSource("internal")},
+                ...roots.filter(root=>root.removable && !root.network).map(root=>({kind:"action" as const,id:`usb-${root.id}`,label:`USB: ${root.label}`,onPress:()=>switchSource("usb",root.id)})),
+                ...(!roots.some(root=>root.removable && !root.network) ? [{kind:"action" as const,id:"usb-empty",label:"USB (No drives connected)",disabled:true,onPress:()=>{}}] : []),
+                {kind:"action",id:"network",label:"Network",onPress:()=>switchSource("network")}]}
         }]}]}>
             <div className="show-browser-toolbar">
-                {source === "usb" && <SelectField label="USB drive" value={rootId} options={roots.filter(root => root.removable).map(root => ({value:root.id,label:root.label}))} onChange={value => {setRootId(value);setPath("");}} />}
                 {source !== "network" && path && <Button disabled={busy} onClick={() => setPath(path.split("/").slice(0,-1).join("/"))}>Up one folder</Button>}
             </div>
-            {source !== "network" && <p className="show-browser-path">{root?.label ?? (source === "usb" ? "No USB drive connected" : "Internal")} / {path}</p>}
+            {source === "usb" && !root && <p>No USB drive connected.</p>}
             {busy && <p role="status">Loading…</p>}
-            {error && <p role="alert">{error}</p>}
+            {error && <p className="show-browser-error" role="alert">{error}</p>}
             {source === "network" && peers.map(peer => <p key={peer.instance} className={peer.error ? "modal-warning" : "show-peer"}>{peer.name} · {peer.address}{peer.error ? ` · ${peer.error}` : peer.shows.length === 0 ? " · No shows available" : ""}</p>)}
-            {!busy && rows.length === 0 && folders.length === 0 && <p>No shows available in this source.</p>}
-            <div className="show-browser-table-scroll"><table className="show-browser-table"><thead><tr><th>Show / folder</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>
+            {!error && !busy && rows.length === 0 && folders.length === 0 && <p>No shows available in this source.</p>}
+            {!error && !busy && <WindowScrollArea className="show-browser-table-scroll"><table className="show-browser-table"><thead><tr><th>Show / folder</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>
                 {folders.map(folder => <tr key={folder.path}><td colSpan={3}><Button disabled={busy} onClick={() => setPath(folder.path)}>📁 {folder.name}</Button></td></tr>)}
                 {rows.map(row => <tr key={row.key}><td><strong>{row.name}</strong>{row.peer && <small>{row.peer.name}</small>}</td><td>{dateLabel(row.updated)}</td><td><div className="show-row-actions"><Button disabled={busy} onClick={() => void perform(row,null,false)}>Load Latest</Button><Button aria-label={`Revisions for ${row.name}`} disabled={busy} onClick={() => void revisionsFor(row)}>…</Button></div></td></tr>)}
-            </tbody></table></div>
+            </tbody></table></WindowScrollArea>}
             {selected && <ModalFrame title={selected.name} ariaLabel={`Revisions for ${selected.name}`} dialogClassName="nested-modal show-revisions-modal"
                 closeDisabled={busy} closeLabel="Close revisions" onClose={() => !busy && setSelected(null)}>
                 <p>Named revisions load as independent copies. Partial Load previews dependencies and conflicts before changing the current show.</p>
-                <div className="show-browser-table-scroll"><table className="show-browser-table"><thead><tr><th>Revision</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>
+                <WindowScrollArea className="show-browser-table-scroll"><table className="show-browser-table"><thead><tr><th>Revision</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>
                     {[{revision:null,name:"Latest Autosave",created_at:selected.updated},...revisions.map(item => ({revision:item.revision,name:`Revision ${item.revision} · ${item.name}`,created_at:item.created_at}))].map(item => <tr key={item.revision ?? "latest"}>
                         <td><strong>{item.name}</strong></td><td>{dateLabel(item.created_at)}</td><td><div className="show-row-actions">
                             <Button disabled={busy} onClick={() => void perform(selected,item.revision,false)}>Load</Button>
                             <Button disabled={busy} onClick={() => void perform(selected,item.revision,true)}>Partial Load</Button>
                         </div></td>
                     </tr>)}
-                </tbody></table></div>
-                {busy && <p role="status">Preparing show…</p>}{error && <p role="alert">{error}</p>}
+                </tbody></table></WindowScrollArea>
+                {busy && <p role="status">Preparing show…</p>}{error && <p className="show-browser-error" role="alert">{error}</p>}
             </ModalFrame>}
     </ModalFrame>;
 }

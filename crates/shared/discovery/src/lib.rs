@@ -112,6 +112,11 @@ impl Advertiser {
         })
     }
 
+    /// The exact DNS-SD identity registered by this application.
+    pub fn instance(&self) -> String {
+        self.full_name.lock().expect("advertised name").clone()
+    }
+
     /// Re-publish with a different show, when the operator loads or closes one.
     ///
     /// The record is what a peer decides from, so it has to follow the application rather than
@@ -149,6 +154,7 @@ fn service_info(advertisement: &Advertisement) -> Result<ServiceInfo, String> {
     let mut properties = HashMap::from([
         ("role".to_owned(), advertisement.role.wire().to_owned()),
         ("name".to_owned(), advertisement.name.clone()),
+        ("os".to_owned(), std::env::consts::OS.to_owned()),
     ]);
     if let Some(show) = &advertisement.show {
         properties.insert("show".to_owned(), show.clone());
@@ -196,6 +202,7 @@ pub fn hostname() -> String {
 pub struct Browser {
     daemon: ServiceDaemon,
     peers: Arc<Mutex<HashMap<String, Peer>>>,
+    operating_systems: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl Browser {
@@ -207,6 +214,8 @@ impl Browser {
             .map_err(|error| format!("browsing for ToskLights: {error}"))?;
         let peers: Arc<Mutex<HashMap<String, Peer>>> = Arc::default();
         let sink = peers.clone();
+        let operating_systems: Arc<Mutex<HashMap<String, String>>> = Arc::default();
+        let os_sink = operating_systems.clone();
         std::thread::Builder::new()
             .name("tosklight-discovery".into())
             .spawn(move || {
@@ -214,6 +223,17 @@ impl Browser {
                     match event {
                         ServiceEvent::ServiceResolved(info) => {
                             if let Some(peer) = peer_from(&info) {
+                                if let Some(os) = info.txt_properties.get_property_val_str("os") {
+                                    os_sink
+                                        .lock()
+                                        .expect("peer operating systems")
+                                        .insert(peer.instance.clone(), os.to_owned());
+                                } else {
+                                    os_sink
+                                        .lock()
+                                        .expect("peer operating systems")
+                                        .remove(&peer.instance);
+                                }
                                 sink.lock()
                                     .expect("peers")
                                     .insert(peer.instance.clone(), peer);
@@ -221,13 +241,21 @@ impl Browser {
                         }
                         ServiceEvent::ServiceRemoved(_, full_name) => {
                             sink.lock().expect("peers").remove(&full_name);
+                            os_sink
+                                .lock()
+                                .expect("peer operating systems")
+                                .remove(&full_name);
                         }
                         _ => {}
                     }
                 }
             })
             .map_err(|error| error.to_string())?;
-        Ok(Self { daemon, peers })
+        Ok(Self {
+            daemon,
+            peers,
+            operating_systems,
+        })
     }
 
     /// Everything currently on the network, in a stable order so a menu does not reshuffle
@@ -250,6 +278,15 @@ impl Browser {
     }
 
     /// Everything of one role. What a caller almost always wants: an editor looks for desks.
+    /// Operating system advertised by a peer; absent for older peers.
+    pub fn operating_system(&self, instance: &str) -> Option<String> {
+        self.operating_systems
+            .lock()
+            .expect("peer operating systems")
+            .get(instance)
+            .cloned()
+    }
+
     pub fn peers_with_role(&self, role: Role) -> Vec<Peer> {
         self.peers()
             .into_iter()
@@ -416,6 +453,7 @@ mod tests {
             port: 5310,
         };
         let info = service_info(&advertisement).expect("a service record");
+        assert_eq!(info.get_property_val_str("os"), Some(std::env::consts::OS));
         assert_eq!(info.get_property_val_str("role"), Some("editor"));
         assert_eq!(info.get_property_val_str("show"), Some("Summer Tour rig"));
         assert_eq!(info.get_port(), 5310);

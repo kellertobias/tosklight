@@ -228,6 +228,7 @@ pub struct RuntimeBootstrapSnapshot {
 pub struct RuntimeReadinessSnapshot {
     pub status: String,
     pub active_show: Option<Uuid>,
+    pub active_show_last_loaded_at: Option<String>,
     pub active_show_error: Option<String>,
     pub recovery_mode: bool,
     #[ts(type = "number")]

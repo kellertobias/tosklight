@@ -186,24 +186,21 @@ describe("QuickSetupModal show workflows", () => {
     await waitFor(() => expect(mocks.server.overwriteShow).toHaveBeenCalledWith("original"));
   });
 
-  it("offers only the current timestamped autosave and saves its base designation", async () => {
+  it("keeps revisions and Latest Autosave out of Save As", async () => {
     render(<QuickSetupModal />);
     fireEvent.click(screen.getByRole("button", { name: "Save As" }));
     const dialog = screen.getByRole("dialog", { name: "Save show" });
-    expect(dialog).not.toHaveTextContent("Festival");
+    expect(dialog).not.toHaveTextContent("Latest Autosave");
     expect(dialog).not.toHaveTextContent("Original show");
-    expect(dialog).toHaveTextContent(new Date("2026-07-17T12:00:00Z").toLocaleString());
-    fireEvent.click(within(dialog).getByRole("button", {name: "Save as a base show"}));
-    await waitFor(() => expect(within(dialog).getByRole("button", {name:"Save to Latest Autosave"})).toBeEnabled());
-    fireEvent.click(within(dialog).getByRole("button", {name: "Save to Latest Autosave"}));
-    await waitFor(() => expect(mocks.server.saveShowAs).toHaveBeenCalledWith("Tour-rev-3-2026-07-17", {baseShow: true, latest: true}));
+    expect(dialog).not.toHaveTextContent("Approved focus");
+    expect(within(dialog).getByRole("switch", {name: "Save as a base show"})).not.toBeChecked();
   });
 
   it("initializes the save designation from an existing base", async () => {
     mocks.server.bootstrap.active_show.is_base_show = true;
     render(<QuickSetupModal />);
     fireEvent.click(screen.getByRole("button", {name: "Save As"}));
-    await waitFor(() => expect(screen.getByRole("button", {name: "Save as a base show"})).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() => expect(screen.getByRole("switch", {name: "Save as a base show"})).toBeChecked());
     delete mocks.server.bootstrap.active_show.is_base_show;
   });
 
@@ -212,14 +209,27 @@ describe("QuickSetupModal show workflows", () => {
     render(<QuickSetupModal />);
     fireEvent.click(screen.getByRole("button", {name:"Save As"}));
     const dialog = screen.getByRole("dialog", {name:"Save show"});
-    const source = within(dialog).getByRole("button", {name:"Source"});
+    const source = within(dialog).getByRole("button", {name:"Source: Internal"});
     expect(source.closest(".ui-title-chrome")).not.toBeNull();
-    expect(within(dialog).getByRole("button", {name:"Save as a base show"})).toHaveAttribute("aria-pressed","false");
+    expect(within(dialog).getByRole("switch", {name:"Save as a base show"})).not.toBeChecked();
+    const location = await within(dialog).findByRole("button", {name:/Location: Shows/});
+    expect(within(dialog).getByRole("textbox", {name:"Show name"})).toHaveValue(mocks.server.bootstrap.active_show.name);
+    expect(mocks.files.fileEntries).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("button", {name:"Export MVR"}).closest(".ui-title-chrome")).not.toBeNull();
+    expect(location).toHaveAttribute("aria-expanded", "false");
+    expect(within(dialog).queryByRole("table")).not.toBeInTheDocument();
+    fireEvent.click(location);
+    fireEvent.click(await within(dialog).findByRole("button", {name:"📁 Tour folder"}));
+    await waitFor(() => expect(location).toHaveTextContent("Shows / Tour folder"));
+    fireEvent.click(within(dialog).getByRole("button", {name:"↑ Up one folder"}));
+    await waitFor(() => expect(location).toHaveTextContent("Shows /"));
+    expect(mocks.files.fileEntries).toHaveBeenCalledTimes(2);
+    expect(within(dialog).queryByRole("button", {name:"↑ Up one folder"})).not.toBeInTheDocument();
     fireEvent.click(await within(dialog).findByRole("button", {name:"📁 Tour folder"}));
     fireEvent.change(within(dialog).getByRole("textbox",{name:"Show name"}),{target:{value:"Folder copy"}});
     await waitFor(() => expect(within(dialog).getByRole("button", {name:"Save as New Show"})).toBeEnabled());
-    fireEvent.click(within(dialog).getByRole("button",{name:"Save as a base show"}));
-    expect(within(dialog).getByRole("button",{name:"Save as a base show"})).toHaveAttribute("aria-pressed","true");
+    fireEvent.click(within(dialog).getByRole("switch",{name:"Save as a base show"}));
+    expect(within(dialog).getByRole("switch",{name:"Save as a base show"})).toBeChecked();
     fireEvent.click(within(dialog).getByRole("button",{name:"Save as New Show"}));
     await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenCalledWith("Folder copy",{rootId:"shows",path:"Tour folder"},true));
     await waitFor(() => expect(within(dialog).getByRole("button",{name:"Export MVR"})).toBeEnabled());
@@ -228,18 +238,45 @@ describe("QuickSetupModal show workflows", () => {
     expect(mocks.server.saveShowAs).not.toHaveBeenCalled();
   });
 
+  it.each(["Load", "Save As"])("lists each USB drive in the %s Source menu and replaces denied folders with an error", async (action) => {
+    mocks.files.fileRoots.mockResolvedValue([
+      {id:"shows",label:"Shows",writable:true,removable:false},
+      {id:"usb-a",label:"Tour USB",writable:true,removable:true},
+      {id:"usb-b",label:"Backup USB",writable:true,removable:true},
+    ]);
+    mocks.files.fileEntries.mockImplementation(async (root: string) => {
+      if (root === "usb-b") throw new Error("Operation not permitted");
+      return {entries:[]};
+    });
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", {name:action}));
+    const dialog = screen.getByRole("dialog", {name:action === "Load" ? "Load show" : "Save show"});
+    const source = within(dialog).getByRole("button", {name:"Source: Internal"});
+    await waitFor(() => expect(source).toBeEnabled());
+    fireEvent.click(source);
+    expect(await screen.findByRole("menuitem", {name:"USB: Tour USB"})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", {name:"USB: Backup USB"}));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Operation not permitted");
+    expect(within(dialog).queryByRole("table")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("combobox")).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", {name:"Source: USB: Backup USB"}));
+    fireEvent.click(screen.getByRole("menuitem", {name:"USB: Tour USB"}));
+    await waitFor(() => expect(within(dialog).getByRole("table")).toBeInTheDocument());
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("offers network shares and Control desks as save destinations", async () => {
     mocks.files.fileRoots.mockResolvedValue([{id:"shows",label:"Shows",writable:true,removable:false},{id:"share",label:"Show share",writable:true,removable:false,network:true}]);
     mocks.server.networkShows.mockResolvedValue({peers:[{instance:"desk-one",name:"Lighting desk",role:"desk",shows:[],error:null},{instance:"architect-one",name:"Architect",role:"architect",shows:[],error:null}]});
     render(<QuickSetupModal />);
     fireEvent.click(screen.getByRole("button",{name:"Save As"}));
     const dialog = screen.getByRole("dialog",{name:"Save show"});
-    await waitFor(() => expect(within(dialog).getByRole("button",{name:"Source"})).toBeEnabled());
-    fireEvent.click(within(dialog).getByRole("button",{name:"Source"}));
+    await waitFor(() => expect(within(dialog).getByRole("button",{name:"Source: Internal"})).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole("button",{name:"Source: Internal"}));
     fireEvent.click(screen.getByRole("menuitem",{name:"Network"}));
     await waitFor(() => expect(within(dialog).getByRole("button",{name:"Lighting desk"})).toBeEnabled());
     expect(within(dialog).getByRole("button",{name:"Show share"})).toBeInTheDocument();
-    expect(within(dialog).queryByRole("button",{name:"Architect"})).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button",{name:"Architect"})).toBeDisabled();
     fireEvent.click(within(dialog).getByRole("button",{name:"Lighting desk"}));
     fireEvent.change(within(dialog).getByRole("textbox",{name:"Show name"}),{target:{value:"Tour-rev-3-2026-07-17"}});
     await waitFor(() => expect(within(dialog).getByRole("button",{name:"Save as New Show"})).toBeEnabled());
@@ -315,12 +352,13 @@ describe("QuickSetupModal show workflows", () => {
     render(<QuickSetupModal />);
     fireEvent.click(screen.getByRole("button", {name:/^Load$/}));
     const browser = screen.getByRole("dialog", {name:"Load show"});
-    await waitFor(() => expect(within(browser).getByRole("button", {name:"Source"})).toBeEnabled());
-    const source = within(browser).getByRole("button", {name:"Source"});
+    await waitFor(() => expect(within(browser).getByRole("button", {name:"Source: Internal"})).toBeEnabled());
+    expect(within(browser).getByRole("heading", {name:"Shows /"})).toBeInTheDocument();
+    const source = within(browser).getByRole("button", {name:"Source: Internal"});
     expect(source.closest(".ui-title-chrome")).not.toBeNull();
     expect(within(browser).queryByRole("button", {name:"Create New Folder"})).not.toBeInTheDocument();
     fireEvent.click(source);
-    for (const name of ["Internal", "USB", "Network"]) expect(screen.getByRole("menuitem", {name})).toBeInTheDocument();
+    for (const name of ["Internal", "USB (No drives connected)", "Network"]) expect(screen.getByRole("menuitem", {name})).toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", {name:"Internal"}));
     expect(within(browser).queryByRole("button",{name:/MVR/})).not.toBeInTheDocument();
     fireEvent.click(within(browser).getByRole("button", {name:"Close Load Show"}));

@@ -57,6 +57,10 @@ impl DeskDiscovery {
     }
 
     /// Publish the show the desk is now running, so a peer's menu names what is actually loaded.
+    pub(super) fn own_instance(&self) -> Option<String> {
+        self.advertiser.as_ref().map(Advertiser::instance)
+    }
+
     pub(super) fn announce_show(&self, show: Option<String>) {
         if let Some(advertiser) = &self.advertiser {
             advertiser.set_show(show);
@@ -91,6 +95,10 @@ pub(super) struct DiscoveryResource(Arc<DeskDiscovery>);
 impl DiscoveryResource {
     pub(super) fn start(port: u16, show: Option<String>) -> Self {
         Self(Arc::new(DeskDiscovery::start(port, show)))
+    }
+
+    pub(super) fn own_instance(&self) -> Option<String> {
+        self.0.own_instance()
     }
 
     pub(super) fn announce_show(&self, show: Option<String>) {

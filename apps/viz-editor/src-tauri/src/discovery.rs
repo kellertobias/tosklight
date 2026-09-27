@@ -82,6 +82,8 @@ pub struct DeskPeer {
     /// The show it is running. A desk with none is listed and not offered.
     pub show: Option<String>,
     pub address: String,
+    pub operating_system: Option<String>,
+    pub show_last_loaded_at: Option<String>,
 }
 
 type Answer<T> = Result<T, String>;
@@ -95,13 +97,23 @@ pub async fn discovered_desks(discovery: tauri::State<'_, Discovery>) -> Answer<
         .into_iter()
         .map(|desk| {
             let client = client.clone();
+            let operating_system = discovery
+                .browser
+                .lock()
+                .as_ref()
+                .and_then(|browser| browser.operating_system(&desk.instance));
             tokio::spawn(async move {
-                let reachable = reachable_base(&client, &desk).await.ok()?;
+                let (reachable, readiness) = reachable_readiness(&client, &desk).await.ok()?;
                 Some(DeskPeer {
                     instance: desk.instance,
                     name: desk.name,
                     address: reachable.trim_start_matches("http://").to_owned(),
                     show: desk.show,
+                    operating_system,
+                    show_last_loaded_at: readiness
+                        .get("active_show_last_loaded_at")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned),
                 })
             })
         })
@@ -301,10 +313,19 @@ fn discovery_client(timeout: std::time::Duration) -> Answer<reqwest::Client> {
 }
 
 async fn reachable_base(client: &reqwest::Client, desk: &Peer) -> Answer<String> {
+    reachable_readiness(client, desk)
+        .await
+        .map(|(base, _)| base)
+}
+
+async fn reachable_readiness(
+    client: &reqwest::Client,
+    desk: &Peer,
+) -> Answer<(String, serde_json::Value)> {
     let mut failures = Vec::new();
     for base in desk.base_urls() {
         match desk_answers(client, &base).await {
-            Ok(_) => return Ok(base),
+            Ok(readiness) => return Ok((base, readiness)),
             Err(error) => failures.push(format!("{base}: {error}")),
         }
     }
@@ -315,7 +336,7 @@ async fn reachable_base(client: &reqwest::Client, desk: &Peer) -> Answer<String>
 ///
 /// Readiness is the desk's unauthenticated health route, so asking it opens no session and
 /// changes nothing on the desk.
-async fn desk_answers(client: &reqwest::Client, base: &str) -> Answer<()> {
+async fn desk_answers(client: &reqwest::Client, base: &str) -> Answer<serde_json::Value> {
     client
         .get(format!("{base}/api/v2/readiness"))
         .send()
@@ -325,8 +346,7 @@ async fn desk_answers(client: &reqwest::Client, base: &str) -> Answer<()> {
         .map_err(|error| format!("did not provide API v2 readiness: {error}"))?
         .json::<serde_json::Value>()
         .await
-        .map_err(|error| format!("returned an invalid API v2 readiness: {error}"))?;
-    Ok(())
+        .map_err(|error| format!("returned an invalid API v2 readiness: {error}"))
 }
 
 async fn open_read_only_session(client: &reqwest::Client, base: &str) -> Answer<String> {
@@ -517,6 +537,8 @@ mod tests {
     #[test]
     fn one_advertised_desk_is_deduplicated_across_address_representations() {
         let peer = |address: &str| DeskPeer {
+            operating_system: None,
+            show_last_loaded_at: None,
             instance: "tosklight-desk-kmp5._tosklight._tcp.local.".into(),
             name: "kmp5".into(),
             show: Some("Tour".into()),

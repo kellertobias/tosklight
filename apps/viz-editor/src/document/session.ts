@@ -121,11 +121,15 @@ export interface ProfileUpdate {
 
 export interface DeskShow { id: string; name: string; updated_at: string; }
 
+export interface RecentDocument { path: string; lastSavedAt: number | null; }
+
 export interface DeskPeer {
 	instance: string;
 	name: string;
 	show: string | null;
 	address: string;
+	operatingSystem?: string | null;
+	showLastLoadedAt?: string | null;
 }
 
 export type LiveDmxProtocol = "artnet" | "sacn";
@@ -492,6 +496,7 @@ export const documentSession = {
 			default: value,
 		}),
 	recentDocuments: () => invoke<string[]>("recent_documents"),
+	recentDocumentDetails: () => invoke<RecentDocument[]>("recent_document_details"),
 	saveAs: (path: string) => invoke<void>("save_document_as", { path }),
 	rename: (name: string) => invoke<void>("rename_document", { name }),
 	exportMvr: (path: string) => invoke<number>("export_mvr", { path }),

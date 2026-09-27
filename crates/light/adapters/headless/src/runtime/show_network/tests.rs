@@ -284,3 +284,37 @@ fn network_save_requires_a_current_discovered_control_desk() {
         StatusCode::BAD_REQUEST
     );
 }
+
+#[test]
+fn network_sources_exclude_this_desk_but_keep_other_desks_and_local_architect() {
+    let peer = |role, instance: &str, address: &str| Peer {
+        role,
+        name: "Same name".into(),
+        show: Some("Tour".into()),
+        addresses: vec![address.into()],
+        instance: instance.into(),
+    };
+    let peers = vec![
+        peer(
+            Role::Desk,
+            "This-Desk._tosklight._tcp.local.",
+            "127.0.0.1:5000",
+        ),
+        peer(
+            Role::Desk,
+            "other-desk._tosklight._tcp.local.",
+            "192.168.1.2:5000",
+        ),
+        peer(
+            Role::Editor,
+            "architect._tosklight._tcp.local.",
+            "127.0.0.1:5001",
+        ),
+    ];
+    assert_eq!(remote_peers(peers.clone(), None), peers);
+    let sources = remote_peers(peers, Some("this-desk._tosklight._tcp.local."));
+    assert_eq!(sources.len(), 2);
+    assert_eq!(sources[0].role, Role::Desk);
+    assert_eq!(sources[1].role, Role::Editor);
+    assert_eq!(sources[1].address(), "127.0.0.1:5001");
+}

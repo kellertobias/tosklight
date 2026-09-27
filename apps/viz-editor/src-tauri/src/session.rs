@@ -1193,3 +1193,30 @@ pub struct MvrImportReport {
 pub fn recent_documents(session: tauri::State<'_, Session>) -> Vec<String> {
     session.recent_paths()
 }
+
+/// Metadata for browsing recent files, without opening or changing the active document.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentDocument {
+    path: String,
+    last_saved_at: Option<u64>,
+}
+
+#[tauri::command]
+pub fn recent_document_details(session: tauri::State<'_, Session>) -> Vec<RecentDocument> {
+    session
+        .recent_paths()
+        .into_iter()
+        .map(|path| {
+            let last_saved_at = std::fs::metadata(&path)
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_secs());
+            RecentDocument {
+                path,
+                last_saved_at,
+            }
+        })
+        .collect()
+}

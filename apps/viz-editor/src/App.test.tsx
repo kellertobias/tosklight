@@ -212,7 +212,7 @@ beforeEach(() => {
 				return Promise.resolve(snapshot);
 			case "source_desk":
 				return Promise.resolve(null);
-			case "recent_documents":
+			case "recent_document_details":
 			case "discovered_desks":
 				return Promise.resolve([]);
 			case "live_dmx_inputs":
@@ -480,7 +480,7 @@ describe("the Viz editor window", () => {
 	it("opens a selected recent show", async () => {
 		const base = invoke.getMockImplementation();
 		invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
-			if (command === "recent_documents") return Promise.resolve(["/shows/recent.show", "/Users/operator/Library/Application Support/de.tokenet.tosklight.visualizer/shows/Internal rig.show"]);
+			if (command === "recent_document_details") return Promise.resolve([{path: "/shows/recent.show", lastSavedAt: 1700000000}, {path: "/Users/operator/Library/Application Support/de.tokenet.tosklight.visualizer/shows/Internal rig.show", lastSavedAt: 1700000000}]);
 			if (command === "open_document") return Promise.resolve({ ...document, name: "Recent rig" });
 			return base?.(command, args);
 		});
@@ -488,7 +488,10 @@ describe("the Viz editor window", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Load Recent Shows" }));
 		const modal = await screen.findByRole("dialog", { name: "Recent shows" });
         expect(within(modal).getByRole("table")).toBeInTheDocument();
-        expect(within(modal).getByText("<internal>/Internal rig.show")).toBeInTheDocument();
+        expect(within(modal).getByText("Internal")).toBeInTheDocument();
+        expect(within(modal).getByText("Internal rig.show")).toBeInTheDocument();
+        expect(within(modal).getByText("Internal rig")).toBeInTheDocument();
+        expect(within(modal).getByRole("columnheader", { name: "Last saved" })).toBeInTheDocument();
         expect(within(modal).queryByText("/Users/operator/Library/Application Support/de.tokenet.tosklight.visualizer/shows/Internal rig.show")).not.toBeInTheDocument();
         fireEvent.click(within(modal).getByRole("button", { name: "Close Recent shows" }));
         expect(screen.queryByRole("dialog", { name: "Recent shows" })).not.toBeInTheDocument();
@@ -527,7 +530,7 @@ describe("the Viz editor window", () => {
 			"New Show",
 			"Load Show from Disk",
 			"Load Recent Shows",
-			"Load from TOSca Light Control Desk",
+			"Load from ToskLight Control",
 			"Open Demo Show",
 			"Save As",
 			"Import MVR",
@@ -543,7 +546,7 @@ describe("the Viz editor window", () => {
 			within(section("Open"))
 				.getAllByRole("button")
 				.map((button) => button.textContent),
-		).toEqual(["Load Show from Disk", "Load Recent Shows", "Load from TOSca Light Control Desk"]);
+		).toEqual(["Load Show from Disk", "Load Recent Shows", "Load from ToskLight Control"]);
 		expect(
 			within(section("New Show"))
 				.getAllByRole("button")
@@ -640,6 +643,8 @@ describe("the Viz editor window", () => {
 				name: "front-of-house",
 				show: "Summer Tour",
 				address: "10.0.0.4:5000",
+                operatingSystem: "macos",
+                showLastLoadedAt: "2026-09-27T10:00:00Z",
 			},
 		];
 		const loaded = {
@@ -667,8 +672,11 @@ describe("the Viz editor window", () => {
 		});
 		renderApp();
 		await waitFor(() => expect(invoke).toHaveBeenCalledWith("discovered_desks"));
-		fireEvent.click(screen.getByRole("button", { name: "Load from TOSca Light Control Desk" }));
+		fireEvent.click(screen.getByRole("button", { name: "Load from ToskLight Control" }));
 		const load = await screen.findByRole("button", { name: "Load Summer Tour from front-of-house" });
+        expect(screen.getByText("10.0.0.4:5000 · macOS")).toBeInTheDocument();
+        expect(screen.getByRole("columnheader", {name:"Active Show"})).toBeInTheDocument();
+        expect(screen.getByText(`Last loaded: ${new Date("2026-09-27T10:00:00Z").toLocaleString()}`)).toBeInTheDocument();
         expect(screen.queryByText("Idle desk")).not.toBeInTheDocument();
         expect(screen.queryByLabelText("Desk host and port")).not.toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Add Desk" })).not.toBeInTheDocument();
@@ -745,7 +753,7 @@ describe("the Viz editor window", () => {
 
 	it("offers no desk when there is none on the network", async () => {
 		renderApp();
-		const get = screen.getByRole("button", { name: "Load from TOSca Light Control Desk" });
+		const get = screen.getByRole("button", { name: "Load from ToskLight Control" });
 		expect(get).toBeEnabled();
 		fireEvent.click(get);
 		expect(await screen.findByText("No announced control desks have an active show.")).toBeInTheDocument();

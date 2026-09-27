@@ -35,12 +35,16 @@ pub(super) async fn readiness(
 ) -> Result<Json<wire::RuntimeReadinessSnapshot>, ApiError> {
     let active_show_error = state.active_show.error();
     let recovery_mode = active_show_error.is_some();
-    if !recovery_mode && let Some(show) = state.active_show.current().as_ref() {
+    let active_show = state.active_show.current();
+    if !recovery_mode && let Some(show) = active_show.as_ref() {
         validate_show_file(&show.path).map_err(|error| ApiError::unavailable(error.to_string()))?;
     }
     Ok(Json(wire::RuntimeReadinessSnapshot {
         status: "ready".into(),
-        active_show: state.active_show.current().as_ref().map(|show| show.id.0),
+        active_show: active_show.as_ref().map(|show| show.id.0),
+        active_show_last_loaded_at: active_show
+            .as_ref()
+            .and_then(|show| show.last_loaded_at.clone()),
         active_show_error,
         recovery_mode,
         snapshot_revision: state.output.snapshot().revision,

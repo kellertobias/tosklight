@@ -1,7 +1,7 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Button, ModalFrame } from "@tosklight/ui";
 import { type ReactNode, useEffect, useState } from "react";
-import type { DeskPeer, DocumentSummary, MvrPreview } from "./document/session";
+import type { DeskPeer, DocumentSummary, MvrPreview, RecentDocument } from "./document/session";
 import { documentSession } from "./document/session";
 import { MvrImport } from "./MvrImport";
 import { useDiscoveredDesks } from "./useDiscoveredDesks";
@@ -14,6 +14,10 @@ function displayShowPath(path: string): string {
     const marker = "/de.tokenet.tosklight.visualizer/shows/";
     const internal = normalized.indexOf(marker);
     return internal >= 0 ? `<internal>/${normalized.slice(internal + marker.length)}` : path;
+}
+
+function displayOperatingSystem(value: string | null | undefined): string {
+    return ({ macos: "macOS", windows: "Windows", linux: "Linux" } as Record<string, string>)[value ?? ""] ?? value ?? "Not announced";
 }
 
 export function FileBar({
@@ -36,13 +40,13 @@ export function FileBar({
 	const [busy, setBusy] = useState(false);
 	const desks = useDiscoveredDesks();
 	const [browser, setBrowser] = useState<"recent" | "desks" | null>(null);
-	const [recent, setRecent] = useState<string[]>([]);
+	const [recent, setRecent] = useState<RecentDocument[]>([]);
 	const [sourceDesk, setSourceDesk] = useState<string | null>(null);
 	const activeDesks = desks.filter((desk) => Boolean(desk.show?.trim()));
 	useEffect(() => { void documentSession.sourceDesk().then(setSourceDesk).catch(() => setSourceDesk(null)); }, [document]);
 	async function browseRecent() {
 		setBrowser("recent");
-		setRecent(await documentSession.recentDocuments());
+		setRecent(await documentSession.recentDocumentDetails());
 		return null;
 	}
 	async function browseDesks() {
@@ -110,7 +114,7 @@ export function FileBar({
 						Load Show from Disk
 					</Button>
 					<Button disabled={busy} onClick={() => void run("Reading recent shows", browseRecent)}>Load Recent Shows</Button>
-					<Button disabled={busy} onClick={() => void run("Reading desk shows", browseDesks)}>Load from TOSca Light Control Desk</Button>
+					<Button disabled={busy} onClick={() => void run("Reading desk shows", browseDesks)}>Load from ToskLight Control</Button>
 				</section>
 				<section>
 					<h2>Save As</h2>
@@ -152,14 +156,14 @@ export function FileBar({
                     <output aria-live="polite" className="viz-editor-status">{status}</output>
 				{browser === "recent" ? <>
 					{recent.length === 0 && <p>No recent shows are available.</p>}
-					<table><thead><tr><th>Show</th><th>Location</th><th>Actions</th></tr></thead><tbody>
-					{recent.map((path) => <tr key={path}><td>{path.split(/[\\/]/).pop()}</td><td title={path}>{displayShowPath(path)}</td><td><Button aria-label={`Open ${displayShowPath(path)}`} disabled={busy} onClick={() => void run("Opening", async () => {
+					<table className="viz-recent-shows-table"><thead><tr><th>Show</th><th>Location</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>
+					{recent.map(({ path, lastSavedAt }) => <tr key={path}><td>{fileStem(path)}</td><td title={path}>{displayShowPath(path).startsWith("<internal>/") ? <><span className="viz-location-badge">Internal</span><span>{displayShowPath(path).slice(11)}</span></> : displayShowPath(path)}</td><td>{lastSavedAt ? new Date(lastSavedAt * 1000).toLocaleString() : "—"}</td><td><Button aria-label={`Open ${displayShowPath(path)}`} disabled={busy} onClick={() => void run("Opening", async () => {
 						const summary = await documentSession.open(path); onDocument(summary); onReloadProfiles(); onReloadDocument(); setBrowser(null); return `Opened ${summary.name}`;
 					})}>Open</Button></td></tr>)}
 					</tbody></table>
 				</> : <>
-					{activeDesks.length === 0 ? <p className="viz-show-browser-empty">No announced control desks have an active show.</p> : <table><thead><tr><th>Desk</th><th>Active show</th><th>Actions</th></tr></thead><tbody>
-					{activeDesks.map((desk) => <tr key={desk.instance}><td>{desk.name}</td><td>{desk.show}</td><td><Button aria-label={`Load ${desk.show} from ${desk.name}`} disabled={busy} onClick={() => void run("Loading", async () => {
+					{activeDesks.length === 0 ? <p className="viz-show-browser-empty">No announced control desks have an active show.</p> : <table className="viz-desk-shows-table"><thead><tr><th>Desk</th><th>Active Show</th><th>Actions</th></tr></thead><tbody>
+					{activeDesks.map((desk) => <tr key={desk.instance}><td><strong className="viz-show-browser-primary">{desk.name}</strong><span className="viz-show-browser-secondary">{desk.address} · {displayOperatingSystem(desk.operatingSystem)}</span></td><td><span className="viz-show-browser-primary">{desk.show}</span><span className="viz-show-browser-secondary">Last loaded: {desk.showLastLoadedAt ? new Date(desk.showLastLoadedAt).toLocaleString() : "—"}</span></td><td><Button aria-label={`Load ${desk.show} from ${desk.name}`} disabled={busy} onClick={() => void run("Loading", async () => {
 						const summary = await documentSession.loadFromDesk(desk.instance); onDocument(summary); onReloadProfiles(); onReloadDocument(); setSourceDesk(desk.name); setBrowser(null); return `Loaded ${summary.name} from ${desk.name}`;
 					})}>Load</Button></td></tr>)}
 					</tbody></table>}

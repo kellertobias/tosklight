@@ -37,7 +37,8 @@ async fn catalog(
     authenticate(&state, &headers)?;
     let client = client(Duration::from_secs(8)).map_err(ApiError::internal)?;
     let mut pending = tokio::task::JoinSet::new();
-    for peer in state.discovery.peers() {
+    let own_instance = state.discovery.own_instance();
+    for peer in remote_peers(state.discovery.peers(), own_instance.as_deref()) {
         let client = client.clone();
         pending.spawn(async move { project_peer(&client, peer).await });
     }
@@ -52,6 +53,14 @@ async fn catalog(
         browsing: state.discovery.is_browsing(),
         peers,
     }))
+}
+
+/// Filter by advertised identity, so another application on this machine remains available.
+fn remote_peers(peers: Vec<Peer>, own_instance: Option<&str>) -> Vec<Peer> {
+    peers
+        .into_iter()
+        .filter(|peer| !own_instance.is_some_and(|own| peer.instance.eq_ignore_ascii_case(own)))
+        .collect()
 }
 
 fn client(timeout: Duration) -> Result<reqwest::Client, String> {

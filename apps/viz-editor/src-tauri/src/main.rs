@@ -395,6 +395,7 @@ fn main() {
             session::preview_mvr,
             session::import_mvr,
             session::recent_documents,
+            session::recent_document_details,
             discovery::discovered_desks,
             discovery::show_library::load_from_desk,
             discovery::show_library::desk_shows,
