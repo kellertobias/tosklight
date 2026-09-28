@@ -2812,7 +2812,7 @@ test("pool cards stay square across width, height, resize, overflow, and applica
 	}
 });
 
-test("the Cuelist pool uses its target minimum and fills the available width", async ({
+test("the Cuelist pool uses the shared default minimum and fills the available width", async ({
 	page,
 }) => {
 	await page.setViewportSize({ width: 1280, height: 760 });
@@ -2821,7 +2821,7 @@ test("the Cuelist pool uses its target minimum and fills the available width", a
 	);
 	const grid = page.locator(".cuelist-pool-grid");
 	const firstCard = page.locator(".cuelist-card").first();
-	await expect(grid).toHaveCSS("--grid-cell-min", "100px");
+	await expect(grid).toHaveCSS("--grid-cell-min", "72px");
 	await expect(firstCard).toBeVisible();
 	const geometry = await grid.evaluate((node) => {
 		const style = getComputedStyle(node);
