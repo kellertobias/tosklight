@@ -1858,6 +1858,23 @@ button:not(:disabled):active {
 	stroke-width: 2;
 	pointer-events: none;
 }
+.shapers-iris-mask {
+	fill: none;
+	stroke: #071015;
+	opacity: 0.92;
+	pointer-events: none;
+}
+.shapers-special-side {
+	display: grid;
+	gap: 18px;
+	align-content: center;
+	min-height: 0;
+}
+.shapers-iris-fader {
+	display: grid;
+	justify-items: center;
+	height: min(220px, 40vh);
+}
 .shapers-special-help {
 	display: grid;
 	gap: 10px;
@@ -1916,6 +1933,13 @@ button:not(:disabled):active {
 	.shapers-special-help {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		font-size: 12px;
+	}
+	.shapers-special-side {
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 8px;
+	}
+	.shapers-iris-fader {
+		height: 160px;
 	}
 }
 .app-mark {

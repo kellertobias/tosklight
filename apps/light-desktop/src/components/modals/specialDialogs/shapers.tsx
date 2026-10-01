@@ -1,5 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useId, useRef, useState } from "react";
+import { VerticalTouchFader } from "../../control/VerticalTouchFader";
 
 export interface ShaperAttributeValue {
 	value: number;
@@ -40,6 +41,8 @@ const CENTER = VIEWBOX_SIZE / 2;
 const APERTURE_RADIUS = 108;
 const HANDLE_RADIUS = 24;
 const BLADE_WIDTH = 360;
+/** A closed iris still passes a pinpoint, matching the Visualizer's iris falloff. */
+const IRIS_MINIMUM_OPENING = 0.08;
 
 function clamp(value: number) {
 	return Math.max(0, Math.min(1, value));
@@ -122,6 +125,7 @@ export function ShapersDialog({
 	const rotationAttribute = attributes.includes("shaper.rotation")
 		? "shaper.rotation"
 		: null;
+	const irisAttribute = attributes.includes("iris") ? "iris" : null;
 	const [preview, setPreview] = useState<Record<string, number>>({});
 	const bladeGesture = useRef<BladeGesture | null>(null);
 	const rotationGesture = useRef<RotationGesture | null>(null);
@@ -131,6 +135,9 @@ export function ShapersDialog({
 			? preview[attribute]
 			: valueFor(values, attribute, fallback);
 	const moduleRotation = resolved(rotationAttribute, 0.5);
+	const iris = resolved(irisAttribute, 0);
+	const irisRadius =
+		APERTURE_RADIUS * (1 - iris * (1 - IRIS_MINIMUM_OPENING));
 
 	const write = (attribute: string | null, value: number, cyclic = false) => {
 		if (!attribute || disabled) return;
@@ -172,7 +179,7 @@ export function ShapersDialog({
 		);
 	};
 
-	if (!controls.length && !rotationAttribute)
+	if (!controls.length && !rotationAttribute && !irisAttribute)
 		return <p>No shaper attributes exist on the selected fixtures.</p>;
 
 	return (
@@ -284,6 +291,16 @@ export function ShapersDialog({
 						);
 					})}
 				</g>
+				{irisAttribute && (
+					<circle
+						className="shapers-iris-mask"
+						data-testid="shaper-iris-mask"
+						cx={CENTER}
+						cy={CENTER}
+						r={(APERTURE_RADIUS + irisRadius) / 2}
+						strokeWidth={APERTURE_RADIUS - irisRadius}
+					/>
+				)}
 				{rotationAttribute && (
 					<>
 						<circle
@@ -338,12 +355,31 @@ export function ShapersDialog({
 					</>
 				)}
 			</svg>
-			<div className="shapers-special-help">
-				<b>Shapers</b>
-				<span>Move a numbered blade inward to cut the beam.</span>
-				<span>Move it sideways to rotate that blade.</span>
-				{rotationAttribute && (
-					<span>Drag the outer ring to rotate the module.</span>
+			<div className="shapers-special-side">
+				<div className="shapers-special-help">
+					<b>Shapers</b>
+					{controls.length > 0 && (
+						<>
+							<span>Move a numbered blade inward to cut the beam.</span>
+							<span>Move it sideways to rotate that blade.</span>
+						</>
+					)}
+					{rotationAttribute && (
+						<span>Drag the outer ring to rotate the module.</span>
+					)}
+				</div>
+				{irisAttribute && (
+					<div
+						className={`shapers-iris-fader${values[irisAttribute]?.mixed ? " mixed" : ""}`}
+					>
+						<VerticalTouchFader
+							label="Iris"
+							value={iris * 100}
+							display={`${Math.round(iris * 100)}%${values[irisAttribute]?.mixed ? " mixed" : ""}`}
+							disabled={disabled}
+							onChange={(value) => write(irisAttribute, value / 100)}
+						/>
+					</div>
 				)}
 			</div>
 		</div>

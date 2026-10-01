@@ -95,11 +95,7 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Shapers | P3/E2 | **Blade 2** (`fixture.blade_2`) | — |
 | Shapers | P3/E3 | **Blade 3** (`fixture.blade_3`) | — |
 | Shapers | P3/E4 | **Blade 4** (`fixture.blade_4`) | — |
-| Shapers | P3/E5 | **Framing Macro** (`fixture.framing_macro`) | — |
-| Shapers | P3/E6 | **Framing Macro Speed** (`fixture.framing_macro_speed`) | — |
-| Shapers | P4/E1 | **Barndoor Macros** (`fixture.barndoor_macros`) | — |
-| Shapers | P4/E2 | **Barndoor Macro Speed** (`fixture.barndoor_macro_speed`) | — |
-| Shapers | P4/E3 | **Barndoor Module Rotation** (`fixture.barndoor_module_rotation`) | — |
+| Shapers | P3/E5 | **Barndoor Module Rotation** (`fixture.barndoor_module_rotation`) | — |
 | Focus | P1/E1 | **Focus** (`focus`) | — |
 | Focus | P1/E2 | **Zoom** (`zoom`) | — |
 | Focus | P1/E3 | **Softness** (`softness`) | — |
@@ -121,6 +117,10 @@ These are the defaults applied by **Restore recommended defaults**. A show may h
 | Control | P3/E5 | **Unused 4** (`fixture.unused_4`) | — |
 | Control | P3/E6 | **Unused 7** (`fixture.unused_7`) | — |
 | Control | P4/E1 | **Unused 8** (`fixture.unused_8`) | — |
+| Control | P4/E2 | **Framing Macro** (`fixture.framing_macro`) | — |
+| Control | P4/E3 | **Framing Macro Speed** (`fixture.framing_macro_speed`) | — |
+| Control | P4/E4 | **Barndoor Macros** (`fixture.barndoor_macros`) | — |
+| Control | P4/E5 | **Barndoor Macro Speed** (`fixture.barndoor_macro_speed`) | — |
 | Media | P1/E1 | **Media Folder** (`media.folder`) | — |
 | Media | P1/E2 | **Media File** (`media.file`) | — |
 | Media | P1/E3 | **Mask Folder** (`media.mask.folder`) | — |

@@ -19,6 +19,7 @@ import { selectedFixtureIdsSupportingAttribute } from "./specialColor";
 import {
 	availableSpecialDialogAttributes,
 	beamAttributesForFamily,
+	isShaperDialogAttribute,
 } from "./specialDialogs/beamShapers";
 import { ColorDialog, useColorDialog } from "./specialDialogs/color";
 import { ControlDialog } from "./specialDialogs/control";
@@ -105,7 +106,7 @@ export function SpecialDialogsModal() {
 	const shaperValues = useMemo(() => {
 		const result: Record<string, ShaperAttributeValue> = {};
 		for (const attribute of available) {
-			if (!attribute.startsWith("shaper.")) continue;
+			if (!isShaperDialogAttribute(attribute)) continue;
 			const entries =
 				activeProgrammerValues?.fixtureValues.filter(
 					(entry) =>
