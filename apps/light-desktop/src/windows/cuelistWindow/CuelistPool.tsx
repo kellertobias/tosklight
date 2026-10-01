@@ -225,9 +225,6 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		number: number,
 		playback: PlaybackDefinition | null,
 	) => {
-		// The right button's pointerdown started a hold, and its pointerup lands on
-		// the Settings dialog, so the hold would reopen Settings after it closes.
-		clearHold();
 		if (!playback) {
 			props.onMessage(
 				`Cuelist ${number} is empty · record it before opening settings.`,
@@ -545,7 +542,12 @@ function CuelistPoolCards({
 				onPointerDown={() => startHold(slot.number, slot.playback)}
 				onPointerEnd={clearHold}
 				onClick={() => click(slot.number, slot.playback)}
-				onContextMenu={() => openContextSettings(slot.number, slot.playback)}
+				onContextMenu={() => {
+					// The right button's pointerdown started a hold, and its pointerup lands
+					// on the Settings dialog, so the hold would reopen Settings after it closes.
+					clearHold();
+					openContextSettings(slot.number, slot.playback);
+				}}
 				onPreviewImage={() =>
 					slot.playback && onPreviewImage(slot.number, slot.playback)
 				}
