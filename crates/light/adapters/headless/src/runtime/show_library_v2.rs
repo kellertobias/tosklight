@@ -114,11 +114,7 @@ async fn execute_action(
         Action::SetDescription {
             show_id,
             description,
-        } => Ok(show_result(super::show_description::set_description(
-            state,
-            show_id,
-            &description,
-        )?)),
+        } => execute_set_description(state, show_id, &description),
         Action::SaveCopy {
             source_show_id,
             data_base64,
@@ -253,6 +249,18 @@ async fn execute_action(
             resolutions,
         } => execute_mvr_apply(state, headers, token, destination, resolutions).await,
     }
+}
+
+fn execute_set_description(
+    state: &AppState,
+    show_id: Uuid,
+    description: &str,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    Ok(show_result(super::show_description::set_description(
+        state,
+        show_id,
+        description,
+    )?))
 }
 
 async fn execute_import_from_desk(
