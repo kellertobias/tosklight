@@ -1885,44 +1885,24 @@ button:not(:disabled):active {
 	color: var(--cyan);
 	font-size: 20px;
 }
-.media-play-mode-dialog {
+/* The Media special dialog is the Built-Ins Media pane, full screen. */
+.modal-backdrop:has(> .media-special-dialog-card) {
+	padding: 12px;
+	overflow: hidden;
+}
+.modal-card.media-special-dialog-card {
+	width: 100%;
 	height: 100%;
+	max-width: none;
+	max-height: none;
+	margin: 0;
 	display: grid;
 	grid-template-rows: auto minmax(0, 1fr);
-	gap: 14px;
 }
-.media-play-mode-dialog > header {
-	display: flex;
-	align-items: baseline;
-	gap: 12px;
-}
-.media-play-mode-dialog > header b {
-	font-size: 20px;
-	color: var(--cyan);
-}
-.media-play-mode-dialog > header span {
-	color: var(--muted);
-}
-.media-play-mode-options {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-	grid-auto-rows: minmax(64px, auto);
-	align-content: start;
-	gap: 8px;
-}
-.media-play-mode-options .ui-button {
-	display: grid;
-	place-content: center;
-	gap: 4px;
-	min-height: 64px;
-}
-.media-play-mode-options .ui-button small {
-	color: var(--muted);
-}
-.media-play-mode-options .ui-button.active {
-	border-color: var(--cyan);
-	background: #153541;
-	color: var(--cyan);
+.media-special-dialog-card .special-dialog-content {
+	min-height: 0;
+	height: 100%;
+	overflow: hidden;
 }
 @media (max-width: 620px) {
 	.shapers-special-dialog {

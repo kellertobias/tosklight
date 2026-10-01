@@ -9,10 +9,6 @@ import {
 } from "../../features/programmerValues/useProgrammerValuesMutationQueue";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../state/AppContext";
-import {
-	type IndexedPresetChoice,
-	indexedPresetChoices,
-} from "../control/parameterControls/indexedPresetChoices";
 import { useParameterPreloadValues } from "../control/parameterControls/useParameterPreloadValues";
 import { useParameterProgrammerValues } from "../control/parameterControls/useParameterProgrammerValues";
 import { selectedFixtureIdsSupportingAttribute } from "./specialColor";
@@ -23,12 +19,12 @@ import {
 } from "./specialDialogs/beamShapers";
 import { ColorDialog, useColorDialog } from "./specialDialogs/color";
 import { ControlDialog } from "./specialDialogs/control";
-import { MediaPlayModeDialog, playModeMutations } from "./specialDialogs/media";
 import { PositionDialog, usePositionDialog } from "./specialDialogs/position";
 import {
 	type ShaperAttributeValue,
 	ShapersDialog,
 } from "./specialDialogs/shapers";
+import { MediaPaneWindow } from "../../windows/MediaPaneWindow";
 
 export {
 	type AuthoredFixtureControlChoice,
@@ -44,8 +40,9 @@ export function SpecialDialogsModal() {
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const family = state.specialDialogFamily;
 	const selection = useProgrammingSelectionView(state.specialDialogsOpen);
+	// The Media pane owns its own programmer writes.
 	const valueWrites = useProgrammerValuesMutationQueue(
-		state.specialDialogsOpen,
+		state.specialDialogsOpen && family !== "Media",
 	);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	const positionDialog = usePositionDialog(
@@ -91,14 +88,14 @@ export function SpecialDialogsModal() {
 		selectedFixtureIds,
 		null,
 		state.specialDialogsOpen &&
-			(family === "Shapers" || family === "Media") &&
+			family === "Shapers" &&
 			valueWrites.route !== "preload",
 	);
 	const preloadValues = useParameterPreloadValues(
 		selectedFixtureIds,
 		null,
 		state.specialDialogsOpen &&
-			(family === "Shapers" || family === "Media") &&
+			family === "Shapers" &&
 			valueWrites.route === "preload",
 	);
 	const activeProgrammerValues =
@@ -124,28 +121,6 @@ export function SpecialDialogsModal() {
 		}
 		return result;
 	}, [activeProgrammerValues, available]);
-	const playModeChoices = useMemo(
-		() =>
-			indexedPresetChoices(
-				selectedFixtures,
-				selectedFixtureIds,
-				"media.play_mode",
-			),
-		[selectedFixtures, selectedFixtureIds],
-	);
-	const playModeValue = useMemo(() => {
-		const values =
-			activeProgrammerValues?.fixtureValues.flatMap((entry) =>
-				entry.attribute === "media.play_mode" && entry.value.kind === "discrete"
-					? [entry.value.value]
-					: [],
-			) ?? [];
-		return {
-			value: values[0] ?? null,
-			mixed: values.some((value) => value !== values[0]),
-		};
-	}, [activeProgrammerValues]);
-
 	const close = () =>
 		dispatch({ type: "SET_MODAL", modal: "specialDialogsOpen", value: false });
 
@@ -168,11 +143,6 @@ export function SpecialDialogsModal() {
 			mutations,
 		);
 	};
-	const applyPlayMode = async (choice: IndexedPresetChoice) => {
-		const mutations = playModeMutations(choice, programmerFadeMillis);
-		await valueWrites.submitBarrier(mutations);
-	};
-
 	if (!state.specialDialogsOpen) return null;
 	const shaperAttributes =
 		family === "Shapers" ? beamAttributesForFamily(available, "Shapers") : [];
@@ -191,13 +161,19 @@ export function SpecialDialogsModal() {
 							? "position-special-dialog"
 							: family === "Shapers"
 								? "shapers-special-dialog-card"
-								: ""
+								: family === "Media"
+									? "media-special-dialog-card"
+									: ""
 					}`}
 				>
 					<ModalTitleBar title={`${family} · Special Dialog`} onClose={close} />
-					<p>{selectedFixtureIds.length} fixtures selected</p>
-					{!valueWrites.canWrite && (
-						<p className="modal-status">Programmer values loading…</p>
+					{family !== "Media" && (
+						<>
+							<p>{selectedFixtureIds.length} fixtures selected</p>
+							{!valueWrites.canWrite && (
+								<p className="modal-status">Programmer values loading…</p>
+							)}
+						</>
 					)}
 					<div className="special-dialog-content">
 						{family === "Position" && <PositionDialog {...positionDialog} />}
@@ -213,13 +189,7 @@ export function SpecialDialogsModal() {
 							/>
 						)}
 						{family === "Media" && (
-							<MediaPlayModeDialog
-								choices={playModeChoices}
-								value={playModeValue.value}
-								mixed={playModeValue.mixed}
-								disabled={!valueWrites.canWrite}
-								apply={applyPlayMode}
-							/>
+							<MediaPaneWindow builtIn />
 						)}
 						{family === "Control" && (
 							<ControlDialog selectedFixtureIds={selectedFixtureIds} />
