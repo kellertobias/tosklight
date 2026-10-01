@@ -90,16 +90,23 @@ export function resolvePoolGridColumns(
 	return columns;
 }
 
-function useMeasuredPoolColumns(sizing: PoolCardSizing | undefined) {
+/**
+ * Measures the grid to choose its columns from `sizing` (unless they are
+ * fixed) and to report whether its tiles are narrower than the default width.
+ */
+function useMeasuredPoolGrid(
+	sizing: PoolCardSizing | undefined,
+	fixedColumns: number | undefined,
+	fallbackWidth: number,
+) {
 	const [node, setNode] = useState<HTMLDivElement | null>(null);
-	const [columns, setColumns] = useState<number>();
-	const defaultWidth = sizing?.defaultWidth;
+	const [layout, setLayout] = useState<{ columns?: number; narrow: boolean }>(
+		{ narrow: false },
+	);
+	const defaultWidth = sizing?.defaultWidth ?? fallbackWidth;
 	const minimumWidth = sizing?.minimumWidth;
 	useLayoutEffect(() => {
-		if (!node || defaultWidth === undefined || minimumWidth === undefined) {
-			setColumns(undefined);
-			return;
-		}
+		if (!node) return;
 		const measure = () => {
 			const style = getComputedStyle(node);
 			const available =
@@ -107,12 +114,25 @@ function useMeasuredPoolColumns(sizing: PoolCardSizing | undefined) {
 				(Number.parseFloat(style.paddingLeft) || 0) -
 				(Number.parseFloat(style.paddingRight) || 0);
 			if (!(available > 0)) return;
-			setColumns(
-				resolvePoolGridColumns(
-					available,
-					Number.parseFloat(style.columnGap) || 0,
-					{ defaultWidth, minimumWidth },
-				),
+			const gap = Number.parseFloat(style.columnGap) || 0;
+			const columns =
+				fixedColumns === undefined && minimumWidth !== undefined
+					? resolvePoolGridColumns(available, gap, {
+							defaultWidth,
+							minimumWidth,
+						})
+					: undefined;
+			const visibleColumns =
+				fixedColumns ??
+				columns ??
+				Math.max(1, Math.floor((available + gap) / (defaultWidth + gap)));
+			const tileWidth =
+				(available - (visibleColumns - 1) * gap) / visibleColumns;
+			const narrow = tileWidth < defaultWidth - 0.5;
+			setLayout((current) =>
+				current.columns === columns && current.narrow === narrow
+					? current
+					: { columns, narrow },
 			);
 		};
 		measure();
@@ -120,8 +140,8 @@ function useMeasuredPoolColumns(sizing: PoolCardSizing | undefined) {
 		const observer = new ResizeObserver(measure);
 		observer.observe(node);
 		return () => observer.disconnect();
-	}, [node, defaultWidth, minimumWidth]);
-	return [setNode, columns] as const;
+	}, [node, fixedColumns, defaultWidth, minimumWidth]);
+	return [setNode, layout] as const;
 }
 
 export interface PoolWindowProps<SlotId extends string | number>
@@ -150,10 +170,12 @@ export function PoolGrid<SlotId extends string | number>({
 		...DEFAULT_POOL_GRID_APPEARANCE,
 		...appearance,
 	};
-	const [measureGrid, measuredColumns] = useMeasuredPoolColumns(
-		fixedColumns ? undefined : cardSizing,
+	const [measureGrid, measured] = useMeasuredPoolGrid(
+		cardSizing,
+		fixedColumns,
+		minimumCardWidth,
 	);
-	const columns = fixedColumns ?? measuredColumns;
+	const columns = fixedColumns ?? measured.columns;
 	const resolved = fillEmptySlots
 		? resolveFixedSlots(slots, slotCount, emptySlot)
 		: [...slots];
@@ -161,7 +183,7 @@ export function PoolGrid<SlotId extends string | number>({
 	return (
 		<ButtonGrid
 			ref={measureGrid}
-			className={`card-pool pool-window-grid pool-filled-${resolvedAppearance.filledStyle} ${className}`.trim()}
+			className={`card-pool pool-window-grid pool-filled-${resolvedAppearance.filledStyle} ${measured.narrow ? "pool-grid-narrow" : ""} ${className}`.trim()}
 			minimum={cardSizing?.defaultWidth ?? minimumCardWidth}
 			style={
 				{

@@ -1587,7 +1587,6 @@
 	border-radius: 7px;
 	background: color-mix(in srgb, var(--pool-card-resolved-color) 8%, var(--bg));
 	text-align: left;
-	container: pool-card / inline-size;
 }
 
 /*
@@ -1901,23 +1900,24 @@
 	opacity: 0.9;
 }
 
-/* A tile narrower than this shows its text at 80% of the regular size. */
-@container pool-card (max-width: 95px) {
-	.pool-card > .number {
-		font-size: 8px;
-	}
+/* Tiles narrower than the pool's default width show their text at 80%. */
+.pool-grid-narrow .pool-card > .number {
+	font-size: 8px;
+}
 
-	.pool-card-name {
-		font-size: 10.4px;
-	}
+.pool-grid-narrow .pool-card-name {
+	font-size: 10.4px;
+}
 
-	.pool-card-information > small,
-	.pool-card-information > em,
-	.pool-card-state-marker,
-	.pool-card-status,
-	.pool-card-workflow {
-		font-size: 7.2px;
-	}
+.pool-grid-narrow
+	:is(
+		.pool-card-information > small,
+		.pool-card-information > em,
+		.pool-card-state-marker,
+		.pool-card-status,
+		.pool-card-workflow
+	) {
+	font-size: 7.2px;
 }
 
 .pool-card-image {

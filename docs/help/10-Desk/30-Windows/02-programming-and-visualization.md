@@ -19,7 +19,7 @@ In **Desk Setup → Preferences → Defaults → Pools** or **Desktop settings**
 - **Default pool tile width (px)** is the width a pane fits its columns to. Tiles stretch to fill the row. The default is 72 px, allowing three columns in a pane about 225 px wide. Larger values show fewer columns.
 - **Minimum pool tile width (px)** only applies when stretching would make tiles wider than 1.5 times the default width. The pane then adds one more column, as long as its tiles stay at least this wide. The default is 56 px. A minimum above the default width is treated as the default width.
 
-Tiles narrower than 96 px show their text at a smaller size. Both values are saved with the desk layout; a layout saved with the earlier single tile width uses that value as its default width. A Group pane with an explicit **Columns** value keeps that column count.
+Tiles narrower than the default width show their text at 80% size. Both values are saved with the desk layout; a layout saved with the earlier single tile width uses that value as its default width. A Group pane with an explicit **Columns** value keeps that column count.
 
 ![Preset pool pane](../../assets/screenshots/panes/presets.png)
 
