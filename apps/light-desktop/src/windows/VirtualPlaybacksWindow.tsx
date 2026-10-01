@@ -88,55 +88,7 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 			ask: (cueNumber) => setRecordChoice({ slot, cueNumber }),
 		});
 	};
-	useControlSurfaceTarget({
-		id: `virtual-playback-settings:${paneId ?? "builtin"}`,
-		priority: 100,
-		accepts: (intent) =>
-			intent.type === "open_playback_settings" &&
-			intent.playback.addressing === "virtual" &&
-			intent.playback.pageNumber === controller.pageNumber &&
-			intent.playback.pageObjectId === (controller.pageObject?.id ?? null) &&
-			intent.playback.pageObjectRevision ===
-				(controller.pageObject?.revision ?? 0),
-		handle: (intent) => {
-			if (
-				intent.type !== "open_playback_settings" ||
-				intent.playback.addressing !== "virtual" ||
-				controller.pageNumber == null
-			)
-				return;
-			const playbackNumber = intent.playback.playbackNumber;
-			controller.openConfiguration(
-				controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null,
-				playbackNumber - virtualPlaybackBankStart(controller.pageNumber) + 1,
-			);
-		},
-	});
-	useEffect(() => {
-		const openRequested = (event: Event) => {
-			const detail = (
-				event as CustomEvent<{
-					addressing: string;
-					page?: number | null;
-					playback?: number | null;
-				}>
-			).detail;
-			if (
-				detail.addressing !== "virtual" ||
-				detail.page == null ||
-				detail.page !== controller.pageNumber ||
-				detail.playback == null
-			)
-				return;
-			controller.openConfiguration(
-				controller.page?.virtual_playbacks?.[String(detail.playback)] ?? null,
-				detail.playback - virtualPlaybackBankStart(detail.page) + 1,
-			);
-		};
-		window.addEventListener("light:playback-configuration", openRequested);
-		return () =>
-			window.removeEventListener("light:playback-configuration", openRequested);
-	}, [controller]);
+	useVirtualPlaybackSettingsRequests(paneId, controller);
 	if (!controller.authorityReady || controller.pageNumber == null)
 		return (
 			<section className="virtual-playback-pane" aria-busy="true">
@@ -261,6 +213,62 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 			)}
 		</section>
 	);
+}
+
+/** Opens playback settings asked for by a control surface or another window. */
+function useVirtualPlaybackSettingsRequests(
+	paneId: WindowProps["paneId"],
+	controller: ReturnType<typeof useVirtualPlaybackController>,
+) {
+	useControlSurfaceTarget({
+		id: `virtual-playback-settings:${paneId ?? "builtin"}`,
+		priority: 100,
+		accepts: (intent) =>
+			intent.type === "open_playback_settings" &&
+			intent.playback.addressing === "virtual" &&
+			intent.playback.pageNumber === controller.pageNumber &&
+			intent.playback.pageObjectId === (controller.pageObject?.id ?? null) &&
+			intent.playback.pageObjectRevision ===
+				(controller.pageObject?.revision ?? 0),
+		handle: (intent) => {
+			if (
+				intent.type !== "open_playback_settings" ||
+				intent.playback.addressing !== "virtual" ||
+				controller.pageNumber == null
+			)
+				return;
+			const playbackNumber = intent.playback.playbackNumber;
+			controller.openConfiguration(
+				controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null,
+				playbackNumber - virtualPlaybackBankStart(controller.pageNumber) + 1,
+			);
+		},
+	});
+	useEffect(() => {
+		const openRequested = (event: Event) => {
+			const detail = (
+				event as CustomEvent<{
+					addressing: string;
+					page?: number | null;
+					playback?: number | null;
+				}>
+			).detail;
+			if (
+				detail.addressing !== "virtual" ||
+				detail.page == null ||
+				detail.page !== controller.pageNumber ||
+				detail.playback == null
+			)
+				return;
+			controller.openConfiguration(
+				controller.page?.virtual_playbacks?.[String(detail.playback)] ?? null,
+				detail.playback - virtualPlaybackBankStart(detail.page) + 1,
+			);
+		};
+		window.addEventListener("light:playback-configuration", openRequested);
+		return () =>
+			window.removeEventListener("light:playback-configuration", openRequested);
+	}, [controller]);
 }
 
 function VirtualCueRecordChoiceModal(props: {
