@@ -284,12 +284,26 @@ export function exclusionFenceForSlot(
 		containingZones.some((zone) =>
 			zone.playbackNumbers.includes(virtualPlaybackNumber(page, neighbor)),
 		);
-	return {
+	const fence = {
 		top: slot <= columns || !sharesZoneWith(slot - columns),
 		right: column === columns - 1 || !sharesZoneWith(slot + 1),
 		bottom: slot + columns > cellCount || !sharesZoneWith(slot + columns),
 		left: column === 0 || !sharesZoneWith(slot - 1),
 	};
+	const innerCorners = (
+		[
+			["top-left", fence.top, fence.left, slot - columns - 1],
+			["top-right", fence.top, fence.right, slot - columns + 1],
+			["bottom-right", fence.bottom, fence.right, slot + columns + 1],
+			["bottom-left", fence.bottom, fence.left, slot + columns - 1],
+		] as const
+	)
+		.filter(
+			([, vertical, horizontal, diagonal]) =>
+				!vertical && !horizontal && !sharesZoneWith(diagonal),
+		)
+		.map(([corner]) => corner);
+	return innerCorners.length > 0 ? { ...fence, innerCorners } : fence;
 }
 
 function requestPlaybackUpdate(props: VirtualPlaybackGridProps, slot: number) {

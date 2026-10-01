@@ -24,7 +24,18 @@ export interface VirtualPlaybackExclusionFence {
 	right: boolean;
 	bottom: boolean;
 	left: boolean;
+	/**
+	 * Concave outline corners: both orthogonal neighbours share the zone but the
+	 * diagonal one does not, so neither neighbour's fence covers the turn.
+	 */
+	innerCorners?: readonly VirtualPlaybackFenceCorner[];
 }
+
+export type VirtualPlaybackFenceCorner =
+	| "top-left"
+	| "top-right"
+	| "bottom-right"
+	| "bottom-left";
 
 export interface VirtualPlaybackBoxViewModel {
 	/** Stable show-owned Virtual Playback number. `slot` remains the displayed cell. */
@@ -491,6 +502,9 @@ function VirtualPlaybackBox({
 				box.exclusionFence?.right && "exclusion-fence-right",
 				box.exclusionFence?.bottom && "exclusion-fence-bottom",
 				box.exclusionFence?.left && "exclusion-fence-left",
+				...(box.exclusionFence?.innerCorners ?? []).map(
+					(corner) => `exclusion-corner-${corner}`,
+				),
 				box.exclusionSelected && "exclusion-selected",
 				box.backgroundImageTransparent && "cue-preview-transparent",
 				box.poolPresentation?.className,

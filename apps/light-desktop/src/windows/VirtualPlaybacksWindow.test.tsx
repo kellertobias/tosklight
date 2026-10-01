@@ -39,6 +39,21 @@ describe("Virtual Playback exclusion-zone fences", () => {
 		});
 	});
 
+	it("fills the concave turn of an L-shaped zone", () => {
+		const zones = [{ playbackNumbers: [1001, 1002, 1005] }];
+
+		expect(exclusionFenceForSlot(zones, 1, 2, 3, 9)).toEqual({
+			top: true,
+			right: true,
+			bottom: false,
+			left: false,
+			innerCorners: ["bottom-left"],
+		});
+		expect(exclusionFenceForSlot(zones, 1, 1, 3, 9)?.innerCorners).toBe(
+			undefined,
+		);
+	});
+
 	it("treats overlapping zones as one connected visual boundary", () => {
 		const zones = [
 			{ playbackNumbers: [1001, 1002] },
