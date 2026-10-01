@@ -1,5 +1,6 @@
 import { Button } from "@tosklight/ui";
 import { EncoderGroupTabs } from "@tosklight/ui/encoders";
+import type { ReactNode } from "react";
 import type { DynamicDefinitionProjection } from "../../../api/types";
 import type { DynamicEditorTask } from "../../../features/dynamics/DynamicEditorSessionContext";
 import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
@@ -141,8 +142,11 @@ function SpecialDialogButton({
 
 export function ParameterFamilyTabs({
 	controller,
+	specialDialog,
 }: {
 	controller: ParameterController;
+	/** Optional presentation slot; normal desks keep the standard Special Dialog action. */
+	specialDialog?: ReactNode;
 }) {
 	const editor = useDynamicEditorSession();
 	const sectionSwitch = useLowerSectionSwitch();
@@ -168,7 +172,11 @@ export function ParameterFamilyTabs({
 			trailing={
 				<>
 					<AlignmentControl controller={controller} />
-					<SpecialDialogButton controller={controller} />
+					{specialDialog === undefined ? (
+						<SpecialDialogButton controller={controller} />
+					) : (
+						specialDialog
+					)}
 					<Button
 						aria-label="Dynamics"
 						className={`dynamics-family ${controller.dynamicsMode ? "active" : ""}`}

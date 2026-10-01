@@ -6,7 +6,7 @@ import {
 
 describe("Storybook actual source", () => {
 	it("maps every included story module to actual source", () => {
-		expect(actualSourceCoverage).toHaveLength(64);
+		expect(actualSourceCoverage).toHaveLength(65);
 		expect(
 			actualSourceCoverage.filter(
 				({ implementationPaths }) => implementationPaths.length === 0,
