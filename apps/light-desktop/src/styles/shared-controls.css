@@ -1875,6 +1875,14 @@ button:not(:disabled):active {
 	justify-items: center;
 	height: min(220px, 40vh);
 }
+/* Fixed width: the value text must never resize the fader while it moves. */
+.shapers-iris-fader .vertical-touch-fader-stack {
+	width: 88px;
+}
+.shapers-iris-fader .vertical-touch-fader strong {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
 .shapers-special-help {
 	display: grid;
 	gap: 10px;

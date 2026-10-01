@@ -375,7 +375,8 @@ export function ShapersDialog({
 						<VerticalTouchFader
 							label="Iris"
 							value={iris * 100}
-							display={`${Math.round(iris * 100)}%${values[irisAttribute]?.mixed ? " mixed" : ""}`}
+							display={`${Math.round(iris * 100)}%`}
+							mode={values[irisAttribute]?.mixed ? "Mixed" : undefined}
 							disabled={disabled}
 							onChange={(value) => write(irisAttribute, value / 100)}
 						/>
