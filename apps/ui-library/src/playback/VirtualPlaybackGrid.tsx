@@ -300,6 +300,7 @@ function VirtualizedPlaybackGrid({
 			style={
 				{
 					"--grid-cell-min": `${minimumBoxWidth}px`,
+					"--button-grid-gap": `${VIRTUAL_GRID_GAP}px`,
 					display: "block",
 					height: "100%",
 					minHeight: 0,
@@ -509,7 +510,7 @@ function VirtualPlaybackBox({
 					: actionHeld
 						? `${box.actionLabel ?? "Action"} held`
 						: box.exclusionSelected
-							? "Exclusion selected"
+							? "Region selected"
 							: undefined,
 				workflow:
 					box.offTarget && assigned

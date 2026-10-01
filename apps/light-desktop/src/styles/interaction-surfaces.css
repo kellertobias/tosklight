@@ -453,8 +453,9 @@
 	color: var(--amber);
 }
 .virtual-playback-grid {
+	--button-grid-gap: 8px;
 	display: grid;
-	gap: 8px;
+	gap: var(--button-grid-gap);
 	height: 100%;
 	min-height: 0;
 	padding: 8px;

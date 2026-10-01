@@ -409,8 +409,24 @@
 }
 .virtual-playback-title-actions {
 	display: flex;
+	min-width: 0;
 	align-items: center;
 	gap: 6px;
+}
+.virtual-playback-title-actions > .ui-button {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* The shared toolbar chrome clamps pane titles in narrow headers; the Virtual
+ * Playbacks title stays whole and its Solo Region actions shrink instead. */
+@container (max-width: 700px) {
+	.ui-window-header:has(.pane-chrome-toolbar-target > .virtual-playback-title-actions)
+		.ui-window-title {
+		max-width: none;
+		overflow: visible;
+	}
 }
 .virtual-playback-pane-error {
 	position: absolute;

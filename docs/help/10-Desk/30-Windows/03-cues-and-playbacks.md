@@ -161,7 +161,7 @@ A cell displays its cell number, assigned playback name, and action. When that p
 
 Configure a cell exactly like a regular Playback: right-click the Virtual Playback, or press `[SET]` and then press the cell. Both paths open the standard Playback Configuration modal for that one-button, faderless target. Virtual Playbacks additionally support an icon or image background.
 
-Pane Settings keeps grid and page configuration in **Virtual Playbacks** and zone management in **Exclusion Zones**. Playback colors remain part of the assigned Playback rather than a separate pane-level color mode.
+Pane Settings keeps grid and page configuration in **Virtual Playbacks** and Solo Region management in **Solo Regions**. Playback colors remain part of the assigned Playback rather than a separate pane-level color mode.
 
 Virtual actions carry their stable playback number and validated page qualifier. During
 Preload, **Preload virtual playback actions** in Desk Setup decides whether they

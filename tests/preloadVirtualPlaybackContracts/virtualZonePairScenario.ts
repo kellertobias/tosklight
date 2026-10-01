@@ -97,10 +97,10 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 			.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2 Touring B/ })
 			.click();
 		await page.keyboard.up("Shift");
-		await pane.getByRole("button", { name: "Create Exclusion Zone" }).click();
-		const create = page.getByRole("dialog", { name: "Create Exclusion Zone" });
-		await create.getByLabel("Zone name").fill("Touring pair");
-		await create.getByRole("button", { name: "Create zone" }).click();
+		await pane.getByRole("button", { name: "Create Solo Region" }).click();
+		const create = page.getByRole("dialog", { name: "Create Solo Region" });
+		await create.getByLabel("Region name").fill("Touring pair");
+		await create.getByRole("button", { name: "Create region" }).click();
 		await expect(create).toBeHidden();
 		state.savedZones = await normalizedVirtualZones(api);
 		state.creationState = [

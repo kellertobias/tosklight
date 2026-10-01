@@ -47,7 +47,7 @@ Playback addresses deliberately distinguish current-page and explicit-page opera
 
 Changing a page in the application changes where the same `page-playback` packet is routed. It
 does not change an explicit physical or Virtual address. A Virtual number is never an alias for
-physical Playback 1–1000 or an old page slot. Its assignment, runtime, and exclusion zones are
+physical Playback 1–1000 or an old page slot. Its assignment, runtime, and Solo Regions are
 shared across the desk; the path records the action source but does not select a separate copy.
 
 ### Dynamics

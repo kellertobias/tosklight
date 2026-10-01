@@ -3530,15 +3530,15 @@ async function createVirtualPlaybackExclusionZone(
 		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackZoneSelectionHoldFrames,
 	);
 	await desk.click(
-		pane.getByRole("button", { name: "Create Exclusion Zone", exact: true }),
+		pane.getByRole("button", { name: "Create Solo Region", exact: true }),
 	);
-	const dialog = page.getByRole("dialog", { name: "Create Exclusion Zone" });
+	const dialog = page.getByRole("dialog", { name: "Create Solo Region" });
 	await expect(dialog).toBeVisible();
 	await demoPause(
 		page,
 		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackZoneDialogHoldFrames,
 	);
-	const zoneName = dialog.getByLabel("Zone name");
+	const zoneName = dialog.getByLabel("Region name");
 	await zoneName.fill("");
 	await zoneName.pressSequentially(name, { delay: 35 });
 	await demoPause(
@@ -3546,7 +3546,7 @@ async function createVirtualPlaybackExclusionZone(
 		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackChoiceHoldFrames,
 	);
 	await desk.click(
-		dialog.getByRole("button", { name: "Create zone", exact: true }),
+		dialog.getByRole("button", { name: "Create region", exact: true }),
 	);
 	await expect(dialog).toBeHidden();
 	for (const cell of cells)

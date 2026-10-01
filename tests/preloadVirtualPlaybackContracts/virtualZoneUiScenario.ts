@@ -47,10 +47,10 @@ const virtualZoneUiSupplement = async ({
 	await page.keyboard.up("Shift");
 	expect(await activeVirtualPlayback(api, 1, 1001)).toBeUndefined();
 	expect(await activeVirtualPlayback(api, 1, 1002)).toBeUndefined();
-	await pane.getByRole("button", { name: "Create Exclusion Zone" }).click();
-	const create = page.getByRole("dialog", { name: "Create Exclusion Zone" });
-	await create.getByLabel("Zone name").fill("Touring pair");
-	await create.getByRole("button", { name: "Create zone" }).click();
+	await pane.getByRole("button", { name: "Create Solo Region" }).click();
+	const create = page.getByRole("dialog", { name: "Create Solo Region" });
+	await create.getByLabel("Region name").fill("Touring pair");
+	await create.getByRole("button", { name: "Create region" }).click();
 	await expect(create).toBeHidden();
 	await expect
 		.poll(async () => {
@@ -90,17 +90,17 @@ const virtualZoneUiSupplement = async ({
 	await settings.getByRole("radio", { name: "Pinned", exact: true }).click();
 	await settings.getByLabel("Pinned page").fill("2");
 	await settings
-		.getByRole("tab", { name: "Exclusion Zones", exact: true })
+		.getByRole("tab", { name: "Solo Regions", exact: true })
 		.click();
 	await settings.getByLabel("Name for Touring pair").fill("Touring alternates");
 	await settings.getByRole("button", { name: "Save name" }).click();
-	await settings.getByRole("button", { name: "Edit Zone" }).click();
+	await settings.getByRole("button", { name: "Edit Region" }).click();
 	await expect(settings).toBeHidden();
 	await pane
 		.getByRole("button", { name: /Virtual playback 1303 page 2 cell 3 empty/ })
 		.click();
 	await pane
-		.getByRole("button", { name: "Update Exclusion Zone", exact: true })
+		.getByRole("button", { name: "Update Solo Region", exact: true })
 		.click();
 	await pane.getByRole("button", { name: "Settings", exact: true }).click();
 	settings = page.getByRole("dialog", { name: "Pane Settings" });
@@ -110,7 +110,7 @@ const virtualZoneUiSupplement = async ({
 	await settings.getByLabel("Rows").fill("1");
 	await settings.getByLabel("Columns").fill("2");
 	await settings
-		.getByRole("tab", { name: "Exclusion Zones", exact: true })
+		.getByRole("tab", { name: "Solo Regions", exact: true })
 		.click();
 	await expect(
 		settings.getByText(/Virtual Playbacks 1001, 1002, 1303/),
@@ -142,7 +142,7 @@ const virtualZoneUiSupplement = async ({
 	).toBeChecked();
 	await expect(settings.getByLabel("Pinned page")).toHaveValue("2");
 	await settings
-		.getByRole("tab", { name: "Exclusion Zones", exact: true })
+		.getByRole("tab", { name: "Solo Regions", exact: true })
 		.click();
 	await expect(settings.getByLabel("Name for Touring alternates")).toHaveValue(
 		"Touring alternates",
@@ -150,7 +150,7 @@ const virtualZoneUiSupplement = async ({
 	await expect(
 		settings.getByText(/Virtual Playbacks 1001, 1002, 1303/),
 	).toBeVisible();
-	await settings.getByRole("button", { name: "Delete zone" }).click();
+	await settings.getByRole("button", { name: "Delete region" }).click();
 	await expect
 		.poll(async () => (await virtualZoneSnapshot(api)).zones)
 		.toEqual([]);
@@ -174,10 +174,10 @@ const virtualZoneUiSupplement = async ({
 	await pane.getByRole("button", { name: "Settings", exact: true }).click();
 	settings = page.getByRole("dialog", { name: "Pane Settings" });
 	await settings
-		.getByRole("tab", { name: "Exclusion Zones", exact: true })
+		.getByRole("tab", { name: "Solo Regions", exact: true })
 		.click();
 	await expect(
-		settings.getByText("No exclusion zones are configured for this show."),
+		settings.getByText("No Solo Regions are configured for this show."),
 	).toBeVisible();
 };
 

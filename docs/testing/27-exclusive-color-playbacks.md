@@ -25,7 +25,7 @@ Automated in `tests/113-semantic-exclusive-color-playbacks.spec.ts`.
 2. Store the five Color presets for the group.
 3. For each preset, record one Cue on its own Playback with the group at full on that preset.
    Name each Playback after its colour and give it a single Toggle button.
-4. Assign the five Playbacks to Virtual Playback cells 1–5 and put all five in one exclusion zone.
+4. Assign the five Playbacks to Virtual Playback cells 1–5 and put all five in one Solo Region.
 5. Press each cell in turn. After each press:
    - only that Virtual Playback is On;
    - the Sunstrip's first and last pixel, both PARs and the mover all show that colour on their

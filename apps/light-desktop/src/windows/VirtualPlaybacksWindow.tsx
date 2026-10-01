@@ -315,7 +315,7 @@ export function VirtualPlaybackTitleActions(props: {
 						}
 						onClick={props.onUpdateZone}
 					>
-						Update Exclusion Zone
+						Update Solo Region
 					</Button>
 					<Button onClick={props.onCancelZone}>Cancel Edit</Button>
 				</>
@@ -325,15 +325,15 @@ export function VirtualPlaybackTitleActions(props: {
 					<Button
 						className="primary"
 						onClick={() =>
-							props.onCreateZone(`Exclusion Zone ${props.zoneCount + 1}`)
+							props.onCreateZone(`Solo Region ${props.zoneCount + 1}`)
 						}
 					>
-						Create Exclusion Zone
+						Create Solo Region
 					</Button>
 				)
 			)}
 			{!props.editing && props.selectedSlots.length > 0 && (
-				<Button onClick={props.onCancelZone}>Cancel Zone Selection</Button>
+				<Button onClick={props.onCancelZone}>Cancel Region Selection</Button>
 			)}
 		</span>
 	);
@@ -361,20 +361,20 @@ function CreateZoneModal(props: {
 					className="nested-modal virtual-playback-zone-modal"
 					role="dialog"
 					aria-modal="true"
-					aria-label="Create Exclusion Zone"
+					aria-label="Create Solo Region"
 				>
 					<ModalTitleBar
-						title="Create Exclusion Zone"
-						closeLabel="Close Create Exclusion Zone"
+						title="Create Solo Region"
+						closeLabel="Close Create Solo Region"
 						onClose={props.onClose}
 					/>
 					<p>
 						Virtual Playbacks {props.playbackNumbers.join(", ")} will be
-						mutually exclusive. Creating the zone does not operate any playback.
+						mutually exclusive. Creating the region does not operate any playback.
 					</p>
 					<FormLayout labelPlacement="side">
 						<TextField
-							label="Zone name"
+							label="Region name"
 							autoFocus
 							maxLength={80}
 							value={draftName}
@@ -395,7 +395,7 @@ function CreateZoneModal(props: {
 							}
 							onClick={() => props.onCreate(draftName)}
 						>
-							{props.saving ? "Creating…" : "Create zone"}
+							{props.saving ? "Creating…" : "Create region"}
 						</Button>
 					</footer>
 					{props.error && <p className="modal-error">{props.error}</p>}
