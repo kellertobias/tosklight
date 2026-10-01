@@ -5,7 +5,9 @@ import {
 	PoolGrid,
 	type PoolSlotViewModel,
 	type ResolvedPoolPresentation,
+	type PoolCardSizing,
 } from "@tosklight/ui/pools";
+import { poolCardSizing } from "../../state/reducerHelpers";
 import {
 	WindowHeader,
 	WindowScrollArea,
@@ -473,7 +475,7 @@ function resolveCuelistPresentation({
 function CuelistPoolCards({
 	slots,
 	search,
-	minimumCardWidth,
+	cardSizing,
 	configuration,
 	showId,
 	surfaceKey,
@@ -492,7 +494,7 @@ function CuelistPoolCards({
 }: {
 	slots: readonly CuelistPoolItem[];
 	search: string;
-	minimumCardWidth: number;
+	cardSizing: PoolCardSizing;
 	configuration: PoolPresentationConfiguration;
 	showId: string;
 	surfaceKey: string;
@@ -562,7 +564,7 @@ function CuelistPoolCards({
 		>
 			<PoolGrid
 				className="cuelist-pool-grid"
-				minimumCardWidth={minimumCardWidth}
+				cardSizing={cardSizing}
 				slots={poolSlots}
 				slotCount={search ? undefined : 1000}
 				fillEmptySlots={!search}
@@ -702,7 +704,7 @@ export function CuelistPool(props: CuelistPoolProps) {
 			<CuelistPoolCards
 				slots={filteredPool}
 				search={search}
-				minimumCardWidth={state.poolGridMinimumWidth}
+				cardSizing={poolCardSizing(state)}
 				configuration={poolPresentation}
 				showId={showId}
 				surfaceKey={surfaceKey}

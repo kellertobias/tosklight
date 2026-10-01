@@ -1,6 +1,10 @@
 import type { AppState } from "../../types";
 import type { Action } from "../appActions";
-import { clamp, normalizePoolGridMinimumWidth } from "../reducerHelpers";
+import {
+	clamp,
+	normalizePoolGridDefaultWidth,
+	normalizePoolGridMinimumWidth,
+} from "../reducerHelpers";
 
 export function reduceControls(
 	state: AppState,
@@ -24,6 +28,14 @@ export function reduceControls(
 			return { ...state, presetFamily: action.family };
 		case "SET_PRESET_POOL_COLORS":
 			return { ...state, presetPoolColors: action.value };
+		case "SET_POOL_GRID_DEFAULT_WIDTH":
+			return {
+				...state,
+				poolGridDefaultWidth: normalizePoolGridDefaultWidth(
+					action.value,
+					state.poolGridDefaultWidth,
+				),
+			};
 		case "SET_POOL_GRID_MINIMUM_WIDTH":
 			return {
 				...state,

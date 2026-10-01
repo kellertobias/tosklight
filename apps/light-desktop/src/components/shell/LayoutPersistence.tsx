@@ -21,6 +21,7 @@ function persistedWindowSettings(state: AppState) {
 		lastBuiltIn: state.lastBuiltIn,
 		presetFamily: state.presetFamily,
 		presetPoolColors: state.presetPoolColors,
+		poolGridDefaultWidth: state.poolGridDefaultWidth,
 		poolGridMinimumWidth: state.poolGridMinimumWidth,
 		playbackColumns: state.playbackColumns,
 		playbackRows: state.playbackRows,

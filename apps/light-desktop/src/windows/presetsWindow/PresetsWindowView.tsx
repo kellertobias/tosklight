@@ -13,6 +13,7 @@ import {
 	type PoolColorMode,
 	PoolGrid,
 	type PoolSlotViewModel,
+	type PoolCardSizing,
 } from "@tosklight/ui/pools";
 import {
 	WindowHeader,
@@ -94,7 +95,7 @@ export function PresetWindowHeader({
 interface PresetCardGridProps {
 	cards: readonly (PresetCard | null)[];
 	family: PresetFamily;
-	minimumCardWidth: number;
+	cardSizing: PoolCardSizing;
 	customizations: Record<string, PresetCustomization>;
 	poolPresentation: PoolPresentationConfiguration;
 	showId: string;
@@ -115,7 +116,7 @@ interface PresetCardGridProps {
 export function PresetCardGrid({
 	cards,
 	family,
-	minimumCardWidth,
+	cardSizing,
 	customizations,
 	poolPresentation,
 	showId,
@@ -148,7 +149,7 @@ export function PresetCardGrid({
 	return (
 		<WindowScrollArea>
 			<PoolGrid
-				minimumCardWidth={minimumCardWidth}
+				cardSizing={cardSizing}
 				slots={slots}
 				slotCount={cards.length}
 				emptySlot={(index) => ({

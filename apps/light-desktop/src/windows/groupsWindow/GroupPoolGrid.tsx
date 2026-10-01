@@ -2,6 +2,7 @@ import {
 	PoolGrid,
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
+import { poolCardSizing } from "../../state/reducerHelpers";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { type MutableRefObject, useRef } from "react";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
@@ -284,7 +285,7 @@ export function GroupPoolGrid({
 		<WindowScrollArea>
 			<PoolGrid
 				columns={columns}
-				minimumCardWidth={state.poolGridMinimumWidth}
+				cardSizing={poolCardSizing(state)}
 				slots={slots}
 				slotCount={cards.length}
 				emptySlot={(index) => ({

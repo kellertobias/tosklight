@@ -1,4 +1,5 @@
 import { INDIVIDUAL_POOL_COLOR_FALLBACK } from "@tosklight/ui/pools";
+import { poolCardSizing } from "../state/reducerHelpers";
 import { useMemo, useState } from "react";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import { requestUpdateTarget } from "../components/control/updateWorkflow";
@@ -331,7 +332,7 @@ function usePresetsWindowModel({
 		showId,
 		paneId,
 		legacyColorsEnabled,
-		gridMinimumWidth: state.poolGridMinimumWidth,
+		cardSizing: poolCardSizing(state),
 		cards,
 		fixtureCounts,
 		customizations,
@@ -376,7 +377,7 @@ export function PresetsWindow(props: WindowProps) {
 			<PresetCardGrid
 				cards={model.cards}
 				family={model.family}
-				minimumCardWidth={model.gridMinimumWidth}
+				cardSizing={model.cardSizing}
 				customizations={model.customizations}
 				poolPresentation={model.poolPresentation}
 				showId={model.showId}

@@ -14,6 +14,7 @@ import { ShowObjectsStateProvider } from "../features/showObjects/ShowObjectsSta
 import { ShowObjectsStore } from "../features/showObjects/store";
 import type { PresetFamily } from "../presetFamilies";
 import { initialState } from "../state/initialState";
+import { poolCardSizing } from "../state/reducerHelpers";
 import { GroupPoolHeader } from "./GroupsWindow";
 import { GroupPoolGrid } from "./groupsWindow/GroupPoolGrid";
 import type { Group } from "./groupsWindow/model";
@@ -209,7 +210,7 @@ export function MarketingPresetWindow({
 				<PresetCardGrid
 					cards={cards}
 					family={family}
-					minimumCardWidth={initialState.poolGridMinimumWidth}
+					cardSizing={poolCardSizing(initialState)}
 					customizations={{}}
 					poolPresentation={defaultPoolPresentation()}
 					showId={SHOW_ID}

@@ -2,7 +2,9 @@ import {
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
+	type PoolCardSizing,
 } from "@tosklight/ui/pools";
+import { poolCardSizing } from "../state/reducerHelpers";
 import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createLightApi } from "../api/client/api";
@@ -242,7 +244,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 			)}
 			<WindowScrollArea>
 				<MacroPool
-					minimumCardWidth={state.poolGridMinimumWidth}
+					cardSizing={poolCardSizing(state)}
 					macros={macros}
 					slots={slots}
 					byNumber={byNumber}
@@ -266,7 +268,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 }
 
 function MacroPool({
-	minimumCardWidth,
+	cardSizing,
 	macros,
 	slots,
 	byNumber,
@@ -282,7 +284,7 @@ function MacroPool({
 	onRun,
 	onOff,
 }: {
-	minimumCardWidth: number;
+	cardSizing: PoolCardSizing;
 	macros: MacroObject[];
 	slots: PoolSlotViewModel<number>[];
 	byNumber: Map<number, MacroObject>;
@@ -300,7 +302,7 @@ function MacroPool({
 }) {
 	return (
 		<PoolGrid
-			minimumCardWidth={minimumCardWidth}
+			cardSizing={cardSizing}
 			slots={slots}
 			slotCount={Math.max(
 				MACRO_POOL_SIZE,

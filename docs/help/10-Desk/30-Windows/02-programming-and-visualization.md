@@ -14,7 +14,12 @@ Each tile shows its number, title, family, icon or artwork, and how many fixture
 
 The full Presets window additionally exposes family buttons and pool-color settings in its header. With Set armed, tapping a preset opens its local button presentation settings: title, icon, and button color. Those presentation choices are stored in desk data, scoped to the active show identity, and do not change the stored preset values.
 
-In **Desk Setup → Preferences → Defaults → Pools** or **Desktop settings**, **Minimum pool tile width (px)** controls the square tile size for Groups, Presets, Cuelists, Macros, and Dynamics pools. The default is 72 px, allowing three columns in a pane about 225 px wide. Larger values show fewer columns. This display preference is saved with the desk layout. A Group pane with an explicit **Columns** value keeps that column count.
+In **Desk Setup → Preferences → Defaults → Pools** or **Desktop settings**, two values control the square tile size for Groups, Presets, Cuelists, Macros, and Dynamics pools:
+
+- **Default pool tile width (px)** is the width a pane fits its columns to. Tiles stretch to fill the row. The default is 72 px, allowing three columns in a pane about 225 px wide. Larger values show fewer columns.
+- **Minimum pool tile width (px)** only applies when stretching would make tiles wider than 1.5 times the default width. The pane then adds one more column, as long as its tiles stay at least this wide. The default is 56 px. A minimum above the default width is treated as the default width.
+
+Tiles narrower than 96 px show their text at a smaller size. Both values are saved with the desk layout; a layout saved with the earlier single tile width uses that value as its default width. A Group pane with an explicit **Columns** value keeps that column count.
 
 ![Preset pool pane](../../assets/screenshots/panes/presets.png)
 

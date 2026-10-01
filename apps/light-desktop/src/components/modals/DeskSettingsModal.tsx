@@ -83,8 +83,20 @@ export function DeskSettingsModal() {
 								}
 							/>
 							<NumberField
-								label="Minimum pool tile width (px)"
+								label="Default pool tile width (px)"
 								min="56"
+								max="320"
+								value={state.poolGridDefaultWidth}
+								onChange={(event) =>
+									dispatch({
+										type: "SET_POOL_GRID_DEFAULT_WIDTH",
+										value: Number(event.target.value),
+									})
+								}
+							/>
+							<NumberField
+								label="Minimum pool tile width (px)"
+								min="48"
 								max="320"
 								value={state.poolGridMinimumWidth}
 								onChange={(event) =>

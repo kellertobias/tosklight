@@ -5,6 +5,8 @@ import {
 	isValidElement,
 	type ReactElement,
 	type ReactNode,
+	useLayoutEffect,
+	useState,
 } from "react";
 import { ButtonGrid } from "../grids";
 import type { TitleActionGroup } from "../common";
@@ -29,6 +31,8 @@ export interface PoolGridProps<SlotId extends string | number> {
 	fillEmptySlots?: boolean;
 	className?: string;
 	minimumCardWidth?: number;
+	/** Measured sizing; overrides `minimumCardWidth` unless `columns` is fixed. */
+	cardSizing?: PoolCardSizing;
 	columns?: number;
 	appearance?: Partial<PoolGridAppearance>;
 	onSlotClick?(id: SlotId, index: number): void;
@@ -54,6 +58,72 @@ export const DEFAULT_POOL_GRID_APPEARANCE: Readonly<PoolGridAppearance> = {
 
 export const DEFAULT_POOL_CARD_MINIMUM_WIDTH = 100;
 
+/** Tiles wider than this multiple of the default width take an extra column. */
+export const POOL_CARD_STRETCH_LIMIT = 1.5;
+
+export interface PoolCardSizing {
+	defaultWidth: number;
+	minimumWidth: number;
+}
+
+/**
+ * Columns fit at the default width and stretch to fill the row. Only when that
+ * stretch exceeds the limit does one more column squeeze in, as long as its
+ * tiles stay at or above the minimum width.
+ */
+export function resolvePoolGridColumns(
+	available: number,
+	gap: number,
+	{ defaultWidth, minimumWidth }: PoolCardSizing,
+): number {
+	const tileWidth = (columns: number) =>
+		(available - (columns - 1) * gap) / columns;
+	let columns = Math.max(
+		1,
+		Math.floor((available + gap) / (defaultWidth + gap)),
+	);
+	while (
+		tileWidth(columns) > defaultWidth * POOL_CARD_STRETCH_LIMIT &&
+		tileWidth(columns + 1) >= Math.min(minimumWidth, defaultWidth)
+	)
+		columns += 1;
+	return columns;
+}
+
+function useMeasuredPoolColumns(sizing: PoolCardSizing | undefined) {
+	const [node, setNode] = useState<HTMLDivElement | null>(null);
+	const [columns, setColumns] = useState<number>();
+	const defaultWidth = sizing?.defaultWidth;
+	const minimumWidth = sizing?.minimumWidth;
+	useLayoutEffect(() => {
+		if (!node || defaultWidth === undefined || minimumWidth === undefined) {
+			setColumns(undefined);
+			return;
+		}
+		const measure = () => {
+			const style = getComputedStyle(node);
+			const available =
+				node.clientWidth -
+				(Number.parseFloat(style.paddingLeft) || 0) -
+				(Number.parseFloat(style.paddingRight) || 0);
+			if (!(available > 0)) return;
+			setColumns(
+				resolvePoolGridColumns(
+					available,
+					Number.parseFloat(style.columnGap) || 0,
+					{ defaultWidth, minimumWidth },
+				),
+			);
+		};
+		measure();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(measure);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, [node, defaultWidth, minimumWidth]);
+	return [setNode, columns] as const;
+}
+
 export interface PoolWindowProps<SlotId extends string | number>
 	extends PoolGridProps<SlotId> {
 	title: ReactNode;
@@ -69,7 +139,8 @@ export function PoolGrid<SlotId extends string | number>({
 	fillEmptySlots = true,
 	className = "",
 	minimumCardWidth = DEFAULT_POOL_CARD_MINIMUM_WIDTH,
-	columns,
+	cardSizing,
+	columns: fixedColumns,
 	appearance,
 	onSlotClick,
 	onSlotPressHold,
@@ -79,14 +150,19 @@ export function PoolGrid<SlotId extends string | number>({
 		...DEFAULT_POOL_GRID_APPEARANCE,
 		...appearance,
 	};
+	const [measureGrid, measuredColumns] = useMeasuredPoolColumns(
+		fixedColumns ? undefined : cardSizing,
+	);
+	const columns = fixedColumns ?? measuredColumns;
 	const resolved = fillEmptySlots
 		? resolveFixedSlots(slots, slotCount, emptySlot)
 		: [...slots];
 
 	return (
 		<ButtonGrid
+			ref={measureGrid}
 			className={`card-pool pool-window-grid pool-filled-${resolvedAppearance.filledStyle} ${className}`.trim()}
-			minimum={minimumCardWidth}
+			minimum={cardSizing?.defaultWidth ?? minimumCardWidth}
 			style={
 				{
 					...(columns

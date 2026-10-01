@@ -10,11 +10,56 @@ import { PATCH_COLUMNS } from "../types";
 export const clamp = (value: number, minimum: number, maximum: number) =>
 	Math.max(minimum, Math.min(maximum, value));
 
-export function normalizePoolGridMinimumWidth(value: unknown, fallback: number): number {
+function normalizePoolGridWidth(
+	value: unknown,
+	minimum: number,
+	fallback: number,
+): number {
 	return typeof value === "number" && Number.isFinite(value)
-		? clamp(Math.round(value), 56, 320)
+		? clamp(Math.round(value), minimum, 320)
 		: fallback;
 }
+
+export const normalizePoolGridDefaultWidth = (value: unknown, fallback: number) =>
+	normalizePoolGridWidth(value, 56, fallback);
+
+export const normalizePoolGridMinimumWidth = (value: unknown, fallback: number) =>
+	normalizePoolGridWidth(value, 48, fallback);
+
+type PoolGridSizing = Pick<AppState, "poolGridDefaultWidth" | "poolGridMinimumWidth">;
+
+/**
+ * Layouts saved before the default width existed stored the tile width the
+ * pools laid out at as `poolGridMinimumWidth`; that value is now the default.
+ */
+export function normalizePoolGridSizing(
+	saved: { poolGridDefaultWidth?: unknown; poolGridMinimumWidth?: unknown } | undefined,
+	fallback: PoolGridSizing,
+): PoolGridSizing {
+	if (saved?.poolGridDefaultWidth === undefined)
+		return {
+			poolGridDefaultWidth: normalizePoolGridDefaultWidth(
+				saved?.poolGridMinimumWidth,
+				fallback.poolGridDefaultWidth,
+			),
+			poolGridMinimumWidth: fallback.poolGridMinimumWidth,
+		};
+	return {
+		poolGridDefaultWidth: normalizePoolGridDefaultWidth(
+			saved.poolGridDefaultWidth,
+			fallback.poolGridDefaultWidth,
+		),
+		poolGridMinimumWidth: normalizePoolGridMinimumWidth(
+			saved.poolGridMinimumWidth,
+			fallback.poolGridMinimumWidth,
+		),
+	};
+}
+
+export const poolCardSizing = (state: PoolGridSizing) => ({
+	defaultWidth: state.poolGridDefaultWidth,
+	minimumWidth: state.poolGridMinimumWidth,
+});
 
 export const normalizeFixtureSheetIncludedHeads = (
 	value: unknown,

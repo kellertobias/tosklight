@@ -2,7 +2,9 @@ import {
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
+	type PoolCardSizing,
 } from "@tosklight/ui/pools";
+import { poolCardSizing } from "../state/reducerHelpers";
 import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import {
 	useCallback,
@@ -202,7 +204,7 @@ export function DynamicsWindow({
 				dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
 			}}
 			shiftArmed={appState.shiftArmed}
-			minimumCardWidth={appState.poolGridMinimumWidth}
+			cardSizing={poolCardSizing(appState)}
 			updateArmed={appState.updateArmed}
 			storeArmed={appState.storeArmed}
 			setArmed={
@@ -532,7 +534,7 @@ function ConnectedDynamicEditor({
 }
 
 interface DynamicsPoolProps {
-	minimumCardWidth: number;
+	cardSizing: PoolCardSizing;
 	dynamics: readonly DynamicObject[];
 	runtime: DynamicRuntimeSnapshotProjection | null;
 	compact: boolean;
@@ -592,7 +594,7 @@ function DynamicsPool(props: DynamicsPoolProps) {
 			)}
 			<WindowScrollArea>
 				<PoolGrid
-					minimumCardWidth={props.minimumCardWidth}
+					cardSizing={props.cardSizing}
 					slots={slots}
 					slotCount={slotCount}
 					emptySlot={(index) => ({
