@@ -225,6 +225,9 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		number: number,
 		playback: PlaybackDefinition | null,
 	) => {
+		// The right button's pointerdown started a hold, and its pointerup lands on
+		// the Settings dialog, so the hold would reopen Settings after it closes.
+		clearHold();
 		if (!playback) {
 			props.onMessage(
 				`Cuelist ${number} is empty · record it before opening settings.`,

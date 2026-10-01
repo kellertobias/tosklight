@@ -25,6 +25,9 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await expect(settings).toContainText(installed.name);
     await expect(page.getByText(/selected · touch a playback fader/i)).toHaveCount(0);
     await settings.getByRole("button", { name: "Close Cuelist Settings" }).click();
+    // The right button's press must not leave a long-press pending that reopens Settings.
+    await page.waitForTimeout(1_000);
+    await expect(settings).toBeHidden();
 
     const previewButton = page.getByRole("button", {
       name: `Open ${installed.name} Playback preview`,
