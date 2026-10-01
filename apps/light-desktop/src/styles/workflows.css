@@ -410,18 +410,35 @@
 .pane-chrome-toolbar-target:has(> .virtual-playback-title-actions) {
 	justify-content: flex-end;
 }
+/* Flush title-bar buttons, like the shared title chrome; its group divider follows. */
 .virtual-playback-title-actions {
 	display: flex;
 	min-width: 0;
-	padding-right: 6px;
-	align-items: center;
-	gap: 6px;
+	height: 100%;
+	align-items: stretch;
+	border-left: 1px solid var(--line);
 }
 .virtual-playback-title-actions > .ui-button {
 	min-width: 0;
+	height: 100%;
+	min-height: 100%;
+	margin: 0;
+	padding: 0 10px;
 	overflow: hidden;
+	border: 0;
+	border-right: 1px solid var(--line);
+	border-radius: 0;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.virtual-playback-title-actions > .ui-button:not(.primary) {
+	background: #171d23;
+}
+.virtual-playback-title-actions > .ui-button:last-child {
+	border-right: 0;
+}
+.virtual-playback-title-actions:empty {
+	border-left: 0;
 }
 /* The shared toolbar chrome clamps pane titles in narrow headers; the Virtual
  * Playbacks title stays whole and its Solo Region actions shrink instead. */
