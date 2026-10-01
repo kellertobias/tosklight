@@ -167,6 +167,11 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 						selectedSlots={controller.selectedSlots}
 						selectedPlaybackCount={controller.selectedPlaybackCount}
 						editing={controller.zoneEdit !== null}
+						selecting={
+							controller.state.shiftArmed ||
+							controller.selectedSlots.length > 0
+						}
+						onStartZone={controller.startZoneSelection}
 						onCreateZone={(name) => {
 							controller.setZoneName(name);
 							controller.setCreatingZone(true);
@@ -298,6 +303,9 @@ export function VirtualPlaybackTitleActions(props: {
 	selectedSlots: readonly number[];
 	selectedPlaybackCount?: number;
 	editing: boolean;
+	/** Cells are being Shift-selected for a new Solo Region. */
+	selecting: boolean;
+	onStartZone(): void;
 	onCreateZone(name: string): void;
 	onUpdateZone(): void;
 	onCancelZone(): void;
@@ -320,19 +328,25 @@ export function VirtualPlaybackTitleActions(props: {
 					<Button onClick={props.onCancelZone}>Cancel Edit</Button>
 				</>
 			) : (
-				props.zonesReady &&
-				props.selectedSlots.length >= 2 && (
+				props.zonesReady && (
 					<Button
-						className="primary"
+						className={
+							props.selecting && props.selectedSlots.length < 2
+								? undefined
+								: "primary"
+						}
+						disabled={props.selecting && props.selectedSlots.length < 2}
 						onClick={() =>
-							props.onCreateZone(`Solo Region ${props.zoneCount + 1}`)
+							props.selectedSlots.length >= 2
+								? props.onCreateZone(`Solo Region ${props.zoneCount + 1}`)
+								: props.onStartZone()
 						}
 					>
 						Create Solo Region
 					</Button>
 				)
 			)}
-			{!props.editing && props.selectedSlots.length > 0 && (
+			{!props.editing && props.selecting && (
 				<Button onClick={props.onCancelZone}>Cancel Region Selection</Button>
 			)}
 		</span>

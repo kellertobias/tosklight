@@ -287,6 +287,11 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 		setCreatingZone(false);
 	};
 
+	const startZoneSelection = () => {
+		if (!options.zones.ready || zoneEdit) return;
+		options.dispatch({ type: "SET_SHIFT_ARMED", value: true });
+	};
+
 	const cancelZoneSelection = () => {
 		setSelectedSlots([]);
 		setCreatingZone(false);
@@ -331,6 +336,7 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 				? configuration
 				: null,
 		setConfiguration,
+		startZoneSelection,
 		selectedSlots,
 		selectedPlaybackCount,
 		setSelectedSlots,

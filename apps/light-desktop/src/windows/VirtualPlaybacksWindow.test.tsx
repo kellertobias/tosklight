@@ -913,22 +913,19 @@ describe("VirtualPlaybacksWindow", () => {
 		await waitFor(() => expect(mocks.zoneCapability.load).toHaveBeenCalled());
 		expect(document.querySelector(".virtual-playback-toolbar")).toBeNull();
 		expect(
-			screen.queryByRole("button", { name: "Create Solo Region" }),
-		).toBeNull();
+			await screen.findByRole("button", { name: "Create Solo Region" }),
+		).toBeDisabled();
 		expect(
-			screen.queryByRole("button", { name: "Cancel Region Selection" }),
-		).toBeNull();
+			screen.getByRole("button", { name: "Cancel Region Selection" }),
+		).toBeInTheDocument();
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 			}),
 		);
 		expect(
-			screen.queryByRole("button", { name: "Create Solo Region" }),
-		).toBeNull();
-		expect(
-			screen.getByRole("button", { name: "Cancel Region Selection" }),
-		).toBeInTheDocument();
+			screen.getByRole("button", { name: "Create Solo Region" }),
+		).toBeDisabled();
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: "Virtual playback 1002 page 1 cell 2 empty",
@@ -959,6 +956,23 @@ describe("VirtualPlaybacksWindow", () => {
 			type: "SET_SHIFT_ARMED",
 			value: false,
 		});
+	});
+
+	it("starts Solo Region selection from the title bar", async () => {
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+		const create = await screen.findByRole("button", {
+			name: "Create Solo Region",
+		});
+		expect(create).toBeEnabled();
+		expect(
+			screen.queryByRole("button", { name: "Cancel Region Selection" }),
+		).toBeNull();
+		fireEvent.click(create);
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_SHIFT_ARMED",
+			value: true,
+		});
+		expect(mocks.zoneCapability.save).not.toHaveBeenCalled();
 	});
 
 	it("updates an existing zone from the title bar and preserves hidden members", async () => {

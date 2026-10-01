@@ -21,8 +21,10 @@ Use Virtual Playbacks for task-specific buttons, not as a substitute for assigni
 ## Solo Regions
 
 A Solo Region is a named set of Virtual Playback numbers where at most one assigned
-playback may be On. Hold Shift and select at least two displayed cells, choose **Create
-Solo Region**, and enter its name. ToskLight resolves those cells to their stable
+playback may be On. Choose **Create Solo Region** in the window title, or hold Shift, then
+select at least two displayed cells. **Create Solo Region** stays disabled until two cells are
+selected; choose it again and enter the region's name. **Cancel Region Selection** leaves
+selection without saving. ToskLight resolves those cells to their stable
 playback numbers before saving. Shift-selection and region creation are configuration
 gestures: they do not press, start, or stop the selected Playbacks.
 

@@ -1998,6 +1998,8 @@
 	--exclusion-corner-bottom-right: 0;
 	--exclusion-corner-bottom-left: 0;
 	--exclusion-member-border-width: 2px;
+	/* Concentric with the tile's 7px corner, half a grid gap further out. */
+	--exclusion-fence-radius: calc(7px + var(--button-grid-gap, 2px) / 2);
 	overflow: visible;
 }
 
@@ -2070,19 +2072,19 @@
 }
 
 .virtual-playback-box.exclusion-fence-top.exclusion-fence-left::after {
-	border-top-left-radius: 8px;
+	border-top-left-radius: var(--exclusion-fence-radius);
 }
 
 .virtual-playback-box.exclusion-fence-top.exclusion-fence-right::after {
-	border-top-right-radius: 8px;
+	border-top-right-radius: var(--exclusion-fence-radius);
 }
 
 .virtual-playback-box.exclusion-fence-bottom.exclusion-fence-right::after {
-	border-bottom-right-radius: 8px;
+	border-bottom-right-radius: var(--exclusion-fence-radius);
 }
 
 .virtual-playback-box.exclusion-fence-bottom.exclusion-fence-left::after {
-	border-bottom-left-radius: 8px;
+	border-bottom-left-radius: var(--exclusion-fence-radius);
 }
 
 .virtual-playback-box.exclusion-selected {

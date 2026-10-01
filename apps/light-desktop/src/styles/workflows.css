@@ -407,9 +407,13 @@
 	grid-template-rows: minmax(0, 1fr);
 	position: relative;
 }
+.pane-chrome-toolbar-target:has(> .virtual-playback-title-actions) {
+	justify-content: flex-end;
+}
 .virtual-playback-title-actions {
 	display: flex;
 	min-width: 0;
+	padding-right: 6px;
 	align-items: center;
 	gap: 6px;
 }
@@ -489,6 +493,9 @@
 	grid-template-columns: minmax(180px, 1fr) repeat(3, auto);
 	align-items: end;
 	gap: 8px;
+}
+.virtual-playback-zone-editor > header > .ui-form-field {
+	margin-block: 0;
 }
 .virtual-playback-cell > .pool-card-status,
 .virtual-playback-cell > .pool-card-workflow {
