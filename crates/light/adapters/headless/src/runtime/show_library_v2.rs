@@ -29,6 +29,7 @@ async fn show_library_snapshot(
     let shows = state.installation.show_library().map_err(ApiError::store)?;
     let mut entries = Vec::with_capacity(shows.len());
     for show in shows {
+        let description = super::show_description::read_description(&show.path)?;
         let revisions = state
             .installation
             .show_revisions(show.id)
@@ -38,6 +39,7 @@ async fn show_library_snapshot(
             .collect();
         entries.push(wire::ShowLibraryEntry {
             show: runtime_wire::show(show),
+            description,
             revisions,
         });
     }
@@ -78,6 +80,7 @@ async fn show_library_action(
         wire::ShowLibraryAction::UpdateDocument { .. }
             | wire::ShowLibraryAction::CreateFromBase { .. }
             | wire::ShowLibraryAction::SetBaseShow { .. }
+            | wire::ShowLibraryAction::SetDescription { .. }
             | wire::ShowLibraryAction::PrepareRevision { .. }
     ) {
         Some(state.active_show.acquire_show_change().await)
@@ -108,6 +111,14 @@ async fn execute_action(
 ) -> Result<wire::ShowLibraryActionResult, ApiError> {
     use wire::ShowLibraryAction as Action;
     match action {
+        Action::SetDescription {
+            show_id,
+            description,
+        } => Ok(show_result(super::show_description::set_description(
+            state,
+            show_id,
+            &description,
+        )?)),
         Action::SaveCopy {
             source_show_id,
             data_base64,

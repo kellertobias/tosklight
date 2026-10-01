@@ -1,0 +1,28 @@
+.ui-modal-stack-layer > .new-show-modal[role="dialog"] { width: min(1120px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 48px); overflow: auto; padding: 0; }
+.new-show-first-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 32px; }
+.new-show-first-row > button { width: 100%; min-height: 52px; white-space: normal; }
+.new-show-base-library { min-height: 0; }
+.new-show-base-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.new-show-base-table th, .new-show-base-table td { text-align: left; vertical-align: top; padding: 12px 8px; border-bottom: 1px solid var(--line2); overflow-wrap: anywhere; }
+.new-show-base-table th:first-child { width: 22%; }
+.new-show-base-table th:nth-child(2) { width: 37%; }
+.new-show-base-table th:nth-child(3) { width: 21%; }
+.new-show-base-table td p { margin: 0 0 8px; white-space: pre-wrap; }
+.new-show-base-table td button { min-height: 44px; max-width: 100%; white-space: nowrap; }
+.show-description-modal { width: min(620px, calc(100vw - 32px)); }
+.show-description-modal input { width: 100%; min-height: 48px; }
+.show-description-modal footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+
+.new-show-modal > .ui-modal-titlebar { margin: 0; padding: 0; }
+.new-show-modal > p, .new-show-base-library > h4, .new-show-base-library > p { margin: 16px 32px; }
+.new-show-base-table th:first-child, .new-show-base-table td:first-child { padding-left: 32px; }
+.new-show-base-table th:last-child, .new-show-base-table td:last-child { padding-right: 32px; text-align: right; }
+
+.new-show-modal > .ui-modal-titlebar .ui-modal-title-copy { padding-inline: 32px; max-width: none; }
+.new-show-modal .ui-modal-title-heading { padding: 0; max-width: none; }
+.new-show-base-scroll { flex: none; max-height: min(420px, 42vh); }
+.new-show-base-scroll > .ui-window-scroller { height: auto; max-height: min(420px, 42vh); }
+.new-show-base-scroll.overflowing .new-show-base-table th:last-child, .new-show-base-scroll.overflowing .new-show-base-table td:last-child { padding-right: 10px; }
+
+.show-description-modal .ui-modal-title-copy { max-width: none; flex: 1; }
+.show-description-modal .ui-modal-title-heading { padding: 0; max-width: none; white-space: normal; overflow-wrap: anywhere; }

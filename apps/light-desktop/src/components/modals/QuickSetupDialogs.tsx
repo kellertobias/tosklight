@@ -9,6 +9,7 @@ import {
 } from "@tosklight/ui";
 
 import { useEffect } from "react";
+import { NewShowDialog } from "./NewShowDialog";
 import { ShowSaveBrowser } from "./ShowSaveBrowser";
 import { ShowLoadBrowser } from "./ShowLoadBrowser";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
@@ -176,46 +177,6 @@ function SelectiveImportDialog({ model }: ModelProps) {
 	);
 }
 
-function NewShowDialog({ model }: ModelProps) {
-	const { lifecycle } = model.authorities;
-	const { newShowOpen, setNewShowOpen } = model.dialogs;
-	if (!newShowOpen) return null;
-	return (
-		<StackedModal onClose={() => setNewShowOpen(false)}>
-			<div
-				className="nested-modal new-show-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label="New show"
-			>
-				<ModalTitleBar
-					title="New Show"
-					groups={[{ id: "new-show-source", actions: [{ id: "mvr", label: "Load from MVR", onPress: () => model.mvr.openMvrImport(() => setNewShowOpen(false)) }] }]}
-					onClose={() => setNewShowOpen(false)}
-				/>
-				<p>
-					Create and open a new empty show. The current show remains saved on
-					this desk.
-				</p>
-                <Button onClick={async () => {if (await lifecycle?.openCleanDefaultShow()) setNewShowOpen(false);}}>Load Clean Built-in Default</Button>
-                {(lifecycle?.shows ?? []).filter(show => show.is_base_show).length > 0 && <section className="base-show-list">
-                    <h4>Start from a base show</h4>
-                    {(lifecycle?.shows ?? []).filter(show => show.is_base_show).map(show => <Button key={show.id} onClick={async () => {
-                        if (await lifecycle?.initializeEmptyShow(show.id)) setNewShowOpen(false);
-                    }}>Use {show.name}</Button>)}
-                </section>}
-				<Button
-					className="primary"
-					onClick={async () => {
-						if (await lifecycle?.initializeEmptyShow()) setNewShowOpen(false);
-					}}
-				>
-					Create Empty Show
-				</Button>
-			</div>
-		</StackedModal>
-	);
-}
 
 function MvrShowPicker({ model }: ModelProps) {
 	const { lifecycle } = model.authorities;

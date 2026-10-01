@@ -464,6 +464,9 @@ fn wire_show_library_notification(
             application::ShowLibraryNotificationKind::ShowBaseChanged => {
                 wire::ShowLibraryNotificationKind::ShowBaseChanged
             }
+            application::ShowLibraryNotificationKind::ShowDescriptionChanged => {
+                wire::ShowLibraryNotificationKind::ShowDescriptionChanged
+            }
             application::ShowLibraryNotificationKind::ShowRenamed => {
                 wire::ShowLibraryNotificationKind::ShowRenamed
             }

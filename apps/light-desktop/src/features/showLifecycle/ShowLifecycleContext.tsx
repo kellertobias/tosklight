@@ -15,6 +15,7 @@ import type {
  * server shutdown.
  */
 export interface ShowLifecycleActions {
+    setShowDescription: (id: string, description: string) => Promise<void>;
 	shows: ShowEntry[];
 	openShow: (
 		id: string,

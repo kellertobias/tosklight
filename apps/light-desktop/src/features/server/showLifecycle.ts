@@ -5,6 +5,7 @@ import type { ServerCapabilities } from "./capabilityContracts";
 type ShowLifecycleActions = Pick<
 	ServerCapabilities,
 	| "networkShows"
+    | "setShowDescription"
     | "networkSaveFolders"
     | "saveShowCopy"
     | "exportMvrFile"
@@ -148,6 +149,10 @@ function createShowCreationActions(
 function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 	const { api, setError, shows, setShows, refresh } = model;
 	return {
+        setShowDescription: async (id,description) => {
+            await api.shows.setDescription(id,description);
+            setShows(await api.shows.shows());
+        },
         networkSaveFolders: (instance, rootId, path) => api.shows.networkSaveFolders(instance, rootId, path),
         saveShowCopy: async (name, target, baseShow) => {
             const source = model.bootstrap?.active_show;

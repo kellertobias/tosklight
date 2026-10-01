@@ -244,6 +244,7 @@ function useShowLifecycleSource(
 ) {
 	return useMemo(
 		() => ({
+            setShowDescription: value.setShowDescription,
             networkSaveFolders: value.networkSaveFolders, saveShowCopy: value.saveShowCopy, exportMvrFile: value.exportMvrFile,
             networkShows: value.networkShows, importRemoteShow: value.importRemoteShow,
             prepareShowRevision: value.prepareShowRevision, prepareShowFile: value.prepareShowFile,
@@ -268,6 +269,7 @@ function useShowLifecycleSource(
 			shutdownServer: value.shutdownServer,
 		}),
 		[
+            value.setShowDescription,
             value.networkSaveFolders, value.saveShowCopy, value.exportMvrFile,
             value.networkShows, value.importRemoteShow, value.prepareShowRevision, value.prepareShowFile, value.openShowFile,
 			value.shows,

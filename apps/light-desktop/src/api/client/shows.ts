@@ -112,6 +112,9 @@ export class ShowApiClient {
 	setBaseShow(id: string, isBaseShow: boolean): Promise<ShowEntry> {
         return this.showAction({ type: "set_base_show", show_id: id, is_base_show: isBaseShow });
     }
+    setDescription(id: string, description: string): Promise<ShowEntry> {
+        return this.showAction({type:"set_description",show_id:id,description});
+    }
     createFromBase(id: string, name: string): Promise<ShowEntry> {
         return this.showAction({ type: "create_from_base", show_id: id, name });
     }

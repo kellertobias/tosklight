@@ -90,6 +90,7 @@ mod schedules_v2_route_tests;
 mod screen_configuration_v2_tests;
 #[path = "selective_import_route_tests.rs"]
 mod selective_import_route_tests;
+mod show_description_tests;
 #[path = "show_library_v2_route_tests.rs"]
 mod show_library_v2_route_tests;
 #[path = "show_object_intents_v2_route_tests.rs"]

@@ -19,6 +19,13 @@ pub(crate) struct ActiveShowRepository {
 }
 
 impl ActiveShowRepository {
+    pub(crate) fn metadata_value(&self, key: &str) -> Result<Option<String>, StoreError> {
+        self.store.metadata_value(key)
+    }
+
+    pub(crate) fn set_metadata_values(&self, values: &[(&str, &str)]) -> Result<(), StoreError> {
+        self.store.set_metadata_values(values)
+    }
     pub(crate) fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         ShowStore::open(path).map(|store| Self { store })
     }

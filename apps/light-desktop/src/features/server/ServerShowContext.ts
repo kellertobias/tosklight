@@ -3,6 +3,7 @@ import type { NetworkShowCatalog, ShowEntry } from "../../api/types";
 import type { StoredDeskLayout } from "./contracts";
 
 export interface ServerShowContext {
+    setShowDescription: (id: string, description: string) => Promise<void>;
 	createShow: (name: string) => Promise<void>;
     networkSaveFolders: (instance: string, rootId: string, path: string) => Promise<import("../../api/client/shows").ShowSaveFolders>;
     saveShowCopy: (name: string, target: import("../../api/client/shows").ShowSaveTarget, baseShow: boolean) => Promise<ShowEntry>;

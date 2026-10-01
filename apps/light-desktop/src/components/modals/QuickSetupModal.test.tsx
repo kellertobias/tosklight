@@ -289,7 +289,7 @@ describe("QuickSetupModal show workflows", () => {
     render(<QuickSetupModal />);
     fireEvent.click(screen.getByRole("button", {name: "New Show"}));
     const dialog = screen.getByRole("dialog", {name: "New show"});
-    fireEvent.click(within(dialog).getByRole("button", {name: "Use Festival"}));
+    fireEvent.click(within(dialog).getByRole("button", {name: "Create show from Festival"}));
     await waitFor(() => expect(mocks.server.initializeEmptyShow).toHaveBeenCalledWith("other"));
     expect(mocks.server.openShow).not.toHaveBeenCalled();
     delete mocks.server.shows[2].is_base_show;
