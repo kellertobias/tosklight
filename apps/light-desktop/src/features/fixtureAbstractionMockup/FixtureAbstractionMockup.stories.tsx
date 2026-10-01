@@ -1,9 +1,21 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { FixtureAbstractionMockup } from "./FixtureAbstractionMockup";
+import { CommandSectionFixture } from "../../../../ui-library/storybook/fixtures/controlSection";
+import { ApplicationStateHarness } from "../../../../ui-library/storybook/providers/ApplicationStateHarness";
+import { StoryShowObjectsProvider } from "../../../../ui-library/storybook/providers/StoryShowObjectsProvider";
+import { FixtureAbstractionMockup, type FixtureAbstractionMockupProps } from "./FixtureAbstractionMockup";
+
+function FixtureAbstractionMockupStory(props: FixtureAbstractionMockupProps) {
+	return <ApplicationStateHarness actions={[{ type: "OPEN_BUILTIN", kind: "fixtures" }]}>
+		<StoryShowObjectsProvider>
+			<FixtureAbstractionMockup {...props} renderControl={({ hardware, programmer }) =>
+				<CommandSectionFixture inheritAppState initialMode="programmer" hardware={hardware} programmer={programmer} />} />
+		</StoryShowObjectsProvider>
+	</ApplicationStateHarness>;
+}
 
 const meta = {
 	title: "ToskLight/Design/Fixture-independent programming",
-	component: FixtureAbstractionMockup,
+	component: FixtureAbstractionMockupStory,
 	tags: ["autodocs"],
 	parameters: {
 		layout: "fullscreen",
@@ -19,8 +31,8 @@ const meta = {
 		mountYaw: { control: { type: "range", min: -180, max: 180, step: 1 } },
 		performerOffset: { control: { type: "range", min: -4, max: 4, step: .1 } },
 	},
-	render: (args, context) => <FixtureAbstractionMockup {...args} surface={context.globals.mode === "hardware" ? "hardware" : args.surface} />,
-} satisfies Meta<typeof FixtureAbstractionMockup>;
+	render: (args, context) => <FixtureAbstractionMockupStory {...args} surface={context.globals.mode === "hardware" ? "hardware" : args.surface} />,
+} satisfies Meta<typeof FixtureAbstractionMockupStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

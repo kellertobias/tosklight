@@ -1,4 +1,4 @@
-import { Button, FormField } from "@tosklight/ui/controls";
+import { Button, FormField, Input } from "@tosklight/ui/controls";
 import { type EncoderSectionItem, type EncoderSectionSurface } from "@tosklight/ui/encoders";
 import type { ReactNode } from "react";
 
@@ -33,7 +33,7 @@ export function MockupSlider({ label, value, onChange, minimum = 0, maximum = 10
 }) {
 	const id = `fam-slider-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 	return <FormField label={label} htmlFor={id}><div className="fam-slider-row">
-		<input id={id} type="range" min={minimum} max={maximum} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+		<Input id={id} type="range" min={minimum} max={maximum} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
 		<output htmlFor={id}>{value.toFixed(step < 1 ? 2 : 0)}{unit}</output>
 	</div></FormField>;
 }

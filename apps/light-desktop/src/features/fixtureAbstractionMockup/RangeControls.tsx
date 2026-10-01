@@ -1,4 +1,5 @@
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { Input } from "@tosklight/ui/controls";
 import { VerticalTouchFaderControl } from "@tosklight/ui/faders";
 import { hsvToRgb } from "../../components/modals/specialColor";
 import type { Recipe } from "./mockupModel";
@@ -72,7 +73,7 @@ export function RangeFader({ label, value, range, min = 0, max = 100, step = 1, 
 	const display = range ? `${format(range[0])} → ${format(range[1])}` : format(value);
 	return <div className="fam-range-field" style={{ "--fam-fader-gradient": gradient ?? "linear-gradient(90deg, #103039, #176777)" } as CSSProperties}>
 		<VerticalTouchFaderControl label={label} display={<output aria-label={`${label} value`}>{display}</output>} fraction={percent(range?.[1] ?? value) / 100} className={`fam-range-fader${range ? " has-range" : ""}`}>
-			<input type="range" aria-label={label} aria-orientation="horizontal" min={min} max={max} step={step} value={range?.[1] ?? value}
+			<Input type="range" aria-label={label} aria-orientation="horizontal" min={min} max={max} step={step} value={range?.[1] ?? value}
 				aria-valuemin={min} aria-valuemax={max} aria-valuenow={range?.[1] ?? value} aria-valuetext={range ? `${format(range[0])} through ${format(range[1])}` : format(value)}
 				onChange={event => onChange(Number(event.target.value))} {...handlers} />
 			{(range ?? [value]).map((n, i) => <i key={i} aria-hidden="true" className="fam-range-handle" style={{ left: `clamp(12px, ${percent(n)}%, calc(100% - 12px))` }}>{range ? i + 1 : pending !== null ? "1" : ""}</i>)}
