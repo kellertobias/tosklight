@@ -97,8 +97,9 @@
 .fixture-abstraction-mockup .hardware-connected .hardware-encoder-display.single-target .hardware-encoder-primary-labels { position: static; }
 .fixture-abstraction-mockup .hardware-connected .hardware-encoder-display.single-target .hardware-encoder-target.hardware-encoder-primary { position: static; top: auto; bottom: auto; left: auto; right: auto; min-height: 0; }
 .fixture-abstraction-mockup .hardware-connected .hardware-encoder-display.single-target .hardware-encoder-target > strong { position: static; inset: auto; transform: none; max-width: 100%; white-space: normal; }
+/* Long readouts such as "-0.0300 Duv" wrap instead of clipping at any encoder width. */
+.fixture-abstraction-mockup .touch-encoder-value { padding-inline: 2px; white-space: normal; }
 @container (max-width: 459px) {
- .fixture-abstraction-mockup .touch-encoder-value { padding-inline: 2px; white-space: normal; }
  .fixture-abstraction-mockup .hardware-encoder-target { left: 2px; right: 2px; }
  .fixture-abstraction-mockup .hardware-encoder-target strong { white-space: normal; }
  .fixture-abstraction-mockup .touch-encoder-labels { grid-template-columns: minmax(0, 1fr); }
