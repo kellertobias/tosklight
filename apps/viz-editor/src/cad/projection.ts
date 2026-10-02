@@ -416,7 +416,17 @@ export function rotateDeskPoint(
  * A model point on a CAD view's page, matching `projectPoint` for the same point in desk axes: the
  * model's +Z is downstage, as the Visualizer places it (desk y = −z).
  */
+/** A model point on the drawing plane of a view, with negative zero folded to zero. */
 function projectModelPoint(
+	point: readonly [number, number, number],
+	view: CadViewDirection,
+): PlanPoint {
+	const [x, y] = modelPlanePoint(point, view);
+	// Adding +0 turns −0 into +0, so a point on an axis reads exactly 0 in either sign of turn.
+	return [x + 0, y + 0];
+}
+
+function modelPlanePoint(
 	point: readonly [number, number, number],
 	view: CadViewDirection,
 ): PlanPoint {
