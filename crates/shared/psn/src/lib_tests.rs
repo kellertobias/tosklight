@@ -287,15 +287,21 @@ fn a_lost_packet_still_yields_the_trackers_that_arrived() {
     let mut assembler = PsnFrameAssembler::new();
     assembler.push(decoded_data(&position_only_packet(&[(1, 1.0)], 4, 3)));
 
-    let frame = assembler
-        .push(decoded_data(&position_only_packet(&[(9, 9.0)], 5, 1)))
-        .expect("the next frame's arrival closes the incomplete one");
+    let update = assembler.push_detailed(&decoded_data(&position_only_packet(&[(9, 9.0)], 5, 1)));
+    let frame = update
+        .discarded
+        .expect("the next frame closes the incomplete one");
 
     assert_eq!(frame.frame_id, 4);
     assert!(!frame.complete);
     assert_eq!(frame.packets_received, 1);
     assert_eq!(frame.packets_expected, 3);
     assert_eq!(frame.trackers.len(), 1);
+    let newest = update
+        .completed
+        .expect("the new complete frame must not be lost");
+    assert_eq!(newest.frame_id, 5);
+    assert_eq!(newest.trackers[0].id, 9);
 }
 
 #[test]
@@ -309,15 +315,13 @@ fn a_single_packet_frame_is_finished_by_that_packet() {
 }
 
 #[test]
-fn a_sender_that_repeats_a_tracker_in_one_frame_is_believed_the_second_time() {
+fn overlapping_split_tracker_chunks_cannot_prove_packet_completeness() {
     let mut assembler = PsnFrameAssembler::new();
     assembler.push(decoded_data(&position_only_packet(&[(1, 1.0)], 2, 2)));
-    let frame = assembler
-        .push(decoded_data(&position_only_packet(&[(1, 5.0)], 2, 2)))
-        .expect("frame 2 completes");
-
-    assert_eq!(frame.trackers.len(), 1);
-    assert_eq!(frame.trackers[0].position.map(|p| p.x), Some(5.0));
+    let update = assembler.push_detailed(&decoded_data(&position_only_packet(&[(1, 5.0)], 2, 2)));
+    assert_eq!(update.rejection, Some(PsnFrameRejection::Ambiguous));
+    assert!(update.completed.is_none());
+    assert!(!assembler.flush().unwrap().complete);
 }
 
 #[test]

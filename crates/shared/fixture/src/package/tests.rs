@@ -801,7 +801,7 @@ fn stage_lamp_packages_leave_body_models_to_visualizer_defaults() {
 #[test]
 fn shipped_jbled_a7_uses_the_documented_safe_shutter_table_in_every_mode() {
     let profile = shipped_profile("jb-lighting--jbled-a7.toskfixture");
-    assert_eq!(profile.revision, 4);
+    assert_eq!(profile.revision, 5);
     assert!(profile.notes.contains("JBLED_A7_DMX_Protocol.pdf"));
     assert_eq!(profile.modes.len(), 4);
     for mode in &profile.modes {
@@ -1325,7 +1325,7 @@ fn assert_moving_lamp_geometry(filename: &str) {
 #[test]
 fn robe_dls_profile_exposes_canonical_framing_controls() {
     let profile = shipped_profile("robe--robin-dls-profile.toskfixture");
-    assert_eq!(profile.revision, 7);
+    assert_eq!(profile.revision, 8);
     assert!(profile.notes.contains("DMX protocol version 1.0"));
     assert!(profile.notes.contains("user manual version 1.3"));
     assert_eq!(
@@ -1719,7 +1719,7 @@ fn shipped_native_hsi_modes_bind_their_physical_coordinates_and_highlight_white(
         let profile = shipped_profile(filename);
         assert_eq!(
             profile.revision,
-            if filename.starts_with("chauvet-") {
+            if filename.starts_with("chauvet-") || filename.starts_with("etc--") {
                 5
             } else {
                 4

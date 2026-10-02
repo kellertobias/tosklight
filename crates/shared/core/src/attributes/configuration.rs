@@ -990,9 +990,10 @@ const fn descriptor(
 ) -> AttributeDescriptor {
     let normalized_bounds = match value_type {
         AttributeValueType::Continuous => Some(AttributeBounds { min: 0.0, max: 1.0 }),
-        AttributeValueType::Color | AttributeValueType::Indexed | AttributeValueType::Control => {
-            None
-        }
+        AttributeValueType::Color
+        | AttributeValueType::Position
+        | AttributeValueType::Indexed
+        | AttributeValueType::Control => None,
     };
     AttributeDescriptor {
         id,

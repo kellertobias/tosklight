@@ -118,6 +118,15 @@ impl AttributeTable {
         id
     }
 
+    /// Number the complete value that a semantic component edits. This is deliberately explicit:
+    /// legacy scalar/native attributes retain their own identities until the programming cutover.
+    pub fn intern_component_owner(
+        &mut self,
+        component: crate::programming::ProgrammingComponent,
+    ) -> AttributeId {
+        self.intern(&component.owner().key())
+    }
+
     /// The number this name already has, or nothing if the show has never named it. Unlike
     /// [`Self::intern`] this leaves the table alone, so it is safe to ask about a name that
     /// arrived from outside.

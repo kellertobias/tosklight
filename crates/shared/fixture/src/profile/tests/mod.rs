@@ -134,12 +134,21 @@ fn wheel_slots(mode: &mut FixtureMode) -> &mut Vec<ColorWheelSlot> {
     slots
 }
 
+mod color_fitting;
 mod color_geometry;
 mod color_intent;
+mod color_physical;
 mod definition_projection;
+mod derived_color_coverage;
+mod derived_color_physical;
+mod derived_position_physical;
 mod encoding_plan;
 mod inversion;
+mod optics_fitting;
+mod physical_mapping;
 mod physical_precision;
 mod resolution;
 mod resolution_plan;
 mod validation;
+
+mod position_physical;

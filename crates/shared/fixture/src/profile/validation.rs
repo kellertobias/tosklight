@@ -28,6 +28,9 @@ impl FixtureProfile {
                 "at least one mode is required".into(),
             ));
         }
+        if let Some(source) = &self.source_gdtf {
+            source.decoded_archive()?;
+        }
         validate_positive("width", self.physical.width_millimetres)?;
         validate_positive("height", self.physical.height_millimetres)?;
         validate_positive("depth", self.physical.depth_millimetres)?;
@@ -330,6 +333,7 @@ impl FixtureProfile {
             }
         }
         for mode in &self.modes {
+            mode.validate_position_physical(&self.mode_geometry(mode))?;
             let mut bound_nodes = HashSet::new();
             for binding in &mode.motion_attributes {
                 if !self
@@ -522,6 +526,7 @@ impl FixtureMode {
             }
         }
         self.validate_color_systems(&head_ids, &channel_ids)?;
+        self.validate_color_physical()?;
         self.validate_geometry(&head_ids)?;
         Ok(())
     }
@@ -749,6 +754,9 @@ impl FixtureChannel {
                 return Err(ProfileError::Invalid(
                     "channel function ranges overlap".into(),
                 ));
+            }
+            if function.physical_mapping.is_some() {
+                super::CompiledPhysicalMapping::compile(self, function)?;
             }
             if let Some(motion) = function.angular_motion {
                 let valid_behavior = matches!(

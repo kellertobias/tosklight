@@ -12,7 +12,19 @@ pub fn validate_patch(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
     Ok(())
 }
 
+/// Planning documents may retain overlapping addresses for the operator to resolve in the
+/// patch sheet. All identities, profiles, calibration and per-instance address bounds still apply.
+pub fn validate_patch_for_planning(fixtures: &[PatchedFixture]) -> Result<(), FixtureError> {
+    let mut validator = PatchValidator::new();
+    validator.allow_address_overlap = true;
+    for fixture in fixtures {
+        validator.validate_fixture(fixture)?;
+    }
+    Ok(())
+}
+
 struct PatchValidator {
+    allow_address_overlap: bool,
     used_slots: HashMap<Universe, [Option<PatchOwner>; 512]>,
     fixture_numbers: HashSet<u32>,
     virtual_fixture_numbers: HashSet<u32>,
@@ -30,6 +42,7 @@ struct PatchOwner {
 impl PatchValidator {
     fn new() -> Self {
         Self {
+            allow_address_overlap: false,
             used_slots: HashMap::new(),
             fixture_numbers: HashSet::new(),
             virtual_fixture_numbers: HashSet::new(),
@@ -48,12 +61,19 @@ impl PatchValidator {
         if let Some(message) = crate::model_scale_error(fixture.model_scale) {
             return Err(invalid(format!("fixture {:?}: {message}", fixture.name)));
         }
+        crate::validate_position_calibration(fixture.position_calibration.as_ref())
+            .map_err(invalid)?;
+        crate::validate_color_calibration(fixture.color_calibration.as_ref()).map_err(invalid)?;
         validate_installed_appearance(
             &fixture.fixture_id.0.to_string(),
             &fixture.installed_appearance,
             fixture,
         )?;
         for instance in &fixture.multipatch {
+            crate::validate_position_calibration(instance.position_calibration.as_ref())
+                .map_err(invalid)?;
+            crate::validate_color_calibration(instance.color_calibration.as_ref())
+                .map_err(invalid)?;
             validate_installed_appearance(
                 &instance.id.to_string(),
                 &instance.installed_appearance,
@@ -61,6 +81,7 @@ impl PatchValidator {
             )?;
         }
         validate_logical_head_topology(fixture)?;
+        crate::validate_position_freeze(fixture)?;
         match fixture.definition.patch_policy() {
             crate::PatchPolicy::VisualOnly => return validate_visual_only_fixture(fixture),
             crate::PatchPolicy::Internal => return validate_internal_fixture(fixture),
@@ -213,6 +234,9 @@ impl PatchValidator {
             return Err(invalid(format!(
                 "fixture instance {instance} exceeds universe {universe}"
             )));
+        }
+        if self.allow_address_overlap {
+            return Ok(());
         }
         let slots = self
             .used_slots

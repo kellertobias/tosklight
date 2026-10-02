@@ -4,6 +4,7 @@ use super::*;
 fn geometry_motion_uses_physical_range_without_changing_profile_data() {
     let node_id = Uuid::new_v4();
     let graph = GeometryGraph {
+        physical_contract: None,
         nodes: vec![GeometryNode {
             id: node_id,
             name: "Yoke".into(),

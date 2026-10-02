@@ -4,6 +4,9 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct GeometryGraph {
+    /// Opt-in physical coordinates and bracket contract. Omission is unverified legacy geometry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub physical_contract: Option<super::GeometryPhysicalContract>,
     #[serde(default)]
     pub nodes: Vec<GeometryNode>,
     #[serde(default)]

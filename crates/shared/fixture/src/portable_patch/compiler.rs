@@ -85,6 +85,7 @@ pub struct PatchedFixtureCompiler<R> {
 
 struct CachedProfile {
     definition: FixtureProfile,
+    color_contexts: HashMap<uuid::Uuid, std::sync::Arc<crate::ColorCalibrationContext>>,
     content_digest: String,
 }
 
@@ -108,6 +109,20 @@ impl<R: FixtureProfileRevisionResolver> PatchedFixtureCompiler<R> {
         result
     }
 
+    /// Export carries the full immutable profile, including all modes and retained source.
+    /// This deliberately differs from per-fixture runtime compilation's compact projection.
+    pub fn compile_for_export(
+        &mut self,
+        record: &PortablePatchedFixtureRecord,
+    ) -> Result<PatchedFixture, PortablePatchError> {
+        let mut fixture = self.compile(record)?;
+        if let Some(reference) = record.profile_reference()? {
+            fixture.definition.profile_snapshot =
+                Some(Box::new(self.profile(reference)?.definition.clone()));
+        }
+        Ok(fixture)
+    }
+
     // @tour fixture-semantics:10 Resolve an immutable profile revision
     // Portable patch records become runtime fixtures here. Profile revisions are digest-checked,
     // validated, and cached; legacy inline records take an explicit compatibility path.
@@ -116,13 +131,23 @@ impl<R: FixtureProfileRevisionResolver> PatchedFixtureCompiler<R> {
         record: &PortablePatchedFixtureRecord,
     ) -> Result<PatchedFixture, PortablePatchError> {
         if record.is_inline() {
-            let fixture = record.inline_fixture()?;
+            let mut fixture = record.inline_fixture()?;
             fixture
                 .definition
                 .validate()
                 .map_err(|error| PortablePatchError::InvalidRecord(error.to_string()))?;
             if let Some(reference) = record.selected_profile_reference()? {
                 self.verify_inline_profile(record, reference)?;
+                fixture.definition.runtime_color_context = self
+                    .profile(reference)?
+                    .color_contexts
+                    .get(&reference.mode_id)
+                    .cloned();
+            }
+            // Same derived Color model as a referenced revision (the record bytes are unchanged).
+            if let Some(profile) = fixture.definition.profile_snapshot.as_deref_mut() {
+                crate::apply_derived_color_physical(profile);
+                crate::apply_derived_position_physical(profile);
             }
             return Ok(fixture);
         }
@@ -163,11 +188,13 @@ impl<R: FixtureProfileRevisionResolver> PatchedFixtureCompiler<R> {
         if let Some(definition) = self.definitions.get(&reference) {
             return Ok(definition.clone());
         }
-        let profile = &self.profile(reference)?.definition;
+        let cached = self.profile(reference)?;
+        let profile = &cached.definition;
         require_mode(profile, reference)?;
-        let definition = profile
+        let mut definition = profile
             .compact_resolved_definition_from_validated_profile(reference.mode_id)
             .map_err(|error| invalid_profile(reference, error))?;
+        definition.runtime_color_context = cached.color_contexts.get(&reference.mode_id).cloned();
         self.definitions.insert(reference, definition.clone());
         Ok(definition)
     }
@@ -220,12 +247,24 @@ fn validate_resolved_profile(
     let content_digest = resolved.content_digest.clone();
     let mut profile = decode_profile(expected, resolved.profile)?;
     ensure_profile_identity(expected, &profile)?;
+    // Capture immutable authoring identity before any transient compatibility projection.
+    let color_contexts = profile
+        .modes
+        .iter()
+        .filter(|m| m.color_physical.is_some())
+        .map(|m| {
+            crate::ColorCalibrationContext::new(&profile, m.id)
+                .map(|context| (m.id, std::sync::Arc::new(context)))
+                .map_err(|error| invalid_profile(expected, error))
+        })
+        .collect::<Result<HashMap<_, _>, _>>()?;
     apply_runtime_profile_compatibility(&mut profile);
     profile
         .validate()
         .map_err(|error| invalid_profile(expected, error))?;
     Ok(CachedProfile {
         definition: profile,
+        color_contexts,
         content_digest,
     })
 }
@@ -337,6 +376,8 @@ fn into_runtime_fixture(
         grand_master_enabled: patch.grand_master_enabled,
         invert_pan: patch.invert_pan,
         invert_tilt: patch.invert_tilt,
+        position_calibration: patch.position_calibration.clone(),
+        color_calibration: patch.color_calibration.clone(),
         bracket_angle: patch.bracket_angle,
         shaper_angle: patch.shaper_angle,
         installed_appearance: patch.installed_appearance,

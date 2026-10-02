@@ -67,6 +67,7 @@ pub enum FixturePackageError {
 #[derive(Clone, Copy)]
 pub(super) enum AssetKind {
     Photograph,
+    GdtfSource,
     Icon,
     Model,
     /// The JavaScript scan engine a laser fixture projects with.
@@ -84,6 +85,7 @@ impl AssetKind {
     pub(super) fn label(self) -> &'static str {
         match self {
             Self::Photograph => "photograph",
+            Self::GdtfSource => "original GDTF source",
             Self::Icon => "stage icon",
             Self::Model => "3D model",
             Self::ScanScript => "scan script",
@@ -97,6 +99,7 @@ impl AssetKind {
     pub(super) fn max_bytes(self) -> usize {
         match self {
             Self::Photograph => MAX_FIXTURE_PHOTOGRAPH_BYTES,
+            Self::GdtfSource => MAX_FIXTURE_PACKAGE_BYTES,
             Self::Icon => MAX_FIXTURE_ICON_BYTES,
             Self::Model => MAX_FIXTURE_MODEL_BYTES,
             Self::ScanScript => MAX_FIXTURE_SCAN_SCRIPT_BYTES,

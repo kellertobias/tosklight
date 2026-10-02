@@ -1,6 +1,7 @@
 use super::{ColorSystem, FixtureMode, ProfileError};
 use crate::{ColorCalibration, EmitterCalibration, HighlightColor, mix_color};
 use light_core::Xyz;
+use light_core::{rgb_to_hsv, xyz_to_srgb};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -208,44 +209,6 @@ fn semantic_slot_matches(semantic_id: &str, color: HighlightColor) -> bool {
         HighlightColor::Magenta => normalized == "magenta",
         HighlightColor::Amber => normalized == "amber",
     }
-}
-
-fn xyz_to_srgb(value: Xyz) -> (f32, f32, f32) {
-    let linear = (
-        3.240_454_2 * value.x - 1.537_138_5 * value.y - 0.498_531_4 * value.z,
-        -0.969_266 * value.x + 1.876_010_8 * value.y + 0.041_556 * value.z,
-        0.055_643_4 * value.x - 0.204_025_9 * value.y + 1.057_225_2 * value.z,
-    );
-    let encode = |value: f32| {
-        let value = value.max(0.0);
-        if value <= 0.003_130_8 {
-            12.92 * value
-        } else {
-            1.055 * value.powf(1.0 / 2.4) - 0.055
-        }
-    };
-    (
-        encode(linear.0).clamp(0.0, 1.0),
-        encode(linear.1).clamp(0.0, 1.0),
-        encode(linear.2).clamp(0.0, 1.0),
-    )
-}
-
-fn rgb_to_hsv(red: f32, green: f32, blue: f32) -> (f32, f32, f32) {
-    let maximum = red.max(green).max(blue);
-    let minimum = red.min(green).min(blue);
-    let delta = maximum - minimum;
-    let saturation = if maximum == 0.0 { 0.0 } else { delta / maximum };
-    let hue = if delta == 0.0 {
-        0.0
-    } else if maximum == red {
-        ((green - blue) / delta).rem_euclid(6.0) / 6.0
-    } else if maximum == green {
-        ((blue - red) / delta + 2.0) / 6.0
-    } else {
-        ((red - green) / delta + 4.0) / 6.0
-    };
-    (hue, saturation, maximum)
 }
 
 pub(super) fn color_distance(left: Xyz, right: Xyz) -> f32 {

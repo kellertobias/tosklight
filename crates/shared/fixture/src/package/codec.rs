@@ -102,6 +102,11 @@ pub fn read_fixture_package(bytes: &[u8]) -> Result<FixtureProfile, FixturePacka
         }
     }
 
+    if let Some(source) = manifest.profile.source_gdtf.as_mut() {
+        let mut asset = Some(source.archive_asset.to_string());
+        resolve_asset_field(&mut asset, AssetKind::GdtfSource, &mut files)?;
+        source.archive_asset = asset.expect("source archive remains present").into();
+    }
     resolve_asset_field(
         &mut manifest.profile.photograph_asset,
         AssetKind::Photograph,
@@ -164,6 +169,16 @@ pub fn write_fixture_package(profile: &FixtureProfile) -> Result<Vec<u8>, Fixtur
     // A transferable package never carries ownership of an application catalog.
     portable.reserved_source = None;
     let mut assets = Vec::new();
+    if let Some(source) = portable.source_gdtf.as_mut() {
+        let mut asset = Some(source.archive_asset.to_string());
+        extract_asset_field(
+            &mut asset,
+            AssetKind::GdtfSource,
+            "assets/source",
+            &mut assets,
+        )?;
+        source.archive_asset = asset.expect("source archive remains present").into();
+    }
     extract_asset_field(
         &mut portable.photograph_asset,
         AssetKind::Photograph,

@@ -108,6 +108,66 @@ fn embedded_jbled_a7_revision_one_uses_safe_open_shutter_runtime_compatibility()
 }
 
 #[test]
+fn a_referenced_generic_led_compiles_with_the_derived_uncalibrated_color_model() {
+    let package = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join("assets/fixture-library/generic--rgb-led.toskfixture");
+    let profile = crate::read_fixture_package(&std::fs::read(package).unwrap()).unwrap();
+    let mode_id = profile
+        .modes
+        .iter()
+        .find(|mode| mode.name == "DRGB 8-bit dimmer first")
+        .unwrap()
+        .id;
+    assert!(
+        profile
+            .modes
+            .iter()
+            .all(|mode| mode.color_physical.is_none())
+    );
+    let digest = fixture_profile_content_digest(&json!(profile)).unwrap();
+    let source = source(&profile);
+    let reference = PatchedFixtureProfileReference {
+        profile_id: profile.id,
+        profile_revision: profile.revision.into(),
+        mode_id,
+    };
+    let record = PortablePatchedFixtureRecord::from_profile_reference(
+        reference,
+        PatchedFixturePatch::from_fixture(&fixture(&profile)),
+    )
+    .unwrap();
+    let compiled = PatchedFixtureCompiler::new(CountingResolver {
+        source: Some(source),
+        calls: 0,
+    })
+    .compile(&record)
+    .unwrap();
+
+    let snapshot = compiled.definition.profile_snapshot.as_deref().unwrap();
+    let model = snapshot.modes[0]
+        .color_physical
+        .as_ref()
+        .expect("the runtime projection derives a Color model");
+    let crate::OpticalSource::Additive { emitters } = &model.paths[0].source else {
+        panic!("additive emitters")
+    };
+    assert_eq!(emitters.len(), 3);
+    assert!(
+        emitters
+            .iter()
+            .all(|e| e.provenance.quality == crate::PhysicalDataQuality::Unknown)
+    );
+    // Derived data is never an authored calibration context, and the stored revision is
+    // untouched.
+    assert!(compiled.definition.runtime_color_context.is_none());
+    assert_eq!(
+        fixture_profile_content_digest(&json!(profile)).unwrap(),
+        digest
+    );
+}
+
+#[test]
 fn large_profile_batch_resolves_once_and_keeps_only_the_selected_runtime_mode() {
     let profile = profile_with_modes(2_000);
     let selected_mode = profile.modes[1_337].id;

@@ -26,8 +26,11 @@ mod frame;
 mod tracking;
 
 pub use encode::{PSN_MAX_PACKET_BYTES, encode_data_frame, encode_info_packet};
-pub use frame::{PsnFrame, PsnFrameAssembler};
-pub use tracking::{PsnObservation, PsnSourceHealth, PsnTracked, PsnTracking};
+pub use frame::{PsnFrame, PsnFrameAssembler, PsnFrameRejection, PsnFrameUpdate};
+pub use tracking::{
+    PsnAcceptedSample, PsnIngressDiagnostics, PsnObservation, PsnSampleId, PsnSourceHealth,
+    PsnTracked, PsnTracking,
+};
 
 use chunk::Chunks;
 use std::collections::BTreeMap;

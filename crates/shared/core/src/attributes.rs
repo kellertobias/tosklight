@@ -79,6 +79,7 @@ impl ResolvedAttributeDescriptor<'_> {
 pub enum AttributeValueType {
     Continuous,
     Color,
+    Position,
     Indexed,
     Control,
 }
@@ -139,7 +140,7 @@ pub fn built_in_attribute_is_projection_only(attribute: &str) -> bool {
 /// Recordable built-ins edited through a dedicated semantic surface instead of occupying a
 /// permanent encoder slot.
 pub const SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES: &[&str] =
-    &["color", "color.tint", "media.grayscale"];
+    &["color", "position", "color.tint", "media.grayscale"];
 
 pub fn built_in_attribute_is_special_dialog_only(attribute: &str) -> bool {
     SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES.contains(&attribute)
@@ -354,7 +355,8 @@ impl AttributeKey {
     }
 
     pub fn is_position(&self) -> bool {
-        *self.0 == *"pan"
+        *self.0 == *"position"
+            || *self.0 == *"pan"
             || *self.0 == *"tilt"
             || self.0.starts_with("position.")
             || self.0.ends_with(".pan")
@@ -381,6 +383,25 @@ pub enum AttributeValue {
     Spread(Vec<f32>),
     Discrete(String),
     ColorXyz(Xyz),
+    /// Complete immutable owners. Sharing keeps scalar frame slots small and retained recipes
+    /// cheap to pass between programmer, cue and frame snapshots.
+    ColorProgram(
+        #[serde(deserialize_with = "crate::programming::deserialize_intent")]
+        std::sync::Arc<crate::programming::ColorProgram>,
+    ),
+    Position(
+        #[serde(deserialize_with = "crate::programming::deserialize_intent")]
+        std::sync::Arc<crate::programming::PositionIntent>,
+    ),
+    Zoom(
+        #[serde(deserialize_with = "crate::programming::deserialize_intent")]
+        std::sync::Arc<crate::programming::ZoomIntent>,
+    ),
+    /// Group-scoped complete template/member assignment. Resolve membership before output.
+    GroupFamily(
+        #[serde(deserialize_with = "crate::programming::deserialize_intent")]
+        std::sync::Arc<crate::programming::GroupFamilyAssignment>,
+    ),
     RawDmx(u8),
     /// Resolution-independent raw channel value used by schema-v2 fixture profiles. The fixture
     /// channel clamps this to its configured 8/16/24/32-bit range at render time.
@@ -704,5 +725,23 @@ pub struct TimedValue {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delay_millis: Option<u64>,
 }
+/// One authored Programmer edit. A monotonic desk order takes precedence over wall-clock
+/// timestamps; legacy values without an order retain timestamp ordering.
+#[derive(Clone, Copy, Debug)]
+pub struct ProgrammerEditStamp {
+    pub changed_at: DateTime<Utc>,
+    pub programmer_order: u64,
+}
+
+impl ProgrammerEditStamp {
+    pub fn supersedes(self, changed_at: DateTime<Utc>, programmer_order: u64) -> bool {
+        if self.programmer_order > 0 && programmer_order > 0 {
+            self.programmer_order > programmer_order
+        } else {
+            (self.changed_at, self.programmer_order) > (changed_at, programmer_order)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

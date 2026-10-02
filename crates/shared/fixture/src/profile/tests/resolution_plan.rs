@@ -15,6 +15,7 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
             dmx_to: 127,
             attribute: AttributeKey::intensity(),
             priority: 0,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Continuous {
                 physical_min: 0.0,
@@ -29,6 +30,7 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
             dmx_to: 255,
             attribute: AttributeKey("shutter".into()),
             priority: 10,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Fixed {
                 semantic_id: "open".into(),
@@ -52,6 +54,8 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
         }],
         channels: vec![fixture_channel],
         color_systems: vec![],
+        color_physical: None,
+        position_physical: None,
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),

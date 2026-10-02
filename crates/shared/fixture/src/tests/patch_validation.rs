@@ -28,6 +28,8 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -61,6 +63,8 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -69,6 +73,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         highlight_overrides: BTreeMap::new(),
         freeze: Default::default(),
     };
+    assert!(validate_patch_for_planning(&[first.clone(), overlap.clone()]).is_ok());
     assert!(validate_patch(&[first.clone(), overlap]).is_err());
     let overflow = PatchedFixture {
         model_scale: None,
@@ -95,6 +100,8 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -103,6 +110,7 @@ fn rejects_patch_overlap_and_boundary_overflow() {
         highlight_overrides: BTreeMap::new(),
         freeze: Default::default(),
     };
+    assert!(validate_patch_for_planning(std::slice::from_ref(&overflow)).is_err());
     assert!(validate_patch(&[overflow]).is_err());
     assert!(validate_patch(&[first]).is_ok());
 }
@@ -140,6 +148,8 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
                 rotation: Default::default(),
                 invert_pan: false,
                 invert_tilt: false,
+                position_calibration: None,
+                color_calibration: None,
                 bracket_angle: 0.0,
                 shaper_angle: None,
                 installed_appearance: Default::default(),
@@ -155,6 +165,8 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
                 rotation: Default::default(),
                 invert_pan: false,
                 invert_tilt: false,
+                position_calibration: None,
+                color_calibration: None,
                 bracket_angle: 0.0,
                 shaper_angle: None,
                 installed_appearance: Default::default(),
@@ -164,6 +176,8 @@ fn multipatch_reserves_real_addresses_and_allows_visualizer_only_instances() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -428,6 +442,8 @@ fn media_server_layers_inherit_parent_direct_control_endpoint() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -489,6 +505,8 @@ fn logical_head_reconciliation_preserves_matching_ids_and_repairs_shape() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -577,6 +595,7 @@ fn legacy_patch_defaults_freeze_empty_and_round_trips_captured_values() {
     fixture.freeze.targets.insert(
         fixture_id,
         FrozenFixtureTarget {
+            position_native: None,
             full: false,
             families: vec![FreezeFamily::Intensity, FreezeFamily::Color],
             values: std::collections::HashMap::from([(
@@ -590,6 +609,7 @@ fn legacy_patch_defaults_freeze_empty_and_round_trips_captured_values() {
     assert_eq!(
         restored.freeze.targets[&fixture_id],
         FrozenFixtureTarget {
+            position_native: None,
             full: false,
             families: vec![FreezeFamily::Intensity, FreezeFamily::Color],
             values: std::collections::HashMap::from([(

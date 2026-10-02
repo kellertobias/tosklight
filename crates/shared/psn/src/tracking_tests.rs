@@ -189,3 +189,179 @@ fn an_info_packet_that_stops_offering_a_name_takes_the_name_away() {
     assert_eq!(tracking.tracker(1).expect("tracked").name, None);
     assert_eq!(tracking.last_info_at_millis(), Some(1_010));
 }
+
+fn sample_packet(frame_id: u8, timestamp: u64, position: Option<PsnVector3>) -> Vec<u8> {
+    crate::encode_data_frame(
+        timestamp,
+        frame_id,
+        &[PsnTrackerData {
+            id: 1,
+            position,
+            ..Default::default()
+        }],
+    )
+    .pop()
+    .unwrap()
+}
+
+fn position(x: f32) -> Option<PsnVector3> {
+    Some(PsnVector3 { x, y: 2.0, z: 3.0 })
+}
+
+#[test]
+fn duplicate_or_old_frames_never_refresh_accepted_identity_position_or_age() {
+    let mut tracking = PsnTracking::new();
+    let original = sample_packet(3, 100, position(1.0));
+    assert!(matches!(
+        tracking.observe(&original, 50),
+        PsnObservation::Frame(_)
+    ));
+    let identity = tracking.accepted_sample();
+    assert_eq!(
+        tracking.observe(&original, 1000),
+        PsnObservation::Rejected(PsnFrameRejection::Duplicate)
+    );
+    assert_eq!(
+        tracking.observe(&sample_packet(2, 90, position(9.0)), 1100),
+        PsnObservation::Rejected(PsnFrameRejection::OutOfOrderOrRestart)
+    );
+    assert_eq!(tracking.accepted_sample(), identity);
+    assert_eq!(tracking.frames(), 1);
+    assert_eq!(tracking.tracker(1).unwrap().position(), position(1.0));
+    assert_eq!(tracking.tracker(1).unwrap().age_millis(1100), 1050);
+    assert_eq!(
+        tracking.health(1100, 100),
+        PsnSourceHealth::Stale {
+            silent_for_millis: 1050
+        }
+    );
+    assert_eq!(tracking.diagnostics().duplicate_datagrams, 1);
+}
+
+#[test]
+fn incomplete_frame_holds_previous_position_and_cannot_drop_next_complete_frame() {
+    let mut tracking = PsnTracking::new();
+    tracking.observe(&data(&[(1, 1.0)], 1, 1), 10);
+    let original = tracking.accepted_sample();
+    tracking.observe(&data(&[(1, 9.0)], 2, 2), 20);
+    assert_eq!(tracking.accepted_sample(), original);
+    assert_eq!(tracking.tracker(1).unwrap().position().unwrap().x, 1.0);
+    let result = tracking.observe(&data(&[(2, 2.0)], 3, 1), 30);
+    assert!(matches!(result, PsnObservation::Frame(frame) if frame.frame_id == 3));
+    assert_eq!(tracking.frames(), 2);
+    assert_eq!(tracking.tracker(1).unwrap().position().unwrap().x, 1.0);
+    assert_eq!(tracking.tracker(1).unwrap().age_millis(30), 20);
+    assert_eq!(tracking.tracker(2).unwrap().position().unwrap().x, 2.0);
+    assert_eq!(tracking.diagnostics().incomplete_frames, 1);
+}
+
+#[test]
+fn a_completed_split_frame_has_one_identity_but_preserves_each_packet_arrival_age() {
+    let mut tracking = PsnTracking::new();
+    let first = data(&[(1, 1.0)], 1, 2);
+    tracking.observe(&first, 100);
+    assert_eq!(
+        tracking.observe(&first, 200),
+        PsnObservation::Rejected(PsnFrameRejection::Duplicate)
+    );
+    tracking.observe(&data(&[(2, 2.0)], 1, 2), 500);
+    let first = tracking.tracker(1).unwrap();
+    let second = tracking.tracker(2).unwrap();
+    assert_eq!(first.position_sample, second.position_sample);
+    assert_eq!(first.position_sample, tracking.accepted_sample());
+    assert_eq!(first.position_sample.unwrap().accepted_at_millis, 500);
+    assert_eq!(first.age_millis(500), 400);
+    assert_eq!(second.age_millis(500), 0);
+}
+
+#[test]
+fn omitted_and_nonfinite_positions_keep_original_position_age_and_sample_identity() {
+    let mut tracking = PsnTracking::new();
+    tracking.observe(&sample_packet(1, 100, position(1.0)), 10);
+    let original = tracking.tracker(1).unwrap().position_sample;
+    for (frame, value) in [
+        (2, None),
+        (3, position(f32::NAN)),
+        (4, position(f32::INFINITY)),
+        (5, position(f32::NEG_INFINITY)),
+    ] {
+        tracking.observe(
+            &sample_packet(frame, u64::from(frame) * 100, value),
+            u64::from(frame) * 10,
+        );
+        let held = tracking.tracker(1).unwrap();
+        assert_eq!(held.position(), position(1.0));
+        assert_eq!(held.updated_at_millis, 10);
+        assert_eq!(held.position_sample, original);
+    }
+    assert_eq!(tracking.diagnostics().invalid_positions, 3);
+    assert_eq!(tracking.tracker(1).unwrap().age_millis(100), 90);
+    tracking.observe(&sample_packet(6, 600, position(2.0)), 70);
+    assert_eq!(tracking.tracker(1).unwrap().position(), position(2.0));
+    assert_eq!(tracking.tracker(1).unwrap().age_millis(100), 30);
+    assert_ne!(tracking.tracker(1).unwrap().position_sample, original);
+}
+
+#[test]
+fn a_tracker_without_a_valid_position_never_acquires_a_position_sample() {
+    let mut tracking = PsnTracking::new();
+    tracking.observe(&sample_packet(1, 100, position(f32::NAN)), 10);
+    assert_eq!(tracking.tracker(1).unwrap().position(), None);
+    assert_eq!(tracking.tracker(1).unwrap().position_sample, None);
+    assert_eq!(tracking.fresh_position(1, 20, 100), None);
+}
+
+#[test]
+fn timestamp_regression_requires_explicit_epoch_change_and_keeps_held_pose_until_then() {
+    let mut tracking = PsnTracking::new();
+    tracking.observe(&sample_packet(90, 900_000, position(1.0)), 10);
+    let original = tracking.tracker(1).unwrap().position_sample.unwrap();
+    let restarted = sample_packet(1, 100, position(2.0));
+    assert_eq!(
+        tracking.observe(&restarted, 60_000),
+        PsnObservation::Rejected(PsnFrameRejection::OutOfOrderOrRestart)
+    );
+    assert_eq!(tracking.tracker(1).unwrap().position(), position(1.0));
+    tracking.restart_source_epoch();
+    assert_eq!(tracking.tracker(1).unwrap().position_sample, Some(original));
+    assert_eq!(tracking.tracker(1).unwrap().updated_at_millis, 10);
+    assert!(tracking.accepted_sample().is_none());
+    assert!(matches!(
+        tracking.observe(&restarted, 60_010),
+        PsnObservation::Frame(_)
+    ));
+    assert_ne!(
+        tracking.accepted_sample().unwrap().id.source_epoch,
+        original.id.source_epoch
+    );
+    assert_eq!(tracking.tracker(1).unwrap().position(), position(2.0));
+}
+
+#[test]
+fn timing_out_an_incomplete_frame_never_publishes_or_refreshes_it() {
+    let mut tracking = PsnTracking::new();
+    tracking.observe(&data(&[(1, 1.0)], 1, 1), 10);
+    tracking.observe(&data(&[(1, 9.0)], 2, 2), 20);
+    assert!(tracking.discard_incomplete());
+    assert!(!tracking.discard_incomplete());
+    assert_eq!(tracking.tracker(1).unwrap().position().unwrap().x, 1.0);
+    assert_eq!(tracking.tracker(1).unwrap().updated_at_millis, 10);
+    assert_eq!(
+        tracking.observe(&data(&[(2, 2.0)], 2, 2), 30),
+        PsnObservation::Rejected(PsnFrameRejection::Ambiguous)
+    );
+    assert!(tracking.tracker(2).is_none());
+    assert_eq!(tracking.diagnostics().incomplete_frames, 1);
+}
+
+#[test]
+fn oversized_input_is_passively_rejected_without_allocating_tracker_history() {
+    let mut tracking = PsnTracking::new();
+    assert_eq!(
+        tracking.observe(&vec![0; PSN_MAX_PACKET_BYTES + 1], 10),
+        PsnObservation::Rejected(PsnFrameRejection::Oversized)
+    );
+    assert!(tracking.tracked.is_empty());
+    assert!(tracking.pending_arrivals.is_empty());
+    assert_eq!(tracking.health(1000, 100), PsnSourceHealth::Silent);
+}

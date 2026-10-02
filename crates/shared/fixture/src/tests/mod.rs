@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 fn definition(footprint: u16) -> FixtureDefinition {
     FixtureDefinition {
+        runtime_color_context: None,
         schema_version: 1,
         id: FixtureId::new(),
         revision: 1,
@@ -105,6 +106,8 @@ fn schema_v2_two_split_fixture() -> PatchedFixture {
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -113,6 +116,8 @@ fn schema_v2_two_split_fixture() -> PatchedFixture {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -129,3 +134,6 @@ mod library;
 mod migration;
 mod model_encoding;
 mod patch_validation;
+
+mod physical_adoption;
+mod position_freeze;

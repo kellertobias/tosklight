@@ -633,3 +633,140 @@ fn invalid_installed_appearance_is_rejected_at_the_portable_record_boundary() {
         ));
     }
 }
+
+#[test]
+fn position_calibration_is_optional_and_round_trips_independently_for_physical_copies() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    let legacy = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    assert!(legacy.body().get("position_calibration").is_none());
+    assert!(legacy.patch().unwrap().position_calibration.is_none());
+    assert!(
+        legacy.patch().unwrap().multipatch[0]
+            .position_calibration
+            .is_none()
+    );
+    fixture.position_calibration = Some(crate::InstalledPositionCalibration {
+        revision: 7,
+        quality: crate::PhysicalDataQuality::Measured,
+        source: Some("Rig commissioning".into()),
+        pan_zero_degrees: -720.5,
+        tilt_zero_degrees: 12.25,
+        axis_overrides: Some(crate::InstalledAxisOverrides {
+            version: 1,
+            source_identity: crate::PositionCalibrationIdentity {
+                profile_id: uuid::Uuid::new_v4(),
+                mode_id: uuid::Uuid::new_v4(),
+                geometry_digest: "a".repeat(64),
+            },
+            axes: vec![crate::InstalledAxisCalibration {
+                node_id: uuid::Uuid::new_v4(),
+                zero_degrees: 390.0,
+                invert: true,
+            }],
+        }),
+    });
+    fixture.multipatch[0].position_calibration = Some(crate::InstalledPositionCalibration {
+        pan_zero_degrees: 90.0,
+        ..Default::default()
+    });
+    for body in [
+        serde_json::to_value(&fixture).unwrap(),
+        PortablePatchedFixtureRecord::from_runtime_fixture(&fixture)
+            .unwrap()
+            .into_body(),
+    ] {
+        let record = PortablePatchedFixtureRecord::decode(body.clone()).unwrap();
+        let read = record.patch().unwrap();
+        assert_eq!(read.position_calibration, fixture.position_calibration);
+        assert_eq!(
+            read.multipatch[0].position_calibration,
+            fixture.multipatch[0].position_calibration
+        );
+        assert_eq!(read.invert_pan, fixture.invert_pan);
+        assert_eq!(record.into_body(), body);
+    }
+}
+
+#[test]
+fn invalid_position_calibration_is_refused_in_both_portable_record_shapes_and_copies() {
+    let profile = profile();
+    let fixture = fixture(&profile);
+    for body in [
+        serde_json::to_value(&fixture).unwrap(),
+        PortablePatchedFixtureRecord::from_runtime_fixture(&fixture)
+            .unwrap()
+            .into_body(),
+    ] {
+        for target in [
+            "/position_calibration",
+            "/multipatch/0/position_calibration",
+        ] {
+            for invalid in [
+                json!({"quality":"measured"}),
+                json!({"pan_zero_degrees":1e40}),
+                json!({"revision":-1}),
+            ] {
+                let mut bad = body.clone();
+                if target.starts_with("/multipatch") {
+                    bad["multipatch"][0]["position_calibration"] = invalid;
+                } else {
+                    bad["position_calibration"] = invalid;
+                }
+                assert!(
+                    PortablePatchedFixtureRecord::decode(bad).is_err(),
+                    "{target}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn installed_color_calibration_roundtrips_root_and_copy_without_inheritance_or_rebinding() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    let empty = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    assert!(empty.body().get("color_calibration").is_none());
+    let value: crate::InstalledColorCalibration=serde_json::from_value(json!({
+        "version":1,"revision":4,"paths":[{"source_identity":{
+            "profile_id":uuid::Uuid::from_u128(1),"profile_revision":3,"profile_digest":"a".repeat(64),
+            "mode_id":uuid::Uuid::from_u128(2),"head_id":uuid::Uuid::from_u128(3),"path_id":uuid::Uuid::from_u128(4),
+            "model_revision":1,"native_layout_signature":"b".repeat(64)},"emitters":[],"measurements":[
+                {"recipe":[],"xyz":{"x":0.0,"y":0.0,"z":0.0},"provenance":{"quality":"measured","source":"Synthetic portability test","revision":1}}
+            ]}]})).unwrap();
+    fixture.color_calibration = Some(value.clone());
+    let root = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture)
+        .unwrap()
+        .patch()
+        .unwrap();
+    assert!(root.multipatch[0].color_calibration.is_none());
+    let mut copy = value.clone();
+    copy.revision = 7;
+    fixture.multipatch[0].color_calibration = Some(copy);
+    for body in [
+        serde_json::to_value(&fixture).unwrap(),
+        PortablePatchedFixtureRecord::from_runtime_fixture(&fixture)
+            .unwrap()
+            .into_body(),
+    ] {
+        let record = PortablePatchedFixtureRecord::decode(body.clone()).unwrap();
+        let read = record.patch().unwrap();
+        assert_eq!(read.color_calibration, fixture.color_calibration);
+        assert_eq!(
+            read.multipatch[0].color_calibration,
+            fixture.multipatch[0].color_calibration
+        );
+        assert_eq!(record.into_body(), body);
+        for target in ["root", "copy"] {
+            let mut bad = body.clone();
+            let calibration = if target == "root" {
+                &mut bad["color_calibration"]
+            } else {
+                &mut bad["multipatch"][0]["color_calibration"]
+            };
+            calibration["version"] = json!(2);
+            assert!(PortablePatchedFixtureRecord::decode(bad).is_err());
+        }
+    }
+}

@@ -40,7 +40,14 @@ impl FixtureProfile {
             mode.primary_slots()?
         };
         let snapshot = self.snapshot_for(mode, snapshot_scope);
-        Ok(build_definition(self, mode, &primary_slots, snapshot))
+        let mut definition = build_definition(self, mode, &primary_slots, snapshot);
+        if mode.color_physical.is_some() {
+            definition.runtime_color_context = Some(std::sync::Arc::new(
+                crate::ColorCalibrationContext::new(self, mode_id)
+                    .map_err(ProfileError::Invalid)?,
+            ));
+        }
+        Ok(definition)
     }
 
     fn required_mode(&self, mode_id: Uuid) -> Result<&FixtureMode, ProfileError> {
@@ -57,7 +64,12 @@ impl FixtureProfile {
             SnapshotScope::SelectedMode if self.crowd.is_some() => self.modes.clone(),
             SnapshotScope::SelectedMode => vec![mode.clone()],
         };
-        self.snapshot_with_modes(modes)
+        let mut snapshot = self.snapshot_with_modes(modes);
+        if matches!(scope, SnapshotScope::SelectedMode) {
+            // Source archives belong to the portable immutable revision, not per-fixture render state.
+            snapshot.source_gdtf = None;
+        }
+        snapshot
     }
 
     fn snapshot_with_modes(&self, modes: Vec<FixtureMode>) -> FixtureProfile {
@@ -74,6 +86,7 @@ impl FixtureProfile {
             photograph_asset: self.photograph_asset.clone(),
             stage_icon_asset: self.stage_icon_asset.clone(),
             model_asset: self.model_asset.clone(),
+            source_gdtf: self.source_gdtf.clone(),
             body_model: self.body_model.clone(),
             geometry: self.geometry.clone(),
             model_units: self.model_units,
@@ -119,6 +132,7 @@ fn build_definition(
     snapshot: FixtureProfile,
 ) -> FixtureDefinition {
     FixtureDefinition {
+        runtime_color_context: None,
         schema_version: FIXTURE_PROFILE_SCHEMA_VERSION,
         id: profile.id,
         revision: profile.revision,

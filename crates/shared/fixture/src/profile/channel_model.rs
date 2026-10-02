@@ -160,6 +160,10 @@ struct FixtureModeCanonical {
     #[serde(default)]
     color_systems: Vec<HeadColorSystem>,
     #[serde(default)]
+    color_physical: Option<super::ColorPhysicalModel>,
+    #[serde(default)]
+    position_physical: Option<super::PositionPhysicalModel>,
+    #[serde(default)]
     control_actions: Vec<ControlAction>,
     #[serde(default)]
     geometry: GeometryGraph,
@@ -230,6 +234,8 @@ impl<'de> Deserialize<'de> for FixtureMode {
             heads: canonical.heads,
             channels: canonical.channels,
             color_systems: canonical.color_systems,
+            color_physical: canonical.color_physical,
+            position_physical: canonical.position_physical,
             control_actions: canonical.control_actions,
             geometry: canonical.geometry,
             emitter_heads: canonical.emitter_heads,
@@ -294,6 +300,9 @@ pub struct ChannelFunction {
     /// `physical_min` and `physical_max` remain the exact DMX endpoint mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub angular_motion: Option<AngularMotion>,
+    /// Optional physical response samples and their evidence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub physical_mapping: Option<super::PhysicalMappingCalibration>,
     pub behavior: ChannelFunctionBehavior,
 }
 
@@ -348,6 +357,7 @@ impl ChannelFunction {
             attribute,
             priority: 0,
             angular_motion: None,
+            physical_mapping: None,
             behavior: ChannelFunctionBehavior::Continuous {
                 physical_min: 0.0,
                 physical_max: 1.0,

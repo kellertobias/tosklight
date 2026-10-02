@@ -218,9 +218,18 @@ fn archive_members(bytes: &[u8]) -> Result<(HashMap<String, Vec<u8>>, Vec<u8>), 
             .to_ascii_lowercase()
             .ends_with("generalscenedescription.xml")
         {
+            if xml.is_some() {
+                return Err(MvrError::Invalid(
+                    "multiple GeneralSceneDescription.xml members".into(),
+                ));
+            }
             xml = Some(data.clone());
         }
-        files.insert(name.to_ascii_lowercase(), data);
+        if files.insert(name.to_ascii_lowercase(), data).is_some() {
+            return Err(MvrError::Invalid(format!(
+                "duplicate archive member {name}"
+            )));
+        }
     }
     let xml =
         xml.ok_or_else(|| MvrError::Invalid("GeneralSceneDescription.xml is missing".into()))?;

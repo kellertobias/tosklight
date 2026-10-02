@@ -42,6 +42,13 @@ pub(super) fn extract_asset_field(
         return Err(invalid(format!("{} exceeds its size limit", kind.label())));
     }
     let extension = match kind {
+        AssetKind::GdtfSource => {
+            if declared_mime != crate::GDTF_SOURCE_MIME {
+                return Err(invalid("GDTF source has unsupported media type"));
+            }
+            crate::gdtf::read::archive_xml(&bytes).map_err(|error| invalid(error.to_string()))?;
+            "gdtf"
+        }
         AssetKind::Photograph | AssetKind::Icon => {
             let format = sniff_image(&bytes)?;
             let mime = image_mime(format);
@@ -208,6 +215,13 @@ fn validate_asset(
         return Err(invalid(format!("{} exceeds its size limit", kind.label())));
     }
     match kind {
+        AssetKind::GdtfSource => {
+            if !path.ends_with(".gdtf") {
+                return Err(invalid("GDTF source must use .gdtf extension"));
+            }
+            crate::gdtf::read::archive_xml(bytes).map_err(|error| invalid(error.to_string()))?;
+            Ok(crate::GDTF_SOURCE_MIME)
+        }
         AssetKind::Photograph | AssetKind::Icon => {
             let format = sniff_image(bytes)?;
             let expected = image_extension(format);
@@ -626,7 +640,8 @@ fn validate_image_dimensions(
         | AssetKind::ScanScript
         | AssetKind::EffectScript
         | AssetKind::PhysicsScript
-        | AssetKind::Projection => unreachable!(),
+        | AssetKind::Projection
+        | AssetKind::GdtfSource => unreachable!(),
     };
     if width == 0 || height == 0 || width > limit || height > limit {
         return Err(invalid(format!(

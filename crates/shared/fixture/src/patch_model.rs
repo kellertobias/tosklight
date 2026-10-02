@@ -287,6 +287,12 @@ pub struct PatchedFixture {
     /// Reverse the normalized Tilt request for this physical fixture.
     #[serde(default)]
     pub invert_tilt: bool,
+    /// Saved installation zero correction; not consumed by the current live output path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_calibration: Option<crate::InstalledPositionCalibration>,
+    /// Independent installed optical observations; stale after incompatible fixture replacement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_calibration: Option<crate::InstalledColorCalibration>,
     /// Degrees the mounting bracket is set to: how far the fixture is angled in the clamp or yoke
     /// it hangs from, positive nose-down. Nothing on the desk can drive it, so the show records
     /// what the rig was actually set to and the picture follows it.
@@ -360,6 +366,9 @@ pub struct FrozenFixtureTarget {
     pub families: Vec<FreezeFamily>,
     #[serde(default)]
     pub values: HashMap<AttributeKey, AttributeValue>,
+    /// Accepted native motor output, independently captured for every physical copy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_native: Option<crate::FrozenPositionOutput>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -418,6 +427,12 @@ pub struct MultiPatchInstance {
     /// Reverse the normalized Tilt request for this physical instance.
     #[serde(default)]
     pub invert_tilt: bool,
+    /// Saved installation zero correction; not consumed by the current live output path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_calibration: Option<crate::InstalledPositionCalibration>,
+    /// Independent installed optical observations; stale after incompatible fixture replacement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_calibration: Option<crate::InstalledColorCalibration>,
     /// Degrees the mounting bracket of this physical instance is set to.
     #[serde(default)]
     pub bracket_angle: f32,

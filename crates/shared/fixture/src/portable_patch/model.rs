@@ -84,6 +84,12 @@ pub struct PatchedFixturePatch {
     pub invert_pan: bool,
     #[serde(default)]
     pub invert_tilt: bool,
+    /// Saved installation zero correction; not consumed by the current live output path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_calibration: Option<crate::InstalledPositionCalibration>,
+    /// Independent installed optical observations; stale after incompatible fixture replacement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_calibration: Option<crate::InstalledColorCalibration>,
     /// Degrees the mounting bracket is set to: how far the fixture is angled in the clamp or yoke
     /// it hangs from, positive nose-down. It is a mechanical setting nothing on the desk can
     /// drive, so the show records it and the picture follows it.
@@ -134,6 +140,8 @@ impl PatchedFixturePatch {
             grand_master_enabled: fixture.grand_master_enabled,
             invert_pan: fixture.invert_pan,
             invert_tilt: fixture.invert_tilt,
+            position_calibration: fixture.position_calibration.clone(),
+            color_calibration: fixture.color_calibration.clone(),
             bracket_angle: fixture.bracket_angle,
             shaper_angle: fixture.shaper_angle,
             installed_appearance: fixture.installed_appearance.clone(),

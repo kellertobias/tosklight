@@ -84,12 +84,14 @@ impl GeometryGraph {
             GeometryTemplate::Fixed | GeometryTemplate::Bar | GeometryTemplate::Matrix => {}
         }
         Self {
+            physical_contract: None,
             nodes,
             emitters: Vec::new(),
         }
     }
 
     pub fn validate(&self, head_ids: &HashSet<Uuid>) -> Result<(), ProfileError> {
+        self.validate_physical_contract()?;
         let node_ids = self
             .nodes
             .iter()

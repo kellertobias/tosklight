@@ -17,5 +17,9 @@ thiserror.workspace = true
 uuid.workspace = true
 zip.workspace = true
 
+[features]
+# Deterministic Direct Color samples for downstream lifecycle tests; never enable in production.
+test-support = []
+
 [lints]
 workspace = true

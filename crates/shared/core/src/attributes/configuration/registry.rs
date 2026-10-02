@@ -71,6 +71,13 @@ pub const ATTRIBUTE_REGISTRY: &[AttributeDescriptor] = &[
         AttributeClass::Color,
         "percent",
     ),
+    descriptor(
+        "position",
+        "Position",
+        AttributeClass::Position,
+        AttributeValueType::Position,
+        None,
+    ),
     continuous("pan", "Pan", AttributeClass::Position, "deg"),
     continuous("tilt", "Tilt", AttributeClass::Position, "deg"),
     continuous(

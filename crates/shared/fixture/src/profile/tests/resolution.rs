@@ -41,6 +41,8 @@ fn exact_raw_values_encode_msb_first_at_every_supported_resolution() {
             }],
             channels: vec![fixture_channel.clone()],
             color_systems: vec![],
+            color_physical: None,
+            position_physical: None,
             control_actions: vec![],
             geometry: GeometryGraph::default(),
             emitter_heads: Vec::new(),
@@ -83,6 +85,7 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
             dmx_to: 127,
             attribute: AttributeKey::intensity(),
             priority: 0,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Continuous {
                 physical_min: 0.0,
@@ -97,6 +100,7 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
             dmx_to: 255,
             attribute: AttributeKey("shutter".into()),
             priority: 10,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Fixed {
                 semantic_id: "open".into(),
@@ -120,6 +124,8 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
         }],
         channels: vec![fixture_channel.clone()],
         color_systems: vec![],
+        color_physical: None,
+        position_physical: None,
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),

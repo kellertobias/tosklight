@@ -5,7 +5,12 @@ mod aim;
 mod attributes;
 mod clock;
 pub mod color_intent;
+mod color_math;
+pub use color_math::{rgb_to_hsv, srgb_to_xyz, xyz_to_linear_srgb, xyz_to_srgb};
 mod frame_address;
+mod physical;
+pub mod programming;
+pub mod spatial;
 mod surface;
 
 pub use aim::{Mount, Point, pan_tilt_towards};
@@ -15,16 +20,21 @@ pub use attributes::{
     AttributeEntry, AttributeId, AttributeKey, AttributePlacement, AttributeTable, AttributeValue,
     AttributeValueType, CanonicalAttributeTransform, CustomAttributeDescriptor,
     CustomAttributeLifecycle, ENCODER_SLOTS_PER_PAGE, EncoderGroup, EncoderPlacement, MergeMode,
-    PROJECTION_ONLY_BUILT_IN_ATTRIBUTES, PickerColor, RETIRED_BUILT_IN_ATTRIBUTES,
-    ResolvedAttributeDescriptor, SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES, TimedValue, Xyz,
-    attribute_descriptor, built_in_attribute_is_projection_only, built_in_attribute_is_retired,
+    PROJECTION_ONLY_BUILT_IN_ATTRIBUTES, PickerColor, ProgrammerEditStamp,
+    RETIRED_BUILT_IN_ATTRIBUTES, ResolvedAttributeDescriptor,
+    SPECIAL_DIALOG_ONLY_BUILT_IN_ATTRIBUTES, TimedValue, Xyz, attribute_descriptor,
+    built_in_attribute_is_projection_only, built_in_attribute_is_retired,
     built_in_attribute_is_special_dialog_only, canonical_attribute_migration,
     canonical_attribute_migration_id, color_range_color, hsv_to_rgb, spread_position,
     transform_canonical_normalized, transform_canonical_value,
 };
 pub use clock::{ApplicationClock, EngineClock, ManualClock, SharedClock, SystemClock};
 pub use color_intent::{ColorProgrammingModel, ColorResolutionQuality};
-pub use frame_address::{FrameAddress, FrameAddressResolver};
+pub use frame_address::{ComponentFrameAddress, FrameAddress, FrameAddressResolver};
+pub use physical::{
+    NativeColorBinding, NativeColorIdentity, NativeColorValue, OpeningConvention,
+    PhysicalDataQuality,
+};
 pub use surface::SurfaceCapability;
 
 use serde::{Deserialize, Serialize};
