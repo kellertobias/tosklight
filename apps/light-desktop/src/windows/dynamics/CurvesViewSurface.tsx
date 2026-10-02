@@ -1,4 +1,9 @@
 import {
+	type ScalarDynamicLane,
+	isScalarDynamicLane,
+} from "../../features/dynamics/laneModel";
+import { ProgrammingLaneRow } from "./ProgrammingLaneView";
+import {
 	Button,
 	CyclingValueToggle,
 	FadedDivider,
@@ -10,7 +15,6 @@ import type {
 	PointerEvent as ReactPointerEvent,
 } from "react";
 import type {
-	DynamicLaneProjection,
 	DynamicPeriodicFunctionProjection,
 	DynamicUpdateIntent,
 } from "../../api/types";
@@ -44,21 +48,21 @@ interface DraggingKeyframe {
 
 interface CurvesSurfaceProps {
 	dynamic: DynamicObject;
-	lane: DynamicLaneProjection;
+	lane: ScalarDynamicLane;
 	selectedLanes: ReadonlySet<string>;
 	shiftArmed: boolean;
 	attributes: readonly { id: string; label: string; family: string }[];
 	keyframeIndex: number;
 	previewPhase: number | null;
 	contentSidebar?: ReactNode;
-	attributeLane: DynamicLaneProjection | undefined;
+	attributeLane: ScalarDynamicLane | undefined;
 	openLaneMenuId: string | null;
 	draggingKeyframe: DraggingKeyframe | null;
 	displayedMethod: "keyframes" | "max_min" | "middle_amplitude";
 	selectedFunction: DynamicPeriodicFunctionProjection | "random";
 	onPrimaryKeyframeIndex(index: number): void;
 	onSelect(id: string, additive: boolean): void;
-	onReplace(next: DynamicLaneProjection): Promise<void>;
+	onReplace(next: ScalarDynamicLane): Promise<void>;
 	onMutate(
 		dynamic: DynamicObject,
 		intent: DynamicUpdateIntent,
@@ -69,7 +73,7 @@ interface CurvesSurfaceProps {
 	onCloseLaneMenu(): void;
 	onDraggingKeyframe(value: DraggingKeyframe | null): void;
 	onMoveKeyframe(
-		lane: DynamicLaneProjection,
+		lane: ScalarDynamicLane,
 		index: number,
 		clientX: number,
 		timeline: HTMLElement,
@@ -99,14 +103,24 @@ export function CurvesViewSurface(props: CurvesSurfaceProps) {
 function LaneOverviewList(props: CurvesSurfaceProps) {
 	return (
 		<ul className="dynamic-lane-overview-list" aria-label="Dynamic lanes">
-			{props.dynamic.body.lanes.map((candidate, index) => (
-				<LaneOverviewRow
-					key={candidate.id}
-					{...props}
-					candidate={candidate}
-					index={index}
-				/>
-			))}
+			{props.dynamic.body.lanes.map((candidate, index) =>
+				isScalarDynamicLane(candidate) ? (
+					<LaneOverviewRow
+						key={candidate.id}
+						{...props}
+						candidate={candidate}
+						index={index}
+					/>
+				) : (
+					<ProgrammingLaneRow
+						key={candidate.id}
+						lane={candidate}
+						index={index}
+						selected={props.selectedLanes.has(candidate.id)}
+						onSelect={props.onSelect}
+					/>
+				),
+			)}
 		</ul>
 	);
 }
@@ -116,7 +130,7 @@ function LaneOverviewRow({
 	index,
 	...props
 }: CurvesSurfaceProps & {
-	candidate: DynamicLaneProjection;
+	candidate: ScalarDynamicLane;
 	index: number;
 }) {
 	const attribute =
@@ -181,7 +195,7 @@ function LaneCurve({
 	preview,
 	...props
 }: CurvesSurfaceProps & {
-	candidate: DynamicLaneProjection;
+	candidate: ScalarDynamicLane;
 	label: string;
 	selected: boolean;
 	preview: LanePreview;
@@ -268,7 +282,7 @@ function KeyframeMarks({
 	preview,
 	...props
 }: CurvesSurfaceProps & {
-	candidate: DynamicLaneProjection;
+	candidate: ScalarDynamicLane;
 	label: string;
 	preview: LanePreview;
 }) {
@@ -319,7 +333,7 @@ function KeyframeMarks({
 
 function beginKeyframeDrag(
 	event: ReactPointerEvent<HTMLButtonElement>,
-	candidate: DynamicLaneProjection,
+	candidate: ScalarDynamicLane,
 	index: number,
 	props: CurvesSurfaceProps,
 ) {
@@ -341,7 +355,7 @@ function beginKeyframeDrag(
 
 function continueKeyframeDrag(
 	event: ReactPointerEvent<HTMLButtonElement>,
-	candidate: DynamicLaneProjection,
+	candidate: ScalarDynamicLane,
 	index: number,
 	preview: LanePreview,
 	props: CurvesSurfaceProps,
@@ -372,7 +386,7 @@ function LaneMenu({
 	label,
 	...props
 }: CurvesSurfaceProps & {
-	candidate: DynamicLaneProjection;
+	candidate: ScalarDynamicLane;
 	label: string;
 }) {
 	return (
@@ -436,7 +450,7 @@ function AttributeLaneEditor(props: CurvesSurfaceProps) {
 				const target = props.dynamic.body.lanes.find(
 					(candidate) => candidate.id === props.attributeLane?.id,
 				);
-				if (!target) return;
+				if (!target || !isScalarDynamicLane(target)) return;
 				props.onAttributeLane(null);
 				void props.onMutate(props.dynamic, {
 					type: "replace_lane",

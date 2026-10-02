@@ -34,12 +34,12 @@ export function parameterSemanticDisplay(
 	const values = projection.dynamicProgrammerValues.filter(
 		(candidate) => candidate.attribute === attribute,
 	);
-	if (values.some((candidate) => candidate.value.type === "release"))
+	if (values.some((candidate) => candidate.value.type === "release" || candidate.value.type === "programming_release"))
 		return "Release";
 	if (
 		values.some(
 			(candidate) =>
-				candidate.value.type === "fix_at" || candidate.value.type === "static",
+				candidate.value.type === "fix_at" || candidate.value.type === "static" || candidate.value.type === "programming_fix_at",
 		)
 	)
 		return "FixAT";

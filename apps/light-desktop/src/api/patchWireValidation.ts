@@ -1,3 +1,5 @@
+import { colorCalibrationError, nativeColorIdentityError } from "@tosklight/patch/color-calibration";
+import { axisOverridesError, positionCalibrationIdentityError } from "@tosklight/patch/position-calibration";
 import type {
 	EventServerMessage,
 	PatchDelta,
@@ -170,6 +172,8 @@ function multipatchAt(value: unknown, path: string): void {
 		booleanAt(instance.invert_tilt, path + ".invert_tilt");
 	angleAt(instance.bracket_angle, path + ".bracket_angle");
 	nullableAngleAt(instance.shaper_angle, path + ".shaper_angle");
+	positionCalibrationAt(instance.position_calibration, path + ".position_calibration");
+	colorCalibrationAt(instance.color_calibration, path + ".color_calibration");
 	installedAppearanceAt(
 		instance.installed_appearance,
 		path + ".installed_appearance",
@@ -184,6 +188,29 @@ function angleAt(value: unknown, path: string): void {
 /** Degrees, or `null`/absent when no shaper or barn-door module is fitted. */
 function nullableAngleAt(value: unknown, path: string): void {
 	if (value !== undefined && value !== null) finiteNumberAt(value, path);
+}
+
+function positionCalibrationAt(value: unknown, path: string): void {
+	if (value == null) return;
+	const calibration = objectAt(value, path);
+ const overridesError=axisOverridesError(calibration.axis_overrides);if(overridesError)throw new WireValidationError(path+".axis_overrides",overridesError,calibration.axis_overrides);
+	for (const key of ["pan_zero_degrees", "tilt_zero_degrees"] as const) {
+		finiteNumberAt(calibration[key], path + "." + key);
+		if (!Number.isFinite(Math.fround(calibration[key] as number)))
+			throw new WireValidationError(path + "." + key, "finite physical degrees", calibration[key]);
+	}
+	finiteNumberAt(calibration.revision, path + ".revision");
+	if (!Number.isInteger(calibration.revision) || (calibration.revision as number) < 0 || (calibration.revision as number) > 0xffff_ffff)
+		throw new WireValidationError(path + ".revision", "non-negative u32 revision", calibration.revision);
+	if (!["unknown", "estimated", "manufacturer", "measured"].includes(calibration.quality as string))
+		throw new WireValidationError(path + ".quality", "calibration quality", calibration.quality);
+	if (calibration.source != null) {
+		stringAt(calibration.source, path + ".source");
+		if (new TextEncoder().encode(calibration.source as string).length > 1024)
+			throw new WireValidationError(path + ".source", "calibration source of at most 1024 bytes", calibration.source);
+	}
+	if ((calibration.quality === "manufacturer" || calibration.quality === "measured") && !(calibration.source as string | undefined)?.trim())
+		throw new WireValidationError(path + ".source", "non-empty calibration source", calibration.source);
 }
 
 function installedAppearanceAt(value: unknown, path: string): void {
@@ -330,6 +357,8 @@ function fixtureAt(
 		booleanAt(fixture.invert_tilt, path + ".invert_tilt");
 	angleAt(fixture.bracket_angle, path + ".bracket_angle");
 	nullableAngleAt(fixture.shaper_angle, path + ".shaper_angle");
+	positionCalibrationAt(fixture.position_calibration, path + ".position_calibration");
+	colorCalibrationAt(fixture.color_calibration, path + ".color_calibration");
 	installedAppearanceAt(
 		fixture.installed_appearance,
 		path + ".installed_appearance",
@@ -368,6 +397,11 @@ function profileAt(
 			const mode = objectAt(modeValue, modePath);
 			uuidAt(mode.mode_id, modePath + ".mode_id");
 			stringAt(mode.name, modePath + ".name");
+            if(mode.position_calibration_identity!=null){const error=positionCalibrationIdentityError(mode.position_calibration_identity);if(error)throw new WireValidationError(modePath+".position_calibration_identity",error,mode.position_calibration_identity);}
+            if (mode.native_color_identities !== undefined) arrayAt(mode.native_color_identities, modePath + ".native_color_identities").forEach((identity, index) => {
+                const error = nativeColorIdentityError(identity);
+                if (error) throw new WireValidationError(`${modePath}.native_color_identities[${index}]`, error, identity);
+            });
 			arrayAt(mode.splits, modePath + ".splits").forEach(
 				(splitValue, splitIndex) => {
 					const splitPath = modePath + ".splits[" + splitIndex + "]";
@@ -518,4 +552,9 @@ export function validatePatchEventServerMessage(
 			invalid("$.type", "ready, event, gap, repaired, or error", message.type);
 	}
 	return value as EventServerMessage;
+}
+
+function colorCalibrationAt(value: unknown, path: string): void {
+	const error = colorCalibrationError(value);
+	if (error) throw new WireValidationError(path, error, value);
 }

@@ -63,6 +63,15 @@ export interface VisualizationSnapshot {
 		attribute: string;
 		value: AttributeValue;
 	}>;
+	/**
+	 * Fixture Sheet reads only: each requested owner's commanded Pan/Tilt from the latest
+	 * accepted Live frame (TL-552), the pose the Pan/Tilt encoders show.
+	 */
+	commanded_positions?: Array<{
+		fixture_id: string;
+		pan_degrees: number;
+		tilt_degrees: number;
+	}>;
 	dynamic_stack?: Array<{
 		fixture_id: string;
 		attribute: string;

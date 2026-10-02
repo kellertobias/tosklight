@@ -1,3 +1,4 @@
+import { sameAttributeValue } from "../programmerValues/projectionValue";
 import type { StoredPreset, VisualizationSnapshot } from "../../api/types";
 import type { AttributeValue } from "../../api/types/playback";
 import { resolveSpread } from "../../components/control/parameterControls/parameterValueMutations";
@@ -73,7 +74,9 @@ export function presetFixtureTargets(
 					attribute,
 					spread
 						? { kind: "normalized", value: spread[index] ?? 0 }
-						: value,
+						: value.kind === "group_family"
+                            ? value.value.members?.[fixtureId] ?? value.value.template
+                            : value,
 				);
 			});
 		}
@@ -149,6 +152,10 @@ function asAttributeValue(raw: unknown): AttributeValue | null {
 			return typeof value === "string" ? (raw as AttributeValue) : null;
 		case "spread":
 			return Array.isArray(value) ? (raw as AttributeValue) : null;
+		case "group_family":
+		case "color_program":
+		case "position":
+		case "zoom":
 		case "color_xyz":
 			return value && typeof value === "object" ? (raw as AttributeValue) : null;
 		default:
@@ -179,6 +186,11 @@ function sameEffectiveValue(stored: AttributeValue, effective: AttributeValue) {
 			);
 		case "discrete":
 			return effective.kind === "discrete" && effective.value === stored.value;
+		case "group_family":
+		case "color_program":
+		case "position":
+		case "zoom":
+			return sameAttributeValue(stored, effective);
 		default:
 			return (
 				effective.kind === stored.kind && near(stored.value, effective.value)

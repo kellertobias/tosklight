@@ -42,6 +42,7 @@ export function programmingSnapshot() {
 		cursor: { sequence: 20 },
 		projection: {
 			desk_id: PROGRAMMING_DESK_ID,
+			alignment: { revision: 0, mode: "off", binding: null, fixture_count: 0 },
 			command_line: programmingCommandLine(),
 			selection: programmingSelection(),
 		},

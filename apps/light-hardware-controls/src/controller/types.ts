@@ -25,6 +25,7 @@ export interface FeedbackState {
   speedBpms: Record<number, number>;
   highlight: HighlightFeedback;
   updateArmed: boolean;
+  alignActive: boolean;
 }
 
 /** Which input path the test application exercises. */
@@ -72,4 +73,5 @@ export const initialFeedbackState: FeedbackState = {
   speedBpms: {},
   highlight: { active: false, canNext: false, canPrevious: false },
   updateArmed: false,
+  alignActive: false,
 };

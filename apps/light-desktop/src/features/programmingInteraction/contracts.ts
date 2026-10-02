@@ -112,6 +112,19 @@ export interface ProgrammingProjection {
 	deskId: string;
 	commandLine: CommandLineProjection;
 	selection: SelectionProjection;
+	alignment: AlignmentProjection;
+}
+
+export interface AlignmentProjection {
+	revision: number;
+	mode: "off" | "left" | "right" | "out" | "in";
+	binding: null | {kind: "attribute"; attribute: string} | {
+		kind: "family";
+		component: import("@tosklight/patch/contracts").ProgrammingComponent;
+		lane: "normal" | "preload";
+		groupId: string | null;
+	};
+	fixtureCount: number;
 }
 
 interface ProgrammingChangeBase {
@@ -119,6 +132,10 @@ interface ProgrammingChangeBase {
 }
 
 export type ProgrammingChange =
+	| (ProgrammingChangeBase & { alignment: AlignmentProjection; commandLine: CommandLineProjection; selection: SelectionProjection })
+	| (ProgrammingChangeBase & { alignment: AlignmentProjection; commandLine: CommandLineProjection })
+	| (ProgrammingChangeBase & { alignment: AlignmentProjection; selection: SelectionProjection })
+	| (ProgrammingChangeBase & { alignment: AlignmentProjection })
 	| (ProgrammingChangeBase & {
 			commandLine: CommandLineProjection;
 			selection: SelectionProjection;
@@ -131,7 +148,7 @@ export interface ProgrammingSnapshot {
 	projection: ProgrammingProjection;
 }
 
-export type ProgrammingCapability = "commandLine" | "selection";
+export type ProgrammingCapability = "commandLine" | "selection" | "alignment";
 
 export type CommandLinePatch = Partial<
 	Pick<CommandLineProjection, "text" | "target" | "pristine" | "pendingChoice">

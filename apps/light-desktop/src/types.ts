@@ -279,6 +279,7 @@ export interface AppState {
 		| "Shapers"
 		| "Control"
 		| "Media"
+		| "Focus"
 		| "Dynamics";
 	systemControlsOpen: boolean;
 	preloadStoreOpen: boolean;

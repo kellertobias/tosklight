@@ -1,5 +1,6 @@
 import type {
 	CommandLinePatch,
+	AlignmentProjection,
 	CommandLineProjection,
 	ProgrammingCapability,
 	ProgrammingChange,
@@ -15,6 +16,7 @@ export interface ProgrammingInteractionState {
 	eventSequence: number | null;
 	commandLine: CommandLineProjection | null;
 	selection: SelectionProjection | null;
+	alignment: AlignmentProjection | null;
 	pendingCapabilities: ReadonlySet<ProgrammingCapability>;
 	status: "idle" | "loading" | "ready" | "error";
 	error: Error | null;
@@ -43,6 +45,7 @@ export class ProgrammingInteractionStore {
 	private readonly operations = new Map<string, OptimisticOperation>();
 	private authoritativeCommandLine: CommandLineProjection | null = null;
 	private authoritativeSelection: SelectionProjection | null = null;
+	private authoritativeAlignment: AlignmentProjection | null = null;
 	private authorityKey = "";
 	private scope = 0;
 	private state: ProgrammingInteractionState = emptyState();
@@ -73,6 +76,7 @@ export class ProgrammingInteractionStore {
 		this.authorityKey = authorityKey;
 		this.authoritativeCommandLine = null;
 		this.authoritativeSelection = null;
+		this.authoritativeAlignment = null;
 		this.operations.clear();
 		this.state = {
 			...emptyState(),
@@ -108,10 +112,18 @@ export class ProgrammingInteractionStore {
 			snapshot.projection.selection,
 			sequence,
 		);
+		const alignmentDecision = this.installDecision(
+			"alignment",
+			this.authoritativeAlignment,
+			snapshot.projection.alignment,
+			sequence,
+		);
 		if (commandDecision === "install")
 			this.authoritativeCommandLine = snapshot.projection.commandLine;
 		if (selectionDecision === "install")
 			this.authoritativeSelection = snapshot.projection.selection;
+		if (alignmentDecision === "install")
+			this.authoritativeAlignment = snapshot.projection.alignment;
 		this.publishAuthoritative(sequence, updateSessionState);
 		return true;
 	}
@@ -124,7 +136,7 @@ export class ProgrammingInteractionStore {
 		if (!this.isScopeCurrent(expectedScope)) return false;
 		if (!this.matchesDesk(change.deskId)) return false;
 		const commandDecision =
-			"commandLine" in change
+			"commandLine" in change && change.commandLine !== undefined
 				? this.installDecision(
 						"command line",
 						this.authoritativeCommandLine,
@@ -133,7 +145,7 @@ export class ProgrammingInteractionStore {
 					)
 				: "same";
 		const selectionDecision =
-			"selection" in change
+			"selection" in change && change.selection !== undefined
 				? this.installDecision(
 						"selection",
 						this.authoritativeSelection,
@@ -141,10 +153,15 @@ export class ProgrammingInteractionStore {
 						sequence,
 					)
 				: "same";
-		if (commandDecision === "install" && "commandLine" in change)
+		const alignmentDecision = "alignment" in change
+			? this.installDecision("alignment", this.authoritativeAlignment, change.alignment, sequence)
+			: "same";
+		if (commandDecision === "install" && "commandLine" in change && change.commandLine)
 			this.authoritativeCommandLine = change.commandLine;
-		if (selectionDecision === "install" && "selection" in change)
+		if (selectionDecision === "install" && "selection" in change && change.selection)
 			this.authoritativeSelection = change.selection;
+		if ("alignment" in change && alignmentDecision === "install")
+			this.authoritativeAlignment = change.alignment;
 		this.publishAuthoritative(sequence);
 		return true;
 	}
@@ -168,6 +185,21 @@ export class ProgrammingInteractionStore {
 		this.operations.set(operation.token, operation);
 		this.publishRendered();
 		return operation.token;
+	}
+
+	installAlignment(alignment: AlignmentProjection, expectedScope = this.scope) {
+		if (!this.isScopeCurrent(expectedScope)) return false;
+		const decision = this.installDecision(
+			"alignment",
+			this.authoritativeAlignment,
+			alignment,
+			this.state.eventSequence ?? 0,
+		);
+		if (decision === "install") {
+			this.authoritativeAlignment = alignment;
+			this.publishRendered();
+		}
+		return true;
 	}
 
 	beginOptimisticSelectionUpdate(
@@ -365,6 +397,7 @@ export class ProgrammingInteractionStore {
 			...this.state,
 			commandLine: this.renderCommandLine(),
 			selection: this.renderSelection(),
+			alignment: this.authoritativeAlignment,
 			pendingCapabilities: new Set(
 				[...this.operations.values()].map(({ capability }) => capability),
 			),
@@ -407,6 +440,7 @@ function emptyState(): ProgrammingInteractionState {
 		eventSequence: null,
 		commandLine: null,
 		selection: null,
+		alignment: null,
 		pendingCapabilities: new Set(),
 		status: "idle",
 		error: null,

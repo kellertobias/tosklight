@@ -698,6 +698,8 @@ function applyPhysicalAction(
 		| "bracket_angle"
 		| "shaper_angle"
 		| "installed_appearance"
+		| "position_calibration"
+		| "color_calibration"
 	>,
 	action: Exclude<
 		PatchFixtureUpdateAction,
@@ -710,6 +712,10 @@ function applyPhysicalAction(
 				invert_pan: action.invertPan,
 				invert_tilt: action.invertTilt,
 			};
+		case "set_color_calibration":
+			return { color_calibration: action.calibration };
+		case "set_position_calibration":
+			return { position_calibration: action.calibration };
 		case "set_location_axis":
 			return {
 				location: {

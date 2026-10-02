@@ -403,3 +403,152 @@ describe("Preload Programmer values event wire", () => {
 		).toThrow(/declared wire field/);
 	});
 });
+
+describe("Preload Programmer semantic component edit intents", () => {
+	const GROUP_ID = "99999999-9999-4999-8999-999999999999";
+	const POINT_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+	const timing = { fade: false, fadeMillis: null, delayMillis: 75 };
+	const wireTiming = { fade: false, fade_millis: null, delay_millis: 75 };
+	const anglePan = [
+		{ kind: "activate_angles" },
+		{ kind: "scalar", component: { kind: "pan" }, operation: { kind: "set", value: { kind: "spread", value: [-90, 90] } } },
+	] as const;
+	const targetXyz = [
+		{ kind: "target", reference: { kind: "origin" } },
+		{ kind: "scalar", component: { kind: "target_x" }, operation: { kind: "relative", value: 1 } },
+		{ kind: "scalar", component: { kind: "target_y" }, operation: { kind: "relative", value: 0 } },
+		{ kind: "scalar", component: { kind: "target_z" }, operation: { kind: "set", value: { kind: "value", value: 3 } } },
+	] as const;
+	const pointTarget = [{ kind: "target", reference: { kind: "point", point_id: POINT_ID } }] as const;
+	const whiteBlendUv = [
+		{ kind: "scalar", component: { kind: "color", component: "uv" }, operation: { kind: "relative", value: -0.2 } },
+		{ kind: "scalar", component: { kind: "color", component: "white_blend" }, operation: { kind: "set", value: { kind: "value", value: 1 } } },
+	] as const;
+	const focus = [{ kind: "scalar", component: { kind: "focus" }, operation: { kind: "set", value: { kind: "value", value: 0.2 } } }] as const;
+	const zoom = [{ kind: "scalar", component: { kind: "zoom" }, operation: { kind: "relative", value: 4 } }] as const;
+
+	function request(
+		requestId: string,
+		attribute: string,
+		edits: readonly unknown[],
+		address: { fixtureIds: string[]; groupId?: string },
+	) {
+		return encodeProgrammerPreloadValuesActionRequest({
+			requestId,
+			expectedPreloadRevision: 21,
+			expectedCaptureModeRevision: 8,
+			action: {
+				action: "apply_intent",
+				...address,
+				attribute,
+				operation: { type: "component_edits", edits: edits as never },
+				undoGroup: null,
+				timing,
+			},
+		});
+	}
+
+	it.each([
+		["Angle activation plus Pan", "position", anglePan],
+		["Target reference plus XYZ", "position", targetXyz],
+		["Target point reference", "position", pointTarget],
+		["UV and White Blend", "color", whiteBlendUv],
+		["Focus", "focus", focus],
+		["Zoom", "zoom", zoom],
+	])("preserves ordered %s edits with Preload revisions", (_name, attribute, edits) => {
+		expect(request("preload-edit", attribute, edits, { fixtureIds: [FIXTURE_ID] })).toEqual({
+			request_id: "preload-edit",
+			expected_revision: 21,
+			expected_capture_mode_revision: 8,
+			action: {
+				type: "apply_intent",
+				fixture_ids: [FIXTURE_ID],
+				group_id: null,
+				attribute,
+				operation: { type: "component_edits", edits },
+				undo_group: null,
+				timing: wireTiming,
+			},
+		});
+	});
+
+	it("keeps live Group addressing distinct from fixture addressing", () => {
+		expect(request("preload-group", "position", anglePan, { fixtureIds: [], groupId: GROUP_ID }).action).toMatchObject({
+			fixture_ids: [],
+			group_id: GROUP_ID,
+			operation: { type: "component_edits", edits: anglePan },
+		});
+	});
+
+	it("still encodes a relative intent", () => {
+		const encoded = encodeProgrammerPreloadValuesActionRequest({
+			requestId: "step-1",
+			expectedPreloadRevision: 1,
+			expectedCaptureModeRevision: 1,
+			action: {
+				action: "apply_intent",
+				fixtureIds: [FIXTURE_ID],
+				attribute: "dimmer",
+				operation: { type: "relative_step", delta: 0.1 },
+				timing,
+			},
+		});
+		expect(encoded.action).toMatchObject({ operation: { type: "relative_step", delta: 0.1 } });
+	});
+
+	it("rejects malformed component edits before transport", () => {
+		expect(() => request("bad", "zoom", [{ kind: "scalar", component: { kind: "zoom" }, operation: { kind: "absolute", value: 1 } }], { fixtureIds: [FIXTURE_ID] })).toThrow(/\$\.action\.operation\.edits\[0\]\.operation\.kind/);
+		expect(() =>
+			encodeProgrammerPreloadValuesActionRequest({
+				requestId: "bad-op",
+				expectedPreloadRevision: 1,
+				expectedCaptureModeRevision: 1,
+				action: { action: "apply_intent", fixtureIds: [FIXTURE_ID], attribute: "zoom", operation: { type: "merge" } as never, timing },
+			}),
+		).toThrow(WireValidationError);
+	});
+});
+
+describe("Preload Programmer values gesture finish wire", () => {
+	it("encodes the generated finish_gesture action in the canonical envelope", () => {
+		expect(
+			encodeProgrammerPreloadValuesActionRequest({
+				requestId: "finish-1",
+				expectedPreloadRevision: 6,
+				expectedCaptureModeRevision: 4,
+				action: {
+					action: "finish_gesture",
+					attribute: "pan",
+					undoGroup: "gesture-1",
+				},
+			}),
+		).toEqual({
+			request_id: "finish-1",
+			expected_revision: 6,
+			expected_capture_mode_revision: 4,
+			action: { type: "finish_gesture", attribute: "pan", undo_group: "gesture-1" },
+		});
+	});
+
+	it("rejects a Finish without its original identity or envelope", () => {
+		const request = {
+			requestId: "finish-1",
+			expectedPreloadRevision: 6,
+			expectedCaptureModeRevision: 4,
+			action: {
+				action: "finish_gesture" as const,
+				attribute: "pan",
+				undoGroup: "gesture-1",
+			},
+		};
+		for (const invalid of [
+			{ ...request, action: { ...request.action, undoGroup: "" } },
+			{ ...request, action: { ...request.action, attribute: "" } },
+			{ ...request, requestId: "" },
+			{ ...request, expectedPreloadRevision: -0.5 },
+		])
+			expect(() => encodeProgrammerPreloadValuesActionRequest(invalid)).toThrow(
+				WireValidationError,
+			);
+	});
+});

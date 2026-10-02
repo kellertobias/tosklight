@@ -376,6 +376,9 @@ function configurationPatch(
 		...(configuration.pool_presentation
 			? { pool_presentation: configuration.pool_presentation }
 			: {}),
+		...(configuration.color_presentation
+			? { color_presentation: configuration.color_presentation }
+			: {}),
 		file_manager_system_picker_fallback:
 			configuration.file_manager_system_picker_fallback,
 		file_manager_roots: configuration.file_manager_roots,

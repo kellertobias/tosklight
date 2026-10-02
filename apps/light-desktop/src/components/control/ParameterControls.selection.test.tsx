@@ -288,6 +288,7 @@ describe("ParameterControls selection projection", () => {
 		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
 		expect(transport.subscriptions[0]?.scope).toEqual({
 			commandLine: false,
+			alignment: true,
 			selection: true,
 		});
 		expect(loadSnapshot).toHaveBeenCalledOnce();

@@ -1,3 +1,10 @@
+import type {
+	ColorAdoptionInput,
+	ColorAdoptionOutcome,
+	ProgrammerValuesHold,
+} from "../../api/colorAdoptionWire";
+import type { DisplayedSource } from "../programmerValues/displayedSource";
+import type { ProgrammerValueIntentOperation } from "../../api/programmingComponentEditWire";
 import type { AttributeValue } from "../../api/types/playback";
 
 export interface ProgrammerPreloadValueTiming {
@@ -88,11 +95,13 @@ export type ProgrammerPreloadValuesCommand =
 			fixtureIds: readonly string[];
 			groupId?: string | null;
 			attribute: string;
-			operation:
-				| { type: "absolute_set"; value: AttributeValue }
-				| { type: "relative_step"; delta: number };
+			operation: ProgrammerValueIntentOperation<AttributeValue>;
 			undoGroup?: string | null;
 			timing: ProgrammerPreloadValueTiming;
+			/** TL-594: the leased Preload displayed source; never a Live lease. */
+			displayedSource?: DisplayedSource | null;
+			/** TL-554: Direct reference head and explicit semantic starting colour. */
+			colorAdoption?: ColorAdoptionInput | null;
 	  }
 	| {
 			action: "apply_indexed_preset";
@@ -102,11 +111,35 @@ export type ProgrammerPreloadValuesCommand =
 	  }
 	| { action: "batch"; mutations: readonly ProgrammerPreloadValuesMutation[] };
 
+/**
+ * Ends one stopped Preload control gesture (TL-625). `undoGroup` is the
+ * gesture's original `apply_intent` Undo group; it never authors values, so
+ * it has no optimistic prediction and is not a `ProgrammerPreloadValuesCommand`.
+ */
+export interface ProgrammerPreloadValuesFinishGestureAction {
+	action: "finish_gesture";
+	attribute: string;
+	undoGroup: string;
+}
+
+export type ProgrammerPreloadValuesRequestAction =
+	| ProgrammerPreloadValuesCommand
+	| ProgrammerPreloadValuesFinishGestureAction;
+
 export interface ProgrammerPreloadValuesActionRequest {
 	requestId: string;
 	expectedPreloadRevision: number;
 	expectedCaptureModeRevision: number;
-	action: ProgrammerPreloadValuesCommand;
+	action: ProgrammerPreloadValuesRequestAction;
+}
+
+/** A fresh request ID plus the stopped gesture's original identity. */
+export interface FinishProgrammerPreloadValuesGestureInput {
+	requestId: string;
+	attribute: string;
+	undoGroup: string;
+	/** A completed discrete step: keep the gesture's unsent edits, queue the Finish behind them. */
+	keepAdmittedEdits?: boolean;
 }
 
 export interface ProgrammerPreloadIndexedPresetTarget {
@@ -122,6 +155,10 @@ interface ProgrammerPreloadValuesOutcomeBase {
 	captureModeRevision: number;
 	replayed: boolean;
 	warning: string | null;
+	/** TL-594/TL-554: why the edit was held quietly (no mutation, revision or Undo). */
+	hold?: ProgrammerValuesHold;
+	/** TL-554: the semantic starting value the first semantic edit of a Direct value adopted. */
+	colorAdoption?: ColorAdoptionOutcome;
 }
 
 export type ProgrammerPreloadValuesActionOutcome =
@@ -177,11 +214,11 @@ export interface ApplyProgrammerPreloadValueIntentInput {
 	fixtureIds: readonly string[];
 	groupId?: string | null;
 	attribute: string;
-	operation:
-		| { type: "absolute_set"; value: AttributeValue }
-		| { type: "relative_step"; delta: number };
+	operation: ProgrammerValueIntentOperation<AttributeValue>;
 	undoGroup?: string | null;
 	timing: ProgrammerPreloadValueTiming;
+	displayedSource?: DisplayedSource | null;
+	colorAdoption?: ColorAdoptionInput | null;
 }
 
 /** View-owned mutation boundary. It stays dormant until authority is mounted. */
@@ -209,5 +246,20 @@ export interface ProgrammerPreloadValuesActions {
 	): Promise<ProgrammerPreloadValuesActionOutcome | null>;
 	batch(
 		input: BatchProgrammerPreloadValuesInput,
+	): Promise<ProgrammerPreloadValuesActionOutcome | null>;
+	/**
+	 * Locally drops the unsent `apply_intent` rows of one stopped gesture
+	 * (its `undoGroup`) and returns how many were dropped. The dispatched row
+	 * still settles; no backend action is sent. Optional so view-level fakes
+	 * stay valid; the mounted writer always provides it.
+	 */
+	cancelGesture?(undoGroup: string): number;
+	/**
+	 * Drops the gesture's unsent edits, then queues exactly one Finish behind
+	 * any in-flight edit on the same FIFO. Optional so view-level fakes stay
+	 * valid; the mounted writer always provides it.
+	 */
+	finishGesture?(
+		input: FinishProgrammerPreloadValuesGestureInput,
 	): Promise<ProgrammerPreloadValuesActionOutcome | null>;
 }

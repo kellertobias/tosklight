@@ -1,3 +1,6 @@
+import type { InstalledColorCalibration, NativeColorIdentity } from "@tosklight/patch";
+import type { InstalledPositionCalibration } from "@tosklight/patch";
+export type { InstalledPositionCalibration } from "@tosklight/patch";
 export interface PatchedFixture {
 	fixture_id: string;
 	fixture_number?: number | null;
@@ -55,6 +58,8 @@ export interface PatchedFixture {
 	grand_master_enabled?: boolean;
 	invert_pan?: boolean;
 	invert_tilt?: boolean;
+	position_calibration?: InstalledPositionCalibration | null;
+	color_calibration?: InstalledColorCalibration | null;
 	/** Degrees the mounting bracket is set to, positive nose-down. */
 	bracket_angle?: number;
 	/** Degrees a fitted shaper or barn-door module is turned to; absent when none is fitted. */
@@ -92,6 +97,8 @@ export interface MultiPatchInstance {
 	split_patches?: SplitPatch[];
 	invert_pan?: boolean;
 	invert_tilt?: boolean;
+	position_calibration?: InstalledPositionCalibration | null;
+	color_calibration?: InstalledColorCalibration | null;
 	bracket_angle?: number;
 	shaper_angle?: number | null;
 	installed_appearance?: InstalledFixtureAppearance;
@@ -119,6 +126,9 @@ import type {
 } from "@tosklight/patch/fixture-profile";
 
 export interface FixtureDefinition {
+ position_calibration_context?: import("@tosklight/patch").PositionCalibrationContext;
+	/** Read-only server context for installed calibration; never written into a profile. */
+	color_calibration_context?: { identities: readonly NativeColorIdentity[]; mode: import("@tosklight/patch/fixture-profile").FixtureMode };
 	schema_version: number;
 	id: string;
 	revision: number;

@@ -30,8 +30,7 @@ import type {
 	GenerateFixturePresetsOutcome,
 	GenerateFixturePresetsRequest,
 	LiveAction,
-	ProgrammingAlignMode,
-	ProgrammingAlignOutcome,
+	ProgrammingAlignAction,
 } from "../generated/light-wire";
 import {
 	decodePresetRecallOutcome,
@@ -63,6 +62,9 @@ import {
 } from "../programmingWire";
 import type { GeneratedFixturePresetResult } from "../types";
 import type { LiveClientTransport } from "./transport";
+import { decodeProgrammingAlignment } from "../programmingWireProjection";
+import { recordAt, stringAt } from "../playbackWirePrimitives";
+import { WireValidationError } from "../wireValidation";
 
 export class ProgrammingApiClient {
 	constructor(private readonly transport: LiveClientTransport) {}
@@ -182,9 +184,9 @@ export class ProgrammingApiClient {
 	 * Requests an Align mode and resolves with the mode the desk actually holds.
 	 * The server reports an activation that changed nothing (no selection) as Off.
 	 */
-	async align(mode: ProgrammingAlignMode): Promise<ProgrammingAlignMode> {
+	async align(mode: ProgrammingAlignAction) {
 		const requestId = crypto.randomUUID();
-		const outcome = (await this.transport.sendAction(
+		const response = await this.transport.sendAction(
 			{
 				type: "programming_align",
 				request: {
@@ -193,8 +195,11 @@ export class ProgrammingApiClient {
 				},
 			},
 			requestId,
-		)) as Partial<ProgrammingAlignOutcome> | undefined;
-		return outcome?.mode ?? mode;
+		);
+		const outcome = recordAt(response, "$");
+		if (stringAt(outcome.request_id, "$.request_id") !== requestId)
+			throw new WireValidationError("$.request_id", requestId, outcome.request_id);
+		return decodeProgrammingAlignment(outcome.alignment, "$.alignment");
 	}
 
 	controlFixtureAction(fixtureId: string, actionId: string, active: boolean) {

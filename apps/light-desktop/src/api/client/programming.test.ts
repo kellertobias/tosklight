@@ -21,6 +21,7 @@ function interactionSnapshot() {
 		cursor: { sequence: 12 },
 		projection: {
 			desk_id: DESK_ID,
+			alignment: { revision: 0, mode: "off", binding: null, fixture_count: 0 },
 			command_line: commandLine(),
 			selection: {
 				selected: [FIXTURE_ID],
@@ -47,6 +48,7 @@ function decodedInteractionSnapshot() {
 		cursor: 12,
 		projection: {
 			deskId: DESK_ID,
+			alignment: { revision: 0, mode: "off", binding: null, fixtureCount: 0 },
 			commandLine: decodedCommandLine(),
 			selection: {
 				selected: [FIXTURE_ID],

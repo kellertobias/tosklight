@@ -157,6 +157,11 @@ export function useVisualizationRuntimeSnapshot(
 	return useVisualizationRuntimeView(options).snapshot;
 }
 
+/** The scoped runtime session (stream readout claims, one-shot reads); null while unscoped. */
+export function useVisualizationRuntimeSession() {
+	return useContext(SessionContext);
+}
+
 export function useVisualizationRuntimeStore() {
 	return useContext(StoreContext) ?? fallbackStore;
 }

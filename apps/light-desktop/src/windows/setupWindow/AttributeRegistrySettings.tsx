@@ -26,7 +26,10 @@ import {
 	renameActivationGroup,
 } from "./activationPresets";
 import { customAttributeId, nextPlacement } from "./attributeRegistryHelpers";
-import { ShowColorModelSettings } from "./ColorModelSettings";
+import {
+	ColorPresentationSettings,
+	ShowColorModelSettings,
+} from "./ColorModelSettings";
 import type { SetupWindowController } from "./controller";
 import {
 	type EncoderSlotTarget,
@@ -96,6 +99,7 @@ export function AttributeRegistrySettings({
 			{activeTab === "color-model" && (
 				<div className="attribute-tabpanel" role="tabpanel">
 					<ShowColorModelSettings controller={controller} />
+					<ColorPresentationSettings controller={controller} />
 				</div>
 			)}
 			{controller.attributeConfigurationError && (

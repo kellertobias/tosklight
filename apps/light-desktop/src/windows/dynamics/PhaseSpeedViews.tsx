@@ -1,3 +1,4 @@
+import { dynamicLaneLabel } from "../../features/dynamics/laneModel";
 import {
 	Button,
 	FormLayout,
@@ -80,7 +81,9 @@ export function PhaseView({
 	};
 	// The shape stage is what a Group is inherited from, so an ordering choice has to move it
 	// too; otherwise the Group's shape would keep winning over the operator's pick.
-	const applyOrderingShape = (ordering: DynamicPhaseOrderingProjection | null) =>
+	const applyOrderingShape = (
+		ordering: DynamicPhaseOrderingProjection | null,
+	) =>
 		onMutate(dynamic, {
 			type: "set_spatial_mapping",
 			spatial_mapping: spatialMappingForOrdering(
@@ -439,7 +442,7 @@ function PhaseControls({
 					value={lane.id}
 					options={dynamic.body.lanes.map((candidate, index) => ({
 						value: candidate.id,
-						label: `Lane ${index + 1} · ${candidate.attribute}`,
+						label: `Lane ${index + 1} · ${dynamicLaneLabel(candidate)}`,
 					}))}
 					onChange={onSelectLane}
 				/>

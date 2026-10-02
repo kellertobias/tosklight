@@ -117,8 +117,9 @@ describe("hardware controller surfaces", () => {
 	it("sends attached ALIGN as one canonical press/release gesture", () => {
 		HTMLElement.prototype.setPointerCapture = vi.fn();
 		const sendControl = vi.fn();
-		render(<NavigationRail page={1} send={sendControl} />);
+		const { rerender } = render(<NavigationRail page={1} send={sendControl} />);
 		const align = screen.getByRole("button", { name: "ALIGN" });
+		expect(align.classList.contains("off")).toBe(true);
 
 		fireEvent.pointerDown(align, { pointerId: 3 });
 		fireEvent.pointerUp(align, { pointerId: 3 });
@@ -131,6 +132,9 @@ describe("hardware controller surfaces", () => {
 		expect(sendControl.mock.calls[1]?.[1]?.[1]).toBe(
 			sendControl.mock.calls[0]?.[1]?.[1],
 		);
+		rerender(<NavigationRail page={1} send={sendControl} alignActive />);
+		expect(align.classList.contains("on")).toBe(true);
+		expect(sendControl).toHaveBeenCalledTimes(2);
 	});
 
 	it("uses native page key gestures for the native simulator", () => {

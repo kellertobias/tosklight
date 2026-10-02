@@ -1,3 +1,4 @@
+import {GeometryPhysicalContractEditor} from "./geometryPhysicalContract";
 import { useState } from "react";
 import type {
 	FixtureMode,
@@ -133,6 +134,7 @@ export function GeometryEditor({
 	};
 	return (
 		<div className="fixture-geometry-editor">
+            <GeometryPhysicalContractEditor geometry={mode.geometry} onChange={geometry=>onChange({...mode,geometry})}/>
 			<GeometryTemplates onSelect={useTemplate} />
 			<div className="geometry-workspace">
 				<GeometryTree
@@ -160,6 +162,7 @@ export function GeometryEditor({
 								onChange({
 									...mode,
 									geometry: {
+                                        ...mode.geometry,
 										nodes: mode.geometry.nodes.filter(
 											(candidate) => candidate.id !== selectedNode.id,
 										),

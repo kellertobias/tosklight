@@ -147,6 +147,7 @@ export function modeGeometry(
 	// more specific statement. After a lift the mode's graph is empty and this is the fixture's.
 	// Both sides are read from stored show data, which may predate either field.
 	const own = {
+        physical_contract: mode.geometry?.physical_contract,
 		nodes: mode.geometry?.nodes ?? [],
 		emitters: mode.geometry?.emitters ?? [],
 	};

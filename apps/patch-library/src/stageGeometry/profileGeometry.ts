@@ -84,11 +84,18 @@ function attributesForNode(
 	return attributes;
 }
 
+function neutralRotation(node: GeometryNode) {
+    const r = node.transform.rotation_degrees;
+    return new THREE.Quaternion().setFromEuler(new THREE.Euler(
+        THREE.MathUtils.degToRad(r.x), THREE.MathUtils.degToRad(r.y), THREE.MathUtils.degToRad(r.z), "XYZ",
+    ));
+}
+
 function applyNodeMotion(
 	node: GeometryNode,
 	attributes: FixtureAttributeValues,
 	translation: THREE.Vector3,
-	rotation: { x: number; y: number; z: number },
+	rotation: THREE.Quaternion,
 ) {
 	// A part this mode does not bind to an attribute does not move, exactly as the fixture crate
 	// resolves it: it stays at its authored transform.
@@ -98,9 +105,8 @@ function applyNodeMotion(
 		node.motion.physical_min +
 		(node.motion.physical_max - node.motion.physical_min) * level;
 	if (node.motion.kind === "rotation") {
-		rotation.x += node.motion.axis.x * physical;
-		rotation.y += node.motion.axis.y * physical;
-		rotation.z += node.motion.axis.z * physical;
+		const axis = new THREE.Vector3(node.motion.axis.x, node.motion.axis.y, node.motion.axis.z);
+		if (axis.lengthSq() > 1e-12) rotation.multiply(new THREE.Quaternion().setFromAxisAngle(axis.normalize(), THREE.MathUtils.degToRad(physical)));
 		return;
 	}
 	translation.add(
@@ -155,17 +161,13 @@ function createGeometryNode(
 ): GeometryNodeParts {
 	const attributes = attributesForNode(options, headIds);
 	const translation = millimetres(node.transform.translation);
-	const rotation = { ...node.transform.rotation_degrees };
+	const rotation = neutralRotation(node);
 	applyNodeMotion(node, attributes, translation, rotation);
 	const pivot = millimetres(node.pivot);
 	const group = new THREE.Group();
 	group.name = `geometry-node:${node.id}`;
 	group.position.copy(translation).add(pivot);
-	group.rotation.set(
-		THREE.MathUtils.degToRad(rotation.x),
-		THREE.MathUtils.degToRad(rotation.y),
-		THREE.MathUtils.degToRad(rotation.z),
-	);
+	group.quaternion.copy(rotation);
 	group.scale.set(
 		node.transform.scale.x || 1,
 		node.transform.scale.y || 1,
@@ -316,7 +318,7 @@ export function updateFixtureProfileGeometry(
 			root.getObjectByName(`geometry-node:${node.id}`);
 		if (!(group instanceof THREE.Group)) continue;
 		const translation = millimetres(node.transform.translation);
-		const rotation = { ...node.transform.rotation_degrees };
+		const rotation = neutralRotation(node);
 		applyNodeMotion(
 			node,
 			attributesForNode(options, relatedHeads.get(node.id) ?? new Set()),
@@ -325,11 +327,7 @@ export function updateFixtureProfileGeometry(
 		);
 		const pivot = millimetres(node.pivot);
 		group.position.copy(translation).add(pivot);
-		group.rotation.set(
-			THREE.MathUtils.degToRad(rotation.x),
-			THREE.MathUtils.degToRad(rotation.y),
-			THREE.MathUtils.degToRad(rotation.z),
-		);
+		group.quaternion.copy(rotation);
 	}
 	for (const emitter of options.mode.geometry.emitters) {
 		const group =

@@ -1,0 +1,38 @@
+.ui-modal-stack-layer.fam-position-control-layer > .fam-position-control-modal { width: min(800px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 0; display: grid; grid-template-rows: 54px minmax(0, 1fr); overflow: hidden; }
+.fam-position-control-modal > .ui-modal-titlebar { margin: 0; border-radius: 5px 5px 0 0; }
+.fam-position-control-modal .fam-position-control-body { display: grid; gap: 16px; padding: 16px 22px 18px; overflow: auto; min-height: 0; }
+.fam-position-control-modal .fam-position-layout { display: grid; grid-template-columns: minmax(250px, 290px) minmax(0, 1fr); gap: 24px; align-items: center; }
+.fam-position-control-modal .fam-position-angle-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; }
+.fam-position-control-modal .fam-position-pan { display: grid; grid-template-rows: 220px 44px 18px; gap: 6px; min-width: 0; }
+.fam-position-control-modal .fam-position-pan svg { width: 220px; height: 220px; justify-self: center; touch-action: none; cursor: grab; outline-offset: -2px; }
+.fam-position-control-modal .fam-position-pan svg:active { cursor: grabbing; }
+.fam-position-control-modal .fam-position-pan-ring { fill: #0b151d; stroke: #3e596d; stroke-width: 3; }
+.fam-position-control-modal .fam-position-pan-tick { stroke: #7893a7; stroke-width: 2; }
+.fam-position-control-modal .fam-position-pan-zero, .fam-position-control-modal .fam-position-pan-label { fill: #a4b4c0; font-size: 12px; }
+.fam-position-control-modal .fam-position-pan-direction { stroke: var(--cyan); stroke-width: 3; }
+.fam-position-control-modal .fam-position-pan-handle { fill: var(--cyan); stroke: #c9faff; stroke-width: 2; }
+.fam-position-control-modal .fam-position-pan-center { fill: #111b23; stroke: #344452; }
+.fam-position-control-modal .fam-position-pan-value { fill: var(--text); font-size: 22px; font-weight: 700; }
+.fam-position-control-modal .fam-position-pan-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.fam-position-control-modal .fam-position-pan-actions .ui-button { min-height: 44px; padding-inline: 8px; }
+.fam-position-control-modal .fam-position-turns { display: block; text-align: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fam-position-control-modal .fam-position-tilt { display: grid; gap: 10px; min-width: 0; }
+.fam-position-control-modal .fam-position-tilt .fam-range-heading { font-size: 14px; }
+.fam-position-control-modal .fam-position-tilt .fam-range-heading output { font-size: 22px; }
+.fam-position-control-modal .fam-position-tilt-limits { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+.fam-position-control-modal .fam-position-aim { display: grid; gap: 8px; min-width: 0; }
+.fam-position-control-modal .fam-position-aim > p { margin: 0; text-align: center; color: var(--muted); font-size: 12px; }
+.fam-position-control-modal .fam-position-joystick { position: relative; width: 100%; aspect-ratio: 1; min-width: 0; border: 1px solid #3b596a; border-radius: 6px; background: linear-gradient(0deg, transparent calc(50% - .5px), #29414f calc(50% - .5px), #29414f calc(50% + .5px), transparent calc(50% + .5px)), linear-gradient(90deg, transparent calc(50% - .5px), #29414f calc(50% - .5px), #29414f calc(50% + .5px), transparent calc(50% + .5px)), #0b1921; touch-action: none; cursor: crosshair; }
+.fam-position-control-modal .fam-position-joystick.is-held { border-color: var(--cyan); }
+.fam-position-control-modal .fam-position-joystick-ring { position: absolute; inset: 8%; border: 1px dashed #375463; border-radius: 50%; pointer-events: none; }
+.fam-position-control-modal .fam-position-joystick-neutral { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border: 1px solid #597a8b; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.fam-position-control-modal .fam-position-joystick-marker { position: absolute; width: 22px; height: 22px; border: 2px solid #c8faff; border-radius: 50%; background: var(--cyan); transform: translate(-50%, -50%); pointer-events: none; }
+.fam-position-control-modal .fam-position-joystick:not(.is-held) .fam-position-joystick-marker { transition: left 100ms ease-out, top 100ms ease-out; }
+.fam-position-control-modal .fam-position-joystick-label { position: absolute; left: 12px; top: 10px; color: var(--muted); font-size: 12px; pointer-events: none; }
+@media (max-width: 620px) {
+ .fam-position-control-modal .fam-position-control-body { padding: 12px; gap: 12px; }
+ .fam-position-control-modal .fam-position-layout { grid-template-columns: 230px minmax(0, 1fr); gap: 16px; }
+}
+@media (max-width: 440px) {
+ .fam-position-control-modal .fam-position-layout { grid-template-columns: 1fr; gap: 16px; }
+}

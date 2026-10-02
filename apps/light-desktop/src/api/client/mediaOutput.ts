@@ -1,3 +1,5 @@
+import { decodeOutputDmxSnapshot } from "../outputDmxWire";
+import type { OutputDmxSnapshot } from "../generated/light-wire";
 import type { NetworkEndpointsSnapshot } from "../../features/dmxDiagnostics/networkEndpoints";
 import type {
 	OutputRuntimeActionOutcome,
@@ -180,8 +182,8 @@ export class MediaOutputApiClient {
 		return this.transport.request(`/api/v2/output/visualization${query}`);
 	}
 
-	dmx(): Promise<DmxSnapshot> {
-		return this.transport.request("/api/v2/output/dmx", {}, false);
+	async dmx(): Promise<DmxSnapshot> {
+		return decodeOutputDmxSnapshot(await this.transport.request<OutputDmxSnapshot>("/api/v2/output/dmx", {}, false));
 	}
 
 	/** Every Art-Net and sACN endpoint the desk sends to or hears from, with its status. */

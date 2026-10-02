@@ -1,3 +1,5 @@
+import { decodeColorProgram, decodePositionIntent, decodeZoomIntent, decodeGroupFamily, decodeDynamicValueAddress, decodeProgrammingComponent } from "./programmingIntentWire";
+import { validateProgrammingMask } from "./programmingMaskWire";
 import type {
 	ProgrammerDynamicValue,
 	ProgrammerFixtureValue,
@@ -96,7 +98,7 @@ function decodeDynamicValue(
 		"programmer_order",
 		"changed_at_millis",
 	]);
-	return {
+	const decoded: ProgrammerDynamicValue = {
 		fixtureId: programmerValuesUuidAt(item.fixture_id, `${path}.fixture_id`),
 		attribute: stringAt(item.attribute, `${path}.attribute`),
 		value: decodeDynamicSemanticValue(
@@ -113,6 +115,18 @@ function decodeDynamicValue(
 			`${path}.changed_at_millis`,
 		),
 	};
+	const semantic = decoded.value;
+	if (semantic.type === "programming_fix_at") {
+		const kind = semantic.mask.address.representation.kind;
+		const owner = kind === "angles" || kind === "target" ? "position" : kind === "semantic_color" || kind === "direct_color" ? "color" : kind;
+		if (decoded.attribute !== owner) throw new WireValidationError(path, "mask stored under its family owner", value);
+	} else if (semantic.type === "programming_release") {
+		const kind = semantic.component?.kind;
+		const owner = kind == null ? decoded.attribute : kind === "pan" || kind === "tilt" || kind.startsWith("target_") ? "position" : kind === "color" || kind === "native_color" ? "color" : kind;
+		if (!["position", "color", "focus", "zoom"].includes(owner) || owner !== decoded.attribute)
+			throw new WireValidationError(path, "Release stored under its family owner", value);
+	}
+	return decoded;
 }
 
 function decodeDynamicSemanticValue(
@@ -126,15 +140,32 @@ function decodeDynamicSemanticValue(
 		"dynamic_on",
 		"dynamic_off",
 		"fix_at",
+		"programming_fix_at",
+		"programming_release",
 		"release",
 	]);
 	if (type === "release")
 		return exactRecordAt(value, path, ["type"]) as { type: "release" };
+	if (type === "programming_release") {
+		const semantic = exactRecordAt(value, path, ["type", "component"]);
+		const component = semantic.component == null ? null : decodeProgrammingComponent(semantic.component, `${path}.component`);
+		if (component?.kind === "color_wheel" || component?.kind === "target_reference")
+			throw new WireValidationError(path, "continuous component Release", value);
+		return { type, component };
+	}
+	if (type === "programming_fix_at") {
+		const semantic = exactRecordAt(value, path, ["type", "mask", "timing"]);
+		const mask = exactRecordAt(semantic.mask, `${path}.mask`, ["address", "family"]);
+		const address = decodeDynamicValueAddress(mask.address, `${path}.mask.address`);
+		const family = decodeAttributeValue(mask.family, `${path}.mask.family`, "fixture");
+		validateProgrammingMask(address, family, `${path}.mask`);
+		return { type, mask: { address, family }, timing: decodeDynamicTiming(semantic.timing, `${path}.timing`) };
+	}
 	if (type === "static") {
 		const semantic = exactRecordAt(value, path, ["type", "value", "timing"]);
 		return {
 			type,
-			value: decodeAttributeValue(semantic.value, `${path}.value`),
+			value: decodeAttributeValue(semantic.value, `${path}.value`, "fixture"),
 			timing: decodeDynamicTiming(semantic.timing, `${path}.timing`),
 		};
 	}
@@ -351,7 +382,7 @@ function decodeFixtureValue(
 	return {
 		fixtureId: programmerValuesUuidAt(item.fixture_id, `${path}.fixture_id`),
 		attribute: stringAt(item.attribute, `${path}.attribute`),
-		value: decodeAttributeValue(item.value, `${path}.value`),
+		value: decodeAttributeValue(item.value, `${path}.value`, "fixture"),
 		programmerOrder: integerAt(
 			item.programmer_order,
 			`${path}.programmer_order`,
@@ -373,7 +404,7 @@ function decodeGroupValue(value: unknown, path: string): ProgrammerGroupValue {
 	return {
 		groupId: stringAt(item.group_id, `${path}.group_id`),
 		attribute: stringAt(item.attribute, `${path}.attribute`),
-		value: decodeAttributeValue(item.value, `${path}.value`),
+		value: decodeAttributeValue(item.value, `${path}.value`, "group"),
 		programmerOrder: integerAt(
 			item.programmer_order,
 			`${path}.programmer_order`,
@@ -399,9 +430,26 @@ function optionalMillis(
 	return value == null ? null : integerAt(value, `${path}.${key}`);
 }
 
-export function decodeAttributeValue(
+export function decodeAttributeValue(value: unknown, path: string, scope: "independent" | "fixture" | "group" = "independent"): AttributeValue {
+    const decoded = decodeAttributePayload(value,path,scope);
+    if (scope === "fixture" && hasSpread(decoded)) throw new WireValidationError(path,"materialized fixture value",value);
+    return decoded;
+}
+function hasSpread(value: AttributeValue): boolean {
+    switch (value.kind) {
+        case "spread": return true;
+        case "position": return value.value.kind === "angles"
+            ? value.value.pan_degrees.kind === "spread" || value.value.tilt_degrees.kind === "spread"
+            : value.value.offset_metres.some(axis => axis.kind === "spread");
+        case "zoom": return value.value.opening_degrees.kind === "spread";
+        case "color_program": return value.value.kind === "semantic" ? Boolean(value.value.intent.spreads?.length) : Boolean(value.value.recipe.spreads?.length);
+        default: return false;
+    }
+}
+function decodeAttributePayload(
 	value: unknown,
 	path: string,
+	scope: "independent" | "fixture" | "group",
 ): AttributeValue {
 	const attribute = exactRecordAt(value, path, ["kind", "value"]);
 	const kind = enumAt(attribute.kind, `${path}.kind`, [
@@ -409,6 +457,10 @@ export function decodeAttributeValue(
 		"spread",
 		"discrete",
 		"color_xyz",
+		"color_program",
+		"group_family",
+		"position",
+		"zoom",
 		"raw_dmx",
 		"raw_dmx_exact",
 	]);
@@ -423,6 +475,13 @@ export function decodeAttributeValue(
 		return { kind, value: stringAt(attribute.value, `${path}.value`) };
 	if (kind === "color_xyz")
 		return { kind, value: decodeColor(attribute.value, `${path}.value`) };
+	if (kind === "group_family") {
+        if (scope !== "group") throw new WireValidationError(path, "Group family assignment only in a Group scope", value);
+        return { kind, value: decodeGroupFamily(attribute.value, `${path}.value`) };
+    }
+	if (kind === "color_program") return { kind, value: decodeColorProgram(attribute.value, `${path}.value`) };
+	if (kind === "position") return { kind, value: decodePositionIntent(attribute.value, `${path}.value`) };
+	if (kind === "zoom") return { kind, value: decodeZoomIntent(attribute.value, `${path}.value`) };
 	const raw = integerAt(attribute.value, `${path}.value`);
 	const maximum = kind === "raw_dmx" ? 255 : 4_294_967_295;
 	if (raw > maximum)

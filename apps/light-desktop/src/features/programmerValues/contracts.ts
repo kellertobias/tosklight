@@ -1,8 +1,16 @@
 import type {
+	ColorAdoptionInput,
+	ColorAdoptionOutcome,
+	ProgrammerValuesHold,
+} from "../../api/colorAdoptionWire";
+import type { DisplayedSource } from "./displayedSource";
+import type {
 	DynamicDefinitionProjection,
 	DynamicReferenceProjection,
 	ProgrammingDynamicSemanticValue,
 } from "../../api/types";
+import type { ProgrammingComponent } from "../../api/generated/light-wire";
+import type { ProgrammerValueIntentOperation } from "../../api/programmingComponentEditWire";
 import type { AttributeValue } from "../../api/types/playback";
 
 export interface ProgrammerValueTiming {
@@ -67,6 +75,8 @@ export interface ProgrammerFixtureValueAddress {
 export interface ProgrammerDynamicValueAddress
 	extends ProgrammerFixtureValueAddress {
 	instanceLink: string | null;
+	laneId: string | null;
+	component?: ProgrammingComponent | null;
 }
 
 export interface ProgrammerGroupValueAddress {
@@ -160,11 +170,13 @@ export type ProgrammerValuesCommand =
 			fixtureIds: readonly string[];
 			groupId?: string | null;
 			attribute: string;
-			operation:
-				| { type: "absolute_set"; value: AttributeValue }
-				| { type: "relative_step"; delta: number };
+			operation: ProgrammerValueIntentOperation<AttributeValue>;
 			undoGroup?: string | null;
 			timing: ProgrammerValueTiming;
+			/** TL-594: the leased displayed source; omitted keeps latest-accepted adoption. */
+			displayedSource?: DisplayedSource | null;
+			/** TL-554: Direct reference head and explicit semantic starting colour. */
+			colorAdoption?: ColorAdoptionInput | null;
 	  }
 	| {
 			action: "apply_indexed_preset";
@@ -176,11 +188,35 @@ export type ProgrammerValuesCommand =
 	| { action: "batch"; mutations: readonly ProgrammerValuesMutation[] }
 	| { action: "clear" };
 
+/**
+ * Ends one stopped control gesture (TL-625). `undoGroup` is the gesture's
+ * original `apply_intent` Undo group; it never authors values, so it has no
+ * optimistic prediction and is never part of `ProgrammerValuesCommand`.
+ */
+export interface ProgrammerValuesFinishGestureAction {
+	action: "finish_gesture";
+	attribute: string;
+	undoGroup: string;
+}
+
+export type ProgrammerValuesRequestAction =
+	| ProgrammerValuesCommand
+	| ProgrammerValuesFinishGestureAction;
+
 export interface ProgrammerValuesActionRequest {
 	requestId: string;
 	expectedRevision: number;
 	expectedCaptureModeRevision: number;
-	action: ProgrammerValuesCommand;
+	action: ProgrammerValuesRequestAction;
+}
+
+/** A fresh request ID plus the stopped gesture's original identity. */
+export interface FinishProgrammerValuesGestureInput {
+	requestId: string;
+	attribute: string;
+	undoGroup: string;
+	/** A completed discrete step: keep the gesture's unsent edits, queue the Finish behind them. */
+	keepAdmittedEdits?: boolean;
 }
 
 export interface ProgrammerIndexedPresetTarget {
@@ -196,6 +232,10 @@ interface ProgrammerValuesOutcomeBase {
 	captureModeRevision: number;
 	replayed: boolean;
 	warning: string | null;
+	/** TL-594/TL-554: why the edit was held quietly (no mutation, revision or Undo). */
+	hold?: ProgrammerValuesHold;
+	/** TL-554: the semantic starting value the first semantic edit of a Direct value adopted. */
+	colorAdoption?: ColorAdoptionOutcome;
 }
 
 export type ProgrammerValuesActionOutcome = ProgrammerValuesOutcomeBase &
@@ -250,9 +290,7 @@ export interface ProgrammerValuesActions {
 		fixtureIds: readonly string[];
 		groupId?: string | null;
 		attribute: string;
-		operation:
-			| { type: "absolute_set"; value: AttributeValue }
-			| { type: "relative_step"; delta: number };
+		operation: ProgrammerValueIntentOperation<AttributeValue>;
 		undoGroup?: string | null;
 		timing: ProgrammerValueTiming;
 	}): Promise<ProgrammerValuesActionOutcome | null>;
@@ -278,4 +316,19 @@ export interface ProgrammerValuesActions {
 		input: BatchProgrammerValuesInput,
 	): Promise<ProgrammerValuesActionOutcome | null>;
 	clear(requestId: string): Promise<ProgrammerValuesActionOutcome | null>;
+	/**
+	 * Locally drops the unsent `apply_intent` rows of one stopped gesture
+	 * (its `undoGroup`) and returns how many were dropped. The dispatched row
+	 * still settles; no backend action is sent. Optional so view-level fakes
+	 * stay valid; the mounted writer always provides it.
+	 */
+	cancelGesture?(undoGroup: string): number;
+	/**
+	 * Drops the gesture's unsent edits, then queues exactly one Finish behind
+	 * any in-flight edit on the same FIFO. Optional so view-level fakes stay
+	 * valid; the mounted writer always provides it.
+	 */
+	finishGesture?(
+		input: FinishProgrammerValuesGestureInput,
+	): Promise<ProgrammerValuesActionOutcome | null>;
 }

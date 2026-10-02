@@ -36,6 +36,7 @@ import {
 	fixtureSheetGroupValues,
 	fixtureSheetNormalizedValue,
 	fixtureSheetValueIndex,
+	withCommandedPositions,
 } from "./fixtureSheetValues";
 
 type FixtureSheetTarget = ReturnType<typeof fixtureSheetTargets>[number];
@@ -592,7 +593,8 @@ function useEventuallyConsistentFixtureSheetSnapshot(
 			if (inFlight) return;
 			inFlight = true;
 			try {
-				const next = await read();
+				// The Position cell reads the same commanded pose as the encoders (TL-552).
+				const next = withCommandedPositions(await read());
 				if (!cancelled)
 					setSnapshot((current) =>
 						fixtureSheetSnapshotsEqual(current, next) ? current : next,

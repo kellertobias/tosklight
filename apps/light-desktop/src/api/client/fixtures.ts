@@ -2,6 +2,8 @@ import type { PatchSnapshot } from "../../features/patch/contracts";
 import type { AttributeValueType } from "../attributeConfigurationModels";
 import type {
 	FixtureDefinitionsSnapshot,
+	FixtureGdtfPreview,
+	FixtureGdtfImportRequest,
 	FixtureLibraryAction,
 	FixtureLibraryActionOutcome,
 	FixtureLibraryWarningsSnapshot,
@@ -32,6 +34,16 @@ export interface FixtureAttributeMapping {
 export interface FixtureImportRequirement {
 	attribute: string;
 	value_type: AttributeValueType;
+}
+
+export type FixtureGdtfImportPreview = Omit<FixtureGdtfPreview, "profile"> & {
+	profile: FixtureProfile;
+};
+export interface FixtureGdtfImportInput {
+	profileId: string;
+	expectedRevision: number;
+	source: Uint8Array;
+	attributeMappings: FixtureAttributeMapping[];
 }
 
 export type FixturePackageImportOutcome =
@@ -200,6 +212,39 @@ export class FixtureApiClient {
 			revision,
 			source_base64: await bytesToBase64(source),
 		});
+	}
+
+	async previewFixtureGdtf(
+		source: Uint8Array,
+	): Promise<FixtureGdtfImportPreview> {
+		const preview = await this.transport.request<FixtureGdtfPreview>(
+			"/api/v2/fixture-library/gdtf/preview",
+			jsonRequest("POST", { source_base64: await bytesToBase64(source) }),
+		);
+		return { ...preview, profile: decodeFixtureProfile(preview.profile) };
+	}
+
+	async importFixtureGdtf(
+		input: FixtureGdtfImportInput,
+	): Promise<FixtureProfile> {
+		const request: FixtureGdtfImportRequest = {
+			request_id: crypto.randomUUID(),
+			expected_revision: input.expectedRevision,
+			source_base64: await bytesToBase64(input.source),
+			attribute_mappings: input.attributeMappings,
+		};
+		const outcome = await this.transport.request<FixtureLibraryActionOutcome>(
+			`/api/v2/fixture-library/profiles/${encodeURIComponent(input.profileId)}/update`,
+			jsonRequest("POST", request),
+		);
+		if (outcome.result.type !== "profile")
+			throw new Error(
+				`Expected fixture profile result, received ${outcome.result.type}`,
+			);
+		return this.profileFromAuthority(
+			outcome.result.profile_id,
+			outcome.result.revision,
+		);
 	}
 
 	async importFixturePackage(

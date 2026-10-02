@@ -142,6 +142,7 @@ function subscription(
 							},
 						]
 					: []),
+				...(scope.alignment ? [{ capability: "desk" as const, id: `programming-alignment:${deskId}` }] : []),
 			],
 		},
 		after_sequence: afterSequence,
@@ -162,7 +163,8 @@ function validateSubscription(
 	if (
 		typeof scope.commandLine !== "boolean" ||
 		typeof scope.selection !== "boolean" ||
-		(!scope.commandLine && !scope.selection)
+		(scope.alignment !== undefined && typeof scope.alignment !== "boolean") ||
+		(!scope.commandLine && !scope.selection && !scope.alignment)
 	)
 		throw new ProgrammingProtocolError(
 			"Programming subscription requires at least one valid view capability",
@@ -171,6 +173,7 @@ function validateSubscription(
 	return {
 		commandLine: scope.commandLine,
 		selection: scope.selection,
+		alignment: scope.alignment ?? false,
 	};
 }
 

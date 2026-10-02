@@ -542,6 +542,7 @@ describe("scoped command-line execution", () => {
 		expect(bootstrap).not.toHaveBeenCalled();
 		expect(transport.subscriptions[0].scope).toEqual({
 			commandLine: true,
+			alignment: false,
 			selection: false,
 		});
 	});

@@ -12,7 +12,7 @@ import {
 	type SlotRow,
 	moveSlotRow,
 	moveSlotRowTo,
-	removeSlotRow,
+	removeSlotRowChecked,
 	setRowLevel,
 	slotRowKey,
 	slotRows,
@@ -499,12 +499,14 @@ export function SlotTable({
 		const next = source && target && moveSlotRowTo(mode, split, source, target);
 		if (next) onChange(next);
 	};
+	const attributeLabel = (row: SlotRow) => (attribute: string) =>
+		channelLabel({ ...row.channel, attribute, behavior: "controlled" }, attributeRegistry);
+	// A byte-layout change is prepared and validated as a whole; a refusal publishes nothing, so the
+	// draft keeps its exact channels, slots and calibration while the reason stays on screen.
 	const onLevel = (row: SlotRow, level: ChannelLevel) => {
-		const result = setRowLevel(mode, split, row, level, (attribute) =>
-			channelLabel({ ...row.channel, attribute, behavior: "controlled" }, attributeRegistry),
-		);
+		const result = setRowLevel(mode, split, row, level, attributeLabel(row));
 		setLevelError(result.error ?? null);
-		if (result.mode) onChange(result.mode);
+		if (result.mode && result.mode !== mode) onChange(result.mode);
 	};
 	return (
 		<div className="fixture-channel-split">
@@ -559,8 +561,10 @@ export function SlotTable({
 				row={rows.find((row) => slotRowKey(row) === removingKey) ?? null}
 				attributeRegistry={attributeRegistry}
 				onRemove={(row) => {
-					onChange(removeSlotRow(mode, split, row));
+					const result = removeSlotRowChecked(mode, split, row, attributeLabel(row));
+					setLevelError(result.error ?? null);
 					setRemovingKey(null);
+					if (result.mode) onChange(result.mode);
 				}}
 				onClose={() => setRemovingKey(null)}
 			/>

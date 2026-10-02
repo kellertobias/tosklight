@@ -4,6 +4,7 @@ import { CueThumbnailApiClient } from "./cueThumbnails";
 import { DeskManagementApiClient } from "./deskManagement";
 import { DiscoveryApiClient } from "./discovery";
 import { DynamicsApiClient } from "./dynamics";
+import { FamilyEncoderApiClient } from "./familyEncoders";
 import { FileApiClient } from "./files";
 import { FixtureApiClient } from "./fixtures";
 import { HelpApiClient } from "./help";
@@ -39,6 +40,7 @@ export function createLightApi(baseUrl?: string) {
 		desk: new DeskManagementApiClient(transport),
 		discovery: new DiscoveryApiClient(transport),
 		dynamics: new DynamicsApiClient(transport),
+		familyEncoders: new FamilyEncoderApiClient(transport),
 		files: new FileApiClient(transport),
 		fixtures: new FixtureApiClient(transport),
 		help: new HelpApiClient(transport),

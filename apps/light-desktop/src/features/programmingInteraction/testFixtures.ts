@@ -61,6 +61,7 @@ export function programmingSnapshot({
 		cursor: sequence,
 		projection: {
 			deskId,
+			alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
 			commandLine: command,
 			selection: selected,
 		},

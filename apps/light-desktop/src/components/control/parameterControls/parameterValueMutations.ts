@@ -1,23 +1,43 @@
+import type { ColorAdoptionInput } from "../../../api/colorAdoptionWire";
+import type { ProgrammingComponentEdit } from "../../../api/familyEncoderModels";
+import type { ProgrammerValueIntentOperation } from "../../../api/programmingComponentEditWire";
 import type { AttributeValue } from "../../../api/types";
 import type {
 	BatchProgrammerValuesInput,
 	ProgrammerValuesMutation,
 	ProgrammerValueTiming,
 } from "../../../features/programmerValues/contracts";
+import type { DisplayedSource } from "../../../features/programmerValues/displayedSource";
 import type { ParameterProjection } from "./useParameterProjection";
+
+/** One `apply_intent` through the Normal or Preload writer (TL-618/TL-594 wire). */
+export interface ParameterValueIntentInput {
+	requestId: string;
+	fixtureIds: readonly string[];
+	groupId?: string | null;
+	attribute: string;
+	/** Absolute, relative, or ordered semantic `component_edits` (never flattened). */
+	operation: ProgrammerValueIntentOperation<AttributeValue>;
+	undoGroup?: string | null;
+	timing: ProgrammerValueTiming;
+	/** TL-594: the leased source the surface displayed; omitted keeps latest-accepted adoption. */
+	displayedSource?: DisplayedSource | null;
+	/** TL-554: Direct reference head and explicit semantic starting colour. */
+	colorAdoption?: ColorAdoptionInput | null;
+}
 
 export interface ParameterValuesMutationPort {
 	batch(input: BatchProgrammerValuesInput): Promise<unknown>;
-	applyIntent?(input: {
+	applyIntent?(input: ParameterValueIntentInput): Promise<unknown>;
+	/** Drops a stopped gesture's unsent rows (mounted writers always provide it). */
+	cancelGesture?(undoGroup: string): number;
+	/** Queues exactly one Finish for a stopped gesture (mounted writers always provide it). */
+	finishGesture?(input: {
 		requestId: string;
-		fixtureIds: readonly string[];
-		groupId?: string | null;
 		attribute: string;
-		operation:
-			| { type: "absolute_set"; value: AttributeValue }
-			| { type: "relative_step"; delta: number };
-		undoGroup?: string | null;
-		timing: ProgrammerValueTiming;
+		undoGroup: string;
+		/** A completed discrete step keeps its admitted edits ahead of the Finish. */
+		keepAdmittedEdits?: boolean;
 	}): Promise<unknown>;
 	applyIndexedPreset?(input: {
 		requestId: string;
@@ -234,6 +254,47 @@ export function submitParameterAbsoluteIntent(
 			projection.directEntryUsesProgrammerFade
 				? parameterValueTiming(projection.programmerFadeMillis)
 				: immediateParameterTiming(),
+	});
+}
+
+/**
+ * One-shot semantic component edits for the current selection (for example a typed absolute
+ * value from the encoder modal). Gesture-shaped input goes through a family gesture session.
+ */
+export function submitParameterComponentEdits(
+	actions: ParameterValuesMutationPort | null,
+	projection: ParameterProjection,
+	attribute: string,
+	fixtureIds: readonly string[],
+	edits: readonly ProgrammingComponentEdit[],
+	options: {
+		requestId?: string;
+		undoGroup?: string | null;
+		displayedSource?: DisplayedSource | null;
+	} = {},
+) {
+	if (
+		!actions?.applyIntent ||
+		edits.length === 0 ||
+		(!projection.selectedGroupId && fixtureIds.length === 0)
+	)
+		return null;
+	return actions.applyIntent({
+		requestId: options.requestId ?? crypto.randomUUID(),
+		fixtureIds: projection.selectedGroupId ? [] : fixtureIds,
+		...(projection.selectedGroupId
+			? { groupId: projection.selectedGroupId }
+			: {}),
+		attribute,
+		operation: { type: "component_edits", edits },
+		...(options.undoGroup ? { undoGroup: options.undoGroup } : {}),
+		timing:
+			projection.programmerValuesRoute === "preload"
+				? parameterValueTiming(projection.programmerFadeMillis)
+				: immediateParameterTiming(),
+		...(options.displayedSource
+			? { displayedSource: options.displayedSource }
+			: {}),
 	});
 }
 

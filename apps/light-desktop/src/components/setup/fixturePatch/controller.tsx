@@ -147,6 +147,8 @@ function usePatchUiState(csvImportRequest = 0) {
 	const [pending, setPending] = useState<Partial<PatchedFixture> | null>(null);
 	const [blockedBy, setBlockedBy] = useState<PatchedFixture[]>([]);
 	const [multipatchEdit, setMultipatchEdit] = useState<MultiPatchEdit>(null);
+	const [positionCalibrationEdit, setPositionCalibrationEdit] = useState<AppearanceEditTarget>(null);
+	const [colorCalibrationEdit, setColorCalibrationEdit] = useState<AppearanceEditTarget>(null);
 	const [appearanceEdit, setAppearanceEdit] =
 		useState<AppearanceEditTarget>(null);
 	const [physicalSelectionFixture, setPhysicalSelectionFixture] = useState<
@@ -230,6 +232,10 @@ function usePatchUiState(csvImportRequest = 0) {
 		setBlockedBy,
 		multipatchEdit,
 		setMultipatchEdit,
+		colorCalibrationEdit,
+		setColorCalibrationEdit,
+		positionCalibrationEdit,
+		setPositionCalibrationEdit,
 		appearanceEdit,
 		setAppearanceEdit,
 		physicalSelectionFixture,

@@ -67,3 +67,20 @@ describe("the fixture-library geometry preview", () => {
 		expect(visibleGeometryBounds(lamp).isEmpty()).toBe(true);
 	});
 });
+
+
+it("composes motion around its authored axis after the compound neutral rotation", () => {
+    const mode = movingHead();
+    const node = mode.geometry.nodes.find(n => n.motion?.kind === "rotation")!;
+    node.transform.rotation_degrees = { x: 23, y: -38, z: 71 };
+    node.motion!.axis = { x: 1, y: 2, z: 3 };
+    node.motion!.physical_min = 64;
+    node.motion!.physical_max = 64;
+    const lamp = buildFixtureProfileGeometryPreview(mode);
+    const actual = lamp.getObjectByName(`geometry-node:${node.id}`)!.quaternion;
+    const neutral = new THREE.Quaternion().setFromEuler(new THREE.Euler(23*Math.PI/180, -38*Math.PI/180, 71*Math.PI/180));
+    const expected = neutral.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,2,3).normalize(), 64*Math.PI/180));
+    for (const basis of [new THREE.Vector3(1,0,0), new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,1)]) {
+        expect(basis.clone().applyQuaternion(actual).distanceTo(basis.clone().applyQuaternion(expected))).toBeLessThan(1e-10);
+    }
+});

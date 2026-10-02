@@ -1,3 +1,4 @@
+import { PositionCalibrationDialog } from "./fixturePatch/PositionCalibration";
 import { PatchFeatureBoundary } from "../../features/patch/PatchFeatureBoundary";
 import type { FixturePatchSetupProps } from "./fixturePatch/controller";
 import {
@@ -7,6 +8,7 @@ import {
 import { CsvImportDialog } from "./fixturePatch/CsvImportDialog";
 import { FixtureBrowser } from "./fixturePatch/FixtureBrowser";
 import { FixturePlacement } from "./fixturePatch/FixturePlacement";
+import { ColorCalibrationDialog } from "./fixturePatch/ColorCalibration";
 import { LightSourceAppearanceDialog } from "./fixturePatch/LightSourceAppearance";
 import { PatchHeader, PatchLayers } from "./fixturePatch/PatchChrome";
 import {
@@ -60,6 +62,8 @@ function FixturePatchLayout() {
 			<MultipatchVectorDialog />
 			<MultipatchAddressDialog />
 			<LightSourceAppearanceDialog />
+			<PositionCalibrationDialog />
+			<ColorCalibrationDialog />
 			<AddLayerDialog />
 			<FixtureEditDialog />
 			<FixtureAddressDialog />

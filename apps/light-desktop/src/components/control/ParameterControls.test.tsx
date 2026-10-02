@@ -132,6 +132,7 @@ const server = {
 	session: { session_id: "session-1", user: { id: "operator" } },
 	readVisualization: vi.fn().mockResolvedValue({ values: [] }),
 	alignSelection: vi.fn(),
+	alignment: { mode: "off" },
 	controlFixtureAction: vi.fn(),
 	controlFixtureActions: vi.fn().mockResolvedValue(undefined),
 	generateFixturePresets: vi.fn().mockResolvedValue({ created: [] }),
@@ -201,6 +202,7 @@ vi.mock(
 vi.mock(
 	"../../features/programmingInteraction/ProgrammingInteractionView",
 	() => ({
+		useProgrammingAlignmentView: () => server.alignment,
 		useProgrammingSelectionView: (active = true) =>
 			active
 				? {
@@ -1690,47 +1692,29 @@ describe("ParameterControls Group targets and alignment", () => {
 		expect(await screen.findByText("75%")).toBeInTheDocument();
 	});
 
-	it("cycles the authoritative Left, Right, Out, In, Off modifier in every encoder family", async () => {
-		render(<ParameterControls />);
+	it("cycles on the server and renders only authoritative modes in every encoder family", async () => {
+		server.alignment = { mode: "off" };
+		const { rerender } = render(<ParameterControls />);
 		const align = screen.getByRole("button", { name: "Align Off" });
-		expect(align).toHaveClass("align-off");
-
-		for (const mode of ["left", "right", "out", "in"] as const) {
+		for (const mode of ["left", "right", "out", "in", "off"]) {
+			const previousLabel = align.getAttribute("aria-label");
 			fireEvent.click(align);
-			await waitFor(() =>
-				expect(server.alignSelection).toHaveBeenLastCalledWith(mode),
-			);
-			expect(align).toHaveAccessibleName(
-				`Align ${mode[0].toUpperCase()}${mode.slice(1)}`,
-			);
-			expect(align).toHaveClass("align-active");
+			await waitFor(() => expect(server.alignSelection).toHaveBeenLastCalledWith("cycle"));
+			expect(align.getAttribute("aria-label")).toBe(previousLabel);
+			server.alignment = { mode };
+			rerender(<ParameterControls />);
+			expect(align).toHaveAccessibleName(`Align ${mode[0].toUpperCase()}${mode.slice(1)}`);
 		}
-		fireEvent.click(align);
-		await waitFor(() =>
-			expect(server.alignSelection).toHaveBeenLastCalledWith("off"),
-		);
-		expect(align).toHaveAccessibleName("Align Off");
-
+		server.alignment = { mode: "right" };
+		rerender(<ParameterControls />);
 		fireEvent.click(screen.getByRole("button", { name: "Color" }));
-		expect(
-			screen.getByRole("button", { name: "Align Off" }),
-		).toBeInTheDocument();
-
-		fireEvent.click(align);
-		await waitFor(() => expect(align).toHaveAccessibleName("Align Left"));
-		state.shiftArmed = true;
-		fireEvent.click(align);
-		await waitFor(() =>
-			expect(align).toHaveAccessibleName("Align Off, Shift: Off"),
-		);
-		expect(align).toHaveTextContent("AlignOffOff");
-		expect(align.querySelector(".shift-action-label")).toHaveTextContent("Off");
+		expect(align).toHaveAccessibleName("Align Right");
+		fireEvent.click(align, { shiftKey: true });
+		await waitFor(() => expect(server.alignSelection).toHaveBeenLastCalledWith("off"));
+		expect(align).toHaveAccessibleName("Align Right");
+		server.alignment = { mode: "off" };
+		rerender(<ParameterControls />);
 		expect(align).toHaveClass("align-off");
-		expect(dispatch).not.toHaveBeenCalledWith({
-			type: "SET_SHIFT_ARMED",
-			value: false,
-		});
-		expect(server.alignSelection).toHaveBeenLastCalledWith("off");
 	});
 
 	it("keeps Align Off when the authoritative activation is rejected", async () => {
@@ -1741,7 +1725,7 @@ describe("ParameterControls Group targets and alignment", () => {
 		fireEvent.click(align);
 
 		await waitFor(() =>
-			expect(server.alignSelection).toHaveBeenCalledWith("left"),
+			expect(server.alignSelection).toHaveBeenCalledWith("cycle"),
 		);
 		expect(align).toHaveAccessibleName("Align Off");
 		expect(align).toHaveClass("align-off");
@@ -1755,27 +1739,27 @@ describe("ParameterControls Group targets and alignment", () => {
 		fireEvent.click(align);
 
 		await waitFor(() =>
-			expect(server.alignSelection).toHaveBeenCalledWith("left"),
+			expect(server.alignSelection).toHaveBeenCalledWith("cycle"),
 		);
 		expect(align).toHaveAccessibleName("Align Off");
 		expect(align).toHaveClass("align-off");
 	});
 
-	it("routes the attached-hardware Align gesture through the same authoritative mode cycle", async () => {
+	it("routes a local keyboard Align gesture to the server without guessing the result", async () => {
 		server.alignSelection.mockResolvedValueOnce(undefined);
 		render(<ParameterControls />);
 		const align = screen.getByRole("button", { name: "Align Off" });
 
 		window.dispatchEvent(
 			new CustomEvent("light:align-action", {
-				detail: { action: "align", request_id: "hardware-align-1" },
+				detail: { action: "align", request_id: "keyboard-align-1" },
 			}),
 		);
 
 		await waitFor(() =>
-			expect(server.alignSelection).toHaveBeenCalledWith("left"),
+			expect(server.alignSelection).toHaveBeenCalledWith("cycle"),
 		);
-		expect(align).toHaveAccessibleName("Align Left");
+		expect(align).toHaveAccessibleName("Align Off");
 	});
 });
 

@@ -3,6 +3,7 @@ import type { ProgrammingInteractionEventMessage } from "./contracts";
 export interface ProgrammingEventScope {
 	commandLine: boolean;
 	selection: boolean;
+	alignment?: boolean;
 }
 
 export interface ProgrammingEventObserver {

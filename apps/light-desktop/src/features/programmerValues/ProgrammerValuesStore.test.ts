@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { createDefaultDynamicDefinition } from "../../windows/dynamics/DynamicsEditor";
 import type {
+	ProgrammerDynamicValue,
 	ProgrammerFixtureValue,
 	ProgrammerValuesProjection,
 } from "./contracts";
@@ -28,6 +30,63 @@ function readyStore(projection = valuesProjection()) {
 	return store;
 }
 
+function positionLane(laneId: string): ProgrammerDynamicValue {
+	const definition = createDefaultDynamicDefinition(1, "pan");
+	return dynamicValue(DYNAMIC_INSTANCE_1, {
+		attribute: "position",
+		value: {
+			type: "dynamic_on",
+			instance_link: DYNAMIC_INSTANCE_1,
+			lane_id: laneId,
+			dynamic: {
+				dynamic_id: definition.id,
+				last_known_pool_number: 1,
+				embedded_fallback_id: definition.id,
+				embedded_fallback_revision: definition.revision,
+				embedded_fallback: definition,
+			},
+			overrides: {
+				size: 1,
+				speed_multiplier: { numerator: 1, denominator: 1 },
+				phase_offset_degrees: 0,
+			},
+			timing: { fade_millis: null, delay_millis: null },
+		},
+	});
+}
+
+it("keeps sibling Position lanes through snapshot and exact lane deltas", () => {
+	const pan = positionLane(FIXTURE_1);
+	const tilt = positionLane(FIXTURE_2);
+	const store = readyStore(
+		valuesProjection({ fixtureValues: [], dynamicValues: [pan, tilt] }),
+	);
+	expect(store.getSnapshot().projection?.dynamicValues).toHaveLength(2);
+	const updatedTilt = { ...tilt, programmerOrder: 5, changedAtMillis: 200 };
+	expect(
+		store.applyChange(
+			{
+				revision: 2,
+				fixtureValues: [],
+				removedFixtureValues: [],
+				groupValues: [],
+				removedGroupValues: [],
+				dynamicValues: [updatedTilt],
+				removedDynamicValues: [
+					{
+						fixtureId: FIXTURE_1,
+						attribute: "position",
+						instanceLink: DYNAMIC_INSTANCE_1,
+						laneId: FIXTURE_1,
+					},
+				],
+			},
+			11,
+		),
+	).toBe(true);
+	expect(store.getSnapshot().projection?.dynamicValues).toEqual([updatedTilt]);
+});
+
 function setFixtureLevel(level: number) {
 	return (current: ProgrammerValuesProjection): ProgrammerValuesProjection => ({
 		...current,
@@ -38,6 +97,30 @@ function setFixtureLevel(level: number) {
 		),
 	});
 }
+
+it("retains sibling component masks and removes only the addressed hold", () => {
+ const mask = (kind: "pan" | "tilt"): ProgrammerDynamicValue => ({
+  fixtureId: FIXTURE_1, attribute: "position", programmerOrder: 1, changedAtMillis: 10,
+  value: { type: "programming_fix_at", timing: {}, mask: {
+   address: { representation: { kind: "angles" }, component: { kind } },
+   family: { kind: "position", value: { kind: "angles", pan_degrees: { kind: "value", value: 720 }, tilt_degrees: { kind: "value", value: -30 } } },
+  } },
+ });
+ const pan = mask("pan");
+ const tilt = mask("tilt");
+ const whole: ProgrammerDynamicValue = { ...pan, value: { type: "programming_release", component: null } };
+ const store = readyStore(valuesProjection({ fixtureValues: [], dynamicValues: [pan, tilt, whole] }));
+ expect(store.getSnapshot().projection?.dynamicValues).toHaveLength(3);
+ store.applyChange({ revision: 2, fixtureValues: [], removedFixtureValues: [], groupValues: [], removedGroupValues: [], dynamicValues: [],
+  removedDynamicValues: [{ fixtureId: FIXTURE_1, attribute: "position", instanceLink: null, laneId: null, component: { kind: "pan" } }],
+ }, 11);
+ expect(store.getSnapshot().projection?.dynamicValues).toEqual(expect.arrayContaining([tilt, whole]));
+ expect(store.getSnapshot().projection?.dynamicValues).toHaveLength(2);
+ const release: ProgrammerDynamicValue = { ...tilt, value: { type: "programming_release", component: { kind: "tilt" } } };
+ store.applyChange({ revision: 3, fixtureValues: [], removedFixtureValues: [], groupValues: [], removedGroupValues: [], dynamicValues: [release], removedDynamicValues: [] }, 12);
+ expect(store.getSnapshot().projection?.dynamicValues).toEqual(expect.arrayContaining([release, whole]));
+ expect(store.getSnapshot().projection?.dynamicValues).toHaveLength(2);
+});
 
 function addToFixtureLevel(delta: number) {
 	return (current: ProgrammerValuesProjection): ProgrammerValuesProjection => ({
@@ -269,6 +352,7 @@ describe("ProgrammerValuesStore authority", () => {
 							fixtureId: FIXTURE_1,
 							attribute: "intensity",
 							instanceLink: DYNAMIC_INSTANCE_1,
+							laneId: null,
 						},
 					],
 				},

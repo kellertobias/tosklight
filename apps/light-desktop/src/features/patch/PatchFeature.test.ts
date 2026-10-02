@@ -496,6 +496,18 @@ describe("Patch v2 network boundary", () => {
 			},
 		},
 		{
+			action: { type: "set_position_calibration", calibration: { revision: 3, quality: "estimated", source: null, pan_zero_degrees: -720.5, tilt_zero_degrees: 15 } },
+			wireAction: { action: "set_position_calibration", calibration: { revision: 3, quality: "estimated", source: null, pan_zero_degrees: -720.5, tilt_zero_degrees: 15 } },
+		},
+		{
+			action: { type: "set_position_calibration", calibration: null },
+			wireAction: { action: "set_position_calibration", calibration: null },
+		},
+		{
+			action: { type: "set_color_calibration", calibration: null },
+			wireAction: { action: "set_color_calibration", calibration: null },
+		},
+		{
 			action: { type: "set_pan_tilt", invertPan: true, invertTilt: false },
 			wireAction: {
 				action: "set_pan_tilt",
@@ -1399,3 +1411,26 @@ class FakePatchTransport implements PatchTransport {
 		},
 	);
 }
+
+
+it("carries authoritative Color identities through a snapshot and replacement delta", () => {
+ const profile = definition().profile_snapshot!;
+ const mode = profile.modes[0];
+ const pathId = crypto.randomUUID();
+ mode.color_physical = {version:1,revision:0,paths:[{id:pathId,head_id:mode.heads[0].id,controls:[],source:{type:"unknown"},filters:[],measurements:[]}]};
+ const identity = {profile_id:PROFILE_ID,profile_revision:3,profile_digest:"a".repeat(64),mode_id:MODE_ID,head_id:mode.heads[0].id,path_id:pathId,model_revision:0,native_layout_signature:"b".repeat(64)};
+ const calibration = {version:1,revision:0,paths:[{source_identity:identity,emitters:[],measurements:[{recipe:[],xyz:{x:0.2,y:0.3,z:0.4},provenance:{quality:"estimated",revision:0}}]}]};
+ const fixture = {...wireFixtureProjection(),color_calibration:calibration};
+ const wireProfile = {...wireProfileProjection(),profile_snapshot:profile,referenced_modes:[{...wireProfileProjection().referenced_modes[0],native_color_identities:[identity]}]};
+ const store = new PatchStore(SHOW_ID, createPatchDefinitionResolver([definition()]));
+ store.applySnapshot(decodePatchSnapshot({...wireSnapshot(1,1,10,[fixture]),profile_revisions:[wireProfile]}));
+ expect(store.getSnapshot().fixtures[0].color_calibration).toEqual(calibration);
+ expect(store.getSnapshot().fixtures[0].definition.color_calibration_context).toEqual({mode,identities:[identity]});
+ const replacement = {...identity,profile_revision:4,profile_digest:"c".repeat(64)};
+ const changed = {...wireProfile,profile_revision:4,profile_snapshot:{...profile,revision:4},referenced_modes:[{...wireProfile.referenced_modes[0],native_color_identities:[replacement]}]};
+ store.applyDelta(decodePatchFixturesOutcome({...wireOutcome("replace",2,2,[{...fixture,fixture_revision:2,profile_revision:4}]),profile_revisions:[changed]}));
+ const current = store.getSnapshot().fixtures[0];
+ expect(current.definition.color_calibration_context?.identities).toEqual([replacement]);
+ expect(current.color_calibration).toEqual(calibration);
+ expect(current.color_calibration?.paths[0].source_identity.profile_revision).toBe(3);
+});

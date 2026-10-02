@@ -4,6 +4,7 @@ import type {
 	ColorModelImpact,
 	ColorProgrammingModel,
 } from "../../api/client/attributeConfiguration";
+import type { ColorEncoderPresentation } from "../../api/familyEncoderModels";
 import type { SetupWindowController } from "./controller";
 
 const MODEL_OPTIONS: ReadonlyArray<{
@@ -201,6 +202,61 @@ export function NewShowDefaultsSettings({
 						controller.editDraft({
 							...draft,
 							color_programming_model_default: value as ColorProgrammingModel,
+						})
+					}
+				/>
+			</FormLayout>
+		</article>
+	);
+}
+
+export const COLOR_PRESENTATION_OPTIONS: ReadonlyArray<{
+	value: ColorEncoderPresentation;
+	label: string;
+}> = [
+	{ value: "easy_rgbw", label: "Easy — Red, Green, Blue, White Blend" },
+	{
+		value: "easy_rgbwauv",
+		label: "Easy with Amber and UV — adds a page for Amber and UV",
+	},
+	{
+		value: "advanced",
+		label: "Advanced — adds Temperature, Duv and colour wheels",
+	},
+];
+
+/**
+ * How this desk presents Color on its encoders (TL-550). A desk setting, never part of the
+ * show: switching it only changes which controls the Color pages show. The programmed colour
+ * itself is untouched, so every stored request is preserved.
+ */
+export function ColorPresentationSettings({
+	controller,
+}: {
+	controller: SetupWindowController;
+}) {
+	const { draft } = controller;
+	if (!draft) return null;
+	return (
+		<article className="color-presentation-settings">
+			<header>
+				<b>Color controls on this desk</b>
+				<small>
+					Belongs to this desk, not to the show. Easy and Advanced only change
+					which Color controls the encoders offer; programmed colour stays exactly
+					as it is.
+				</small>
+			</header>
+			<FormLayout labelPlacement="side">
+				<SelectField
+					label="Color encoders"
+					ariaLabel="Color encoder presentation"
+					value={draft.color_presentation ?? "easy_rgbw"}
+					options={COLOR_PRESENTATION_OPTIONS.map((option) => ({ ...option }))}
+					onChange={(value) =>
+						controller.editDraft({
+							...draft,
+							color_presentation: value as ColorEncoderPresentation,
 						})
 					}
 				/>

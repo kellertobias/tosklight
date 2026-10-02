@@ -80,9 +80,15 @@ export function replaceFunctionBehavior(
 	type: ChannelFunctionBehavior["type"],
 	channel: FixtureChannel,
 ): FixtureChannel["functions"][number] {
+	const priority = type === "continuous" ? 0 : type === "control" ? 200 : 100;
+	// Preserve a calibrated mapping when its type is reselected, including its endpoints.
+	// The existing behavior selector still restores the documented default priority.
+	if (type === "continuous" && fn.behavior.type === "continuous" && fn.physical_mapping)
+		return { ...fn, priority };
 	return {
 		...fn,
-		priority: type === "continuous" ? 0 : type === "control" ? 200 : 100,
+		physical_mapping: type === "continuous" ? fn.physical_mapping : null,
+		priority,
 		angular_motion:
 			type === "continuous"
 				? fn.angular_motion

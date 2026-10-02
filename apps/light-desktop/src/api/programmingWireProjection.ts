@@ -1,5 +1,6 @@
 import type {
 	CommandChoiceOption,
+	AlignmentProjection,
 	CommandLineProjection,
 	PendingCommandChoice,
 	ProgrammingChange,
@@ -19,6 +20,7 @@ import {
 	stringAt,
 } from "./playbackWirePrimitives";
 import { WireValidationError } from "./wireValidation";
+import { decodeProgrammingComponent } from "./programmingIntentWire";
 
 const UUID_PATTERN =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -234,6 +236,7 @@ export function decodeProgrammingProjection(
 			projection.selection,
 			`${path}.selection`,
 		),
+		alignment: decodeProgrammingAlignment(projection.alignment,`${path}.alignment`),
 	};
 }
 
@@ -245,7 +248,8 @@ export function decodeProgrammingChange(
 	const deskId = programmingUuidAt(change.desk_id, `${path}.desk_id`);
 	const hasCommandLine = "command_line" in change;
 	const hasSelection = "selection" in change;
-	if (!hasCommandLine && !hasSelection)
+	const hasAlignment = "alignment" in change;
+	if (!hasCommandLine && !hasSelection && !hasAlignment)
 		throw new WireValidationError(
 			path,
 			"non-empty Programming interaction change",
@@ -257,6 +261,15 @@ export function decodeProgrammingChange(
 	const selection = hasSelection
 		? decodeProgrammingSelection(change.selection, `${path}.selection`)
 		: null;
+	if (hasAlignment) {
+		const alignment = decodeProgrammingAlignment(change.alignment, `${path}.alignment`);
+		return {
+			deskId,
+			alignment,
+			...(commandLine ? { commandLine } : {}),
+			...(selection ? { selection } : {}),
+		};
+	}
 	if (commandLine && selection) return { deskId, commandLine, selection };
 	if (commandLine) return { deskId, commandLine };
 	if (selection) return { deskId, selection };
@@ -271,5 +284,46 @@ export function programmingComponentPresence(change: ProgrammingChange) {
 	return {
 		commandLine: "commandLine" in change,
 		selection: "selection" in change,
+		alignment: "alignment" in change,
+	};
+}
+
+export function decodeProgrammingAlignment(
+	value: unknown,
+	path = "$",
+): AlignmentProjection {
+	const projection = recordAt(value, path);
+	const mode = enumAt(projection.mode, `${path}.mode`, [
+		"off", "left", "right", "out", "in",
+	]);
+	const fixtureCount = integerAt(projection.fixture_count, `${path}.fixture_count`);
+	let binding: AlignmentProjection["binding"] = null;
+	if (projection.binding !== null) {
+		const raw = recordAt(projection.binding, `${path}.binding`);
+		const kind = enumAt(raw.kind, `${path}.binding.kind`, ["attribute", "family"]);
+		if (kind === "attribute") {
+			binding = { kind, attribute: stringAt(raw.attribute, `${path}.binding.attribute`) };
+		} else {
+			const component = decodeProgrammingComponent(raw.component, `${path}.binding.component`);
+			if (component.kind === "color_wheel" || component.kind === "target_reference")
+				throw new WireValidationError(`${path}.binding.component`, "continuous Align component", component);
+			binding = {
+				kind,
+				component,
+				lane: enumAt(raw.lane, `${path}.binding.lane`, ["normal", "preload"]),
+				groupId: raw.group_id === null ? null : stringAt(raw.group_id, `${path}.binding.group_id`),
+			};
+		}
+	}
+	if (
+		(mode === "off" && (binding !== null || fixtureCount !== 0)) ||
+		(mode !== "off" && fixtureCount === 0)
+	)
+		throw new WireValidationError(path, "coherent Align state", value);
+	return {
+		mode,
+		binding,
+		fixtureCount,
+		revision: integerAt(projection.revision, `${path}.revision`),
 	};
 }

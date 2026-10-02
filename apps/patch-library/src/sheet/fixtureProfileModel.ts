@@ -9,3 +9,5 @@ export * from "./fixtureProfileModel/rawValues";
 export * from "./fixtureProfileModel/utilities";
 export * from "./fixtureProfileModel/validation";
 export * from "./fixtureProfileModel/wheelColors";
+
+export { nativeColorFunctionAllowed } from "./fixtureProfileModel/colorPhysical";

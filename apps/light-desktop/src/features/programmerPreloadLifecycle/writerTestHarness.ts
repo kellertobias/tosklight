@@ -173,6 +173,7 @@ export function lifecycleWriterHarness(
 		cursor: 13,
 		projection: {
 			deskId: DESK_ID,
+			alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
 			commandLine: {
 				text: "FIXTURE",
 				target: "FIXTURE",

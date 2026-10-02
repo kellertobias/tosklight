@@ -136,6 +136,8 @@ function mapFixtureProjection(
 			rotation: { ...instance.rotation },
 			invertPan: instance.invert_pan,
 			invertTilt: instance.invert_tilt,
+			positionCalibration: instance.position_calibration ?? null,
+			colorCalibration: instance.color_calibration ?? null,
 			bracketAngle: instance.bracket_angle,
 			shaperAngle: instance.shaper_angle,
 			installedAppearance: mapInstalledAppearance(
@@ -147,6 +149,8 @@ function mapFixtureProjection(
 		grandMasterEnabled: fixture.grand_master_enabled,
 		invertPan: fixture.invert_pan,
 		invertTilt: fixture.invert_tilt,
+		positionCalibration: fixture.position_calibration ?? null,
+		colorCalibration: fixture.color_calibration ?? null,
 		bracketAngle: fixture.bracket_angle,
 		shaperAngle: fixture.shaper_angle,
 		installedAppearance: mapInstalledAppearance(fixture.installed_appearance),
@@ -238,6 +242,8 @@ function mapProfileRevision(
 		fixtureType: profile.fixture_type,
 		patchPolicy: profile.patch_policy,
 		referencedModes: profile.referenced_modes.map((mode) => ({
+			nativeColorIdentities: mode.native_color_identities ?? [],
+ positionCalibrationIdentity: mode.position_calibration_identity ?? null,
 			modeId: mode.mode_id,
 			name: mode.name,
 			splits: mode.splits.map((split) => ({ ...split })),

@@ -1,3 +1,5 @@
+import type { InstalledColorCalibration, NativeColorIdentity } from "@tosklight/patch";
+import type { InstalledPositionCalibration } from "@tosklight/patch";
 /** Feature-owned Patch models. Serialized wire DTOs are mapped at the API boundary. */
 import type { FixtureProfile } from "../../api/types";
 
@@ -78,6 +80,8 @@ export interface PatchMultiPatch {
 	rotation: PatchFixtureRotation;
 	invertPan?: boolean;
 	invertTilt?: boolean;
+	positionCalibration?: InstalledPositionCalibration | null;
+	colorCalibration?: InstalledColorCalibration | null;
 	bracketAngle?: number;
 	shaperAngle?: number | null;
 	installedAppearance?: PatchInstalledFixtureAppearance;
@@ -124,6 +128,8 @@ export interface PatchFixtureWrite {
 	grandMasterEnabled?: boolean;
 	invertPan?: boolean;
 	invertTilt?: boolean;
+	positionCalibration?: InstalledPositionCalibration | null;
+	colorCalibration?: InstalledColorCalibration | null;
 	/** Degrees the mounting bracket is set to, positive nose-down. */
 	bracketAngle?: number;
 	/** Degrees a fitted shaper or barn-door module is turned to; `null` when none is fitted. */
@@ -203,6 +209,8 @@ export interface PatchFixtureFreezeTarget {
 }
 
 export interface PatchModeProjection {
+	nativeColorIdentities?: readonly NativeColorIdentity[];
+ positionCalibrationIdentity?: import("@tosklight/patch").PositionCalibrationIdentity | null;
 	modeId: string;
 	name: string;
 	splits: readonly { split: number; footprint: number }[];
@@ -270,6 +278,8 @@ export type PatchFixtureUpdateAction =
 			grandMasterEnabled: boolean;
 	  }
 	| { type: "set_pan_tilt"; invertPan: boolean; invertTilt: boolean }
+	| { type: "set_position_calibration"; calibration: InstalledPositionCalibration | null }
+	| { type: "set_color_calibration"; calibration: InstalledColorCalibration | null }
 	| { type: "set_move_in_black"; enabled: boolean; delayMillis: number }
 	| {
 			type: "set_location_axis";

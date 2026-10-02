@@ -568,3 +568,196 @@ describe("ProgrammerValuesWriter reconciliation", () => {
 		await Promise.resolve();
 	});
 });
+
+function intentInput(requestId: string, undoGroup: string | null, level = 0.5) {
+	return {
+		requestId,
+		fixtureIds: [FIXTURE_1],
+		attribute: "intensity",
+		operation: {
+			type: "absolute_set" as const,
+			value: { kind: "normalized" as const, value: level },
+		},
+		undoGroup,
+		timing: { fade: false, fadeMillis: null, delayMillis: null },
+	};
+}
+
+async function flushWrites() {
+	for (let turn = 0; turn < 10; turn++)
+		await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function settlementSpy<T>(promise: Promise<T>) {
+	const spy = vi.fn();
+	void promise.then(spy, spy);
+	return spy;
+}
+
+function sentRequestIds(
+	applyAction: ReturnType<typeof harness>["applyAction"],
+) {
+	return applyAction.mock.calls.map((call) => call[1].requestId);
+}
+
+describe("ProgrammerValuesWriter gesture cancellation", () => {
+	it("drops only unsent rows of the stopped gesture and keeps the dispatched row", async () => {
+		const { store, applyAction, onError, writer } = harness();
+		const response = deferred<ProgrammerValuesActionOutcome>();
+		applyAction.mockReturnValueOnce(response.promise);
+		applyAction.mockImplementation(async (_scope, request) =>
+			noChange(request.requestId, request.expectedRevision),
+		);
+		const dispatched = writer.applyIntent(intentInput("a-1", "gesture-a"));
+		const unsentA = writer.applyIntent(intentInput("a-2", "gesture-a", 0.6));
+		const barrier = writer.setFixtureValue(fixtureInput("barrier", 0.7));
+		const gestureB = writer.applyIntent(intentInput("b-1", "gesture-b"));
+		const unsentA2 = writer.applyIntent(intentInput("a-3", "gesture-a", 0.8));
+		await flushWrites();
+		expect(sentRequestIds(applyAction)).toEqual(["a-1"]);
+		const dispatchedSettled = settlementSpy(dispatched);
+
+		expect(writer.cancelGesture("gesture-a")).toBe(2);
+
+		await expect(unsentA).resolves.toBeNull();
+		await expect(unsentA2).resolves.toBeNull();
+		expect(store.getSnapshot().pendingRequestIds).toEqual([
+			"a-1",
+			"barrier",
+			"b-1",
+		]);
+		expect(dispatchedSettled).not.toHaveBeenCalled();
+
+		const projection = valuesProjection({ revision: 2 });
+		response.resolve(changed("a-1", projection));
+		await expect(dispatched).resolves.toMatchObject({
+			requestId: "a-1",
+			status: "changed",
+		});
+		await expect(barrier).resolves.toMatchObject({ requestId: "barrier" });
+		await expect(gestureB).resolves.toMatchObject({ requestId: "b-1" });
+		expect(dispatchedSettled).toHaveBeenCalledOnce();
+		expect(applyAction.mock.calls[0]?.[1]).toMatchObject({
+			requestId: "a-1",
+			expectedRevision: 1,
+			expectedCaptureModeRevision: 1,
+			action: { action: "apply_intent", undoGroup: "gesture-a" },
+		});
+		expect(sentRequestIds(applyAction)).toEqual(["a-1", "barrier", "b-1"]);
+		expect(applyAction.mock.calls[1]?.[1].expectedRevision).toBe(2);
+		expect(store.getSnapshot()).toMatchObject({
+			pendingRequestIds: [],
+			projection: { revision: 2 },
+			error: null,
+		});
+		expect(onError).not.toHaveBeenCalledWith(expect.any(Error));
+	});
+
+	it("keeps a dispatched row and its genuine error when cancelled during repair", async () => {
+		const { store, applyAction, repair, onError, writer } = harness();
+		const valuesRepair = deferred<void>();
+		applyAction.mockRejectedValueOnce(
+			Object.assign(new Error("revision conflict"), { status: 409 }),
+		);
+		applyAction.mockImplementation(async (_scope, request) =>
+			noChange(request.requestId, request.expectedRevision),
+		);
+		repair.mockReturnValueOnce(valuesRepair.promise);
+		const dispatched = writer.applyIntent(intentInput("a-1", "gesture-a"));
+		const unsent = writer.applyIntent(intentInput("a-2", "gesture-a"));
+		const gestureB = writer.applyIntent(intentInput("b-1", "gesture-b"));
+		await flushWrites();
+		expect(repair).toHaveBeenCalledOnce();
+
+		expect(writer.cancelGesture("gesture-a")).toBe(1);
+		await expect(unsent).resolves.toBeNull();
+		expect(store.getSnapshot().pendingRequestIds).toEqual(["a-1", "b-1"]);
+
+		valuesRepair.resolve();
+		await expect(dispatched).resolves.toBeNull();
+		await expect(gestureB).resolves.toMatchObject({ requestId: "b-1" });
+		expect(onError).toHaveBeenCalledWith(
+			expect.objectContaining({ message: "revision conflict" }),
+		);
+		expect(sentRequestIds(applyAction)).toEqual(["a-1", "b-1"]);
+		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
+	});
+
+	it("tolerates repeated cancellation, late completion and a fresh gesture ID", async () => {
+		const { store, applyAction, writer } = harness();
+		const response = deferred<ProgrammerValuesActionOutcome>();
+		applyAction.mockReturnValueOnce(response.promise);
+		applyAction.mockImplementation(async (_scope, request) =>
+			noChange(request.requestId, request.expectedRevision),
+		);
+		const dispatched = writer.applyIntent(intentInput("a-1", "gesture-a"));
+		const unsent = writer.applyIntent(intentInput("a-2", "gesture-a"));
+		await flushWrites();
+		const unsentSettled = settlementSpy(unsent);
+
+		expect(writer.cancelGesture("gesture-a")).toBe(1);
+		expect(writer.cancelGesture("gesture-a")).toBe(0);
+		expect(writer.cancelGesture("")).toBe(0);
+		await flushWrites();
+		expect(unsentSettled).toHaveBeenCalledOnce();
+		expect(unsentSettled).toHaveBeenCalledWith(null);
+
+		const fresh = writer.applyIntent(intentInput("a2-1", "gesture-a2"));
+		response.resolve(noChange("a-1"));
+		await expect(dispatched).resolves.toMatchObject({ requestId: "a-1" });
+		await expect(fresh).resolves.toMatchObject({ requestId: "a2-1" });
+		expect(writer.cancelGesture("gesture-a")).toBe(0);
+		await flushWrites();
+		expect(unsentSettled).toHaveBeenCalledOnce();
+		expect(sentRequestIds(applyAction)).toEqual(["a-1", "a2-1"]);
+		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
+	});
+
+	it("never cancels untagged rows and preserves an existing store error", async () => {
+		const { store, applyAction, writer } = harness();
+		applyAction.mockRejectedValueOnce(
+			Object.assign(new Error("invalid value"), { status: 400 }),
+		);
+		await writer.setFixtureValue(fixtureInput("rejected", 0.8));
+		const genuine = store.getSnapshot().error;
+		expect(genuine?.message).toBe("invalid value");
+
+		const response = deferred<ProgrammerValuesActionOutcome>();
+		applyAction.mockReturnValueOnce(response.promise);
+		applyAction.mockImplementation(async (_scope, request) =>
+			noChange(request.requestId, request.expectedRevision),
+		);
+		const dispatched = writer.applyIntent(intentInput("a-1", "gesture-a"));
+		const untagged = writer.applyIntent(intentInput("plain", null));
+		const unsent = writer.applyIntent(intentInput("a-2", "gesture-a"));
+		await flushWrites();
+
+		expect(writer.cancelGesture("gesture-a")).toBe(1);
+		await expect(unsent).resolves.toBeNull();
+		expect(store.getSnapshot().error).toBe(genuine);
+		response.resolve(noChange("a-1"));
+		await expect(dispatched).resolves.toMatchObject({ requestId: "a-1" });
+		await expect(untagged).resolves.toMatchObject({ requestId: "plain" });
+	});
+
+	it("keeps permanent stop semantics after a cancellation", async () => {
+		const { store, applyAction, writer } = harness();
+		const response = deferred<ProgrammerValuesActionOutcome>();
+		applyAction.mockReturnValueOnce(response.promise);
+		const dispatched = writer.applyIntent(intentInput("a-1", "gesture-a"));
+		const gestureB = writer.applyIntent(intentInput("b-1", "gesture-b"));
+		await flushWrites();
+		writer.cancelGesture("gesture-a");
+		writer.stop();
+		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
+		await expect(dispatched).resolves.toBeNull();
+		await expect(gestureB).resolves.toBeNull();
+		expect(writer.cancelGesture("gesture-b")).toBe(0);
+		await expect(
+			writer.applyIntent(intentInput("after-stop", "gesture-c")),
+		).resolves.toBeNull();
+		response.resolve(noChange("a-1"));
+		await flushWrites();
+		expect(applyAction).toHaveBeenCalledOnce();
+	});
+});

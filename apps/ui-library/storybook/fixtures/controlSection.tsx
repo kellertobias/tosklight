@@ -284,17 +284,22 @@ function ProgrammerToolsFixture({
 	previousEnabled: boolean;
 	nextEnabled: boolean;
 }) {
+	const { state, dispatch } = useApp();
 	const [lastKey, setLastKey] = useState("Ready");
-	const [activeKeys, setActiveKeys] = useState<SoftwareKey[]>([]);
+	const [setArmed, setSetArmed] = useState(false);
 	const [highlight, setHighlight] = useState(true);
+	// SHIFT is the desk-wide modifier, as in the production NumericPad: the key toggles the
+	// application's shiftArmed state and the lamp reflects that state, so a story that reads
+	// useApp().state.shiftArmed sees exactly the modifier the operator sees lit.
+	const activeKeys: SoftwareKey[] = [
+		...(setArmed ? (["SET"] as const) : []),
+		...(state.shiftArmed ? (["SHIFT"] as const) : []),
+	];
 	const press = (key: SoftwareKey) => {
 		setLastKey(key);
-		if (key !== "SET" && key !== "SHIFT") return;
-		setActiveKeys((current) =>
-			current.includes(key)
-				? current.filter((item) => item !== key)
-				: [...current, key],
-		);
+		if (key === "SET") setSetArmed((current) => !current);
+		if (key === "SHIFT")
+			dispatch({ type: "SET_SHIFT_ARMED", value: !state.shiftArmed });
 	};
 	return (
 		<>
@@ -414,8 +419,8 @@ function FullFader({
 }
 
 function PlaybackToolsFixture() {
+	const { state, dispatch } = useApp();
 	const [setArmed, setSetArmed] = useState(false);
-	const [shiftArmed, setShiftArmed] = useState(false);
 	return (
 		<PlaybackToolsView
 			pageControls={<PageControlsFixture />}
@@ -424,10 +429,11 @@ function PlaybackToolsFixture() {
 			releaseFade={<FullFader label="Release" value={2} maximum={60} />}
 			speedGroups={speedGroups}
 			setArmed={setArmed}
-			shiftArmed={shiftArmed}
+			shiftArmed={state.shiftArmed}
 			onCommandKey={(key) => {
 				if (key === "SET") setSetArmed((current) => !current);
-				if (key === "SHIFT") setShiftArmed((current) => !current);
+				if (key === "SHIFT")
+					dispatch({ type: "SET_SHIFT_ARMED", value: !state.shiftArmed });
 			}}
 		/>
 	);

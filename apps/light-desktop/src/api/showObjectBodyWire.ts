@@ -1,3 +1,4 @@
+import { decodeAttributeValue } from "./programmerValuesWireProjection";
 import type {
 	StoredDeskLayout,
 	StoredStageLayout,
@@ -137,17 +138,15 @@ function decodeDynamic(
 }
 
 function decodePreset(value: unknown, path: string): StoredPreset {
-	const body = recordAt(value, path);
-	const values = recordAt(body.values, `${path}.values`);
-	const decodedValues: StoredPreset["values"] = {};
-	for (const [key, rawValue] of Object.entries(values))
-		decodedValues[key] = recordAt(rawValue, `${path}.values.${key}`);
-	return {
-		...body,
-		name: plainStringAt(body.name, `${path}.name`),
-		number: integerAt(body.number, `${path}.number`),
-		values: decodedValues,
-	};
+ const body = recordAt(value, path);
+ const decodeMap = (raw: unknown, path: string, scope: "independent" | "fixture" | "group") => Object.fromEntries(Object.entries(recordAt(raw, path)).map(([attribute, value]) => [attribute, decodeAttributeValue(value, `${path}.${attribute}`, scope)]));
+ const values = Object.fromEntries(Object.entries(recordAt(body.values, `${path}.values`)).map(([id, values]) => [id, decodeMap(values, `${path}.values.${id}`, "fixture")]));
+ const groups = Object.fromEntries(Object.entries(recordAt(body.group_values === undefined ? {} : body.group_values, `${path}.group_values`)).map(([id, values]) => [id, decodeMap(values, `${path}.group_values.${id}`, "group")]));
+ return {
+  ...body, name: plainStringAt(body.name, `${path}.name`), number: integerAt(body.number, `${path}.number`), values,
+  ...(body.group_values === undefined ? {} : { group_values: groups }),
+  ...(body.universal_values === undefined ? {} : { universal_values: decodeMap(body.universal_values, `${path}.universal_values`, "independent") }),
+ };
 }
 
 function plainStringAt(value: unknown, path: string) {

@@ -3,6 +3,15 @@ import { feedbackReducer, reduceFeedback } from "./feedbackReducer";
 import { initialFeedbackState } from "./types";
 
 describe("hardware feedback reducer", () => {
+  it("projects authoritative Align feedback in raw and wrapped OSC formats", () => {
+    const address = "/light/main/feedback/programmer/align/active";
+    const active = reduceFeedback(initialFeedbackState, { address, arguments: [{ Bool: true }] });
+    expect(active.alignActive).toBe(true);
+    expect(reduceFeedback(active, { address, arguments: [true] })).toBe(active);
+    const off = reduceFeedback(active, { address, arguments: [false] });
+    expect(off.alignActive).toBe(false);
+    expect(off.highlight).toBe(initialFeedbackState.highlight);
+  });
   it("marks the controller connected and projects desk state feedback", () => {
     const page = reduceFeedback(initialFeedbackState, {
       address: "/light/main/feedback/page",

@@ -1,3 +1,4 @@
+import { decodeProgrammingComponent } from "./programmingIntentWire";
 import type {
 	ProgrammingUpdateAddress,
 	ProgrammingUpdateItemOutcome,
@@ -223,12 +224,19 @@ function decodeAddress(value: unknown, path: string): ProgrammingUpdateAddress {
 	const address = exactRecordAt(value, path, addressFields(value, path));
 	const type = enumAt(address.type, `${path}.type`, [
 		"fixture_attribute",
+		"dynamic_attribute",
 		"group_attribute",
 		"group_membership",
 	]);
 	if (type === "fixture_attribute") {
 		scopedUuidAt(address.fixture_id, `${path}.fixture_id`);
 		stringAt(address.attribute, `${path}.attribute`);
+	} else if (type === "dynamic_attribute") {
+		scopedUuidAt(address.fixture_id, `${path}.fixture_id`);
+		stringAt(address.attribute, `${path}.attribute`);
+		if (address.instance_link != null) scopedUuidAt(address.instance_link, `${path}.instance_link`);
+		if (address.lane_id != null) scopedUuidAt(address.lane_id, `${path}.lane_id`);
+		if (address.component != null) decodeProgrammingComponent(address.component, `${path}.component`);
 	} else if (type === "group_attribute") {
 		stringAt(address.group_id, `${path}.group_id`);
 		stringAt(address.attribute, `${path}.attribute`);
@@ -306,13 +314,18 @@ function addressFields(value: unknown, path: string) {
 		"fixture_id",
 		"group_id",
 		"attribute",
+		"instance_link",
+		"lane_id",
+		"component",
 	]);
 	const type = enumAt(address.type, `${path}.type`, [
 		"fixture_attribute",
+		"dynamic_attribute",
 		"group_attribute",
 		"group_membership",
 	]);
 	if (type === "fixture_attribute") return ["type", "fixture_id", "attribute"];
+	if (type === "dynamic_attribute") return ["type", "fixture_id", "attribute", "instance_link", "lane_id", "component"];
 	if (type === "group_attribute") return ["type", "group_id", "attribute"];
 	return ["type", "fixture_id"];
 }

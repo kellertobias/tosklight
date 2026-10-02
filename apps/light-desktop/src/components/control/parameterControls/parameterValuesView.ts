@@ -1,3 +1,4 @@
+import { sameAttributeValue } from "../../../features/programmerValues/projectionValue";
 import type { AttributeValue } from "../../../api/types/playback";
 import type { ProgrammerDynamicValue } from "../../../features/programmerValues/contracts";
 
@@ -152,6 +153,10 @@ function equalAttributeValue(left: AttributeValue, right: AttributeValue) {
 				left.value.y === right.value.y &&
 				left.value.z === right.value.z
 			);
+		case "color_program":
+		case "position":
+		case "zoom":
+			return sameAttributeValue(left, right);
 		default:
 			return right.kind === left.kind && left.value === right.value;
 	}

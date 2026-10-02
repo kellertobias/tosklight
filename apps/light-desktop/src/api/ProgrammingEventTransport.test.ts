@@ -73,6 +73,7 @@ function expectedObjects(scope: ProgrammingEventScope) {
 					},
 				]
 			: []),
+		...(scope.alignment ? [{ capability: "desk", id: `programming-alignment:${PROGRAMMING_DESK_ID}` }] : []),
 	];
 }
 
@@ -81,6 +82,8 @@ describe("WebSocketProgrammingEventTransport", () => {
 		{ commandLine: true, selection: false },
 		{ commandLine: false, selection: true },
 		{ commandLine: true, selection: true },
+		{ commandLine: false, selection: false, alignment: true },
+		{ commandLine: true, selection: true, alignment: true },
 	])("subscribes only to the mounted $scope views", (scope) => {
 		const { observer, transport } = createHarness();
 		const stream = transport.subscribe(

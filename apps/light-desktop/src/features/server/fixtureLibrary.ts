@@ -12,6 +12,8 @@ export function createFixtureLibraryActions(
 	| "fixtureProfileRevisions"
 	| "fixtureBodyCatalogue"
 	| "saveFixtureProfileSourceGdtf"
+	| "previewFixtureGdtf"
+	| "importFixtureGdtf"
 	| "importFixturePackage"
 	| "exportFixturePackage"
 	| "fixtureSourceMappings"
@@ -86,6 +88,15 @@ export function createFixtureLibraryActions(
 				setError(reason instanceof Error ? reason.message : String(reason));
 				return false;
 			}
+		},
+		previewFixtureGdtf: (source) => api.fixtures.previewFixtureGdtf(source),
+		importFixtureGdtf: async (input) => {
+			const profile = await api.fixtures.importFixtureGdtf(input);
+			setFixtureProfiles(await api.fixtures.fixtureProfiles());
+			setFixtureProfileWarnings(await api.fixtures.fixtureProfileWarnings());
+			setFixtureLibrary(await api.fixtures.fixtureLibrary());
+			setError(null);
+			return profile;
 		},
 		importFixturePackage: async (source, attributeMappings) => {
 			try {

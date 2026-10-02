@@ -94,7 +94,7 @@ function HeadActions({
 			<Button
 				iconOnly
 				aria-label={`Remove ${head.name}`}
-				disabled={mode.heads.length === 1 || ownsChannels}
+				disabled={mode.heads.length === 1 || ownsChannels || mode.color_physical?.paths.some((path) => path.head_id === head.id)}
 				title={
 					ownsChannels
 						? "Remove or reassign this head's channels first"
@@ -182,6 +182,7 @@ function HeadRow({
 					})
 				}
 			/>
+            {mode.color_physical?.paths.some((path) => path.head_id === head.id) && <p className="field-hint">Remove this head's physical optical path in Color before deleting the head.</p>}
 			<HeadActions
 				head={head}
 				index={index}
@@ -197,7 +198,8 @@ function HeadRow({
 function removeHead(mode: FixtureMode, headId: string): FixtureMode | null {
 	if (
 		mode.heads.length === 1 ||
-		mode.channels.some((channel) => channel.head_id === headId)
+		mode.channels.some((channel) => channel.head_id === headId) ||
+        mode.color_physical?.paths.some((path) => path.head_id === headId)
 	)
 		return null;
 	return {

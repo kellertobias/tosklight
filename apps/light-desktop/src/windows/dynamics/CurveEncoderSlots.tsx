@@ -1,4 +1,10 @@
 import {
+	type ScalarDynamicLane,
+	isScalarDynamicLane,
+	isScalarDynamicRandomGroup,
+} from "../../features/dynamics/laneModel";
+import type { DynamicLaneProjection } from "../../api/types";
+import {
 	Button,
 	ColorPickerField,
 	CyclingValueToggle,
@@ -44,7 +50,6 @@ import type {
 	DynamicDefinitionProjection,
 	DynamicDefinitionStatusProjection,
 	DynamicLaneModeProjection,
-	DynamicLaneProjection,
 	DynamicPeriodicFunctionProjection,
 	DynamicPhaseOrderingProjection,
 	DynamicRandomGroupProjection,
@@ -95,9 +100,9 @@ import { encoderChoices, type DynamicEncoderSlot } from "./DynamicEncoderDeck";
 type PresetObject = ShowObject<"preset">;
 
 function curveSlotFactories(
-	lane: DynamicLaneProjection | undefined,
+	lane: ScalarDynamicLane | undefined,
 	onLaneChange: (
-		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
+		update: (lane: ScalarDynamicLane) => ScalarDynamicLane,
 		mutationGroup?: string,
 	) => Promise<void>,
 	presets: readonly PresetObject[],
@@ -121,9 +126,9 @@ function curveSlotFactories(
 		label: string,
 		source: DynamicScalarSourceProjection | undefined,
 		replace: (
-			lane: DynamicLaneProjection,
+			lane: ScalarDynamicLane,
 			source: DynamicScalarSourceProjection,
-		) => DynamicLaneProjection,
+		) => ScalarDynamicLane,
 	): DynamicEncoderSlot => ({
 		id,
 		label,
@@ -207,7 +212,7 @@ function keyframeCurveSlots({
 	widthSlot,
 	speedSlot,
 }: {
-	lane: DynamicLaneProjection | undefined;
+	lane: ScalarDynamicLane | undefined;
 	keyframeIndex: number;
 	onKeyframeIndex(index: number): void;
 	onLaneChange: Parameters<typeof curveSlotFactories>[1];
@@ -326,13 +331,13 @@ function keyframeCurveSlots({
 	];
 }
 
-export function curveEditorEncoderSlots(
-	lane: DynamicLaneProjection | undefined,
+function scalarCurveEditorEncoderSlots(
+	lane: ScalarDynamicLane | undefined,
 	dynamic: DynamicDefinitionProjection,
 	keyframeIndex: number,
 	onKeyframeIndex: (index: number) => void,
 	onLaneChange: (
-		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
+		update: (lane: ScalarDynamicLane) => ScalarDynamicLane,
 		mutationGroup?: string,
 	) => Promise<void>,
 	presets: readonly PresetObject[],
@@ -399,9 +404,9 @@ export function curveEditorEncoderSlots(
 				];
 	}
 	if (lane.mode === "random") {
-		const group = dynamic.random_groups.find(
-			(candidate) => candidate.id === lane.random_group_id,
-		);
+		const group = dynamic.random_groups
+			.filter(isScalarDynamicRandomGroup)
+			.find((candidate) => candidate.id === lane.random_group_id);
 		return [
 			{
 				...sourceSlot("random-low", "Low", group?.low, (item) => item),
@@ -439,9 +444,9 @@ export function curveEditorEncoderSlots(
 }
 
 function middleAmplitudePwmValueSlots(
-	lane: DynamicLaneProjection,
+	lane: ScalarDynamicLane,
 	onLaneChange: (
-		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
+		update: (lane: ScalarDynamicLane) => ScalarDynamicLane,
 		mutationGroup?: string,
 	) => Promise<void>,
 ): DynamicEncoderSlot[] {
@@ -496,7 +501,7 @@ function middleAmplitudePwmValueSlots(
 	return [slot("top", top), slot("bottom", bottom)];
 }
 
-export function normalizePwmLane(lane: DynamicLaneProjection) {
+export function normalizePwmLane(lane: ScalarDynamicLane) {
 	const functionName =
 		lane.mode === "middle_amplitude"
 			? lane.middle_amplitude.function
@@ -533,9 +538,9 @@ export function normalizePwmLane(lane: DynamicLaneProjection) {
 }
 
 function pwmEncoderSlots(
-	lane: DynamicLaneProjection,
+	lane: ScalarDynamicLane,
 	onLaneChange: (
-		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
+		update: (lane: ScalarDynamicLane) => ScalarDynamicLane,
 		mutationGroup?: string,
 	) => Promise<void>,
 ): DynamicEncoderSlot[] {
@@ -563,10 +568,10 @@ function pwmEncoderSlots(
 }
 
 function setLanePwmValue(
-	lane: DynamicLaneProjection,
+	lane: ScalarDynamicLane,
 	field: "attack" | "on" | "decay",
 	value: number,
-): DynamicLaneProjection {
+): ScalarDynamicLane {
 	const pwm =
 		lane.mode === "middle_amplitude"
 			? lane.middle_amplitude.pwm
@@ -779,3 +784,82 @@ const interpolations = [
 	"hold",
 	"drop",
 ] as const;
+
+export function curveEditorEncoderSlots(
+	lane: DynamicLaneProjection | undefined,
+	dynamic: DynamicDefinitionProjection,
+	keyframeIndex: number,
+	onKeyframeIndex: (index: number) => void,
+	onLaneChange: (
+		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
+		mutationGroup?: string,
+	) => Promise<void>,
+	presets: readonly PresetObject[],
+): DynamicEncoderSlot[] {
+	if (lane && !isScalarDynamicLane(lane))
+		return [
+			...Array.from(
+				{ length: 4 },
+				(_, index): DynamicEncoderSlot => ({
+					id: `intent-value-${index}`,
+					label: "Unassigned",
+					display: "—",
+					value: 0,
+					minimum: 0,
+					maximum: 1,
+					inputScale: 1,
+					fineStep: 0.01,
+					coarseStep: 0.1,
+					disabled: true,
+					apply: async () => undefined,
+				}),
+			),
+			{
+				id: "curve-width",
+				label: "Curve width",
+				display: `${Math.round(lane.width * 100)}%`,
+				value: lane.width,
+				minimum: 0.05,
+				maximum: 1,
+				inputScale: 100,
+				fineStep: 0.01,
+				coarseStep: 0.1,
+				apply: (value, group) =>
+					onLaneChange(
+						(current) => ({ ...current, width: clamp(value, 0.05, 1) }),
+						group,
+					),
+			},
+			{
+				id: "lane-speed",
+				label: "Speed",
+				display: `${lane.speed_multiplier.numerator}/${lane.speed_multiplier.denominator}`,
+				value: rationalValue(lane.speed_multiplier),
+				minimum: 0.0625,
+				maximum: 16,
+				inputScale: 1,
+				fineStep: 0.0625,
+				coarseStep: 0.5,
+				apply: (value, group) =>
+					onLaneChange(
+						(current) => ({
+							...current,
+							speed_multiplier: rationalFromNumber(value),
+						}),
+						group,
+					),
+			},
+		];
+	return scalarCurveEditorEncoderSlots(
+		lane,
+		dynamic,
+		keyframeIndex,
+		onKeyframeIndex,
+		(update, group) =>
+			onLaneChange(
+				(current) => (isScalarDynamicLane(current) ? update(current) : current),
+				group,
+			),
+		presets,
+	);
+}

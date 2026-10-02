@@ -1,0 +1,110 @@
+.fixture-abstraction-mockup { height: calc(100vh - 48px); min-height: 0; width: 100%; color: var(--text); background: var(--bg); }
+.fixture-abstraction-mockup .app-shell, .fixture-abstraction-mockup .fam-workspace { height: 100%; min-height: 0; }
+.fixture-abstraction-mockup .fam-surfaces { display: flex; flex-direction: column; min-width: 0; min-height: 0; container-type: inline-size; }
+.fixture-abstraction-mockup .fam-surfaces > .encoder-section { flex: 1; min-height: 0; }
+.fixture-abstraction-panel { color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; min-width: 0; }
+.fixture-abstraction-layer { padding: 12px; }
+/* Match production modal chrome: the title bar meets the dialog edge. */
+.fixture-abstraction-layer.ui-modal-stack-layer > .fixture-abstraction-panel[role="dialog"] { padding: 0; max-height: calc(100dvh - 24px); }
+.fixture-abstraction-panel > .ui-modal-titlebar { margin: 0; padding: 0; border-radius: 5px 5px 0 0; flex-shrink: 0; }
+.fixture-abstraction-panel small { font-size: 12px; color: var(--muted); }
+.fixture-abstraction-panel p { font-size: 13px; line-height: 1.5; margin: 0; }
+.fixture-abstraction-panel .fam-muted { color: var(--muted); }
+/* Compact Special occupies the four encoder slots. Its actions sit below White Blend. */
+.fixture-abstraction-mockup .fam-inline-dialog.fam-color-editor { height: 100%; min-height: 0; width: 100%; }
+.fixture-abstraction-panel .fam-editor-page { display: grid; height: 100%; grid-template-columns: minmax(0, 1fr) 230px; align-items: center; gap: 24px; padding: 10px 16px; min-height: 0; min-width: 0; }
+.fixture-abstraction-panel .fam-compact-color-actions { display: grid; gap: 22px; align-content: center; min-width: 0; }
+.fixture-abstraction-panel .fam-editor-buttons { display: flex; gap: 8px; }
+.fixture-abstraction-panel .fam-editor-buttons .ui-button { min-height: 40px; flex: 1; padding-inline: 10px; white-space: nowrap; }
+.fixture-abstraction-panel .fam-editor-white { grid-template-columns: minmax(0, 1fr) 170px; }
+.fixture-abstraction-panel .fam-editor-white .fam-editor-buttons, .fixture-abstraction-panel .fam-editor-preview .fam-editor-buttons { flex-direction: column; }
+.fixture-abstraction-panel .fam-editor-preview { grid-template-columns: minmax(0, 1fr) 140px; }
+.fixture-abstraction-panel .fam-white-balance { display: grid; gap: 20px; min-width: 0; }
+/* Existing touch-fader face, horizontal colored travel and a visible touch indicator. */
+.fixture-abstraction-panel .fam-range-field { position: relative; min-width: 0; }
+.fixture-abstraction-panel .vertical-touch-fader.fam-range-fader { height: 72px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; cursor: ew-resize; }
+.fixture-abstraction-panel .vertical-touch-fader.fam-range-fader::before { background: var(--fam-fader-gradient); transform: none; }
+.fixture-abstraction-panel .vertical-touch-fader.fam-range-fader > span { color: white; font-size: 12px; width: fit-content; padding: 2px 5px; background: #101820c9; border-radius: 3px; text-shadow: 0 1px 2px #000; }
+.fixture-abstraction-panel .vertical-touch-fader.fam-range-fader > strong { margin: 0; padding: 0 5px; font-size: 21px; font-variant-numeric: tabular-nums; background: #101820c9; border-radius: 3px; }
+/* The production vertical fader pins its value bottom-left inside the programmer. */
+.fixture-abstraction-mockup .control-section .fam-inline-dialog .fam-range-field .vertical-touch-fader.fam-range-fader > strong { position: relative; inset: auto; }
+.fixture-abstraction-panel .vertical-touch-fader.fam-range-fader.has-range > strong { font-size: 17px; line-height: 25px; }
+.fixture-abstraction-panel .vertical-touch-fader.fam-range-fader input { writing-mode: horizontal-tb; direction: ltr; cursor: ew-resize; }
+.fixture-abstraction-panel .fam-range-handle { position: absolute; z-index: 3; bottom: 10px; width: 20px; height: 20px; transform: translateX(-50%); border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #10202b, 0 1px 4px #000; color: white; background: #152735cc; display: grid; place-items: center; font-style: normal; font-size: 11px; pointer-events: none; }
+.fixture-abstraction-panel .fam-range-handle::before { content: ""; position: absolute; left: 7px; top: -9px; height: 7px; border-left: 2px solid white; filter: drop-shadow(0 0 1px #000); }
+.fixture-abstraction-panel .fam-range-pending { position: absolute; z-index: 4; bottom: 12px; left: 38px; padding: 2px 5px; background: #101820db; color: white; border-radius: 3px; font-size: 10px; pointer-events: none; }
+.fixture-abstraction-panel .fam-range-fader:focus-within { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.fixture-abstraction-panel :is(.fam-hue-ring, .fam-2d-sheet):focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+/* Compact sheet retains the production hue-horizontal, saturation-vertical layout. */
+.fixture-abstraction-panel .fam-color-plane { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) 20px; gap: 7px; min-width: 0; min-height: 0; }
+.fixture-abstraction-panel .fam-2d-sheet { width: 100%; height: 100%; min-height: 0; cursor: crosshair; }
+.fixture-abstraction-panel .fam-plane-marker { display: grid; place-items: center; font: 11px sans-serif; color: white; background: #12253699; pointer-events: none; }
+.fixture-abstraction-panel .fam-2d-caption { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
+.fixture-abstraction-panel .fam-2d-caption > span:first-child { width: 18px; height: 18px; border: 1px solid var(--border); border-radius: 3px; }
+/* Large modal ring and all color faders share one full-width region. */
+.fixture-abstraction-layer.ui-modal-stack-layer > .fam-full-color-modal[role="dialog"] { width: min(1060px, calc(100vw - 24px)); display: flex; flex-direction: column; }
+.fixture-abstraction-panel .fam-full-color-layout { display: grid; gap: 18px; padding: 16px 22px; overflow: auto; min-height: 0; }
+.fixture-abstraction-panel .fam-full-picker { min-width: 0; width: 100%; }
+.fixture-abstraction-panel .fam-hue-picker { --fam-ring-size: clamp(300px, 43vw, 380px); display: grid; grid-template-columns: var(--fam-ring-size) minmax(0, 1fr); align-items: center; gap: 28px; min-width: 0; }
+.fixture-abstraction-panel .fam-hue-ring { position: relative; width: var(--fam-ring-size); height: var(--fam-ring-size); border-radius: 50%; background: conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); cursor: crosshair; touch-action: none; }
+.fixture-abstraction-panel .fam-hue-center { position: absolute; inset: 19%; border-radius: 50%; background: var(--panel); display: grid; align-content: center; justify-items: center; gap: 12px; pointer-events: none; }
+.fixture-abstraction-panel .fam-hue-center > span { width: 64px; height: 64px; border-radius: 50%; border: 1px solid #9aa7b3; }
+.fixture-abstraction-panel .fam-hue-center output { font-size: 18px; font-variant-numeric: tabular-nums; }
+.fixture-abstraction-panel .fam-hue-handle { position: absolute; width: 28px; height: 28px; transform: translate(-50%, -50%); border: 2px solid white; border-radius: 50%; box-shadow: 0 0 0 1px #142735; color: white; background: #152736aa; display: grid; place-items: center; pointer-events: none; font-size: 13px; }
+.fixture-abstraction-panel .fam-saturation-control { display: grid; gap: 12px; min-width: 0; }
+.fixture-abstraction-panel .fam-saturation-control .fam-white-balance { gap: 12px; }
+.fixture-abstraction-panel .fam-saturation-control > small { font-size: 11px; line-height: 1.4; }
+.fixture-abstraction-panel .fam-full-color-comparison { display: grid; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+.fixture-abstraction-panel .fam-full-color-comparison h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.fixture-abstraction-panel .fam-full-media-preview { height: 220px; min-width: 0; }
+.fixture-abstraction-panel .fam-color-matches { display: grid; gap: 10px; min-width: 0; font-size: 12px; }
+.fixture-abstraction-panel .fam-match-request { display: flex; align-items: center; gap: 8px; }
+.fixture-abstraction-panel .fam-match-request > small { margin-left: auto; }
+.fixture-abstraction-panel .fam-result-swatch { display: block; flex-shrink: 0; width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 3px; }
+.fixture-abstraction-panel .fam-output-swatches { display: flex; gap: 4px; }
+.fixture-abstraction-panel .fam-match-results { display: grid; gap: 8px; }
+.fixture-abstraction-panel .fam-color-match { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; }
+.fixture-abstraction-panel .fam-match-copy { display: grid; gap: 2px; min-width: 0; }
+.fixture-abstraction-panel .fam-match-copy b { font-weight: 600; }
+.fixture-abstraction-panel .fam-match-copy small, .fixture-abstraction-panel .fam-match-status { font-size: 11px; }
+.fixture-abstraction-panel .fam-match-status { color: var(--muted); }
+.fixture-abstraction-panel .fam-match-warning { color: #f8c96b; }
+.fixture-abstraction-panel .fam-generic-matches { display: grid; gap: 8px; }
+.fixture-abstraction-panel .fam-generic-matches > div { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.fixture-abstraction-panel .fam-generic-matches small { margin-left: auto; }
+/* Profile configuration story keeps its own application modal. */
+.fixture-abstraction-layer.ui-modal-stack-layer > .fam-configuration-modal[role="dialog"] { width: min(1120px, calc(100vw - 24px)); display: flex; flex-direction: column; }
+.fixture-abstraction-panel .fam-modal-body { overflow: auto; min-height: 0; padding: 20px; display: grid; gap: 18px; align-content: start; }
+.fixture-abstraction-panel .fam-inline { display: flex; gap: 6px; flex-wrap: wrap; }
+.fixture-abstraction-panel .fam-two-columns { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 18px; }
+.fixture-abstraction-panel .fam-panel, .fixture-abstraction-panel .fam-sidebar { display: grid; align-content: start; gap: 12px; }
+.fixture-abstraction-panel .fam-panel h2 { font-size: 15px; margin: 0; }
+.fixture-abstraction-panel .fam-context-row, .fixture-abstraction-panel .fam-emitter-list, .fixture-abstraction-panel .fam-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.fixture-abstraction-panel .fam-readouts { display: flex; gap: 16px; }
+.fixture-abstraction-panel .fam-readouts > div { display: grid; gap: 5px; }
+.fixture-abstraction-panel .fam-quality-list { padding-left: 18px; display: grid; gap: 12px; font-size: 12px; }
+.fixture-abstraction-panel .fam-slider-row { display: flex; gap: 10px; }
+.fixture-abstraction-panel .fam-slider-row input { flex: 1; min-width: 0; }
+@media (max-width: 1100px) { .fixture-abstraction-panel .fam-two-columns { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) { .fixture-abstraction-mockup .family-tabs .special-dialogs { position: sticky; right: 0; z-index: 4; box-shadow: -5px 0 5px var(--bg); } }
+@media (max-width: 650px) {
+ .fixture-abstraction-panel .fam-full-color-layout { padding: 14px; }
+ .fixture-abstraction-panel .fam-hue-picker { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 18px; }
+ .fixture-abstraction-panel .fam-saturation-control { width: 100%; }
+}
+/* Hardware cards need explicit label/value rows in the compact lower section. */
+.fixture-abstraction-mockup .hardware-connected .hardware-encoder-display.single-target { display: grid; grid-template-rows: max-content minmax(0, 1fr); gap: 4px; padding: 3px; }
+.fixture-abstraction-mockup .hardware-connected .hardware-encoder-display.single-target .hardware-encoder-primary-labels { position: static; }
+.fixture-abstraction-mockup .hardware-connected .hardware-encoder-display.single-target .hardware-encoder-target.hardware-encoder-primary { position: static; top: auto; bottom: auto; left: auto; right: auto; min-height: 0; }
+.fixture-abstraction-mockup .hardware-connected .hardware-encoder-display.single-target .hardware-encoder-target > strong { position: static; inset: auto; transform: none; max-width: 100%; white-space: normal; }
+@container (max-width: 459px) {
+ .fixture-abstraction-mockup .touch-encoder-value { padding-inline: 2px; white-space: normal; }
+ .fixture-abstraction-mockup .hardware-encoder-target { left: 2px; right: 2px; }
+ .fixture-abstraction-mockup .hardware-encoder-target strong { white-space: normal; }
+ .fixture-abstraction-mockup .touch-encoder-labels { grid-template-columns: minmax(0, 1fr); }
+ .fixture-abstraction-mockup .touch-encoder-labels b { word-break: normal; overflow-wrap: normal; }
+ .fixture-abstraction-mockup .touch-encoder-labels small { display: none; }
+ .fixture-abstraction-mockup .hardware-connected .hardware-encoder-primary-labels { left: 3px; right: 3px; top: 3px; grid-template-columns: minmax(0, 1fr); }
+ .fixture-abstraction-mockup .hardware-connected .hardware-encoder-primary-labels small { display: none; }
+ .fixture-abstraction-mockup .hardware-connected .hardware-encoder-primary-labels b { word-break: normal; overflow-wrap: normal; text-align: center; }
+}

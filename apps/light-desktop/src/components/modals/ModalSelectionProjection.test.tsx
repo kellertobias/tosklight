@@ -176,6 +176,7 @@ describe("modal selection projections", () => {
 		expect(transport.subscriptions).toHaveLength(1);
 		expect(transport.subscriptions[0].scope).toEqual({
 			commandLine: false,
+			alignment: false,
 			selection: true,
 		});
 

@@ -63,7 +63,9 @@ export type SpecialParameterFamily =
 	| "Position"
 	| "Shapers"
 	| "Control"
-	| "Media";
+	| "Media"
+	/** Semantic contract only (TL-551): the Focus/Zoom Special Dialog. */
+	| "Focus";
 export const alignModes = ["left", "right", "out", "in"] as const;
 export type AlignMode = (typeof alignModes)[number];
 
@@ -126,6 +128,7 @@ export const parameterLabels: Record<string, string> = {
 	"shaper.rotation": "Shaper Rotation",
 };
 
+/** Families with a legacy (contract 0) Special Dialog. Focus has one only when semantic. */
 export const specialParameterFamilies = new Set<SpecialParameterFamily>([
 	"Color",
 	"Position",

@@ -529,6 +529,29 @@ describe("decodeVisualizationRuntimeSnapshot", () => {
 		expect(decoded.profile_output_values).toEqual(decoded.values);
 	});
 
+	it("decodes the Fixture Sheet's commanded Pan/Tilt rows and rejects a non-numeric angle", () => {
+		const row = { fixture_id: "fixture-1", pan_degrees: 1.06, tilt_degrees: 0.53 };
+		expect(
+			decodeVisualizationRuntimeSnapshot(
+				{ ...snapshot(false), commanded_positions: [row] },
+				"normal",
+			).commanded_positions,
+		).toEqual([row]);
+		expect(
+			decodeVisualizationRuntimeSnapshot(snapshot(false), "normal")
+				.commanded_positions,
+		).toBeUndefined();
+		expect(() =>
+			decodeVisualizationRuntimeSnapshot(
+				{
+					...snapshot(false),
+					commanded_positions: [{ ...row, pan_degrees: "1.06" }],
+				},
+				"normal",
+			),
+		).toThrow();
+	});
+
 	it("decodes the Dynamic stack emitted by the production endpoint", () => {
 		const decoded = decodeVisualizationRuntimeSnapshot(
 			{

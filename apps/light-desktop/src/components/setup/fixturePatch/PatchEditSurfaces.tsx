@@ -1,3 +1,4 @@
+import { PositionCalibrationButton } from "./PositionCalibration";
 import { isVisualOnly } from "../patchUtils";
 import { positionPointLabel, positionPoints } from "./positionReference";
 import { SCENERY_AXES } from "./scenerySize";
@@ -86,7 +87,7 @@ export function MultipatchVectorDialog() {
 					/>
 					<EditError />
 					{policy ? (
-						<CombinedPolicySelect kind="pan_tilt" />
+						<><CombinedPolicySelect kind="pan_tilt" /><PositionCalibrationButton /></>
 					) : (
 						<VectorInputs
 							kind={edit.kind as "location" | "rotation"}
@@ -298,7 +299,7 @@ function FixtureEditFields() {
 	if (edit === "chain") return <ChainModeFields />;
 	if (edit === "position_reference") return <PositionReferenceFields />;
 	if (edit === "masters" || edit === "pan_tilt")
-		return <CombinedPolicySelect kind={edit} />;
+		return <><CombinedPolicySelect kind={edit} />{edit === "pan_tilt" && <PositionCalibrationButton />}</>;
 	if (edit === "location" || edit === "rotation")
 		return (
 			<VectorInputs kind={edit} axis={controller.ui.editAxis ?? undefined} />

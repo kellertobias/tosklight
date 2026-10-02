@@ -44,6 +44,11 @@ export function reduceFeedback(
     if (updateArmed !== next.updateArmed) next = { ...next, updateArmed };
   }
 
+  if (feedback.address.endsWith("/feedback/programmer/align/active")) {
+    const alignActive = Boolean(arguments_[0]);
+    if (alignActive !== next.alignActive) next = { ...next, alignActive };
+  }
+
   const highlightOffset = parts.indexOf("highlight");
   if (highlightOffset >= 0 && parts[highlightOffset - 1] === "feedback") {
     next = reduceHighlight(next, parts[highlightOffset + 1], arguments_[0]);

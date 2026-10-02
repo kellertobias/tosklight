@@ -13,6 +13,8 @@
     "./transport": "./src/transport.ts",
     "./wire": "./src/wire.ts",
 		"./fixture-profile": "./src/fixtureProfile.ts",
+		"./color-calibration": "./src/colorCalibration.ts",
+		"./position-calibration": "./src/positionCalibration.ts",
 		"./fixture-profile-model": "./src/sheet/fixtureProfileModel.ts",
 		"./library": "./src/library/index.ts",
 		"./stage-geometry": "./src/stageGeometry/index.ts",

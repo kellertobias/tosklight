@@ -1,0 +1,44 @@
+/* TL-550: one small, steady, subdued triangle beside a Fixture Sheet Color value. No animation,
+ * no alarm colour; the hit area is touch-sized while the glyph stays small. */
+.ui-button.fixture-sheet-color-notice {
+	display: inline-grid;
+	place-items: center;
+	min-width: 32px;
+	min-height: 32px;
+	margin: -6px -6px -6px 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	flex: 0 0 auto;
+}
+.ui-button.fixture-sheet-color-notice:focus-visible {
+	outline: 2px solid var(--focus, currentColor);
+	outline-offset: -4px;
+	border-radius: 4px;
+}
+.fixture-sheet-color-notice-glyph {
+	position: relative;
+	width: 12px;
+	height: 11px;
+	display: grid;
+	place-items: end center;
+	opacity: 0.72;
+}
+.fixture-sheet-color-notice-glyph::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 50%;
+	transform: translateX(-50%);
+	border-right: 6px solid transparent;
+	border-bottom: 11px solid var(--muted, #9aa3ad);
+	border-left: 6px solid transparent;
+}
+.fixture-sheet-color-notice-glyph::after {
+	content: "!";
+	position: relative;
+	color: var(--panel, #1b2026);
+	font: 900 8px/1 ui-sans-serif, system-ui, sans-serif;
+}

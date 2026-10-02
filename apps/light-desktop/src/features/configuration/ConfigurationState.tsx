@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { DeskConfiguration } from "../../api/types";
 import {
+	selectColorPresentation,
 	selectCuelistAutoOffAtZeroDefault,
 	selectCuelistAutoOffFlashReleaseDefault,
 	selectDeskConfiguration,
@@ -40,6 +41,11 @@ export function ConfigurationStateProvider({
 			{children}
 		</ConfigurationStoreContext.Provider>
 	);
+}
+
+/** The desk's Easy/Advanced Color encoder presentation (Easy RGBW until one is chosen). */
+export function useColorPresentation() {
+	return useConfigurationSelector(selectColorPresentation, Object.is);
 }
 
 /** Programmer fade in milliseconds, or null while the desk configuration is unknown. */

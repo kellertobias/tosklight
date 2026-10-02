@@ -144,6 +144,7 @@ function setup(
 		cursor: 20,
 		projection: {
 			deskId: DESK_ID,
+			alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
 			commandLine: commandLine(1, choice),
 			selection: {
 				selected: [],

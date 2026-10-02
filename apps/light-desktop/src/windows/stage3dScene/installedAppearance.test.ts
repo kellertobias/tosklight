@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { PatchedFixture, VisualizationSnapshot } from "../../api/types";
 import { buildStageScene, disposeScene } from "../stage3dScene";
+import { applyFixtureRootTransform } from "./fallbackFixture";
 import {
 	applyInstalledAppearance,
 	colorTemperatureLinearRgb,
@@ -151,4 +152,18 @@ describe("installed Stage appearance", () => {
 		).toBe(0);
 		disposeScene(built.scene);
 	});
+});
+
+
+it("applies desk XYZ mounting and local bracket in the renderer basis", () => {
+    const item = { fixture, index: 0, position: { ...position, rotationX: 23, rotationY: -38, rotationZ: 71 }, bracketAngle: 32 };
+    const root = new THREE.Group();
+    applyFixtureRootTransform(root, item);
+    const desk = new THREE.Quaternion().setFromEuler(new THREE.Euler(23*Math.PI/180, -38*Math.PI/180, 71*Math.PI/180));
+    for (const basis of [new THREE.Vector3(1,0,0), new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,1)]) {
+        const bracketed = basis.clone().applyAxisAngle(new THREE.Vector3(1,0,0), 32*Math.PI/180);
+        const wantedDesk = new THREE.Vector3(bracketed.x, -bracketed.z, bracketed.y).applyQuaternion(desk);
+        const wanted = new THREE.Vector3(wantedDesk.x, wantedDesk.z, -wantedDesk.y);
+        expect(basis.clone().applyQuaternion(root.quaternion).distanceTo(wanted)).toBeLessThan(1e-10);
+    }
 });

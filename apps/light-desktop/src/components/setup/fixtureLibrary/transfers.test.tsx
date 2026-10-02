@@ -1,6 +1,5 @@
 import { act, render, renderHook, screen } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
-import JSZip from "jszip";
 import type { PropsWithChildren } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -13,6 +12,7 @@ import {
 	type FixtureLibraryState,
 } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import { FixtureImportDialogs, useFixtureLibraryTransfers } from "./transfers";
+import { blankFixtureProfile } from "../fixtureProfileModel";
 
 vi.mock("../../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useAttributeRegistry: () => [
@@ -46,22 +46,23 @@ function fixtureLibrary(
 	};
 }
 
-async function gdtfFile(attribute: string) {
-	const zip = new JSZip();
-	zip.file(
-		"description.xml",
-		`<GDTF><FixtureType Manufacturer="Acme" Name="Mapped"><DMXModes><DMXMode Name="Standard"><DMXChannels><DMXChannel Offset="1" Geometry="Main"><LogicalChannel Attribute="${attribute}"><ChannelFunction><ChannelSet Name="Open" DMXFrom="0/1" DMXTo="255/1"/></ChannelFunction></LogicalChannel></DMXChannel></DMXChannels></DMXMode></DMXModes></FixtureType></GDTF>`,
-	);
-	const archive = await zip.generateAsync({ type: "uint8array" });
-	return new File(
-		[
-			archive.buffer.slice(
-				archive.byteOffset,
-				archive.byteOffset + archive.byteLength,
-			) as ArrayBuffer,
+function gdtfPreview() {
+	const profile = blankFixtureProfile();
+	profile.manufacturer = "Acme";
+	profile.name = "Mapped";
+	return {
+		profile,
+		diagnostics: [
+			{ node: "Optics", message: "Optical calibration remains unknown." },
 		],
-		"mapped.gdtf",
-	);
+		unknown_attributes: [
+			{ attribute: "gdtf.Gobo", value_type: "indexed" as const },
+		],
+	};
+}
+
+async function gdtfFile(_attribute: string) {
+	return new File([new Uint8Array([80, 75, 3, 4])], "mapped.gdtf");
 }
 
 describe("useFixtureLibraryTransfers", () => {
@@ -302,13 +303,15 @@ describe("useFixtureLibraryTransfers", () => {
 	});
 
 	it("maps an unknown GDTF source identity and remembers the explicit target", async () => {
-		const saveFixtureProfile = vi.fn(async (profile) => ({
-			...profile,
+		const preview = gdtfPreview();
+		const importFixtureGdtf = vi.fn(async () => ({
+			...preview.profile,
 			revision: 1,
 		}));
 		const rememberFixtureSourceMapping = vi.fn(async () => null);
 		const library = fixtureLibrary(vi.fn(), {
-			saveFixtureProfile,
+			previewFixtureGdtf: vi.fn(async () => preview),
+			importFixtureGdtf,
 			saveFixtureProfileSourceGdtf: vi.fn(async () => true),
 			fixtureSourceMappings: vi.fn(async () => []),
 			rememberFixtureSourceMapping,
@@ -332,10 +335,10 @@ describe("useFixtureLibraryTransfers", () => {
 		const file = await gdtfFile("Gobo");
 		await act(() => result.current.importGdtfFile(file));
 		expect(result.current.requirements).toEqual([
-			{ attribute: "GDTF:Gobo", value_type: "indexed" },
+			{ attribute: "gdtf.Gobo", value_type: "indexed" },
 		]);
 
-		act(() => result.current.setMapping("GDTF:Gobo", "gobo.1"));
+		act(() => result.current.setMapping("gdtf.Gobo", "gobo.1"));
 		await act(() => result.current.confirmGdtfMappings());
 
 		expect(rememberFixtureSourceMapping).toHaveBeenCalledWith({
@@ -343,21 +346,28 @@ describe("useFixtureLibraryTransfers", () => {
 			sourceAttribute: "Gobo",
 			targetAttribute: "gobo.1",
 		});
-		const saved = saveFixtureProfile.mock.calls[0]?.[0];
-		expect(saved.modes[0].channels[0]).toMatchObject({
-			fixture_attribute: "GDTF:Gobo",
-			attribute: "gobo.1",
-			functions: [expect.objectContaining({ attribute: "gobo.1" })],
-		});
+		expect(importFixtureGdtf).toHaveBeenCalledWith(
+			expect.objectContaining({
+				profileId: preview.profile.id,
+				expectedRevision: 0,
+				attributeMappings: [
+					{ source_attribute: "gdtf.Gobo", target_attribute: "gobo.1" },
+				],
+			}),
+		);
+		expect(library.saveFixtureProfile).not.toHaveBeenCalled();
+		expect(library.saveFixtureProfileSourceGdtf).not.toHaveBeenCalled();
 	});
 
-	it("reuses a compatible remembered GDTF mapping without another prompt", async () => {
-		const saveFixtureProfile = vi.fn(async (profile) => ({
-			...profile,
+	it("prefills a compatible remembered mapping while still presenting import limitations", async () => {
+		const preview = gdtfPreview();
+		const importFixtureGdtf = vi.fn(async () => ({
+			...preview.profile,
 			revision: 1,
 		}));
 		const library = fixtureLibrary(vi.fn(), {
-			saveFixtureProfile,
+			previewFixtureGdtf: vi.fn(async () => preview),
+			importFixtureGdtf,
 			saveFixtureProfileSourceGdtf: vi.fn(async () => true),
 			fixtureSourceMappings: vi.fn(async () => [
 				{
@@ -386,13 +396,13 @@ describe("useFixtureLibraryTransfers", () => {
 		const file = await gdtfFile("Gobo");
 		await act(() => result.current.importGdtfFile(file));
 
-		expect(result.current.requirements).toEqual([]);
-		expect(
-			saveFixtureProfile.mock.calls[0]?.[0].modes[0].channels[0],
-		).toMatchObject({
-			fixture_attribute: "GDTF:Gobo",
-			attribute: "gobo.1",
-		});
+		expect(result.current.mappings).toEqual({ "gdtf.Gobo": "gobo.1" });
+		expect(result.current.pendingGdtf?.diagnostics).toEqual(
+			preview.diagnostics,
+		);
+		expect(importFixtureGdtf).not.toHaveBeenCalled();
+		await act(() => result.current.confirmGdtfMappings());
+		expect(importFixtureGdtf).toHaveBeenCalledTimes(1);
 	});
 });
 

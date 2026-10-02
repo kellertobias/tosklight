@@ -11,6 +11,7 @@ import {
 	FIXTURE_SHEET_ATTRIBUTE_GROUPS,
 	fixtureSheetGroupValues,
 	fixtureSheetValueIndex,
+	withCommandedPositions,
 } from "./fixtureSheetValues";
 
 const attributeGroups = [
@@ -342,6 +343,81 @@ describe("Fixture Sheet attribute-group values", () => {
 		expect(groups.intensity.members[0]).toMatchObject({
 			text: "0%",
 			source: "playback",
+		});
+	});
+	describe("Position reads the commanded pose in degrees (TL-552)", () => {
+		// Production Pan/Tilt descriptors carry degrees without a channel domain.
+		const angleRegistry = registry.map((descriptor) =>
+			descriptor.id === "pan"
+				? { ...descriptor, domain_min: null, domain_max: null }
+				: descriptor,
+		);
+		const empty = (): VisualizationSnapshot => ({
+			...snapshot("2026-08-02T10:00:00Z"),
+			values: [],
+			dynamic_stack: [],
+		});
+		const commanded = (
+			snapshot: VisualizationSnapshot,
+			rows: VisualizationSnapshot["commanded_positions"],
+		) => withCommandedPositions({ ...snapshot, commanded_positions: rows });
+		const pan = (
+			current: VisualizationSnapshot | null,
+			programmerAttributes = new Set<string>(),
+		) =>
+			fixtureSheetGroupValues({
+				target: fixtureSheetTargets(fixture())[0],
+				registry: angleRegistry,
+				values: fixtureSheetValueIndex(current).get("fixture-1"),
+				preloadValues: undefined,
+				programmerAttributes,
+				dynamicStack: [],
+				preloadDynamicStack: [],
+			}).position.members[0];
+
+		it("never labels a channel fraction as degrees", () => {
+			expect(pan(empty()).text).toBe("—");
+		});
+
+		it("shows an idle mover's commanded default pose as the encoders do", () => {
+			// DMX 128/255 on a nominal 540° Pan travel: the encoder reads Pan 1.1°.
+			const shown = commanded(empty(), [
+				{ fixture_id: "fixture-1", pan_degrees: 1.0588236, tilt_degrees: 0.5294118 },
+			]);
+			expect(pan(shown)).toMatchObject({ text: "1.1°", source: "default" });
+		});
+
+		it("prefers the commanded pose over the requested Angles and keeps the Programmer source", () => {
+			const requested = empty();
+			requested.values = [
+				{
+					fixture_id: "fixture-1",
+					attribute: "position",
+					value: {
+						kind: "position",
+						value: {
+							kind: "angles",
+							pan_degrees: { kind: "value", value: 30 },
+							tilt_degrees: { kind: "value", value: 10 },
+						},
+					},
+				},
+			];
+			const programmed = new Set(["position"]);
+			expect(pan(requested, programmed)).toMatchObject({
+				text: "30°",
+				source: "programmer",
+			});
+			const shown = commanded(requested, [
+				{ fixture_id: "fixture-1", pan_degrees: 29.5, tilt_degrees: 10 },
+			]);
+			expect(pan(shown, programmed).text).toBe("29.5°");
+		});
+
+		it("adds nothing when the server lists no common pose or there is no snapshot", () => {
+			// Divergent copies and owners without a pose are absent from the server's rows.
+			expect(pan(commanded(empty(), [])).text).toBe("—");
+			expect(withCommandedPositions(null)).toBeNull();
 		});
 	});
 });

@@ -13,6 +13,7 @@ import {
 } from "./channelFunctionCard";
 import { replaceFunctionBehavior } from "./channelModel";
 import { OptionPickerModal } from "./optionPicker";
+import { PhysicalMappingEditor } from "./physicalMappingEditor";
 
 type ChannelFunction = FixtureChannel["functions"][number];
 type ActionIds = Array<{ id: string; name: string }>;
@@ -252,6 +253,11 @@ function FunctionRow({
 								onChange={(behavior) => setFunction({ ...fn, behavior })}
 							/>
 							<AngularMotionEditor functionValue={fn} onChange={setFunction} />
+							<PhysicalMappingEditor
+								functionValue={fn}
+								maximumRaw={maxRaw(channel.resolution)}
+								onChange={setFunction}
+							/>
 						</div>
 					</td>
 				</tr>

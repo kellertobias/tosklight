@@ -1,4 +1,10 @@
 import {
+	type ScalarDynamicLane,
+	isScalarDynamicLane,
+} from "../../features/dynamics/laneModel";
+import type { DynamicLaneProjection } from "../../api/types";
+import { ProgrammingLaneView } from "./ProgrammingLaneView";
+import {
 	Button,
 	ColorPickerField,
 	CyclingValueToggle,
@@ -43,7 +49,6 @@ import type {
 	DynamicDefinitionProjection,
 	DynamicDefinitionStatusProjection,
 	DynamicLaneModeProjection,
-	DynamicLaneProjection,
 	DynamicPeriodicFunctionProjection,
 	DynamicPhaseOrderingProjection,
 	DynamicRandomGroupProjection,
@@ -102,7 +107,7 @@ import { CurvesViewSurface } from "./CurvesViewSurface";
 
 type DynamicObject = ShowObject<"dynamic">;
 
-export function CurvesView({
+function ScalarCurvesView({
 	dynamic,
 	lane,
 	selectedLanes,
@@ -117,7 +122,7 @@ export function CurvesView({
 	onMutate,
 }: {
 	dynamic: DynamicObject;
-	lane: DynamicLaneProjection;
+	lane: ScalarDynamicLane;
 	selectedLanes: ReadonlySet<string>;
 	shiftArmed: boolean;
 	attributes: readonly { id: string; label: string; family: string }[];
@@ -126,7 +131,7 @@ export function CurvesView({
 	contentSidebar?: ReactNode;
 	onPrimaryKeyframeIndex(index: number): void;
 	onSelect(id: string, additive: boolean): void;
-	onReplace(next: DynamicLaneProjection): Promise<void>;
+	onReplace(next: ScalarDynamicLane): Promise<void>;
 	onMutate(
 		dynamic: DynamicObject,
 		intent: DynamicUpdateIntent,
@@ -199,7 +204,9 @@ export function CurvesView({
 		);
 	};
 	const attributeLane = attributeLaneId
-		? dynamic.body.lanes.find((candidate) => candidate.id === attributeLaneId)
+		? dynamic.body.lanes
+				.filter(isScalarDynamicLane)
+				.find((candidate) => candidate.id === attributeLaneId)
 		: undefined;
 	const keyframeIndex = Math.min(
 		primaryKeyframeIndex,
@@ -253,7 +260,7 @@ function createMoveKeyframeAction(
 	) => Promise<void>,
 ) {
 	return (
-		candidate: DynamicLaneProjection,
+		candidate: ScalarDynamicLane,
 		index: number,
 		clientX: number,
 		timeline: HTMLElement,
@@ -290,9 +297,7 @@ function createMoveKeyframeAction(
 	};
 }
 
-export function addKeyframeToLane(
-	lane: DynamicLaneProjection,
-): DynamicLaneProjection {
+export function addKeyframeToLane(lane: ScalarDynamicLane): ScalarDynamicLane {
 	const points = [...lane.keyframes.points];
 	const position = largestKeyframeGapMidpoint(points);
 	points.push({
@@ -308,9 +313,9 @@ export function addKeyframeToLane(
 }
 
 export function deleteKeyframeFromLane(
-	lane: DynamicLaneProjection,
+	lane: ScalarDynamicLane,
 	index: number,
-): DynamicLaneProjection {
+): ScalarDynamicLane {
 	if (index <= 0 || lane.keyframes.points.length <= 2) return lane;
 	return {
 		...lane,
@@ -321,4 +326,20 @@ export function deleteKeyframeFromLane(
 			),
 		},
 	};
+}
+
+type CurvesViewProps = Omit<Parameters<typeof ScalarCurvesView>[0], "lane"> & {
+	lane: DynamicLaneProjection;
+};
+export function CurvesView(props: CurvesViewProps) {
+	return isScalarDynamicLane(props.lane) ? (
+		<ScalarCurvesView {...props} lane={props.lane} />
+	) : (
+		<ProgrammingLaneView
+			dynamic={props.dynamic.body}
+			lane={props.lane}
+			selectedLanes={props.selectedLanes}
+			onSelect={props.onSelect}
+		/>
+	);
 }

@@ -1,3 +1,8 @@
+import {
+	type ScalarDynamicLane,
+	isScalarDynamicLane,
+	isScalarDynamicRandomGroup,
+} from "../../features/dynamics/laneModel";
 import { Button, MultiValueToggle } from "@tosklight/ui";
 import { type CSSProperties, useMemo } from "react";
 import type {
@@ -54,6 +59,9 @@ export function DynamicSelectionPreview({
 		() => dynamicPreviewPhaseOffsets(dynamic.body.phase, previewPositions),
 		[dynamic.body.phase, previewPositions],
 	);
+	const hasIntentLanes = dynamic.body.lanes.some(
+		(lane) => !isScalarDynamicLane(lane),
+	);
 	return (
 		<aside
 			className="dynamic-face-preview-sidebar dynamic-discussion-preview-sidebar"
@@ -70,40 +78,44 @@ export function DynamicSelectionPreview({
 				</span>
 				<b>{selected ? selection.length : 400}</b>
 			</header>
-			<div
-				className={`dynamic-face-fixture-field ${selected ? "selected-fixtures" : "virtual-fixtures"}`}
-				role="img"
-				aria-label={
-					selected
-						? `Top-down preview of ${selection.length} selected fixtures`
-						: "Front-end-only preview of 400 virtual fixtures"
-				}
-			>
-				{previewPositions.map(({ id, left, top }, index) => {
-					const values = dynamicPreviewValues(
-						dynamic.body,
-						moduloOne(previewPhase + (phaseOffsets[index] ?? 0)),
-					);
-					return (
-						<i
-							key={id}
-							className="dynamic-face-fixture"
-							style={
-								{
-									left: `${left}%`,
-									top: `${top}%`,
-									"--fixture-color": `rgb(${Math.round(values.red * 255)} ${Math.round(values.green * 255)} ${Math.round(values.blue * 255)})`,
-									"--fixture-intensity": values.intensity,
-									"--pan": `${(values.pan - 0.5) * 56}%`,
-									"--tilt": `${(values.tilt - 0.5) * 56}%`,
-								} as CSSProperties
-							}
-						>
-							<span />
-						</i>
-					);
-				})}
-			</div>
+			{hasIntentLanes ? (
+				<p>Intent output preview is not available in this build.</p>
+			) : (
+				<div
+					className={`dynamic-face-fixture-field ${selected ? "selected-fixtures" : "virtual-fixtures"}`}
+					role="img"
+					aria-label={
+						selected
+							? `Top-down preview of ${selection.length} selected fixtures`
+							: "Front-end-only preview of 400 virtual fixtures"
+					}
+				>
+					{previewPositions.map(({ id, left, top }, index) => {
+						const values = dynamicPreviewValues(
+							dynamic.body,
+							moduloOne(previewPhase + (phaseOffsets[index] ?? 0)),
+						);
+						return (
+							<i
+								key={id}
+								className="dynamic-face-fixture"
+								style={
+									{
+										left: `${left}%`,
+										top: `${top}%`,
+										"--fixture-color": `rgb(${Math.round(values.red * 255)} ${Math.round(values.green * 255)} ${Math.round(values.blue * 255)})`,
+										"--fixture-intensity": values.intensity,
+										"--pan": `${(values.pan - 0.5) * 56}%`,
+										"--tilt": `${(values.tilt - 0.5) * 56}%`,
+									} as CSSProperties
+								}
+							>
+								<span />
+							</i>
+						);
+					})}
+				</div>
+			)}
 		</aside>
 	);
 }
@@ -295,7 +307,7 @@ function dynamicPreviewValues(
 	phase: number,
 ) {
 	const values = new Map<string, number>();
-	for (const lane of dynamic.lanes)
+	for (const lane of dynamic.lanes.filter(isScalarDynamicLane))
 		values.set(lane.attribute, lanePreviewValue(lane, dynamic, phase));
 	const hasColor = [...values.keys()].some((attribute) =>
 		attribute.startsWith("color."),
@@ -311,7 +323,7 @@ function dynamicPreviewValues(
 }
 
 function lanePreviewValue(
-	lane: DynamicLaneProjection,
+	lane: ScalarDynamicLane,
 	dynamic: DynamicDefinitionProjection,
 	phase: number,
 ) {
@@ -327,9 +339,9 @@ function lanePreviewValue(
 	if (lane.mode === "keyframes")
 		return keyframePreviewValue(lane.keyframes.points, position);
 	if (lane.mode === "random") {
-		const group = dynamic.random_groups.find(
-			(candidate) => candidate.id === lane.random_group_id,
-		);
+		const group = dynamic.random_groups
+			.filter(isScalarDynamicRandomGroup)
+			.find((candidate) => candidate.id === lane.random_group_id);
 		if (!group) return 0;
 		const low = scalarSourceCurveValue(group.low);
 		const high = scalarSourceCurveValue(group.high);
@@ -403,7 +415,7 @@ function keyframePreviewValue(
 export function periodicPreviewValue(
 	functionName: DynamicPeriodicFunctionProjection,
 	position: number,
-	pwm: DynamicLaneProjection["max_min"]["pwm"],
+	pwm: ScalarDynamicLane["max_min"]["pwm"],
 ) {
 	switch (functionName) {
 		case "linear_up":
@@ -421,7 +433,7 @@ export function periodicPreviewValue(
 
 function pwmPreviewValue(
 	position: number,
-	pwm: DynamicLaneProjection["max_min"]["pwm"],
+	pwm: ScalarDynamicLane["max_min"]["pwm"],
 ) {
 	const total = Math.max(Number.EPSILON, pwm.on + pwm.off);
 	const onEnd = pwm.on / total;

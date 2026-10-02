@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
+import { useProgrammingAlignmentView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import type { AttributeDomain } from "./attributeDomain";
 import { useApp } from "../../../state/AppContext";
 import {
-	type AlignMode,
-	alignModes,
 	type ParameterFamily,
 	parameterFamilyOrder,
 } from "./model";
@@ -15,6 +14,7 @@ import {
 	normalizedParameterTarget,
 	parameterSemanticDisplay,
 } from "./parameterProgrammerState";
+import { useFamilyEncoderBinding } from "./familyEncoders/useFamilyEncoderBinding";
 import { useHardwareParameterEncoders } from "./useHardwareParameterEncoders";
 import {
 	type ParameterProjection,
@@ -103,8 +103,8 @@ export function useParameterController(active = true) {
 	const [encoderPageAnchor, setEncoderPageAnchor] = useState<string | null>(
 		null,
 	);
-	const [alignMode, setAlignModeState] = useState<AlignMode | null>(null);
-	const [alignAttribute, setAlignAttribute] = useState<string | null>(null);
+	const alignment = useProgrammingAlignmentView(active);
+	const alignMode = alignment?.mode === "off" ? null : alignment?.mode ?? null;
 	const [dynamicsMode, setDynamicsMode] = useState(false);
 	const projection = useParameterProjection(
 		family,
@@ -114,25 +114,14 @@ export function useParameterController(active = true) {
 	);
 	const valueActions = useParameterValueActions(projection);
 	const rawActions = createParameterActions(projection, valueActions);
-	const setAlignMode = (mode: AlignMode | null) => {
-		setAlignModeState(mode);
-		setAlignAttribute(null);
-	};
-	const actions = {
-		...rawActions,
-		stepParameter: (
-			attribute: string,
-			delta: number,
-			undoGroup?: string | null,
-			requestId?: string,
-		) => {
-			if (alignMode && alignAttribute == null) setAlignAttribute(attribute);
-			else if (alignMode && alignAttribute !== attribute) setAlignMode(null);
-			return rawActions.stepParameter(attribute, delta, undoGroup, requestId);
-		},
-	};
-	useHardwareParameterEncoders(projection, actions);
+	const actions = rawActions;
+	const familyEncoders = useFamilyEncoderBinding(projection, family);
+	useHardwareParameterEncoders(
+		{ ...projection, ...familyEncoders.overrides },
+		{ ...actions, familyEncoderDetent: familyEncoders.detent },
+	);
 	const selectEncoderGroup = (next: ParameterFamily, page: number) => {
+		familyEncoders.selectPage(next, page);
 		const group = projection.encoderGroups.find(
 			(candidate) => candidate.id === next.toLowerCase(),
 		);
@@ -148,19 +137,13 @@ export function useParameterController(active = true) {
 		if (!projection.active || !projection.programmerActions) return;
 		const programmerActions = projection.programmerActions;
 		const handleAlign = () => {
-			const nextIndex =
-				alignMode == null ? 0 : alignModes.indexOf(alignMode) + 1;
-			const next =
-				nextIndex >= alignModes.length ? null : alignModes[nextIndex];
 			void programmerActions
-				.alignSelection(next ?? "off")
-				.then((resulting) => setAlignMode(resulting === "off" ? null : next))
+				.alignSelection("cycle")
 				.catch(() => undefined);
 		};
 		const handleAlignOff = () => {
 			void programmerActions
 				.alignSelection("off")
-				.then(() => setAlignMode(null))
 				.catch(() => undefined);
 		};
 		window.addEventListener("light:align-action", handleAlign);
@@ -169,7 +152,7 @@ export function useParameterController(active = true) {
 			window.removeEventListener("light:align-action", handleAlign);
 			window.removeEventListener("light:align-off", handleAlignOff);
 		};
-	}, [alignMode, projection.active, projection.programmerActions]);
+	}, [projection.active, projection.programmerActions]);
 	useEffect(() => {
 		if (!active) return;
 		const selectFromKey = (event: Event) => {
@@ -217,10 +200,11 @@ export function useParameterController(active = true) {
 		family,
 		setFamily,
 		encoderPage: projection.encoderPage,
+		...familyEncoders.overrides,
+		familyEncoders,
 		encoderPageAnchor,
 		selectEncoderGroup,
 		alignMode,
-		setAlignMode,
 		dynamicsMode,
 		setDynamicsMode,
 	};

@@ -210,9 +210,9 @@ export function ColorCalibrationFields({
 		<fieldset className="color-calibration">
 			<legend>Color Intent calibration</legend>
 			<p>
-				Measured data can promise an exact colour; nominal data is typical;
-				uncalibrated data cannot promise a colour. Raise the revision whenever
-				the colour data changes.
+				Measured data improves color prediction; nominal data is an estimate.
+				Neither guarantees a match between fixtures. Raise the revision whenever
+				the color data changes.
 			</p>
 			<FormLayout columns={3} minColumnWidth={200}>
 				<SelectField

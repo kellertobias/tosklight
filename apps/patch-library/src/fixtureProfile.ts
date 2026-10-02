@@ -2,6 +2,12 @@
 // Mirrors crates/shared/fixture/src/profile/*.rs. Serialized field names are snake_case.
 
 export interface FixtureProfile {
+	source_gdtf?: {
+		version: 1;
+		archive_asset: string;
+		archive_sha256: string;
+		profile_fingerprint: string | null;
+	} | null;
 	schema_version: 2 | 3;
 	id: string;
 	revision: number;
@@ -167,6 +173,8 @@ export interface FixtureMode {
 	heads: FixtureHead[];
 	channels: FixtureChannel[];
 	color_systems: HeadColorSystem[];
+	color_physical?: ColorPhysicalModel | null;
+	position_physical?: PositionPhysicalModel | null;
 	/** Which of the fixture's emitters each of this mode's heads owns. */
 	emitter_heads?: EmitterHeadBinding[];
 	/**
@@ -237,7 +245,30 @@ export interface ChannelFunction {
 	attribute: string;
 	priority: number;
 	angular_motion?: AngularMotion | null;
+	/** Optional physical calibration. Function endpoints remain authoritative. */
+	physical_mapping?: PhysicalMappingCalibration | null;
 	behavior: ChannelFunctionBehavior;
+}
+
+export type PhysicalMappingQuality =
+	| "unknown"
+	| "estimated"
+	| "manufacturer"
+	| "measured";
+
+export interface PhysicalMappingSample {
+	raw: number;
+	physical: number;
+}
+
+/** Empty samples use the continuous function's linear endpoint mapping. */
+export interface PhysicalMappingCalibration {
+	quality: PhysicalMappingQuality;
+	source?: string | null;
+	revision: number;
+	samples: PhysicalMappingSample[];
+	/** Zoom opening convention; valid only with an explicit degree unit. */
+	opening_convention?: "beam" | "field" | null;
 }
 
 export type AngularMotionKind = "absolute_position" | "angular_velocity";
@@ -357,6 +388,7 @@ export interface XyzValue {
 }
 
 export interface GeometryGraph {
+ physical_contract?: GeometryPhysicalContract | null;
 	nodes: GeometryNode[];
 	emitters: GeometryEmitter[];
 }
@@ -530,3 +562,86 @@ export interface FixtureProfilePrism {
 	facets: number;
 	spread_degrees: number;
 }
+
+/** Versioned physical data; live optical fitting is integrated separately. */
+export interface ColorPhysicalModel {
+	version: number;
+	revision: number;
+	paths: HeadOpticalPath[];
+}
+export interface OpticalProvenance {
+	quality: PhysicalMappingQuality;
+	source?: string | null;
+	revision: number;
+}
+export interface SpectrumSample {
+	wavelength_nm: number;
+	value: number;
+}
+export interface NativeColorBinding {
+	channel_id: string;
+	function_id: string;
+}
+export type OpticalSource =
+	| { type: "unknown" }
+	| {
+			type: "fixed";
+			xyz: XyzValue | null;
+			spectrum: SpectrumSample[];
+			provenance: OpticalProvenance;
+	  }
+	| { type: "additive"; emitters: OpticalEmitter[] };
+export interface OpticalEmitter {
+	id: string;
+	name: string;
+	binding: NativeColorBinding;
+	xyz: XyzValue | null;
+	spectrum: SpectrumSample[];
+	band: "visible" | "ultraviolet" | "infrared" | "other_non_visible";
+	native_reversed?: boolean;
+	maximum_level: number;
+	response_exponent: number;
+	provenance: OpticalProvenance;
+}
+export type OpticalTransmission =
+	| { type: "unknown" }
+	| {
+			type: "spectral";
+			samples: {
+				raw_from: number;
+				raw_to: number;
+				spectrum: SpectrumSample[];
+			}[];
+	  };
+export interface OpticalFilter {
+	id: string;
+	name: string;
+	binding: NativeColorBinding;
+	transmission: OpticalTransmission;
+	provenance: OpticalProvenance;
+}
+export interface NativeColorValue extends NativeColorBinding {
+	raw: number;
+}
+export interface ColorRecipeMeasurement {
+	recipe: NativeColorValue[];
+	xyz: XyzValue;
+	provenance: OpticalProvenance;
+}
+export interface HeadOpticalPath {
+	id: string;
+	head_id: string;
+	controls: string[];
+	source: OpticalSource;
+	filters: OpticalFilter[];
+	measurements: ColorRecipeMeasurement[];
+}
+
+/** Version 1: local mm, right-handed Y-up, beam -Y, Rx*Ry*Rz neutral rotation. */
+export interface GeometryPhysicalContract {
+ version: number;
+ provenance: OpticalProvenance;
+ bracket: {kind:"unknown"} | {kind:"fixed"} | {kind:"hinge";node_id:string;pivot:Vector3Value;axis:Vector3Value};
+}
+export interface MotionFunctionBinding { node_id:string;channel_id:string;function_id:string;role:"pan"|"tilt" }
+export interface PositionPhysicalModel { version:number;revision:number;bindings:MotionFunctionBinding[] }

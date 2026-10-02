@@ -51,6 +51,11 @@ export function selectPatchPreviewHighlightDmx(
 	return snapshot.configuration?.patch_preview_highlight_dmx ?? false;
 }
 
+/** Easy RGBW is the default presentation of an installation that never chose one. */
+export function selectColorPresentation(snapshot: ConfigurationSnapshot) {
+	return snapshot.configuration?.color_presentation ?? "easy_rgbw";
+}
+
 export function selectMatterEnabled(snapshot: ConfigurationSnapshot) {
 	return snapshot.configuration?.matter_enabled ?? false;
 }
