@@ -291,3 +291,145 @@ fn legacy_show_entry_json_defaults_to_an_ordinary_show() {
     .unwrap();
     assert!(!entry.is_base_show);
 }
+
+fn activation_metadata_snapshot(
+    desk: &DeskStore,
+) -> (Option<String>, Option<String>, serde_json::Value) {
+    (
+        desk.setting("active_show_id").unwrap(),
+        desk.setting("previous_active_show_id").unwrap(),
+        serde_json::to_value(desk.library().unwrap()).unwrap(),
+    )
+}
+
+#[test]
+fn record_show_activation_survives_reopen_and_preserves_content_metadata() {
+    let path = temporary("activation-metadata");
+    let desk = DeskStore::open(&path).unwrap();
+    let previous = desk
+        .upsert_show("Previous", "previous.show", false)
+        .unwrap();
+    let source = RevisionCopySource {
+        show_id: previous.id,
+        show_name: previous.name.clone(),
+        revision: 4,
+        revision_name: "Approved".into(),
+        copied_at: "2026-09-30T10:00:00Z".into(),
+    };
+    let destination = desk
+        .upsert_show_with_revision_copy("Destination", "destination.show", false, Some(&source))
+        .unwrap();
+    let destination = desk.set_show_base(destination.id, true).unwrap();
+    desk.set_active_show(Some(previous.id)).unwrap();
+    let loaded = desk
+        .record_show_activation(destination.id, Some(previous.id))
+        .unwrap();
+    assert!(loaded.last_loaded_at.is_some());
+    let mut unchanged_content = loaded.clone();
+    unchanged_content.last_loaded_at = destination.last_loaded_at.clone();
+    assert_eq!(
+        serde_json::to_value(unchanged_content).unwrap(),
+        serde_json::to_value(&destination).unwrap()
+    );
+    drop(desk);
+
+    let desk = DeskStore::open(&path).unwrap();
+    assert_eq!(
+        serde_json::to_value(desk.active_show().unwrap().unwrap()).unwrap(),
+        serde_json::to_value(&loaded).unwrap()
+    );
+    assert_eq!(
+        desk.setting("previous_active_show_id").unwrap(),
+        Some(previous.id.0.to_string())
+    );
+    // MVR's None must leave previous metadata intact, rather than deleting it.
+    let previous_loaded = desk.record_show_activation(previous.id, None).unwrap();
+    assert!(previous_loaded.last_loaded_at.is_some());
+    assert_eq!(previous_loaded.updated_at, previous.updated_at);
+    assert_eq!(previous_loaded.revision, previous.revision);
+    drop(desk);
+    let desk = DeskStore::open(&path).unwrap();
+    assert_eq!(desk.active_show().unwrap().unwrap().id, previous.id);
+    assert_eq!(
+        desk.setting("previous_active_show_id").unwrap(),
+        Some(previous.id.0.to_string())
+    );
+    assert_eq!(
+        desk.show(destination.id).unwrap().unwrap().last_loaded_at,
+        loaded.last_loaded_at
+    );
+    drop(desk);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn record_show_activation_missing_destination_changes_no_metadata() {
+    let path = temporary("activation-missing");
+    let desk = DeskStore::open(&path).unwrap();
+    let previous = desk
+        .upsert_show("Previous", "previous.show", false)
+        .unwrap();
+    desk.set_active_show(Some(previous.id)).unwrap();
+    desk.set_setting("previous_active_show_id", "original previous value")
+        .unwrap();
+    let before = activation_metadata_snapshot(&desk);
+    assert!(
+        desk.record_show_activation(ShowId::new(), Some(previous.id))
+            .is_err()
+    );
+    assert_eq!(activation_metadata_snapshot(&desk), before);
+    drop(desk);
+    let desk = DeskStore::open(&path).unwrap();
+    assert_eq!(activation_metadata_snapshot(&desk), before);
+    drop(desk);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn record_show_activation_sql_failure_rolls_back_prior_timestamp_and_active_id_writes() {
+    let path = temporary("activation-sql-rollback");
+    let desk = DeskStore::open(&path).unwrap();
+    let previous = desk
+        .upsert_show("Previous", "previous.show", false)
+        .unwrap();
+    let destination = desk
+        .upsert_show("Destination", "destination.show", false)
+        .unwrap();
+    desk.set_active_show(Some(previous.id)).unwrap();
+    desk.set_setting("previous_active_show_id", "original previous value")
+        .unwrap();
+    // The helper has already updated last_loaded_at and active_show_id when this third
+    // statement fails. RAISE(ABORT) rolls back only its statement; the helper must roll back
+    // the enclosing transaction to undo the earlier two writes as well.
+    desk.conn
+        .execute_batch(
+            "CREATE TRIGGER reject_activation_previous BEFORE INSERT ON settings
+         WHEN NEW.key='previous_active_show_id'
+         BEGIN SELECT RAISE(ABORT, 'injected activation metadata failure'); END;",
+        )
+        .unwrap();
+    let before = activation_metadata_snapshot(&desk);
+    let error = desk
+        .record_show_activation(destination.id, Some(previous.id))
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("injected activation metadata failure"),
+        "{error}"
+    );
+    assert_eq!(activation_metadata_snapshot(&desk), before);
+    drop(desk);
+    let desk = DeskStore::open(&path).unwrap();
+    assert_eq!(activation_metadata_snapshot(&desk), before);
+    desk.conn
+        .execute_batch("DROP TRIGGER reject_activation_previous")
+        .unwrap();
+    let loaded = desk
+        .record_show_activation(destination.id, Some(previous.id))
+        .unwrap();
+    assert!(loaded.last_loaded_at.is_some());
+    assert_eq!(desk.active_show().unwrap().unwrap().id, destination.id);
+    drop(desk);
+    let _ = fs::remove_file(path);
+}

@@ -168,6 +168,42 @@ impl DeskStore {
             .ok_or_else(|| StoreError::Invalid("show index update failed".into()))
     }
 
+    /// Atomically records a committed operator activation in this desk's metadata.
+    /// `None` preserves the previous-show setting, as required by open-after-import.
+    /// Portable content, revision and content timestamps are unchanged. All returned-entry
+    /// decoding happens inside the transaction; no fallible read follows its commit.
+    pub fn record_show_activation(
+        &self,
+        id: ShowId,
+        previous_id: Option<ShowId>,
+    ) -> Result<ShowEntry, StoreError> {
+        let transaction = self.conn.unchecked_transaction()?;
+        if transaction.execute(
+            "UPDATE show_library SET last_loaded_at=?1 WHERE id=?2",
+            params![Utc::now().to_rfc3339(), id.0.to_string()],
+        )? != 1
+        {
+            return Err(StoreError::Invalid("show does not exist".into()));
+        }
+        transaction.execute(
+            "INSERT INTO settings(key,value) VALUES ('active_show_id',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [id.0.to_string()],
+        )?;
+        if let Some(previous_id) = previous_id {
+            transaction.execute(
+                "INSERT INTO settings(key,value) VALUES ('previous_active_show_id',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                [previous_id.0.to_string()],
+            )?;
+        }
+        // show() reads the same Connection, hence the uncommitted transaction's row.
+        // A decoding or lookup failure drops the transaction and rolls every write back.
+        let entry = self
+            .show(id)?
+            .ok_or_else(|| StoreError::Invalid("show index update failed".into()))?;
+        transaction.commit()?;
+        Ok(entry)
+    }
+
     /// Records an operator-initiated load. Startup restoration deliberately does not call this.
     pub fn mark_show_loaded(&self, id: ShowId) -> Result<ShowEntry, StoreError> {
         if self.conn.execute(
