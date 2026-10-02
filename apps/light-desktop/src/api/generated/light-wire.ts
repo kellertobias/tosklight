@@ -1565,6 +1565,12 @@ acknowledgements: boolean,
  */
 include_dynamic_stack: boolean,
 /**
+ * Carry every resolved attribute in `values`. Stage consumers receive only the
+ * attributes the Stage draws; a Preset pool compares every stored attribute, such as
+ * the semantic Position owner and Beam attributes, against the effective values.
+ */
+complete_values: boolean,
+/**
  * Permit deltas to omit an unchanged Dynamic stack. Missing means
  * retain the previously installed stack; an explicit empty array
  * still clears it. Older clients leave this disabled and continue to

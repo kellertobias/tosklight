@@ -34,7 +34,7 @@ const beamPreset: Pick<StoredPreset, "values" | "group_values"> = {
 };
 
 function counts(
-	preset: Pick<StoredPreset, "values" | "group_values">,
+	preset: Pick<StoredPreset, "values" | "group_values" | "universal_values">,
 	values: VisualizationSnapshot["values"] | null,
 	groups = NO_GROUPS,
 ) {
@@ -154,5 +154,119 @@ describe("Preset active / defined fixture counts", () => {
 				},
 			]),
 		).toEqual({ active: 1, defined: 1 });
+	});
+
+	describe("semantic family presets compare the requested intent", () => {
+		type Effective = VisualizationSnapshot["values"][number]["value"];
+		const angles = (tilt: number) =>
+			({
+				kind: "position",
+				value: {
+					kind: "angles",
+					pan_degrees: { kind: "value", value: 0 },
+					tilt_degrees: { kind: "value", value: tilt },
+				},
+			}) as unknown as Effective;
+		// Stored with the show file's f64 spelling; the stream reports the compact f32 one.
+		const yellow = (x: number, y: number, z: number) =>
+			({
+				kind: "color_program",
+				value: {
+					kind: "semantic",
+					intent: {
+						allocation: "preserve_recipe",
+						base_xyz: { x, y, z },
+						recipe: { amber: 0, approximate: false, rgb: [1, 1, 0], version: 1 },
+						relative_output: 1,
+						uv: { amount: 0 },
+						white_blend: 0,
+						white_target: { duv: 0, kelvin: 6500 },
+					},
+				},
+			}) as unknown as Effective;
+		const storedYellow = yellow(0.770032525062561, 0.9278250932693481, 0.13852590322494507);
+		const effectiveYellow = yellow(0.7700325, 0.9278251, 0.1385259);
+		const zoom = (degrees: number) =>
+			({
+				kind: "zoom",
+				value: { opening_degrees: { kind: "value", value: degrees }, convention: "beam" },
+			}) as unknown as Effective;
+		const effective = (attribute: string, values: Record<string, Effective>) =>
+			Object.entries(values).map(([fixture_id, value]) => ({
+				fixture_id,
+				attribute,
+				value,
+			}));
+		const stored = (attribute: string, value: Effective) => ({
+			values: {
+				"fixture-a": { [attribute]: value },
+				"fixture-b": { [attribute]: value },
+			},
+		});
+
+		it("counts a Position preset on the fixtures whose requested Angles are the preset", () => {
+			const down = stored("position", angles(-67.5));
+			const up = stored("position", angles(45));
+			const live = effective("position", {
+				"fixture-a": angles(-67.5),
+				"fixture-b": angles(-67.5),
+			});
+			expect(presetFixtureCountLabel(counts(down, live))).toBe("2 / 2");
+			// Negative control: a different stored Position stays inactive.
+			expect(presetFixtureCountLabel(counts(up, live))).toBe("0 / 2");
+			const fixtureBElsewhere = effective("position", {
+				"fixture-a": angles(-67.5),
+				"fixture-b": angles(45),
+			});
+			expect(presetFixtureCountLabel(counts(down, fixtureBElsewhere))).toBe("1 / 2");
+		});
+
+		it("matches a semantic Color across float spellings and rejects another colour", () => {
+			const live = effective("color", {
+				"fixture-a": effectiveYellow,
+				"fixture-b": effectiveYellow,
+			});
+			expect(presetFixtureCountLabel(counts(stored("color", storedYellow), live))).toBe(
+				"2 / 2",
+			);
+			const red = yellow(0.4124564, 0.2126729, 0.0193339);
+			expect(presetFixtureCountLabel(counts(stored("color", red), live))).toBe("0 / 2");
+			// A universal colour names no fixtures: it counts every fixture currently showing it.
+			const universal = { values: {}, universal_values: { color: storedYellow } };
+			expect(presetFixtureCountLabel(counts(universal, live))).toBe("Universal · 2");
+			expect(
+				presetFixtureCountLabel(
+					counts({ values: {}, universal_values: { color: red } }, live),
+				),
+			).toBe("Universal · 0");
+		});
+
+		it("counts a Zoom preset by its requested opening", () => {
+			const live = effective("zoom", { "fixture-a": zoom(20), "fixture-b": zoom(30) });
+			expect(presetFixtureCountLabel(counts(stored("zoom", zoom(20)), live))).toBe("1 / 2");
+		});
+
+		it("requires every stored family of a Mixed preset, alongside Intensity", () => {
+			const mixed = {
+				values: {
+					"fixture-a": {
+						intensity: { kind: "normalized", value: 1 },
+						position: angles(-67.5),
+					},
+				},
+			};
+			const intensity = { values: { "fixture-a": { intensity: { kind: "normalized", value: 1 } } } };
+			const live = [
+				...effective("position", { "fixture-a": angles(45) }),
+				...effective("intensity", { "fixture-a": { kind: "normalized", value: 1 } as Effective }),
+			];
+			expect(presetFixtureCountLabel(counts(mixed, live))).toBe("0 / 1");
+			expect(presetFixtureCountLabel(counts(intensity, live))).toBe("1 / 1");
+			const showing = [
+				...effective("position", { "fixture-a": angles(-67.5) }),
+				...effective("intensity", { "fixture-a": { kind: "normalized", value: 1 } as Effective }),
+			];
+			expect(presetFixtureCountLabel(counts(mixed, showing))).toBe("1 / 1");
+		});
 	});
 });

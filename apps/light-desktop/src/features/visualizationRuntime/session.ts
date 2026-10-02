@@ -19,6 +19,7 @@ interface LaneRuntime {
 			intervalMillis: number;
 			consumerId: string;
 			includeDynamicStack: boolean;
+			completeValues: boolean;
 		}
 	>;
 	generation: number;
@@ -64,6 +65,7 @@ export class VisualizationRuntimeSession {
 		intervalMillis: number,
 		consumerId = "anonymous",
 		includeDynamicStack = false,
+		completeValues = false,
 	) {
 		assertInterval(intervalMillis);
 		if (this.stopped || !this.store.matchesScope(this.scope)) return () => {};
@@ -74,6 +76,7 @@ export class VisualizationRuntimeSession {
 			intervalMillis,
 			consumerId,
 			includeDynamicStack,
+			completeValues,
 		});
 		this.recordClaims();
 		if (first) {
@@ -240,7 +243,7 @@ export class VisualizationRuntimeSession {
 			(lane) => this.lanes[lane].claims.size > 0,
 		);
 		if (!claimedLanes.length) {
-			this.stream?.updateClaims([], 10, false);
+			this.stream?.updateClaims([], 10, false, false);
 			this.stream?.close();
 			this.stream = null;
 			return;
@@ -277,14 +280,15 @@ export class VisualizationRuntimeSession {
 			]),
 		);
 		this.readoutClaims.publish(true);
+		const claimed = (detail: "includeDynamicStack" | "completeValues") =>
+			claimedLanes.some((lane) =>
+				[...this.lanes[lane].claims.values()].some((claim) => claim[detail]),
+			);
 		this.stream?.updateClaims(
 			claimedLanes,
 			Math.max(1, Math.min(10, Math.ceil(1_000 / fastest))),
-			claimedLanes.some((lane) =>
-				[...this.lanes[lane].claims.values()].some(
-					(claim) => claim.includeDynamicStack,
-				),
-			),
+			claimed("includeDynamicStack"),
+			claimed("completeValues"),
 		);
 	}
 

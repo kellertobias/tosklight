@@ -162,6 +162,8 @@ function usePresetFixtureCounts(
 		enabled: active,
 		intervalMillis: 250,
 		consumerId: "preset-pool",
+		// Stored Presets hold attributes the Stage does not draw, such as the semantic Position.
+		completeValues: true,
 	});
 	const groups = usePortableGroups(active);
 	const groupMembers = useMemo(() => resolveGroupMembership(groups), [groups]);

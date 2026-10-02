@@ -497,6 +497,7 @@ async fn project_subscribed_lanes(
                                     lane,
                                     &projection_source,
                                     refresh_dynamic_stack,
+                                    key.complete_values(),
                                 )
                             },
                         )
@@ -530,6 +531,8 @@ struct SubscriptionClaims {
     session_id: uuid::Uuid,
     lanes: HashSet<VisualizationLane>,
     include_dynamic_stack: bool,
+    /// Every resolved attribute rather than only those the Stage draws (Preset pools).
+    complete_values: bool,
     sparse_dynamic_stack: bool,
     /// TL-594 readout claim (Normal lane); replaced by every Subscribe.
     readouts: Option<Vec<light_core::FixtureId>>,
@@ -542,13 +545,17 @@ impl SubscriptionClaims {
             session_id,
             lanes: HashSet::new(),
             include_dynamic_stack: false,
+            complete_values: false,
             sparse_dynamic_stack: false,
             readouts: None,
         }
     }
 
-    fn set_include_dynamic_stack(&mut self, include_dynamic_stack: bool) {
-        if self.include_dynamic_stack == include_dynamic_stack {
+    /// Both details select the shared projection, so a change moves every claimed lane's claim.
+    fn set_projection_detail(&mut self, include_dynamic_stack: bool, complete_values: bool) {
+        if self.include_dynamic_stack == include_dynamic_stack
+            && self.complete_values == complete_values
+        {
             return;
         }
         let lanes = self.lanes.iter().copied().collect::<Vec<_>>();
@@ -557,6 +564,7 @@ impl SubscriptionClaims {
                 .change_visualization_projection_claim(self.key(*lane), -1);
         }
         self.include_dynamic_stack = include_dynamic_stack;
+        self.complete_values = complete_values;
         for lane in lanes {
             self.output
                 .change_visualization_projection_claim(self.key(lane), 1);
@@ -595,12 +603,14 @@ impl SubscriptionClaims {
             VisualizationLane::Normal => {
                 super::visualization_frame::VisualizationProjectionKey::Normal {
                     include_dynamic_stack: self.include_dynamic_stack,
+                    complete_values: self.complete_values,
                 }
             }
             VisualizationLane::Preload => {
                 super::visualization_frame::VisualizationProjectionKey::Preload {
                     session_id: self.session_id,
                     include_dynamic_stack: self.include_dynamic_stack,
+                    complete_values: self.complete_values,
                 }
             }
         }
@@ -609,21 +619,10 @@ impl SubscriptionClaims {
 
 impl Drop for SubscriptionClaims {
     fn drop(&mut self) {
-        for lane in self.lanes.drain() {
+        let lanes = self.lanes.drain().collect::<Vec<_>>();
+        for lane in lanes {
             self.output.change_visualization_subscribers(lane, -1);
-            let key = match lane {
-                VisualizationLane::Normal => {
-                    super::visualization_frame::VisualizationProjectionKey::Normal {
-                        include_dynamic_stack: self.include_dynamic_stack,
-                    }
-                }
-                VisualizationLane::Preload => {
-                    super::visualization_frame::VisualizationProjectionKey::Preload {
-                        session_id: self.session_id,
-                        include_dynamic_stack: self.include_dynamic_stack,
-                    }
-                }
-            };
+            let key = self.key(lane);
             self.output.change_visualization_projection_claim(key, -1);
         }
     }
@@ -713,6 +712,7 @@ async fn handle_socket_messages(
                                 max_rate_hz,
                                 acknowledgements,
                                 include_dynamic_stack,
+                                complete_values,
                                 sparse_dynamic_stack,
                                 batched_messages,
                                 readouts,
@@ -728,7 +728,8 @@ async fn handle_socket_messages(
                                     publication.force_snapshot = true;
                                     continue;
                                 }
-                                subscribed.set_include_dynamic_stack(include_dynamic_stack);
+                                subscribed
+                                    .set_projection_detail(include_dynamic_stack, complete_values);
                                 subscribed.set_sparse_dynamic_stack(sparse_dynamic_stack);
                                 subscribed.readouts =
                                     super::visualization_readouts::claimed_owners(readouts);
@@ -923,6 +924,7 @@ fn lane_snapshot(
     lane: VisualizationLane,
     source: &super::visualization_frame::PublishedVisualizationFrame,
     include_dynamic_stack: bool,
+    complete_values: bool,
 ) -> Result<VisualizationLaneSnapshot, ApiError> {
     let preload = lane == VisualizationLane::Preload;
     // TL-594: gated Preload content and its message stamp come from ONE publication read.
@@ -952,6 +954,16 @@ fn lane_snapshot(
         snapshot.grand_master = source.options.grand_master;
         snapshot.blackout = source.options.blackout;
     }
+    trim_lane_snapshot(&mut snapshot, include_dynamic_stack, complete_values);
+    Ok(snapshot)
+}
+
+/// What one lane publication carries for its claim.
+fn trim_lane_snapshot(
+    snapshot: &mut VisualizationLaneSnapshot,
+    include_dynamic_stack: bool,
+    complete_values: bool,
+) {
     if include_dynamic_stack {
         // Fixture Sheet consumes Dynamic identity and state; live sampled and
         // resolved values belong to the DMX/output view. Do not make every
@@ -965,14 +977,17 @@ fn lane_snapshot(
             entry.activation_mix = None;
         }
     } else {
-        snapshot
-            .values
-            .retain(|entry| stage_visualization_attribute(&entry.attribute));
+        // A Preset pool compares every stored attribute, including the semantic Position owner
+        // and Beam attributes; the Stage draws only these.
+        if !complete_values {
+            snapshot
+                .values
+                .retain(|entry| stage_visualization_attribute(&entry.attribute));
+        }
         snapshot
             .profile_output_values
             .retain(|entry| stage_visualization_attribute(&entry.attribute));
     }
-    Ok(snapshot)
 }
 
 fn stage_visualization_attribute(attribute: &str) -> bool {

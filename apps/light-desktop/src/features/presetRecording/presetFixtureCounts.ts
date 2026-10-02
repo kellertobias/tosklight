@@ -187,13 +187,36 @@ function sameEffectiveValue(stored: AttributeValue, effective: AttributeValue) {
 		case "discrete":
 			return effective.kind === "discrete" && effective.value === stored.value;
 		case "group_family":
+			return sameAttributeValue(stored, effective);
 		case "color_program":
 		case "position":
 		case "zoom":
-			return sameAttributeValue(stored, effective);
+			// Requested semantic intent, never the achieved output: equal intents match even when
+			// the stored and resolved spellings differ in float width.
+			return effective.kind === stored.kind && sameIntent(stored.value, effective.value);
 		default:
 			return (
 				effective.kind === stored.kind && near(stored.value, effective.value)
 			);
 	}
+}
+
+function sameIntent(stored: unknown, effective: unknown): boolean {
+	if (typeof stored === "number" && typeof effective === "number")
+		return near(stored, effective);
+	if (Array.isArray(stored))
+		return (
+			Array.isArray(effective) &&
+			stored.length === effective.length &&
+			stored.every((item, index) => sameIntent(item, effective[index]))
+		);
+	if (!stored || typeof stored !== "object" || !effective || typeof effective !== "object")
+		return stored === effective;
+	const left = stored as Record<string, unknown>;
+	const right = effective as Record<string, unknown>;
+	const keys = Object.keys(left);
+	return (
+		keys.length === Object.keys(right).length &&
+		keys.every((key) => key in right && sameIntent(left[key], right[key]))
+	);
 }

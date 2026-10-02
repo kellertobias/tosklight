@@ -14,7 +14,7 @@ Executable coverage:
 - The Storybook mockup spec `fixture-abstraction-mockup.spec.ts` covers geometry and held-joystick
   behaviour on the shared `PositionDialog`.
 - The root Playwright spec `tests/117-position-operator-controls.spec.ts` covers POSITION-CONTROLS-001,
-  003, 004, 007 and 008. Under `npm run test:e2e` it skips, because production reports programming
+  003, 004, 007, 008 and 009. Under `npm run test:e2e` it skips, because production reports programming
   contract 0. `npm run test:e2e-semantic` runs it on the contract-1 E2E test server, where a missing
   semantic publication fails instead of skipping.
 - Every case starts from scratch: a fresh show patched from the shipped library and an empty
@@ -137,6 +137,17 @@ hardware-connected layout.
    −90°/Reset/+90° buttons are disabled, and that no error or alert appears.
 5. Program a Position value for the same fixtures by other means, for example a preset. Verify that
    the encoders become editable again.
+
+## POSITION-CONTROLS-009 — Position Preset tiles count the fixtures showing them
+
+1. Patch two moving heads, for example the Cameo AURO SPOT Z300, and store Position 1 with Tilt
+   −67.5° and Position 2 with Tilt 45° for both fixtures. Select both with an empty Programmer and
+   show the Position Presets in a Preset pool.
+2. Verify that both tiles read `0 / 2`.
+3. Touch Position 1 and let the fade finish. Verify that Position 1 reads `2 / 2` and Position 2
+   still reads `0 / 2`. The count compares the requested Position intent, so the achieved output
+   pose and mechanical limits never deactivate it, and it keeps counting while the pane stays open.
+4. Touch Position 2. Verify that Position 1 returns to `0 / 2` and Position 2 reads `2 / 2`.
 
 ## POSITION-HOME-001 — Return Home
 

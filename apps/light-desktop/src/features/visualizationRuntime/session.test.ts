@@ -104,14 +104,15 @@ describe("VisualizationRuntimeSession", () => {
 			["normal", "preload"],
 			10,
 			false,
+			false,
 		);
 		observer?.snapshot("normal", snapshot("normal"));
 		expect(store.getSnapshot().normal.status).toBe("ready");
 
 		releasePreload();
-		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, false);
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, false, false);
 		releaseNormal();
-		expect(updateClaims).toHaveBeenLastCalledWith([], 10, false);
+		expect(updateClaims).toHaveBeenLastCalledWith([], 10, false, false);
 		expect(updateClaims.mock.invocationCallOrder.at(-1)).toBeLessThan(
 			close.mock.invocationCallOrder[0],
 		);
@@ -140,9 +141,10 @@ describe("VisualizationRuntimeSession", () => {
 			["normal", "preload"],
 			10,
 			false,
+			false,
 		);
 		releaseSecondNormal();
-		expect(updateClaims).toHaveBeenLastCalledWith(["preload"], 10, false);
+		expect(updateClaims).toHaveBeenLastCalledWith(["preload"], 10, false, false);
 	});
 
 	it("claims the diagnostic Dynamic stack only while a requesting consumer is active", () => {
@@ -166,9 +168,37 @@ describe("VisualizationRuntimeSession", () => {
 			true,
 		);
 
-		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, true);
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, true, false);
 		releaseFixtureSheet();
-		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, false);
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, false, false);
+	});
+
+	it("claims complete values only while a Preset pool is active", () => {
+		const store = new VisualizationRuntimeStore();
+		store.reset(scope);
+		const updateClaims = vi.fn();
+		const transport: VisualizationRuntimeTransport = {
+			loadSnapshot: vi.fn(),
+			openStream: vi.fn(() => ({ updateClaims, close: vi.fn() })),
+		};
+		const session = new VisualizationRuntimeSession({
+			scope,
+			store,
+			transport,
+		});
+		session.activate("normal", 100, "stage");
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, false, false);
+		const releasePresetPool = session.activate(
+			"normal",
+			250,
+			"preset-pool",
+			false,
+			true,
+		);
+
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, false, true);
+		releasePresetPool();
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10, false, false);
 	});
 
 	it("drops an old response after immediate scope replacement", async () => {

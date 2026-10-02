@@ -40,6 +40,11 @@ pub enum VisualizationClientMessage {
         /// heavier projection explicitly.
         #[serde(default)]
         include_dynamic_stack: bool,
+        /// Carry every resolved attribute in `values`. Stage consumers receive only the
+        /// attributes the Stage draws; a Preset pool compares every stored attribute, such as
+        /// the semantic Position owner and Beam attributes, against the effective values.
+        #[serde(default)]
+        complete_values: bool,
         /// Permit deltas to omit an unchanged Dynamic stack. Missing means
         /// retain the previously installed stack; an explicit empty array
         /// still clears it. Older clients leave this disabled and continue to
@@ -253,6 +258,7 @@ mod tests {
                 max_rate_hz: 10,
                 acknowledgements: false,
                 include_dynamic_stack: false,
+                complete_values: false,
                 sparse_dynamic_stack: false,
                 batched_messages: false,
                 readouts: None,

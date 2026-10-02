@@ -57,7 +57,7 @@ describe("visualization session readout claims", () => {
 		const releaseSecond = session.claimReadouts(["b", "c"], second, "modal");
 
 		expect(lastClaim(stream)).toEqual(["a", "b", "c"]);
-		expect(stream.updateClaims).toHaveBeenLastCalledWith(["normal"], 3, false);
+		expect(stream.updateClaims).toHaveBeenLastCalledWith(["normal"], 3, false, false);
 
 		const snapshot = { lane: "normal", owners: [] } as unknown as OutputReadoutSnapshot;
 		deliver(snapshot);

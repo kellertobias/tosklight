@@ -61,30 +61,9 @@ impl RenderedSemanticFrame {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(super) enum VisualizationProjectionKey {
-    Normal {
-        include_dynamic_stack: bool,
-    },
-    Preload {
-        session_id: Uuid,
-        include_dynamic_stack: bool,
-    },
-}
-
-impl VisualizationProjectionKey {
-    const fn includes_dynamic_stack(self) -> bool {
-        match self {
-            Self::Normal {
-                include_dynamic_stack,
-            }
-            | Self::Preload {
-                include_dynamic_stack,
-                ..
-            } => include_dynamic_stack,
-        }
-    }
-}
+#[path = "visualization_frame/projection_key.rs"]
+mod projection_key;
+pub(super) use projection_key::VisualizationProjectionKey;
 
 pub(super) struct ProjectedVisualizationFrame {
     pub(super) source_sequence: u64,
@@ -813,6 +792,7 @@ mod tests {
             .projection(
                 VisualizationProjectionKey::Normal {
                     include_dynamic_stack: false,
+                    complete_values: false,
                 },
                 &source,
                 build,
@@ -822,6 +802,7 @@ mod tests {
             .projection(
                 VisualizationProjectionKey::Normal {
                     include_dynamic_stack: false,
+                    complete_values: false,
                 },
                 &source,
                 build,
@@ -840,6 +821,7 @@ mod tests {
         let scope = scope(Uuid::new_v4());
         let key = VisualizationProjectionKey::Normal {
             include_dynamic_stack: true,
+            complete_values: false,
         };
         hub.publish(&rendered(10), scope);
         let first_source = hub.latest().unwrap();
@@ -1018,6 +1000,7 @@ mod tests {
                 VisualizationProjectionKey::Preload {
                     session_id: Uuid::new_v4(),
                     include_dynamic_stack: false,
+                    complete_values: false,
                 },
                 &source,
                 |_| {
@@ -1063,6 +1046,7 @@ mod tests {
         let key = VisualizationProjectionKey::Preload {
             session_id: Uuid::new_v4(),
             include_dynamic_stack: false,
+            complete_values: false,
         };
         let scope = scope(Uuid::new_v4());
         hub.change_projection_claim(key, 1);
@@ -1166,6 +1150,7 @@ mod tests {
                 .projection(
                     VisualizationProjectionKey::Normal {
                         include_dynamic_stack: false,
+                        complete_values: false,
                     },
                     &source,
                     |_| {

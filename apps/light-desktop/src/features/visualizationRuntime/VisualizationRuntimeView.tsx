@@ -41,6 +41,11 @@ export interface VisualizationRuntimeViewOptions {
 	reconcileSnapshots?: boolean;
 	consumerId?: string;
 	includeDynamicStack?: boolean;
+	/**
+	 * Receive every resolved attribute. Stage consumers get only what the Stage draws; a Preset
+	 * pool compares every stored attribute, such as the semantic Position owner.
+	 */
+	completeValues?: boolean;
 	deliveryIntervalMillis?: number;
 	snapshotEqual?: (
 		left: VisualizationSnapshot | null,
@@ -57,6 +62,7 @@ const RemoteActivationContext = createContext<
 			intervalMillis: number,
 			consumerId?: string,
 			includeDynamicStack?: boolean,
+			completeValues?: boolean,
 	  ) => () => void)
 	| null
 >(null);
@@ -125,6 +131,7 @@ export function useVisualizationRuntimeView({
 	reconcileSnapshots = true,
 	consumerId,
 	includeDynamicStack = false,
+	completeValues = false,
 	deliveryIntervalMillis = 0,
 	snapshotEqual = Object.is,
 }: VisualizationRuntimeViewOptions): VisualizationRuntimeView {
@@ -134,6 +141,7 @@ export function useVisualizationRuntimeView({
 		intervalMillis,
 		consumerId,
 		includeDynamicStack,
+		completeValues,
 	);
 	return useVisualizationRuntimeSelector(
 		useCallback(
@@ -223,6 +231,7 @@ function useVisualizationRuntimeActivation(
 	intervalMillis: number,
 	consumerId?: string,
 	includeDynamicStack = false,
+	completeValues = false,
 ) {
 	const session = useContext(SessionContext);
 	const remoteActivation = useContext(RemoteActivationContext);
@@ -234,6 +243,7 @@ function useVisualizationRuntimeActivation(
 				intervalMillis,
 				consumerId,
 				includeDynamicStack,
+				completeValues,
 			);
 		if (!session) return;
 		return session.activate(
@@ -241,8 +251,10 @@ function useVisualizationRuntimeActivation(
 			intervalMillis,
 			consumerId,
 			includeDynamicStack,
+			completeValues,
 		);
 	}, [
+		completeValues,
 		consumerId,
 		enabled,
 		includeDynamicStack,
@@ -389,6 +401,7 @@ function DesktopRuntimeMirror({
 			intervalMillis: number,
 			consumerId?: string,
 			includeDynamicStack = false,
+			completeValues = false,
 		) => {
 			if (!scope || !fallbackSession) return () => undefined;
 			return fallbackSession.activate(
@@ -396,6 +409,7 @@ function DesktopRuntimeMirror({
 				intervalMillis,
 				`desktop-secondary:${consumerId ?? "consumer"}`,
 				includeDynamicStack,
+				completeValues,
 			);
 		},
 		[fallbackSession, scope],

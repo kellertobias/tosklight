@@ -154,6 +154,43 @@ function recordPositionEdits(page: Page) {
 	return sent;
 }
 
+/** A stored Position preset holding the same Angles for every fixture, as the shipped shows do. */
+async function seedPositionPreset(api: ApiDriver, showId: string, number: number, name: string, fixtureIds: string[], tilt: number) {
+	const position = {
+		kind: "position",
+		value: { kind: "angles", pan_degrees: { kind: "value", value: 0 }, tilt_degrees: { kind: "value", value: tilt } },
+	};
+	await api.seedShowObject(showId, "preset", `3.${number}`, {
+		name,
+		family: "Position",
+		number,
+		values: Object.fromEntries(fixtureIds.map((id) => [id, { position }])),
+		group_values: {},
+	});
+}
+
+/** The visible Preset pool, switched to its Position family. */
+async function showPositionPresets(page: Page) {
+	const pane = page.locator('[data-pane-type="presets"]:visible').first();
+	const direct = pane.getByRole("button", { name: "Position", exact: true });
+	if (await direct.count()) {
+		await direct.click();
+		return pane;
+	}
+	await pane.getByRole("button", { name: "Settings", exact: true }).click();
+	const settings = page.getByRole("dialog", { name: "Pane Settings" });
+	await settings.getByRole("tab", { name: "Pool", exact: true }).click();
+	await settings.getByRole("button", { name: "Position", exact: true }).click();
+	await settings.getByRole("button", { name: "Close settings" }).click();
+	return pane;
+}
+
+/** A tile's `active / defined` label after the manual bench clock renders another frame. */
+async function tileCount(bench: LightBench, tile: Locator) {
+	await bench.tick(25);
+	return (await tile.innerText()).replace(/\s+/gu, " ");
+}
+
 test.describe("docs/testing/34-position-operator-controls.md", () => {
 	test("POSITION-CONTROLS-001 @ui › pages, modal geometry and inert navigation", async ({ api, bench, desk, page }) => {
 		const { selected } = await arrange({ api, bench, desk, page }, "001");
@@ -340,5 +377,32 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 		expect(await positionValues(api)).toEqual([]);
 		await expect(page.getByRole("alert")).toHaveCount(0);
 		await expect(page.getByRole("alertdialog")).toHaveCount(0);
+	});
+
+	test("POSITION-CONTROLS-009 @ui › Position preset tiles count the fixtures whose requested Position is the preset", async ({ api, bench, desk, page }) => {
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "009");
+		requireSemanticContract(await semanticPosition(api, selected), GATE);
+		await seedPositionPreset(api, showId, 1, "Down", selected, -67.5);
+		await seedPositionPreset(api, showId, 2, "Up", selected, 45);
+		await desk.open(api.baseUrl);
+		const pane = await showPositionPresets(page);
+		const down = pane.locator(".preset-card").nth(0);
+		const up = pane.locator(".preset-card").nth(1);
+		await expect(down).toContainText("Down");
+		await expect(up).toContainText("Up");
+		await expect.poll(() => tileCount(bench, down)).toContain("0 / 2");
+		await expect.poll(() => tileCount(bench, up)).toContain("0 / 2");
+
+		await down.click();
+		await expect.poll(async () => (await programmedAngles(api, selected.length))?.every((angles) => angles.tilt === -67.5) ?? false).toBe(true);
+		await expect.poll(() => tileCount(bench, down)).toContain("2 / 2");
+		// Negative control: a preset the fixtures do not show stays inactive.
+		expect(await tileCount(bench, up)).toContain("0 / 2");
+
+		await up.click();
+		await expect.poll(async () => (await programmedAngles(api, selected.length))?.every((angles) => angles.tilt === 45) ?? false).toBe(true);
+		await expect.poll(() => tileCount(bench, up)).toContain("2 / 2");
+		await expect.poll(() => tileCount(bench, down)).toContain("0 / 2");
+		await expect(page.getByRole("alert")).toHaveCount(0);
 	});
 });

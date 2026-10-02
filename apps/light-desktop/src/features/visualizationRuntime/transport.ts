@@ -35,6 +35,8 @@ export interface VisualizationRuntimeStream {
 		lanes: readonly VisualizationRuntimeLane[],
 		maxRateHz: number,
 		includeDynamicStack?: boolean,
+		/** Every resolved attribute rather than only those the Stage draws (Preset pools). */
+		completeValues?: boolean,
 	): void;
 	/**
 	 * Replaces the readout claim sent with the next Subscribe (`null` or empty clears it). The

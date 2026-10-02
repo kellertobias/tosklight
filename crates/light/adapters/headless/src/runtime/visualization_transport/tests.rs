@@ -60,6 +60,7 @@ fn client_messages_tolerate_unknown_fields_through_the_logged_decoder() {
             max_rate_hz: 10,
             acknowledgements: false,
             include_dynamic_stack: false,
+            complete_values: false,
             sparse_dynamic_stack: false,
             batched_messages: false,
             readouts: None,
@@ -269,3 +270,51 @@ fn stage_stream_keeps_only_attributes_consumed_by_the_renderer() {
 
 #[path = "readout_tests.rs"]
 mod readout_tests;
+
+#[test]
+fn only_a_complete_values_claim_carries_attributes_the_stage_does_not_draw() {
+    let snapshot = || {
+        let fixture_id = uuid::Uuid::nil();
+        let value = |attribute: &str| light_wire::v2::visualization::VisualizationValue {
+            fixture_id,
+            attribute: attribute.into(),
+            value: light_wire::v2::preload_values::ProgrammingPreloadAttributeValue::Normalized(
+                0.5,
+            ),
+        };
+        VisualizationLaneSnapshot {
+            scope: VisualizationScope { show_id: None },
+            revision: 1,
+            generated_at: String::new(),
+            grand_master: 1.,
+            blackout: false,
+            preload: false,
+            values: ["intensity", "color", "position", "zoom", "prism"]
+                .map(value)
+                .to_vec(),
+            dynamic_stack: Vec::new(),
+            profile_output_values: ["pan", "prism"].map(value).to_vec(),
+        }
+    };
+    fn attributes(values: &[light_wire::v2::visualization::VisualizationValue]) -> Vec<&str> {
+        values
+            .iter()
+            .map(|value| value.attribute.as_str())
+            .collect()
+    }
+
+    // The Stage claim: the semantic Position owner and Beam attributes are not drawn.
+    let mut stage = snapshot();
+    trim_lane_snapshot(&mut stage, false, false);
+    assert_eq!(attributes(&stage.values), ["intensity", "color", "zoom"]);
+
+    // A Preset pool compares every stored attribute against the effective values.
+    let mut complete = snapshot();
+    trim_lane_snapshot(&mut complete, false, true);
+    assert_eq!(
+        attributes(&complete.values),
+        ["intensity", "color", "position", "zoom", "prism"]
+    );
+    // Profile output stays the Stage's own projection either way.
+    assert_eq!(attributes(&complete.profile_output_values), ["pan"]);
+}

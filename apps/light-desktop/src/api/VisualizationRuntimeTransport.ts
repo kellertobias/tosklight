@@ -149,6 +149,7 @@ class WebSocketVisualizationRuntimeStream
 	private claims = new Set<VisualizationRuntimeLane>();
 	private maxRateHz = 10;
 	private includeDynamicStack = false;
+	private completeValues = false;
 	private readoutClaim: readonly string[] | null = null;
 	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null =
 		null;
@@ -179,11 +180,13 @@ class WebSocketVisualizationRuntimeStream
 		lanes: readonly VisualizationRuntimeLane[],
 		maxRateHz: number,
 		includeDynamicStack = false,
+		completeValues = false,
 	) {
 		const removed = [...this.claims].filter((lane) => !lanes.includes(lane));
 		this.claims = new Set(lanes);
 		this.maxRateHz = Math.max(1, Math.min(10, Math.floor(maxRateHz)));
 		this.includeDynamicStack = includeDynamicStack;
+		this.completeValues = completeValues;
 		if (!this.claims.size) {
 			if (removed.length) this.send({ type: "unsubscribe", lanes: removed });
 			this.closeSocket();
@@ -440,6 +443,7 @@ class WebSocketVisualizationRuntimeStream
 			lanes: [...this.claims],
 			max_rate_hz: this.maxRateHz,
 			include_dynamic_stack: this.includeDynamicStack,
+			complete_values: this.completeValues,
 			sparse_dynamic_stack: true,
 			batched_messages: true,
 			acknowledgements: this.acknowledgementBackpressure,
