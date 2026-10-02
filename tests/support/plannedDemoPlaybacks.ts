@@ -1,6 +1,7 @@
 import type { ApiDriver } from "../bench/core/api";
 import { plannedDemoGroupSpecs } from "./plannedDemoGroups";
 import { putPlannedDemoObject } from "./plannedDemoObjects";
+import { semanticAngles, semanticColor } from "./plannedDemoSemantic";
 
 interface PatchedTargetFixture {
 	fixture_id: string;
@@ -80,19 +81,12 @@ export async function installPlannedDemoPlaybacks(
 						"LED Show",
 						"LED Auxiliary",
 					],
-					{
-						"color.red": 1,
-						"color.green": 1,
-						"color.blue": 1,
-					},
+					{ color: semanticColor("White") },
 				),
 				...attributes(
 					groups,
 					["Beam Show", "Beam Auxiliary", "Wash Show", "Wash Auxiliary"],
-					{
-						pan: 0.5,
-						tilt: 0.5,
-					},
+					{ position: semanticAngles(0.5, 0.5) },
 				),
 			]),
 		]),
@@ -199,7 +193,7 @@ function intensity(groups: Map<string, string[]>, name: string, value: number) {
 function attributes(
 	groups: Map<string, string[]>,
 	names: readonly string[],
-	values: Readonly<Record<string, number>>,
+	values: Readonly<Record<string, number | object>>,
 ) {
 	return names.flatMap((name) => {
 		const fixtures = groups.get(name);
@@ -215,7 +209,7 @@ function attributes(
 function stateCue(
 	number: number,
 	name: string,
-	changes: ReadonlyArray<readonly [string, string, number]>,
+	changes: ReadonlyArray<readonly [string, string, number | object]>,
 ) {
 	return {
 		id: stableUuid(3, number),
@@ -225,7 +219,8 @@ function stateCue(
 		changes: changes.map(([fixture_id, attribute, value]) => ({
 			fixture_id,
 			attribute,
-			value: { kind: "normalized", value },
+			// Semantic demo values (TL-560) are already typed owners.
+			value: typeof value === "number" ? { kind: "normalized", value } : value,
 			automatic_restore: false,
 		})),
 		group_changes: [],

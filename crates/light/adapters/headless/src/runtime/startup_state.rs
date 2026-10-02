@@ -1,8 +1,9 @@
 //! Persistent state loading and engine restoration for process startup.
 
+use super::show_programming_contract::{check_programmer, check_runtime_payload};
 use super::{
     ActiveShowRepository, DeskConfiguration, InstallationResource, PersistedOutputRuntime,
-    active_playbacks_setting, compile_active_show_for_startup, fixed_test_time,
+    active_playbacks_setting, fixed_test_time, load_active_show_runtime_for_startup,
     output_runtime_setting, sibling_fixture_package_dir, startup_options,
 };
 use anyhow::Context;
@@ -19,6 +20,16 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
+
+/// TL-552: production supports the semantic programming contract (`PROGRAMMING_CONTRACT_VERSION`).
+/// Only the `#[cfg(test)]` startup harness can report another contract; see
+/// `e2e_semantic_contract`.
+fn supported_programming_contract() -> u16 {
+    super::e2e_semantic_contract::startup_programming_contract()
+}
+
+#[path = "startup_runtime_recovery.rs"]
+mod runtime_recovery;
 
 pub(super) fn rebase_desk_show_paths(
     desk: &DeskStore,
@@ -324,6 +335,7 @@ pub(super) struct StartupState {
     pub(super) persistent: PersistentState,
     pub(super) programmers: ProgrammerRegistry,
     pub(super) engine: Arc<Engine>,
+    pub(super) dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
     pub(super) active_show_error: Option<String>,
     pub(super) output_runtime: PersistedOutputRuntime,
     pub(super) manual_clock: Option<Arc<ManualClock>>,
@@ -333,15 +345,19 @@ pub(super) struct StartupState {
 impl StartupState {
     pub(super) fn load(options: startup_options::StartupOptions) -> anyhow::Result<Self> {
         let persistent = PersistentState::open(options)?;
-        let (manual_clock, programmers) = restore_programmers(&persistent)?;
-        let (engine, active_show_error) = load_engine(&persistent, &programmers)?;
-        let output_runtime = load_output_runtime(&persistent, active_show_error.as_deref())?;
+        let (manual_clock, programmers, programmer_recovery) = restore_programmers(&persistent)?;
+        let (engine, dynamics, active_show_error) =
+            load_engine(&persistent, &programmers, programmer_recovery)?;
+        let (output_runtime, output_recovery) =
+            load_output_runtime(&persistent, &programmers, active_show_error.as_deref())?;
+        let active_show_error = active_show_error.or(output_recovery);
         apply_output_runtime(&engine, &output_runtime);
         let speed_groups = create_speed_groups(&persistent.configuration);
         Ok(Self {
             persistent,
             programmers,
             engine,
+            dynamics,
             active_show_error,
             output_runtime,
             manual_clock,
@@ -352,7 +368,7 @@ impl StartupState {
 
 fn restore_programmers(
     persistent: &PersistentState,
-) -> anyhow::Result<(Option<Arc<ManualClock>>, ProgrammerRegistry)> {
+) -> anyhow::Result<(Option<Arc<ManualClock>>, ProgrammerRegistry, Option<String>)> {
     let manual_clock = persistent
         .test_bench
         .then(|| Arc::new(ManualClock::new(fixed_test_time())));
@@ -375,11 +391,13 @@ fn restore_programmers(
              the rest were written out"
         );
     }
-    if let Some(session) = collapse.canonical {
-        restore_programmer(&programmers, session);
-    }
+    let recovery = collapse
+        .canonical
+        .map(|session| restore_programmer(&programmers, session, &persistent.data_dir))
+        .transpose()?
+        .flatten();
     tracing::info!("persisted programmers restored");
-    Ok((manual_clock, programmers))
+    Ok((manual_clock, programmers, recovery))
 }
 
 fn application_clock(manual_clock: Option<&Arc<ManualClock>>) -> SharedClock {
@@ -388,21 +406,42 @@ fn application_clock(manual_clock: Option<&Arc<ManualClock>>) -> SharedClock {
         .unwrap_or_else(|| Arc::new(SystemClock))
 }
 
-fn restore_programmer(programmers: &ProgrammerRegistry, session: light_show::PersistedSession) {
+fn restore_programmer(
+    programmers: &ProgrammerRegistry,
+    session: light_show::PersistedSession,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<Option<String>> {
     let parsed = (|| -> anyhow::Result<light_programmer::ProgrammerState> {
         let mut value = serde_json::from_str::<serde_json::Value>(&session.programmer_json)?;
         migrate_frozen_group_selection(&mut value);
         migrate_retired_programmer_attributes(&mut value).map_err(anyhow::Error::msg)?;
-        Ok(serde_json::from_value(value)?)
+        check_programmer(&value, supported_programming_contract())?;
+        let programmer: light_programmer::ProgrammerState = serde_json::from_value(value)?;
+        anyhow::ensure!(
+            programmer.required_programming_contract() <= supported_programming_contract(),
+            "stored Programmer requires programming contract {}; this runtime supports {}",
+            programmer.required_programming_contract(),
+            supported_programming_contract()
+        );
+        programmer
+            .validate_programming()
+            .map_err(anyhow::Error::msg)?;
+        Ok(programmer)
     })();
     match parsed {
         Ok(mut programmer) => {
             programmer.connected = false;
             programmers.restore(programmer);
+            Ok(None)
         }
-        Err(error) => {
-            tracing::warn!(session_id=%session.id.0, %error, "ignoring invalid persisted programmer")
-        }
+        Err(error) => runtime_recovery::preserve(
+            data_dir,
+            "Programmer",
+            session.id.0,
+            &session.programmer_json,
+            &error,
+        )
+        .map(Some),
     }
 }
 
@@ -703,26 +742,58 @@ fn migrate_frozen_group_selection(value: &mut serde_json::Value) {
 fn load_engine(
     persistent: &PersistentState,
     programmers: &ProgrammerRegistry,
-) -> anyhow::Result<(Arc<Engine>, Option<String>)> {
-    let engine = Arc::new(Engine::new(programmers.clone()));
-    let active_show_error = compile_active_show(&engine, persistent);
+    programmer_recovery: Option<String>,
+) -> anyhow::Result<(
+    Arc<Engine>,
+    Arc<Mutex<light_dynamics::DynamicRuntime>>,
+    Option<String>,
+)> {
+    let engine = Arc::new(Engine::with_programming_contract_support(
+        programmers.clone(),
+        supported_programming_contract(),
+    ));
+    let (dynamics, active_show_error) = match programmer_recovery {
+        Some(error) => (None, Some(error)),
+        None => match compile_active_show(&engine, persistent) {
+            Ok(dynamics) => (dynamics, None),
+            Err(error) => (None, Some(error)),
+        },
+    };
+    // Failed or absent shows retain the empty Engine and its empty source catalogue. Never carry
+    // a rejected candidate's models into Programmer reconstruction or checkpoint recovery.
+    let dynamics = Arc::new(Mutex::new(dynamics.unwrap_or_else(|| {
+        light_dynamics::DynamicRuntime::with_native_color_models(
+            engine.supported_programming_contract(),
+            engine.snapshot().native_color_sources.clone(),
+        )
+    })));
     tracing::info!("engine snapshot ready");
     configure_engine(&engine, &persistent.configuration)?;
-    restore_active_playbacks(persistent, &engine, active_show_error.as_deref())?;
-    Ok((engine, active_show_error))
+    let playback_recovery =
+        restore_active_playbacks(persistent, &engine, active_show_error.as_deref())?;
+    let active_show_error = active_show_error.or(playback_recovery);
+    Ok((engine, dynamics, active_show_error))
 }
 
-fn compile_active_show(engine: &Engine, persistent: &PersistentState) -> Option<String> {
-    let active = persistent.active_show.as_ref()?;
+fn compile_active_show(
+    engine: &Engine,
+    persistent: &PersistentState,
+) -> Result<Option<light_dynamics::DynamicRuntime>, String> {
+    let Some(active) = persistent.active_show.as_ref() else {
+        return Ok(None);
+    };
     tracing::info!(show=%active.name, "compiling active show");
-    let message = compile_active_show_for_startup(
+    load_active_show_runtime_for_startup(
         engine,
         active,
         &persistent.data_dir,
         persistent.configuration.backup_retention,
-    )?;
-    tracing::error!(show=%active.name, error=%message, "starting in show recovery mode");
-    Some(message)
+    )
+    .map(Some)
+    .map_err(|message| {
+        tracing::error!(show=%active.name, error=%message, "starting in show recovery mode");
+        message
+    })
 }
 
 fn configure_engine(engine: &Engine, configuration: &DeskConfiguration) -> anyhow::Result<()> {
@@ -741,27 +812,47 @@ fn restore_active_playbacks(
     persistent: &PersistentState,
     engine: &Engine,
     recovery_error: Option<&str>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<String>> {
     let Some(show) = available_show(persistent, recovery_error) else {
-        return Ok(());
+        return Ok(None);
     };
     let Some(serialized) = persistent
         .desk
         .setting(&active_playbacks_setting(show.id))?
     else {
-        return Ok(());
+        return Ok(None);
     };
-    match serde_json::from_str::<Vec<light_playback::ActivePlayback>>(&serialized) {
+    let parsed = (|| -> anyhow::Result<Vec<light_playback::ActivePlayback>> {
+        check_runtime_payload("Playback", &serialized, supported_programming_contract())?;
+        let playbacks = serde_json::from_str::<Vec<light_playback::ActivePlayback>>(&serialized)?;
+        let required = playbacks
+            .iter()
+            .map(light_playback::ActivePlayback::required_programming_contract)
+            .max()
+            .unwrap_or(0);
+        anyhow::ensure!(
+            required <= engine.supported_programming_contract(),
+            "stored Playback runtime requires programming contract {required}; this runtime supports {}",
+            engine.supported_programming_contract()
+        );
+        Ok(playbacks)
+    })();
+    match parsed {
         Ok(playbacks) => {
             engine
                 .execute_playback(EnginePlaybackCommand::RestoreActive(playbacks))
                 .expect("restoring validated Playback state is infallible");
+            Ok(None)
         }
-        Err(error) => {
-            tracing::warn!(show_id=?show.id, %error, "ignoring invalid persisted playback runtime")
-        }
+        Err(error) => runtime_recovery::preserve(
+            &persistent.data_dir,
+            "Playback",
+            show.id.0,
+            &serialized,
+            &error,
+        )
+        .map(Some),
     }
-    Ok(())
 }
 
 fn available_show<'a>(
@@ -776,29 +867,43 @@ fn available_show<'a>(
 
 fn load_output_runtime(
     persistent: &PersistentState,
+    programmers: &ProgrammerRegistry,
     recovery_error: Option<&str>,
-) -> anyhow::Result<PersistedOutputRuntime> {
+) -> anyhow::Result<(PersistedOutputRuntime, Option<String>)> {
     let Some(show) = available_show(persistent, recovery_error) else {
-        return Ok(PersistedOutputRuntime::default());
+        return Ok((PersistedOutputRuntime::default(), None));
     };
     let Some(serialized) = persistent.desk.setting(&output_runtime_setting(show.id))? else {
-        return Ok(PersistedOutputRuntime::default());
+        return Ok((PersistedOutputRuntime::default(), None));
     };
-    Ok(parse_output_runtime(show, &serialized))
-}
-
-fn parse_output_runtime(show: &ShowEntry, serialized: &str) -> PersistedOutputRuntime {
-    match serde_json::from_str::<PersistedOutputRuntime>(serialized) {
-        Ok(runtime) if runtime.is_valid() => runtime,
-        Ok(_) => {
-            tracing::warn!(show_id=?show.id, "ignoring invalid persisted output runtime");
-            PersistedOutputRuntime::default()
+    let candidate = parse_output_runtime(&serialized).and_then(|mut runtime| {
+        if let Some(snapshot) = &mut runtime.dynamic_runtime {
+            super::normalize_programmer_dynamic_checkpoint(programmers, snapshot)?;
         }
+        // Legacy controller-key normalization must not leave a previously valid source
+        // catalogue pointing at different retained expression/controller identities.
+        runtime.validate_for_support(supported_programming_contract())?;
+        Ok(runtime)
+    });
+    match candidate {
+        Ok(runtime) => Ok((runtime, None)),
         Err(error) => {
-            tracing::warn!(show_id=?show.id, %error, "ignoring invalid persisted output runtime");
-            PersistedOutputRuntime::default()
+            let message = runtime_recovery::preserve(
+                &persistent.data_dir,
+                "Output",
+                show.id.0,
+                &serialized,
+                &error,
+            )?;
+            Ok((PersistedOutputRuntime::default(), Some(message)))
         }
     }
+}
+
+fn parse_output_runtime(serialized: &str) -> anyhow::Result<PersistedOutputRuntime> {
+    check_runtime_payload("Output", serialized, supported_programming_contract())?;
+    // Embedded/deleted Dynamic definitions are independent of the active show's gate.
+    PersistedOutputRuntime::decode_for_support(serialized, supported_programming_contract())
 }
 
 fn apply_output_runtime(engine: &Engine, runtime: &PersistedOutputRuntime) {
@@ -1167,5 +1272,110 @@ mod tests {
     fn assert_migrated_number(value: &serde_json::Value, expected: f64) {
         let actual = value.as_f64().expect("expected JSON number");
         assert!((actual - expected).abs() < 1.0e-6, "{actual} != {expected}");
+    }
+}
+
+/// Source-only originals, captured before normalization or any success-path persistence.
+/// Session authentication data is deliberately excluded from this type.
+#[derive(serde::Serialize)]
+pub(super) struct OriginalStartupOwners {
+    show_id: Option<light_core::ShowId>,
+    programmers: Vec<OriginalStartupProgrammer>,
+    playback: Option<String>,
+    output: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct OriginalStartupProgrammer {
+    session_id: light_core::SessionId,
+    programmer_json: String,
+}
+
+impl OriginalStartupOwners {
+    pub(super) fn capture(persistent: &PersistentState) -> anyhow::Result<Self> {
+        let show_id = persistent.active_show.as_ref().map(|show| show.id);
+        let programmers = persistent
+            .desk
+            .persisted_sessions()?
+            .into_iter()
+            .map(|session| OriginalStartupProgrammer {
+                session_id: session.id,
+                programmer_json: session.programmer_json,
+            })
+            .collect();
+        let (playback, output) = match show_id {
+            Some(show) => (
+                persistent.desk.setting(&active_playbacks_setting(show))?,
+                persistent.desk.setting(&output_runtime_setting(show))?,
+            ),
+            None => (None, None),
+        };
+        Ok(Self {
+            show_id,
+            programmers,
+            playback,
+            output,
+        })
+    }
+}
+
+/// Process startup only, before rendering/control inputs/server tasks begin.
+/// Live show activation retains its separate destination preflight boundary.
+pub(super) fn finalize_restored_owners_for_startup(
+    state: &super::AppState,
+    originals: OriginalStartupOwners,
+) -> anyhow::Result<()> {
+    if state.active_show.error().is_some() {
+        return Ok(());
+    }
+    let normalized = super::playback_exclusion_normalization::
+        normalize_restored_virtual_playback_exclusions_deferred(state)
+        .map_err(|error| anyhow::anyhow!(error.message))?;
+    match state
+        .output
+        .finalize_restored_owners(&state.playback.render_capability())
+    {
+        Ok(()) => {
+            if normalized.persistence_pending {
+                if let Err(error) = super::persist_active_playbacks(state) {
+                    tracing::warn!(error=%error.message,
+                        "validated restored Playback normalization persistence is pending");
+                }
+            }
+            Ok(())
+        }
+        Err(error) => {
+            // Prepare the complete empty pair before touching Programmer or published state.
+            let prepared = state.output.prepare_snapshot(Default::default())?;
+            let checkpoint = super::dynamic_source_origins::DynamicRuntimeSourceCheckpoint {
+                runtime: Default::default(),
+                origins: Some(
+                    super::dynamic_source_origins::DynamicSourceOrigins::default().snapshot(),
+                ),
+            };
+            let prepared = state
+                .output
+                .prepare_snapshot_restore(prepared, checkpoint)?;
+            let serialized = serde_json::to_string(&originals)?;
+            let message = runtime_recovery::preserve(
+                state.installation.data_dir(),
+                "Dynamic owners",
+                originals
+                    .show_id
+                    .map(|id| id.0)
+                    .unwrap_or_else(uuid::Uuid::nil),
+                &serialized,
+                &anyhow::anyhow!(error.to_string()),
+            )?;
+            // Reporting must succeed before the irreversible in-memory recovery commit.
+            // This guard prevents controls/shutdown from overwriting either saved checkpoint.
+            state.active_show.set_error(Some(message));
+            state.programming.reset_all();
+            state
+                .output
+                .install_prepared_snapshot_releasing_playback(prepared);
+            super::restore_prevalidated_output_controls(state, &PersistedOutputRuntime::default());
+            Ok(())
+        }
     }
 }

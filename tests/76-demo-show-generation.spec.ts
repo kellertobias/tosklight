@@ -389,6 +389,7 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 			?.panes.map((pane: any) => pane.kind),
 	).toEqual(["fixtures", "stage", "dmx"]);
 
+	// TL-552: the packaged default show is the semantic demo, so a contract-1 desk opens it.
 	await api.openDefaultShow({ transition: "hold_current" });
 	await api.openShow(showId, { transition: "hold_current" });
 	expect(

@@ -1,5 +1,9 @@
 import type { ApiDriver } from "../bench/core/api";
 import { putPlannedDemoObject } from "./plannedDemoObjects";
+import {
+	semanticLane,
+	semanticRandomGroup,
+} from "./plannedDemoSemantic";
 
 const FAMILY_GROUPS = [
 	["Beam Show", "4", "A"],
@@ -209,8 +213,13 @@ function definition(
 	randomGroups: any[] = [],
 	ordering: any = { type: "selection" },
 ) {
+	// TL-552: family lanes are typed Programming lanes; Intensity lanes stay scalar.
+	const authoredLanes = lanes.map(semanticLane);
+	const typedRandom = authoredLanes.some(
+		(item) => item.programming && item.random_group_id,
+	);
 	const boundRandomGroups = randomGroups.map((item, index) => ({
-		...item,
+		...(typedRandom ? semanticRandomGroup(item) : item),
 		id: stableUuid(7, poolNumber * 100 + index + 1),
 	}));
 	return {
@@ -221,7 +230,7 @@ function definition(
 		color: "#4edcff",
 		icon: "∿",
 		target_binding: { type: "live_group", group_id: groupId },
-		lanes: lanes.map((item, index) => ({
+		lanes: authoredLanes.map((item, index) => ({
 			...item,
 			id: stableUuid(6, poolNumber * 100 + index + 1),
 			random_group_id: item.random_group_id
