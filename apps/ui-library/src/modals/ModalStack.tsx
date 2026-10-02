@@ -6,6 +6,7 @@ import {
 	useContext,
 	useEffect,
 	useId,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -205,7 +206,9 @@ function useRegisteredModal(
 	const claimedInitialFocus = useRef(false);
 	const resolvedPolicy = requiredPolicy(policy);
 
-	useEffect(() => {
+	// Registration lands in the layout phase, so a modal is registered (and top, not inert) before
+	// it is first painted: an operator, or a test, acting on the freshly drawn modal reaches it.
+	useLayoutEffect(() => {
 		previousFocus.current =
 			document.activeElement instanceof HTMLElement
 				? document.activeElement
@@ -236,6 +239,9 @@ function useRegisteredModal(
 		if (!top || claimedInitialFocus.current) return;
 		claimedInitialFocus.current = true;
 		requestAnimationFrame(() => {
+			// Focus already inside the modal (an autofocused field, or one the operator has
+			// already chosen) is kept; the initial focus only applies when it is still outside.
+			if (layer.current?.contains(document.activeElement)) return;
 			const first =
 				layer.current?.querySelector<HTMLElement>(
 					"[data-modal-initial-focus]",
