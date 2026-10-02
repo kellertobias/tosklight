@@ -34,6 +34,8 @@ fn synchronized_controller_pause_holds_output_and_crossfades_to_live_transport_o
             &[transport_at(now_millis); 5],
             &Sources { current: 0.0 },
         )[0]
+        .legacy()
+        .expect("scalar sample")
         .value
     };
 
@@ -95,6 +97,8 @@ fn synchronized_global_pause_transition_survives_runtime_snapshot_restore() {
             &[transport_at(now_millis); 5],
             &Sources { current: 0.0 },
         )[0]
+        .legacy()
+        .expect("scalar sample")
         .value
     };
 
@@ -182,5 +186,5 @@ fn next_bar_boundary_waits_for_the_authoritative_four_beat_boundary() {
         }; 5],
         &Sources { current: 0.0 },
     );
-    assert_eq!(boundary[0].value, 0.0);
+    assert_eq!(boundary[0].legacy().expect("scalar sample").value, 0.0);
 }

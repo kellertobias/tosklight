@@ -32,6 +32,8 @@ pub(crate) fn resolve_profile_fixture(
     highlight_layers: &HashMap<FixtureId, HighlightOutputLayer>,
     highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
+    instance_id: uuid::Uuid,
+    native_channels: Option<&[Option<crate::native_position_projection::NativePositionInput>]>,
     // Filled rather than returned: a render resolves every fixture in turn and would otherwise
     // grow two vectors per fixture per frame.
     fixture_output: &mut ResolvedProfileFixtureOutput,
@@ -42,6 +44,14 @@ pub(crate) fn resolve_profile_fixture(
         .map_err(|error| EngineError::Invalid(error.to_string()))?;
     fixture_output.heads.clear();
     fixture_output.channels.clear();
+    fixture_output.color_writes.clear();
+    if fixture_output.track_color_writes {
+        fixture_output.native_active_attributes.clear();
+        fixture_output
+            .native_active_attributes
+            .resize(mode.channels.len(), None);
+    }
+    let frozen_channels = projection.position_freeze_inputs(instance_id);
     for head in projection
         .heads()
         .iter()
@@ -59,7 +69,15 @@ pub(crate) fn resolve_profile_fixture(
             highlight_layers,
             highlight_look,
             axis_inversion,
+            native_channels,
+            frozen_channels,
             &mut fixture_output.channels,
+            fixture_output
+                .track_color_writes
+                .then_some(&mut fixture_output.color_writes),
+            fixture_output
+                .track_color_writes
+                .then_some(fixture_output.native_active_attributes.as_mut_slice()),
         )?;
         fixture_output.heads.push(head_output);
     }
@@ -73,9 +91,19 @@ pub(crate) struct AxisInversion {
 }
 
 impl AxisInversion {
-    fn applies(self, attribute: &AttributeKey) -> bool {
-        (self.pan && attribute.0.eq_ignore_ascii_case("pan"))
-            || (self.tilt && attribute.0.eq_ignore_ascii_case("tilt"))
+    /// Installation inversion follows the head's cold compiled Position role first (TL-630), so a
+    /// motor alias bound to Pan or Tilt mirrors with its physical prediction. Attributes without a
+    /// compiled role keep the legacy canonical `pan`/`tilt` rule; nothing else is guessed by name.
+    fn applies(self, head: &ProfileHeadPlan, attribute: &AttributeKey) -> bool {
+        let (pan, tilt) = match head.axis_role(attribute) {
+            Some(light_fixture::PositionAxisRole::Pan) => (true, false),
+            Some(light_fixture::PositionAxisRole::Tilt) => (false, true),
+            None => (
+                attribute.0.eq_ignore_ascii_case("pan"),
+                attribute.0.eq_ignore_ascii_case("tilt"),
+            ),
+        };
+        (self.pan && pan) || (self.tilt && tilt)
     }
 
     fn any(self) -> bool {
@@ -91,6 +119,20 @@ pub(crate) struct ResolvedProfileFixtureOutput {
     /// Its position, not its identity: encoding finds where the bytes go by indexing rather than
     /// by hashing a Uuid twice, and the batch is half the size in memory.
     pub(crate) channels: Vec<(u32, u32)>,
+    /// Observer-only trace of actual semantic Color writes, independent of value equality.
+    pub(crate) color_writes: Vec<(FixtureId, usize)>,
+    pub(crate) track_color_writes: bool,
+    pub(crate) native_active_attributes: Vec<Option<AttributeKey>>,
+}
+
+impl crate::Reusable for ResolvedProfileFixtureOutput {
+    fn reset(&mut self) {
+        self.heads.clear();
+        self.channels.clear();
+        self.color_writes.clear();
+        self.track_color_writes = false;
+        self.native_active_attributes.clear();
+    }
 }
 
 pub(crate) struct ResolvedProfileHeadOutput {
@@ -110,6 +152,7 @@ struct ProfileHeadInputs {
     /// Hashed for speed rather than against an adversary: a head's values are read several times
     /// per channel and never arrive from outside this desk.
     values: crate::HeadValues,
+    held_native: bool,
     sequence_masters: crate::HeadSequenceMasters,
 }
 
@@ -169,7 +212,11 @@ pub(crate) fn resolve_profile_head(
     highlight_layers: &HashMap<FixtureId, HighlightOutputLayer>,
     highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
+    native_channels: Option<&[Option<crate::native_position_projection::NativePositionInput>]>,
+    frozen_channels: Option<&[Option<crate::native_position_projection::NativePositionInput>]>,
     channels: &mut Vec<(u32, u32)>,
+    color_writes: Option<&mut Vec<(FixtureId, usize)>>,
+    active_attributes: Option<&mut [Option<AttributeKey>]>,
 ) -> Result<ResolvedProfileHeadOutput, EngineError> {
     let owner = head.owner;
     // Nothing frozen, nothing highlighted and nothing flashing is the ordinary state of a desk, so
@@ -213,7 +260,15 @@ pub(crate) fn resolve_profile_head(
         AttributeValue::ColorXyz(color) => Some(*color),
         _ => None,
     });
-    if options.control_loss_progress.is_none()
+    if native_channels.is_none_or(|native| {
+        head.channel_indices
+            .iter()
+            .all(|&index| native[index].is_none())
+    }) && frozen_channels.is_none_or(|frozen| {
+        head.channel_indices
+            .iter()
+            .all(|&index| frozen[index].is_none())
+    }) && options.control_loss_progress.is_none()
         && !(fixture.definition.hazardous && options.blackout)
         && borrowed_requested_color.is_none()
         && !axis_inversion.any()
@@ -234,6 +289,7 @@ pub(crate) fn resolve_profile_head(
                 selected_look: selected_look.as_ref(),
             },
             channels,
+            active_attributes,
         ));
     }
 
@@ -248,10 +304,18 @@ pub(crate) fn resolve_profile_head(
         highlight_layers,
         highlight_look,
         axis_inversion,
+        None,
     )?;
     let virtual_intensity = virtual_intensity(&inputs);
     let requested_color = requested_color(&inputs.values);
-    resolve_requested_color(mode, &mut inputs, requested_color, options.color_model)?;
+    let mut color_attributes = Vec::new();
+    resolve_requested_color(
+        mode,
+        &mut inputs,
+        requested_color,
+        options.color_model,
+        color_writes.as_ref().map(|_| &mut color_attributes),
+    )?;
     let channel_start = channels.len();
     resolve_channels(
         ChannelResolutionContext {
@@ -260,11 +324,22 @@ pub(crate) fn resolve_profile_head(
             head,
             resolution,
             inputs: &inputs,
+            color_attributes: &color_attributes,
             virtual_intensity,
             options,
+            native_channels,
+            frozen_channels,
+            source_values: values,
+            axis_inversion,
+            group_masters,
+            group_master_flashes,
+            highlight_layers,
+            highlight_look,
         },
         channels,
-    );
+        color_writes,
+        active_attributes,
+    )?;
     Ok(finalize_output(
         ProfileOutputContext {
             fixture,
@@ -302,6 +377,7 @@ struct HeadFastPath<'a> {
 fn resolve_head_without_overlays(
     path: HeadFastPath<'_>,
     channels: &mut Vec<(u32, u32)>,
+    mut active_attributes: Option<&mut [Option<AttributeKey>]>,
 ) -> ResolvedProfileHeadOutput {
     let HeadFastPath {
         fixture,
@@ -371,6 +447,9 @@ fn resolve_head_without_overlays(
                 }
             },
         );
+        if let Some(active) = active_attributes.as_mut() {
+            active[*channel_index] = resolved.active_attribute.cloned();
+        }
         let mut raw = resolved.raw;
         if options.blackout {
             raw = blackout_raw(mode, channel, raw);
@@ -417,16 +496,21 @@ fn prepare_head_inputs(
     highlight_layers: &HashMap<FixtureId, HighlightOutputLayer>,
     highlight_look: &HighlightLook,
     axis_inversion: AxisInversion,
+    native: Option<(
+        usize,
+        &crate::native_position_projection::NativePositionInput,
+    )>,
 ) -> Result<ProfileHeadInputs, EngineError> {
     let owner = head.owner;
     // Nothing frozen, nothing highlighted and nothing flashing is the ordinary state of a desk, so
     // each of these asks whether there is anything to look up before hashing this head's identity.
-    let full_freeze = !fixture.freeze.targets.is_empty()
-        && fixture
-            .freeze
-            .targets
-            .get(&owner)
-            .is_some_and(|target| target.full);
+    let full_freeze = native.is_some_and(|(_, value)| value.full_freeze)
+        || !fixture.freeze.targets.is_empty()
+            && fixture
+                .freeze
+                .targets
+                .get(&owner)
+                .is_some_and(|target| target.full);
     let options = if full_freeze {
         RenderOptions {
             grand_master: 1.0,
@@ -453,6 +537,28 @@ fn prepare_head_inputs(
     } else {
         group_masters.scale(owner, group_master_flashes)
     };
+    let matches_channel = |channel: &FixtureChannel, attribute: &AttributeKey| {
+        *attribute == channel.attribute
+            || *attribute == channel.fixture_attribute
+            || *attribute == FixtureMode::control_action_attribute(channel.id)
+            || channel
+                .functions
+                .iter()
+                .any(|function| function.attribute == *attribute)
+    };
+    // An explicit scalar Freeze channel uses the already Freeze-overridden ordinary input.
+    // This avoids a new canonical candidate defeating a held fixture-facing alias.
+    let native = native.filter(|(index, input)| {
+        if input.frozen {
+            return true;
+        }
+        fixture.freeze.targets.get(&owner).is_none_or(|frozen| {
+            !frozen
+                .values
+                .keys()
+                .any(|attribute| matches_channel(&mode.channels[*index], attribute))
+        })
+    });
     let mut inputs = ProfileHeadInputs {
         owner,
         head_id: head.head_id,
@@ -463,14 +569,88 @@ fn prepare_head_inputs(
             .map(|layer| layer.suppressed_attributes)
             .unwrap_or_default(),
         group_scale,
-        values: values.values(owner),
+        // Native candidates replace this channel's complete input. Preserve virtual intensity
+        // without cloning every head attribute once for every fitted motor channel.
+        values: if native.is_some() {
+            let mut local = crate::HeadValues::default();
+            if let Some(intensity) = values.common(owner).intensity {
+                local.insert(AttributeKey::intensity(), intensity.clone());
+            }
+            local
+        } else {
+            values.values(owner)
+        },
+        held_native: native.is_some_and(|(_, input)| input.frozen),
         sequence_masters: values.sequence_masters(owner),
     };
+    let mut derived_attributes = Vec::new();
+    if let Some((index, native)) = native {
+        let channel = &mode.channels[index];
+        inputs.values.remove(&channel.attribute);
+        inputs
+            .values
+            .insert(channel.attribute.clone(), native.value.clone());
+        derived_attributes.push(channel.attribute.clone());
+        let safe_keys: Vec<_> = fixture
+            .definition
+            .safe_values
+            .keys()
+            .filter(|attribute| matches_channel(channel, attribute))
+            .collect();
+        let loss_progress = options.control_loss_progress.and_then(|progress| {
+            match fixture.definition.effective_signal_loss_policy() {
+                SignalLossPolicy::HoldLast => None,
+                SignalLossPolicy::ImmediateSafe => Some(1.0),
+                SignalLossPolicy::FadeToSafe { .. } => Some(progress.clamp(0.0, 1.0)),
+            }
+        });
+        let replacing = (fixture.definition.hazardous && options.blackout && !safe_keys.is_empty())
+            || loss_progress.is_some_and(|progress| {
+                safe_keys.iter().any(|attribute| {
+                    progress >= 1.0 || mode.head_attribute_is_snap(inputs.head_id, attribute)
+                })
+            });
+        if replacing {
+            // A safety alias/function must become a real candidate, without the old native
+            // canonical candidate defeating it. Other safe candidates keep normal priorities.
+            inputs.values.remove(&channel.attribute);
+            derived_attributes.clear();
+        } else if loss_progress.is_some() {
+            // Existing Raw->safe fading holds until completion. Seed every applicable safety
+            // alias from the same exact raw base so an absent alias cannot start a new fade.
+            for attribute in safe_keys {
+                inputs
+                    .values
+                    .insert(attribute.clone(), native.value.clone());
+                if !derived_attributes.contains(attribute) {
+                    derived_attributes.push(attribute.clone());
+                }
+            }
+        }
+    }
     apply_control_loss(fixture, mode, options, &mut inputs);
     apply_hazardous_blackout(fixture, options, &mut inputs.values);
-    apply_axis_inversion(axis_inversion, &mut inputs.values);
+    apply_axis_inversion(axis_inversion, head, &mut inputs.values);
     if let Some(look) = selected_look.as_ref() {
-        apply_semantic_highlight(mode, head, look, &mut inputs)?;
+        let mut written = Vec::new();
+        apply_semantic_highlight(
+            mode,
+            head,
+            look,
+            &mut inputs,
+            native.is_some().then_some(&mut written),
+        )?;
+        if let Some((index, _)) = native
+            && written
+                .iter()
+                .any(|attribute| matches_channel(&mode.channels[index], attribute))
+        {
+            for attribute in derived_attributes {
+                if !written.contains(&attribute) {
+                    inputs.values.remove(&attribute);
+                }
+            }
+        }
     }
     Ok(inputs)
 }
@@ -480,6 +660,7 @@ fn apply_semantic_highlight(
     head: &ProfileHeadPlan,
     look: &HighlightLook,
     inputs: &mut ProfileHeadInputs,
+    mut written: Option<&mut Vec<AttributeKey>>,
 ) -> Result<(), EngineError> {
     if !inputs.output_highlighted || look.compatibility != HighlightLookCompatibility::Semantic {
         return Ok(());
@@ -488,6 +669,9 @@ fn apply_semantic_highlight(
         .suppressed_highlight_attributes
         .contains(&AttributeKey::intensity())
     {
+        if let Some(written) = written.as_mut() {
+            written.push(AttributeKey::intensity());
+        }
         inputs.values.insert(
             AttributeKey::intensity(),
             AttributeValue::Normalized(look.intensity),
@@ -508,6 +692,9 @@ fn apply_semantic_highlight(
         && has_authored_shutter_open
         && !is_highlight_attribute_suppressed(inputs, "shutter")
     {
+        if let Some(written) = written.as_mut() {
+            written.push(AttributeKey("shutter".into()));
+        }
         inputs.values.insert(
             AttributeKey("shutter".into()),
             AttributeValue::Discrete("open".into()),
@@ -521,6 +708,9 @@ fn apply_semantic_highlight(
             .map_err(|error| EngineError::Invalid(error.to_string()))?
             .is_empty();
         if supported {
+            if let Some(written) = written.as_mut() {
+                written.push(AttributeKey::color());
+            }
             inputs.values.insert(
                 AttributeKey::color(),
                 AttributeValue::ColorXyz(color.to_xyz()),
@@ -538,6 +728,9 @@ fn apply_semantic_highlight(
             if is_highlight_attribute_suppressed(inputs, name) {
                 continue;
             }
+            if let Some(written) = written.as_mut() {
+                written.push(AttributeKey(name.into()));
+            }
             inputs
                 .values
                 .insert(AttributeKey(name.into()), AttributeValue::Normalized(value));
@@ -546,9 +739,18 @@ fn apply_semantic_highlight(
     Ok(())
 }
 
-fn apply_axis_inversion(inversion: AxisInversion, values: &mut crate::HeadValues) {
+/// Mirror normalized Pan/Tilt inputs of one head, once each. Explicit raw values (including
+/// fitted and Frozen native words) are already native to the installation and never change.
+pub(crate) fn apply_axis_inversion(
+    inversion: AxisInversion,
+    head: &ProfileHeadPlan,
+    values: &mut crate::HeadValues,
+) {
+    if !inversion.any() {
+        return;
+    }
     for (attribute, value) in values {
-        if !inversion.applies(attribute) {
+        if !inversion.applies(head, attribute) {
             continue;
         }
         if let AttributeValue::Normalized(normalized) = value {
@@ -614,6 +816,7 @@ fn resolve_requested_color(
     inputs: &mut ProfileHeadInputs,
     target: Option<Xyz>,
     model: ColorProgrammingModel,
+    mut color_writes: Option<&mut Vec<AttributeKey>>,
 ) -> Result<(), EngineError> {
     let Some(target) = target else {
         return Ok(());
@@ -640,6 +843,11 @@ fn resolve_requested_color(
         if inputs.values.contains_key(&channel.attribute) {
             continue;
         }
+        if channel.behavior != light_fixture::ChannelBehavior::Static
+            && let Some(writes) = color_writes.as_mut()
+        {
+            writes.push(channel.attribute.clone());
+        }
         inputs
             .values
             .insert(channel.attribute.clone(), AttributeValue::RawDmxExact(raw));
@@ -658,30 +866,81 @@ struct ChannelResolutionContext<'a> {
     head: &'a ProfileHeadPlan,
     resolution: &'a BoundFixtureModeResolution<'a>,
     inputs: &'a ProfileHeadInputs,
+    color_attributes: &'a [AttributeKey],
     virtual_intensity: f32,
     options: RenderOptions,
+    native_channels: Option<&'a [Option<crate::native_position_projection::NativePositionInput>]>,
+    frozen_channels: Option<&'a [Option<crate::native_position_projection::NativePositionInput>]>,
+    source_values: &'a ProfileValueIndex<'a>,
+    axis_inversion: AxisInversion,
+    group_masters: &'a GroupMasterIndex,
+    group_master_flashes: &'a HashMap<String, f32>,
+    highlight_layers: &'a HashMap<FixtureId, HighlightOutputLayer>,
+    highlight_look: &'a HighlightLook,
 }
 
-fn resolve_channels(context: ChannelResolutionContext<'_>, channels: &mut Vec<(u32, u32)>) {
+fn resolve_channels(
+    context: ChannelResolutionContext<'_>,
+    channels: &mut Vec<(u32, u32)>,
+    mut color_writes: Option<&mut Vec<(FixtureId, usize)>>,
+    mut active_attributes: Option<&mut [Option<AttributeKey>]>,
+) -> Result<(), EngineError> {
     let intensity_master = context
         .inputs
         .sequence_masters
         .get(&AttributeKey::intensity())
         .copied();
-    channels.extend(context.head.channel_indices.iter().map(|channel_index| {
+    for channel_index in context.head.channel_indices.iter() {
         let channel = &context.mode.channels[*channel_index];
+        let native_inputs;
+        let native = context
+            .frozen_channels
+            .and_then(|channels| channels[*channel_index].as_ref())
+            .or_else(|| {
+                context
+                    .native_channels
+                    .and_then(|channels| channels[*channel_index].as_ref())
+            });
+        let inputs = if let Some(native) = native {
+            native_inputs = prepare_head_inputs(
+                context.fixture,
+                context.mode,
+                context.head,
+                context.source_values,
+                context.options,
+                context.group_masters,
+                context.group_master_flashes,
+                context.highlight_layers,
+                context.highlight_look,
+                context.axis_inversion,
+                Some((*channel_index, native)),
+            )?;
+            &native_inputs
+        } else {
+            context.inputs
+        };
         let resolved = context.resolution.resolve_channel(
             *channel_index,
-            &context.inputs.values,
-            context.inputs.legacy_raw_highlight,
+            &inputs.values,
+            inputs.legacy_raw_highlight,
             context
                 .fixture
                 .highlight_overrides
                 .get(&channel.id)
                 .copied(),
             |active| {
+                if inputs.held_native {
+                    // Captured words already include masters. Do not scale fine bytes twice;
+                    // control-loss/blackout/Highlight still act before this ordinary resolver.
+                    return ChannelScales {
+                        virtual_intensity: None,
+                        sequence_master: 1.,
+                        group_master: 1.,
+                        grand_master: 1.,
+                    };
+                }
                 let sequence_master =
-                    sequence_master_scale(channel, active, context.inputs, intensity_master);
+                    sequence_master_scale(channel, active, inputs, intensity_master);
                 // An intensity channel is the virtual intensity's source, not a reader of it.
                 let channel_intensity = (!active.is_some_and(AttributeKey::is_intensity))
                     .then_some(context.virtual_intensity);
@@ -693,12 +952,23 @@ fn resolve_channels(context: ChannelResolutionContext<'_>, channels: &mut Vec<(u
                 }
             },
         );
+        if resolved
+            .active_attribute
+            .is_some_and(|attribute| context.color_attributes.contains(attribute))
+            && let Some(writes) = color_writes.as_mut()
+        {
+            writes.push((context.inputs.owner, *channel_index));
+        }
+        if let Some(active) = active_attributes.as_mut() {
+            active[*channel_index] = resolved.active_attribute.cloned();
+        }
         let mut raw = resolved.raw;
-        if context.options.blackout {
+        if context.options.blackout && !native.is_some_and(|input| input.full_freeze) {
             raw = blackout_raw(context.mode, channel, raw);
         }
-        (*channel_index as u32, raw)
-    }))
+        channels.push((*channel_index as u32, raw));
+    }
+    Ok(())
 }
 
 /// The attribute's own sequence master, unless it already reaches the channel another way.

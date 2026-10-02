@@ -78,7 +78,7 @@ impl<'de> Deserialize<'de> for DynamicDefinition {
         let spatial_mapping = stored.spatial_mapping.unwrap_or_else(|| {
             infer_legacy_spatial_mapping(stored.phase_spread_mode, &stored.phase, &stored.lanes)
         });
-        Ok(Self {
+        let mut definition = Self {
             id: stored.id,
             pool_number: stored.pool_number,
             revision: stored.revision,
@@ -96,7 +96,9 @@ impl<'de> Deserialize<'de> for DynamicDefinition {
             run_mode: stored.run_mode,
             default_activation: stored.default_activation,
             activation_boundary: stored.activation_boundary,
-        })
+        };
+        definition.normalize_angle_pair();
+        Ok(definition)
     }
 }
 
@@ -178,14 +180,11 @@ pub enum DynamicTargetBinding {
     Targetless,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicLane {
     pub id: Uuid,
-    pub attribute: AttributeKey,
-    pub mode: DynamicLaneMode,
-    pub keyframes: KeyframeConfiguration,
-    pub max_min: MaxMinConfiguration,
-    pub middle_amplitude: MiddleAmplitudeConfiguration,
+    #[serde(flatten)]
+    pub body: crate::DynamicLaneBody,
     pub speed_multiplier: Rational,
     pub width: f32,
     #[serde(default)]
@@ -221,23 +220,23 @@ pub enum DynamicLaneMode {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct KeyframeConfiguration {
-    pub points: Vec<DynamicKeyframe>,
+pub struct KeyframeConfiguration<S = ScalarSource> {
+    pub points: Vec<DynamicKeyframe<S>>,
     #[serde(default = "default_lane_size")]
     pub size: f32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DynamicKeyframe {
+pub struct DynamicKeyframe<S = ScalarSource> {
     pub position: f32,
-    pub source: ScalarSource,
+    pub source: S,
     pub interpolation: ScalarInterpolation,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct MaxMinConfiguration {
-    pub minimum: ScalarSource,
-    pub maximum: ScalarSource,
+pub struct MaxMinConfiguration<S = ScalarSource> {
+    pub minimum: S,
+    pub maximum: S,
     pub function: PeriodicFunction,
     #[serde(default = "default_lane_size")]
     pub size: f32,
@@ -246,9 +245,9 @@ pub struct MaxMinConfiguration {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct MiddleAmplitudeConfiguration {
-    pub middle: ScalarSource,
-    pub amplitude: f32,
+pub struct MiddleAmplitudeConfiguration<S = ScalarSource, A = f32> {
+    pub middle: S,
+    pub amplitude: A,
     pub function: PeriodicFunction,
     #[serde(default = "default_lane_size")]
     pub size: f32,
@@ -334,12 +333,12 @@ impl Default for PwmShape {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicRandomGroup {
     pub id: Uuid,
     pub seed: u64,
-    pub low: ScalarSource,
-    pub high: ScalarSource,
+    #[serde(flatten)]
+    pub range: crate::DynamicRandomRange,
     pub decision_interval_millis: u64,
     pub start_probability: f32,
     pub mean_duration_millis: u64,
@@ -474,7 +473,33 @@ pub enum DynamicSemanticValue {
         value: f32,
         timing: DynamicValueTiming,
     },
+    ProgrammingFixAt {
+        mask: crate::ProgrammingFamilyFixAt,
+        timing: DynamicValueTiming,
+    },
+    /// Remove only this component hold. The legacy Release remains an owner-wide release.
+    ProgrammingRelease {
+        /// None releases the complete-family hold only; Release clears every component hold.
+        component: Option<light_core::programming::ProgrammingComponent>,
+    },
     Release,
+}
+
+impl DynamicSemanticValue {
+    pub fn required_programming_contract(&self) -> u16 {
+        match self {
+            Self::Static { value, .. } => value.required_programming_contract(),
+            Self::ProgrammingFixAt { mask, .. } => mask.required_programming_contract(),
+            Self::ProgrammingRelease { .. } => {
+                light_core::programming::PROGRAMMING_CONTRACT_VERSION
+            }
+            Self::DynamicOn { dynamic, .. } => dynamic
+                .embedded_fallback
+                .definition
+                .required_programming_contract(),
+            _ => 0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]

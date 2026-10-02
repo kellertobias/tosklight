@@ -4,7 +4,10 @@ use std::collections::BTreeSet;
 impl PlaybackEngine {
     /// Classifies the exact retained runtime difference from an isolated baseline.
     pub fn retained_runtime_effect_since(&self, before: &Self) -> PlaybackRuntimeEffect {
-        if self.active != before.active {
+        if self.active != before.active
+            || self.active_dynamics != before.active_dynamics
+            || self.jump_counts != before.jump_counts
+        {
             PlaybackRuntimeEffect::Durable
         } else if self.control_states != before.control_states
             || self.temporary != before.temporary
@@ -31,7 +34,10 @@ impl PlaybackEngine {
     }
 
     fn numbered_runtime_effect_since(&self, before: &Self, number: u16) -> PlaybackRuntimeEffect {
-        if active_playback(self, number) != active_playback(before, number) {
+        if active_playback(self, number) != active_playback(before, number)
+            || dynamic_playback(self, number) != dynamic_playback(before, number)
+            || cue_jump_counts_differ(self, before, number)
+        {
             PlaybackRuntimeEffect::Durable
         } else if control_state(self, number) != control_state(before, number)
             || temporary_playbacks(self, number) != temporary_playbacks(before, number)
@@ -56,19 +62,57 @@ fn control_state(engine: &PlaybackEngine, number: u16) -> PlaybackControlState {
         .unwrap_or_default()
 }
 
+fn cue_jump_counts_differ(current: &PlaybackEngine, before: &PlaybackEngine, number: u16) -> bool {
+    let cue_list_id = current
+        .definitions
+        .get(&number)
+        .or_else(|| before.definitions.get(&number))
+        .and_then(|definition| match &definition.target {
+            PlaybackTarget::CueList { cue_list_id } => Some(*cue_list_id),
+            _ => None,
+        });
+    let Some(cue_list_id) = cue_list_id else {
+        return false;
+    };
+    current
+        .jump_counts
+        .iter()
+        .filter(|((id, _), _)| *id == cue_list_id)
+        .any(|(key, count)| before.jump_counts.get(key) != Some(count))
+        || before
+            .jump_counts
+            .iter()
+            .filter(|((id, _), _)| *id == cue_list_id)
+            .any(|(key, count)| current.jump_counts.get(key) != Some(count))
+}
+
+fn has_cue_jump_counts(engine: &PlaybackEngine, cue_list_id: CueListId) -> bool {
+    engine.jump_counts.keys().any(|(id, _)| *id == cue_list_id)
+}
+
 fn runtime_numbers(current: &PlaybackEngine, before: &PlaybackEngine) -> BTreeSet<u16> {
     current
         .definitions
         .values()
         .chain(before.definitions.values())
-        .filter_map(|definition| match definition.target {
+        .filter_map(|definition| match &definition.target {
             PlaybackTarget::CueList { cue_list_id }
                 if current
                     .active
-                    .contains_key(&PlaybackKey::CueList(cue_list_id))
+                    .contains_key(&PlaybackKey::CueList(*cue_list_id))
                     || before
                         .active
-                        .contains_key(&PlaybackKey::CueList(cue_list_id)) =>
+                        .contains_key(&PlaybackKey::CueList(*cue_list_id))
+                    || has_cue_jump_counts(current, *cue_list_id)
+                    || has_cue_jump_counts(before, *cue_list_id) =>
+            {
+                Some(definition.number)
+            }
+            PlaybackTarget::Dynamic { assignment }
+                if current
+                    .active_dynamics
+                    .contains_key(&assignment.target_id())
+                    || before.active_dynamics.contains_key(&assignment.target_id()) =>
             {
                 Some(definition.number)
             }
@@ -116,6 +160,11 @@ fn runtime_numbers(current: &PlaybackEngine, before: &PlaybackEngine) -> BTreeSe
 fn active_playback(engine: &PlaybackEngine, number: u16) -> Option<&ActivePlayback> {
     let key = engine.runtime_key(number).ok()?;
     engine.active.get(&key)
+}
+
+fn dynamic_playback(engine: &PlaybackEngine, number: u16) -> Option<&ActiveDynamicPlayback> {
+    let target = engine.dynamic_assignment(number)?.target_id();
+    engine.active_dynamics.get(&target)
 }
 
 fn temporary_playbacks(

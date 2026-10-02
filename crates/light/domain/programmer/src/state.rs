@@ -37,7 +37,8 @@ pub struct ProgrammerSnapshot {
     pub preload_group_pending: GroupProgrammerValues,
     pub preload_group_active: Arc<GroupProgrammerValues>,
     pub preload_group_release_pending: Vec<GroupReleaseProgrammerValue>,
-    pub preload_group_release_active: Vec<GroupReleaseProgrammerValue>,
+    pub preload_released_colors: Arc<crate::ReleasedPreloadColors>,
+    pub preload_group_release_active: Arc<Vec<GroupReleaseProgrammerValue>>,
     pub preload_playback_pending: Vec<PreloadPlaybackAction>,
     pub command_line: String,
     pub blind: bool,
@@ -83,7 +84,9 @@ pub struct ProgrammerState {
     #[serde(default)]
     pub preload_group_release_pending: Vec<GroupReleaseProgrammerValue>,
     #[serde(default)]
-    pub preload_group_release_active: Vec<GroupReleaseProgrammerValue>,
+    pub preload_released_colors: Arc<crate::ReleasedPreloadColors>,
+    #[serde(default)]
+    pub preload_group_release_active: Arc<Vec<GroupReleaseProgrammerValue>>,
     #[serde(default)]
     pub preload_playback_pending: Vec<PreloadPlaybackAction>,
     /// True while a Preload GO has committed queued Playback activations that hold-to-release has
@@ -115,9 +118,12 @@ pub struct ProgrammerState {
     /// Redo has the same live-session lifetime as Undo.
     #[serde(default, skip_serializing)]
     pub redo: Vec<Arc<ProgrammerSnapshot>>,
-    /// Runtime-only identity for coalescing samples from one continuous encoder gesture.
+    /// Runtime-only (Preload lane, identity) for coalescing one continuous encoder gesture.
     #[serde(skip)]
-    pub active_value_undo_group: Option<String>,
+    pub active_value_undo_group: Option<(bool, String)>,
+    /// Runtime boundary for frozen family adoption; not part of Undo or persisted shows.
+    #[serde(skip)]
+    pub value_gesture_epoch: u64,
 }
 
 /// Minimal owned Programmer projection consumed by the output renderer.
@@ -133,6 +139,8 @@ pub struct ProgrammerOutputState {
     pub group_values: Arc<GroupProgrammerValues>,
     pub preload_active: Arc<Vec<TimedValue>>,
     pub preload_group_active: Arc<GroupProgrammerValues>,
+    pub preload_dynamic_active: Arc<Vec<DynamicAddressValue>>,
+    pub preload_group_release_active: Arc<Vec<GroupReleaseProgrammerValue>>,
 }
 
 #[derive(Clone, Debug)]

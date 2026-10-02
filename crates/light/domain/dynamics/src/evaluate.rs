@@ -5,6 +5,13 @@ use uuid::Uuid;
 
 pub trait ScalarSourceResolver {
     fn current(&self, target: FixtureId, attribute: &AttributeKey) -> Option<f32>;
+    fn current_occurrence(
+        &self,
+        _target: FixtureId,
+        _attribute: &AttributeKey,
+    ) -> Option<DynamicSourceOccurrenceId> {
+        None
+    }
     fn preset(&self, preset_id: &str, target: FixtureId, attribute: &AttributeKey) -> Option<f32>;
 }
 
@@ -36,30 +43,28 @@ impl<'a> DynamicEvaluator<'a> {
         lane: &DynamicLane,
         context: DynamicEvaluationContext<'_>,
     ) -> Option<f32> {
-        let duration =
-            (context.cycle_duration_millis as f64 / lane.speed_multiplier.factor()).max(1.0);
-        let interval_position = ((context.elapsed_millis as f64 / duration)
-            + f64::from(context.phase_degrees) / 360.0)
-            .rem_euclid(1.0) as f32;
-        let width = if lane_is_pwm(lane) {
-            1.0
-        } else {
-            lane.width.clamp(f32::EPSILON, 1.0)
-        };
-        let position = ((interval_position - (1.0 - width) * 0.5) / width).clamp(0.0, 1.0);
-        let value = match lane.mode {
-            DynamicLaneMode::Keyframes => self.keyframes(lane, position, context)?,
-            DynamicLaneMode::MaxMin => self.max_min(lane, position, context)?,
-            DynamicLaneMode::MiddleAmplitude => self.middle_amplitude(lane, position, context)?,
+        let position = lane_position(
+            lane.speed_multiplier,
+            lane.width,
+            lane_is_pwm(lane),
+            context.elapsed_millis,
+            context.cycle_duration_millis,
+            context.phase_degrees,
+        );
+        let body = lane.legacy()?;
+        let value = match body.mode {
+            DynamicLaneMode::Keyframes => self.keyframes(body, position, context)?,
+            DynamicLaneMode::MaxMin => self.max_min(body, position, context)?,
+            DynamicLaneMode::MiddleAmplitude => self.middle_amplitude(body, position, context)?,
             DynamicLaneMode::Random => self.random(lane, context)?,
         };
-        let bounds = light_core::attribute_descriptor(&lane.attribute).normalized_bounds?;
+        let bounds = light_core::attribute_descriptor(&body.attribute).normalized_bounds?;
         Some(value.clamp(bounds.min, bounds.max))
     }
 
     fn keyframes(
         &self,
-        lane: &DynamicLane,
+        lane: &LegacyScalarLaneBody,
         position: f32,
         context: DynamicEvaluationContext<'_>,
     ) -> Option<f32> {
@@ -88,7 +93,7 @@ impl<'a> DynamicEvaluator<'a> {
 
     fn max_min(
         &self,
-        lane: &DynamicLane,
+        lane: &LegacyScalarLaneBody,
         position: f32,
         context: DynamicEvaluationContext<'_>,
     ) -> Option<f32> {
@@ -101,7 +106,7 @@ impl<'a> DynamicEvaluator<'a> {
 
     fn middle_amplitude(
         &self,
-        lane: &DynamicLane,
+        lane: &LegacyScalarLaneBody,
         position: f32,
         context: DynamicEvaluationContext<'_>,
     ) -> Option<f32> {
@@ -126,12 +131,16 @@ impl<'a> DynamicEvaluator<'a> {
             .random_groups
             .iter()
             .find(|group| Some(group.id) == lane.random_group_id)?;
+        let DynamicRandomRange::LegacyScalar { low, high } = &group.range else {
+            return None;
+        };
+        let attribute = &lane.legacy()?.attribute;
         let interval = group.decision_interval_millis.max(1);
         let decision = context.elapsed_millis / interval;
         let start = uniform(group.seed, context.instance_id, context.target, decision);
-        let low = resolve_source(&group.low, &lane.attribute, context)?;
+        let low = resolve_source(low, attribute, context)?;
         if let Some(envelope) = context.random_envelope {
-            let high = resolve_source(&group.high, &lane.attribute, context)?;
+            let high = resolve_source(high, attribute, context)?;
             return Some(low + (high - low) * envelope.clamp(0.0, 1.0));
         }
         if start > f64::from(group.start_probability) {
@@ -146,7 +155,7 @@ impl<'a> DynamicEvaluator<'a> {
         if elapsed >= duration {
             return Some(low);
         }
-        let high = resolve_source(&group.high, &lane.attribute, context)?;
+        let high = resolve_source(high, attribute, context)?;
         let progress = elapsed as f32 / duration as f32;
         let envelope = if group.attack_ratio > 0.0 && progress < group.attack_ratio {
             progress / group.attack_ratio
@@ -183,7 +192,29 @@ fn resolve_source(
     }
 }
 
+pub(crate) fn lane_position(
+    speed: Rational,
+    width: f32,
+    pwm: bool,
+    elapsed_millis: u64,
+    cycle_duration_millis: u64,
+    phase_degrees: f32,
+) -> f32 {
+    let duration = (cycle_duration_millis as f64 / speed.factor()).max(1.0);
+    let interval_position = ((elapsed_millis as f64 / duration) + f64::from(phase_degrees) / 360.0)
+        .rem_euclid(1.0) as f32;
+    let width = if pwm {
+        1.0
+    } else {
+        width.clamp(f32::EPSILON, 1.0)
+    };
+    ((interval_position - (1.0 - width) * 0.5) / width).clamp(0.0, 1.0)
+}
+
 fn lane_is_pwm(lane: &DynamicLane) -> bool {
+    let Some(lane) = lane.legacy() else {
+        return false;
+    };
     matches!(
         lane.mode,
         DynamicLaneMode::MaxMin if lane.max_min.function == PeriodicFunction::Pwm
@@ -194,7 +225,7 @@ fn lane_is_pwm(lane: &DynamicLane) -> bool {
     )
 }
 
-fn periodic(function: PeriodicFunction, position: f32, pwm: PwmShape) -> f32 {
+pub(crate) fn periodic(function: PeriodicFunction, position: f32, pwm: PwmShape) -> f32 {
     match function {
         PeriodicFunction::Sinus => ((f64::from(position) * TAU).sin() * 0.5 + 0.5) as f32,
         PeriodicFunction::Cosinus => ((f64::from(position) * TAU).cos() * 0.5 + 0.5) as f32,
@@ -224,7 +255,7 @@ fn pwm_value(position: f32, shape: PwmShape) -> f32 {
     }
 }
 
-fn interpolate(progress: f32, interpolation: ScalarInterpolation) -> f32 {
+pub(crate) fn interpolate(progress: f32, interpolation: ScalarInterpolation) -> f32 {
     match interpolation {
         ScalarInterpolation::Linear => progress,
         ScalarInterpolation::EaseIn => progress * progress,

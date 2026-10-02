@@ -1,9 +1,13 @@
-use crate::alignment::ProgrammerAlignmentState;
+use crate::alignment::ProgrammerAlignmentContext;
 use crate::command_state::CommandLineState;
+use crate::output_capture::{
+    PendingOutputCache, ProgrammerOutputSourceCapture, ProgrammerPreloadOutputSource,
+    ProgrammerPreloadPendingOutput,
+};
 use crate::selection::{ProgrammerSelection, SelectionContext};
 use crate::state::{ProgrammerOutputState, ProgrammerState};
 use light_core::{SessionId, SharedClock, SystemClock};
-use parking_lot::{ReentrantMutex, RwLock};
+use parking_lot::{Mutex, ReentrantMutex, RwLock};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -27,7 +31,7 @@ pub struct ProgrammerRegistry {
     pub(crate) sessions: Arc<RwLock<HashSet<SessionId>>>,
     pub(crate) command_state: Arc<RwLock<CommandLineState>>,
     pub(crate) selection_context: Arc<RwLock<SelectionContext>>,
-    pub(crate) alignment_context: Arc<RwLock<Option<ProgrammerAlignmentState>>>,
+    pub(crate) alignment_context: Arc<RwLock<ProgrammerAlignmentContext>>,
     pub(crate) selection_revision: Arc<AtomicU64>,
     pub(crate) alignment_revision: Arc<AtomicU64>,
     pub(crate) programmer_order: Arc<AtomicU64>,
@@ -61,6 +65,8 @@ pub struct ProgrammerRegistry {
     /// because public mutation helpers compose other public helpers (for example,
     /// `activate_preload` calls `activate_preload_at`).
     pub(crate) mutation_gate: Arc<ReentrantMutex<()>>,
+    /// Immutable pending values for output readers, reused until the pending edit stamp moves.
+    pub(crate) pending_output_cache: Arc<Mutex<Option<PendingOutputCache>>>,
     /// Nesting depth of the detached-command scopes currently open on this desk. While it is
     /// non-zero every command-line write is dropped: a Macro line, or any other command that
     /// carries its own text, reaches the Programmer without touching the command line the
@@ -98,6 +104,7 @@ impl ProgrammerRegistry {
             priority_revisions: crate::desk_stamp::DeskStamp::default(),
             priority_changed_at: Arc::default(),
             mutation_gate: Arc::new(ReentrantMutex::new(())),
+            pending_output_cache: Arc::new(Mutex::new(None)),
             command_line_writes_suppressed: Arc::default(),
             desk: crate::DeskAuthority::default(),
             clock,
@@ -202,6 +209,8 @@ impl ProgrammerRegistry {
         let changed_at = self.clock.now();
         state.last_activity = changed_at;
         drop(states);
+        // Pending values are keyed by priority as well as edit generation. Keep the cache so
+        // the unchanged Playback action queue can retain its independently keyed Arc.
         *self.priority_changed_at.write() = Some(changed_at);
         Some(true)
     }
@@ -217,7 +226,7 @@ impl ProgrammerRegistry {
             self.desk.release();
             *self.command_state.write() = CommandLineState::default();
             *self.selection_context.write() = SelectionContext::default();
-            *self.alignment_context.write() = None;
+            *self.alignment_context.write() = Default::default();
             self.selection_revision.store(0, Ordering::Relaxed);
             self.alignment_revision.store(0, Ordering::Relaxed);
             self.programmer_order.store(0, Ordering::Relaxed);
@@ -229,6 +238,7 @@ impl ProgrammerRegistry {
             self.preload_playback_queue_revisions.clear();
             self.capture_mode_revisions.clear();
             self.priority_revisions.clear();
+            self.invalidate_pending_output_cache();
             *self.priority_changed_at.write() = None;
         });
     }
@@ -440,6 +450,7 @@ impl ProgrammerRegistry {
         let Some(state) = self.state.write().take() else {
             return false;
         };
+        self.deactivate_alignment(_session);
         if !state.values.is_empty()
             || !state.group_values.is_empty()
             || !state.dynamic_values.is_empty()
@@ -477,8 +488,127 @@ impl ProgrammerRegistry {
                 group_values: Arc::clone(&state.group_values),
                 preload_active: Arc::clone(&state.preload_active),
                 preload_group_active: Arc::clone(&state.preload_group_active),
+                preload_dynamic_active: Arc::clone(&state.preload_dynamic_active),
+                preload_group_release_active: Arc::clone(&state.preload_group_release_active),
             })
             .collect()
+    }
+
+    /// Capture all output-side Programmer sources from one state read and one mutation boundary.
+    /// Pending mutable vectors are copied only after their edit generation changes; retained
+    /// captures keep the old Arc when the operator edits again.
+    pub fn capture_output_sources(&self) -> ProgrammerOutputSourceCapture {
+        let _guard = self.mutation_gate.lock();
+        self.capture_output_sources_locked()
+    }
+
+    /// A scheduler may retain its last complete frame if an operator edit owns the gate. It must
+    /// never block the output tick waiting for a large staged Programmer transaction.
+    pub fn try_capture_output_sources(&self) -> Option<ProgrammerOutputSourceCapture> {
+        let _guard = self.mutation_gate.try_lock()?;
+        Some(self.capture_output_sources_locked())
+    }
+
+    pub(crate) fn invalidate_pending_output_cache(&self) {
+        self.pending_output_cache.lock().take();
+    }
+
+    fn capture_output_sources_locked(&self) -> ProgrammerOutputSourceCapture {
+        let has_sessions = !self.sessions.read().is_empty();
+        let state = self.state.read();
+        let normal_values_generation = self.normal_values_generations.get();
+        let preload_values_generation = self.preload_values_generations.get();
+        let preload_playback_queue_generation = self.preload_playback_queue_generations.get();
+        let Some(state) = state.as_ref() else {
+            return ProgrammerOutputSourceCapture {
+                identity: None,
+                normal_values_generation,
+                preload_values_generation,
+                preload_playback_queue_generation,
+                preload_playback_actions: Arc::default(),
+                priority: None,
+                output_states: Vec::new(),
+                normal_dynamics: Vec::new(),
+                preload: None,
+            };
+        };
+        let output_state = ProgrammerOutputState {
+            id: state.id,
+            priority: state.priority,
+            values: Arc::clone(&state.values),
+            transient_values: Arc::clone(&state.transient_values),
+            group_values: Arc::clone(&state.group_values),
+            preload_active: Arc::clone(&state.preload_active),
+            preload_group_active: Arc::clone(&state.preload_group_active),
+            preload_dynamic_active: Arc::clone(&state.preload_dynamic_active),
+            preload_group_release_active: Arc::clone(&state.preload_group_release_active),
+        };
+        let (pending, preload_playback_actions) = {
+            let mut cache = self.pending_output_cache.lock();
+            if cache
+                .as_ref()
+                .is_some_and(|cached| cached.identity != state.id)
+            {
+                cache.take();
+            }
+            let copy_pending = || {
+                Arc::new(ProgrammerPreloadPendingOutput {
+                    fixture_values: Arc::new(state.preload_pending.clone()),
+                    group_values: Arc::new(state.preload_group_pending.clone()),
+                    group_release_values: Arc::new(state.preload_group_release_pending.clone()),
+                    dynamic_values: Arc::clone(&state.preload_dynamic_pending),
+                    released_colors: Arc::clone(&state.preload_released_colors),
+                })
+            };
+            let cached = cache.get_or_insert_with(|| PendingOutputCache {
+                identity: state.id,
+                generation: preload_values_generation,
+                priority: state.priority,
+                value: copy_pending(),
+                playback_queue_generation: preload_playback_queue_generation,
+                playback_actions: Arc::new(state.preload_playback_pending.clone()),
+            });
+            if cached.generation != preload_values_generation || cached.priority != state.priority {
+                cached.value = copy_pending();
+                cached.generation = preload_values_generation;
+                cached.priority = state.priority;
+            }
+            if cached.playback_queue_generation != preload_playback_queue_generation {
+                cached.playback_actions = Arc::new(state.preload_playback_pending.clone());
+                cached.playback_queue_generation = preload_playback_queue_generation;
+            }
+            (
+                Arc::clone(&cached.value),
+                Arc::clone(&cached.playback_actions),
+            )
+        };
+        ProgrammerOutputSourceCapture {
+            identity: Some(state.id),
+            normal_values_generation,
+            preload_values_generation,
+            preload_playback_queue_generation,
+            preload_playback_actions,
+            priority: Some(state.priority),
+            output_states: vec![output_state],
+            normal_dynamics: has_sessions
+                .then(|| {
+                    (
+                        state.id.0,
+                        state.priority,
+                        Arc::clone(&state.dynamic_values),
+                        Arc::clone(&state.preload_dynamic_active),
+                    )
+                })
+                .into_iter()
+                .collect(),
+            preload: Some(ProgrammerPreloadOutputSource {
+                pending,
+                active_values: Arc::clone(&state.preload_active),
+                active_groups: Arc::clone(&state.preload_group_active),
+                active_dynamics: Arc::clone(&state.preload_dynamic_active),
+                active_group_releases: Arc::clone(&state.preload_group_release_active),
+            }),
+        }
     }
     pub fn active_dynamic_sources_for_sessions(&self) -> Vec<ActiveDynamicSessionSource> {
         if self.sessions.read().is_empty() {
@@ -537,6 +667,33 @@ impl ProgrammerRegistry {
         state.selected = selection.selected.clone();
         state.selection_expression = selection.expression.clone();
         Some(state)
+    }
+
+    /// End an adoption without creating an Undo entry, for committed runtime lifecycle changes.
+    pub fn finish_value_gesture(&self) {
+        let gate = self.mutation_gate();
+        let _guard = gate.lock();
+        if let Some(state) = self.state.write().as_mut() {
+            state.end_value_gesture();
+        }
+    }
+
+    /// Cheap runtime identity for a continuous family edit. Read under the mutation gate so
+    /// callers never combine a history boundary with a selection from a different action.
+    pub fn value_gesture_stamp(&self) -> Option<(light_core::ProgrammerId, u64, u64, u64)> {
+        let gate = self.mutation_gate();
+        let _guard = gate.lock();
+        let (id, epoch) = self
+            .state
+            .read()
+            .as_ref()
+            .map(|s| (s.id, s.value_gesture_epoch))?;
+        Some((
+            id,
+            epoch,
+            self.selection_context.read().revision,
+            self.capture_mode_revision(),
+        ))
     }
 
     pub fn selection(&self, _session: SessionId) -> Option<ProgrammerSelection> {

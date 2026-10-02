@@ -111,6 +111,8 @@ fn calibrated_visual_fixture(fixture_id: FixtureId) -> PatchedFixture {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -236,3 +238,20 @@ fn emitter(
         visible: true,
     }
 }
+
+#[path = "native_raw.rs"]
+mod native_raw;
+#[path = "physical_forward.rs"]
+mod physical_forward;
+
+#[path = "preload_families.rs"]
+mod preload_families;
+#[path = "preload_frames.rs"]
+mod preload_frames;
+#[path = "preview_ownership.rs"]
+mod preview_ownership;
+#[path = "source_trace.rs"]
+mod source_trace;
+
+#[path = "native_position_raw.rs"]
+mod native_position_raw;

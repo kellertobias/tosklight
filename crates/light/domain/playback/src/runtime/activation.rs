@@ -13,6 +13,29 @@ impl PlaybackEngine {
         }
     }
 
+    pub(crate) fn take_source_occurrence_ordinal(&mut self) -> Option<u64> {
+        crate::source_evidence::take_occurrence_ordinal(&mut self.next_source_occurrence_ordinal)
+    }
+
+    /// Greatest allocated or reserved provenance ordinal, independent of LTP arbitration.
+    pub fn source_occurrence_watermark(&self) -> u64 {
+        self.next_source_occurrence_ordinal
+            .checked_sub(1)
+            .unwrap_or(u64::MAX)
+    }
+
+    /// Reserve historical IDs before restoring a source catalogue. MAX exhausts future exact
+    /// occurrences; values keep running with unknown evidence rather than reusing an identity.
+    pub fn reserve_source_occurrence_watermark(&mut self, watermark: u64) {
+        if self.next_source_occurrence_ordinal == 0 {
+            return;
+        }
+        self.next_source_occurrence_ordinal = watermark
+            .checked_add(1)
+            .map(|next| next.max(self.next_source_occurrence_ordinal))
+            .unwrap_or(0);
+    }
+
     pub fn record_activation(&mut self, number: u16, origin: PlaybackActivationOrigin) {
         let Ok(identity) = PlaybackIdentity::physical(number) else {
             return;

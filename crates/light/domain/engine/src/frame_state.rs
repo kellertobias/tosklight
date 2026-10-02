@@ -28,9 +28,15 @@ pub(crate) struct SlotWinner {
     pub(crate) value: AttributeValue,
     pub(crate) priority: i16,
     pub(crate) changed_at: DateTime<Utc>,
+    /// A post-static projection has its own output timestamp, including explicit unknown.
+    /// The original `changed_at` remains the static arbitration stamp.
+    pub(crate) projected_changed_at: Option<Option<DateTime<Utc>>>,
     pub(crate) merge_mode: MergeMode,
     pub(crate) transition_ordinal: Option<u64>,
     pub(crate) sequence_master: Option<ApplicableSequenceMaster>,
+    pub(crate) origin: Option<std::sync::Arc<crate::contribution_batch::ContributionOrigin>>,
+    pub(crate) family_evidence:
+        Option<std::sync::Arc<crate::contribution_batch::ContributionFamilyEvidence>>,
 }
 
 impl Default for SlotWinner {
@@ -39,10 +45,19 @@ impl Default for SlotWinner {
             value: AttributeValue::Normalized(0.0),
             priority: 0,
             changed_at: DateTime::<Utc>::MIN_UTC,
+            projected_changed_at: None,
             merge_mode: MergeMode::Ltp,
             transition_ordinal: None,
             sequence_master: None,
+            origin: None,
+            family_evidence: None,
         }
+    }
+}
+
+impl SlotWinner {
+    pub(crate) fn output_changed_at(&self) -> Option<DateTime<Utc>> {
+        self.projected_changed_at.unwrap_or(Some(self.changed_at))
     }
 }
 
@@ -113,6 +128,21 @@ impl FrameState {
             .flatten()
     }
 
+    /// Update one already-resolved family after composition, without offering another LTP vote.
+    /// Its baseline rank stays intact; the projection explicitly chooses source/master metadata.
+    pub(crate) fn project_family(
+        &mut self,
+        slot: Slot,
+        value: AttributeValue,
+        metadata: crate::FamilyProjectionMetadata,
+    ) -> bool {
+        if !self.is_current(slot) {
+            return false;
+        }
+        metadata.apply(&mut self.winners[slot.index()], value);
+        true
+    }
+
     /// Offer a value for a slot, keeping whichever of the two the merge rules prefer.
     ///
     /// `build` is only called when the candidate actually wins, so a losing contribution costs a
@@ -146,9 +176,12 @@ impl FrameState {
         let winner = &mut self.winners[index];
         winner.priority = offer.priority;
         winner.changed_at = offer.changed_at;
+        winner.projected_changed_at = None;
         winner.merge_mode = offer.merge_mode;
         winner.transition_ordinal = offer.transition_ordinal;
         winner.sequence_master = None;
+        winner.origin = None;
+        winner.family_evidence = None;
         build(winner);
     }
 
@@ -166,6 +199,8 @@ impl FrameState {
         let winner = &mut self.winners[index];
         winner.value = value;
         winner.sequence_master = None;
+        winner.origin = None;
+        winner.family_evidence = None;
     }
 
     /// Take a slot over, optionally restamping when its value changed.
@@ -180,6 +215,7 @@ impl FrameState {
             && index < self.winners.len()
         {
             self.winners[index].changed_at = changed_at;
+            self.winners[index].projected_changed_at = None;
         }
     }
 

@@ -192,6 +192,27 @@ pub struct PlaybackDynamicsProjection {
 }
 
 impl Engine {
+    /// Exact provenance allocation is independent of Playback transport and LTP ordering.
+    pub fn playback_source_occurrence_watermark(&self) -> u64 {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .source_occurrence_watermark()
+    }
+
+    /// Cold restore reserves historical source IDs before their catalogue becomes visible.
+    /// Call outside the Dynamics runtime guard; this takes only the Playback write lock.
+    /// The caller must serialize generation installation (startup before workers, or the
+    /// desk's exclusive show activation permit), just as for installing the restored runtime.
+    pub fn reserve_playback_source_occurrence_watermark(&self, watermark: u64) {
+        self.generation
+            .load()
+            .playback()
+            .write()
+            .reserve_source_occurrence_watermark(watermark);
+    }
+
     pub fn application_time(&self) -> DateTime<Utc> {
         self.clock.now()
     }

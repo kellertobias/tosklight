@@ -46,6 +46,99 @@ fn fixed_at(fixture_id: FixtureId, value: f32) -> CueDynamicChange {
     }
 }
 
+fn position_mask(
+    fixture_id: FixtureId,
+    component: Option<light_core::programming::ProgrammingComponent>,
+    pan: f32,
+    tilt: f32,
+) -> CueDynamicChange {
+    CueDynamicChange {
+        fixture_id,
+        attribute: AttributeKey("position".into()),
+        automatic_restore: false,
+        value: DynamicSemanticValue::ProgrammingFixAt {
+            mask: light_dynamics::ProgrammingFamilyFixAt {
+                address: light_dynamics::DynamicValueAddress {
+                    representation: light_dynamics::DynamicFamilyRepresentation::Angles,
+                    component,
+                },
+                family: AttributeValue::Position(std::sync::Arc::new(
+                    light_core::programming::PositionIntent::angles(pan, tilt),
+                )),
+            },
+            timing: DynamicValueTiming::default(),
+        },
+    }
+}
+
+#[test]
+fn cue_only_component_and_whole_holds_release_only_the_introduced_track() {
+    use light_core::programming::ProgrammingComponent;
+    for component in [Some(ProgrammingComponent::Pan), None] {
+        let fixture = FixtureId::new();
+        let tilt = position_mask(fixture, Some(ProgrammingComponent::Tilt), 10.0, -30.0);
+        let mut baseline = cue(1.0, "Tilt hold", vec![]);
+        baseline.dynamic_changes = vec![tilt.clone()];
+        let mut temporary = cue(2.0, "Temporary", vec![]);
+        temporary.cue_only = true;
+        temporary.dynamic_changes = vec![position_mask(fixture, component, 720.0, 90.0)];
+        let mut list = cue_list(vec![baseline, temporary, cue(3.0, "Continue Tilt", vec![])]);
+        refresh_cue_only_restorations(&mut list);
+        let restored = &list.cues[2].dynamic_changes;
+        assert_eq!(restored.len(), 1);
+        assert!(restored[0].automatic_restore);
+        assert_eq!(
+            restored[0].value,
+            DynamicSemanticValue::ProgrammingRelease { component }
+        );
+        let saved = serde_json::to_string(&list).unwrap();
+        refresh_cue_only_restorations(&mut list);
+        assert_eq!(serde_json::to_string(&list).unwrap(), saved);
+        let id = list.id;
+        let mut engine = PlaybackEngine::default();
+        engine.register(list).unwrap();
+        for expected in [1, 2, 1] {
+            engine.go_at(id, Utc::now()).unwrap();
+            assert_eq!(engine.active_cue_dynamic_values().len(), expected);
+        }
+        assert_eq!(engine.active_cue_dynamic_values()[0].value, tilt.value);
+    }
+}
+
+#[test]
+fn cue_only_owner_release_restores_every_component_hold() {
+    use light_core::programming::ProgrammingComponent;
+    let fixture = FixtureId::new();
+    let baseline_values = vec![
+        position_mask(fixture, Some(ProgrammingComponent::Pan), 720.0, 10.0),
+        position_mask(fixture, Some(ProgrammingComponent::Tilt), 20.0, -30.0),
+    ];
+    let mut baseline = cue(1.0, "Pair", vec![]);
+    baseline.dynamic_changes = baseline_values.clone();
+    let mut temporary = cue(2.0, "Release owner", vec![]);
+    temporary.cue_only = true;
+    temporary.dynamic_changes = vec![CueDynamicChange {
+        fixture_id: fixture,
+        attribute: AttributeKey("position".into()),
+        value: DynamicSemanticValue::Release,
+        automatic_restore: false,
+    }];
+    let mut list = cue_list(vec![baseline, temporary, cue(3.0, "Restore pair", vec![])]);
+    refresh_cue_only_restorations(&mut list);
+    assert_eq!(list.cues[2].dynamic_changes.len(), 2);
+    let id = list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(list).unwrap();
+    for expected in [2, 0, 2] {
+        engine.go_at(id, Utc::now()).unwrap();
+        assert_eq!(engine.active_cue_dynamic_values().len(), expected);
+    }
+    let result = engine.active_cue_dynamic_values();
+    for expected in baseline_values {
+        assert!(result.iter().any(|value| value.value == expected.value));
+    }
+}
+
 fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
         id: CueListId::new(),
@@ -840,4 +933,137 @@ fn insert_stores_a_new_cue_and_never_replaces_one() {
             cue_number: cue_number(1.0)
         })
     );
+}
+
+fn lane_on(instance: Uuid, lane: u128) -> light_dynamics::DynamicSemanticValue {
+    serde_json::from_value(serde_json::json!({
+        "type": "dynamic_on", "instance_link": instance, "lane_id": Uuid::from_u128(lane),
+        "dynamic": { "dynamic_id": null, "last_known_pool_number": 1,
+            "embedded_fallback": { "definition": {
+                "id": Uuid::from_u128(100), "pool_number": 1, "revision": 1, "name": "Position",
+                "target_binding": {"type":"targetless"}, "lanes": ([1, 2].map(|id| serde_json::json!({
+                    "id": Uuid::from_u128(id), "speed_multiplier": {"numerator":1,"denominator":1}, "width":1.0,
+                    "programming": {"address":{"representation":{"kind":"angles"},"component": {"kind": if id == 1 { "pan" } else { "tilt" }}},
+                        "configuration":{"mode":"keyframes","configuration":{"points":[
+                            {"position":0.0,"source":{"kind":"value","value":{"kind":"scalar","value":45.0}},"interpolation":"linear"}
+                        ],"size":1.0}}}
+                }))),
+                "phase": {"ordering":{"type":"selection"},"offset_degrees":0,"span_degrees":360,"block_size":1,"repeats":1,"wings":false},
+                "speed":{"type":"fixed","duration_millis":1000},"default_activation":"start_now"
+            }}
+        }, "overrides":{"size":1.0,"speed_multiplier":{"numerator":1,"denominator":1},"phase_offset_degrees":0},
+        "timing":{}
+    })).unwrap()
+}
+
+#[test]
+fn dynamic_lane_provenance_tracks_each_authored_cue_and_instance_off_replacement() {
+    let fixture = FixtureId::new();
+    let instance = Uuid::new_v4();
+    let change = |value| CueDynamicChange {
+        fixture_id: fixture,
+        attribute: AttributeKey("position".into()),
+        value,
+        automatic_restore: false,
+    };
+    let mut first = cue(1.0, "Pan", vec![]);
+    first.dynamic_changes.push(change(lane_on(instance, 1)));
+    let mut second = cue(2.0, "Tilt", vec![]);
+    second.dynamic_changes.push(change(lane_on(instance, 2)));
+    let mut third = cue(3.0, "Off", vec![]);
+    third
+        .dynamic_changes
+        .push(change(DynamicSemanticValue::DynamicOff {
+            instance_link: instance,
+            timing: Default::default(),
+        }));
+    let mut fourth = cue(4.0, "Pan again", vec![]);
+    fourth.dynamic_changes.push(change(lane_on(instance, 1)));
+    let ids = [first.id, second.id, third.id, fourth.id];
+    let list = cue_list(vec![first, second, third, fourth]);
+    let list_id = list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(list).unwrap();
+    engine.go_at(list_id, Utc::now()).unwrap();
+    engine.go_at(list_id, Utc::now()).unwrap();
+    let tracked = engine.active_cue_dynamic_values();
+    assert_eq!(tracked.len(), 2);
+    for (lane, authored) in [(1, ids[0]), (2, ids[1])] {
+        let row = tracked
+            .iter()
+            .find(|row| row.value.track_key().lane_id == Some(Uuid::from_u128(lane)))
+            .unwrap();
+        assert_eq!(row.authored_cue_id, authored);
+        assert_eq!(row.current_cue_id, ids[1]);
+    }
+    engine.go_at(list_id, Utc::now()).unwrap();
+    let off = engine.active_cue_dynamic_values();
+    assert_eq!(off.len(), 1);
+    assert_eq!(off[0].authored_cue_id, ids[2]);
+    assert!(matches!(
+        off[0].value,
+        DynamicSemanticValue::DynamicOff { .. }
+    ));
+    engine.go_at(list_id, Utc::now()).unwrap();
+    let resumed = engine.active_cue_dynamic_values();
+    assert_eq!(resumed.len(), 1);
+    assert_eq!(resumed[0].authored_cue_id, ids[3]);
+    assert_eq!(
+        resumed[0].value.track_key().lane_id,
+        Some(Uuid::from_u128(1))
+    );
+}
+
+#[test]
+fn cue_only_restores_complete_multifixture_lane_set_before_following_explicit_changes() {
+    let fixtures = [FixtureId::new(), FixtureId::new()];
+    let instance = Uuid::new_v4();
+    let on = |fixture, lane| CueDynamicChange {
+        fixture_id: fixture,
+        attribute: AttributeKey("position".into()),
+        value: lane_on(instance, lane),
+        automatic_restore: false,
+    };
+    let baseline_values = vec![on(fixtures[0], 1), on(fixtures[0], 2), on(fixtures[1], 1)];
+    let mut baseline = cue(1.0, "Baseline", vec![]);
+    baseline.dynamic_changes = baseline_values.clone();
+    let mut temporary = cue(2.0, "Temporary", vec![]);
+    temporary.cue_only = true;
+    temporary.dynamic_changes = vec![on(fixtures[1], 2)];
+    let mut consecutive = cue(3.0, "Second temporary", vec![]);
+    consecutive.cue_only = true;
+    consecutive.dynamic_changes = vec![on(fixtures[1], 2)];
+    let following = cue(4.0, "Restored", vec![]);
+    let mut list = cue_list(vec![baseline, temporary, consecutive, following]);
+    refresh_cue_only_restorations(&mut list);
+    let snapshot = serde_json::to_string(&list).unwrap();
+    refresh_cue_only_restorations(&mut list);
+    assert_eq!(
+        serde_json::to_string(&list).unwrap(),
+        snapshot,
+        "regeneration must be idempotent"
+    );
+    let id = list.id;
+    let now = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.register(list).unwrap();
+    for expected in [3, 4, 4, 3] {
+        engine.go_at(id, now).unwrap();
+        let values = engine.active_cue_dynamic_values();
+        assert_eq!(values.len(), expected);
+        assert!(
+            values
+                .iter()
+                .all(|value| matches!(value.value, DynamicSemanticValue::DynamicOn { .. }))
+        );
+    }
+    let values = engine.active_cue_dynamic_values();
+    for expected in baseline_values {
+        assert!(
+            values
+                .iter()
+                .any(|value| value.fixture_id == expected.fixture_id
+                    && value.value == expected.value)
+        );
+    }
 }

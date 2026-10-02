@@ -22,7 +22,7 @@ impl PlaybackEngine {
                     .get(&key)
                     .is_some_and(|playback| playback.enabled);
                 if !had_runtime {
-                    self.go_at_key(key, cue_list_id, self.clock.now())?;
+                    self.go_at_key(key, cue_list_id, self.clock.now(), Some(identity))?;
                 }
                 if had_runtime {
                     self.restart_first_cue_if_needed(key, cue_list_id);
@@ -37,6 +37,7 @@ impl PlaybackEngine {
                 activate_normal(active, address.number().get());
                 if let Some(transition_ordinal) = transition_ordinal {
                     active.transition_ordinal = transition_ordinal;
+                    active.source_history = None;
                 }
                 self.retarget_physical_controls(cue_list_id, 1.0, None);
                 Ok(())
@@ -80,7 +81,12 @@ impl PlaybackEngine {
             .is_some_and(|playback| playback.enabled);
         let mut changed = false;
         if !had_runtime {
-            self.go_at_key(key, id, self.clock.now())?;
+            self.go_at_key(
+                key,
+                id,
+                self.clock.now(),
+                Some(PlaybackIdentity::physical(number)?),
+            )?;
             changed = true;
         }
         changed |= self.restart_first_cue_if_needed(key, id);
@@ -91,6 +97,7 @@ impl PlaybackEngine {
         changed |= activate_normal(active, number);
         if let Some(transition_ordinal) = transition_ordinal {
             active.transition_ordinal = transition_ordinal;
+            active.source_history = None;
         }
         let control_changed = self.retarget_physical_controls(id, 1.0, None);
         let addressed_effect = durable_effect(changed);
@@ -301,7 +308,12 @@ impl PlaybackEngine {
         let id = self.cue_list_for(number)?;
         let key = PlaybackKey::CueList(id);
         if value > 0.0 && !self.active.contains_key(&key) {
-            self.go_at_key(key, id, started_at)?;
+            self.go_at_key(
+                key,
+                id,
+                started_at,
+                Some(PlaybackIdentity::physical(number)?),
+            )?;
         }
         let active = self
             .active
@@ -364,7 +376,7 @@ impl PlaybackEngine {
         let key = PlaybackKey::CueList(cue_list_id);
         let auto_off_at_zero = self.cue_lists[&cue_list_id].auto_off_at_zero;
         if !self.active.contains_key(&key) {
-            self.go_at_key(key, cue_list_id, self.clock.now())?;
+            self.go_at_key(key, cue_list_id, self.clock.now(), Some(identity))?;
         }
         let mut changed = false;
         if let Some(active) = self.active.get_mut(&key) {
@@ -557,7 +569,12 @@ impl PlaybackEngine {
             }
         }
         if !self.active.contains_key(&key) {
-            self.go_at_key(key, id, self.clock.now())?;
+            self.go_at_key(
+                key,
+                id,
+                self.clock.now(),
+                Some(PlaybackIdentity::physical(number)?),
+            )?;
         }
         let mut changed = false;
         if let Some(active) = self.active.get_mut(&key) {
@@ -728,6 +745,9 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
     playback.master_transition = None;
     playback.deleted_cue_transition_source = None;
     reset_manual_transition(playback);
+    if let Some(history) = &mut playback.source_history {
+        history.forget_evaluation_cache();
+    }
     changed
 }
 
@@ -747,6 +767,9 @@ pub(crate) fn deactivate(playback: &mut ActivePlayback) -> bool {
     playback.master_transition = None;
     playback.deleted_cue_hold = None;
     playback.deleted_cue_transition_source = None;
+    if let Some(history) = &mut playback.source_history {
+        history.forget_evaluation_cache();
+    }
     playback.loaded_cue_id = None;
     playback.loaded_cue_number = None;
     changed

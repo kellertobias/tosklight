@@ -49,6 +49,8 @@ fn robin_dls_full_white_keeps_its_shutter_open_in_resolved_dmx() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -163,10 +165,24 @@ fn physical_axis_inversion_is_independent_for_root_and_multipatch() {
         rotation: Default::default(),
         invert_pan: false,
         invert_tilt: true,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
     }];
+    // Saved calibration is a foundation contract and must not alter existing live output.
+    fixture.position_calibration = Some(light_fixture::InstalledPositionCalibration {
+        pan_zero_degrees: 123.0,
+        tilt_zero_degrees: -721.0,
+        ..Default::default()
+    });
+    fixture.multipatch[0].position_calibration =
+        Some(light_fixture::InstalledPositionCalibration {
+            pan_zero_degrees: -90.0,
+            tilt_zero_degrees: 45.0,
+            ..Default::default()
+        });
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
     programmers.start(session);
@@ -267,6 +283,8 @@ fn patch_and_profile_axis_inversion_compose_exactly_once() {
         rotation: Default::default(),
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -518,6 +536,8 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -526,6 +546,8 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -626,15 +648,17 @@ fn schema_v2_snap_bypasses_move_in_black_and_signal_loss_fades() {
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
     clock.set(started + ChronoDuration::milliseconds(1_999));
-    assert_eq!(
-        normalized(&engine.resolved_values(), fixture_id, "pan"),
-        0.2
-    );
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
+    assert_eq!(normalized(&values, fixture_id, "pan"), 0.2);
     clock.set(started + ChronoDuration::milliseconds(2_000));
-    assert_eq!(
-        normalized(&engine.resolved_values(), fixture_id, "pan"),
-        0.8
-    );
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
+    assert_eq!(normalized(&values, fixture_id, "pan"), 0.8);
     assert_eq!(
         engine.move_in_black_runtime()[0].state,
         MoveInBlackState::Completed
@@ -1032,5 +1056,55 @@ fn manufacturer_channel_name_is_numbered_and_overflow_stays_with_its_fixture() {
             .get(&(neighbour_id, AttributeKey("never.declared".into()))),
         Some(&AttributeValue::Normalized(0.25)),
         "the undeclared name still reaches the boundary for the fixture it was sent to"
+    );
+}
+
+#[test]
+fn equal_preload_intent_releases_cue_sequence_master_and_rejects_old_generation() {
+    let (fixture, fixture_id) = schema_v2_fixture(&[("beam.rate", false, false, true, true, true)]);
+    let main = test_cue_list(
+        "Main",
+        vec![CueChange::set(
+            fixture_id,
+            AttributeKey("beam.rate".into()),
+            AttributeValue::Normalized(1.),
+        )],
+    );
+    let playback = test_playback(1, main.id);
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![main].into(),
+            playbacks: vec![playback].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(0.5));
+    let source = engine.snapshot();
+    let values = engine.resolved_values();
+    let ordinary = engine
+        .profile_visualization_projection_at(
+            &values,
+            Default::default(),
+            Some(&source),
+            &Default::default(),
+        )
+        .unwrap();
+    assert_eq!(ordinary.physical.instances[0].native_raw[0], 128);
+    let owned = std::collections::HashSet::from([(fixture_id, AttributeKey("beam.rate".into()))]);
+    let preload = engine
+        .profile_visualization_projection_at(&values, Default::default(), Some(&source), &owned)
+        .unwrap();
+    assert_eq!(preload.physical.instances[0].native_raw[0], 255);
+    let mut changed = (*source).clone();
+    changed.revision += 1;
+    engine.replace_snapshot(changed).unwrap();
+    assert!(
+        engine
+            .profile_visualization_projection_at(&values, Default::default(), Some(&source), &owned)
+            .is_err()
     );
 }

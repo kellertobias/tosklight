@@ -368,6 +368,7 @@ pub(crate) fn legacy_test_fixture(fixture_id: FixtureId, attributes: &[&str]) ->
         note: None,
         position_master: None,
         definition: FixtureDefinition {
+            runtime_color_context: None,
             schema_version: 1,
             id: FixtureId::new(),
             revision: 1,
@@ -408,6 +409,8 @@ pub(crate) fn legacy_test_fixture(fixture_id: FixtureId, attributes: &[&str]) ->
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),

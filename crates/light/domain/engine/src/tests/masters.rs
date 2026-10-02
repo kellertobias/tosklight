@@ -60,6 +60,8 @@ fn grand_master_and_blackout_affect_intensity() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
+            required_programming_contract: 0,
+            native_color_sources: Default::default(),
             fixtures: vec![fixture].into(),
             cue_lists: vec![].into(),
             dynamics: vec![].into(),
@@ -108,6 +110,7 @@ fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
         targets: HashMap::from([(
             logical,
             FrozenFixtureTarget {
+                position_native: None,
                 full: false,
                 families: vec![FreezeFamily::Intensity],
                 values: HashMap::from([(
@@ -176,6 +179,7 @@ fn full_freeze_bypasses_every_master_and_resumes_underlying_state_when_removed()
         targets: HashMap::from([(
             logical,
             FrozenFixtureTarget {
+                position_native: None,
                 full: true,
                 families: Vec::new(),
                 values: HashMap::from([(
@@ -639,6 +643,8 @@ fn logical_head_master_does_not_limit_sibling_heads() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),

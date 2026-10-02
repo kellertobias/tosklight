@@ -6,15 +6,31 @@ use light_programmer::{GroupDefinition, resolve_group, resolve_group_spatial};
 use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
+/// An output generation changes even when its dense slot numbering remains valid.
+static NEXT_RUNTIME_GENERATION: AtomicU64 = AtomicU64::new(1);
+
+fn next_runtime_generation() -> u64 {
+    NEXT_RUNTIME_GENERATION.fetch_add(1, Ordering::Relaxed)
+}
+
 /// One internally coherent engine generation.
+///
+/// Every construction and replacement receives a fresh `identity`, including a same-show reload
+/// or a calibration/rebind edit that keeps slot numbering. [`crate::CapturedFrameToken`] carries
+/// this identity so physical destination descriptors compiled for one generation cannot be
+/// used with a capture of another.
 ///
 /// A render retains this value for its complete lifetime, so fixture projection, Playback state,
 /// Group resolution, and output routing cannot be mixed across show revisions while a new show is
 /// installed concurrently.
 pub(crate) struct RuntimeGeneration {
+    identity: u64,
     snapshot: Arc<EngineSnapshot>,
     playback: Arc<RwLock<PlaybackEngine>>,
     groups: Arc<HashMap<String, GroupDefinition>>,
@@ -33,6 +49,21 @@ pub(crate) struct RuntimeGeneration {
     channel_slots: Arc<crate::ChannelSlotIndex>,
     /// Every Group's programming, as the slots it lands in.
     group_plan: Arc<crate::group_plan::GroupContributionPlan>,
+    point_projection: Arc<crate::point_projection::PointProjectionIndex>,
+    mount_projection: Arc<crate::mount_projection::MountProjectionIndex>,
+    /// Declared default poses, decoded lazily against exactly this generation's projections. The
+    /// Playback engine starts a Position that fades in from nothing here (TL-552).
+    declared_positions: Arc<crate::position_adoption::DeclaredPositions>,
+}
+
+/// Where a replacement generation's Group Master levels come from.
+pub(crate) enum GroupMasterLevels {
+    /// Portable seeds only (Release policy).
+    Released,
+    /// The current generation's levels for surviving Group Master bindings.
+    Preserved,
+    /// An index already compiled against the replacement snapshot and Groups, adopted verbatim.
+    Prepared(Arc<GroupMasterIndex>),
 }
 
 #[derive(Clone, Copy)]
@@ -43,6 +74,12 @@ pub(crate) enum GroupMasterGenerationUpdate {
 }
 
 impl RuntimeGeneration {
+    pub(crate) fn physical_projection(
+        &self,
+    ) -> &crate::physical_projection::PhysicalProjectionIndex {
+        &self.profile_projections.physical
+    }
+
     pub(crate) fn new(
         snapshot: EngineSnapshot,
         playback: Arc<RwLock<PlaybackEngine>>,
@@ -66,16 +103,23 @@ impl RuntimeGeneration {
         let channel_slots = Arc::new(crate::ChannelSlotIndex::compile(&snapshot.fixtures, &slots));
         let group_plan = Arc::new(crate::group_plan::GroupContributionPlan::compile(
             &snapshot.groups,
-            &groups,
+            &group_rankings,
             &slots,
         ));
-        // Every compiled cue list learns where this generation keeps its pairs, so a playback
-        // contribution is offered by number rather than by name on every tick.
-        playback
-            .write()
-            .resolve_frame_addresses(&crate::FrameAddresser::new(Arc::clone(&slots)));
+        let point_projection = Arc::new(crate::point_projection::PointProjectionIndex::compile(
+            &snapshot.fixtures,
+            &slots,
+        ));
+        let mount_projection = Arc::new(crate::mount_projection::MountProjectionIndex::compile(
+            &snapshot.fixtures,
+            &point_projection,
+        ));
+        let snapshot = Arc::new(snapshot);
+        let declared_positions =
+            install_playback_frame(&playback, &slots, &snapshot, &profile_projections);
         Self {
-            snapshot: Arc::new(snapshot),
+            identity: next_runtime_generation(),
+            snapshot,
             playback,
             groups,
             routes,
@@ -89,17 +133,20 @@ impl RuntimeGeneration {
             frames,
             channel_slots,
             group_plan,
+            point_projection,
+            mount_projection,
+            declared_positions,
         }
     }
 
     pub(crate) fn replacing(
         current: &Arc<Self>,
-        snapshot: EngineSnapshot,
+        snapshot: Arc<EngineSnapshot>,
         playback: Arc<RwLock<PlaybackEngine>>,
         groups: Arc<HashMap<String, GroupDefinition>>,
         profile_encodings: Arc<ProfileEncodingIndex>,
         profile_projections: Arc<ProfileProjectionIndex>,
-        preserve_group_master_levels: bool,
+        group_master_levels: GroupMasterLevels,
     ) -> Self {
         let fixtures_changed = !Arc::ptr_eq(&snapshot.fixtures, &current.snapshot.fixtures);
         let playbacks_changed = !Arc::ptr_eq(&snapshot.playbacks, &current.snapshot.playbacks);
@@ -125,18 +172,23 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.default_values)
         };
-        let group_masters = if !preserve_group_master_levels
-            || playbacks_changed
-            || playback_pages_changed
-            || groups_changed
-        {
-            Arc::new(GroupMasterIndex::compile(
-                &groups,
-                &snapshot,
-                preserve_group_master_levels.then_some(current.group_masters.as_ref()),
-            ))
-        } else {
-            Arc::clone(&current.group_masters)
+        // A Release-policy destination may carry a Group Master index already compiled against
+        // this exact snapshot and Group table, with persisted levels applied before install.
+        let group_masters = match group_master_levels {
+            GroupMasterLevels::Prepared(prepared) => prepared,
+            GroupMasterLevels::Released => {
+                Arc::new(GroupMasterIndex::compile(&groups, &snapshot, None))
+            }
+            GroupMasterLevels::Preserved
+                if playbacks_changed || playback_pages_changed || groups_changed =>
+            {
+                Arc::new(GroupMasterIndex::compile(
+                    &groups,
+                    &snapshot,
+                    Some(current.group_masters.as_ref()),
+                ))
+            }
+            GroupMasterLevels::Preserved => Arc::clone(&current.group_masters),
         };
         let (slots, frames, channel_slots) = if fixtures_changed {
             let slots = Arc::new(crate::SlotTable::compile(
@@ -162,22 +214,36 @@ impl RuntimeGeneration {
         } else {
             Arc::clone(&current.group_rankings)
         };
-        let group_plan = if groups_changed || fixtures_changed {
+        let group_plan = if groups_changed || fixtures_changed || stage_positions_changed {
             Arc::new(crate::group_plan::GroupContributionPlan::compile(
                 &snapshot.groups,
-                &groups,
+                &group_rankings,
                 &slots,
             ))
         } else {
             Arc::clone(&current.group_plan)
         };
-        // Every compiled cue list learns where this generation keeps its pairs, so a playback
-        // contribution is offered by number rather than by name on every tick.
-        playback
-            .write()
-            .resolve_frame_addresses(&crate::FrameAddresser::new(Arc::clone(&slots)));
+        let point_projection = if fixtures_changed {
+            Arc::new(crate::point_projection::PointProjectionIndex::compile(
+                &snapshot.fixtures,
+                &slots,
+            ))
+        } else {
+            Arc::clone(&current.point_projection)
+        };
+        let mount_projection = if fixtures_changed {
+            Arc::new(crate::mount_projection::MountProjectionIndex::compile(
+                &snapshot.fixtures,
+                &point_projection,
+            ))
+        } else {
+            Arc::clone(&current.mount_projection)
+        };
+        let declared_positions =
+            install_playback_frame(&playback, &slots, &snapshot, &profile_projections);
         Self {
-            snapshot: Arc::new(snapshot),
+            identity: next_runtime_generation(),
+            snapshot,
             playback,
             groups,
             routes,
@@ -191,6 +257,9 @@ impl RuntimeGeneration {
             frames,
             channel_slots,
             group_plan,
+            point_projection,
+            mount_projection,
+            declared_positions,
         }
     }
 
@@ -207,6 +276,7 @@ impl RuntimeGeneration {
         }
         (
             Arc::new(Self {
+                identity: next_runtime_generation(),
                 snapshot: Arc::clone(&current.snapshot),
                 playback: Arc::clone(&current.playback),
                 groups: Arc::clone(&current.groups),
@@ -221,6 +291,9 @@ impl RuntimeGeneration {
                 frames: Arc::clone(&current.frames),
                 channel_slots: Arc::clone(&current.channel_slots),
                 group_plan: Arc::clone(&current.group_plan),
+                point_projection: Arc::clone(&current.point_projection),
+                mount_projection: Arc::clone(&current.mount_projection),
+                declared_positions: Arc::clone(&current.declared_positions),
             }),
             GroupMasterGenerationUpdate::Changed,
         )
@@ -247,6 +320,18 @@ impl RuntimeGeneration {
 
     pub(crate) fn snapshot_arc(&self) -> Arc<EngineSnapshot> {
         Arc::clone(&self.snapshot)
+    }
+
+    pub(crate) fn identity(&self) -> u64 {
+        self.identity
+    }
+
+    pub(crate) fn point_projection(&self) -> &crate::point_projection::PointProjectionIndex {
+        &self.point_projection
+    }
+
+    pub(crate) fn mount_projection(&self) -> &crate::mount_projection::MountProjectionIndex {
+        &self.mount_projection
     }
 
     pub(crate) fn playback(&self) -> &RwLock<PlaybackEngine> {
@@ -299,12 +384,22 @@ impl RuntimeGeneration {
         self.default_values.get(&(fixture_id, attribute.clone()))
     }
 
+    pub(crate) fn declared_positions(&self) -> &crate::position_adoption::DeclaredPositions {
+        &self.declared_positions
+    }
+
+    pub(crate) fn position_owner_view(&self) -> crate::position_adoption::PositionOwnerView<'_> {
+        (&self.snapshot, &self.profile_projections)
+    }
+
     pub(crate) fn group_masters(&self) -> &GroupMasterIndex {
         &self.group_masters
     }
 
-    pub(crate) fn group_ranking(&self, group_id: &str) -> Option<&light_dynamics::RankedSelection> {
-        self.group_rankings.get(group_id)
+    pub(crate) fn group_rankings_arc(
+        &self,
+    ) -> Arc<HashMap<String, light_dynamics::RankedSelection>> {
+        Arc::clone(&self.group_rankings)
     }
 
     pub(crate) fn profile_encoding(
@@ -320,6 +415,41 @@ impl RuntimeGeneration {
     ) -> Option<&crate::FixtureProjectionPlan> {
         self.profile_projections.fixture(fixture_id)
     }
+
+    pub(crate) fn profile_owner(&self, owner: FixtureId) -> Option<(FixtureId, usize)> {
+        self.profile_projections.owner(owner)
+    }
+
+    /// Native footprint of one family owner on one physical instance (TL-548 C2).
+    pub(crate) fn family_footprint(
+        &self,
+        fixture: &light_fixture::PatchedFixture,
+        mode: &light_fixture::FixtureMode,
+        owner: (FixtureId, light_core::programming::ProgrammingOwner),
+        instance: uuid::Uuid,
+    ) -> Option<&[usize]> {
+        self.profile_projections
+            .family_footprint(fixture, mode, owner, instance)
+    }
+}
+
+/// Every compiled cue list learns where this generation keeps its pairs, so a playback
+/// contribution is offered by number rather than by name on every tick, and where a Position
+/// that fades in from nothing starts: this generation's declared default poses (TL-552).
+fn install_playback_frame(
+    playback: &RwLock<PlaybackEngine>,
+    slots: &Arc<crate::SlotTable>,
+    snapshot: &Arc<EngineSnapshot>,
+    profile_projections: &Arc<ProfileProjectionIndex>,
+) -> Arc<crate::position_adoption::DeclaredPositions> {
+    let declared = Arc::new(crate::position_adoption::DeclaredPositions::new(
+        Arc::clone(snapshot),
+        Arc::clone(profile_projections),
+    ));
+    let mut playback = playback.write();
+    playback.resolve_frame_addresses(&crate::FrameAddresser::new(Arc::clone(slots)));
+    playback.set_family_start(Some(Arc::clone(&declared) as _));
+    declared
 }
 
 fn compile_default_values(snapshot: &EngineSnapshot) -> crate::ResolvedValues {
@@ -391,13 +521,13 @@ pub(crate) fn group_stage_positions(
         .collect()
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct GroupMasterIndex {
     masters: Vec<GroupMasterBinding>,
     fixtures: HashMap<FixtureId, Vec<usize>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct GroupMasterBinding {
     group_id: String,
     master: f32,
@@ -471,6 +601,26 @@ impl GroupMasterIndex {
             })
             .reduce(f32::max)
             .unwrap_or(1.0)
+    }
+
+    /// The index a Release-policy installation compiles: portable seeds only, no Live levels.
+    pub(crate) fn compile_released(
+        groups: &HashMap<String, GroupDefinition>,
+        snapshot: &EngineSnapshot,
+    ) -> Self {
+        Self::compile(groups, snapshot, None)
+    }
+
+    /// Sets an existing binding in place. `None` means the Group has no Group Master binding in
+    /// this index (unassigned, deleted, or unresolvable), matching `with_master`'s missing case.
+    pub(crate) fn set_existing_master(&mut self, group_id: &str, value: f32) -> Option<bool> {
+        let binding = self
+            .masters
+            .iter_mut()
+            .find(|binding| binding.group_id == group_id)?;
+        let changed = binding.master != value;
+        binding.master = value;
+        Some(changed)
     }
 
     pub(crate) fn master(&self, group_id: &str) -> Option<f32> {

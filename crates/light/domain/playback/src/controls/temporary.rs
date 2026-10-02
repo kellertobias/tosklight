@@ -2,7 +2,7 @@ use crate::{controls::activation::deactivate, engine::CuelistFlashState, *};
 
 impl PlaybackEngine {
     pub(crate) fn temporary_playback_at(
-        &self,
+        &mut self,
         identity: PlaybackIdentity,
         master: f32,
         flash: bool,
@@ -45,6 +45,21 @@ impl PlaybackEngine {
         playback.manual_xfade_from_index = None;
         playback.manual_xfade_to_index = None;
         playback.manual_xfade_progress = 0.0;
+        let ordinal = self.take_source_occurrence_ordinal();
+        // The replay selects its own Cue endpoint. Existing cloned holds and transition rows
+        // remain the evaluator's outgoing values and keep their own paired evidence.
+        playback.source_history = ordinal.map(|ordinal| {
+            PlaybackSourceHistory::next(
+                None,
+                now,
+                ordinal,
+                &self.compiled_cue_lists[&cue_list_id],
+                playback.cue_index,
+                playback.tracking_wrap,
+                playback.sequence_master_source(),
+                false,
+            )
+        });
         Ok(playback)
     }
 

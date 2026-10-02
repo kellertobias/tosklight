@@ -108,6 +108,8 @@ fn unpatched_group_member_keeps_programming_but_outputs_no_dmx() {
         ..Default::default()
     };
     let snapshot = |unpatched_fixture: PatchedFixture| EngineSnapshot {
+        required_programming_contract: 0,
+        native_color_sources: Default::default(),
         fixtures: vec![patched.clone(), unpatched_fixture].into(),
         cue_lists: vec![].into(),
         dynamics: vec![].into(),

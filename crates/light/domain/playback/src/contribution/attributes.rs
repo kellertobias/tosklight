@@ -11,7 +11,8 @@ impl ContributionContext<'_> {
         sequence_master: f32,
         snap_sequence_master: f32,
     ) {
-        values.extend(hold.contributions.iter().cloned().map(|value| {
+        values.extend(hold.contributions.iter().cloned().map(|retained| {
+            let value = retained.timed;
             let snaps = match self.is_snap {
                 Some(is_snap) => is_snap(value.fixture_id, &value.attribute),
                 None => crate::attribute_uses_snap_transition(&value.attribute),
@@ -23,6 +24,8 @@ impl ContributionContext<'_> {
             };
             PlaybackContribution {
                 value,
+                family_evidence: retained.family_evidence,
+                authored_target: false,
                 transition_ordinal,
                 sequence_master,
                 source,
@@ -46,7 +49,13 @@ impl ContributionContext<'_> {
         if let Some(previous) = frame.deleted_previous() {
             for ((fixture_id, attribute), value) in previous {
                 if !frame.compiled.contains(*fixture_id, attribute) {
-                    self.extend_deleted_attribute(values, frame, *fixture_id, attribute, value);
+                    self.extend_deleted_attribute(
+                        values,
+                        frame,
+                        *fixture_id,
+                        attribute,
+                        &value.timed.value,
+                    );
                 }
             }
         }
@@ -78,9 +87,19 @@ impl ContributionContext<'_> {
             attribute.timing(frame.target_index),
             snap,
         );
-        let Some(value) = interpolate(previous, target, progress) else {
+        // A Position fading in over nothing starts from the declared default pose (TL-552). Only
+        // the frame value uses it; evidence still names the authored endpoints alone.
+        let declared = match (previous, target, self.family_start) {
+            (None, Some(AttributeValue::Position(_)), Some(start)) if progress < 1.0 => {
+                start.family_start(fixture_id, key)
+            }
+            _ => None,
+        };
+        let Some(value) = interpolate(previous.or(declared.as_ref()), target, progress) else {
             return;
         };
+        let family_evidence = crate::source_evidence::family_owner(key, &value)
+            .and_then(|_| frame.evidence(fixture_id, key, progress));
         values.push(attribute_contribution(
             frame,
             fixture_id,
@@ -88,6 +107,8 @@ impl ContributionContext<'_> {
             value,
             snap,
             attribute.frame_address(),
+            progress >= 1.0 && target.is_some(),
+            family_evidence,
         ));
     }
 
@@ -107,6 +128,8 @@ impl ContributionContext<'_> {
         let Some(value) = interpolate(Some(previous), None, progress) else {
             return;
         };
+        let family_evidence = crate::source_evidence::family_owner(attribute, &value)
+            .and_then(|_| frame.evidence(fixture_id, attribute, progress));
         values.push(attribute_contribution(
             frame,
             fixture_id,
@@ -114,6 +137,8 @@ impl ContributionContext<'_> {
             value,
             snap,
             None,
+            false,
+            family_evidence,
         ));
     }
 }
@@ -186,6 +211,7 @@ fn effective_timing(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn attribute_contribution(
     frame: &PlaybackFrame<'_>,
     fixture_id: FixtureId,
@@ -193,11 +219,15 @@ fn attribute_contribution(
     value: AttributeValue,
     snap: bool,
     address: Option<light_core::FrameAddress>,
+    authored_target: bool,
+    family_evidence: Option<Arc<PlaybackFamilyEvidence>>,
 ) -> PlaybackContribution {
     let sequence_master = frame.master_for(snap);
     let value = apply_intensity_master(value, &attribute, sequence_master);
     PlaybackContribution {
         value: timed_value(frame, fixture_id, attribute, value),
+        family_evidence,
+        authored_target,
         transition_ordinal: frame.playback.transition_ordinal,
         sequence_master,
         source: frame.source,

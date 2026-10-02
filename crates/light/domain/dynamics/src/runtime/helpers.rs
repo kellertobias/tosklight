@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashSet;
 
 pub(super) fn project_instance_phases(
     definition: &DynamicDefinition,
@@ -61,42 +62,317 @@ pub(super) fn project_instance_phases(
 }
 
 pub(super) fn sample_values_snapshot(
-    values: &HashMap<(Uuid, FixtureId, Uuid), f32>,
-) -> Vec<DynamicHeldSampleSnapshot> {
-    let mut values = values
+    last: &HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
+    held: &HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
+) -> (
+    Option<Arc<crate::RetainedExpressionTape>>,
+    Vec<DynamicHeldSampleSnapshot>,
+    Vec<DynamicHeldSampleSnapshot>,
+) {
+    let sorted = |values: &HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>| {
+        let mut values = values
+            .iter()
+            .map(|(key, value)| (*key, Arc::new(value.clone())))
+            .collect::<Vec<_>>();
+        values.sort_by_key(|((controller, target, lane), _)| (*controller, target.0, *lane));
+        values
+    };
+    let mut values = sorted(last);
+    let last_len = values.len();
+    values.extend(sorted(held));
+    if values.is_empty() {
+        return (None, Vec::new(), Vec::new());
+    }
+    let roots = values
         .iter()
+        .map(|(_, expression)| expression.clone())
+        .collect::<Vec<_>>();
+    let tape = Arc::new(
+        crate::RetainedExpressionTape::from_roots(&roots)
+            .expect("validated runtime samples form an acyclic retained graph"),
+    );
+    let mut rows = values
+        .into_iter()
+        .zip(&tape.roots)
         .map(
-            |((controller_id, target, lane_id), value)| DynamicHeldSampleSnapshot {
-                controller_id: *controller_id,
-                target: *target,
-                lane_id: *lane_id,
-                value: *value,
+            |(((controller_id, target, lane_id), _), root)| DynamicHeldSampleSnapshot {
+                controller_id,
+                target,
+                lane_id,
+                payload: DynamicHeldPayload::TapeRoot { tape_root: *root },
             },
         )
         .collect::<Vec<_>>();
-    values.sort_by_key(|sample| (sample.controller_id, sample.target.0, sample.lane_id));
-    values
+    let held = rows.split_off(last_len);
+    (Some(tape), rows, held)
+}
+
+/// Promote only at a pause boundary. Ordinary frames wrap immutable historical roots and
+/// never append a sample to a growing tape or clone its node vector.
+pub(super) fn retain_sample_history(
+    values: &mut HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
+) {
+    if values.is_empty() {
+        return;
+    }
+    let keys = values.keys().copied().collect::<Vec<_>>();
+    let roots = keys
+        .iter()
+        .map(|key| Arc::new(values[key].clone()))
+        .collect::<Vec<_>>();
+    let tape = Arc::new(
+        crate::RetainedExpressionTape::from_roots(&roots)
+            .expect("validated runtime samples form an acyclic retained graph"),
+    );
+    for (key, root) in keys.into_iter().zip(&tape.roots) {
+        values.insert(
+            key,
+            DynamicSampleExpression::Retained {
+                tape: tape.clone(),
+                root: *root,
+            },
+        );
+    }
+}
+
+pub(super) fn held_angle_sources(
+    values: &HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
+    prepared: Option<&PreparedSampleTape>,
+) -> HashSet<(Uuid, FixtureId, Uuid)> {
+    let mut angles = HashSet::new();
+    let mut remaining = Vec::new();
+    for (key, expression) in values {
+        if let (Some(prepared), DynamicSampleExpression::Retained { tape, root }) =
+            (prepared, expression)
+            && Arc::ptr_eq(tape, &prepared.tape)
+        {
+            if prepared.contains_angles[root.0 as usize] {
+                angles.insert(*key);
+            }
+        } else {
+            remaining.push((*key, Arc::new(expression.clone())));
+        }
+    }
+    if !remaining.is_empty() {
+        // At a pause boundary, import all held roots together so shared history is traversed
+        // once. Runtime samples have already passed storage and source validation.
+        let roots = remaining
+            .iter()
+            .map(|(_, expression)| Arc::clone(expression))
+            .collect::<Vec<_>>();
+        let tape = crate::RetainedExpressionTape::from_roots(&roots)
+            .expect("validated runtime samples form an acyclic retained graph");
+        let flags = angle_flags(&tape);
+        for ((key, _), root) in remaining.into_iter().zip(tape.roots) {
+            if flags[root.0 as usize] {
+                angles.insert(key);
+            }
+        }
+    }
+    angles
+}
+
+fn angle_flags(tape: &crate::RetainedExpressionTape) -> Vec<bool> {
+    let mut flags = Vec::with_capacity(tape.nodes.len());
+    for node in &tape.nodes {
+        let own = match node {
+            crate::RetainedExpressionNode::AngleCurrent { .. }
+            | crate::RetainedExpressionNode::AngleNumeric { .. } => true,
+            crate::RetainedExpressionNode::Programming { address, .. }
+            | crate::RetainedExpressionNode::Scale { address, .. } => {
+                address.representation == crate::DynamicFamilyRepresentation::Angles
+            }
+            _ => false,
+        };
+        let inherited = node.children().any(|id| flags[id.0 as usize]);
+        flags.push(own || inherited);
+    }
+    flags
+}
+
+/// Validate the shared checkpoint graph once. Topological contract summaries let keyed rows
+/// retain their original root without reimporting the complete tape for every fixture.
+pub(super) struct PreparedSampleTape {
+    pub(super) tape: Arc<crate::RetainedExpressionTape>,
+    roots: HashSet<crate::RetainedNodeId>,
+    required_contract: Vec<u16>,
+    contains_angles: Vec<bool>,
+}
+
+pub(super) fn prepare_sample_tape(
+    tape: Option<&Arc<crate::RetainedExpressionTape>>,
+) -> Result<Option<PreparedSampleTape>, DynamicRuntimeError> {
+    let Some(tape) = tape else { return Ok(None) };
+    tape.validate()
+        .map_err(|error| DynamicRuntimeError::InvalidSnapshot(error.to_string()))?;
+    let mut required_contract = Vec::<u16>::with_capacity(tape.nodes.len());
+    for node in &tape.nodes {
+        let own = match node {
+            crate::RetainedExpressionNode::Programming { .. }
+            | crate::RetainedExpressionNode::AngleCurrent { .. }
+            | crate::RetainedExpressionNode::AngleNumeric { .. }
+            | crate::RetainedExpressionNode::Scale { .. } => {
+                light_core::programming::PROGRAMMING_CONTRACT_VERSION
+            }
+            _ => 0,
+        };
+        let children = node
+            .children()
+            .map(|id| required_contract[id.0 as usize])
+            .max()
+            .unwrap_or(0);
+        required_contract.push(own.max(children));
+    }
+    Ok(Some(PreparedSampleTape {
+        tape: Arc::clone(tape),
+        roots: tape.roots.iter().copied().collect(),
+        required_contract,
+        contains_angles: angle_flags(tape),
+    }))
+}
+
+/// Restore-time object-table check, before any restored state is installed: every witness
+/// belongs to this instance, and every operation reachable from a held row belongs to that
+/// row's controller, target and lane. Malformed references reject the complete restore.
+pub(super) fn validate_retained_operations(
+    prepared: Option<&PreparedSampleTape>,
+    instance_id: Uuid,
+    rows: [&[DynamicHeldSampleSnapshot]; 2],
+) -> Result<(), DynamicRuntimeError> {
+    let Some(prepared) = prepared else {
+        return Ok(());
+    };
+    if prepared.tape.operation_emissions().is_empty() {
+        return Ok(());
+    }
+    let invalid = |message: &str| DynamicRuntimeError::InvalidSnapshot(message.into());
+    let owners = prepared
+        .tape
+        .operation_owners()
+        .map_err(|error| DynamicRuntimeError::InvalidSnapshot(error.to_string()))?;
+    for row in rows.into_iter().flatten() {
+        let DynamicHeldPayload::TapeRoot { tape_root } = row.payload else {
+            continue;
+        };
+        match owners.get(tape_root.0 as usize) {
+            None | Some(crate::RetainedOperationOwner::Unattributed) => {}
+            Some(crate::RetainedOperationOwner::Exact {
+                instance_id: owner_instance,
+                controller_id,
+                target,
+                lane_id,
+            }) if *owner_instance == instance_id
+                && *controller_id == row.controller_id
+                && *target == row.target
+                && *lane_id == row.lane_id => {}
+            Some(_) => {
+                return Err(invalid(
+                    "held Dynamic operation provenance belongs to another emission row",
+                ));
+            }
+        }
+    }
+    if prepared
+        .tape
+        .operation_emissions()
+        .iter()
+        .any(|emission| emission.instance_id() != instance_id)
+    {
+        return Err(invalid(
+            "retained Dynamic emission belongs to another instance",
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn sample_values_from_snapshot(
     values: Vec<DynamicHeldSampleSnapshot>,
-) -> HashMap<(Uuid, FixtureId, Uuid), f32> {
-    values
-        .into_iter()
-        .map(|sample| {
-            (
+    definition: &DynamicDefinition,
+    supported_contract: u16,
+    prepared: Option<&PreparedSampleTape>,
+) -> Result<HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>, DynamicRuntimeError> {
+    let mut samples = HashMap::new();
+    for sample in values {
+        let (expression, required) = match sample.payload {
+            DynamicHeldPayload::TapeRoot { tape_root } => {
+                let prepared = prepared
+                    .filter(|prepared| prepared.roots.contains(&tape_root))
+                    .ok_or_else(|| {
+                        DynamicRuntimeError::InvalidSnapshot(
+                            "held sample references an absent retained tape root".into(),
+                        )
+                    })?;
+                (
+                    DynamicSampleExpression::Retained {
+                        tape: Arc::clone(&prepared.tape),
+                        root: tape_root,
+                    },
+                    prepared.required_contract[tape_root.0 as usize],
+                )
+            }
+            DynamicHeldPayload::Expression { expression } => {
+                expression
+                    .validate()
+                    .map_err(|error| DynamicRuntimeError::InvalidSnapshot(error.to_string()))?;
+                let required = expression.required_programming_contract();
+                (expression, required)
+            }
+            DynamicHeldPayload::Legacy { value } => {
+                let lane = definition
+                    .lanes
+                    .iter()
+                    .find(|lane| lane.id == sample.lane_id)
+                    .and_then(|lane| lane.legacy())
+                    .ok_or_else(|| {
+                        DynamicRuntimeError::InvalidSnapshot(
+                            "legacy held value has no retained scalar lane".into(),
+                        )
+                    })?;
+                let expression = DynamicSampleExpression::LegacyScalar {
+                    attribute: lane.attribute.clone(),
+                    value,
+                    occurrence: None,
+                    dependency_occurrence: None,
+                };
+                expression
+                    .validate()
+                    .map_err(|error| DynamicRuntimeError::InvalidSnapshot(error.to_string()))?;
+                (expression, 0)
+            }
+        };
+        if required > supported_contract {
+            return Err(DynamicRuntimeError::InvalidSnapshot(format!(
+                "held Dynamic requires programming contract {required}; this runtime supports {supported_contract}"
+            )));
+        }
+        if samples
+            .insert(
                 (sample.controller_id, sample.target, sample.lane_id),
-                sample.value,
+                expression,
             )
-        })
-        .collect()
+            .is_some()
+        {
+            return Err(DynamicRuntimeError::InvalidSnapshot(
+                "duplicate held Dynamic address".into(),
+            ));
+        }
+    }
+    Ok(samples)
 }
 
 pub(super) fn random_group_speed_factor(definition: &DynamicDefinition, group_id: Uuid) -> f64 {
+    let typed = definition
+        .random_groups
+        .iter()
+        .find(|group| group.id == group_id)
+        .is_some_and(|group| matches!(group.range, crate::DynamicRandomRange::Programming { .. }));
     definition
         .lanes
         .iter()
-        .find(|lane| lane.random_group_id == Some(group_id))
+        .find(|lane| {
+            lane.random_group_id == Some(group_id)
+                && (!typed || lane.mode() == crate::DynamicLaneMode::Random)
+        })
         .map_or(1.0, |lane| lane.speed_multiplier.factor())
 }
 
@@ -268,8 +544,10 @@ pub(super) fn winning_controller(instance: &DynamicInstance) -> Option<&DynamicC
 pub(super) fn schedule_synchronized_resume(instance: &mut DynamicInstance, now_millis: u64) {
     if instance.activation_policy != crate::ActivationPolicy::JoinSyncNow {
         instance.synchronized_hold_elapsed_millis = None;
+        instance.synchronized_hold_captured = false;
         instance.synchronized_resume_transition = None;
         instance.synchronized_hold_values.clear();
+        instance.synchronized_hold_angle_sources.clear();
         return;
     }
     let Some(held_elapsed_millis) = instance.synchronized_hold_elapsed_millis else {
@@ -280,15 +558,37 @@ pub(super) fn schedule_synchronized_resume(instance: &mut DynamicInstance, now_m
         .map_or(0, |transition| transition.activation_duration_millis);
     if duration_millis == 0 {
         instance.synchronized_hold_elapsed_millis = None;
+        instance.synchronized_hold_captured = false;
         instance.synchronized_resume_transition = None;
         instance.synchronized_hold_values.clear();
+        instance.synchronized_hold_angle_sources.clear();
         return;
     }
     instance.synchronized_resume_transition = Some(DynamicSynchronizedResumeTransitionSnapshot {
+        occurrence_id: synchronized_resume_occurrence(instance, now_millis, held_elapsed_millis),
         started_at_millis: now_millis,
         duration_millis,
         held_elapsed_millis,
     });
+}
+
+fn synchronized_resume_occurrence(instance: &DynamicInstance, now: u64, held: u64) -> Uuid {
+    // Replaying the same command against a restored checkpoint must produce the
+    // same identity. Retained nested occurrences distinguish repeated interruptions
+    // even when commands share the same millisecond.
+    let mut ids = Vec::new();
+    for expression in instance.synchronized_hold_values.values() {
+        expression.visit_resume_occurrences(&mut |id| ids.push(id));
+    }
+    ids.sort_unstable();
+    ids.dedup();
+    let mut key = b"tosklight:dynamic-resume:v1".to_vec();
+    key.extend_from_slice(&now.to_le_bytes());
+    key.extend_from_slice(&held.to_le_bytes());
+    for id in ids {
+        key.extend_from_slice(id.as_bytes());
+    }
+    Uuid::new_v5(&instance.id, &key)
 }
 
 pub(super) fn reconcile_pause(
@@ -305,12 +605,19 @@ pub(super) fn reconcile_pause(
             if instance.activation_policy == crate::ActivationPolicy::JoinSyncNow {
                 instance.synchronized_hold_elapsed_millis =
                     instance.last_synchronized_elapsed_millis;
+                instance.synchronized_hold_captured =
+                    instance.last_synchronized_elapsed_millis.is_some();
                 instance
                     .synchronized_hold_values
                     .clone_from(&instance.last_sample_values);
+                retain_sample_history(&mut instance.synchronized_hold_values);
+                instance.synchronized_hold_angle_sources =
+                    held_angle_sources(&instance.synchronized_hold_values, None);
             } else {
                 instance.synchronized_hold_elapsed_millis = None;
+                instance.synchronized_hold_captured = false;
                 instance.synchronized_hold_values.clear();
+                instance.synchronized_hold_angle_sources.clear();
             }
         }
         (false, Some(paused_at)) => {

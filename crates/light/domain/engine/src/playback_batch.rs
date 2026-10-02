@@ -74,7 +74,68 @@ impl PreparedPlaybackBatch {
     }
 }
 
+/// An isolated execution of one ordered queue against its captured Playback source.
+///
+/// This type cannot be installed by `install_prepared_playback_batch`. It is a queue executor
+/// primitive, not a retained preview episode: overlay/rebase lifecycle, intermediate Dynamic
+/// restart effects and scheduler publication remain the caller's separate integration work.
+pub struct PreparedPreloadPlaybackBatch {
+    playback: PlaybackEngine,
+    outcomes: Vec<PlaybackBatchOutcome>,
+    effect: PlaybackRuntimeEffect,
+}
+
+impl PreparedPreloadPlaybackBatch {
+    pub fn runtime(&self) -> &PlaybackEngine {
+        &self.playback
+    }
+
+    pub fn outcomes(&self) -> &[PlaybackBatchOutcome] {
+        &self.outcomes
+    }
+
+    pub const fn effect(&self) -> PlaybackRuntimeEffect {
+        self.effect
+    }
+}
+
 impl Engine {
+    /// Execute a complete hypothetical Preload GO using only the supplied immutable frame.
+    /// Commands retain their order and duplicates; failure discards the whole isolated result.
+    /// Neither Live state nor the captured queue is read again, drained, ticked or installed.
+    pub fn prepare_preload_playback_batch(
+        &self,
+        frame: &crate::PreparedOutputFrame,
+        commands: &[PlaybackBatchCommand],
+    ) -> Result<PreparedPreloadPlaybackBatch, String> {
+        let source = frame
+            .preload_playback_source()
+            .ok_or("the output frame has no captured Preload Playback source")?;
+        let started_at = frame.sampled_at();
+        let mut playback = source.fork_for_preview(started_at);
+        let outcomes = commands
+            .iter()
+            .map(|command| {
+                let mut command = command.clone();
+                if let Some(origin) = command.activation_origin.as_mut() {
+                    origin.at = started_at;
+                }
+                apply_command(
+                    &mut playback,
+                    &command,
+                    started_at,
+                    frame.programmer_fade_millis,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let effect = playback.retained_runtime_effect_since(source);
+        Ok(PreparedPreloadPlaybackBatch {
+            playback,
+            outcomes,
+            effect,
+        })
+    }
+
     pub fn prepare_playback_batch(
         &self,
         commands: &[PlaybackBatchCommand],
@@ -107,14 +168,28 @@ impl Engine {
         &self,
         prepared: PreparedPlaybackBatch,
     ) -> Result<(), String> {
+        self.install_prepared_playback_batch_with(prepared, |_| Ok(()), |()| ())
+    }
+
+    /// Validate the generation, then prepare dependent state under the Playback write guard.
+    /// The preparation must leave live state untouched on error. Installation is infallible;
+    /// adapters can retain a later-ranked runtime guard in `T` across the Playback swap.
+    pub fn install_prepared_playback_batch_with<T, R>(
+        &self,
+        prepared: PreparedPlaybackBatch,
+        prepare: impl FnOnce(&PlaybackEngine) -> Result<T, String>,
+        install: impl FnOnce(T) -> R,
+    ) -> Result<R, String> {
         let current = self.generation.load_full();
         if !Arc::ptr_eq(&current, &prepared.generation) {
             return Err("the compiled show changed while Playback was being prepared".into());
         }
+        let mut live = current.playback().write();
+        let dependent = prepare(&prepared.playback)?;
         if prepared.effect.changed() {
-            *prepared.generation.playback().write() = prepared.playback;
+            *live = prepared.playback;
         }
-        Ok(())
+        Ok(install(dependent))
     }
 }
 
@@ -135,7 +210,13 @@ fn apply_command(
         command.activation_origin,
         |playback| apply_action(playback, command),
     )?;
-    let timing_effect = if effects.addressed.changed() {
+    let timing_effect = if effects.addressed.changed()
+        && matches!(
+            playback
+                .definition_at(PlaybackIdentity::physical(command.number)?)
+                .map(|definition| &definition.target),
+            Some(light_playback::PlaybackTarget::CueList { .. })
+        ) {
         playback
             .apply_preload_timing_mutation(
                 command.number,
@@ -180,7 +261,7 @@ fn apply_virtual_command(
         .map(|zone| {
             zone.iter()
                 .copied()
-                .map(|number| VirtualPlaybackAddress::new(page, number))
+                .map(VirtualPlaybackAddress::from_number)
                 .collect::<Result<Vec<_>, _>>()
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -203,7 +284,13 @@ fn apply_virtual_command(
         crate::EnginePlaybackOutcome::Changed(effect) => effect,
         _ => EnginePlaybackEffect::default(),
     };
-    let timing_effect = if effects.addressed.changed() {
+    let timing_effect = if effects.addressed.changed()
+        && matches!(
+            playback
+                .definition_at(identity)
+                .map(|definition| &definition.target),
+            Some(light_playback::PlaybackTarget::CueList { .. })
+        ) {
         playback
             .apply_preload_timing_at_mutation(
                 identity,

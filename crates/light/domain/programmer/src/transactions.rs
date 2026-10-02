@@ -1,7 +1,8 @@
+use crate::alignment::ProgrammerAlignmentContext;
 use crate::command_state::CommandLineState;
 use crate::history::HISTORY_LIMIT;
 use crate::selection::SelectionContext;
-use crate::{ProgrammerAlignmentState, ProgrammerRegistry, ProgrammerState};
+use crate::{ProgrammerRegistry, ProgrammerState};
 use light_core::SessionId;
 use parking_lot::{ReentrantMutex, RwLock};
 use std::collections::HashSet;
@@ -18,7 +19,7 @@ pub struct ProgrammerTransactionSnapshot {
     priority_changed_at: chrono::DateTime<chrono::Utc>,
     selection: SelectionContext,
     command_line: CommandLineState,
-    alignment: Option<ProgrammerAlignmentState>,
+    alignment: ProgrammerAlignmentContext,
 }
 
 impl ProgrammerRegistry {
@@ -186,6 +187,7 @@ impl ProgrammerRegistry {
             priority_revisions: crate::desk_stamp::DeskStamp::seeded(priority_revision),
             priority_changed_at: Arc::new(RwLock::new(Some(priority_changed_at))),
             mutation_gate: Arc::new(ReentrantMutex::new(())),
+            pending_output_cache: Arc::new(parking_lot::Mutex::new(None)),
             // A detached command suppresses command-line writes for the whole execution, staged
             // Programmer included: the staged command line is committed back over the live one.
             command_line_writes_suppressed: Arc::clone(&self.command_line_writes_suppressed),
@@ -239,6 +241,7 @@ impl ProgrammerRegistry {
             .set(staged_preload_values_generation);
         self.preload_playback_queue_generations
             .set(staged_preload_playback_queue_generation);
+        self.invalidate_pending_output_cache();
         *self.priority_changed_at.write() = Some(staged_priority_changed_at);
         true
     }
@@ -289,6 +292,7 @@ impl ProgrammerRegistry {
             .set(snapshot.preload_values_generation);
         self.preload_playback_queue_generations
             .set(snapshot.preload_playback_queue_generation);
+        self.invalidate_pending_output_cache();
         *self.priority_changed_at.write() = Some(snapshot.priority_changed_at);
         *self.selection_context.write() = snapshot.selection;
         *self.command_state.write() = snapshot.command_line;

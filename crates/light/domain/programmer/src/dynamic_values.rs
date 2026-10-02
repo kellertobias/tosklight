@@ -60,7 +60,6 @@ impl ProgrammerRegistry {
         }
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        self.close_selection_gesture(session);
         let mut states = self.state.write();
         let Some(state) = states.as_mut() else {
             return false;
@@ -77,19 +76,49 @@ impl ProgrammerRegistry {
         {
             return false;
         }
-        let continues_group =
-            undo_group.is_some() && state.active_value_undo_group.as_deref() == undo_group;
+        self.close_selection_gesture(session);
+        let continues_group = undo_group.is_some_and(|group| {
+            state
+                .active_value_undo_group
+                .as_ref()
+                .is_some_and(|(preload_lane, existing)| {
+                    *preload_lane == preload && existing == group
+                })
+        });
         if !continues_group {
             state.checkpoint();
         }
-        state.active_value_undo_group = undo_group.map(str::to_owned);
-        let values = if preload {
-            Arc::make_mut(&mut state.preload_dynamic_pending)
-        } else {
-            Arc::make_mut(&mut state.dynamic_values)
-        };
+        state.active_value_undo_group = undo_group.map(|group| (preload, group.to_owned()));
         for mutation in mutations {
+            if preload {
+                match mutation {
+                    DynamicProgrammerValueMutation::Set {
+                        fixture_id,
+                        attribute,
+                        value,
+                    } if value.is_programming_release() => state.retain_released_fixture_color_for(
+                        *fixture_id,
+                        attribute,
+                        false,
+                        value,
+                    ),
+                    DynamicProgrammerValueMutation::Release {
+                        fixture_id,
+                        attribute,
+                        instance_link: None,
+                    } => state.clear_released_fixture_color(*fixture_id, attribute),
+                    _ => {}
+                }
+            }
+            let values = if preload {
+                Arc::make_mut(&mut state.preload_dynamic_pending)
+            } else {
+                Arc::make_mut(&mut state.dynamic_values)
+            };
             apply_mutation(self, values, mutation);
+            if preload {
+                state.prune_released_fixture_colors();
+            }
         }
         state.last_activity = self.clock.now();
         drop(states);
@@ -141,10 +170,13 @@ impl ProgrammerRegistry {
         let fixture_change = fixtures.iter().any(|release| {
             normal_values.iter().any(|stored| {
                 stored.fixture_id == release.fixture_id && stored.attribute == release.attribute
-            }) || dynamic_values
-                .iter()
-                .find(|stored| same_track(stored, release.fixture_id, &release.attribute, None))
-                .is_none_or(|stored| !matches!(stored.value, DynamicSemanticValue::Release))
+            }) || !dynamic_values.iter().any(|stored| {
+                same_track(stored, release.fixture_id, &release.attribute, None)
+                    && matches!(stored.value, DynamicSemanticValue::Release)
+            }) || dynamic_values.iter().any(|stored| {
+                same_track(stored, release.fixture_id, &release.attribute, None)
+                    && !matches!(stored.value, DynamicSemanticValue::Release)
+            })
         });
         let group_change = groups.iter().any(|release| {
             group_values
@@ -158,9 +190,17 @@ impl ProgrammerRegistry {
             return false;
         }
         state.checkpoint();
-        state.active_value_undo_group = None;
         let changed_at = self.clock.now();
         let changed_at_millis = u64::try_from(changed_at.timestamp_millis()).unwrap_or_default();
+
+        if preload {
+            for release in fixtures {
+                state.retain_released_fixture_color(release.fixture_id, &release.attribute, true);
+            }
+            for release in groups {
+                state.retain_released_group_color(&release.group_id, &release.attribute);
+            }
+        }
 
         let (normal_values, group_values, group_releases, dynamic_values) = if preload {
             (
@@ -228,17 +268,18 @@ fn mutation_changes(
             fixture_id,
             attribute,
             value,
-        } => values
-            .iter()
-            .find(|stored| {
-                same_track(
-                    stored,
+        } => {
+            let mut replaced = values.iter().filter(|stored| {
+                value.replaces_address(
                     *fixture_id,
                     attribute,
-                    semantic_instance_link(value),
+                    stored.value.track_key(),
+                    stored.fixture_id,
+                    &stored.attribute,
                 )
-            })
-            .is_none_or(|stored| stored.value != *value),
+            });
+            replaced.next().is_none_or(|stored| stored.value != *value) || replaced.next().is_some()
+        }
         DynamicProgrammerValueMutation::Release {
             fixture_id,
             attribute,
@@ -266,7 +307,18 @@ fn apply_mutation(
             instance_link,
         } => (*fixture_id, attribute, *instance_link),
     };
-    values.retain(|stored| !same_track(stored, fixture_id, attribute, instance_link));
+    values.retain(|stored| match mutation {
+        DynamicProgrammerValueMutation::Set { value, .. } => !value.replaces_address(
+            fixture_id,
+            attribute,
+            stored.value.track_key(),
+            stored.fixture_id,
+            &stored.attribute,
+        ),
+        DynamicProgrammerValueMutation::Release { .. } => {
+            !same_track(stored, fixture_id, attribute, instance_link)
+        }
+    });
     if let DynamicProgrammerValueMutation::Set { value, .. } = mutation {
         values.push(DynamicAddressValue {
             fixture_id,
@@ -291,11 +343,85 @@ fn same_track(
 }
 
 fn semantic_instance_link(value: &DynamicSemanticValue) -> Option<Uuid> {
-    match value {
-        DynamicSemanticValue::DynamicOn { instance_link, .. }
-        | DynamicSemanticValue::DynamicOff { instance_link, .. } => Some(*instance_link),
-        DynamicSemanticValue::Static { .. }
-        | DynamicSemanticValue::FixAt { .. }
-        | DynamicSemanticValue::Release => None,
+    value.track_key().instance_link
+}
+
+impl crate::ProgrammerState {
+    pub(crate) fn has_fixture_release(
+        &self,
+        preload: bool,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> bool {
+        let values = if preload {
+            &self.preload_dynamic_pending
+        } else {
+            &self.dynamic_values
+        };
+        values.iter().any(|value| {
+            value.fixture_id == fixture
+                && value.attribute == *attribute
+                && matches!(value.value, DynamicSemanticValue::Release)
+        })
+    }
+
+    pub(crate) fn clear_fixture_release(
+        &mut self,
+        preload: bool,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) {
+        let values = if preload {
+            &mut self.preload_dynamic_pending
+        } else {
+            &mut self.dynamic_values
+        };
+        if values.iter().any(|value| {
+            value.fixture_id == fixture
+                && value.attribute == *attribute
+                && matches!(value.value, DynamicSemanticValue::Release)
+        }) {
+            Arc::make_mut(values).retain(|value| {
+                value.fixture_id != fixture
+                    || value.attribute != *attribute
+                    || !matches!(value.value, DynamicSemanticValue::Release)
+            });
+        }
+        if preload {
+            self.prune_released_fixture_colors();
+        }
+    }
+
+    pub(crate) fn has_group_release(
+        &self,
+        preload: bool,
+        group: &str,
+        attribute: &AttributeKey,
+    ) -> bool {
+        let values = if preload {
+            &self.preload_group_release_pending
+        } else {
+            &self.group_release_values
+        };
+        values
+            .iter()
+            .any(|value| value.group_id == group && value.attribute == *attribute)
+    }
+
+    pub(crate) fn clear_group_release(
+        &mut self,
+        preload: bool,
+        group: &str,
+        attribute: &AttributeKey,
+    ) {
+        if preload {
+            self.clear_released_group_color(group, attribute);
+        }
+        let values = if preload {
+            &mut self.preload_group_release_pending
+        } else {
+            &mut self.group_release_values
+        };
+        values.retain(|value| value.group_id != group || value.attribute != *attribute);
     }
 }

@@ -37,6 +37,8 @@ fn target_bound_sources_share_one_clock_and_controller_fallback_preserves_phase(
         runtime
             .sample(instance, at, 1_000, 10, &Sources { current: 0.0 })
             .unwrap()[0]
+            .legacy()
+            .expect("scalar sample")
             .value
     };
     let held = sample(&mut runtime, 500);
@@ -215,11 +217,15 @@ fn global_pause_freezes_existing_and_new_instances_without_inheriting_old_pause_
     let held = runtime
         .sample(first, 250, 1_000, 10, &Sources { current: 0.0 })
         .unwrap()[0]
+        .legacy()
+        .expect("scalar sample")
         .value;
     assert_eq!(
         runtime
             .sample(first, 750, 1_000, 10, &Sources { current: 0.0 })
             .unwrap()[0]
+            .legacy()
+            .expect("scalar sample")
             .value,
         held
     );
@@ -237,6 +243,8 @@ fn global_pause_freezes_existing_and_new_instances_without_inheriting_old_pause_
         runtime
             .sample(second, 750, 1_000, 10, &Sources { current: 0.0 })
             .unwrap()[0]
+            .legacy()
+            .expect("scalar sample")
             .value,
         0.0
     );
@@ -246,6 +254,8 @@ fn global_pause_freezes_existing_and_new_instances_without_inheriting_old_pause_
         runtime
             .sample(first, 750, 1_000, 10, &Sources { current: 0.0 })
             .unwrap()[0]
+            .legacy()
+            .expect("scalar sample")
             .value,
         held
     );
@@ -253,6 +263,8 @@ fn global_pause_freezes_existing_and_new_instances_without_inheriting_old_pause_
         runtime
             .sample(second, 1_000, 1_000, 10, &Sources { current: 0.0 })
             .unwrap()[0]
+            .legacy()
+            .expect("scalar sample")
             .value
             > 0.0
     );
@@ -305,7 +317,7 @@ mod frame_addresses {
             beat_phase: 0.0,
             phase_advancing: true,
         };
-        let mut sample = |runtime: &mut DynamicRuntime, now, addresser: &CountingAddresser| {
+        let sample = |runtime: &mut DynamicRuntime, now, addresser: &CountingAddresser| {
             runtime.sample_all_addressed(
                 now,
                 10,
@@ -351,4 +363,237 @@ mod frame_addresses {
             "nobody asked, nothing is claimed"
         );
     }
+}
+
+fn sample_sync(runtime: &mut DynamicRuntime, now: u64) -> Vec<DynamicRuntimeSample> {
+    let transport = DynamicSpeedTransport {
+        effective_bpm: 60.0,
+        phase_origin_millis: 0,
+        phase_reference_millis: now,
+        beat_phase: (now as f64 / 1000.0).rem_euclid(1.0),
+        phase_advancing: true,
+    };
+    runtime.sample_all(now, 10, &[transport; 5], &Sources { current: 0.0 })
+}
+
+#[test]
+fn paused_lane_hot_edit_retains_original_owner_then_resumes_against_each_underlay() {
+    let mut source = definition(lane());
+    source.default_activation = ActivationPolicy::JoinSyncNow;
+    source.speed = DynamicSpeed::SpeedGroup {
+        group: SpeedGroup::A,
+        beats_per_cycle: Rational::ONE,
+    };
+    let id = source.id;
+    let lane_id = source.lanes[0].id;
+    let target = FixtureId::new();
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([source.clone()]).unwrap();
+    let mut request = start_request(id, controller(41, 0, false), target, 0, false);
+    request.activation_duration_millis = 1000;
+    let instance = runtime.start(request).unwrap();
+    sample_sync(&mut runtime, 250);
+    runtime.set_global_paused(true, 250);
+    let held = sample_sync(&mut runtime, 250)[0].expression.clone();
+    source.lanes[0].legacy_mut().unwrap().attribute = AttributeKey("pan".into());
+    runtime.install_definitions([source.clone()]).unwrap();
+    assert_eq!(sample_sync(&mut runtime, 750)[0].expression, held);
+    let serialized = serde_json::to_value(runtime.snapshot()).unwrap();
+    let mut restored = DynamicRuntime::default();
+    restored
+        .restore_snapshot(serde_json::from_value(serialized.clone()).unwrap())
+        .unwrap();
+    assert_eq!(sample_sync(&mut restored, 750)[0].expression, held);
+    runtime
+        .set_controller_paused(instance, Uuid::from_u128(41), true, 750)
+        .unwrap();
+    runtime.set_global_paused(false, 750);
+    runtime
+        .set_controller_paused_with_resume(instance, Uuid::from_u128(41), false, 750, None)
+        .unwrap();
+    let resume = sample_sync(&mut runtime, 1250);
+    let sample = resume
+        .iter()
+        .find(|sample| sample.lane_id == lane_id)
+        .unwrap();
+    let mut weights = HashMap::new();
+    assert!(
+        sample
+            .expression
+            .visit_legacy_contributions(|owner, _, weight| {
+                weights.insert(owner.clone(), weight);
+            })
+    );
+    assert_eq!(weights[&AttributeKey::intensity()], 0.5);
+    assert_eq!(weights[&AttributeKey("pan".into())], 0.5);
+    // A previously stored numeric hold is restored against its retained scalar definition.
+    let mut legacy = serialized.clone();
+    for field in ["last_sample_values", "synchronized_hold_values"] {
+        for entry in legacy["instances"][0][field].as_array_mut().unwrap() {
+            entry.as_object_mut().unwrap().remove("expression");
+            entry.as_object_mut().unwrap().remove("tape_root");
+            entry["value"] = serde_json::json!(0.75);
+        }
+    }
+    DynamicRuntime::default()
+        .restore_snapshot(serde_json::from_value(legacy).unwrap())
+        .unwrap();
+    let mut mixed = serialized.clone();
+    mixed["instances"][0]["last_sample_values"][0]["value"] = serde_json::json!(0.5);
+    assert!(serde_json::from_value::<DynamicRuntimeSnapshot>(mixed).is_err());
+    // Returning the current definition to legacy does not hide typed held state.
+    let mut typed_hold = serialized;
+    typed_hold["instances"][0]["last_sample_values"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("tape_root");
+    typed_hold["instances"][0]["last_sample_values"][0]["expression"] = serde_json::json!({
+        "kind":"programming", "address":{"representation":{"kind":"angles"},"component":{"kind":"pan"}},
+        "value":{"kind":"scalar","value":720.0}
+    });
+    assert!(
+        DynamicRuntime::with_programming_contract_support(0)
+            .restore_snapshot(serde_json::from_value(typed_hold).unwrap())
+            .is_err()
+    );
+}
+
+#[test]
+fn deleted_paused_lane_retains_hold_and_releases_on_resume() {
+    let mut source = definition(lane());
+    source.default_activation = ActivationPolicy::JoinSyncNow;
+    source.speed = DynamicSpeed::SpeedGroup {
+        group: SpeedGroup::A,
+        beats_per_cycle: Rational::ONE,
+    };
+    let id = source.id;
+    let old_lane = source.lanes[0].id;
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([source.clone()]).unwrap();
+    let mut request = start_request(id, controller(42, 0, false), FixtureId::new(), 0, false);
+    request.activation_duration_millis = 1000;
+    let instance = runtime.start(request).unwrap();
+    sample_sync(&mut runtime, 250);
+    runtime
+        .set_controller_paused(instance, Uuid::from_u128(42), true, 250)
+        .unwrap();
+    source.lanes[0].id = Uuid::new_v4();
+    source.lanes[0].legacy_mut().unwrap().attribute = AttributeKey("pan".into());
+    runtime.install_definitions([source]).unwrap();
+    let held = sample_sync(&mut runtime, 750);
+    assert!(
+        held.iter().any(|sample| sample.lane_id == old_lane
+            && sample.legacy().unwrap().attribute.is_intensity())
+    );
+    runtime
+        .set_controller_paused_with_resume(instance, Uuid::from_u128(42), false, 750, None)
+        .unwrap();
+    let resumed = sample_sync(&mut runtime, 1250);
+    assert!(
+        matches!(&resumed.iter().find(|sample| sample.lane_id == old_lane).unwrap().expression,
+        DynamicSampleExpression::Transition { to:None, progress, .. } if *progress == 0.5)
+    );
+    assert!(
+        sample_sync(&mut runtime, 1750)
+            .iter()
+            .all(|sample| sample.lane_id != old_lane)
+    );
+}
+
+#[test]
+fn explicit_lane_selection_survives_restore_and_does_not_activate_hot_added_lanes() {
+    let targets = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
+    let mut source = definition(lane());
+    let first_lane = source.lanes[0].id;
+    let second = lane();
+    let second_lane = second.id;
+    source.lanes.push(second);
+    let mut request = start_request(source.id, controller(43, 0, false), targets[0], 0, false);
+    request.target_scope.ordered_targets = targets[..2].to_vec();
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([source.clone()]).unwrap();
+    let instance = runtime.start(request).unwrap();
+    let selection = DynamicLaneSelection::PerTarget {
+        targets: vec![
+            DynamicTargetLanes {
+                target: targets[0],
+                lanes: vec![first_lane],
+            },
+            DynamicTargetLanes {
+                target: targets[1],
+                lanes: vec![second_lane],
+            },
+        ],
+    };
+    assert!(
+        runtime
+            .set_controller_lane_selection(instance, Uuid::from_u128(43), selection.clone())
+            .unwrap()
+    );
+    assert!(
+        !runtime
+            .set_controller_lane_selection(instance, Uuid::from_u128(43), selection)
+            .unwrap()
+    );
+    let sample = |runtime: &mut DynamicRuntime| {
+        runtime
+            .sample(instance, 250, 1000, 10, &Sources { current: 0.0 })
+            .unwrap()
+            .iter()
+            .map(|value| (value.target, value.lane_id))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        sample(&mut runtime),
+        vec![(targets[0], first_lane), (targets[1], second_lane)]
+    );
+    let snapshot =
+        serde_json::from_value(serde_json::to_value(runtime.snapshot()).unwrap()).unwrap();
+    let mut restored = DynamicRuntime::default();
+    restored.restore_snapshot(snapshot).unwrap();
+    assert_eq!(sample(&mut restored), sample(&mut runtime));
+    source.lanes.push(lane());
+    runtime.install_definitions([source.clone()]).unwrap();
+    assert_eq!(sample(&mut runtime).len(), 2);
+    runtime
+        .set_controller_lane_selection(
+            instance,
+            Uuid::from_u128(43),
+            DynamicLaneSelection::Uniform {
+                lanes: vec![first_lane],
+            },
+        )
+        .unwrap();
+    runtime
+        .reconcile_instance_targets(
+            instance,
+            DynamicTargetScope {
+                ordered_targets: targets.to_vec(),
+            },
+            &HashMap::new(),
+            None,
+        )
+        .unwrap();
+    assert_eq!(
+        sample(&mut runtime),
+        targets.map(|target| (target, first_lane))
+    );
+    let snapshot = runtime.snapshot();
+    assert!(
+        DynamicRuntime::with_programming_contract_support(0)
+            .restore_snapshot(snapshot)
+            .is_err()
+    );
+    assert!(
+        runtime
+            .set_controller_lane_selection(
+                instance,
+                Uuid::from_u128(43),
+                DynamicLaneSelection::Uniform {
+                    lanes: vec![first_lane, first_lane]
+                }
+            )
+            .is_err()
+    );
+    assert_eq!(sample(&mut runtime).len(), 3, "invalid selection is atomic");
 }

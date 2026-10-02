@@ -18,11 +18,24 @@ impl Engine {
         options: RenderOptions,
         sampled: &[ContributionBatch],
     ) -> Result<RenderResult, EngineError> {
-        self.advance_group_master_transitions();
-        let generation = self.generation.load_full();
-        self.render_generation(&generation, options, sampled)
+        let frame = self.prepare_output_frame(options);
+        self.render_prepared(&frame, sampled)
     }
 
+    /// Commit one final lane evaluation. Speculative observations of this capture never consume
+    /// its Live continuity or automatic Playback transitions.
+    pub fn render_prepared(
+        &self,
+        frame: &crate::PreparedOutputFrame,
+        sampled: &[ContributionBatch],
+    ) -> Result<RenderResult, EngineError> {
+        crate::timed(crate::RenderPhase::RenderTotal, || {
+            let static_frame = self.prepare_static_family_frame_with_trace(frame, sampled, false);
+            self.finish_static_family_frame(frame, static_frame)
+        })
+    }
+
+    #[cfg(test)]
     fn render_generation(
         &self,
         generation: &RuntimeGeneration,
@@ -34,19 +47,40 @@ impl Engine {
         })
     }
 
+    #[cfg(test)]
     fn render_generation_inner(
         &self,
         generation: &RuntimeGeneration,
         options: RenderOptions,
         sampled: &[ContributionBatch],
     ) -> Result<RenderResult, EngineError> {
-        let options = RenderOptions {
-            color_model: self.color_model(),
-            ..options
-        };
+        let sampled_at = self.clock.now();
+        let resolved = self.resolved_attributes_for_render(generation, sampled_at.clone(), sampled);
+        self.project_resolved_frame(
+            generation,
+            sampled_at,
+            resolved,
+            &self.capture_output_overlays(options),
+            self.tracking_frame(),
+            &mut Default::default(),
+            None,
+            &Default::default(),
+        )
+    }
+
+    pub(crate) fn project_resolved_frame(
+        &self,
+        generation: &RuntimeGeneration,
+        sampled_at: chrono::DateTime<chrono::Utc>,
+        mut resolved: crate::ResolvedAttributes,
+        overlays: &crate::prepared_frame::CapturedOutputOverlays,
+        tracking: Arc<crate::TrackedInputFrame>,
+        mount_workspace: &mut crate::mount_projection::MountTransformWorkspace,
+        geometry: Option<crate::PreparedFrameGeometry>,
+        position_native: &crate::native_position_projection::NativePositionProjection,
+    ) -> Result<RenderResult, EngineError> {
+        let options = overlays.options;
         let snapshot = generation.snapshot();
-        let mut resolved =
-            self.resolved_attributes_for_render(generation, self.clock.now(), sampled);
         crate::timed(crate::RenderPhase::FixtureFreezes, || {
             apply_fixture_freezes(&snapshot.fixtures, &mut resolved)
         });
@@ -54,6 +88,16 @@ impl Engine {
         // one of them actually asks, and a show of schema-v2 fixtures never asks here at all.
         let sequence_masters = std::mem::take(&mut resolved.sequence_masters);
         let named_values = resolved.named_values();
+        let (points, mounts) = match geometry {
+            Some(geometry) => (geometry.points, geometry.mounts),
+            None => {
+                let points = Arc::new(generation.point_projection().resolve(&named_values));
+                let mounts = generation
+                    .mount_projection()
+                    .resolve(&points, mount_workspace);
+                (points, mounts)
+            }
+        };
         let profile_values = crate::timed(crate::RenderPhase::ValueIndexBuild, || {
             crate::ProfileValueIndex::new(
                 &named_values,
@@ -62,15 +106,18 @@ impl Engine {
             )
         });
         let group_masters = generation.group_masters();
-        let group_master_flashes = self.group_master_flashes.read();
-        let highlight_layers = self.highlight_layers.read();
-        let highlight_look = self.highlight_look.read();
+        let group_master_flashes = &overlays.flashes;
+        let highlight_layers = &overlays.highlights;
+        let highlight_look = &overlays.highlight_look;
         let mut universes = self.universe_pool.take();
         let mut patched_slots = self.patched_slot_pool.take();
         let mut profile_visualization_values = self.visualization_pool.take();
         // One buffer for every fixture of this frame, rather than two vectors per fixture.
-        let mut output = crate::ResolvedProfileFixtureOutput::default();
+        let mut output = self.profile_scratch_pool.take();
+        let mut physical = generation.physical_projection().take_frame();
+        physical.bind_generation(generation.identity());
         let inputs = ProjectionInputs {
+            position_native,
             values: &profile_values,
             options,
             group_masters,
@@ -90,12 +137,20 @@ impl Engine {
                         &mut universes,
                         &mut patched_slots,
                         &mut profile_visualization_values,
+                        &mut physical,
                     )?;
                 }
                 Ok(())
             },
         )?;
         Ok(RenderResult {
+            source_snapshot: generation.snapshot_arc(),
+            tracking,
+            generation: generation.identity(),
+            sampled_at,
+            points,
+            mounts,
+            physical: Arc::new(physical),
             universes,
             resolved_values: named_values,
             profile_visualization_values: Arc::new(profile_visualization_values),
@@ -122,6 +177,7 @@ impl Engine {
 /// resolves each of these once for the whole frame, and threading seven borrows through one call
 /// per fixture said nothing the frame did not already say.
 struct ProjectionInputs<'a> {
+    position_native: &'a crate::native_position_projection::NativePositionProjection,
     values: &'a crate::ProfileValueIndex<'a>,
     options: RenderOptions,
     group_masters: &'a crate::GroupMasterIndex,
@@ -139,6 +195,7 @@ fn project_fixture(
     universes: &mut HashMap<Universe, light_output::DmxFrame>,
     patched_slots: &mut HashMap<Universe, u16>,
     visualization: &mut crate::ResolvedValues,
+    physical: &mut crate::PhysicalForwardFrame,
 ) -> Result<(), EngineError> {
     let profile = fixture
         .definition
@@ -158,7 +215,7 @@ fn project_fixture(
         .ok_or_else(|| {
             EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
         })?;
-    let resolve = |inversion, output: &mut crate::ResolvedProfileFixtureOutput| {
+    let resolve = |inversion, instance, output: &mut crate::ResolvedProfileFixtureOutput| {
         resolve_profile_fixture(
             fixture,
             mode,
@@ -171,13 +228,38 @@ fn project_fixture(
             inputs.highlight_layers,
             inputs.highlight_look,
             inversion,
+            instance,
+            inputs
+                .position_native
+                .instance(fixture.fixture_id, instance),
             output,
         )
     };
     if profile.patch_policy != light_fixture::PatchPolicy::Dmx {
-        resolve(AxisInversion::default(), output)?;
+        resolve(AxisInversion::default(), fixture.fixture_id.0, output)?;
         insert_profile_visualization_values(visualization, output);
         insert_raw_channel_values(visualization, fixture, mode, output);
+        generation.physical_projection().evaluate(
+            fixture.fixture_id,
+            0,
+            &output.channels,
+            physical,
+        )?;
+        for (index, copy) in fixture.multipatch.iter().enumerate() {
+            if inputs
+                .position_native
+                .instance(fixture.fixture_id, copy.id)
+                .is_some()
+            {
+                resolve(AxisInversion::default(), copy.id, output)?;
+            }
+            generation.physical_projection().evaluate(
+                fixture.fixture_id,
+                index + 1,
+                &output.channels,
+                physical,
+            )?;
+        }
         return Ok(());
     }
     let encoding = generation
@@ -188,9 +270,13 @@ fn project_fixture(
             pan: fixture.invert_pan,
             tilt: fixture.invert_tilt,
         },
+        fixture.fixture_id.0,
         output,
     )?;
     insert_profile_visualization_values(visualization, output);
+    generation
+        .physical_projection()
+        .evaluate(fixture.fixture_id, 0, &output.channels, physical)?;
     encode_profile_destination(
         &fixture.split_patches,
         fixture.universe,
@@ -200,13 +286,20 @@ fn project_fixture(
         universes,
         patched_slots,
     )?;
-    for instance in &fixture.multipatch {
+    for (index, instance) in fixture.multipatch.iter().enumerate() {
         resolve(
             AxisInversion {
                 pan: instance.invert_pan,
                 tilt: instance.invert_tilt,
             },
+            instance.id,
             output,
+        )?;
+        generation.physical_projection().evaluate(
+            fixture.fixture_id,
+            index + 1,
+            &output.channels,
+            physical,
         )?;
         encode_profile_destination(
             &instance.split_patches,
@@ -252,7 +345,7 @@ fn insert_raw_channel_values(
     }
 }
 
-fn apply_fixture_freezes(
+pub(crate) fn apply_fixture_freezes(
     fixtures: &[light_fixture::PatchedFixture],
     resolved: &mut super::ResolvedAttributes,
 ) {

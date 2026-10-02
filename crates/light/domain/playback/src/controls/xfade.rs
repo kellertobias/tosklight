@@ -43,14 +43,63 @@ impl PlaybackEngine {
                 key,
                 new_active_playback(Some(number), cue_list, self.clock.now(), 1.0, true),
             );
+            let ordinal = self.take_source_occurrence_ordinal();
+            let compiled = &self.compiled_cue_lists[&cue_list_id];
+            let active = self
+                .active
+                .get_mut(&key)
+                .expect("X-fade activation inserted runtime");
+            active.begin_source_history(active.activated_at, ordinal, compiled);
             changed = true;
         }
+        let now = self.clock.now();
+        let leg_indices = {
+            let active = &self.active[&key];
+            (active.manual_xfade_from_index.is_none()
+                && manual_xfade_progress(active.manual_xfade_direction, value) > 0.0)
+                .then(|| next_manual_xfade_index(active, &self.cue_lists[&cue_list_id]))
+                .flatten()
+                .map(|to| (active.cue_index, to))
+        };
+        let leg_history = if let Some((from, to)) = leg_indices {
+            let ordinal = self.take_source_occurrence_ordinal();
+            let active = &self.active[&key];
+            let source = SequenceMasterSource {
+                playback_number: Some(number),
+                playback_identity: None,
+                cue_list_id,
+                temporary: false,
+            };
+            ordinal.map(|ordinal| {
+                PlaybackSourceHistory::cue_leg(
+                    active.source_history.as_ref(),
+                    &self.compiled_cue_lists[&cue_list_id],
+                    source,
+                    now,
+                    ordinal,
+                    from,
+                    to,
+                    false,
+                    true,
+                )
+            })
+        } else {
+            None
+        };
         let cue_list = self
             .cue_lists
             .get(&cue_list_id)
             .ok_or("playback cue list does not exist")?;
         let active = self.active.get_mut(&key).expect("X-fade playback exists");
-        changed |= apply_manual_xfade(active, cue_list, number, value, self.clock.now());
+        changed |= apply_manual_xfade(
+            active,
+            cue_list,
+            &self.compiled_cue_lists[&cue_list_id],
+            number,
+            value,
+            now,
+            leg_history,
+        );
         let effect = if changed {
             PlaybackRuntimeEffect::Durable
         } else {
@@ -77,7 +126,12 @@ impl PlaybackEngine {
         let key = PlaybackKey::CueList(id);
         let mut changed = false;
         if on && !self.active.contains_key(&key) {
-            self.go_at_key(key, id, self.clock.now())?;
+            self.go_at_key(
+                key,
+                id,
+                self.clock.now(),
+                Some(PlaybackIdentity::physical(number)?),
+            )?;
             self.active.get_mut(&key).unwrap().master = 0.0;
             changed = true;
         }
@@ -137,7 +191,7 @@ impl PlaybackEngine {
         let key = PlaybackKey::CueList(cue_list_id);
         let mut changed = false;
         if on && !self.active.contains_key(&key) {
-            self.go_at_key(key, cue_list_id, self.clock.now())?;
+            self.go_at_key(key, cue_list_id, self.clock.now(), Some(identity))?;
             self.active.get_mut(&key).unwrap().master = 0.0;
             changed = true;
         }
@@ -268,9 +322,11 @@ impl PlaybackEngine {
 fn apply_manual_xfade(
     active: &mut ActivePlayback,
     cue_list: &CueList,
+    compiled: &Arc<CompiledCueList>,
     number: u16,
     value: f32,
     now: DateTime<Utc>,
+    leg_history: Option<PlaybackSourceHistory>,
 ) -> bool {
     let mut changed = active.playback_number != Some(number)
         || !active.enabled
@@ -287,6 +343,7 @@ fn apply_manual_xfade(
         && let Some(next) = next_manual_xfade_index(active, cue_list)
     {
         active.manual_xfade_from_index = Some(active.cue_index);
+        active.source_history = leg_history;
         active.manual_xfade_to_index = Some(next);
         active.transition_timing_bypassed = false;
         changed = true;
@@ -300,7 +357,7 @@ fn apply_manual_xfade(
     changed |= active.manual_xfade_progress != next_progress;
     active.manual_xfade_progress = next_progress;
     if progress >= 1.0 {
-        complete_manual_xfade(active, cue_list, now);
+        complete_manual_xfade(active, cue_list, compiled, now);
         changed = true;
     }
     changed
@@ -323,7 +380,12 @@ fn next_manual_xfade_index(active: &ActivePlayback, cue_list: &CueList) -> Optio
     }
 }
 
-fn complete_manual_xfade(active: &mut ActivePlayback, cue_list: &CueList, now: DateTime<Utc>) {
+fn complete_manual_xfade(
+    active: &mut ActivePlayback,
+    cue_list: &CueList,
+    compiled: &Arc<CompiledCueList>,
+    now: DateTime<Utc>,
+) {
     let target = active
         .manual_xfade_to_index
         .expect("manual X-fade target accompanies source");
@@ -342,6 +404,10 @@ fn complete_manual_xfade(active: &mut ActivePlayback, cue_list: &CueList, now: D
         ManualXFadeDirection::TowardsHigh => ManualXFadeDirection::TowardsLow,
         ManualXFadeDirection::TowardsLow => ManualXFadeDirection::TowardsHigh,
     };
+    active.source_history = active
+        .source_history
+        .take()
+        .and_then(|history| history.complete_manual(compiled, target, active.tracking_wrap));
 }
 
 fn apply_active_preload_timing(

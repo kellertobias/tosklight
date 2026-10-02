@@ -187,6 +187,9 @@ impl ProgrammerRegistry {
                 .map(|(fixture_id, attribute, _)| (*fixture_id, attribute.clone()))
                 .collect::<HashSet<_>>();
             let preload = state.blind && state.preload_capture_programmer;
+            for (fixture_id, attribute) in &touched {
+                state.clear_fixture_release(preload, *fixture_id, attribute);
+            }
             {
                 let values = if preload {
                     &mut state.preload_pending
@@ -304,6 +307,7 @@ impl ProgrammerRegistry {
             state.checkpoint();
             let merge_mode = light_core::MergeMode::Ltp;
             let preload = state.blind && state.preload_capture_programmer;
+            state.clear_fixture_release(preload, fixture_id, &attribute);
             let values = if preload {
                 &mut state.preload_pending
             } else {

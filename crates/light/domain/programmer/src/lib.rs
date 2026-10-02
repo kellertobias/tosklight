@@ -9,6 +9,7 @@ mod cue_recording;
 mod desk_authority;
 mod desk_stamp;
 mod dynamic_values;
+mod family_alignment;
 mod fixture_value_batch;
 mod group_recording;
 mod groups;
@@ -16,11 +17,14 @@ pub mod highlight;
 mod history;
 mod lifecycle_projection;
 mod normal_values;
+mod output_capture;
 mod preload;
 mod preload_playback_queue;
+mod preload_release;
 mod preload_values;
 mod preset_capture;
 mod presets;
+mod programming_validation;
 mod registry;
 mod selection;
 mod sessions;
@@ -34,7 +38,8 @@ pub mod command_line;
 pub use alignment::{
     ProgrammerAlignedFixtureValue, ProgrammerAlignmentBase, ProgrammerAlignmentBinding,
     ProgrammerAlignmentError, ProgrammerAlignmentMode, ProgrammerAlignmentPlan,
-    ProgrammerAlignmentState, apply_programmer_alignment_delta, programmer_alignment_weight,
+    ProgrammerAlignmentProjection, ProgrammerAlignmentProjectionBinding, ProgrammerAlignmentState,
+    apply_programmer_alignment_delta, programmer_alignment_weight,
 };
 pub use capture_mode::ProgrammerCaptureMode;
 pub use command_choice::{
@@ -54,6 +59,7 @@ pub use dynamic_values::{
     DynamicProgrammerValueMutation, GroupReleaseProgrammerValue, ReleaseProgrammerFixtureValue,
     ReleaseProgrammerGroupValue,
 };
+pub use family_alignment::*;
 pub use group_recording::{GroupRecordingCapture, group_delete_blocker};
 pub use groups::{
     DerivedGroup, FrozenGroup, GroupDefinition, GroupFixtureSource, GroupMappingProvenance,
@@ -70,8 +76,12 @@ pub use lifecycle_projection::{ProgrammerLifecycleSession, ProgrammerLifecycleSu
 pub use normal_values::{
     NormalPresetRecallTransition, NormalProgrammerValueMutation, NormalProgrammerValueTiming,
 };
+pub use output_capture::{
+    ProgrammerOutputSourceCapture, ProgrammerPreloadOutputSource, ProgrammerPreloadPendingOutput,
+};
 pub use preload::PreloadPlaybackAction;
 pub use preload_playback_queue::{PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface};
+pub use preload_release::{ReleasedPreloadColors, ReleasedPreloadFixtureColor};
 pub use preload_values::{
     PreloadProgrammerFixtureValue, PreloadProgrammerGroupValue, PreloadProgrammerValueMutation,
     PreloadProgrammerValueTiming, PreloadProgrammerValuesContent,

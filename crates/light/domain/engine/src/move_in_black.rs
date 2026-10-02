@@ -1,5 +1,6 @@
 use crate::{
-    Engine, MoveInBlackDiagnostic, MoveInBlackRuntime, PreparedCandidate, RuntimeGeneration,
+    Engine, MoveInBlackDiagnostic, MoveInBlackRuntime, OutputContinuityState, PreparedCandidate,
+    RuntimeGeneration,
 };
 use chrono::{DateTime, Utc};
 use light_core::TimedValue;
@@ -9,8 +10,9 @@ use std::collections::HashSet;
 impl Engine {
     pub fn move_in_black_runtime(&self) -> Vec<MoveInBlackDiagnostic> {
         let mut diagnostics = self
-            .move_in_black
+            .output_continuity
             .lock()
+            .move_in_black
             .values()
             .map(MoveInBlackRuntime::diagnostic)
             .collect::<Vec<_>>();
@@ -22,15 +24,17 @@ impl Engine {
         diagnostics
     }
 
-    pub(crate) fn move_in_black_contributions(
-        &self,
+    /// Move-in-Black observes the same captured generation, resolved underlay and clock as
+    /// this lane's other contributions. Speculative callers retain their own state branch.
+    pub(crate) fn move_in_black_contributions_with_state(
         generation: &RuntimeGeneration,
         candidates: Vec<MoveInBlackCandidate>,
         active: &[ActivePlayback],
         base_resolved: &crate::ResolvedValues,
         now: DateTime<Utc>,
+        continuity: &mut OutputContinuityState,
     ) -> Vec<(TimedValue, u64)> {
-        let mut runtimes = self.move_in_black.lock();
+        let runtimes = &mut continuity.move_in_black;
         let mut present = HashSet::new();
         for candidate in candidates {
             let candidate = PreparedCandidate::new(generation, candidate, base_resolved);

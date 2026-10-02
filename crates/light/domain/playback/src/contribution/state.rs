@@ -3,7 +3,7 @@ use crate::*;
 
 pub(super) enum PreviousState {
     Tracked(usize),
-    Deleted(HashMap<AttributeAddress, AttributeValue>),
+    Deleted(HashMap<AttributeAddress, PlaybackRetainedValue>),
     Empty,
 }
 
@@ -13,7 +13,7 @@ pub(super) struct PlaybackFrame<'a> {
     pub(super) cue: &'a Cue,
     pub(super) outgoing_cue: Option<&'a Cue>,
     pub(super) outgoing_cue_fade_millis: Option<u64>,
-    pub(super) compiled: &'a CompiledCueList,
+    pub(super) compiled: &'a Arc<CompiledCueList>,
     pub(super) source: SequenceMasterSource,
     pub(super) sequence_master: f32,
     pub(super) snap_sequence_master: f32,
@@ -112,14 +112,16 @@ impl<'a> PlaybackFrame<'a> {
     ) -> Option<&'b AttributeValue> {
         match &self.previous {
             PreviousState::Tracked(index) => attribute.value(*index, false),
-            PreviousState::Deleted(values) => {
-                values.get(&(attribute.fixture_id(), attribute.attribute().clone()))
-            }
+            PreviousState::Deleted(values) => values
+                .get(&(attribute.fixture_id(), attribute.attribute().clone()))
+                .map(|row| &row.timed.value),
             PreviousState::Empty => None,
         }
     }
 
-    pub(super) fn deleted_previous(&self) -> Option<&HashMap<AttributeAddress, AttributeValue>> {
+    pub(super) fn deleted_previous(
+        &self,
+    ) -> Option<&HashMap<AttributeAddress, PlaybackRetainedValue>> {
         match &self.previous {
             PreviousState::Deleted(values) => Some(values),
             _ => None,
@@ -135,6 +137,92 @@ impl<'a> PlaybackFrame<'a> {
             PreviousState::Empty | PreviousState::Deleted(_) => self.target_index,
         };
         self.compiled.attributes_through(latest_index)
+    }
+
+    pub(super) fn evidence(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+        progress: f32,
+    ) -> Option<Arc<PlaybackFamilyEvidence>> {
+        use crate::source_evidence::{EvidencePhases, PlaybackEvidenceCache};
+        let history = self.playback.source_history.as_ref()?;
+        if !history.matches_manual_route(
+            self.playback.manual_xfade_from_index,
+            self.playback.manual_xfade_to_index,
+        ) {
+            return None;
+        }
+        let cache = history.cached(
+            self.compiled,
+            self.target_index,
+            self.target_tracking_wrap,
+            |history| {
+                let mut cache = PlaybackEvidenceCache {
+                    generation: Arc::downgrade(self.compiled.source_generation()),
+                    target_index: self.target_index,
+                    target_wrap: self.target_tracking_wrap,
+                    targets: HashMap::new(),
+                    phases: HashMap::new(),
+                };
+                for compiled in self.relevant_attributes() {
+                    if [self.previous_value(compiled), self.target_value(compiled)]
+                        .into_iter()
+                        .flatten()
+                        .all(|value| {
+                            crate::source_evidence::family_owner(compiled.attribute(), value)
+                                .is_none()
+                        })
+                    {
+                        continue;
+                    }
+                    let address = (compiled.fixture_id(), compiled.attribute().clone());
+                    let previous = self
+                        .deleted_previous()
+                        .and_then(|rows| rows.get(&address))
+                        .and_then(|row| row.family_evidence.clone());
+                    let target = history.target(
+                        self.compiled,
+                        compiled,
+                        self.target_index,
+                        self.target_tracking_wrap,
+                    );
+                    let phases = EvidencePhases::new(
+                        compiled.attribute(),
+                        self.previous_value(compiled),
+                        self.target_value(compiled),
+                        previous,
+                        target.evidence.clone(),
+                    );
+                    cache.targets.insert(address.clone(), target);
+                    cache.phases.insert(address, phases);
+                }
+                if let Some(previous) = self.deleted_previous() {
+                    for (address, row) in previous {
+                        if !self.compiled.contains(address.0, &address.1)
+                            && crate::source_evidence::family_owner(&address.1, &row.timed.value)
+                                .is_some()
+                        {
+                            cache.phases.insert(
+                                address.clone(),
+                                EvidencePhases::new(
+                                    &address.1,
+                                    Some(&row.timed.value),
+                                    None,
+                                    row.family_evidence.clone(),
+                                    None,
+                                ),
+                            );
+                        }
+                    }
+                }
+                cache
+            },
+        )?;
+        cache
+            .phases
+            .get(&(fixture, attribute.clone()))?
+            .at(progress)
     }
 }
 
@@ -152,15 +240,16 @@ fn previous_state(playback: &ActivePlayback) -> PreviousState {
 }
 
 fn normalized_deleted_source(
-    source: &[TimedValue],
+    source: &[PlaybackRetainedValue],
     playback: &ActivePlayback,
-) -> HashMap<AttributeAddress, AttributeValue> {
+) -> HashMap<AttributeAddress, PlaybackRetainedValue> {
     let intensity_scale = if playback.flash { 1.0 } else { playback.master };
     source
         .iter()
-        .map(|timed| {
-            let value = normalized_deleted_value(timed, intensity_scale);
-            ((timed.fixture_id, timed.attribute.clone()), value)
+        .map(|retained| {
+            let mut row = retained.clone();
+            row.timed.value = normalized_deleted_value(&retained.timed, intensity_scale);
+            ((retained.fixture_id, retained.attribute.clone()), row)
         })
         .collect()
 }

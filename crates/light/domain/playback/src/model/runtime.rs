@@ -10,7 +10,7 @@ pub(crate) enum PlaybackKey {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) enum TemporaryPlaybackKind {
+pub enum TemporaryPlaybackKind {
     Flash,
     TempButton,
     TempFader,
@@ -162,7 +162,9 @@ pub struct ActivePlayback {
     /// GO/GOTO/BACK or deleted-Cue recovery continuous instead of reconstructing from a stored Cue
     /// endpoint. This runtime snapshot is never written into Cue data.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub deleted_cue_transition_source: Option<Vec<TimedValue>>,
+    pub deleted_cue_transition_source: Option<Vec<PlaybackRetainedValue>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_history: Option<PlaybackSourceHistory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loaded_cue_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -223,14 +225,35 @@ pub struct CueTimingRuntimeStatus {
 
 /// Tracked Dynamic-layer value for one active Cuelist source.
 ///
-/// The projection remains scalar and address-local. `instance_link` coordinates the lanes which
+/// The projection remains address-local. `instance_link` coordinates the lanes which
 /// share one runtime clock, while FAT/static values continue to arbitrate independently.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ActiveCueDynamicValue {
+    /// The actual iterated normal or temporary Playback, including page-qualified virtual
+    /// identity. A standalone Dynamic Playback is a different source and never uses this row.
+    pub source: SequenceMasterSource,
+    /// Stable controller scope; concurrent temporary kinds on one assignment have independent
+    /// clocks even when their master ownership and exact activation timestamps are identical.
+    pub source_key: CueDynamicSourceKey,
+    /// Suppressed sources still reconcile and advance their controller clocks. Only emitted
+    /// contributions are filtered, so releasing Swap can reveal the continuing Dynamic.
+    pub output_enabled: bool,
+    pub sequence_master: f32,
+    pub snap_sequence_master: f32,
     pub playback_number: Option<u16>,
     pub cue_list_id: CueListId,
+    /// Cue containing the surviving stored Dynamic row. Tracking through later sparse Cues
+    /// preserves this identity; a replacement or generated restoration belongs to its own Cue.
+    pub authored_cue_id: Uuid,
+    /// Current activation context, independent from the earlier Cue supplying a tracked row.
     pub current_cue_id: Uuid,
     pub priority: i16,
+    /// Preserve the full source instant and monotonic order; milliseconds alone cannot
+    /// distinguish simultaneous actions or the temporary source's microsecond separation.
+    /// Navigation intentionally updates this activation context even for a tracked row whose
+    /// `authored_cue_id` has not changed.
+    pub changed_at: DateTime<Utc>,
+    pub transition_ordinal: u64,
     pub changed_at_millis: u64,
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,
@@ -283,7 +306,8 @@ const fn default_dynamic_speed_multiplier() -> light_dynamics::Rational {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MoveInBlackTargetValue {
     pub attribute: AttributeKey,
-    pub current: AttributeValue,
+    /// Missing semantic ownership must be filled from the engine underlay, never Normalized(0).
+    pub current: Option<AttributeValue>,
     pub target: AttributeValue,
     pub fade_millis: u64,
 }
@@ -313,9 +337,129 @@ pub struct SequenceMasterSource {
     pub temporary: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum CueDynamicSourceKey {
+    Normal {
+        source: SequenceMasterSource,
+    },
+    Temporary {
+        source: SequenceMasterSource,
+        kind: TemporaryPlaybackKind,
+    },
+}
+
+impl CueDynamicSourceKey {
+    pub fn source(self) -> SequenceMasterSource {
+        match self {
+            Self::Normal { source } | Self::Temporary { source, .. } => source,
+        }
+    }
+
+    /// Stable source/instance identity, independent of Cue navigation and activation stamps.
+    /// Fixed byte tags avoid Debug/serde formatting or randomized Hash implementations.
+    pub fn controller_id(self, instance_link: Uuid) -> Uuid {
+        const NAMESPACE: Uuid = Uuid::from_u128(0x4355455f_44594e41_4d494353_5f563100);
+        let source = self.source();
+        let mut key = [0_u8; 37];
+        key[..16].copy_from_slice(source.cue_list_id.0.as_bytes());
+        key[16..32].copy_from_slice(instance_link.as_bytes());
+        let identity = source.playback_identity.or_else(|| {
+            source
+                .playback_number
+                .and_then(|number| PlaybackIdentity::physical(number).ok())
+        });
+        match identity {
+            Some(PlaybackIdentity::Physical(number)) => {
+                key[32] = 1;
+                key[34..36].copy_from_slice(&number.get().to_be_bytes());
+            }
+            Some(PlaybackIdentity::Virtual(address)) => {
+                key[32] = 2;
+                key[33] = address.page();
+                key[34..36].copy_from_slice(&address.number().get().to_be_bytes());
+            }
+            None => {
+                if let Some(number) = source.playback_number {
+                    // An unqualified nonphysical legacy number is not a direct Cuelist source.
+                    // Preserve its namespace without inventing a physical/virtual assignment.
+                    key[32] = 3;
+                    key[34..36].copy_from_slice(&number.to_be_bytes());
+                }
+            }
+        }
+        key[36] = match self {
+            Self::Normal { .. } => 0,
+            Self::Temporary { kind, .. } => match kind {
+                TemporaryPlaybackKind::Flash => 1,
+                TemporaryPlaybackKind::TempButton => 2,
+                TemporaryPlaybackKind::TempFader => 3,
+                TemporaryPlaybackKind::Swap => 4,
+            },
+        };
+        Uuid::new_v5(&NAMESPACE, &key)
+    }
+}
+
+impl ActivePlayback {
+    pub(crate) fn begin_source_history(
+        &mut self,
+        at: DateTime<Utc>,
+        ordinal: Option<u64>,
+        compiled: &Arc<CompiledCueList>,
+    ) {
+        self.begin_source_history_from(at, ordinal, compiled, self.sequence_master_source());
+    }
+    pub(crate) fn begin_source_history_from(
+        &mut self,
+        at: DateTime<Utc>,
+        ordinal: Option<u64>,
+        compiled: &Arc<CompiledCueList>,
+        source: SequenceMasterSource,
+    ) {
+        self.source_history = ordinal.map(|ordinal| {
+            PlaybackSourceHistory::next(
+                self.source_history.as_ref(),
+                at,
+                ordinal,
+                compiled,
+                self.cue_index,
+                self.tracking_wrap,
+                source,
+                self.deleted_cue_transition_source.is_some(),
+            )
+        });
+    }
+    pub(crate) fn sequence_master_source(&self) -> SequenceMasterSource {
+        SequenceMasterSource {
+            playback_number: self.playback_number,
+            playback_identity: self.playback_identity,
+            cue_list_id: self.cue_list_id,
+            temporary: self.temporary,
+        }
+    }
+
+    pub(crate) fn sequence_masters(&self) -> (f32, f32) {
+        if self.flash {
+            return (1.0, 1.0);
+        }
+        let current = self.master.clamp(0.0, 1.0);
+        let snapped = self
+            .master_transition
+            .as_ref()
+            .map(|transition| transition.to)
+            .unwrap_or(self.master)
+            .clamp(0.0, 1.0);
+        (current, snapped)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct PlaybackContribution {
     pub value: TimedValue,
+    pub family_evidence: Option<Arc<PlaybackFamilyEvidence>>,
+    /// Output-only proof that this value is the complete authored target endpoint. Intermediate
+    /// blends and retained/deleted Cue holds lack exact historical dependency evidence.
+    pub authored_target: bool,
     pub transition_ordinal: u64,
     pub sequence_master: f32,
     pub source: SequenceMasterSource,
@@ -328,7 +472,7 @@ pub struct DeletedCueHold {
     pub deleted_number: CueNumber,
     pub previous_number: Option<CueNumber>,
     pub next_number: Option<CueNumber>,
-    pub contributions: Vec<TimedValue>,
+    pub contributions: Vec<PlaybackRetainedValue>,
 }
 
 pub(crate) fn advance_chaser_steps(
@@ -386,6 +530,10 @@ fn default_master() -> f32 {
 }
 
 pub(crate) fn reset_manual_transition(playback: &mut ActivePlayback) {
+    playback.source_history = playback
+        .source_history
+        .take()
+        .and_then(PlaybackSourceHistory::cancel_manual);
     playback.external_completion_millis = 0;
     playback.transition_timing_bypassed = false;
     playback.transition_fade_fallback_millis = None;
@@ -437,6 +585,7 @@ pub(crate) fn new_active_playback(
         current_cue_number: cue_list.cues.first().map(|cue| cue.number.clone()),
         deleted_cue_hold: None,
         deleted_cue_transition_source: None,
+        source_history: None,
         loaded_cue_id: None,
         loaded_cue_number: None,
     }

@@ -497,6 +497,69 @@ fn live_group_sample_replaces_only_the_assigned_group() {
 }
 
 #[test]
+fn exclusion_only_release_preserves_other_group_and_fixture_sources_and_reveals_the_cue() {
+    let clock = Arc::new(ManualClock::new(test_time()));
+    let (engine, programmers, session, fixture_id) =
+        grouped_source_engine(clock.clone(), &["a", "b"]);
+    let attribute = AttributeKey("tilt".into());
+    let cue = test_cue_list(
+        "Underlay",
+        vec![CueChange::set(
+            fixture_id,
+            attribute.clone(),
+            normalized(0.1),
+        )],
+    );
+    let playback = test_playback(1, cue.id);
+    let mut snapshot = engine.snapshot().as_ref().clone();
+    snapshot.cue_lists = vec![cue].into();
+    snapshot.playbacks = vec![playback].into();
+    snapshot.revision += 1;
+    engine.replace_snapshot(snapshot).unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    programmers.set_group(session, "b".into(), attribute.clone(), normalized(0.4));
+    clock.advance_millis(1);
+    programmers.set_group(session, "a".into(), attribute.clone(), normalized(0.9));
+    clock.advance_millis(1);
+    programmers.set(session, fixture_id, attribute.clone(), normalized(0.7));
+    let state = programmers.active().remove(0);
+    let depth = programmers.undo_depth(session);
+    let sources = [
+        ContributionSourceId::programmer_group(state.id, "a"),
+        ContributionSourceId::programmer(state.id),
+        ContributionSourceId::programmer_group(state.id, "b"),
+    ];
+    for (count, expected) in [(1, 0.7), (2, 0.4), (3, 0.1)] {
+        let batch = ContributionBatch::excluding(
+            sources[..count]
+                .iter()
+                .map(|source| (source.clone(), fixture_id, attribute.clone())),
+        );
+        assert_eq!(batch.len(), 0);
+        assert!(!batch.is_empty());
+        assert_normalized(
+            &engine.resolved_values_with_contribution_batches(std::slice::from_ref(&batch)),
+            fixture_id,
+            "tilt",
+            expected,
+        );
+        let frame = engine
+            .render_with_contribution_batches(
+                RenderOptions::default(),
+                std::slice::from_ref(&batch),
+            )
+            .unwrap();
+        assert_dmx(
+            frame.universes[&1][1],
+            expected,
+            "source-scoped release underlay",
+        );
+    }
+    assert_normalized(&engine.resolved_values(), fixture_id, "tilt", 0.7);
+    assert_eq!(programmers.undo_depth(session), depth);
+}
+
+#[test]
 fn preload_group_sample_keeps_the_live_group_lane_independent() {
     let started = test_time();
     let clock = Arc::new(ManualClock::new(started));
@@ -568,9 +631,11 @@ fn sampled_intensity_participates_in_move_in_black_darkness() {
     clock.set(started + ChronoDuration::milliseconds(5_000));
     let sampled = independent_batch(timed_value(fixture_id, "intensity", 0.2, 100, clock.now()));
 
-    engine.resolved_values_with_contribution_batches(std::slice::from_ref(&sampled));
+    engine
+        .render_with_contribution_batches(RenderOptions::default(), std::slice::from_ref(&sampled))
+        .unwrap();
     assert_eq!(mib_state(&engine, fixture_id), MoveInBlackState::Blocked);
-    engine.resolved_values();
+    engine.render(RenderOptions::default()).unwrap();
     assert_eq!(mib_state(&engine, fixture_id), MoveInBlackState::Delaying);
 }
 
@@ -853,4 +918,280 @@ fn mib_state(engine: &Engine, fixture_id: FixtureId) -> MoveInBlackState {
 
 fn test_time() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 7, 19, 12, 0, 0).unwrap()
+}
+
+#[test]
+fn preload_release_go_reveals_underlay_without_erasing_the_older_programmer() {
+    let clock = Arc::new(ManualClock::new(test_time()));
+    let (engine, programmers, session, fixture) =
+        grouped_source_engine(clock.clone(), &["underlay"]);
+    let tilt = AttributeKey("tilt".into());
+    programmers.set_group(session, "underlay".into(), tilt.clone(), normalized(0.2));
+    programmers.set_many(session, [(fixture, tilt.clone(), normalized(0.5))]);
+    programmers.arm_preload(session, true);
+    programmers.set_many(session, [(fixture, tilt.clone(), normalized(0.8))]);
+    programmers.activate_preload(session);
+    assert_normalized(&engine.resolved_values(), fixture, "tilt", 0.8);
+    programmers.arm_preload(session, true);
+    assert!(programmers.apply_release_values(
+        session,
+        &[light_programmer::ReleaseProgrammerFixtureValue {
+            fixture_id: fixture,
+            attribute: tilt.clone()
+        }],
+        &[]
+    ));
+    assert_normalized(&engine.resolved_values(), fixture, "tilt", 0.8);
+    programmers.activate_preload(session);
+    assert_normalized(&engine.resolved_values(), fixture, "tilt", 0.2);
+    let rendered = engine.render(RenderOptions::default()).unwrap();
+    assert_dmx(rendered.universes[&1][1], 0.2, "Preload Release Go");
+    assert_eq!(
+        programmers.get(session).unwrap().values[0].value,
+        normalized(0.5)
+    );
+    assert!(programmers.undo(session));
+    assert_normalized(&engine.resolved_values(), fixture, "tilt", 0.8);
+    assert!(programmers.redo(session));
+    assert_normalized(&engine.resolved_values(), fixture, "tilt", 0.2);
+    assert!(programmers.release_preload(session));
+    assert_normalized(&engine.resolved_values(), fixture, "tilt", 0.5);
+}
+
+#[test]
+fn preload_release_keeps_newer_edits_and_does_not_let_a_released_sample_replace_them() {
+    let clock = Arc::new(ManualClock::new(test_time()));
+    let (engine, programmers, session, fixture) =
+        grouped_source_engine(clock.clone(), &["underlay"]);
+    let tilt = AttributeKey("tilt".into());
+    programmers.set_group(session, "underlay".into(), tilt.clone(), normalized(0.2));
+    programmers.set_many(session, [(fixture, tilt.clone(), normalized(0.5))]);
+    let state = programmers.get(session).unwrap();
+    let sample = ContributionBatch::new([ContributionSample::replacing(
+        state.values[0].clone(),
+        ContributionSourceId::programmer(state.id),
+    )]);
+    programmers.arm_preload(session, true);
+    programmers.apply_release_values(
+        session,
+        &[light_programmer::ReleaseProgrammerFixtureValue {
+            fixture_id: fixture,
+            attribute: tilt.clone(),
+        }],
+        &[],
+    );
+    programmers.arm_preload(session, false);
+    // All authored timestamps are identical. Only the monotonic edit order distinguishes them.
+    programmers.set_many(session, [(fixture, tilt.clone(), normalized(0.7))]);
+    clock.advance_millis(5_000);
+    programmers.activate_preload(session);
+    assert_normalized(
+        &engine.resolved_values_with_contribution_batches(std::slice::from_ref(&sample)),
+        fixture,
+        "tilt",
+        0.7,
+    );
+    // Clearing the newer value leaves the retained Preload Release active.
+    programmers.release_fixture_attribute(session, fixture, &tilt);
+    assert_normalized(
+        &engine.resolved_values_with_contribution_batches(&[sample]),
+        fixture,
+        "tilt",
+        0.2,
+    );
+}
+
+#[test]
+fn group_preload_release_preserves_other_groups_direct_exceptions_and_updates_membership() {
+    let clock: SharedClock = Arc::new(ManualClock::new(test_time()));
+    let (engine, programmers, session, fixture) = grouped_source_engine(clock, &["a", "b"]);
+    let tilt = AttributeKey("tilt".into());
+    programmers.set_group(session, "b".into(), tilt.clone(), normalized(0.3));
+    programmers.set_group(session, "a".into(), tilt.clone(), normalized(0.6));
+    programmers.arm_preload(session, true);
+    programmers.apply_release_values(
+        session,
+        &[],
+        &[light_programmer::ReleaseProgrammerGroupValue {
+            group_id: "a".into(),
+            attribute: tilt.clone(),
+        }],
+    );
+    programmers.activate_preload(session);
+    assert_normalized(&engine.resolved_values(), fixture, "tilt", 0.3);
+    programmers.set_many(session, [(fixture, tilt.clone(), normalized(0.9))]);
+    assert_normalized(&engine.resolved_values(), fixture, "tilt", 0.9);
+    programmers.release_fixture_attribute(session, fixture, &tilt);
+    assert_normalized(&engine.resolved_values(), fixture, "tilt", 0.3);
+    // Remove the competing Group, keeping the released Group's old value suppressed.
+    let mut snapshot = engine.snapshot().as_ref().clone();
+    let mut groups = snapshot.groups.as_ref().clone();
+    groups
+        .iter_mut()
+        .find(|group| group.id == "b")
+        .unwrap()
+        .fixtures
+        .clear();
+    snapshot.groups = Arc::new(groups);
+    snapshot.revision += 1;
+    engine.replace_snapshot(snapshot).unwrap();
+    assert!(
+        !engine
+            .resolved_values()
+            .contains_key(&(fixture, tilt.clone()))
+    );
+    programmers.release_preload(session);
+    assert_normalized(&engine.resolved_values(), fixture, "tilt", 0.6);
+}
+
+#[test]
+fn active_preload_release_filters_older_fixat_sources_before_dynamic_reconciliation() {
+    let (engine, programmers, session, fixture) = source_engine(test_time());
+    let tilt = AttributeKey("tilt".into());
+    let set = |value| light_programmer::DynamicProgrammerValueMutation::Set {
+        fixture_id: fixture,
+        attribute: tilt.clone(),
+        value: light_dynamics::DynamicSemanticValue::FixAt {
+            value,
+            timing: Default::default(),
+        },
+    };
+    programmers.apply_dynamic_values(session, &[set(0.6)], None);
+    assert_eq!(engine.dynamic_programmer_values().len(), 1);
+    programmers.arm_preload(session, true);
+    programmers.apply_release_values(
+        session,
+        &[light_programmer::ReleaseProgrammerFixtureValue {
+            fixture_id: fixture,
+            attribute: tilt.clone(),
+        }],
+        &[],
+    );
+    programmers.activate_preload(session);
+    let released = engine.dynamic_programmer_values();
+    assert_eq!(released.len(), 1);
+    assert!(matches!(
+        released[0].2.value,
+        light_dynamics::DynamicSemanticValue::Release
+    ));
+    programmers.apply_dynamic_values(session, &[set(0.9)], None);
+    assert_eq!(engine.dynamic_programmer_values().len(), 2);
+    programmers.release_preload(session);
+    assert_eq!(engine.dynamic_programmer_values().len(), 1);
+}
+
+#[test]
+fn captured_dynamic_tuple_and_source_row_share_one_arc_memo_boundary() {
+    let (engine, programmers, session, fixture) = source_engine(test_time());
+    let attribute = AttributeKey("focus".into());
+    let set = |value| light_programmer::DynamicProgrammerValueMutation::Set {
+        fixture_id: fixture,
+        attribute: attribute.clone(),
+        value: light_dynamics::DynamicSemanticValue::FixAt {
+            value,
+            timing: Default::default(),
+        },
+    };
+    programmers.apply_dynamic_values(session, &[set(0.3)], None);
+    let first_capture = programmers.capture_output_sources();
+    let (first_values, first_rows) = engine
+        .captured_dynamic_programmer_values_from_sources(first_capture.normal_dynamics.clone());
+    let (same_values, same_rows) = engine
+        .captured_dynamic_programmer_values_from_sources(first_capture.normal_dynamics.clone());
+    assert!(Arc::ptr_eq(&first_values, &same_values));
+    assert!(Arc::ptr_eq(&first_rows, &same_rows));
+    assert_eq!(first_values.len(), 1);
+    assert_eq!(first_rows.len(), first_values.len());
+    assert_eq!(
+        first_rows[0].source,
+        ContributionSourceId::programmer(first_capture.identity.unwrap())
+    );
+    assert_eq!(
+        first_rows[0].programmer_order,
+        first_values[0].2.programmer_order
+    );
+    assert_eq!(
+        first_rows[0].stamp.unwrap().programmer_order,
+        first_values[0].2.programmer_order
+    );
+
+    programmers.apply_dynamic_values(session, &[set(0.7)], None);
+    let next_capture = programmers.capture_output_sources();
+    let (next_values, next_rows) = engine
+        .captured_dynamic_programmer_values_from_sources(next_capture.normal_dynamics.clone());
+    assert!(!Arc::ptr_eq(&first_values, &next_values));
+    assert!(!Arc::ptr_eq(&first_rows, &next_rows));
+    assert_eq!(
+        next_rows[0].programmer_order,
+        next_values[0].2.programmer_order
+    );
+    assert!(
+        next_rows[0].programmer_order > first_rows[0].programmer_order,
+        "the prior capture must retain its original authored row"
+    );
+}
+
+#[test]
+fn restored_release_orders_cannot_suppress_the_next_operator_edit() {
+    let (engine, programmers, session, fixture) = source_engine(test_time());
+    let tilt = AttributeKey("tilt".into());
+    programmers.arm_preload(session, true);
+    programmers.apply_release_values(
+        session,
+        &[light_programmer::ReleaseProgrammerFixtureValue {
+            fixture_id: fixture,
+            attribute: tilt.clone(),
+        }],
+        &[],
+    );
+    programmers.activate_preload(session);
+    let saved = serde_json::to_vec(&programmers.get(session).unwrap()).unwrap();
+    let restored = ProgrammerRegistry::with_clock(Arc::new(ManualClock::new(test_time())));
+    restored.start(session);
+    restored.restore(serde_json::from_slice(&saved).unwrap());
+    let engine_after_restore = Engine::new(restored.clone());
+    engine_after_restore
+        .replace_snapshot(engine.snapshot().as_ref().clone())
+        .unwrap();
+    restored.set_many(session, [(fixture, tilt.clone(), normalized(0.8))]);
+    assert_normalized(
+        &engine_after_restore.resolved_values(),
+        fixture,
+        "tilt",
+        0.8,
+    );
+}
+
+#[test]
+fn preload_release_keeps_linked_dynamic_on_off_lifetimes_independent() {
+    let (engine, programmers, session, fixture) = source_engine(test_time());
+    let tilt = AttributeKey("tilt".into());
+    programmers.apply_dynamic_values(
+        session,
+        &[light_programmer::DynamicProgrammerValueMutation::Set {
+            fixture_id: fixture,
+            attribute: tilt.clone(),
+            value: light_dynamics::DynamicSemanticValue::DynamicOff {
+                instance_link: uuid::Uuid::new_v4(),
+                timing: Default::default(),
+            },
+        }],
+        None,
+    );
+    programmers.arm_preload(session, true);
+    programmers.apply_release_values(
+        session,
+        &[light_programmer::ReleaseProgrammerFixtureValue {
+            fixture_id: fixture,
+            attribute: tilt,
+        }],
+        &[],
+    );
+    programmers.activate_preload(session);
+    let values = engine.dynamic_programmer_values();
+    assert_eq!(values.len(), 2);
+    assert!(values.iter().any(|(_, _, value)| matches!(
+        value.value,
+        light_dynamics::DynamicSemanticValue::DynamicOff { .. }
+    )));
 }

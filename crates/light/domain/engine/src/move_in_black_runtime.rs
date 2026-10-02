@@ -158,14 +158,16 @@ impl MoveInBlackRuntime {
             .candidate
             .values
             .iter()
-            .map(|value| MoveInBlackPosition {
-                attribute: value.attribute.clone(),
-                current: self
-                    .current
-                    .get(&value.attribute)
-                    .cloned()
-                    .unwrap_or_else(|| value.current.clone()),
-                target: value.target.clone(),
+            .filter_map(|value| {
+                Some(MoveInBlackPosition {
+                    attribute: value.attribute.clone(),
+                    current: self
+                        .current
+                        .get(&value.attribute)
+                        .cloned()
+                        .or_else(|| value.current.clone())?,
+                    target: value.target.clone(),
+                })
             })
             .collect::<Vec<_>>();
         positions.sort_by(|left, right| left.attribute.cmp(&right.attribute));
@@ -307,16 +309,20 @@ impl MoveInBlackRuntime {
         self.candidate
             .values
             .iter()
-            .map(|target| {
-                let from = self.from.get(&target.attribute).unwrap_or(&target.current);
+            .filter_map(|target| {
+                let from = self.from.get(&target.attribute).or(target.current.as_ref());
                 let elapsed = (now - started_at).num_milliseconds().max(0) as u64;
                 let progress = if target.fade_millis == 0 {
                     1.0
                 } else {
                     (elapsed as f32 / target.fade_millis as f32).clamp(0.0, 1.0)
                 };
-                let value = interpolate_value(from, &target.target, progress);
-                (target.attribute.clone(), value)
+                let value = if progress >= 1.0 {
+                    target.target.clone()
+                } else {
+                    interpolate_value(from?, &target.target, progress)?
+                };
+                Some((target.attribute.clone(), value))
             })
             .collect()
     }
@@ -347,11 +353,11 @@ fn interpolate_value(
     from: &AttributeValue,
     target: &AttributeValue,
     progress: f32,
-) -> AttributeValue {
-    match (from.normalized(), target.normalized()) {
-        (Some(from), Some(to)) => AttributeValue::Normalized(from + (to - from) * progress),
-        _ if progress >= 1.0 => target.clone(),
-        _ => from.clone(),
+) -> Option<AttributeValue> {
+    match light_core::programming::interpolate_programming_value(from, target, progress) {
+        Ok(value) => Some(value),
+        Err(light_core::programming::TransitionError::Requires(_)) => Some(from.clone()),
+        Err(light_core::programming::TransitionError::Invalid(_)) => None,
     }
 }
 

@@ -553,6 +553,7 @@ impl ProgrammerRegistry {
         state.checkpoint();
         let programmer_order = self.next_programmer_order();
         let preload = state.blind && state.preload_capture_programmer;
+        state.clear_group_release(preload, &group_id, &attribute);
         let target = if preload {
             &mut state.preload_group_pending
         } else {
@@ -600,10 +601,10 @@ impl ProgrammerRegistry {
         } else {
             Arc::make_mut(&mut state.values)
         };
-        let before = values.len();
         if values
             .iter()
             .all(|value| value.fixture_id != fixture_id || value.attribute != *attribute)
+            && !state.has_fixture_release(preload, fixture_id, attribute)
         {
             return false;
         }
@@ -614,7 +615,7 @@ impl ProgrammerRegistry {
             Arc::make_mut(&mut state.values)
         };
         values.retain(|value| value.fixture_id != fixture_id || value.attribute != *attribute);
-        debug_assert!(values.len() < before);
+        state.clear_fixture_release(preload, fixture_id, attribute);
         state.last_activity = self.clock.now();
         drop(states);
         if preload {
@@ -649,6 +650,7 @@ impl ProgrammerRegistry {
         if !target
             .get(group_id)
             .is_some_and(|attributes| attributes.contains_key(attribute))
+            && !state.has_group_release(preload, group_id, attribute)
         {
             return false;
         }
@@ -664,6 +666,7 @@ impl ProgrammerRegistry {
                 target.remove(group_id);
             }
         }
+        state.clear_group_release(preload, group_id, attribute);
         state.last_activity = self.clock.now();
         drop(states);
         if preload {

@@ -12,10 +12,35 @@ struct ContributionContext<'a> {
     /// which is the ordinary case: the answer depends only on the attribute's name, and that was
     /// settled when the cue list compiled rather than per contribution per frame.
     is_snap: Option<SnapOverride<'a>>,
+    /// Where a family that fades in with nothing before it starts (see [`FamilyStartSource`]).
+    family_start: Option<&'a dyn FamilyStartSource>,
 }
 
 /// A caller's own answer to whether an attribute snaps rather than fades.
 pub type SnapOverride<'a> = &'a dyn Fn(FixtureId, &AttributeKey) -> bool;
+
+/// TL-552: where a Position that fades in with no previous Cue value starts. Angles cannot fade
+/// from nothing (0° is a real pose, never an invented owner), so without a start the fade renders
+/// no Position until it completes. The engine installs each generation's declared default poses:
+/// a frame-local start with no provenance. Live frames, previews and the interrupted source a
+/// GO captures mid-fade all read the same start, so an interrupted fade continues from where it
+/// was rather than jumping back.
+pub trait FamilyStartSource: Send + Sync {
+    fn family_start(&self, fixture: FixtureId, attribute: &AttributeKey) -> Option<AttributeValue>;
+}
+
+/// The installed [`FamilyStartSource`]; empty keeps the hold-until-complete behaviour.
+#[derive(Clone, Default)]
+pub(crate) struct FamilyStartSlot(pub(crate) Option<Arc<dyn FamilyStartSource>>);
+
+impl std::fmt::Debug for FamilyStartSlot {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_tuple("FamilyStartSlot")
+            .field(&self.0.is_some())
+            .finish()
+    }
+}
 
 impl PlaybackEngine {
     pub fn contributions(&self) -> Vec<TimedValue> {
@@ -33,7 +58,7 @@ impl PlaybackEngine {
         &self,
         key: PlaybackKey,
         now: DateTime<Utc>,
-    ) -> Option<Vec<TimedValue>> {
+    ) -> Option<Vec<PlaybackRetainedValue>> {
         let playback = self.active.get(&key)?;
         if !playback.enabled {
             return None;
@@ -45,6 +70,7 @@ impl PlaybackEngine {
             engine: self,
             now,
             is_snap: None,
+            family_start: self.family_start.0.as_deref(),
         };
         if context.suppressed(playback) {
             return Some(Vec::new());
@@ -54,7 +80,7 @@ impl PlaybackEngine {
         Some(
             values
                 .into_iter()
-                .map(|contribution| contribution.value)
+                .map(PlaybackRetainedValue::from)
                 .collect(),
         )
     }
@@ -112,8 +138,25 @@ impl PlaybackEngine {
             engine: self,
             now,
             is_snap,
+            family_start: self.family_start.0.as_deref(),
         }
         .build_into(values);
+    }
+
+    /// Ordinary and Dynamic Cue projections must agree about temporarily suppressed sources.
+    pub(crate) fn playback_source_suppressed(&self, playback: &ActivePlayback) -> bool {
+        let Some(number) = playback.playback_number else {
+            return false;
+        };
+        let identity = playback.playback_identity.unwrap_or_else(|| {
+            PlaybackIdentity::physical(number).expect("active physical playback number is valid")
+        });
+        self.swap_held.iter().any(|source| {
+            *source != identity
+                && !self
+                    .definition_at(identity)
+                    .is_some_and(|definition| definition.protect_from_swap)
+        })
     }
 }
 
@@ -132,19 +175,7 @@ impl ContributionContext<'_> {
     }
 
     fn suppressed(&self, playback: &ActivePlayback) -> bool {
-        let Some(number) = playback.playback_number else {
-            return false;
-        };
-        let identity = playback.playback_identity.unwrap_or_else(|| {
-            PlaybackIdentity::physical(number).expect("active physical playback number is valid")
-        });
-        self.engine.swap_held.iter().any(|source| {
-            *source != identity
-                && !self
-                    .engine
-                    .definition_at(identity)
-                    .is_some_and(|definition| definition.protect_from_swap)
-        })
+        self.engine.playback_source_suppressed(playback)
     }
 
     fn extend_playback(&self, values: &mut Vec<PlaybackContribution>, playback: &ActivePlayback) {
@@ -173,24 +204,9 @@ impl ContributionContext<'_> {
 }
 
 fn source(playback: &ActivePlayback) -> SequenceMasterSource {
-    SequenceMasterSource {
-        playback_number: playback.playback_number,
-        playback_identity: playback.playback_identity,
-        cue_list_id: playback.cue_list_id,
-        temporary: playback.temporary,
-    }
+    playback.sequence_master_source()
 }
 
 fn sequence_masters(playback: &ActivePlayback) -> (f32, f32) {
-    if playback.flash {
-        return (1.0, 1.0);
-    }
-    let current = playback.master.clamp(0.0, 1.0);
-    let snapped = playback
-        .master_transition
-        .as_ref()
-        .map(|transition| transition.to)
-        .unwrap_or(playback.master)
-        .clamp(0.0, 1.0);
-    (current, snapped)
+    playback.sequence_masters()
 }

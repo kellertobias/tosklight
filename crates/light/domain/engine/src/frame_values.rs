@@ -75,6 +75,26 @@ impl FrameValues {
         self.shared.frame.as_ref()
     }
 
+    /// Available only on an explicitly traced observer frame. Equal payloads do not imply the
+    /// same source; overrides and Freeze deliberately clear their underlying source identity.
+    pub fn contribution_origin(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&crate::ContributionOrigin> {
+        self.frame()?.origin(fixture, attribute)
+    }
+
+    /// Exact producer-supplied authorship and dependency trace for a winning composed sample.
+    /// Available only on an observer frame. Equal values do not imply equal ownership.
+    pub fn contribution_family_evidence(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&Arc<crate::ContributionFamilyEvidence>> {
+        self.frame()?.family_evidence(fixture, attribute)
+    }
+
     /// One value by name, without building a map to find it.
     ///
     /// This is the call for anything on the frame path. Reaching for [`Self::values`] to look up a
@@ -115,7 +135,7 @@ impl FrameValues {
                     .overflow(fixture_id)
                     .iter()
                     .find(|(candidate, _)| candidate == attribute)
-                    .map(|(_, winner)| winner.changed_at),
+                    .and_then(|(_, winner)| winner.output_changed_at()),
             },
             None => self
                 .shared
@@ -156,10 +176,14 @@ impl FrameValues {
             );
             for (slot, winner) in frame.occupied() {
                 let (fixture_id, attribute) = frame.slots().pair(slot);
-                changed_at.insert((fixture_id, attribute.clone()), winner.changed_at);
+                if let Some(at) = winner.output_changed_at() {
+                    changed_at.insert((fixture_id, attribute.clone()), at);
+                }
             }
             for (fixture_id, attribute, winner) in frame.overflowed() {
-                changed_at.insert((fixture_id, attribute.clone()), winner.changed_at);
+                if let Some(at) = winner.output_changed_at() {
+                    changed_at.insert((fixture_id, attribute.clone()), at);
+                }
             }
             changed_at
         })

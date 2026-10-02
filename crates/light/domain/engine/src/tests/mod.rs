@@ -135,6 +135,8 @@ fn fixture() -> (PatchedFixture, FixtureId) {
             grand_master_enabled: true,
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -277,6 +279,8 @@ fn schema_v2_fixture(
             grand_master_enabled: true,
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -465,6 +469,8 @@ fn mib_snapshot(fixtures: Vec<PatchedFixture>, fixture_ids: &[FixtureId]) -> Eng
         presentation_image: None,
     };
     EngineSnapshot {
+        required_programming_contract: 0,
+        native_color_sources: Default::default(),
         fixtures: fixtures.into(),
         cue_lists: vec![cue_list].into(),
         dynamics: vec![].into(),
@@ -509,14 +515,25 @@ mod highlight_masters;
 
 mod highlight_looks;
 
+mod activation_group_masters;
 mod lifecycle;
+mod lifecycle_dependencies;
 
 mod color_intent;
 mod contribution_batches;
 
+mod family_evidence;
 mod frame_addresses;
 mod frame_reuse;
+mod position_adoption;
+mod prepared_frames;
+mod prepared_geometry;
+mod prepared_static_family;
 
+mod playback_batch_dynamic;
+mod playback_batch_jump;
 mod playback_boundary;
 
+mod frame_token;
+mod mount_projection;
 mod tracked_positions;

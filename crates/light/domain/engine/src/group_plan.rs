@@ -6,7 +6,7 @@
 //! then offers numbers.
 
 use light_core::{AttributeValue, MergeMode};
-use light_programmer::{GroupDefinition, resolve_group};
+use light_programmer::GroupDefinition;
 use std::collections::HashMap;
 
 /// One Group member's programmed attribute, ready to offer.
@@ -26,7 +26,7 @@ pub(crate) struct GroupContributionPlan {
 impl GroupContributionPlan {
     pub(crate) fn compile(
         groups: &[GroupDefinition],
-        definitions: &HashMap<String, GroupDefinition>,
+        rankings: &HashMap<String, light_dynamics::RankedSelection>,
         slots: &crate::SlotTable,
     ) -> Self {
         let mut entries = Vec::new();
@@ -34,10 +34,9 @@ impl GroupContributionPlan {
             if group.programming.is_empty() {
                 continue;
             }
-            let fixtures = resolve_group(&group.id, definitions).unwrap_or_default();
-            if fixtures.is_empty() {
+            let Some(ranking) = rankings.get(&group.id) else {
                 continue;
-            }
+            };
             let programming = group
                 .programming
                 .iter()
@@ -53,17 +52,20 @@ impl GroupContributionPlan {
                     ))
                 })
                 .collect::<Vec<_>>();
-            for fixture_id in fixtures {
-                for (attribute, value, merge_mode) in &programming {
-                    // A member that does not have this attribute is left alone rather than given
-                    // a value nothing would ever project.
-                    let Some(slot) = slots.slot_of(fixture_id, *attribute) else {
+            for (attribute, value, merge_mode) in programming {
+                let Ok(values) = crate::group_programming::compile_group_values(value, ranking)
+                else {
+                    // Unresolved source models must never emit an unsampled native recipe.
+                    continue;
+                };
+                for (fixture_id, value) in values {
+                    let Some(slot) = slots.slot_of(fixture_id, attribute) else {
                         continue;
                     };
                     entries.push(GroupContributionEntry {
                         slot,
-                        value: (*value).clone(),
-                        merge_mode: *merge_mode,
+                        value,
+                        merge_mode,
                     });
                 }
             }

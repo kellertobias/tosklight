@@ -53,6 +53,36 @@ pub enum SelectionReference {
     RemoveLiveGroup { group_id: String },
 }
 
+impl SelectionExpression {
+    /// Whole live Group owners remain addressable when their current membership is empty.
+    /// Subsets and mixed fixture expressions address resolved fixtures instead.
+    pub fn live_group_owners(&self) -> Vec<String> {
+        match self {
+            Self::LiveGroup {
+                group_id,
+                rule: SelectionRule::All,
+            } => vec![group_id.clone()],
+            Self::Sources { items }
+                if items
+                    .iter()
+                    .all(|item| matches!(item, SelectionReference::LiveGroup { .. })) =>
+            {
+                let mut seen = HashSet::new();
+                items
+                    .iter()
+                    .filter_map(|item| match item {
+                        SelectionReference::LiveGroup { group_id } if seen.insert(group_id) => {
+                            Some(group_id.clone())
+                        }
+                        _ => None,
+                    })
+                    .collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+}
+
 pub fn apply_selection_rule(fixtures: &[FixtureId], rule: &SelectionRule) -> Vec<FixtureId> {
     fixtures
         .iter()

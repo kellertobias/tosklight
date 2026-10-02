@@ -21,6 +21,7 @@ fn semantic_highlight_applies_only_authored_identification_attributes() {
         dmx_to: 110,
         attribute: AttributeKey("shutter".into()),
         priority: 0,
+        physical_mapping: None,
         angular_motion: None,
         behavior: light_fixture::ChannelFunctionBehavior::Fixed {
             semantic_id: "open".into(),
@@ -236,6 +237,8 @@ fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -387,6 +390,8 @@ fn selected_logical_head_highlights_independently_while_parent_identifies_all_he
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -472,6 +477,7 @@ fn high_low_and_explicit_attribute_suppression_are_temporary_and_exact() {
         dmx_to: 110,
         attribute: AttributeKey("shutter".into()),
         priority: 0,
+        physical_mapping: None,
         angular_motion: None,
         behavior: light_fixture::ChannelFunctionBehavior::Fixed {
             semantic_id: "open".into(),

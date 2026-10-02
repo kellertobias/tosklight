@@ -132,6 +132,28 @@ impl PlaybackEngine {
             }
             self.observe_restored_activation(playback.activation.as_ref());
             self.observe_restored_transition_ordinal(playback.transition_ordinal);
+            // Historical occurrences survive the public runtime shape even when its current
+            // arbitration ordinal does not. New actions must not reuse one of those identities.
+            if let Some(history) = &playback.source_history {
+                self.reserve_source_occurrence_watermark(history.action_ordinal());
+            }
+            for row in playback
+                .deleted_cue_transition_source
+                .iter()
+                .flatten()
+                .chain(
+                    playback
+                        .deleted_cue_hold
+                        .iter()
+                        .flat_map(|hold| &hold.contributions),
+                )
+            {
+                if let Some(evidence) = &row.family_evidence {
+                    for entry in evidence.entries() {
+                        self.reserve_source_occurrence_watermark(entry.occurrence.action_ordinal);
+                    }
+                }
+            }
             match self.active.entry(key) {
                 std::collections::hash_map::Entry::Vacant(entry) => {
                     entry.insert(playback);
@@ -369,19 +391,23 @@ impl PlaybackEngine {
                     clock: Arc::clone(&self.clock),
                     next_activation_ordinal: self.next_activation_ordinal,
                     next_transition_ordinal: self.next_transition_ordinal,
+                    next_source_occurrence_ordinal: self.next_source_occurrence_ordinal,
+                    family_start: self.family_start.clone(),
                 };
                 isolated.active.get_mut(key).unwrap().deleted_cue_hold = None;
-                isolated
-                    .active
-                    .get_mut(key)
-                    .unwrap()
-                    .deleted_cue_transition_source = None;
+                // An interrupted transition starts at its captured interior value, not the
+                // previous Cue's stored endpoint. Keep that source until the hold is sampled.
+                let contributions = isolated
+                    .contributions_with_context(now, None)
+                    .into_iter()
+                    .map(PlaybackRetainedValue::from)
+                    .collect();
                 playback.deleted_cue_transition_source = None;
                 playback.deleted_cue_hold = Some(DeletedCueHold {
                     deleted_number: number,
                     previous_number,
                     next_number,
-                    contributions: isolated.contributions_at(now),
+                    contributions,
                 });
                 playback
             })
