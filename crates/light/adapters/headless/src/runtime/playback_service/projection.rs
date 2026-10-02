@@ -275,6 +275,16 @@ fn project_group(
     let playback_number = match resolve_group_playback(snapshot, group_id.as_str()) {
         Ok(number) => number,
         Err(error) if error.kind == ActionErrorKind::Conflict => None,
+        // A Group absent from the active show (deleted, or named by a previous show's layout)
+        // is reported per item so the rest of the snapshot still hydrates.
+        Err(error) if error.kind == ActionErrorKind::NotFound => {
+            return Ok(PlaybackRuntimeProjection {
+                scope,
+                requested,
+                playback_number: None,
+                target: PlaybackTargetProjection::Missing,
+            });
+        }
         Err(error) => return Err(error),
     };
     Ok(PlaybackRuntimeProjection {

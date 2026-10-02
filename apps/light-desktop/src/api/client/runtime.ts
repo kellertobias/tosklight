@@ -320,7 +320,7 @@ export class LightClientRuntime {
 		init: RequestInit = {},
 	): Promise<Blob> {
 		const response = await this.requestResponse(path, init);
-		if (!response.ok) throw new Error(await response.text());
+		if (!response.ok) throw await apiError(response);
 		return response.blob();
 	}
 
@@ -394,9 +394,25 @@ function requestingScreenId(): string | null {
 async function apiError(response: Response): Promise<ApiRequestError> {
 	const body = await response.text();
 	return new ApiRequestError(
-		body || `${response.status} ${response.statusText}`,
+		errorEnvelopeMessage(body) ||
+			body ||
+			`${response.status} ${response.statusText}`,
 		response.status,
 	);
+}
+
+/** The server's typed `{ kind, error }` envelope names the condition; never show its raw JSON. */
+function errorEnvelopeMessage(body: string): string | null {
+	if (!body.trimStart().startsWith("{")) return null;
+	try {
+		const value: unknown = JSON.parse(body);
+		if (typeof value !== "object" || value === null) return null;
+		const { error, message } = value as { error?: unknown; message?: unknown };
+		const text = typeof error === "string" ? error : message;
+		return typeof text === "string" && text.trim() ? text : null;
+	} catch {
+		return null;
+	}
 }
 
 function base64Url(value: string): string {

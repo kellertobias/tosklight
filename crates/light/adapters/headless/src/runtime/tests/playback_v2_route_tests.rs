@@ -1312,6 +1312,78 @@ async fn v2_group_snapshot_is_exact_and_rejects_foreign_or_invalid_identity() {
 }
 
 #[tokio::test]
+async fn v2_snapshot_reports_an_absent_group_per_item_and_keeps_stored_groups() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_group_runtime_test_state(&state);
+    // A stored empty Group assigned to Playback 3 is a real Group, never an absent one.
+    let mut snapshot = (*state.output.snapshot()).clone();
+    std::sync::Arc::make_mut(&mut snapshot.groups).push(light_programmer::GroupDefinition {
+        id: "empty".into(),
+        name: "Empty".into(),
+        ..light_programmer::GroupDefinition::default()
+    });
+    std::sync::Arc::make_mut(&mut snapshot.playbacks).push(playback_test_definition(
+        3,
+        light_playback::PlaybackTarget::Group {
+            group_id: "empty".into(),
+            initial_master: Some(0.25),
+        },
+    ));
+    state.output.replace_snapshot(snapshot).unwrap();
+
+    let response = post_playback_snapshot(
+        &app,
+        Some(&token),
+        desk_id,
+        serde_json::json!({"identities":[
+            {"kind":"group","group_id":"front"},
+            {"kind":"group","group_id":"from-previous-show"},
+            {"kind":"group","group_id":"empty"},
+        ]}),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let snapshot = json(response).await;
+    let projections = snapshot["projections"].as_array().unwrap();
+    assert_eq!(projections.len(), 3);
+    let by_request = |requested: serde_json::Value| {
+        projections
+            .iter()
+            .find(|projection| projection["requested"] == requested)
+            .unwrap_or_else(|| panic!("no projection for {requested}"))
+    };
+    // A Group the show does not hold (deleted, or named by the previous show) is reported as
+    // Missing without failing its siblings.
+    let absent = by_request(serde_json::json!({"kind":"group","group_id":"from-previous-show"}));
+    assert_eq!(absent["target"], "missing");
+    assert!(absent["playback_number"].is_null());
+    // Negative controls: a stored Group stays a Group, including a stored empty one.
+    let front = by_request(serde_json::json!({"kind":"group","group_id":"front"}));
+    assert_eq!(front["target"], "group");
+    assert_eq!(front["master"], 0.75);
+    let empty = by_request(serde_json::json!({"kind":"group","group_id":"empty"}));
+    assert_eq!(empty["target"], "group");
+    assert_eq!(empty["group_id"], "empty");
+    assert_eq!(empty["playback_number"], 3);
+    assert_eq!(empty["master"], 0.25);
+
+    // A malformed identity is still a request error, not a per-item absence.
+    let rejected = post_playback_snapshot(
+        &app,
+        Some(&token),
+        desk_id,
+        serde_json::json!({"identities":[{"kind":"group","group_id":""}]}),
+    )
+    .await;
+    assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_group_actions_reject_unsupported_missing_and_unassigned_groups() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

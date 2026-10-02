@@ -133,6 +133,42 @@ describe("LightClientRuntime", () => {
 		);
 	});
 
+	it("reports the server's error envelope as its human message, not raw JSON", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response(
+					JSON.stringify({
+						kind: "not_found",
+						error: "Group not found",
+						retryable: false,
+					}),
+					{ status: 404, headers: { "content-type": "application/json" } },
+				),
+			),
+		);
+
+		const error = await new LightClientRuntime("http://desk.local")
+			.bootstrap()
+			.catch((reason: unknown) => reason);
+
+		expect(error).toEqual(new ApiRequestError("Group not found", 404));
+		expect(String(error)).not.toMatch(/[{}]|not_found|retryable/u);
+	});
+
+	it("keeps a plain-text error body unchanged", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response("the active show is changing", { status: 409 }),
+			),
+		);
+
+		await expect(
+			new LightClientRuntime("http://desk.local").bootstrap(),
+		).rejects.toEqual(new ApiRequestError("the active show is changing", 409));
+	});
+
 	it("accepts JSON response media types with parameters", async () => {
 		vi.stubGlobal(
 			"fetch",
