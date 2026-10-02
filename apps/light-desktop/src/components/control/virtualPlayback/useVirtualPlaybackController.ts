@@ -188,7 +188,7 @@ function openVirtualPlaybackConfiguration(
 function selectedZonePlaybackCount(
 	options: InteractionOptions,
 	zoneEdit: ReturnType<typeof useApp>["state"]["virtualPlaybackZoneEdit"],
-	selectedSlots: number[],
+	selectedSlots: readonly number[],
 ) {
 	if (!zoneEdit || options.pageNumber == null) return selectedSlots.length;
 	const hiddenCount =
@@ -198,6 +198,37 @@ function selectedZonePlaybackCount(
 				(number) => virtualPlaybackPage(number) !== options.pageNumber,
 			).length ?? 0;
 	return selectedSlots.length + hiddenCount;
+}
+
+/**
+ * The zones with one region's members on this page replaced by the selected slots; members on
+ * other pages stay. Null when the region is gone or would keep fewer than two playbacks.
+ */
+function zonesWithEditedRegion(
+	zones: readonly VirtualPlaybackZone[],
+	zoneId: string,
+	pageNumber: number,
+	selectedSlots: readonly number[],
+): VirtualPlaybackZone[] | null {
+	const current = zones.find((candidate) => candidate.id === zoneId);
+	if (!current) return null;
+	const hiddenNumbers = current.playbackNumbers.filter(
+		(number) => virtualPlaybackPage(number) !== pageNumber,
+	);
+	if (hiddenNumbers.length + selectedSlots.length < 2) return null;
+	const visibleNumbers = selectedSlots.map((slot) =>
+		virtualPlaybackNumber(pageNumber, slot),
+	);
+	return zones.map((candidate) =>
+		candidate.id === zoneId
+			? {
+					...candidate,
+					playbackNumbers: [...hiddenNumbers, ...visibleNumbers].sort(
+						(left, right) => left - right,
+					),
+				}
+			: candidate,
+	);
 }
 
 function useVirtualPlaybackInteractions(options: InteractionOptions) {
@@ -287,6 +318,11 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 		setCreatingZone(false);
 	};
 
+	const startZoneSelection = () => {
+		if (!options.zones.ready || zoneEdit) return;
+		options.dispatch({ type: "SET_SHIFT_ARMED", value: true });
+	};
+
 	const cancelZoneSelection = () => {
 		setSelectedSlots([]);
 		setCreatingZone(false);
@@ -298,29 +334,13 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 
 	const updateZone = async () => {
 		if (!zoneEdit || !options.zones.ready || options.pageNumber == null) return;
-		const pageNumber = options.pageNumber;
-		const current = options.zones.zones.find(
-			(candidate) => candidate.id === zoneEdit.zoneId,
+		const next = zonesWithEditedRegion(
+			options.zones.zones,
+			zoneEdit.zoneId,
+			options.pageNumber,
+			selectedSlots,
 		);
-		if (!current) return;
-		const hiddenNumbers = current.playbackNumbers.filter(
-			(number) => virtualPlaybackPage(number) !== pageNumber,
-		);
-		if (hiddenNumbers.length + selectedSlots.length < 2) return;
-		const visibleNumbers = selectedSlots.map((slot) =>
-			virtualPlaybackNumber(pageNumber, slot),
-		);
-		const next = options.zones.zones.map((candidate) =>
-			candidate.id === zoneEdit.zoneId
-				? {
-						...candidate,
-						playbackNumbers: [...hiddenNumbers, ...visibleNumbers].sort(
-							(left, right) => left - right,
-						),
-					}
-				: candidate,
-		);
-		if (!(await options.zones.persist(next))) return;
+		if (!next || !(await options.zones.persist(next))) return;
 		cancelZoneSelection();
 	};
 	const selectedPlaybackCount = selectedZonePlaybackCount(options, zoneEdit, selectedSlots);
@@ -331,6 +351,7 @@ function useVirtualPlaybackInteractions(options: InteractionOptions) {
 				? configuration
 				: null,
 		setConfiguration,
+		startZoneSelection,
 		selectedSlots,
 		selectedPlaybackCount,
 		setSelectedSlots,

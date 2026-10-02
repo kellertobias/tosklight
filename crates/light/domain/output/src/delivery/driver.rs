@@ -7,6 +7,9 @@ use std::{
 };
 use tokio::net::UdpSocket;
 
+// async-trait marks its boxed future `#[must_use]`; newer Clippy also treats that future as
+// must-use and reports the macro's attribute as doubled.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait OutputDriver: Send + Sync {
     async fn send(&self, universe: Universe, sequence: u8, frame: &DmxFrame) -> io::Result<()>;

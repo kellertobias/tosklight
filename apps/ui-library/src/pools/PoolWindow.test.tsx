@@ -4,6 +4,7 @@ import {
 	type PoolSlotViewModel,
 	PoolWindow,
 	type PoolWindowProps,
+	resolvePoolGridColumns,
 } from "./PoolWindow";
 
 afterEach(() => {
@@ -203,5 +204,33 @@ describe("PoolWindow", () => {
 		expect(document.querySelectorAll(".application-pool-card")).toHaveLength(
 			200,
 		);
+	});
+});
+
+describe("resolvePoolGridColumns", () => {
+	const sizing = { defaultWidth: 100, minimumWidth: 70 };
+
+	it("fits default-width tiles and lets them stretch up to 1.5 times", () => {
+		expect(resolvePoolGridColumns(300, 0, sizing)).toBe(3);
+		expect(resolvePoolGridColumns(450, 0, sizing)).toBe(4);
+		expect(resolvePoolGridColumns(140, 0, sizing)).toBe(1);
+	});
+
+	it("adds a narrower column only once tiles would grow past 1.5 times", () => {
+		expect(resolvePoolGridColumns(160, 0, sizing)).toBe(2);
+		expect(resolvePoolGridColumns(160, 0, { ...sizing, minimumWidth: 90 })).toBe(
+			1,
+		);
+	});
+
+	it("accounts for the gap and never goes below one column", () => {
+		expect(resolvePoolGridColumns(304, 2, sizing)).toBe(3);
+		expect(resolvePoolGridColumns(40, 2, sizing)).toBe(1);
+	});
+
+	it("never lets the minimum exceed the default width", () => {
+		expect(
+			resolvePoolGridColumns(300, 0, { defaultWidth: 100, minimumWidth: 200 }),
+		).toBe(3);
 	});
 });

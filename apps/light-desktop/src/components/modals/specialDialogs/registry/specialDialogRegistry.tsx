@@ -8,10 +8,10 @@ import { beamAttributesForFamily } from "../beamShapers";
 import { ColorDialog } from "../color";
 import { ControlDialog } from "../control";
 import { FocusSpecialDialog } from "../focus/FocusSpecialDialog";
-import { MediaPlayModeDialog } from "../media";
 import { PositionDialog } from "../position";
 import { PositionSpecialDialog } from "../semanticPosition/PositionSpecialDialog";
 import { ShapersDialog } from "../shapers";
+import { MediaPaneWindow } from "../../../../windows/MediaPaneWindow";
 import { ColorSpecialDialog } from "../intention/color/ColorSpecialDialog";
 import { SemanticSpecialDialogPlaceholder } from "./SemanticSpecialDialogPlaceholder";
 import type { LegacySpecialDialogHost } from "./useLegacySpecialDialogHost";
@@ -43,6 +43,8 @@ export interface LegacySpecialDialogEntry {
 	family: SpecialParameterFamily;
 	/** Extra class on the legacy `modal-card`. */
 	cardClassName: string;
+	/** The dialog owns its own programmer writes; the card hides the selection summary. */
+	ownsProgrammerWrites?: boolean;
 	render(host: LegacySpecialDialogHost): ReactNode;
 }
 
@@ -87,16 +89,9 @@ export const LEGACY_SPECIAL_DIALOGS: Readonly<
 	Media: {
 		mode: "legacy",
 		family: "Media",
-		cardClassName: "",
-		render: (host) => (
-			<MediaPlayModeDialog
-				choices={host.playModeChoices}
-				value={host.playModeValue.value}
-				mixed={host.playModeValue.mixed}
-				disabled={!host.valueWrites.canWrite}
-				apply={host.applyPlayMode}
-			/>
-		),
+		cardClassName: "media-special-dialog-card",
+		ownsProgrammerWrites: true,
+		render: () => <MediaPaneWindow builtIn />,
 	},
 	Control: {
 		mode: "legacy",

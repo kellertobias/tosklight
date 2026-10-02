@@ -263,6 +263,8 @@ export interface AppState {
 	playbackPageNames: string[];
 	presetFamily: PresetFamily;
 	presetPoolColors: boolean;
+	poolGridDefaultWidth: number;
+	poolGridMinimumWidth: number;
 	presetSetArmed: boolean;
 	cuelistBuiltInView: "pool" | "cues";
 	cuelistBuiltInNumber: number | null;
@@ -391,6 +393,8 @@ export interface WindowSettings {
 	lastBuiltIn: BuiltInWindow;
 	presetFamily: AppState["presetFamily"];
 	presetPoolColors: boolean;
+	poolGridDefaultWidth?: number;
+	poolGridMinimumWidth?: number;
 	playbackColumns: number;
 	playbackRows: number;
 	playbackPage: number;

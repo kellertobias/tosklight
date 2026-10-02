@@ -2,7 +2,9 @@ import {
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
+	type PoolCardSizing,
 } from "@tosklight/ui/pools";
+import { poolCardSizing } from "../state/reducerHelpers";
 import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createLightApi } from "../api/client/api";
@@ -26,6 +28,7 @@ import {
 } from "../features/macros/MacroActionsContext";
 import { MacroEditor } from "../features/macros/MacroEditor";
 import { resolveMacroPoolGesture } from "../features/macros/poolGesture";
+import { useApp } from "../state/AppContext";
 import type { WindowProps } from "./windowTypes";
 import "./MacrosWindow.css";
 
@@ -34,7 +37,18 @@ const MACRO_COLOR = "#8f3541";
 
 type MacroObject = VersionedObject<MacroDefinition>;
 
+function runningMacroIds(executions: MacroExecution[]): Set<string> {
+	return new Set(
+		executions
+			.filter((execution) =>
+				["queued", "validating", "running"].includes(execution.state),
+			)
+			.map((execution) => execution.macro_id),
+	);
+}
+
 export function MacrosWindow({ active = true, compact = false }: WindowProps) {
+	const { state } = useApp();
 	const showId = useActiveShowId();
 	const command = useCommandLineSurface({
 		enabled: active,
@@ -195,13 +209,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 		}
 		return true;
 	};
-	const running = new Set(
-		executions
-			.filter((execution) =>
-				["queued", "validating", "running"].includes(execution.state),
-			)
-			.map((execution) => execution.macro_id),
-	);
+	const running = runningMacroIds(executions);
 	const slots: PoolSlotViewModel<number>[] = macros.map((macro) => ({
 		id: macro.body.number,
 		position: macro.body.number - 1,
@@ -236,6 +244,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 			)}
 			<WindowScrollArea>
 				<MacroPool
+					cardSizing={poolCardSizing(state)}
 					macros={macros}
 					slots={slots}
 					byNumber={byNumber}
@@ -259,6 +268,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 }
 
 function MacroPool({
+	cardSizing,
 	macros,
 	slots,
 	byNumber,
@@ -274,6 +284,7 @@ function MacroPool({
 	onRun,
 	onOff,
 }: {
+	cardSizing: PoolCardSizing;
 	macros: MacroObject[];
 	slots: PoolSlotViewModel<number>[];
 	byNumber: Map<number, MacroObject>;
@@ -291,6 +302,7 @@ function MacroPool({
 }) {
 	return (
 		<PoolGrid
+			cardSizing={cardSizing}
 			slots={slots}
 			slotCount={Math.max(
 				MACRO_POOL_SIZE,

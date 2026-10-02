@@ -252,21 +252,21 @@ export class BrowserVirtualPlaybacks {
 		}
 		await this.desk.click(
 			this.pane(pane).getByRole("button", {
-				name: "Create Exclusion Zone",
+				name: "Create Solo Region",
 				exact: true,
 			}),
 		);
 		const dialog = this.page.getByRole("dialog", {
-			name: "Create Exclusion Zone",
+			name: "Create Solo Region",
 		});
 		await expect(dialog).toBeVisible();
 		await this.page.waitForTimeout(100);
-		const nameInput = dialog.getByLabel("Zone name");
+		const nameInput = dialog.getByLabel("Region name");
 		await nameInput.fill(name);
 		await expect(nameInput).toHaveValue(name);
 		await nameInput.press("Tab");
 		await this.desk.click(
-			dialog.getByRole("button", { name: "Create zone", exact: true }),
+			dialog.getByRole("button", { name: "Create region", exact: true }),
 		);
 		await expect(dialog).toBeHidden();
 	}
@@ -291,7 +291,7 @@ export class BrowserVirtualPlaybacks {
 			}
 			await expect(
 				this.pane(pane).getByRole("button", {
-					name: "Create Exclusion Zone",
+					name: "Create Solo Region",
 					exact: true,
 				}),
 			).toBeVisible();
@@ -299,20 +299,20 @@ export class BrowserVirtualPlaybacks {
 				.send(`/light/${alias}/programmer/shift`, [false])
 				.catch(() => undefined);
 			const createButton = this.pane(pane).getByRole("button", {
-				name: "Create Exclusion Zone",
+				name: "Create Solo Region",
 				exact: true,
 			});
 			await this.desk.click(createButton);
 			const dialog = this.page.getByRole("dialog", {
-				name: "Create Exclusion Zone",
+				name: "Create Solo Region",
 			});
 			await expect(dialog).toBeVisible();
-			const nameInput = dialog.getByLabel("Zone name");
+			const nameInput = dialog.getByLabel("Region name");
 			await nameInput.fill(name);
 			await expect(nameInput).toHaveValue(name);
 			await nameInput.press("Tab");
 			await this.desk.click(
-				dialog.getByRole("button", { name: "Create zone", exact: true }),
+				dialog.getByRole("button", { name: "Create region", exact: true }),
 			);
 			await expect(dialog).toBeHidden();
 		} finally {
@@ -332,11 +332,11 @@ export class BrowserVirtualPlaybacks {
 		);
 		const settings = this.page.getByRole("dialog", { name: "Pane Settings" });
 		await this.desk.click(
-			settings.getByRole("tab", { name: "Exclusion Zones", exact: true }),
+			settings.getByRole("tab", { name: "Solo Regions", exact: true }),
 		);
 		await expect(settings.getByLabel(`Name for ${name}`)).toBeVisible();
 		await this.desk.click(
-			settings.getByRole("button", { name: "Delete zone", exact: true }),
+			settings.getByRole("button", { name: "Delete region", exact: true }),
 		);
 		await expect
 			.poll(async () => (await this.zones()).some((zone) => zone.name === name))

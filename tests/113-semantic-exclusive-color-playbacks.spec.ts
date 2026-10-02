@@ -109,7 +109,7 @@ scenario(
 			);
 		const cells = COLORS.map((_, index) => index + 1);
 		// The zone keeps the name the desk proposes for a show's first zone.
-		const zone = "Exclusion Zone 1";
+		const zone = "Solo Region 1";
 		await t.virtualPlayback.createExclusionZoneWithAttachedShift(pane, zone, cells);
 		await t.virtualPlayback.expect.zones([
 			{ name: zone, playback_numbers: cells.map((cell) => 1000 + cell) },

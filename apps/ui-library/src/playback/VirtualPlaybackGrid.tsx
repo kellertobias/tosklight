@@ -2,6 +2,7 @@ import {
 	type CSSProperties,
 	type MouseEvent as ReactMouseEvent,
 	type PointerEvent as ReactPointerEvent,
+	type RefObject,
 	useEffect,
 	useLayoutEffect,
 	useRef,
@@ -24,7 +25,18 @@ export interface VirtualPlaybackExclusionFence {
 	right: boolean;
 	bottom: boolean;
 	left: boolean;
+	/**
+	 * Concave outline corners: both orthogonal neighbours share the zone but the
+	 * diagonal one does not, so neither neighbour's fence covers the turn.
+	 */
+	innerCorners?: readonly VirtualPlaybackFenceCorner[];
 }
+
+export type VirtualPlaybackFenceCorner =
+	| "top-left"
+	| "top-right"
+	| "bottom-right"
+	| "bottom-left";
 
 export interface VirtualPlaybackBoxViewModel {
 	/** Stable show-owned Virtual Playback number. `slot` remains the displayed cell. */
@@ -215,6 +227,40 @@ function virtualWindow(
 	};
 }
 
+/** The scroll position and client size of a scrolling element. */
+function useScrollViewport(host: RefObject<HTMLDivElement | null>) {
+	const [viewport, setViewport] = useState({
+		scrollTop: 0,
+		scrollLeft: 0,
+		width: 0,
+		height: 0,
+	});
+	useLayoutEffect(() => {
+		const node = host.current;
+		if (!node) return;
+		const update = () =>
+			setViewport((current) => {
+				const next = {
+					scrollTop: node.scrollTop,
+					scrollLeft: node.scrollLeft,
+					width: node.clientWidth,
+					height: node.clientHeight,
+				};
+				return sameViewport(current, next) ? current : next;
+			});
+		update();
+		node.addEventListener("scroll", update, { passive: true });
+		const observer =
+			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+		observer?.observe(node);
+		return () => {
+			node.removeEventListener("scroll", update);
+			observer?.disconnect();
+		};
+	}, [host]);
+	return viewport;
+}
+
 function VirtualizedPlaybackGrid({
 	page,
 	rows,
@@ -233,12 +279,7 @@ function VirtualizedPlaybackGrid({
 	className: string;
 }) {
 	const host = useRef<HTMLDivElement>(null);
-	const [viewport, setViewport] = useState({
-		scrollTop: 0,
-		scrollLeft: 0,
-		width: 0,
-		height: 0,
-	});
+	const viewport = useScrollViewport(host);
 	const {
 		cellWidth,
 		rowHeight,
@@ -266,30 +307,6 @@ function VirtualizedPlaybackGrid({
 		return () => globalThis.clearTimeout(timeout);
 	}, [rangeKey]);
 
-	useLayoutEffect(() => {
-		const node = host.current;
-		if (!node) return;
-		const update = () =>
-			setViewport((current) => {
-				const next = {
-					scrollTop: node.scrollTop,
-					scrollLeft: node.scrollLeft,
-					width: node.clientWidth,
-					height: node.clientHeight,
-				};
-				return sameViewport(current, next) ? current : next;
-			});
-		update();
-		node.addEventListener("scroll", update, { passive: true });
-		const observer =
-			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
-		observer?.observe(node);
-		return () => {
-			node.removeEventListener("scroll", update);
-			observer?.disconnect();
-		};
-	}, []);
-
 	return (
 		<div
 			ref={host}
@@ -300,6 +317,7 @@ function VirtualizedPlaybackGrid({
 			style={
 				{
 					"--grid-cell-min": `${minimumBoxWidth}px`,
+					"--button-grid-gap": `${VIRTUAL_GRID_GAP}px`,
 					display: "block",
 					height: "100%",
 					minHeight: 0,
@@ -475,27 +493,7 @@ function VirtualPlaybackBox({
 					: ""
 			}
 			disabled={unavailable}
-			className={[
-				"virtual-playback-box",
-				assigned && "playback-colored",
-				vacant && "vacant",
-				box.running && "running",
-				actionHeld && "held-active",
-				box.configurationTarget && !unavailable && "configuration-armed",
-				box.assignmentTarget && !unavailable && "assignment-pending",
-				box.updateTarget && "update-target",
-				box.offTarget && assigned && "command-target-off",
-				box.exclusionMember && "exclusion-member",
-				box.exclusionFence?.top && "exclusion-fence-top",
-				box.exclusionFence?.right && "exclusion-fence-right",
-				box.exclusionFence?.bottom && "exclusion-fence-bottom",
-				box.exclusionFence?.left && "exclusion-fence-left",
-				box.exclusionSelected && "exclusion-selected",
-				box.backgroundImageTransparent && "cue-preview-transparent",
-				box.poolPresentation?.className,
-			]
-				.filter(Boolean)
-				.join(" ")}
+			className={boxClassName(box, { assigned, vacant, actionHeld, unavailable })}
 			model={{
 				number: box.number ?? box.slot,
 				primary: box.label ?? (vacant ? "Empty" : ""),
@@ -509,7 +507,7 @@ function VirtualPlaybackBox({
 					: actionHeld
 						? `${box.actionLabel ?? "Action"} held`
 						: box.exclusionSelected
-							? "Exclusion selected"
+							? "Region selected"
 							: undefined,
 				workflow:
 					box.offTarget && assigned
@@ -546,6 +544,47 @@ function VirtualPlaybackBox({
 			}}
 		/>
 	);
+}
+
+/** The tile's state, workflow-target and exclusion-region classes. */
+function boxClassName(
+	box: VirtualPlaybackBoxViewModel,
+	{
+		assigned,
+		vacant,
+		actionHeld,
+		unavailable,
+	}: {
+		assigned: boolean;
+		vacant: boolean;
+		actionHeld: boolean;
+		unavailable: boolean;
+	},
+) {
+	return [
+		"virtual-playback-box",
+		assigned && "playback-colored",
+		vacant && "vacant",
+		box.running && "running",
+		actionHeld && "held-active",
+		box.configurationTarget && !unavailable && "configuration-armed",
+		box.assignmentTarget && !unavailable && "assignment-pending",
+		box.updateTarget && "update-target",
+		box.offTarget && assigned && "command-target-off",
+		box.exclusionMember && "exclusion-member",
+		box.exclusionFence?.top && "exclusion-fence-top",
+		box.exclusionFence?.right && "exclusion-fence-right",
+		box.exclusionFence?.bottom && "exclusion-fence-bottom",
+		box.exclusionFence?.left && "exclusion-fence-left",
+		...(box.exclusionFence?.innerCorners ?? []).map(
+			(corner) => `exclusion-corner-${corner}`,
+		),
+		box.exclusionSelected && "exclusion-selected",
+		box.backgroundImageTransparent && "cue-preview-transparent",
+		box.poolPresentation?.className,
+	]
+		.filter(Boolean)
+		.join(" ");
 }
 
 /** The tile image: the operator's artwork, or the automatic Cue preview. */

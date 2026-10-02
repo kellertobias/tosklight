@@ -2,6 +2,7 @@ import {
 	cloneElement,
 	createContext,
 	isValidElement,
+	useCallback,
 	useContext,
 	useEffect,
 	useId,
@@ -67,12 +68,21 @@ export function ModalProvider({ children }: { children: ReactNode }) {
 	const reservedOrders = useRef(new Map<string, number>());
 	const entriesRef = useRef(entries);
 	const pendingFocusRestore = useRef<HTMLElement | null>(null);
-	entriesRef.current = entries;
+	// Keyboard handlers read the ref, so it changes with the stack rather than
+	// with a render: Escape right after a modal opens or closes must see it, and
+	// a render that skips a pending stack update must not restore the old stack.
+	const updateEntries = useCallback(
+		(update: (current: ModalRegistration[]) => ModalRegistration[]) => {
+			entriesRef.current = update(entriesRef.current);
+			setEntries(entriesRef.current);
+		},
+		[],
+	);
 
 	const value = useMemo<ModalStackContextValue>(
 		() => ({
 			register(registration) {
-				setEntries((current) =>
+				updateEntries((current) =>
 					[
 						...current.filter((entry) => entry.id !== registration.id),
 						registration,
@@ -89,7 +99,9 @@ export function ModalProvider({ children }: { children: ReactNode }) {
 			unregister(id, restoreFocus) {
 				reservedOrders.current.delete(id);
 				pendingFocusRestore.current = restoreFocus ?? null;
-				setEntries((current) => current.filter((entry) => entry.id !== id));
+				updateEntries((current) =>
+					current.filter((entry) => entry.id !== id),
+				);
 			},
 			close(id) {
 				const entry = entriesRef.current.find(
@@ -102,7 +114,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
 			updatePolicy(id, policy) {
 				const updated = entriesRef.current.some((entry) => entry.id === id);
 				if (!updated) return false;
-				setEntries((current) =>
+				updateEntries((current) =>
 					current.map((entry) => {
 						if (entry.id !== id) return entry;
 						return { ...entry, policy: { ...entry.policy, ...policy } };

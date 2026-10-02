@@ -704,6 +704,60 @@ mod attribute_registry_tests {
     }
 
     #[test]
+    fn legacy_default_shaper_macros_move_to_the_control_group() {
+        let moves = [
+            (
+                "fixture.framing_macro",
+                (EncoderGroup::Shapers, 3, 5),
+                (EncoderGroup::Control, 4, 2),
+            ),
+            (
+                "fixture.framing_macro_speed",
+                (EncoderGroup::Shapers, 3, 6),
+                (EncoderGroup::Control, 4, 3),
+            ),
+            (
+                "fixture.barndoor_macros",
+                (EncoderGroup::Shapers, 4, 1),
+                (EncoderGroup::Control, 4, 4),
+            ),
+            (
+                "fixture.barndoor_macro_speed",
+                (EncoderGroup::Shapers, 4, 2),
+                (EncoderGroup::Control, 4, 5),
+            ),
+            (
+                "fixture.barndoor_module_rotation",
+                (EncoderGroup::Shapers, 4, 3),
+                (EncoderGroup::Shapers, 3, 5),
+            ),
+        ];
+        let mut legacy = AttributeConfiguration::recommended();
+        for (attribute, (group, page, slot), _) in moves {
+            legacy
+                .placements
+                .iter_mut()
+                .find(|placement| *placement.attribute.0 == *attribute)
+                .unwrap()
+                .encoder = EncoderPlacement::new(group, page, slot);
+        }
+
+        let migrated = legacy.migrate_canonical_attributes().unwrap();
+        migrated.validate().unwrap();
+        for (attribute, _, (group, page, slot)) in moves {
+            assert_eq!(
+                migrated
+                    .attribute_placement_for(&AttributeKey(attribute.into()))
+                    .unwrap()
+                    .encoder,
+                EncoderPlacement::new(group, page, slot),
+                "{attribute}"
+            );
+        }
+        assert_eq!(migrated, AttributeConfiguration::recommended());
+    }
+
+    #[test]
     fn legacy_cold_and_warm_white_controls_join_existing_white_and_amber_controls() {
         let mut legacy = AttributeConfiguration::recommended();
         for (source, encoder) in [

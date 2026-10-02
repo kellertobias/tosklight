@@ -29,6 +29,7 @@ async fn show_library_snapshot(
     let shows = state.installation.show_library().map_err(ApiError::store)?;
     let mut entries = Vec::with_capacity(shows.len());
     for show in shows {
+        let description = super::show_description::read_description(&show.path)?;
         let revisions = state
             .installation
             .show_revisions(show.id)
@@ -38,6 +39,7 @@ async fn show_library_snapshot(
             .collect();
         entries.push(wire::ShowLibraryEntry {
             show: runtime_wire::show(show),
+            description,
             revisions,
         });
     }
@@ -103,6 +105,7 @@ async fn run_show_library_action(
         wire::ShowLibraryAction::UpdateDocument { .. }
             | wire::ShowLibraryAction::CreateFromBase { .. }
             | wire::ShowLibraryAction::SetBaseShow { .. }
+            | wire::ShowLibraryAction::SetDescription { .. }
             | wire::ShowLibraryAction::PrepareRevision { .. }
     ) {
         Some(state.active_show.acquire_show_change().await)
@@ -134,6 +137,10 @@ async fn execute_action(
 ) -> Result<wire::ShowLibraryActionResult, ApiError> {
     use wire::ShowLibraryAction as Action;
     match action {
+        Action::SetDescription {
+            show_id,
+            description,
+        } => execute_set_description(state, show_id, &description),
         Action::SaveCopy {
             source_show_id,
             data_base64,
@@ -141,35 +148,22 @@ async fn execute_action(
             root_id,
             path,
             is_base_show,
-        } => {
-            let show = super::show_save_destination::save_copy(
-                state,
-                source_show_id,
-                data_base64,
-                name,
-                root_id,
-                path,
-                is_base_show,
-            )?;
-            Ok(show_result(show))
-        }
+        } => execute_save_copy(
+            state,
+            source_show_id,
+            data_base64,
+            name,
+            root_id,
+            path,
+            is_base_show,
+        ),
         Action::ExportMvrFile {
             show_id,
             data_base64,
             name,
             root_id,
             path,
-        } => {
-            let (root_id, path) = super::show_save_destination::export_mvr_file(
-                state,
-                show_id,
-                data_base64,
-                name,
-                root_id,
-                path,
-            )?;
-            Ok(wire::ShowLibraryActionResult::FileSaved { root_id, path })
-        }
+        } => execute_export_mvr_file(state, show_id, data_base64, name, root_id, path),
         Action::SaveCopyToPeer {
             instance,
             source_show_id,
@@ -178,18 +172,17 @@ async fn execute_action(
             path,
             is_base_show,
         } => {
-            let show = super::show_network::save_copy_to_peer(
+            execute_save_copy_to_peer(
                 state,
                 request_id,
-                &instance,
+                instance,
                 source_show_id,
-                &name,
-                &root_id,
-                &path,
+                name,
+                root_id,
+                path,
                 is_base_show,
             )
-            .await?;
-            Ok(wire::ShowLibraryActionResult::Show { show })
+            .await
         }
         Action::ExportMvrToPeer {
             instance,
@@ -198,11 +191,8 @@ async fn execute_action(
             root_id,
             path,
         } => {
-            let (root_id, path) = super::show_network::export_mvr_to_peer(
-                state, request_id, &instance, show_id, &name, &root_id, &path,
-            )
-            .await?;
-            Ok(wire::ShowLibraryActionResult::FileSaved { root_id, path })
+            execute_export_mvr_to_peer(state, request_id, instance, show_id, name, root_id, path)
+                .await
         }
         Action::Create {
             name,
@@ -217,79 +207,13 @@ async fn execute_action(
             show_id,
             revision,
             open,
-        } => {
-            let (source_name, data) =
-                super::show_network::fetch_desk_document(state, &instance, show_id, revision)
-                    .await?;
-            let name = unique_import_name(state, &source_name)?;
-            let imported =
-                execute_create(state, headers, name, Some(STANDARD.encode(data)), false).await?;
-            if !open {
-                return Ok(imported);
-            }
-            let wire::ShowLibraryActionResult::Show { show } = imported else {
-                unreachable!()
-            };
-            execute_open(
-                state,
-                headers,
-                show.id,
-                wire::ShowOpenTransition::SafeBlackout,
-                None,
-            )
-            .await
-        }
+        } => execute_import_from_desk(state, headers, instance, show_id, revision, open).await,
         Action::SetBaseShow {
             show_id,
             is_base_show,
-        } => {
-            let _session = authenticate(state, headers)?;
-            let show = state
-                .installation
-                .set_show_base(light_core::ShowId(show_id), is_base_show)
-                .map_err(ApiError::store)?;
-            if state
-                .active_show
-                .current()
-                .is_some_and(|active| active.id == show.id)
-            {
-                state.active_show.replace_current(Some(show.clone()));
-            }
-            emit(state, "show_updated", serde_json::json!({"show":show}));
-            Ok(show_result(show))
-        }
+        } => execute_set_base_show(state, headers, show_id, is_base_show),
         Action::CreateFromBase { show_id, name } => {
-            validate_show_name(&name)?;
-            let source = state
-                .installation
-                .show(light_core::ShowId(show_id))
-                .map_err(ApiError::store)?
-                .ok_or_else(|| ApiError::not_found("base show"))?;
-            if !source.is_base_show {
-                return Err(ApiError::conflict("This show is no longer a base show"));
-            }
-            let export = state
-                .installation
-                .data_dir()
-                .join(format!(".base-{}.show", Uuid::new_v4()));
-            ActiveShowRepository::open(&source.path)
-                .map_err(ApiError::store)?
-                .backup_to(&export)
-                .map_err(ApiError::store)?;
-            ActiveShowRepository::open(&export)
-                .map_err(ApiError::store)?
-                .set_identity(source.id, &source.name, None)
-                .map_err(ApiError::store)?;
-            let bytes = std::fs::read(&export);
-            let _ = std::fs::remove_file(&export);
-            execute_create(
-                state,
-                headers,
-                name,
-                Some(STANDARD.encode(bytes.map_err(ApiError::io)?)),
-                false,
-            )
-            .await
+            execute_create_from_base(state, headers, show_id, name).await
         }
         Action::Open {
             show_id,
@@ -351,6 +275,187 @@ async fn execute_action(
             resolutions,
         } => execute_mvr_apply(state, headers, token, destination, resolutions).await,
     }
+}
+
+fn execute_set_description(
+    state: &AppState,
+    show_id: Uuid,
+    description: &str,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    Ok(show_result(super::show_description::set_description(
+        state,
+        show_id,
+        description,
+    )?))
+}
+
+async fn execute_import_from_desk(
+    state: &AppState,
+    headers: &HeaderMap,
+    instance: String,
+    show_id: Uuid,
+    revision: Option<u64>,
+    open: bool,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    let (source_name, data) =
+        super::show_network::fetch_desk_document(state, &instance, show_id, revision).await?;
+    let name = unique_import_name(state, &source_name)?;
+    let imported = execute_create(state, headers, name, Some(STANDARD.encode(data)), false).await?;
+    if !open {
+        return Ok(imported);
+    }
+    let wire::ShowLibraryActionResult::Show { show } = imported else {
+        unreachable!()
+    };
+    execute_open(
+        state,
+        headers,
+        show.id,
+        wire::ShowOpenTransition::SafeBlackout,
+        None,
+    )
+    .await
+}
+
+fn execute_save_copy(
+    state: &AppState,
+    source_show_id: Option<Uuid>,
+    data_base64: Option<String>,
+    name: String,
+    root_id: String,
+    path: String,
+    is_base_show: bool,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    let show = super::show_save_destination::save_copy(
+        state,
+        source_show_id,
+        data_base64,
+        name,
+        root_id,
+        path,
+        is_base_show,
+    )?;
+    Ok(show_result(show))
+}
+
+fn execute_export_mvr_file(
+    state: &AppState,
+    show_id: Option<Uuid>,
+    data_base64: Option<String>,
+    name: String,
+    root_id: String,
+    path: String,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    let (root_id, path) = super::show_save_destination::export_mvr_file(
+        state,
+        show_id,
+        data_base64,
+        name,
+        root_id,
+        path,
+    )?;
+    Ok(wire::ShowLibraryActionResult::FileSaved { root_id, path })
+}
+
+async fn execute_save_copy_to_peer(
+    state: &AppState,
+    request_id: &str,
+    instance: String,
+    source_show_id: Uuid,
+    name: String,
+    root_id: String,
+    path: String,
+    is_base_show: bool,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    let show = super::show_network::save_copy_to_peer(
+        state,
+        request_id,
+        &instance,
+        source_show_id,
+        &name,
+        &root_id,
+        &path,
+        is_base_show,
+    )
+    .await?;
+    Ok(wire::ShowLibraryActionResult::Show { show })
+}
+
+async fn execute_export_mvr_to_peer(
+    state: &AppState,
+    request_id: &str,
+    instance: String,
+    show_id: Uuid,
+    name: String,
+    root_id: String,
+    path: String,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    let (root_id, path) = super::show_network::export_mvr_to_peer(
+        state, request_id, &instance, show_id, &name, &root_id, &path,
+    )
+    .await?;
+    Ok(wire::ShowLibraryActionResult::FileSaved { root_id, path })
+}
+
+fn execute_set_base_show(
+    state: &AppState,
+    headers: &HeaderMap,
+    show_id: Uuid,
+    is_base_show: bool,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    let _session = authenticate(state, headers)?;
+    let show = state
+        .installation
+        .set_show_base(light_core::ShowId(show_id), is_base_show)
+        .map_err(ApiError::store)?;
+    if state
+        .active_show
+        .current()
+        .is_some_and(|active| active.id == show.id)
+    {
+        state.active_show.replace_current(Some(show.clone()));
+    }
+    emit(state, "show_updated", serde_json::json!({"show":show}));
+    Ok(show_result(show))
+}
+
+async fn execute_create_from_base(
+    state: &AppState,
+    headers: &HeaderMap,
+    show_id: Uuid,
+    name: String,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    validate_show_name(&name)?;
+    let source = state
+        .installation
+        .show(light_core::ShowId(show_id))
+        .map_err(ApiError::store)?
+        .ok_or_else(|| ApiError::not_found("base show"))?;
+    if !source.is_base_show {
+        return Err(ApiError::conflict("This show is no longer a base show"));
+    }
+    let export = state
+        .installation
+        .data_dir()
+        .join(format!(".base-{}.show", Uuid::new_v4()));
+    ActiveShowRepository::open(&source.path)
+        .map_err(ApiError::store)?
+        .backup_to(&export)
+        .map_err(ApiError::store)?;
+    ActiveShowRepository::open(&export)
+        .map_err(ApiError::store)?
+        .set_identity(source.id, &source.name, None)
+        .map_err(ApiError::store)?;
+    let bytes = std::fs::read(&export);
+    let _ = std::fs::remove_file(&export);
+    execute_create(
+        state,
+        headers,
+        name,
+        Some(STANDARD.encode(bytes.map_err(ApiError::io)?)),
+        false,
+    )
+    .await
 }
 
 pub(super) fn unique_import_name(state: &AppState, source_name: &str) -> Result<String, ApiError> {

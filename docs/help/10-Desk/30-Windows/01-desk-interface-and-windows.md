@@ -28,7 +28,7 @@ Typing filters immediately unless the feature page explicitly documents a differ
 
 ## Desktops and panes
 
-A Desktop uses a 24-column by 18-row grid. Create one with **New desktop** in the DESKTOPS dock. Open its settings to rename it, change its icon, clone the current layout, delete it, or customize the desk's shared pool-color defaults. At least one Desktop always remains.
+A Desktop uses a 24-column by 18-row grid. Create one with **New desktop** in the DESKTOPS dock. Open its settings to rename it, change its icon, set the default and minimum pool tile widths, clone the current layout, or delete it. At least one Desktop always remains.
 
 Add a pane from the empty-cell picker or **Open Window**. Open Window groups descriptive pane choices into **Programming**, **Playback & Automation**, **Show & Visual**, and **Miscellaneous** title tabs. Macro Pool is under Programming. Running, Scheduler, and Help are under Miscellaneous. Cuelists is the single catalog entry for the integrated Pool, Cues, and Cuelist Settings workflow. Drag a pane by its header to move it. Open the pane settings to set its exact grid position and size, maximize it, change window-specific options, or remove it. Panes cannot overlap; moves and resizes are constrained to the grid.
 

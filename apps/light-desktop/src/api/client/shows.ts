@@ -2,12 +2,14 @@ import type {
 	MvrApplyResult,
 	MvrExportPreview,
 	MvrImportPreview,
+	NetworkShowCatalog,
 	ShowEntry,
 	ShowRevision,
 } from "../types";
 import type {
 	MvrImportResolution,
 	MvrImportResolutionAction,
+	NetworkShowCatalog as WireNetworkShowCatalog,
 	RuntimeShowEntry,
 	ShowLibraryAction,
 	ShowLibraryActionOutcome,
@@ -75,9 +77,32 @@ export class ShowApiClient {
         if (outcome.type !== "file_saved") throw new Error("The export did not return a saved file");
         return outcome;
     }
-    networkShows(): Promise<import("../generated/light-wire").NetworkShowCatalog> {
-        return this.transport.request("/api/v2/shows/network");
-    }
+	async networkShows(): Promise<NetworkShowCatalog> {
+		const catalog = await this.transport.request<WireNetworkShowCatalog>(
+			"/api/v2/shows/network",
+		);
+		return {
+			browsing: catalog.browsing,
+			peers: catalog.peers.map((peer) => ({
+				instance: peer.instance,
+				name: peer.name,
+				address: peer.address,
+				role: peer.role,
+				error: peer.error,
+				shows: peer.shows.map((show) => ({
+					id: show.id,
+					name: show.name,
+					updated_at: show.updated_at,
+					revisions: show.revisions.map((revision) => ({
+						show_id: revision.show_id,
+						revision: revision.revision,
+						name: revision.name,
+						created_at: revision.created_at,
+					})),
+				})),
+			})),
+		};
+	}
     prepareRevision(id: string, revision: number): Promise<ShowEntry> {
         return this.showAction({type:"prepare_revision",show_id:id,revision});
     }
@@ -86,6 +111,9 @@ export class ShowApiClient {
     }
 	setBaseShow(id: string, isBaseShow: boolean): Promise<ShowEntry> {
         return this.showAction({ type: "set_base_show", show_id: id, is_base_show: isBaseShow });
+    }
+    setDescription(id: string, description: string): Promise<ShowEntry> {
+        return this.showAction({type:"set_description",show_id:id,description});
     }
     createFromBase(id: string, name: string): Promise<ShowEntry> {
         return this.showAction({ type: "create_from_base", show_id: id, name });

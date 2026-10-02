@@ -27,6 +27,17 @@ beforeEach(() => context.dispatch.mockReset());
 afterEach(cleanup);
 
 describe("DeskSettingsModal", () => {
+	it("sets the shared minimum width for pool tiles", () => {
+		renderModal();
+		fireEvent.change(
+			screen.getByRole("textbox", { name: "Minimum pool tile width (px)" }),
+			{ target: { value: "84" } },
+		);
+		expect(context.dispatch).toHaveBeenCalledWith({
+			type: "SET_POOL_GRID_MINIMUM_WIDTH",
+			value: 84,
+		});
+	});
 	it("places Delete beside Close and keeps Clone as the large neutral action", () => {
 		renderModal();
 		const dialog = screen.getByRole("dialog", { name: "Desktop settings" });

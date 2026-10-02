@@ -324,6 +324,7 @@ pub enum ShowLibraryNotificationKind {
     ShowOpened,
     ShowRenamed,
     ShowBaseChanged,
+    ShowDescriptionChanged,
     ShowRolledBack,
     ShowUploaded,
     ShowDeleted,

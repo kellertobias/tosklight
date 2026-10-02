@@ -34,13 +34,18 @@ export function availableSpecialDialogAttributes(
 	return result;
 }
 
+/** The Shapers encoder group holds the iris as well as the framing blades. */
+export function isShaperDialogAttribute(attribute: string) {
+	return attribute.startsWith("shaper.") || attribute === "iris";
+}
+
 export function beamAttributesForFamily(
 	available: Set<string>,
 	family: BeamFamily,
 ): string[] {
 	return [...available].filter((attribute) =>
 		family === "Shapers"
-			? attribute.startsWith("shaper.")
+			? isShaperDialogAttribute(attribute)
 			: /^(gobo|prism|iris)/.test(attribute),
 	);
 }

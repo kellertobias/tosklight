@@ -174,6 +174,28 @@ export interface ShowRevision {
 	created_at: string;
 }
 
+/** Operator-facing network show listing, mapped from the show-library transport. */
+export interface NetworkShowCatalog {
+	browsing: boolean;
+	peers: NetworkShowPeer[];
+}
+
+export interface NetworkShowPeer {
+	instance: string;
+	name: string;
+	address: string;
+	role: "desk" | "editor";
+	shows: NetworkShow[];
+	error: string | null;
+}
+
+export interface NetworkShow {
+	id: string | null;
+	name: string;
+	updated_at: string | null;
+	revisions: ShowRevision[];
+}
+
 export interface HelpCatalogEntry {
 	id: string | null;
 	title: string;

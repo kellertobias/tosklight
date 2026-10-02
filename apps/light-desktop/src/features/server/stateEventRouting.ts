@@ -134,7 +134,7 @@ function refreshShows(event: RuntimeCapabilityEvent, state: ServerState) {
 		.shows()
 		.then((shows) => {
 			state.setShows(shows);
-			if (event.change.kind !== "show_renamed" && event.change.kind !== "show_base_changed") return;
+			if (event.change.kind !== "show_renamed" && event.change.kind !== "show_base_changed" && event.change.kind !== "show_description_changed") return;
 			state.setBootstrap((current) => {
 				if (!current?.active_show) return current;
 				const active = shows.find(
@@ -239,6 +239,7 @@ function isShowLibraryEvent(
 		| "show_opened"
 		| "show_renamed"
 		| "show_base_changed"
+        | "show_description_changed"
 		| "show_rolled_back"
 		| "show_uploaded"
 		| "show_deleted"

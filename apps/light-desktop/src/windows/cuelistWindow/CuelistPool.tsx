@@ -1,12 +1,13 @@
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { ModalFrame } from "@tosklight/ui/modals";
 import {
-	DEFAULT_POOL_CARD_MINIMUM_WIDTH,
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
 	type ResolvedPoolPresentation,
+	type PoolCardSizing,
 } from "@tosklight/ui/pools";
+import { poolCardSizing } from "../../state/reducerHelpers";
 import {
 	WindowHeader,
 	WindowScrollArea,
@@ -474,6 +475,7 @@ function resolveCuelistPresentation({
 function CuelistPoolCards({
 	slots,
 	search,
+	cardSizing,
 	configuration,
 	showId,
 	surfaceKey,
@@ -492,6 +494,7 @@ function CuelistPoolCards({
 }: {
 	slots: readonly CuelistPoolItem[];
 	search: string;
+	cardSizing: PoolCardSizing;
 	configuration: PoolPresentationConfiguration;
 	showId: string;
 	surfaceKey: string;
@@ -539,7 +542,12 @@ function CuelistPoolCards({
 				onPointerDown={() => startHold(slot.number, slot.playback)}
 				onPointerEnd={clearHold}
 				onClick={() => click(slot.number, slot.playback)}
-				onContextMenu={() => openContextSettings(slot.number, slot.playback)}
+				onContextMenu={() => {
+					// The right button's pointerdown started a hold, and its pointerup lands
+					// on the Settings dialog, so the hold would reopen Settings after it closes.
+					clearHold();
+					openContextSettings(slot.number, slot.playback);
+				}}
 				onPreviewImage={() =>
 					slot.playback && onPreviewImage(slot.number, slot.playback)
 				}
@@ -561,7 +569,7 @@ function CuelistPoolCards({
 		>
 			<PoolGrid
 				className="cuelist-pool-grid"
-				minimumCardWidth={DEFAULT_POOL_CARD_MINIMUM_WIDTH}
+				cardSizing={cardSizing}
 				slots={poolSlots}
 				slotCount={search ? undefined : 1000}
 				fillEmptySlots={!search}
@@ -701,6 +709,7 @@ export function CuelistPool(props: CuelistPoolProps) {
 			<CuelistPoolCards
 				slots={filteredPool}
 				search={search}
+				cardSizing={poolCardSizing(state)}
 				configuration={poolPresentation}
 				showId={showId}
 				surfaceKey={surfaceKey}

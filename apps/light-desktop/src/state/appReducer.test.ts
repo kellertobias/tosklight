@@ -1338,6 +1338,44 @@ describe("appReducer Fixture Sheet and preset pane migrations", () => {
 });
 
 describe("appReducer pool and Set configuration", () => {
+	it("keeps the pool grid default and minimum widths in desk settings", () => {
+		const changed = appReducer(
+			appReducer(initialState, {
+				type: "SET_POOL_GRID_DEFAULT_WIDTH",
+				value: 180,
+			}),
+			{ type: "SET_POOL_GRID_MINIMUM_WIDTH", value: 120 },
+		);
+		expect(changed.poolGridDefaultWidth).toBe(180);
+		expect(changed.poolGridMinimumWidth).toBe(120);
+		const hydrate = (windowSettings: Record<string, unknown>) =>
+			appReducer(initialState, {
+				type: "HYDRATE_LAYOUT",
+				desks: initialState.desks,
+				activeDeskId: initialState.activeDeskId,
+				windowSettings,
+			});
+		expect(
+			hydrate({ poolGridDefaultWidth: 180, poolGridMinimumWidth: 120 }),
+		).toMatchObject({ poolGridDefaultWidth: 180, poolGridMinimumWidth: 120 });
+		expect(hydrate({})).toMatchObject({
+			poolGridDefaultWidth: 72,
+			poolGridMinimumWidth: 56,
+		});
+		expect(
+			hydrate({ poolGridDefaultWidth: Number.NaN, poolGridMinimumWidth: 10 }),
+		).toMatchObject({ poolGridDefaultWidth: 72, poolGridMinimumWidth: 48 });
+	});
+	it("migrates the single legacy pool tile width to the default width", () => {
+		expect(
+			appReducer(initialState, {
+				type: "HYDRATE_LAYOUT",
+				desks: initialState.desks,
+				activeDeskId: initialState.activeDeskId,
+				windowSettings: { poolGridMinimumWidth: 180 },
+			}),
+		).toMatchObject({ poolGridDefaultWidth: 180, poolGridMinimumWidth: 56 });
+	});
 	it("keeps pool colors and Set configuration mode independently configurable", () => {
 		const plain = appReducer(initialState, {
 			type: "SET_PRESET_POOL_COLORS",

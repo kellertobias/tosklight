@@ -106,6 +106,7 @@ mod semantic_contract_startup_tests;
 mod show_activation_checkpoint_tests;
 #[path = "show_activation_configuration_tests.rs"]
 mod show_activation_configuration_tests;
+mod show_description_tests;
 #[path = "show_library_v2_route_tests.rs"]
 mod show_library_v2_route_tests;
 #[path = "show_object_intents_v2_route_tests.rs"]

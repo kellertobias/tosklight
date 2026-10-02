@@ -39,6 +39,21 @@ describe("Virtual Playback exclusion-zone fences", () => {
 		});
 	});
 
+	it("fills the concave turn of an L-shaped zone", () => {
+		const zones = [{ playbackNumbers: [1001, 1002, 1005] }];
+
+		expect(exclusionFenceForSlot(zones, 1, 2, 3, 9)).toEqual({
+			top: true,
+			right: true,
+			bottom: false,
+			left: false,
+			innerCorners: ["bottom-left"],
+		});
+		expect(exclusionFenceForSlot(zones, 1, 1, 3, 9)?.innerCorners).toBe(
+			undefined,
+		);
+	});
+
 	it("treats overlapping zones as one connected visual boundary", () => {
 		const zones = [
 			{ playbackNumbers: [1001, 1002] },
@@ -793,7 +808,7 @@ describe("VirtualPlaybacksWindow", () => {
 
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 		expect(
-			screen.getByRole("button", { name: "Cancel Zone Selection" }),
+			screen.getByRole("button", { name: "Cancel Region Selection" }),
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole("button", {
@@ -898,22 +913,19 @@ describe("VirtualPlaybacksWindow", () => {
 		await waitFor(() => expect(mocks.zoneCapability.load).toHaveBeenCalled());
 		expect(document.querySelector(".virtual-playback-toolbar")).toBeNull();
 		expect(
-			screen.queryByRole("button", { name: "Create Exclusion Zone" }),
-		).toBeNull();
+			await screen.findByRole("button", { name: "Create Solo Region" }),
+		).toBeDisabled();
 		expect(
-			screen.queryByRole("button", { name: "Cancel Zone Selection" }),
-		).toBeNull();
+			screen.getByRole("button", { name: "Cancel Region Selection" }),
+		).toBeInTheDocument();
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: "Virtual playback 1001 page 1 cell 1 Front Wash",
 			}),
 		);
 		expect(
-			screen.queryByRole("button", { name: "Create Exclusion Zone" }),
-		).toBeNull();
-		expect(
-			screen.getByRole("button", { name: "Cancel Zone Selection" }),
-		).toBeInTheDocument();
+			screen.getByRole("button", { name: "Create Solo Region" }),
+		).toBeDisabled();
 		fireEvent.click(
 			screen.getByRole("button", {
 				name: "Virtual playback 1002 page 1 cell 2 empty",
@@ -922,16 +934,16 @@ describe("VirtualPlaybacksWindow", () => {
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 		expect(
 			screen
-				.getByRole("button", { name: "Create Exclusion Zone" })
+				.getByRole("button", { name: "Create Solo Region" })
 				.closest(".pane-chrome-toolbar-target"),
 		).not.toBeNull();
 		fireEvent.click(
-			await screen.findByRole("button", { name: "Create Exclusion Zone" }),
+			await screen.findByRole("button", { name: "Create Solo Region" }),
 		);
-		fireEvent.change(screen.getByLabelText("Zone name"), {
+		fireEvent.change(screen.getByLabelText("Region name"), {
 			target: { value: "Front alternates" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Create zone" }));
+		fireEvent.click(screen.getByRole("button", { name: "Create region" }));
 		await waitFor(() =>
 			expect(mocks.zoneCapability.save).toHaveBeenCalledWith([
 				expect.objectContaining({
@@ -944,6 +956,23 @@ describe("VirtualPlaybacksWindow", () => {
 			type: "SET_SHIFT_ARMED",
 			value: false,
 		});
+	});
+
+	it("starts Solo Region selection from the title bar", async () => {
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+		const create = await screen.findByRole("button", {
+			name: "Create Solo Region",
+		});
+		expect(create).toBeEnabled();
+		expect(
+			screen.queryByRole("button", { name: "Cancel Region Selection" }),
+		).toBeNull();
+		fireEvent.click(create);
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_SHIFT_ARMED",
+			value: true,
+		});
+		expect(mocks.zoneCapability.save).not.toHaveBeenCalled();
 	});
 
 	it("updates an existing zone from the title bar and preserves hidden members", async () => {
@@ -962,13 +991,13 @@ describe("VirtualPlaybacksWindow", () => {
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 
 		const update = await screen.findByRole("button", {
-			name: "Update Exclusion Zone",
+			name: "Update Solo Region",
 		});
 		expect(
 			screen.getByRole("button", { name: "Cancel Edit" }),
 		).toBeInTheDocument();
 		expect(
-			screen.queryByRole("button", { name: "Create Exclusion Zone" }),
+			screen.queryByRole("button", { name: "Create Solo Region" }),
 		).toBeNull();
 		fireEvent.click(
 			screen.getByRole("button", {
@@ -1110,20 +1139,20 @@ describe("Virtual Playback Pane Settings", () => {
 		expect(screen.queryByText("Individual Colors")).toBeNull();
 		expect(mocks.zoneCapability.load).not.toHaveBeenCalled();
 
-		fireEvent.click(screen.getByRole("tab", { name: "Exclusion Zones" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Solo Regions" }));
 		await waitFor(() => expect(mocks.zoneCapability.load).toHaveBeenCalled());
 		expect(
 			await screen.findByText(/Virtual Playbacks 1001, 1002, 1004/),
 		).toBeInTheDocument();
 		expect(
-			screen.getByRole("button", { name: "Edit Zone" }),
+			screen.getByRole("button", { name: "Edit Region" }),
 		).toBeInTheDocument();
 		expect(mocks.useServer).not.toHaveBeenCalled();
 	});
 
 	it("renames and deletes zones through the scoped capability", async () => {
 		render(<PaneSettingsModal />);
-		fireEvent.click(screen.getByRole("tab", { name: "Exclusion Zones" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Solo Regions" }));
 		await screen.findByLabelText("Name for Front alternates");
 		fireEvent.change(screen.getByLabelText("Name for Front alternates"), {
 			target: { value: "Front choice" },
@@ -1140,7 +1169,7 @@ describe("Virtual Playback Pane Settings", () => {
 		);
 
 		mocks.zoneCapability.save.mockClear();
-		fireEvent.click(screen.getByRole("button", { name: "Delete zone" }));
+		fireEvent.click(screen.getByRole("button", { name: "Delete region" }));
 		await waitFor(() =>
 			expect(mocks.zoneCapability.save).toHaveBeenCalledWith([]),
 		);
@@ -1148,8 +1177,8 @@ describe("Virtual Playback Pane Settings", () => {
 
 	it("closes settings and hands the selected zone to live-grid editing", async () => {
 		render(<PaneSettingsModal />);
-		fireEvent.click(screen.getByRole("tab", { name: "Exclusion Zones" }));
-		fireEvent.click(await screen.findByRole("button", { name: "Edit Zone" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Solo Regions" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Edit Region" }));
 
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",

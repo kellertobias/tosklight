@@ -462,7 +462,9 @@ describe("Place Multiple", () => {
 		type(dialog, "Grid centre X", "5");
 		type(dialog, "Grid centre Y", "-2");
 		// The plan shows every element before anything is placed.
-		expect(within(dialog).getAllByTestId("cad-bulk-preview-element")).toHaveLength(6);
+		await waitFor(() =>
+			expect(within(dialog).getAllByTestId("cad-bulk-preview-element")).toHaveLength(6),
+		);
 		expect(mocks.patchFixtures).not.toHaveBeenCalled();
 		fireEvent.click(within(dialog).getByRole("button", { name: /^Place 6$/u }));
 		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledTimes(1));

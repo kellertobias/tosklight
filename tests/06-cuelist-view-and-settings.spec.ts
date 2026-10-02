@@ -20,11 +20,14 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await openCuelistPoolFromCurrentDesk(page);
     const card = page.locator(".cuelist-card").filter({ hasText: installed.name });
 
-    await card.click({ button: "right" });
+    await card.click({ button: "right", position: { x: 8, y: 8 } });
     const settings = page.getByRole("dialog", { name: "Cuelist Settings" });
     await expect(settings).toContainText(installed.name);
     await expect(page.getByText(/selected · touch a playback fader/i)).toHaveCount(0);
     await settings.getByRole("button", { name: "Close Cuelist Settings" }).click();
+    // The right button's press must not leave a long-press pending that reopens Settings.
+    await page.waitForTimeout(1_000);
+    await expect(settings).toBeHidden();
 
     const previewButton = page.getByRole("button", {
       name: `Open ${installed.name} Playback preview`,
@@ -48,7 +51,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await expect(previewButton).toBeFocused();
 
     await page.getByRole("button", { name: "SET", exact: true }).click();
-    await card.click();
+    await card.click({ position: { x: 8, y: 8 } });
     await expect(
       page.getByText("Cuelist 1 selected · touch a playback fader to assign it."),
     ).toBeVisible();

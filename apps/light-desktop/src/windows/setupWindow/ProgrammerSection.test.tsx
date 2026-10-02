@@ -17,6 +17,13 @@ import {
 	PlaybackDefaultsSettings,
 } from "./ProgrammerSection";
 
+const app = vi.hoisted(() => ({
+	state: { poolGridMinimumWidth: 72 },
+	dispatch: vi.fn(),
+}));
+
+vi.mock("../../state/AppContext", () => ({ useApp: () => app }));
+
 afterEach(cleanup);
 
 describe("Desk Setup Defaults layout", () => {
@@ -57,7 +64,7 @@ describe("Desk Setup Defaults layout", () => {
 		const view = render(<DefaultsSection controller={controller} />);
 		expect(screen.getByText("Record & Update defaults")).toBeInTheDocument();
 		expect(screen.queryByText("Cuelist playback defaults")).toBeNull();
-		expect(screen.queryByText("Pool color defaults")).toBeNull();
+		expect(screen.queryByText("Pools")).toBeNull();
 
 		view.rerender(
 			<DefaultsSection
@@ -66,7 +73,7 @@ describe("Desk Setup Defaults layout", () => {
 		);
 		expect(screen.queryByText("Record & Update defaults")).toBeNull();
 		expect(screen.getByText("Cuelist playback defaults")).toBeInTheDocument();
-		expect(screen.queryByText("Pool color defaults")).toBeNull();
+		expect(screen.queryByText("Pools")).toBeNull();
 
 		view.rerender(
 			<DefaultsSection controller={{ ...controller, defaultsTab: "pools" }} />,
@@ -74,8 +81,16 @@ describe("Desk Setup Defaults layout", () => {
 		expect(screen.queryByText("Record & Update defaults")).toBeNull();
 		expect(screen.queryByText("Cuelist playback defaults")).toBeNull();
 		expect(
-			screen.getByRole("heading", { name: "Pool color defaults" }),
+			screen.getByRole("heading", { name: "Pools" }),
 		).toBeInTheDocument();
+		fireEvent.change(
+			screen.getByRole("textbox", { name: "Minimum pool tile width (px)" }),
+			{ target: { value: "68" } },
+		);
+		expect(app.dispatch).toHaveBeenCalledWith({
+			type: "SET_POOL_GRID_MINIMUM_WIDTH",
+			value: 68,
+		});
 		expect(screen.queryByRole("heading", { name: "Defaults" })).toBeNull();
 		expect(screen.queryByText(/server-wide presentation colors/)).toBeNull();
 		const grid = view.container.querySelector(".pool-color-defaults-grid");

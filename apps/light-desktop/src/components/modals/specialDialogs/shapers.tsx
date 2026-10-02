@@ -1,5 +1,6 @@
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { useId, useRef, useState } from "react";
+import { VerticalTouchFader } from "../../control/VerticalTouchFader";
 
 export interface ShaperAttributeValue {
 	value: number;
@@ -40,6 +41,8 @@ const CENTER = VIEWBOX_SIZE / 2;
 const APERTURE_RADIUS = 108;
 const HANDLE_RADIUS = 24;
 const BLADE_WIDTH = 360;
+/** A closed iris still passes a pinpoint, matching the Visualizer's iris falloff. */
+const IRIS_MINIMUM_OPENING = 0.08;
 
 function clamp(value: number) {
 	return Math.max(0, Math.min(1, value));
@@ -122,6 +125,7 @@ export function ShapersDialog({
 	const rotationAttribute = attributes.includes("shaper.rotation")
 		? "shaper.rotation"
 		: null;
+	const irisAttribute = attributes.includes("iris") ? "iris" : null;
 	const [preview, setPreview] = useState<Record<string, number>>({});
 	const bladeGesture = useRef<BladeGesture | null>(null);
 	const rotationGesture = useRef<RotationGesture | null>(null);
@@ -131,6 +135,9 @@ export function ShapersDialog({
 			? preview[attribute]
 			: valueFor(values, attribute, fallback);
 	const moduleRotation = resolved(rotationAttribute, 0.5);
+	const iris = resolved(irisAttribute, 0);
+	const irisRadius =
+		APERTURE_RADIUS * (1 - iris * (1 - IRIS_MINIMUM_OPENING));
 
 	const write = (attribute: string | null, value: number, cyclic = false) => {
 		if (!attribute || disabled) return;
@@ -172,7 +179,7 @@ export function ShapersDialog({
 		);
 	};
 
-	if (!controls.length && !rotationAttribute)
+	if (!controls.length && !rotationAttribute && !irisAttribute)
 		return <p>No shaper attributes exist on the selected fixtures.</p>;
 
 	return (
@@ -237,115 +244,222 @@ export function ShapersDialog({
 								(control.angle && values[control.angle]?.mixed),
 						);
 						return (
-							<g key={control.index}>
-								<circle
-									className={`shaper-blade-handle${mixed ? " mixed" : ""}`}
-									cx={point.x}
-									cy={point.y}
-									r={HANDLE_RADIUS}
-									role="slider"
-									aria-label={`Blade ${control.index} insertion and rotation`}
-									aria-valuemin={0}
-									aria-valuemax={100}
-									aria-valuenow={Math.round(position * 100)}
-									aria-valuetext={`${Math.round(position * 100)}% inserted, ${Math.round((angle - 0.5) * 90)}°${mixed ? ", mixed" : ""}`}
-									aria-disabled={disabled}
-									onPointerDown={(event) => {
-										if (disabled) return;
-										event.currentTarget.setPointerCapture?.(event.pointerId);
-										const start = pointerInViewbox(event);
-										bladeGesture.current = {
-											pointerId: event.pointerId,
-											control,
-											startX: start.x,
-											startY: start.y,
-											startPosition: position,
-											startAngle: angle,
-											axisRadians:
-												((bladeBaseAngle(control.index) +
-													(angle - 0.5) * 90 +
-													(moduleRotation - 0.5) * 360) *
-													Math.PI) /
-												180,
-										};
-									}}
-									onPointerMove={moveBlade}
-									onPointerUp={() => {
-										bladeGesture.current = null;
-									}}
-									onPointerCancel={() => {
-										bladeGesture.current = null;
-									}}
-								/>
-								<text className="shaper-blade-number" x={point.x} y={point.y}>
-									{control.index}
-								</text>
-							</g>
+							<ShaperBladeHandle
+								key={control.index}
+								control={control}
+								position={position}
+								angle={angle}
+								handle={point}
+								moduleRotation={moduleRotation}
+								mixed={mixed}
+								disabled={disabled}
+								gesture={bladeGesture}
+								onMove={moveBlade}
+							/>
 						);
 					})}
 				</g>
+				{irisAttribute && (
+					<circle
+						className="shapers-iris-mask"
+						data-testid="shaper-iris-mask"
+						cx={CENTER}
+						cy={CENTER}
+						r={(APERTURE_RADIUS + irisRadius) / 2}
+						strokeWidth={APERTURE_RADIUS - irisRadius}
+					/>
+				)}
 				{rotationAttribute && (
-					<>
-						<circle
-							className="shapers-rotation-track"
-							cx={CENTER}
-							cy={CENTER}
-							r="142"
-						/>
-						<circle
-							className="shapers-rotation-hitarea"
-							cx={CENTER}
-							cy={CENTER}
-							r="142"
-							role="slider"
-							aria-label="Shaper module rotation"
-							aria-valuemin={-180}
-							aria-valuemax={180}
-							aria-valuenow={Math.round((moduleRotation - 0.5) * 360)}
-							aria-valuetext={`${Math.round((moduleRotation - 0.5) * 360)}°${values[rotationAttribute]?.mixed ? ", mixed" : ""}`}
-							aria-disabled={disabled}
-							onPointerDown={(event) => {
-								if (disabled) return;
-								event.currentTarget.setPointerCapture?.(event.pointerId);
-								const point = pointerInViewbox(event);
-								rotationGesture.current = {
-									pointerId: event.pointerId,
-									startPointerAngle: Math.atan2(
-										point.y - CENTER,
-										point.x - CENTER,
-									),
-									startRotation: moduleRotation,
-								};
-							}}
-							onPointerMove={moveRotation}
-							onPointerUp={() => {
-								rotationGesture.current = null;
-							}}
-							onPointerCancel={() => {
-								rotationGesture.current = null;
-							}}
-						/>
-						<circle
-							className="shapers-rotation-handle"
-							cx={CENTER}
-							cy="18"
-							r="10"
-							style={{
-								transformOrigin: `${CENTER}px ${CENTER}px`,
-								transform: `rotate(${(moduleRotation - 0.5) * 360}deg)`,
-							}}
-						/>
-					</>
+					<ShaperRotationRing
+						moduleRotation={moduleRotation}
+						mixed={Boolean(values[rotationAttribute]?.mixed)}
+						disabled={disabled}
+						gesture={rotationGesture}
+						onMove={moveRotation}
+					/>
 				)}
 			</svg>
+			<ShapersSidePanel
+				blades={controls.length > 0}
+				rotation={Boolean(rotationAttribute)}
+				iris={irisAttribute ? iris : null}
+				irisMixed={Boolean(irisAttribute && values[irisAttribute]?.mixed)}
+				disabled={disabled}
+				onIris={(value) => write(irisAttribute, value)}
+			/>
+		</div>
+	);
+}
+
+function ShaperBladeHandle({
+	control,
+	position,
+	angle,
+	handle,
+	moduleRotation,
+	mixed,
+	disabled,
+	gesture,
+	onMove,
+}: {
+	control: BladeControl;
+	position: number;
+	angle: number;
+	handle: { x: number; y: number };
+	moduleRotation: number;
+	mixed: boolean;
+	disabled: boolean;
+	gesture: RefObject<BladeGesture | null>;
+	onMove(event: ReactPointerEvent<SVGCircleElement>): void;
+}) {
+	return (
+		<g>
+			<circle
+				className={`shaper-blade-handle${mixed ? " mixed" : ""}`}
+				cx={handle.x}
+				cy={handle.y}
+				r={HANDLE_RADIUS}
+				role="slider"
+				aria-label={`Blade ${control.index} insertion and rotation`}
+				aria-valuemin={0}
+				aria-valuemax={100}
+				aria-valuenow={Math.round(position * 100)}
+				aria-valuetext={`${Math.round(position * 100)}% inserted, ${Math.round((angle - 0.5) * 90)}°${mixed ? ", mixed" : ""}`}
+				aria-disabled={disabled}
+				onPointerDown={(event) => {
+					if (disabled) return;
+					event.currentTarget.setPointerCapture?.(event.pointerId);
+					const start = pointerInViewbox(event);
+					gesture.current = {
+						pointerId: event.pointerId,
+						control,
+						startX: start.x,
+						startY: start.y,
+						startPosition: position,
+						startAngle: angle,
+						axisRadians:
+							((bladeBaseAngle(control.index) +
+								(angle - 0.5) * 90 +
+								(moduleRotation - 0.5) * 360) *
+								Math.PI) /
+							180,
+					};
+				}}
+				onPointerMove={onMove}
+				onPointerUp={() => {
+					gesture.current = null;
+				}}
+				onPointerCancel={() => {
+					gesture.current = null;
+				}}
+			/>
+			<text className="shaper-blade-number" x={handle.x} y={handle.y}>
+				{control.index}
+			</text>
+		</g>
+	);
+}
+
+function ShaperRotationRing({
+	moduleRotation,
+	mixed,
+	disabled,
+	gesture,
+	onMove,
+}: {
+	moduleRotation: number;
+	mixed: boolean;
+	disabled: boolean;
+	gesture: RefObject<RotationGesture | null>;
+	onMove(event: ReactPointerEvent<SVGCircleElement>): void;
+}) {
+	return (
+		<>
+			<circle className="shapers-rotation-track" cx={CENTER} cy={CENTER} r="142" />
+			<circle
+				className="shapers-rotation-hitarea"
+				cx={CENTER}
+				cy={CENTER}
+				r="142"
+				role="slider"
+				aria-label="Shaper module rotation"
+				aria-valuemin={-180}
+				aria-valuemax={180}
+				aria-valuenow={Math.round((moduleRotation - 0.5) * 360)}
+				aria-valuetext={`${Math.round((moduleRotation - 0.5) * 360)}°${mixed ? ", mixed" : ""}`}
+				aria-disabled={disabled}
+				onPointerDown={(event) => {
+					if (disabled) return;
+					event.currentTarget.setPointerCapture?.(event.pointerId);
+					const point = pointerInViewbox(event);
+					gesture.current = {
+						pointerId: event.pointerId,
+						startPointerAngle: Math.atan2(point.y - CENTER, point.x - CENTER),
+						startRotation: moduleRotation,
+					};
+				}}
+				onPointerMove={onMove}
+				onPointerUp={() => {
+					gesture.current = null;
+				}}
+				onPointerCancel={() => {
+					gesture.current = null;
+				}}
+			/>
+			<circle
+				className="shapers-rotation-handle"
+				cx={CENTER}
+				cy="18"
+				r="10"
+				style={{
+					transformOrigin: `${CENTER}px ${CENTER}px`,
+					transform: `rotate(${(moduleRotation - 0.5) * 360}deg)`,
+				}}
+			/>
+		</>
+	);
+}
+
+/** Operating help beside the aperture, plus the Iris fader when the selection has one. */
+function ShapersSidePanel({
+	blades,
+	rotation,
+	iris,
+	irisMixed,
+	disabled,
+	onIris,
+}: {
+	blades: boolean;
+	rotation: boolean;
+	iris: number | null;
+	irisMixed: boolean;
+	disabled: boolean;
+	onIris(value: number): void;
+}) {
+	return (
+		<div className="shapers-special-side">
 			<div className="shapers-special-help">
 				<b>Shapers</b>
-				<span>Move a numbered blade inward to cut the beam.</span>
-				<span>Move it sideways to rotate that blade.</span>
-				{rotationAttribute && (
-					<span>Drag the outer ring to rotate the module.</span>
+				{blades && (
+					<>
+						<span>Move a numbered blade inward to cut the beam.</span>
+						<span>Move it sideways to rotate that blade.</span>
+					</>
 				)}
+				{rotation && <span>Drag the outer ring to rotate the module.</span>}
 			</div>
+			{iris !== null && (
+				<div className={`shapers-iris-fader${irisMixed ? " mixed" : ""}`}>
+					<VerticalTouchFader
+						label="Iris"
+						value={iris * 100}
+						display={`${Math.round(iris * 100)}%`}
+						mode={irisMixed ? "Mixed" : undefined}
+						disabled={disabled}
+						onChange={(value) => onIris(value / 100)}
+					/>
+				</div>
+			)}
 		</div>
 	);
 }

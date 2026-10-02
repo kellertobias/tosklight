@@ -4,6 +4,7 @@ import {
 	IconPickerField,
 	ModalPortal,
 	ModalTitleBar,
+	NumberField,
 	TextField,
 } from "@tosklight/ui";
 import { useEffect, useState } from "react";
@@ -79,6 +80,30 @@ export function DeskSettingsModal() {
 								value={desk.icon ?? "⊞"}
 								onChange={(icon) =>
 									dispatch({ type: "UPDATE_DESK", id: desk.id, icon })
+								}
+							/>
+							<NumberField
+								label="Default pool tile width (px)"
+								min="56"
+								max="320"
+								value={state.poolGridDefaultWidth}
+								onChange={(event) =>
+									dispatch({
+										type: "SET_POOL_GRID_DEFAULT_WIDTH",
+										value: Number(event.target.value),
+									})
+								}
+							/>
+							<NumberField
+								label="Minimum pool tile width (px)"
+								min="48"
+								max="320"
+								value={state.poolGridMinimumWidth}
+								onChange={(event) =>
+									dispatch({
+										type: "SET_POOL_GRID_MINIMUM_WIDTH",
+										value: Number(event.target.value),
+									})
 								}
 							/>
 						</FormLayout>

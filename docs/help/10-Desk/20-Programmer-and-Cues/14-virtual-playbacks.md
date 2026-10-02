@@ -18,26 +18,28 @@ Virtual actions have their own Preload capture switch. This allows physical cont
 
 Use Virtual Playbacks for task-specific buttons, not as a substitute for assigning and documenting the underlying playback. The target, action, page, and release behavior must remain understandable from playback configuration.
 
-## Playback Exclusion Zones
+## Solo Regions
 
-An exclusion zone is a named set of Virtual Playback numbers where at most one assigned
-playback may be On. Hold Shift and select at least two displayed cells, choose **Create
-Exclusion Zone**, and enter its name. ToskLight resolves those cells to their stable
-playback numbers before saving. Shift-selection and zone creation are configuration
+A Solo Region is a named set of Virtual Playback numbers where at most one assigned
+playback may be On. Choose **Create Solo Region** in the window title, or hold Shift, then
+select at least two displayed cells. **Create Solo Region** stays disabled until two cells are
+selected; choose it again and enter the region's name. **Cancel Region Selection** leaves
+selection without saving. ToskLight resolves those cells to their stable
+playback numbers before saving. Shift-selection and region creation are configuration
 gestures: they do not press, start, or stop the selected Playbacks.
 
-Saved zone members have an amber fence. Directly neighboring members share one outer fence with no internal fence edge. Disconnected members are outlined as separate islands, so the grid shows each connected part of the zone without relying on color alone.
+Saved region members have an amber fence. Directly neighboring members share one continuous outer fence that runs across the gap between their cells, with no internal fence edge. Disconnected members are outlined as separate islands, so the grid shows each connected part of the region without relying on color alone.
 
 When one member turns On, it wins and every other active member turns Off. Turning the winning member Off does not start another member. Touch, mouse, OSC, and restored playback state all use this server-owned rule. Virtual Playbacks do not use the physical F1–F8 Playback shortcuts. Automatic full-override release remains a separate playback option.
 
-Open the pane's **Settings → Exclusion Zones** tab to rename or delete a zone. Choose
-**Edit Zone** to close Settings and select its visible playback numbers on the live
-grid. The window title then offers **Update Exclusion Zone** and **Cancel Edit**. A
-Virtual Playback may belong to several zones; activating it releases the deduplicated
+Open the pane's **Settings → Solo Regions** tab to rename or delete a region. Choose
+**Edit Region** to close Settings and select its visible playback numbers on the live
+grid. The window title then offers **Update Solo Region** and **Cancel Edit**. A
+Virtual Playback may belong to several regions; activating it releases the deduplicated
 union of the other numbered members.
 
-Zone configuration is stored once for the active show and is shared by every desk,
+Solo Region configuration is stored once for the active show and is shared by every desk,
 pane, OSC controller, and other control path. Moving, duplicating, resizing, or
-removing a pane and removing a historical desk do not copy, retarget, or delete zones.
-Only the explicit zone-delete action removes a zone. Desk layouts and current pages may
-differ without changing the underlying playback numbers or zone membership.
+removing a pane and removing a historical desk do not copy, retarget, or delete regions.
+Only the explicit region-delete action removes a region. Desk layouts and current pages may
+differ without changing the underlying playback numbers or region membership.

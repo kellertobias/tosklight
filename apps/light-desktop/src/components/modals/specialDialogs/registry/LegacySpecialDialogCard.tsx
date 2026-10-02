@@ -26,9 +26,13 @@ export function LegacySpecialDialogCard({
 					className={`modal-card special-dialog-card ${entry?.cardClassName ?? ""}`}
 				>
 					<ModalTitleBar title={`${family} · Special Dialog`} onClose={close} />
-					<p>{host.selectedFixtureIds.length} fixtures selected</p>
-					{!host.valueWrites.canWrite && (
-						<p className="modal-status">Programmer values loading…</p>
+					{!entry?.ownsProgrammerWrites && (
+						<>
+							<p>{host.selectedFixtureIds.length} fixtures selected</p>
+							{!host.valueWrites.canWrite && (
+								<p className="modal-status">Programmer values loading…</p>
+							)}
+						</>
 					)}
 					<div className="special-dialog-content">{entry?.render(host)}</div>
 				</section>

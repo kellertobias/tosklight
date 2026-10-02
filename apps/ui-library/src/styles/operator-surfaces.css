@@ -1900,6 +1900,26 @@
 	opacity: 0.9;
 }
 
+/* Tiles narrower than the pool's default width show their text at 80%. */
+.pool-grid-narrow .pool-card > .number {
+	font-size: 8px;
+}
+
+.pool-grid-narrow .pool-card-name {
+	font-size: 10.4px;
+}
+
+.pool-grid-narrow
+	:is(
+		.pool-card-information > small,
+		.pool-card-information > em,
+		.pool-card-state-marker,
+		.pool-card-status,
+		.pool-card-workflow
+	) {
+	font-size: 7.2px;
+}
+
 .pool-card-image {
 	width: 100%;
 	height: 100%;
@@ -1993,14 +2013,29 @@
 	--exclusion-fence-right-width: 0;
 	--exclusion-fence-bottom-width: 0;
 	--exclusion-fence-left-width: 0;
+	--exclusion-corner-top-left: 0;
+	--exclusion-corner-top-right: 0;
+	--exclusion-corner-bottom-right: 0;
+	--exclusion-corner-bottom-left: 0;
+	--exclusion-member-border-width: 2px;
+	/* Concentric with the tile's 7px corner, half a grid gap further out. */
+	--exclusion-fence-radius: calc(7px + var(--button-grid-gap, 2px) / 2);
 	overflow: visible;
+}
+
+/* The fence is positioned from the padding box, so members share one border width. */
+:is(.virtual-playback-grid, .virtual-playback-visible-cells)
+	> .virtual-playback-box.exclusion-member {
+	border-width: var(--exclusion-member-border-width);
 }
 
 .virtual-playback-box.exclusion-member::after {
 	content: "";
 	position: absolute;
 	z-index: 20;
-	inset: calc(var(--button-grid-gap, 2px) / -2);
+	inset: calc(
+		var(--button-grid-gap, 2px) / -2 - var(--exclusion-member-border-width)
+	);
 	border-color: var(--amber);
 	border-style: solid;
 	border-width:
@@ -2008,7 +2043,36 @@
 		var(--exclusion-fence-right-width)
 		var(--exclusion-fence-bottom-width)
 		var(--exclusion-fence-left-width);
+	/* Concave turns of the outline are filled here; no neighbour's edge reaches them. */
+	background:
+		linear-gradient(var(--amber), var(--amber)) left top /
+			var(--exclusion-corner-top-left) var(--exclusion-corner-top-left),
+		linear-gradient(var(--amber), var(--amber)) right top /
+			var(--exclusion-corner-top-right) var(--exclusion-corner-top-right),
+		linear-gradient(var(--amber), var(--amber)) right bottom /
+			var(--exclusion-corner-bottom-right)
+			var(--exclusion-corner-bottom-right),
+		linear-gradient(var(--amber), var(--amber)) left bottom /
+			var(--exclusion-corner-bottom-left) var(--exclusion-corner-bottom-left);
+	background-origin: border-box;
+	background-repeat: no-repeat;
 	pointer-events: none;
+}
+
+.virtual-playback-box.exclusion-corner-top-left {
+	--exclusion-corner-top-left: 3px;
+}
+
+.virtual-playback-box.exclusion-corner-top-right {
+	--exclusion-corner-top-right: 3px;
+}
+
+.virtual-playback-box.exclusion-corner-bottom-right {
+	--exclusion-corner-bottom-right: 3px;
+}
+
+.virtual-playback-box.exclusion-corner-bottom-left {
+	--exclusion-corner-bottom-left: 3px;
 }
 
 .virtual-playback-box.exclusion-fence-top {
@@ -2028,19 +2092,19 @@
 }
 
 .virtual-playback-box.exclusion-fence-top.exclusion-fence-left::after {
-	border-top-left-radius: 8px;
+	border-top-left-radius: var(--exclusion-fence-radius);
 }
 
 .virtual-playback-box.exclusion-fence-top.exclusion-fence-right::after {
-	border-top-right-radius: 8px;
+	border-top-right-radius: var(--exclusion-fence-radius);
 }
 
 .virtual-playback-box.exclusion-fence-bottom.exclusion-fence-right::after {
-	border-bottom-right-radius: 8px;
+	border-bottom-right-radius: var(--exclusion-fence-radius);
 }
 
 .virtual-playback-box.exclusion-fence-bottom.exclusion-fence-left::after {
-	border-bottom-left-radius: 8px;
+	border-bottom-left-radius: var(--exclusion-fence-radius);
 }
 
 .virtual-playback-box.exclusion-selected {

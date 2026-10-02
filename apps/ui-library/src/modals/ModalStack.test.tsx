@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Button } from "../controls";
 import {
@@ -30,7 +30,37 @@ function NestedHarness({ closeFirst, closeSecond }: { closeFirst: () => void; cl
   );
 }
 
+function EscapeOnMount() {
+  useEffect(() => {
+    fireEvent.keyDown(document, { key: "Escape" });
+  }, []);
+  return null;
+}
+
 describe("ModalProvider", () => {
+  it("closes a modal on Escape pressed before its registration re-renders the stack", () => {
+    const close = vi.fn();
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <ModalProvider>
+          <Button onClick={() => setOpen(true)}>Open</Button>
+          {open && (
+            <>
+              <ModalFrame id="fresh" ariaLabel="Fresh" title="Fresh" onClose={close}>
+                Fresh
+              </ModalFrame>
+              <EscapeOnMount />
+            </>
+          )}
+        </ModalProvider>
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("routes Escape and backdrop only to the top eligible modal", () => {
     const first = vi.fn();
     const second = vi.fn();

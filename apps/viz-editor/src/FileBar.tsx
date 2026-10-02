@@ -88,6 +88,71 @@ export function FileBar({
 
 	return (
 		<section className="viz-editor-file-bar is-show">
+			<FileActionButtons busy={busy} document={document} sourceDesk={sourceDesk} actions={actions} browseRecent={browseRecent} browseDesks={browseDesks} run={run} />
+			{children}
+			{browser && <ModalFrame
+				title={browser === "recent" ? "Recent shows" : "Control desk shows"}
+				ariaLabel={browser === "recent" ? "Recent shows" : "Control desk shows"}
+				closeLabel={browser === "recent" ? "Close Recent shows" : "Close Control desk shows"}
+				dialogClassName="viz-show-browser"
+				closeDisabled={busy}
+				policy={{ escape: !busy, backdrop: !busy }}
+				onClose={() => { if (!busy) setBrowser(null); }}
+			>
+				<div className="viz-show-browser-scroll" aria-busy={busy}>
+                    <output aria-live="polite" className="viz-editor-status">{status}</output>
+				{browser === "recent" ? <>
+					{recent.length === 0 && <p>No recent shows are available.</p>}
+					<table className="viz-recent-shows-table"><thead><tr><th>Show</th><th>Location</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>
+					{recent.map(({ path, lastSavedAt }) => <tr key={path}><td>{fileStem(path)}</td><td title={path}>{displayShowPath(path).startsWith("<internal>/") ? <><span className="viz-location-badge">Internal</span><span>{displayShowPath(path).slice(11)}</span></> : displayShowPath(path)}</td><td>{lastSavedAt ? new Date(lastSavedAt * 1000).toLocaleString() : "—"}</td><td><Button aria-label={`Open ${displayShowPath(path)}`} disabled={busy} onClick={() => void run("Opening", async () => {
+						const summary = await documentSession.open(path); onDocument(summary); onReloadProfiles(); onReloadDocument(); setBrowser(null); return `Opened ${summary.name}`;
+					})}>Open</Button></td></tr>)}
+					</tbody></table>
+				</> : <>
+					{activeDesks.length === 0 ? <p className="viz-show-browser-empty">No announced control desks have an active show.</p> : <table className="viz-desk-shows-table"><thead><tr><th>Desk</th><th>Active Show</th><th>Actions</th></tr></thead><tbody>
+					{activeDesks.map((desk) => <tr key={desk.instance}><td><strong className="viz-show-browser-primary">{desk.name}</strong><span className="viz-show-browser-secondary">{desk.address} · {displayOperatingSystem(desk.operatingSystem)}</span></td><td><span className="viz-show-browser-primary">{desk.show}</span><span className="viz-show-browser-secondary">Last loaded: {desk.showLastLoadedAt ? new Date(desk.showLastLoadedAt).toLocaleString() : "—"}</span></td><td><Button aria-label={`Load ${desk.show} from ${desk.name}`} disabled={busy} onClick={() => void run("Loading", async () => {
+						const summary = await documentSession.loadFromDesk(desk.instance); onDocument(summary); onReloadProfiles(); onReloadDocument(); setSourceDesk(desk.name); setBrowser(null); return `Loaded ${summary.name} from ${desk.name}`;
+					})}>Load</Button></td></tr>)}
+					</tbody></table>}
+				</>}
+				</div>
+			</ModalFrame>}
+
+			{!browser && <output aria-live="polite" className="viz-editor-status">{status}</output>}
+			{pendingMvr && (
+				<MvrImport
+					// Each prepared preview starts its own decisions.
+					key={pendingMvr.preview.token}
+					preview={pendingMvr.preview}
+					onImported={(summary) => finishMvr(summary, true)}
+					onCancel={() =>
+						finishMvr("Import cancelled; nothing was changed", false)
+					}
+					onError={onError}
+				/>
+			)}
+		</section>
+	);
+}
+
+function FileActionButtons({
+	busy,
+	document,
+	sourceDesk,
+	actions,
+	browseRecent,
+	browseDesks,
+	run,
+}: {
+	busy: boolean;
+	document: DocumentSummary | null;
+	sourceDesk: string | null;
+	actions: ReturnType<typeof useFileActions>;
+	browseRecent: () => Promise<null>;
+	browseDesks: () => Promise<null>;
+	run: (label: string, action: () => Promise<string | null>) => Promise<void>;
+}) {
+	return (
 			<div className="viz-show-actions">
 				<section>
 					<h2>New Show</h2>
@@ -142,49 +207,6 @@ export function FileBar({
 					</Button>
 				</section>
 			</div>
-			{children}
-			{browser && <ModalFrame
-				title={browser === "recent" ? "Recent shows" : "Control desk shows"}
-				ariaLabel={browser === "recent" ? "Recent shows" : "Control desk shows"}
-				closeLabel={browser === "recent" ? "Close Recent shows" : "Close Control desk shows"}
-				dialogClassName="viz-show-browser"
-				closeDisabled={busy}
-				policy={{ escape: !busy, backdrop: !busy }}
-				onClose={() => { if (!busy) setBrowser(null); }}
-			>
-				<div className="viz-show-browser-scroll" aria-busy={busy}>
-                    <output aria-live="polite" className="viz-editor-status">{status}</output>
-				{browser === "recent" ? <>
-					{recent.length === 0 && <p>No recent shows are available.</p>}
-					<table className="viz-recent-shows-table"><thead><tr><th>Show</th><th>Location</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>
-					{recent.map(({ path, lastSavedAt }) => <tr key={path}><td>{fileStem(path)}</td><td title={path}>{displayShowPath(path).startsWith("<internal>/") ? <><span className="viz-location-badge">Internal</span><span>{displayShowPath(path).slice(11)}</span></> : displayShowPath(path)}</td><td>{lastSavedAt ? new Date(lastSavedAt * 1000).toLocaleString() : "—"}</td><td><Button aria-label={`Open ${displayShowPath(path)}`} disabled={busy} onClick={() => void run("Opening", async () => {
-						const summary = await documentSession.open(path); onDocument(summary); onReloadProfiles(); onReloadDocument(); setBrowser(null); return `Opened ${summary.name}`;
-					})}>Open</Button></td></tr>)}
-					</tbody></table>
-				</> : <>
-					{activeDesks.length === 0 ? <p className="viz-show-browser-empty">No announced control desks have an active show.</p> : <table className="viz-desk-shows-table"><thead><tr><th>Desk</th><th>Active Show</th><th>Actions</th></tr></thead><tbody>
-					{activeDesks.map((desk) => <tr key={desk.instance}><td><strong className="viz-show-browser-primary">{desk.name}</strong><span className="viz-show-browser-secondary">{desk.address} · {displayOperatingSystem(desk.operatingSystem)}</span></td><td><span className="viz-show-browser-primary">{desk.show}</span><span className="viz-show-browser-secondary">Last loaded: {desk.showLastLoadedAt ? new Date(desk.showLastLoadedAt).toLocaleString() : "—"}</span></td><td><Button aria-label={`Load ${desk.show} from ${desk.name}`} disabled={busy} onClick={() => void run("Loading", async () => {
-						const summary = await documentSession.loadFromDesk(desk.instance); onDocument(summary); onReloadProfiles(); onReloadDocument(); setSourceDesk(desk.name); setBrowser(null); return `Loaded ${summary.name} from ${desk.name}`;
-					})}>Load</Button></td></tr>)}
-					</tbody></table>}
-				</>}
-				</div>
-			</ModalFrame>}
-
-			{!browser && <output aria-live="polite" className="viz-editor-status">{status}</output>}
-			{pendingMvr && (
-				<MvrImport
-					// Each prepared preview starts its own decisions.
-					key={pendingMvr.preview.token}
-					preview={pendingMvr.preview}
-					onImported={(summary) => finishMvr(summary, true)}
-					onCancel={() =>
-						finishMvr("Import cancelled; nothing was changed", false)
-					}
-					onError={onError}
-				/>
-			)}
-		</section>
 	);
 }
 

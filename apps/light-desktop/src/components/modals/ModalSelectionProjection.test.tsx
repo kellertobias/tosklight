@@ -75,7 +75,7 @@ const mocks = vi.hoisted(() => {
 		appState: {
 			specialDialogsOpen: false,
 			systemControlsOpen: false,
-			specialDialogFamily: "Dynamics" as const,
+			specialDialogFamily: "Dynamics" as string,
 			shiftArmed: false,
 		},
 	};
@@ -118,6 +118,11 @@ vi.mock("./systemControls/runningDynamicsAuthority", () => ({
 		off: vi.fn(),
 	}),
 }));
+vi.mock("../../windows/MediaPaneWindow", () => ({
+	MediaPaneWindow: ({ builtIn }: { builtIn?: boolean }) => (
+		<main aria-label="Media pane" data-built-in={builtIn} />
+	),
+}));
 vi.mock("../control/VerticalTouchFader", () => ({
 	VerticalTouchFader: ({
 		label,
@@ -159,6 +164,7 @@ function renderSelectionView(children: ReactNode) {
 beforeEach(() => {
 	mocks.appState.specialDialogsOpen = false;
 	mocks.appState.systemControlsOpen = false;
+	mocks.appState.specialDialogFamily = "Dynamics";
 	mocks.mutationQueue.canWrite = true;
 });
 
@@ -195,6 +201,20 @@ describe("modal selection projections", () => {
 		await screen.findByText("2 fixtures selected");
 		expect(mocks.mutationQueue.submitLatest).not.toHaveBeenCalled();
 		expect(mocks.selectionAccess).not.toHaveBeenCalled();
+	});
+
+	it("opens the Built-Ins Media pane as a fullscreen Media special dialog", async () => {
+		mocks.appState.specialDialogsOpen = true;
+		mocks.appState.specialDialogFamily = "Media";
+		renderSelectionView(<SpecialDialogsModal />);
+
+		const pane = await screen.findByRole("main", { name: "Media pane" });
+		expect(pane).toHaveAttribute("data-built-in", "true");
+		expect(pane.closest(".modal-card")).toHaveClass(
+			"media-special-dialog-card",
+		);
+		expect(screen.queryByText(/fixtures selected/)).toBeNull();
+		expect(mocks.mutationQueueUse).not.toHaveBeenCalledWith(true);
 	});
 
 	it("updates System Controls fixture-action scope from streamed selection", async () => {

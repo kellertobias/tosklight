@@ -411,6 +411,31 @@ impl AttributeConfiguration {
                 EncoderPlacement::new(EncoderGroup::Media, 3, 6),
                 EncoderPlacement::new(EncoderGroup::Media, 1, 5),
             ),
+            (
+                "fixture.framing_macro",
+                EncoderPlacement::new(EncoderGroup::Shapers, 3, 5),
+                EncoderPlacement::new(EncoderGroup::Control, 4, 2),
+            ),
+            (
+                "fixture.framing_macro_speed",
+                EncoderPlacement::new(EncoderGroup::Shapers, 3, 6),
+                EncoderPlacement::new(EncoderGroup::Control, 4, 3),
+            ),
+            (
+                "fixture.barndoor_macros",
+                EncoderPlacement::new(EncoderGroup::Shapers, 4, 1),
+                EncoderPlacement::new(EncoderGroup::Control, 4, 4),
+            ),
+            (
+                "fixture.barndoor_macro_speed",
+                EncoderPlacement::new(EncoderGroup::Shapers, 4, 2),
+                EncoderPlacement::new(EncoderGroup::Control, 4, 5),
+            ),
+            (
+                "fixture.barndoor_module_rotation",
+                EncoderPlacement::new(EncoderGroup::Shapers, 4, 3),
+                EncoderPlacement::new(EncoderGroup::Shapers, 3, 5),
+            ),
         ] {
             self.move_legacy_default_encoder(attribute, from, to);
         }

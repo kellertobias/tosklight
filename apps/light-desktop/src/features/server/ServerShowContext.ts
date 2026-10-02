@@ -1,13 +1,14 @@
 import type { DiscoveredPeer } from "../../api/client/discovery";
-import type { ShowEntry } from "../../api/types";
+import type { NetworkShowCatalog, ShowEntry } from "../../api/types";
 import type { StoredDeskLayout } from "./contracts";
 
 export interface ServerShowContext {
+    setShowDescription: (id: string, description: string) => Promise<void>;
 	createShow: (name: string) => Promise<void>;
     networkSaveFolders: (instance: string, rootId: string, path: string) => Promise<import("../../api/client/shows").ShowSaveFolders>;
     saveShowCopy: (name: string, target: import("../../api/client/shows").ShowSaveTarget, baseShow: boolean) => Promise<ShowEntry>;
     exportMvrFile: (name: string, target: import("../../api/client/shows").ShowSaveTarget) => Promise<import("../../api/client/shows").SavedShowFile>;
-    networkShows: () => Promise<import("../../api/generated/light-wire").NetworkShowCatalog>;
+    networkShows: () => Promise<NetworkShowCatalog>;
     importRemoteShow: (instance: string, showId: string | null, revision: number | null, open: boolean) => Promise<ShowEntry | null>;
     prepareShowRevision: (id: string, revision: number) => Promise<ShowEntry | null>;
     prepareShowFile: (root: string, path: string, name: string) => Promise<ShowEntry | null>;

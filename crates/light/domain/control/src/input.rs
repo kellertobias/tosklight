@@ -3,6 +3,9 @@ use async_trait::async_trait;
 use std::net::SocketAddr;
 use tokio::net::UdpSocket;
 
+// async-trait marks its boxed future `#[must_use]`; newer Clippy also treats that future as
+// must-use and reports the macro's attribute as doubled.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait ControlInput: Send {
     async fn next_event(&mut self) -> Option<ControlEvent>;

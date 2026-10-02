@@ -97,7 +97,7 @@ function VirtualPlaybackZoneEditor({
 					Save name
 				</Button>
 				<Button disabled={saving} onClick={() => onEdit(zone)}>
-					Edit Zone
+					Edit Region
 				</Button>
 				<Button
 					className="danger"
@@ -106,11 +106,11 @@ function VirtualPlaybackZoneEditor({
 						persist(zones.filter((candidate) => candidate.id !== zone.id))
 					}
 				>
-					Delete zone
+					Delete region
 				</Button>
 			</header>
 			<small>
-				Virtual Playbacks {zone.playbackNumbers.join(", ")} · zone order{" "}
+				Virtual Playbacks {zone.playbackNumbers.join(", ")} · region order{" "}
 				{zones.findIndex((candidate) => candidate.id === zone.id) + 1}
 			</small>
 		</article>
@@ -142,20 +142,20 @@ function VirtualPlaybackZoneSettings({
 	return (
 		<section
 			className="virtual-playback-zone-settings"
-			aria-label="Playback Exclusion Zones"
+			aria-label="Playback Solo Regions"
 		>
 			<p>
-				Shift-select at least two cells in the pane to create a zone. A newly
+				Shift-select at least two cells in the pane to create a region. A newly
 				activated member releases the other active members; creating or editing
-				a zone never operates a playback.
+				a region never operates a playback.
 			</p>
-			{surface.saving && <p role="status">Saving Playback Exclusion Zones…</p>}
+			{surface.saving && <p role="status">Saving Playback Solo Regions…</p>}
 			{!surface.ready ? (
 				<p role={surface.error ? "alert" : "status"}>
-					{surface.error ?? "Loading Playback Exclusion Zones…"}
+					{surface.error ?? "Loading Playback Solo Regions…"}
 				</p>
 			) : surface.zones.length === 0 ? (
-				<p>No exclusion zones are configured for this show.</p>
+				<p>No Solo Regions are configured for this show.</p>
 			) : (
 				surface.zones.map((zone) => (
 					<VirtualPlaybackZoneEditor
@@ -930,7 +930,7 @@ function paneSpecificTabs(
 			},
 			{
 				id: "virtual-exclusion-zones",
-				label: "Exclusion Zones",
+				label: "Solo Regions",
 				content: <VirtualPlaybackExclusionSettings pane={pane} close={close} />,
 			},
 		);

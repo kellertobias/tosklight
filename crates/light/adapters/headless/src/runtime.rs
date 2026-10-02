@@ -225,6 +225,7 @@ mod show_command_update;
 mod show_commands;
 mod show_compile;
 mod show_compile_migrations;
+mod show_description;
 mod show_programming_contract;
 mod show_library;
 mod show_library_mutations;

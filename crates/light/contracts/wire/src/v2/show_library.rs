@@ -19,6 +19,8 @@ pub struct ShowLibrarySnapshot {
 pub struct ShowLibraryEntry {
     #[serde(flatten)]
     pub show: RuntimeShowEntry,
+    #[serde(default)]
+    pub description: String,
     pub revisions: Vec<ShowLibraryRevision>,
 }
 
@@ -92,6 +94,10 @@ pub enum ShowLibraryAction {
     SetBaseShow {
         show_id: Uuid,
         is_base_show: bool,
+    },
+    SetDescription {
+        show_id: Uuid,
+        description: String,
     },
     CreateFromBase {
         show_id: Uuid,

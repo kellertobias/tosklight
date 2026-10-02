@@ -1,6 +1,34 @@
 import type { AppState } from "../../types";
 import type { Action } from "../appActions";
-import { clamp } from "../reducerHelpers";
+import {
+	clamp,
+	normalizePoolGridDefaultWidth,
+	normalizePoolGridMinimumWidth,
+} from "../reducerHelpers";
+
+function reducePoolGridWidth(
+	state: AppState,
+	action: Extract<
+		Action,
+		{ type: "SET_POOL_GRID_DEFAULT_WIDTH" | "SET_POOL_GRID_MINIMUM_WIDTH" }
+	>,
+): AppState {
+	return action.type === "SET_POOL_GRID_DEFAULT_WIDTH"
+		? {
+				...state,
+				poolGridDefaultWidth: normalizePoolGridDefaultWidth(
+					action.value,
+					state.poolGridDefaultWidth,
+				),
+			}
+		: {
+				...state,
+				poolGridMinimumWidth: normalizePoolGridMinimumWidth(
+					action.value,
+					state.poolGridMinimumWidth,
+				),
+			};
+}
 
 export function reduceControls(
 	state: AppState,
@@ -24,6 +52,9 @@ export function reduceControls(
 			return { ...state, presetFamily: action.family };
 		case "SET_PRESET_POOL_COLORS":
 			return { ...state, presetPoolColors: action.value };
+		case "SET_POOL_GRID_DEFAULT_WIDTH":
+		case "SET_POOL_GRID_MINIMUM_WIDTH":
+			return reducePoolGridWidth(state, action);
 		case "SET_PRESET_SET_ARMED":
 			return { ...state, presetSetArmed: action.value };
 		case "OPEN_BUILTIN_CUELIST":

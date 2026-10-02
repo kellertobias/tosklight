@@ -5,8 +5,16 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ShapersDialog, shaperBladeGeometry } from "./shapers";
+
+vi.mock("../../../features/deskSnapshot/DeskSnapshotState", () => ({
+	useHardwareConnected: () => false,
+}));
+vi.mock("../../../state/AppContext", () => ({
+	useApp: () => ({ state: { midiProfile: null } }),
+}));
 
 afterEach(cleanup);
 
@@ -179,5 +187,60 @@ describe("ShapersDialog", () => {
 		expect(
 			apply.mock.calls.every(([attribute]) => attribute === "shaper.rotation"),
 		).toBe(true);
+	});
+
+	it("controls the iris from the Shapers encoder group", async () => {
+		const apply = vi.fn(
+			async (_attribute: string, _value: number) => undefined,
+		);
+		render(
+			<ShapersDialog
+				attributes={["iris", "shaper.blade.1.position"]}
+				values={{ iris: { value: 0.5, mixed: false } }}
+				disabled={false}
+				apply={apply}
+			/>,
+			{ wrapper: ModalProvider },
+		);
+
+		const fader = screen.getByRole("slider", { name: "Iris" });
+		expect(fader).toHaveValue("50");
+		expect(
+			Number(screen.getByTestId("shaper-iris-mask").getAttribute("stroke-width")),
+		).toBeGreaterThan(0);
+		vi.spyOn(fader, "getBoundingClientRect").mockReturnValue({
+			bottom: 500,
+			height: 400,
+			left: 0,
+			right: 100,
+			top: 100,
+			width: 100,
+			x: 0,
+			y: 100,
+			toJSON: () => undefined,
+		});
+		fireEvent.pointerDown(fader, { clientY: 200, pointerId: 1 });
+		fireEvent.pointerUp(fader, { clientY: 200, pointerId: 1 });
+		await waitFor(() => expect(apply).toHaveBeenCalled());
+		const [attribute, value] = apply.mock.lastCall ?? [];
+		expect(attribute).toBe("iris");
+		expect(value).toBeGreaterThan(0.75);
+		expect(value).toBeLessThan(0.85);
+	});
+
+	it("opens for a fixture whose only shaper control is the iris", () => {
+		render(
+			<ShapersDialog
+				attributes={["iris"]}
+				values={{}}
+				disabled={false}
+				apply={vi.fn(async (_attribute: string, _value: number) => undefined)}
+			/>,
+			{ wrapper: ModalProvider },
+		);
+		expect(screen.getByRole("slider", { name: "Iris" })).toBeInTheDocument();
+		expect(
+			screen.queryByText("Move a numbered blade inward to cut the beam."),
+		).toBeNull();
 	});
 });

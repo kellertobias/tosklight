@@ -407,10 +407,47 @@
 	grid-template-rows: minmax(0, 1fr);
 	position: relative;
 }
+.pane-chrome-toolbar-target:has(> .virtual-playback-title-actions) {
+	justify-content: flex-end;
+}
+/* Flush title-bar buttons, like the shared title chrome; its group divider follows. */
 .virtual-playback-title-actions {
 	display: flex;
-	align-items: center;
-	gap: 6px;
+	min-width: 0;
+	height: 100%;
+	align-items: stretch;
+	border-left: 1px solid var(--line);
+}
+.virtual-playback-title-actions > .ui-button {
+	min-width: 0;
+	height: 100%;
+	min-height: 100%;
+	margin: 0;
+	padding: 0 10px;
+	overflow: hidden;
+	border: 0;
+	border-right: 1px solid var(--line);
+	border-radius: 0;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.virtual-playback-title-actions > .ui-button:not(.primary) {
+	background: #171d23;
+}
+.virtual-playback-title-actions > .ui-button:last-child {
+	border-right: 0;
+}
+.virtual-playback-title-actions:empty {
+	border-left: 0;
+}
+/* The shared toolbar chrome clamps pane titles in narrow headers; the Virtual
+ * Playbacks title stays whole and its Solo Region actions shrink instead. */
+@container (max-width: 700px) {
+	.ui-window-header:has(.pane-chrome-toolbar-target > .virtual-playback-title-actions)
+		.ui-window-title {
+		max-width: none;
+		overflow: visible;
+	}
 }
 .virtual-playback-pane-error {
 	position: absolute;
@@ -473,6 +510,9 @@
 	grid-template-columns: minmax(180px, 1fr) repeat(3, auto);
 	align-items: end;
 	gap: 8px;
+}
+.virtual-playback-zone-editor > header > .ui-form-field {
+	margin-block: 0;
 }
 .virtual-playback-cell > .pool-card-status,
 .virtual-playback-cell > .pool-card-workflow {

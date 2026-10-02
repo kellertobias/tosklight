@@ -8,16 +8,14 @@ import {
 } from "../../../../features/programmerValues/useProgrammerValuesMutationQueue";
 import { useProgrammingSelectionView } from "../../../../features/programmingInteraction/ProgrammingInteractionView";
 import type { AppState } from "../../../../types";
-import {
-	type IndexedPresetChoice,
-	indexedPresetChoices,
-} from "../../../control/parameterControls/indexedPresetChoices";
 import { useParameterPreloadValues } from "../../../control/parameterControls/useParameterPreloadValues";
 import { useParameterProgrammerValues } from "../../../control/parameterControls/useParameterProgrammerValues";
 import { selectedFixtureIdsSupportingAttribute } from "../../specialColor";
-import { availableSpecialDialogAttributes } from "../beamShapers";
+import {
+	availableSpecialDialogAttributes,
+	isShaperDialogAttribute,
+} from "../beamShapers";
 import { useColorDialog } from "../color";
-import { playModeMutations } from "../media";
 import { usePositionDialog } from "../position";
 import type { ShaperAttributeValue } from "../shapers";
 
@@ -30,9 +28,12 @@ import type { ShaperAttributeValue } from "../shapers";
 
 const EMPTY_FIXTURE_IDS: readonly string[] = [];
 
-function useSelectionHost(open: boolean) {
+function useSelectionHost(open: boolean, family: string) {
 	const selection = useProgrammingSelectionView(open);
-	const valueWrites = useProgrammerValuesMutationQueue(open);
+	// The Media pane owns its own programmer writes.
+	const valueWrites = useProgrammerValuesMutationQueue(
+		open && family !== "Media",
+	);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	const selectedFixtures = useSelectedPatchedFixtures(selectedFixtureIds, open);
 	return { valueWrites, selectedFixtureIds, selectedFixtures };
@@ -91,14 +92,14 @@ function useAttributeDialogs(
 		selectedFixtureIds,
 		null,
 		state.specialDialogsOpen &&
-			(family === "Shapers" || family === "Media") &&
+			family === "Shapers" &&
 			valueWrites.route !== "preload",
 	);
 	const preloadValues = useParameterPreloadValues(
 		selectedFixtureIds,
 		null,
 		state.specialDialogsOpen &&
-			(family === "Shapers" || family === "Media") &&
+			family === "Shapers" &&
 			valueWrites.route === "preload",
 	);
 	const activeProgrammerValues =
@@ -106,7 +107,7 @@ function useAttributeDialogs(
 	const shaperValues = useMemo(() => {
 		const result: Record<string, ShaperAttributeValue> = {};
 		for (const attribute of available) {
-			if (!attribute.startsWith("shaper.")) continue;
+			if (!isShaperDialogAttribute(attribute)) continue;
 			const entries =
 				activeProgrammerValues?.fixtureValues.filter(
 					(entry) =>
@@ -124,28 +125,7 @@ function useAttributeDialogs(
 		}
 		return result;
 	}, [activeProgrammerValues, available]);
-	const playModeChoices = useMemo(
-		() =>
-			indexedPresetChoices(
-				selectedFixtures,
-				selectedFixtureIds,
-				"media.play_mode",
-			),
-		[selectedFixtures, selectedFixtureIds],
-	);
-	const playModeValue = useMemo(() => {
-		const values =
-			activeProgrammerValues?.fixtureValues.flatMap((entry) =>
-				entry.attribute === "media.play_mode" && entry.value.kind === "discrete"
-					? [entry.value.value]
-					: [],
-			) ?? [];
-		return {
-			value: values[0] ?? null,
-			mixed: values.some((value) => value !== values[0]),
-		};
-	}, [activeProgrammerValues]);
-	return { available, shaperValues, playModeChoices, playModeValue };
+	return { available, shaperValues };
 }
 
 export function useLegacySpecialDialogHost(
@@ -155,7 +135,10 @@ export function useLegacySpecialDialogHost(
 	>,
 ) {
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
-	const host = useSelectionHost(state.specialDialogsOpen);
+	const host = useSelectionHost(
+		state.specialDialogsOpen,
+		state.specialDialogFamily,
+	);
 	const values = useValueDialogs(state, host);
 	const attributes = useAttributeDialogs(state, host);
 	const { selectedFixtures, selectedFixtureIds, valueWrites } = host;
@@ -178,17 +161,12 @@ export function useLegacySpecialDialogHost(
 			mutations,
 		);
 	};
-	const applyPlayMode = async (choice: IndexedPresetChoice) => {
-		const mutations = playModeMutations(choice, programmerFadeMillis);
-		await valueWrites.submitBarrier(mutations);
-	};
 	return {
 		...host,
 		...values,
 		...attributes,
 		shiftArmed: state.shiftArmed,
 		apply,
-		applyPlayMode,
 	};
 }
 

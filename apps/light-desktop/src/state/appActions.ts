@@ -224,6 +224,8 @@ export type Action =
 	| { type: "SET_PLAYBACK_PAGE"; page: number }
 	| { type: "SET_PRESET_FAMILY"; family: AppState["presetFamily"] }
 	| { type: "SET_PRESET_POOL_COLORS"; value: boolean }
+	| { type: "SET_POOL_GRID_DEFAULT_WIDTH"; value: number }
+	| { type: "SET_POOL_GRID_MINIMUM_WIDTH"; value: number }
 	| { type: "SET_PRESET_SET_ARMED"; value: boolean }
 	| { type: "OPEN_BUILTIN_CUELIST"; number: number }
 	| { type: "SET_BUILTIN_CUELIST_VIEW"; value: "pool" | "cues" }

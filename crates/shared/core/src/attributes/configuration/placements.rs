@@ -175,11 +175,7 @@ fn fixture_control_placements() -> Vec<PlacedAttribute> {
         ("fixture.blade_2", Shapers, 3, 2),
         ("fixture.blade_3", Shapers, 3, 3),
         ("fixture.blade_4", Shapers, 3, 4),
-        ("fixture.framing_macro", Shapers, 3, 5),
-        ("fixture.framing_macro_speed", Shapers, 3, 6),
-        ("fixture.barndoor_macros", Shapers, 4, 1),
-        ("fixture.barndoor_macro_speed", Shapers, 4, 2),
-        ("fixture.barndoor_module_rotation", Shapers, 4, 3),
+        ("fixture.barndoor_module_rotation", Shapers, 3, 5),
         ("fixture.effect_animations", Beam, 4, 1),
         ("fixture.effect_wheel_position", Beam, 4, 2),
         ("fixture.effect_wheel_rotation", Beam, 4, 3),
@@ -208,5 +204,10 @@ fn fixture_control_placements() -> Vec<PlacedAttribute> {
         ("fixture.unused_4", Control, 3, 5),
         ("fixture.unused_7", Control, 3, 6),
         ("fixture.unused_8", Control, 4, 1),
+        // Macros run the blades for the operator; they are fixture control, not shaping.
+        ("fixture.framing_macro", Control, 4, 2),
+        ("fixture.framing_macro_speed", Control, 4, 3),
+        ("fixture.barndoor_macros", Control, 4, 4),
+        ("fixture.barndoor_macro_speed", Control, 4, 5),
     ]
 }

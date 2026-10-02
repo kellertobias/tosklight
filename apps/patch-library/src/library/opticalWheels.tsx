@@ -28,13 +28,6 @@ export function OpticalWheelsSection({
 				i === index ? { ...slot, ...patch } : slot,
 			),
 		}));
-	const updatePrism = (index: number, patch: Partial<FixtureProfilePrism>) =>
-		onChange((current) => ({
-			...current,
-			prisms: (current.prisms ?? []).map((slot, i) =>
-				i === index ? { ...slot, ...patch } : slot,
-			),
-		}));
 	return (
 		<section>
 			<h3>Optical wheels</h3>
@@ -113,6 +106,27 @@ export function OpticalWheelsSection({
 			>
 				Add gobo slot
 			</Button>
+			<PrismRepresentation draft={draft} onChange={onChange} />
+		</section>
+	);
+}
+
+function PrismRepresentation({
+	draft,
+	onChange,
+}: {
+	draft: FixtureProfile;
+	onChange: Dispatch<SetStateAction<FixtureProfile>>;
+}) {
+	const updatePrism = (index: number, patch: Partial<FixtureProfilePrism>) =>
+		onChange((current) => ({
+			...current,
+			prisms: (current.prisms ?? []).map((slot, i) =>
+				i === index ? { ...slot, ...patch } : slot,
+			),
+		}));
+	return (
+		<>
 			<h4>Prism representation</h4>
 			<p className="field-hint">
 				Spread is the angle from the beam axis to the outermost copies. Leave
@@ -209,6 +223,6 @@ export function OpticalWheelsSection({
 			>
 				Add prism slot
 			</Button>
-		</section>
+		</>
 	);
 }

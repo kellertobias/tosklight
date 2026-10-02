@@ -88,55 +88,7 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 			ask: (cueNumber) => setRecordChoice({ slot, cueNumber }),
 		});
 	};
-	useControlSurfaceTarget({
-		id: `virtual-playback-settings:${paneId ?? "builtin"}`,
-		priority: 100,
-		accepts: (intent) =>
-			intent.type === "open_playback_settings" &&
-			intent.playback.addressing === "virtual" &&
-			intent.playback.pageNumber === controller.pageNumber &&
-			intent.playback.pageObjectId === (controller.pageObject?.id ?? null) &&
-			intent.playback.pageObjectRevision ===
-				(controller.pageObject?.revision ?? 0),
-		handle: (intent) => {
-			if (
-				intent.type !== "open_playback_settings" ||
-				intent.playback.addressing !== "virtual" ||
-				controller.pageNumber == null
-			)
-				return;
-			const playbackNumber = intent.playback.playbackNumber;
-			controller.openConfiguration(
-				controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null,
-				playbackNumber - virtualPlaybackBankStart(controller.pageNumber) + 1,
-			);
-		},
-	});
-	useEffect(() => {
-		const openRequested = (event: Event) => {
-			const detail = (
-				event as CustomEvent<{
-					addressing: string;
-					page?: number | null;
-					playback?: number | null;
-				}>
-			).detail;
-			if (
-				detail.addressing !== "virtual" ||
-				detail.page == null ||
-				detail.page !== controller.pageNumber ||
-				detail.playback == null
-			)
-				return;
-			controller.openConfiguration(
-				controller.page?.virtual_playbacks?.[String(detail.playback)] ?? null,
-				detail.playback - virtualPlaybackBankStart(detail.page) + 1,
-			);
-		};
-		window.addEventListener("light:playback-configuration", openRequested);
-		return () =>
-			window.removeEventListener("light:playback-configuration", openRequested);
-	}, [controller]);
+	useVirtualPlaybackSettingsRequests(paneId, controller);
 	if (!controller.authorityReady || controller.pageNumber == null)
 		return (
 			<section className="virtual-playback-pane" aria-busy="true">
@@ -167,6 +119,11 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 						selectedSlots={controller.selectedSlots}
 						selectedPlaybackCount={controller.selectedPlaybackCount}
 						editing={controller.zoneEdit !== null}
+						selecting={
+							controller.state.shiftArmed ||
+							controller.selectedSlots.length > 0
+						}
+						onStartZone={controller.startZoneSelection}
 						onCreateZone={(name) => {
 							controller.setZoneName(name);
 							controller.setCreatingZone(true);
@@ -258,6 +215,62 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 	);
 }
 
+/** Opens playback settings asked for by a control surface or another window. */
+function useVirtualPlaybackSettingsRequests(
+	paneId: WindowProps["paneId"],
+	controller: ReturnType<typeof useVirtualPlaybackController>,
+) {
+	useControlSurfaceTarget({
+		id: `virtual-playback-settings:${paneId ?? "builtin"}`,
+		priority: 100,
+		accepts: (intent) =>
+			intent.type === "open_playback_settings" &&
+			intent.playback.addressing === "virtual" &&
+			intent.playback.pageNumber === controller.pageNumber &&
+			intent.playback.pageObjectId === (controller.pageObject?.id ?? null) &&
+			intent.playback.pageObjectRevision ===
+				(controller.pageObject?.revision ?? 0),
+		handle: (intent) => {
+			if (
+				intent.type !== "open_playback_settings" ||
+				intent.playback.addressing !== "virtual" ||
+				controller.pageNumber == null
+			)
+				return;
+			const playbackNumber = intent.playback.playbackNumber;
+			controller.openConfiguration(
+				controller.page?.virtual_playbacks?.[String(playbackNumber)] ?? null,
+				playbackNumber - virtualPlaybackBankStart(controller.pageNumber) + 1,
+			);
+		},
+	});
+	useEffect(() => {
+		const openRequested = (event: Event) => {
+			const detail = (
+				event as CustomEvent<{
+					addressing: string;
+					page?: number | null;
+					playback?: number | null;
+				}>
+			).detail;
+			if (
+				detail.addressing !== "virtual" ||
+				detail.page == null ||
+				detail.page !== controller.pageNumber ||
+				detail.playback == null
+			)
+				return;
+			controller.openConfiguration(
+				controller.page?.virtual_playbacks?.[String(detail.playback)] ?? null,
+				detail.playback - virtualPlaybackBankStart(detail.page) + 1,
+			);
+		};
+		window.addEventListener("light:playback-configuration", openRequested);
+		return () =>
+			window.removeEventListener("light:playback-configuration", openRequested);
+	}, [controller]);
+}
+
 function VirtualCueRecordChoiceModal(props: {
 	cueNumber: string;
 	onClose(): void;
@@ -298,6 +311,9 @@ export function VirtualPlaybackTitleActions(props: {
 	selectedSlots: readonly number[];
 	selectedPlaybackCount?: number;
 	editing: boolean;
+	/** Cells are being Shift-selected for a new Solo Region. */
+	selecting: boolean;
+	onStartZone(): void;
 	onCreateZone(name: string): void;
 	onUpdateZone(): void;
 	onCancelZone(): void;
@@ -315,25 +331,31 @@ export function VirtualPlaybackTitleActions(props: {
 						}
 						onClick={props.onUpdateZone}
 					>
-						Update Exclusion Zone
+						Update Solo Region
 					</Button>
 					<Button onClick={props.onCancelZone}>Cancel Edit</Button>
 				</>
 			) : (
-				props.zonesReady &&
-				props.selectedSlots.length >= 2 && (
+				props.zonesReady && (
 					<Button
-						className="primary"
+						className={
+							props.selecting && props.selectedSlots.length < 2
+								? undefined
+								: "primary"
+						}
+						disabled={props.selecting && props.selectedSlots.length < 2}
 						onClick={() =>
-							props.onCreateZone(`Exclusion Zone ${props.zoneCount + 1}`)
+							props.selectedSlots.length >= 2
+								? props.onCreateZone(`Solo Region ${props.zoneCount + 1}`)
+								: props.onStartZone()
 						}
 					>
-						Create Exclusion Zone
+						Create Solo Region
 					</Button>
 				)
 			)}
-			{!props.editing && props.selectedSlots.length > 0 && (
-				<Button onClick={props.onCancelZone}>Cancel Zone Selection</Button>
+			{!props.editing && props.selecting && (
+				<Button onClick={props.onCancelZone}>Cancel Region Selection</Button>
 			)}
 		</span>
 	);
@@ -361,20 +383,20 @@ function CreateZoneModal(props: {
 					className="nested-modal virtual-playback-zone-modal"
 					role="dialog"
 					aria-modal="true"
-					aria-label="Create Exclusion Zone"
+					aria-label="Create Solo Region"
 				>
 					<ModalTitleBar
-						title="Create Exclusion Zone"
-						closeLabel="Close Create Exclusion Zone"
+						title="Create Solo Region"
+						closeLabel="Close Create Solo Region"
 						onClose={props.onClose}
 					/>
 					<p>
 						Virtual Playbacks {props.playbackNumbers.join(", ")} will be
-						mutually exclusive. Creating the zone does not operate any playback.
+						mutually exclusive. Creating the region does not operate any playback.
 					</p>
 					<FormLayout labelPlacement="side">
 						<TextField
-							label="Zone name"
+							label="Region name"
 							autoFocus
 							maxLength={80}
 							value={draftName}
@@ -395,7 +417,7 @@ function CreateZoneModal(props: {
 							}
 							onClick={() => props.onCreate(draftName)}
 						>
-							{props.saving ? "Creating…" : "Create zone"}
+							{props.saving ? "Creating…" : "Create region"}
 						</Button>
 					</footer>
 					{props.error && <p className="modal-error">{props.error}</p>}

@@ -13,6 +13,8 @@ import type { PresetCard } from "../features/presetRecording/presetCards";
 import { ShowObjectsStateProvider } from "../features/showObjects/ShowObjectsState";
 import { ShowObjectsStore } from "../features/showObjects/store";
 import type { PresetFamily } from "../presetFamilies";
+import { initialState } from "../state/initialState";
+import { poolCardSizing } from "../state/reducerHelpers";
 import { GroupPoolHeader } from "./GroupsWindow";
 import { GroupPoolGrid } from "./groupsWindow/GroupPoolGrid";
 import type { Group } from "./groupsWindow/model";
@@ -208,6 +210,7 @@ export function MarketingPresetWindow({
 				<PresetCardGrid
 					cards={cards}
 					family={family}
+					cardSizing={poolCardSizing(initialState)}
 					customizations={{}}
 					poolPresentation={defaultPoolPresentation()}
 					showId={SHOW_ID}
