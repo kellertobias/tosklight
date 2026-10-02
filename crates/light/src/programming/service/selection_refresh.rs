@@ -83,17 +83,21 @@ impl ProgrammingService {
         // Published under the acting context's desk, which is the key an outer interaction uses
         // to recognise a selection revision it has already sent.
         let desk_id = context.desk_id;
-        let events =
-            ProgrammingInteractionChange::from_components(desk_id, command_line, selection)
-                .map(|change| {
-                    let event_sequence =
-                        self.publish_selection_refresh(context, change, within_interaction);
-                    vec![ProgrammingSelectionRefreshEvent {
-                        desk_id,
-                        event_sequence,
-                    }]
-                })
-                .unwrap_or_default();
+        let events = ProgrammingInteractionChange::with_alignment(
+            desk_id,
+            command_line,
+            selection,
+            (before.alignment != after.alignment).then_some(after.alignment),
+        )
+        .map(|change| {
+            let event_sequence =
+                self.publish_selection_refresh(context, change, within_interaction);
+            vec![ProgrammingSelectionRefreshEvent {
+                desk_id,
+                event_sequence,
+            }]
+        })
+        .unwrap_or_default();
         self.publish_lifecycle(context, lifecycle_before);
         ProgrammingSelectionRefreshResult { output, events }
     }

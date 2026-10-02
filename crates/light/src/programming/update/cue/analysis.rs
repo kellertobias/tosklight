@@ -44,19 +44,12 @@ fn group_address(change: &GroupCueChange) -> UpdateAddress {
 }
 
 fn dynamic_address(change: &CueDynamicChange) -> UpdateAddress {
-    let instance_link = match &change.value {
-        light_dynamics::DynamicSemanticValue::DynamicOn { instance_link, .. }
-        | light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. } => {
-            Some(*instance_link)
-        }
-        light_dynamics::DynamicSemanticValue::Static { .. }
-        | light_dynamics::DynamicSemanticValue::FixAt { .. }
-        | light_dynamics::DynamicSemanticValue::Release => None,
-    };
     UpdateAddress::DynamicAttribute {
         fixture_id: change.fixture_id,
         attribute: change.attribute.clone(),
-        instance_link,
+        instance_link: change.value.track_key().instance_link,
+        lane_id: change.value.track_key().lane_id,
+        component: change.value.track_key().component,
     }
 }
 
@@ -97,6 +90,19 @@ pub(super) fn analyse_cue_list(cue_list: &CueList, current_index: usize) -> CueA
             );
         }
         for (change_index, change) in cue.dynamic_changes.iter().enumerate() {
+            if cue_index <= current_index {
+                analysis
+                    .active_sources
+                    .retain(|address, _| !replaces_dynamic_address(change, address));
+            }
+            if cue_index == current_index {
+                analysis
+                    .current_any
+                    .retain(|address, _| !replaces_dynamic_address(change, address));
+                analysis
+                    .current_explicit
+                    .retain(|address, _| !replaces_dynamic_address(change, address));
+            }
             record_event(
                 &mut analysis,
                 dynamic_address(change),
@@ -104,7 +110,9 @@ pub(super) fn analyse_cue_list(cue_list: &CueList, current_index: usize) -> CueA
                     cue_index,
                     change_index,
                     kind: CueEventKind::Dynamic,
-                    has_value: true,
+                    // Playback drops released tracks, so a typed or owner release is a
+                    // tracked address without a value, exactly like an ordinary release.
+                    has_value: !change.value.is_programming_release(),
                 },
                 current_index,
                 change.automatic_restore,
@@ -112,6 +120,30 @@ pub(super) fn analyse_cue_list(cue_list: &CueList, current_index: usize) -> CueA
         }
     }
     analysis
+}
+
+fn replaces_dynamic_address(change: &CueDynamicChange, address: &UpdateAddress) -> bool {
+    let UpdateAddress::DynamicAttribute {
+        fixture_id,
+        attribute,
+        instance_link,
+        lane_id,
+        component,
+    } = address
+    else {
+        return false;
+    };
+    change.value.replaces_address(
+        change.fixture_id,
+        &change.attribute,
+        light_dynamics::DynamicTrackKey {
+            instance_link: *instance_link,
+            lane_id: *lane_id,
+            component: *component,
+        },
+        *fixture_id,
+        attribute,
+    )
 }
 
 fn record_event(

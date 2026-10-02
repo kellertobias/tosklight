@@ -78,6 +78,7 @@ impl ProgrammingPresetRecordingPorts for PresetPorts {
         let raw_body = serde_json::to_value(&preset).unwrap();
         Ok(ProgrammingPresetCommitResult {
             changed,
+            created: changed && current.is_none(),
             projection: ProgrammingPresetProjection {
                 show_id: show.show_id,
                 object_id: commit.address.storage_key(),

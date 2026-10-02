@@ -93,6 +93,23 @@ pub trait ActiveShowPorts: Send + Sync {
         None
     }
 
+    /// Finalize current runtime dependencies before invoking persistence, retaining any adapter
+    /// lease through installation. An override may reject before calling `persist`; after it
+    /// succeeds, installation must be infallible and run exactly once before returning success.
+    /// The closure contains backup and commit only. Application post-commit reconciliation and
+    /// events remain outside this scope. Overrides must also account for callbacks and events
+    /// inside their own persistence and installation paths before retaining non-reentrant locks.
+    fn finalize_runtime<T>(
+        &self,
+        context: &ActionContext,
+        prepared: Self::PreparedRuntime,
+        persist: impl FnOnce() -> Result<T, ActionError>,
+    ) -> Result<T, ActionError> {
+        let committed = persist()?;
+        self.install_runtime(context, prepared);
+        Ok(committed)
+    }
+
     /// Installation is deliberately infallible: every fallible step precedes persistence.
     fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime);
 

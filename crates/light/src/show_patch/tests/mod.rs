@@ -382,6 +382,8 @@ fn sparse_updates_apply_paired_fields_to_the_exact_root_or_copy() {
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -468,6 +470,7 @@ fn freeze_sparse_update_persists_captured_values_across_ordinary_patch_edits() {
         targets: std::collections::HashMap::from([(
             target_id,
             light_fixture::FrozenFixtureTarget {
+                position_native: None,
                 full: false,
                 families: vec![light_fixture::FreezeFamily::Intensity],
                 values: std::collections::HashMap::from([(
@@ -1592,4 +1595,402 @@ fn a_reference_to_a_point_the_show_no_longer_holds_reads_as_no_reference() {
         .unwrap();
     assert_eq!(third.change.fixtures[0].patch.name, "Renamed");
     assert_eq!(third.change.fixtures[0].patch.position_master, None);
+}
+
+#[test]
+fn position_calibration_sparse_edit_is_exact_replay_safe_and_clearable() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut add = patch_batch(rig.ports.show_id(), reference, 1);
+    let fixture_id = add.fixtures[0].patch.fixture_id;
+    let copy_id = Uuid::from_u128(710_001);
+    add.fixtures[0]
+        .patch
+        .multipatch
+        .push(light_fixture::MultiPatchInstance {
+            id: copy_id,
+            name: "Calibrated copy".into(),
+            split_patches: vec![light_fixture::SplitPatch {
+                split: 1,
+                universe: None,
+                address: None,
+            }],
+            invert_pan: true,
+            ..Default::default()
+        });
+    rig.service
+        .handle(envelope(add, "calibration-seed", 0), &rig.ports)
+        .unwrap();
+    let calibration = light_fixture::InstalledPositionCalibration {
+        revision: 2,
+        quality: light_fixture::PhysicalDataQuality::Measured,
+        source: Some("Rig record".into()),
+        pan_zero_degrees: -720.5,
+        tilt_zero_degrees: 12.0,
+        axis_overrides: None,
+    };
+    let command = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        1,
+        1,
+        Some(copy_id),
+        PatchFixtureUpdateAction::SetPositionCalibration {
+            calibration: Some(calibration.clone()),
+        },
+    );
+    let changed = rig
+        .service
+        .handle(envelope(command.clone(), "copy-calibration", 1), &rig.ports)
+        .unwrap();
+    let patch = &changed.change.fixtures[0].patch;
+    assert!(patch.position_calibration.is_none());
+    assert_eq!(
+        patch.multipatch[0].position_calibration.as_ref(),
+        Some(&calibration)
+    );
+    assert!(patch.multipatch[0].invert_pan);
+    let replay = rig
+        .service
+        .handle(envelope(command, "copy-calibration", 1), &rig.ports)
+        .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(changed.change, replay.change);
+    let invalid = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        2,
+        2,
+        None,
+        PatchFixtureUpdateAction::SetPositionCalibration {
+            calibration: Some(light_fixture::InstalledPositionCalibration {
+                pan_zero_degrees: f32::INFINITY,
+                ..Default::default()
+            }),
+        },
+    );
+    assert_eq!(
+        rig.service
+            .handle(envelope(invalid, "invalid-calibration", 2), &rig.ports)
+            .unwrap_err()
+            .kind,
+        ActionErrorKind::Invalid
+    );
+    let clear = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        2,
+        2,
+        Some(copy_id),
+        PatchFixtureUpdateAction::SetPositionCalibration { calibration: None },
+    );
+    let cleared = rig
+        .service
+        .handle(envelope(clear, "clear-calibration", 2), &rig.ports)
+        .unwrap();
+    assert!(
+        cleared.change.fixtures[0].patch.multipatch[0]
+            .position_calibration
+            .is_none()
+    );
+    assert!(cleared.change.fixtures[0].patch.multipatch[0].invert_pan);
+}
+
+#[test]
+fn installed_color_calibration_sparse_updates_and_replacement_preserve_source_and_copy_scope() {
+    let (stored, mut reference) = profile_with_modes(2);
+    let mut profile: light_fixture::FixtureProfile =
+        serde_json::from_value(stored.profile().clone()).unwrap();
+    reference.mode_id = profile.modes[0].id;
+    let mode = &mut profile.modes[0];
+    let head_id = mode.heads[0].id;
+    mode.color_physical = Some(light_fixture::ColorPhysicalModel {
+        version: 1,
+        revision: 1,
+        paths: vec![light_fixture::HeadOpticalPath {
+            id: Uuid::new_v4(),
+            head_id,
+            controls: vec![],
+            source: light_fixture::OpticalSource::Unknown,
+            filters: vec![],
+            measurements: vec![],
+        }],
+    });
+    let profile: light_fixture::FixtureProfile =
+        serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap();
+    let calibration = light_fixture::InstalledColorCalibration {
+        version: 1,
+        revision: 1,
+        paths: vec![light_fixture::InstalledColorPathCalibration {
+            source_identity: profile
+                .native_color_identity(reference.mode_id, head_id)
+                .unwrap(),
+            emitters: vec![],
+            measurements: vec![light_fixture::ColorRecipeMeasurement {
+                recipe: vec![],
+                xyz: light_core::Xyz {
+                    x: 0.9,
+                    y: 1.0,
+                    z: 1.1,
+                },
+                provenance: light_fixture::OpticalProvenance {
+                    quality: light_fixture::PhysicalDataQuality::Measured,
+                    source: Some("Synthetic calibration regression".into()),
+                    revision: 1,
+                },
+            }],
+        }],
+    };
+    let second_mode = profile.modes[1].id;
+    let stored =
+        light_show::FixtureProfileRevision::from_profile(serde_json::to_value(profile).unwrap())
+            .unwrap();
+    let rig = TestRig::new(stored, FailurePoint::None);
+    let mut add = patch_batch(rig.ports.show_id(), reference, 1);
+    let fixture_id = add.fixtures[0].patch.fixture_id;
+    let copy_id = Uuid::new_v4();
+    add.fixtures[0]
+        .patch
+        .multipatch
+        .push(light_fixture::MultiPatchInstance {
+            id: copy_id,
+            name: "Physical copy".into(),
+            split_patches: vec![light_fixture::SplitPatch {
+                split: 1,
+                universe: None,
+                address: None,
+            }],
+            ..Default::default()
+        });
+    rig.service
+        .handle(envelope(add, "color-seed", 0), &rig.ports)
+        .unwrap();
+    let command = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        1,
+        1,
+        Some(copy_id),
+        PatchFixtureUpdateAction::SetColorCalibration {
+            calibration: Some(calibration.clone()),
+        },
+    );
+    let changed = rig
+        .service
+        .handle(envelope(command.clone(), "color-copy", 1), &rig.ports)
+        .unwrap();
+    let patch = &changed.change.fixtures[0].patch;
+    assert!(patch.color_calibration.is_none());
+    assert_eq!(
+        patch.multipatch[0].color_calibration,
+        Some(calibration.clone())
+    );
+    let replay = rig
+        .service
+        .handle(envelope(command, "color-copy", 1), &rig.ports)
+        .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(changed.change, replay.change);
+    let mut replacement = patch_batch(rig.ports.show_id(), reference, 1);
+    replacement.fixtures[0].patch = patch.clone();
+    replacement.fixtures[0].profile.mode_id = second_mode;
+    let replaced = rig
+        .service
+        .handle(envelope(replacement, "color-replacement", 2), &rig.ports)
+        .unwrap();
+    assert_eq!(
+        replaced.change.fixtures[0].patch.multipatch[0].color_calibration,
+        Some(calibration.clone())
+    );
+    let mut edited = calibration.clone();
+    edited.revision += 1;
+    let bad = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        3,
+        3,
+        Some(copy_id),
+        PatchFixtureUpdateAction::SetColorCalibration {
+            calibration: Some(edited),
+        },
+    );
+    let before = rig.counters();
+    assert_eq!(
+        rig.service
+            .handle(envelope(bad, "stale-calibration-edit", 3), &rig.ports)
+            .unwrap_err()
+            .kind,
+        ActionErrorKind::Invalid
+    );
+    assert_eq!(rig.counters().commits, before.commits);
+    let clear = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        3,
+        3,
+        Some(copy_id),
+        PatchFixtureUpdateAction::SetColorCalibration { calibration: None },
+    );
+    let cleared = rig
+        .service
+        .handle(envelope(clear, "clear-color-calibration", 3), &rig.ports)
+        .unwrap();
+    assert!(
+        cleared.change.fixtures[0].patch.multipatch[0]
+            .color_calibration
+            .is_none()
+    );
+}
+
+#[test]
+fn physical_axis_calibration_transaction_keeps_copy_scope_replay_and_stale_source() {
+    use light_fixture::*;
+    let (stored, mut reference) = profile_with_modes(2);
+    let mut profile: FixtureProfile = serde_json::from_value(stored.profile().clone()).unwrap();
+    reference.mode_id = profile.modes[0].id;
+    profile.geometry = GeometryGraph::template(
+        GeometryTemplate::MovingHead,
+        &[profile.modes[0].heads[0].id],
+    );
+    profile.geometry.physical_contract = Some(GeometryPhysicalContract {
+        version: 1,
+        provenance: OpticalProvenance::default(),
+        bracket: GeometryBracket::Fixed,
+    });
+    let node = profile.geometry.nodes[1].id;
+    let mode = &mut profile.modes[0];
+    let channel:FixtureChannel=serde_json::from_value(json!({"id":Uuid::new_v4(),"head_id":mode.heads[0].id,"split":1,"fixture_attribute":"pan","attribute":"pan","resolution":"u8","default_raw":0,"highlight_raw":0,"functions":[{"id":Uuid::new_v4(),"name":"Pan","attribute":"pan","dmx_from":0,"dmx_to":255,"priority":0,"behavior":{"type":"continuous","physical_min":-720.0,"physical_max":720.0,"unit":"deg"},"angular_motion":{"kind":"absolute_position"}}]})).unwrap();
+    mode.position_physical = Some(PositionPhysicalModel {
+        version: 1,
+        revision: 0,
+        bindings: vec![MotionFunctionBinding {
+            node_id: node,
+            channel_id: channel.id,
+            function_id: channel.functions[0].id,
+            role: PositionAxisRole::Pan,
+        }],
+    });
+    mode.channels = vec![channel];
+    profile.validate().unwrap();
+    let identity = profile
+        .position_calibration_identity(reference.mode_id)
+        .unwrap()
+        .unwrap();
+    let calibration = InstalledPositionCalibration {
+        axis_overrides: Some(InstalledAxisOverrides {
+            version: 1,
+            source_identity: identity.clone(),
+            axes: vec![InstalledAxisCalibration {
+                node_id: node,
+                zero_degrees: 30.0,
+                invert: true,
+            }],
+        }),
+        ..Default::default()
+    };
+    let second = profile.modes[1].id;
+    let rig = TestRig::new(
+        FixtureProfileRevision::from_profile(serde_json::to_value(profile).unwrap()).unwrap(),
+        FailurePoint::None,
+    );
+    let mut add = patch_batch(rig.ports.show_id(), reference, 1);
+    let fixture = add.fixtures[0].patch.fixture_id;
+    let copy = Uuid::new_v4();
+    add.fixtures[0].patch.multipatch.push(MultiPatchInstance {
+        id: copy,
+        name: "Copy".into(),
+        split_patches: vec![SplitPatch {
+            split: 1,
+            universe: None,
+            address: None,
+        }],
+        ..Default::default()
+    });
+    let seeded = rig
+        .service
+        .handle(envelope(add, "axis-seed", 0), &rig.ports)
+        .unwrap();
+    assert_eq!(
+        seeded.change.profile_revisions[0].referenced_modes[0].position_calibration_identity,
+        Some(identity)
+    );
+    let command = sparse_update(
+        rig.ports.show_id(),
+        fixture,
+        1,
+        1,
+        Some(copy),
+        PatchFixtureUpdateAction::SetPositionCalibration {
+            calibration: Some(calibration.clone()),
+        },
+    );
+    let saved = rig
+        .service
+        .handle(envelope(command.clone(), "axis-save", 1), &rig.ports)
+        .unwrap();
+    assert!(
+        saved.change.fixtures[0]
+            .patch
+            .position_calibration
+            .is_none()
+    );
+    assert_eq!(
+        saved.change.fixtures[0].patch.multipatch[0].position_calibration,
+        Some(calibration.clone())
+    );
+    let replay = rig
+        .service
+        .handle(envelope(command, "axis-save", 1), &rig.ports)
+        .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(saved.change, replay.change);
+    let mut replace = patch_batch(rig.ports.show_id(), reference, 1);
+    replace.fixtures[0].patch = saved.change.fixtures[0].patch.clone();
+    replace.fixtures[0].profile.mode_id = second;
+    let replaced = rig
+        .service
+        .handle(envelope(replace, "axis-replace", 2), &rig.ports)
+        .unwrap();
+    assert_eq!(
+        replaced.change.fixtures[0].patch.multipatch[0].position_calibration,
+        Some(calibration.clone())
+    );
+    let mut edited = calibration.clone();
+    edited.axis_overrides.as_mut().unwrap().axes[0].zero_degrees = 40.0;
+    let bad = sparse_update(
+        rig.ports.show_id(),
+        fixture,
+        3,
+        3,
+        Some(copy),
+        PatchFixtureUpdateAction::SetPositionCalibration {
+            calibration: Some(edited),
+        },
+    );
+    let before = rig.counters();
+    assert_eq!(
+        rig.service
+            .handle(envelope(bad, "stale-axis-edit", 3), &rig.ports)
+            .unwrap_err()
+            .kind,
+        ActionErrorKind::Invalid
+    );
+    assert_eq!(before.commits, rig.counters().commits);
+    let clear = sparse_update(
+        rig.ports.show_id(),
+        fixture,
+        3,
+        3,
+        Some(copy),
+        PatchFixtureUpdateAction::SetPositionCalibration { calibration: None },
+    );
+    let cleared = rig
+        .service
+        .handle(envelope(clear, "axis-clear", 3), &rig.ports)
+        .unwrap();
+    assert!(
+        cleared.change.fixtures[0].patch.multipatch[0]
+            .position_calibration
+            .is_none()
+    );
 }

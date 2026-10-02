@@ -120,9 +120,5 @@ fn result_dynamic_bytes(context: &ActionContext, warning: &Option<String>) -> us
 }
 
 fn attribute_value_bytes(value: &AttributeValue) -> usize {
-    match value {
-        AttributeValue::Spread(values) => values.capacity() * size_of::<f32>(),
-        AttributeValue::Discrete(value) => value.capacity(),
-        _ => 0,
-    }
+    value.retained_heap_bytes()
 }

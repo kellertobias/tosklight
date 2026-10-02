@@ -25,6 +25,8 @@ pub(super) struct ResolvedMode {
     /// Whether this mode makes its fixture a 3D Point: a reference object other placements can
     /// take as their position reference.
     position_point: bool,
+    color_context: Option<light_fixture::ColorCalibrationContext>,
+    position_context: Option<light_fixture::PositionCalibrationContext>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -124,15 +126,59 @@ impl ResolvedMode {
             .iter()
             .map(split_projection)
             .collect::<Result<_, _>>()?;
+        let color_context = if mode.get("color_physical").is_some_and(|v| !v.is_null()) {
+            let full: light_fixture::FixtureProfile =
+                serde_json::from_value(profile.clone()).map_err(|e| invalid(e.to_string()))?;
+            Some(light_fixture::ColorCalibrationContext::new(&full, mode_id).map_err(invalid)?)
+        } else {
+            None
+        };
+        let position_context = if mode.get("position_physical").is_some_and(|v| !v.is_null()) {
+            let full: light_fixture::FixtureProfile =
+                serde_json::from_value(profile.clone()).map_err(|e| invalid(e.to_string()))?;
+            light_fixture::PositionCalibrationContext::new(&full, mode_id).map_err(invalid)?
+        } else {
+            None
+        };
         Ok(Self {
             logical_heads,
             projection: PatchModeProjection {
+                position_calibration_identity: position_context
+                    .as_ref()
+                    .map(|c| c.identity.clone()),
                 mode_id,
                 name: required_string(mode, "name")?,
                 splits,
+                native_color_identities: color_context
+                    .as_ref()
+                    .map(|c| c.identities().to_vec())
+                    .unwrap_or_default(),
             },
             position_point: mode_is_position_point(mode),
+            color_context,
+            position_context,
         })
+    }
+
+    pub(super) fn validate_position_calibration(
+        &self,
+        value: &light_fixture::InstalledPositionCalibration,
+    ) -> Result<(), ActionError> {
+        if let Some(overrides) = &value.axis_overrides {
+            let context = self.position_context.as_ref().ok_or_else(|| {
+                invalid("Position axis calibration requires authored physical bindings")
+            })?;
+            overrides.validate_for_context(context).map_err(invalid)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_color_calibration(
+        &self,
+        value: &light_fixture::InstalledColorCalibration,
+    ) -> Result<(), ActionError> {
+        let context = self.color_context.as_ref().ok_or_else(|| invalid("Color calibration requires an authored physical optical path in the selected profile"))?;
+        value.validate_for_context(context).map_err(invalid)
     }
 
     /// Whether a fixture patched to this mode is a 3D Point.

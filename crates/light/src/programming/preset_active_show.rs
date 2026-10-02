@@ -2,7 +2,9 @@ use super::{
     ProgrammingPresetActiveShowPorts, ProgrammingPresetCommit, ProgrammingPresetCommitResult,
     ProgrammingPresetProjection, ProgrammingPresetRevisionExpectation,
 };
-use crate::active_show::{CompletedActiveShowTransaction, PreparedActiveShowTransaction};
+use crate::active_show::{
+    CompletedActiveShowTransaction, PreparedActiveShowTransaction, migration_changes,
+};
 use crate::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowObjectKind,
     ActiveShowObjectsChange, ActiveShowService, EventBus, EventDraft, lossless_json,
@@ -42,6 +44,8 @@ fn prepare_recording(
     let existing = find_preset(document, commit.address)?;
     validate_revision(existing.as_ref().map(|(object, _)| *object), commit)?;
     let mut preset = commit.merged_with(existing.as_ref().map(|(_, preset)| preset))?;
+    preset.validate_programming().map_err(invalid)?;
+    preset.consolidate_universal_color_program();
     if show_color_model(document) == light_core::ColorProgrammingModel::Intent {
         preset.consolidate_universal_color();
     }
@@ -62,6 +66,7 @@ fn prepare_recording(
                 object_id,
                 current_revision,
                 raw_body,
+                false,
                 false,
             ),
         }));
@@ -95,6 +100,7 @@ fn prepare_recording(
                 object_revision,
                 raw_body,
                 true,
+                existing.is_none(),
             ),
         },
     })
@@ -138,6 +144,12 @@ fn complete_recording<P: ProgrammingPresetActiveShowPorts>(
         result.projection.raw_body.as_ref().clone(),
     )
     .expect("prepared Preset projection must remain a typed Preset");
+    // The prepared candidate also carries every Dynamic whose retained Preset source the show
+    // compiler restaged, plus any compatibility write-back. They share this commit, so they ride
+    // the same completion event with their exact committed bodies and revisions.
+    let mut changes = vec![change];
+    let additional = migration_changes(&commit, &changes);
+    changes.extend(additional);
     result.event_sequence = Some(
         events
             .publish(EventDraft::active_show_objects_changed(
@@ -145,7 +157,7 @@ fn complete_recording<P: ProgrammingPresetActiveShowPorts>(
                 ActiveShowObjectsChange {
                     show_id: result.projection.show_id,
                     show_revision: result.show_revision,
-                    changes: vec![change],
+                    changes,
                 },
             ))
             .sequence,
@@ -164,9 +176,11 @@ fn completion(
     object_revision: u64,
     raw_body: serde_json::Value,
     changed: bool,
+    created: bool,
 ) -> ProgrammingPresetCommitResult {
     ProgrammingPresetCommitResult {
         changed,
+        created,
         projection: ProgrammingPresetProjection {
             show_id: commit.show_id,
             object_id,

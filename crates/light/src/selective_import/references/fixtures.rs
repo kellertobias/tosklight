@@ -2,9 +2,11 @@ use super::locations::{
     add_optional_direct_reference, array_at, identity_at, primary_identity, scalar_at,
     value_location,
 };
+use super::programming::ProgrammingReferences;
 use crate::selective_import::model::ImportProfileReference;
 use crate::selective_import::{
-    ImportIdentityFormat, ImportObjectDescriptor, ImportOwnedIdentity, ImportProfileKey,
+    ImportIdentityFormat, ImportObjectDescriptor, ImportObjectReference, ImportOwnedIdentity,
+    ImportProfileKey, ImportReferenceLocation,
 };
 use light_core::FixtureId;
 use light_show::{PortableShowDocument, PortableShowObject, PortableShowObjectKey};
@@ -89,7 +91,13 @@ pub(super) fn fixture_descriptor(
         identities: fixture_identities(object)?,
         ..ImportObjectDescriptor::default()
     };
-    if let Some(reference) = fixture_profile_reference(object)? {
+    if let Some(mut reference) = fixture_profile_reference(object)? {
+        add_position_calibration_profile_locations(object.body(), &mut reference);
+        super::installed_color::add_installed_color_references(
+            object.body(),
+            &reference,
+            &mut descriptor,
+        );
         descriptor.profile_references.push(reference);
     }
     if object
@@ -102,7 +110,121 @@ pub(super) fn fixture_descriptor(
     {
         add_optional_direct_reference(object.body(), "/layer_id", "patch_layer", &mut descriptor)?;
     }
+    add_freeze_references(object, source, target, &mut descriptor)?;
     Ok(descriptor)
+}
+
+fn add_position_calibration_profile_locations(
+    body: &Value,
+    reference: &mut ImportProfileReference,
+) {
+    let mut prefixes = vec!["/position_calibration".to_owned()];
+    for index in 0..array_at(body, "/multipatch").map_or(0, Vec::len) {
+        prefixes.push(format!("/multipatch/{index}/position_calibration"));
+    }
+    let expected = reference.key.profile_id.0.to_string();
+    for prefix in prefixes {
+        let pointer = format!("{prefix}/axis_overrides/source_identity/profile_id");
+        if body.pointer(&pointer).and_then(Value::as_str) == Some(expected.as_str()) {
+            // Duplicate preserves mode/node UUIDs and geometry. Rebase only the matching
+            // profile proof; stale geometry/mode/axis evidence must never be regenerated.
+            reference
+                .id_locations
+                .push(value_location(pointer, ImportIdentityFormat::Full));
+        }
+    }
+}
+
+/// Holds refer to this fixture's existing owners and physical copies. Stale IDs are retained,
+/// rather than accidentally rebound to a different fixture through the global identity catalog.
+fn add_freeze_references(
+    object: &PortableShowObject,
+    source: &FixtureIdentityCatalog,
+    target: &FixtureIdentityCatalog,
+    descriptor: &mut ImportObjectDescriptor,
+) -> Result<(), String> {
+    let Some(targets) = object
+        .body()
+        .pointer("/freeze/targets")
+        .and_then(Value::as_object)
+    else {
+        return Ok(());
+    };
+    let identities = descriptor.identities.clone();
+    for (owner, frozen) in targets {
+        if let Some(identity) = identities.iter().find(|identity| {
+            identity.value == *owner
+                && (identity.slot == "object" || identity.slot.starts_with("head:"))
+        }) {
+            add_local_freeze_reference(
+                object,
+                identity,
+                ImportReferenceLocation::ObjectKey {
+                    object_pointer: "/freeze/targets".into(),
+                    key: owner.clone(),
+                },
+                descriptor,
+            );
+        }
+        let escaped = owner.replace('~', "~0").replace('/', "~1");
+        let prefix = format!("/freeze/targets/{escaped}");
+        let first_reference = descriptor.references.len();
+        ProgrammingReferences {
+            body: object.body(),
+            source,
+            target,
+            descriptor: &mut *descriptor,
+        }
+        .attribute_map(&format!("{prefix}/values"))?;
+        // A held Target may outlive its Point. Keep real dependencies remappable, while absent
+        // fixture/Point references stay loadable. Native Color profile checks remain strict.
+        for reference in &mut descriptor.references[first_reference..] {
+            if matches!(reference.target.kind(), "fixture" | "patched_fixture") {
+                reference.allow_missing = true;
+            }
+        }
+        for (index, instance) in frozen
+            .pointer("/position_native/instances")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            let instance_id = scalar_at(instance, "/instance_id")?;
+            if let Some(identity) = identities.iter().find(|identity| {
+                identity.value == instance_id
+                    && (identity.slot == "object" || identity.slot.starts_with("multipatch:"))
+            }) {
+                add_local_freeze_reference(
+                    object,
+                    identity,
+                    value_location(
+                        format!("{prefix}/position_native/instances/{index}/instance_id"),
+                        ImportIdentityFormat::Full,
+                    ),
+                    descriptor,
+                );
+            }
+            // Profile duplication currently preserves child channel identities. Signatures
+            // and raw words must also remain exact, including stale or incompatible holds.
+        }
+    }
+    Ok(())
+}
+
+fn add_local_freeze_reference(
+    object: &PortableShowObject,
+    identity: &ImportOwnedIdentity,
+    location: ImportReferenceLocation,
+    descriptor: &mut ImportObjectDescriptor,
+) {
+    descriptor.references.push(ImportObjectReference {
+        target: object.key().clone(),
+        target_slot: identity.slot.clone(),
+        source_identity: identity.value.clone(),
+        location,
+        allow_missing: false,
+    });
 }
 
 fn fixture_identities(object: &PortableShowObject) -> Result<Vec<ImportOwnedIdentity>, String> {

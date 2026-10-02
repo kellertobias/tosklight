@@ -4,13 +4,11 @@
 //!
 //! A patched fixture stores `location` in millimetres and `rotation` in degrees on the desk axes:
 //! `x` across the stage, `y` upstage, `z` up. That is right-handed and Z-up, like MVR, so positions
-//! need no conversion. The Stage and the visualizer draw a fixture by carrying it into their Y-up
-//! world as position `(x, z, −y)` and rotation `(x, z, y)`, composing `Rx·Ry·Rz` there, and then
-//! turning the bracket about the fixture's own transverse axis. Brought back onto the desk axes,
-//! with column vectors mapping the fixture's own frame into the scene, that is
+//! need no conversion. Mount rotation is `Rx·Ry·Rz` in desk space; renderer boundaries
+//! conjugate it into their Y-up basis `(x, z, −y)`. The bracket is local X:
 //!
 //! ```text
-//! R = Rx(rotation.x) · Rz(rotation.z) · Ry(−rotation.y) · Rx(bracket_angle)
+//! R = Rx(rotation.x) · Ry(rotation.y) · Rz(rotation.z) · Rx(bracket_angle)
 //! ```
 //!
 //! # MVR's convention
@@ -129,19 +127,18 @@ pub fn placement_from_mvr_unbracketed(
         multiply(turned, about_x(-f64::from(bracket_degrees)))
     };
     let r = |row: usize, column: usize| mounted[row][column];
-    // R = Rx(a) · Rz(c) · Ry(β): R[0][1] = −sin c, R[0][0] = cos c cos β, R[0][2] = cos c sin β,
-    // R[1][1] = cos a cos c, R[2][1] = sin a cos c.
-    let c = (-r(0, 1)).clamp(-1.0, 1.0).asin();
-    let (a, beta) = if c.cos().abs() > GIMBAL_EPSILON {
-        (r(2, 1).atan2(r(1, 1)), r(0, 2).atan2(r(0, 0)))
+    // R = Rx(x) * Ry(y) * Rz(z). At gimbal lock choose z=0.
+    let cos_y = r(0, 0).hypot(r(0, 1));
+    let y = r(0, 2).atan2(cos_y);
+    let (x, z) = if cos_y > GIMBAL_EPSILON {
+        ((-r(1, 2)).atan2(r(2, 2)), (-r(0, 1)).atan2(r(0, 0)))
     } else {
-        // Only the sum of the outer turns is fixed; give all of it to x.
-        ((-r(1, 2)).atan2(r(2, 2)), 0.0)
+        (r(2, 1).atan2(r(1, 1)), 0.0)
     };
     let rotation = FixtureVector {
-        x: degrees(a),
-        y: degrees(-beta),
-        z: degrees(c),
+        x: degrees(x),
+        y: degrees(y),
+        z: degrees(z),
     };
     let mut origin = [matrix[9], matrix[10], matrix[11]];
     if let Some(hinge) = hinge
@@ -170,9 +167,9 @@ fn placement(rotation: FixtureVector) -> Matrix3 {
     multiply(
         multiply(
             about_x(f64::from(rotation.x)),
-            about_z(f64::from(rotation.z)),
+            about_y(f64::from(rotation.y)),
         ),
-        about_y(-f64::from(rotation.y)),
+        about_z(f64::from(rotation.z)),
     )
 }
 

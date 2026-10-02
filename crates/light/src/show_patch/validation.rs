@@ -153,6 +153,12 @@ fn validate_fixture_update(action: &PatchFixtureUpdateAction) -> Result<(), Acti
         PatchFixtureUpdateAction::SetInstalledAppearance { appearance } => {
             appearance.validate().map_err(invalid)?;
         }
+        PatchFixtureUpdateAction::SetPositionCalibration { calibration } => {
+            light_fixture::validate_position_calibration(calibration.as_ref()).map_err(invalid)?;
+        }
+        PatchFixtureUpdateAction::SetColorCalibration { calibration } => {
+            light_fixture::validate_color_calibration(calibration.as_ref()).map_err(invalid)?;
+        }
         PatchFixtureUpdateAction::SetFreeze { freeze } => {
             if freeze.targets.values().any(|target| {
                 target.full && !target.families.is_empty()
@@ -289,6 +295,9 @@ fn validate_fixture(fixture: &PatchFixtureCandidate) -> Result<usize, ActionErro
     if patch.highlight_overrides.len() > MAX_HIGHLIGHT_OVERRIDES {
         return Err(invalid("fixture has too many Highlight overrides"));
     }
+    light_fixture::validate_position_calibration(patch.position_calibration.as_ref())
+        .map_err(invalid)?;
+    light_fixture::validate_color_calibration(patch.color_calibration.as_ref()).map_err(invalid)?;
     if !finite_rotation(patch.rotation) {
         return Err(invalid("fixture rotations must be finite"));
     }
@@ -296,6 +305,10 @@ fn validate_fixture(fixture: &PatchFixtureCandidate) -> Result<usize, ActionErro
         .saturating_add(patch.split_patches.len())
         .saturating_add(patch.highlight_overrides.len());
     for instance in &patch.multipatch {
+        light_fixture::validate_position_calibration(instance.position_calibration.as_ref())
+            .map_err(invalid)?;
+        light_fixture::validate_color_calibration(instance.color_calibration.as_ref())
+            .map_err(invalid)?;
         if instance.name.len() > MAX_NAME_BYTES {
             return Err(invalid("multipatch name is too long"));
         }

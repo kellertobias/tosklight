@@ -210,6 +210,13 @@ impl Rig {
         fixtures: Vec<MvrFixture>,
         definitions: Vec<FixtureDefinition>,
     ) -> ActionEnvelope<ApplyActiveMvrImportCommand> {
+        let definitions = fixtures
+            .iter()
+            .filter_map(|fixture| {
+                resolve_mvr_definition(&definitions, fixture)
+                    .map(|definition| (fixture.uuid, definition))
+            })
+            .collect();
         ActionEnvelope {
             context: ActionContext::system(Uuid::from_u128(7), ActionSource::Http)
                 .with_request_id("mvr-apply"),
@@ -261,6 +268,7 @@ pub fn fixture_definition_from(
 
 fn described_fixture(footprint: u16) -> FixtureDefinition {
     FixtureDefinition {
+        runtime_color_context: None,
         schema_version: 1,
         id: FixtureId(Uuid::from_u128(800)),
         revision: 1,
@@ -349,6 +357,8 @@ pub fn stored_fixture(
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),

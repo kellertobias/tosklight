@@ -31,6 +31,7 @@ impl ApplicationCommand for ProgrammingPresetRecallRequest {
 
 #[derive(Clone, Debug)]
 pub struct ProgrammingPresetRecallEnvironment {
+    pub supported_programming_contract: u16,
     pub show_id: ShowId,
     pub show_revision: PortableShowRevision,
     pub object_id: String,
@@ -38,7 +39,12 @@ pub struct ProgrammingPresetRecallEnvironment {
     pub address: PresetAddress,
     pub raw_body: Arc<serde_json::Value>,
     pub preset: Arc<Preset>,
+    /// Captured runtime-only Aim values. The stored preset remains the source for first-touch
+    /// target selection; its raw body is never rewritten by geometry or tracking.
+    pub resolved_aim: Option<Arc<Preset>>,
     pub groups: Arc<HashMap<String, GroupDefinition>>,
+    /// Spatial order frozen from the same portable document as the Preset and Group graph.
+    pub stage_positions: Arc<HashMap<light_core::FixtureId, light_dynamics::Position3d>>,
     /// Every currently selectable fixture or logical-head identity in deterministic desk order.
     /// Unpatched fixtures remain in this catalog; deleted identities do not.
     pub selectable_targets: Arc<Vec<light_core::FixtureId>>,

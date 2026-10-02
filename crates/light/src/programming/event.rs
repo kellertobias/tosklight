@@ -15,6 +15,7 @@ pub struct ProgrammingInteractionChange {
     desk_id: Uuid,
     command_line: Option<CommandLineState>,
     selection: Option<ProgrammerSelection>,
+    alignment: Option<light_programmer::ProgrammerAlignmentProjection>,
 }
 
 impl ProgrammingInteractionChange {
@@ -23,10 +24,20 @@ impl ProgrammingInteractionChange {
         command_line: Option<CommandLineState>,
         selection: Option<ProgrammerSelection>,
     ) -> Option<Self> {
-        (command_line.is_some() || selection.is_some()).then_some(Self {
+        Self::with_alignment(desk_id, command_line, selection, None)
+    }
+
+    pub fn with_alignment(
+        desk_id: Uuid,
+        command_line: Option<CommandLineState>,
+        selection: Option<ProgrammerSelection>,
+        alignment: Option<light_programmer::ProgrammerAlignmentProjection>,
+    ) -> Option<Self> {
+        (command_line.is_some() || selection.is_some() || alignment.is_some()).then_some(Self {
             desk_id,
             command_line,
             selection,
+            alignment,
         })
     }
 
@@ -40,7 +51,8 @@ impl ProgrammingInteractionChange {
         let command_line =
             (before.command_line != after.command_line).then(|| after.command_line.clone());
         let selection = (before.selection != after.selection).then(|| after.selection.clone());
-        Self::from_components(after.desk_id, command_line, selection)
+        let alignment = (before.alignment != after.alignment).then(|| after.alignment.clone());
+        Self::with_alignment(after.desk_id, command_line, selection, alignment)
     }
 
     pub const fn desk_id(&self) -> Uuid {
@@ -56,11 +68,21 @@ impl ProgrammingInteractionChange {
     }
 
     pub(super) fn without_selection(self) -> Option<Self> {
-        Self::from_components(self.desk_id, self.command_line, None)
+        Self::with_alignment(self.desk_id, self.command_line, None, self.alignment)
+    }
+
+    pub fn alignment(&self) -> Option<&light_programmer::ProgrammerAlignmentProjection> {
+        self.alignment.as_ref()
     }
 }
 
 impl EventObject {
+    pub fn programming_alignment(desk_id: Uuid) -> Self {
+        Self::new(
+            EventCapability::Desk,
+            format!("programming-alignment:{desk_id}"),
+        )
+    }
     pub fn programming_command_line(desk_id: Uuid) -> Self {
         Self::new(
             EventCapability::Desk,
@@ -232,12 +254,16 @@ impl EventDraft {
 }
 
 fn interaction_routes(change: &ProgrammingInteractionChange) -> (EventObject, Vec<EventObject>) {
-    let command_line = EventObject::programming_command_line(change.desk_id);
-    let selection = EventObject::programming_selection(change.desk_id);
-    match (change.command_line.is_some(), change.selection.is_some()) {
-        (true, true) => (command_line, vec![selection]),
-        (true, false) => (command_line, Vec::new()),
-        (false, true) => (selection, Vec::new()),
-        (false, false) => unreachable!("Programming changes always contain a changed projection"),
+    let mut routes = Vec::with_capacity(3);
+    if change.command_line.is_some() {
+        routes.push(EventObject::programming_command_line(change.desk_id));
     }
+    if change.selection.is_some() {
+        routes.push(EventObject::programming_selection(change.desk_id));
+    }
+    if change.alignment.is_some() {
+        routes.push(EventObject::programming_alignment(change.desk_id));
+    }
+    let first = routes.remove(0);
+    (first, routes)
 }

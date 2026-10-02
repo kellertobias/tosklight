@@ -436,6 +436,38 @@ where
 }
 
 impl StageLayout {
+    /// Shared spatial rank inputs. Explicit 3D positions override their 2D projection.
+    pub fn fixture_spatial_positions(
+        &self,
+    ) -> HashMap<light_core::FixtureId, light_dynamics::SpatialPosition> {
+        let mut result = HashMap::new();
+        for (id, point) in &self.positions {
+            if let Ok(id) = uuid::Uuid::parse_str(id) {
+                result.insert(
+                    light_core::FixtureId(id),
+                    light_dynamics::SpatialPosition {
+                        x: point.x as f32,
+                        y: 0.0,
+                        z: point.y as f32,
+                    },
+                );
+            }
+        }
+        for (id, point) in &self.positions_3d {
+            if let Ok(id) = uuid::Uuid::parse_str(id) {
+                result.insert(
+                    light_core::FixtureId(id),
+                    light_dynamics::SpatialPosition {
+                        x: point.x as f32,
+                        y: point.y as f32,
+                        z: point.z as f32,
+                    },
+                );
+            }
+        }
+        result
+    }
+
     /// Resolves the compatibility default without rewriting an untouched legacy object.
     ///
     /// A legacy layout containing operator-authored 2D positions is manual. An absent or empty

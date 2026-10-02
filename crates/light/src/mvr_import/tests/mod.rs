@@ -214,6 +214,8 @@ fn replace_and_reimport_preserve_reference_only_patch_settings_and_physical_copi
         rotation: Default::default(),
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 12.0,
         shaper_angle: None,
         installed_appearance: InstalledFixtureAppearance {
@@ -535,4 +537,216 @@ fn imported_fixtures_land_on_layers_named_as_the_file_names_them() {
     };
     assert_eq!(layer_of("On truss"), "uuid-truss");
     assert_eq!(layer_of("On default"), DEFAULT_PATCH_LAYER);
+}
+
+#[test]
+fn native_secondary_output_survives_ordinary_import_and_explicit_unpatch_frees_its_address() {
+    struct NoGdtf;
+    impl crate::mvr_export::GdtfSource for NoGdtf {
+        type Error = Infallible;
+        fn source_gdtf(&self, _: FixtureId, _: u32) -> Result<Option<Vec<u8>>, Self::Error> {
+            Ok(None)
+        }
+    }
+    let rig = Rig::new();
+    // The legacy fixture factory has per-mode geometry; use its canonical loaded revision.
+    let mut profile: FixtureProfile = serde_json::from_value(
+        serde_json::to_value(fixture_definition(1).profile_snapshot.unwrap()).unwrap(),
+    )
+    .unwrap();
+    profile.modes[0].splits.push(light_fixture::FixtureSplit {
+        number: 2,
+        footprint: 1,
+    });
+    let definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+    let mut fixture = stored_fixture(
+        FixtureId(Uuid::from_u128(910)),
+        definition.clone(),
+        1,
+        (true, 0),
+    );
+    fixture.universe = None;
+    fixture.address = None;
+    fixture.split_patches = vec![
+        SplitPatch {
+            split: 1,
+            universe: None,
+            address: None,
+        },
+        SplitPatch {
+            split: 2,
+            universe: Some(2),
+            address: Some(10),
+        },
+    ];
+    let (native, _) = crate::mvr_export::build_mvr_document(
+        &[(fixture.fixture_id.0.to_string(), fixture.clone())],
+        &Default::default(),
+        Vec::new(),
+        &NoGdtf,
+        |_| None,
+    )
+    .unwrap();
+    let uuid = native.fixtures[0].uuid;
+    let mut first = rig.envelope(Vec::new(), Vec::new());
+    first.command.document = native.clone();
+    let result = rig.service.apply(first, &rig.ports).unwrap();
+    assert_eq!(
+        result.change.fixtures[0].patch.split_patches,
+        fixture.split_patches
+    );
+    assert_eq!(occupied_patches(&rig.document()).unwrap().len(), 1);
+
+    let incoming = mvr_fixture(Uuid::from_u128(911), "Freed address", 2, 10);
+    let mut update = rig.envelope(vec![incoming.clone()], vec![definition]);
+    update.command.document = native.clone();
+    update.command.document.fixtures.push(incoming);
+    update
+        .command
+        .resolutions
+        .insert(uuid, MvrImportResolution::ImportUnpatched);
+    let result = rig.service.apply(update, &rig.ports).unwrap();
+    assert_eq!(result.imported_fixtures, 2);
+    let original = result
+        .change
+        .fixtures
+        .iter()
+        .find(|item| item.patch.fixture_id == fixture.fixture_id)
+        .unwrap();
+    assert!(
+        original
+            .patch
+            .split_patches
+            .iter()
+            .all(|patch| patch.address.is_none())
+    );
+    let incoming = result
+        .change
+        .fixtures
+        .iter()
+        .find(|item| item.patch.fixture_id != fixture.fixture_id)
+        .unwrap();
+    assert_eq!(incoming.patch.universe, Some(2));
+    assert_eq!(incoming.patch.address, Some(10));
+    assert!(
+        !result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("conflicts"))
+    );
+    // A requested Address may be rejected even when the source had no primary address.
+    let mut rejected = rig.envelope(Vec::new(), Vec::new());
+    rejected.command.document = native;
+    rejected.command.resolutions.insert(
+        uuid,
+        MvrImportResolution::Address {
+            universe: 2,
+            address: 10,
+        },
+    );
+    let result = rig.service.apply(rejected, &rig.ports).unwrap();
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("imported unpatched"))
+    );
+    assert!(
+        result.change.fixtures[0]
+            .patch
+            .split_patches
+            .iter()
+            .all(|patch| patch.address.is_none())
+    );
+}
+
+#[test]
+fn large_import_plan_shares_one_profile_projection_and_stores_lean_records() {
+    let rig = Rig::new();
+    let mut profile = *fixture_definition(1).profile_snapshot.unwrap();
+    let archive = light_fixture::gdtf::profile::package_profile(&profile).unwrap();
+    profile.source_gdtf =
+        Some(light_fixture::ProfileGdtfSource::associate(&profile, &archive).unwrap());
+    let definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+    let fixtures = (0..300)
+        .map(|index| {
+            mvr_fixture(
+                Uuid::from_u128(1000 + index),
+                &format!("Rig {index}"),
+                1,
+                index as u16 + 1,
+            )
+        })
+        .collect();
+    let request = rig.envelope(fixtures, vec![definition]);
+    let planned =
+        super::plan::plan_import(&rig.document(), request.context, &request.command).unwrap();
+    assert_eq!(planned.state.patch.profiles.len(), 1);
+    let first = &planned.state.patch.fixtures[0].profile_projection;
+    for fixture in &planned.state.patch.fixtures {
+        assert!(std::sync::Arc::ptr_eq(first, &fixture.profile_projection));
+        assert!(fixture.record.get("definition").is_none());
+        assert!(fixture.record.get("source_gdtf").is_none());
+        assert!(serde_json::to_vec(&fixture.record).unwrap().len() < 3000);
+    }
+    let candidate = crate::prepare_show_candidate(&rig.document(), planned.transaction).unwrap();
+    let (transaction, snapshot) = candidate.into_parts();
+    assert_eq!(snapshot.fixtures.len(), 300);
+    let committed = rig
+        .ports
+        .store()
+        .apply_portable_transaction(transaction)
+        .unwrap();
+    assert_eq!(committed.fixture_profile_revisions().len(), 1);
+    let stored = rig.document();
+    assert_eq!(stored.fixture_profile_revisions().len(), 1);
+    assert_eq!(stored.objects_of_kind("patched_fixture").count(), 300);
+}
+
+#[test]
+fn mvr_prepare_checks_preview_revision_against_the_actual_snapshot() {
+    let rig = Rig::new();
+    rig.service
+        .apply(
+            rig.envelope(
+                vec![mvr_fixture(Uuid::from_u128(701), "First", 1, 1)],
+                vec![fixture_definition(1)],
+            ),
+            &rig.ports,
+        )
+        .unwrap();
+    let mut stale = rig.envelope(
+        vec![mvr_fixture(Uuid::from_u128(702), "Stale", 1, 20)],
+        vec![fixture_definition(1)],
+    );
+    stale.context = stale.context.with_expected_revision(0);
+    let error = rig.service.prepare(stale, &rig.ports).err().unwrap();
+    assert_eq!(error.kind, ActionErrorKind::Conflict);
+    assert_eq!(error.current_revision, Some(1));
+    assert_eq!(count(&rig.ports.counters.commits), 1);
+    assert_eq!(rig.document().objects_of_kind("patched_fixture").count(), 1);
+}
+
+#[test]
+fn mvr_missing_full_library_revision_never_publishes_a_stripped_catalog() {
+    let mut profile = FixtureProfile::blank();
+    profile.revision = 1;
+    profile.manufacturer = "Library".into();
+    profile.name = "Exact".into();
+    profile.short_name = "Exact".into();
+    let mut source = mvr_fixture(Uuid::from_u128(1), "Missing", 1, 1);
+    source.gdtf_spec = "Exact.gdtf".into();
+    source.gdtf_mode = profile.modes[0].name.clone();
+    let document = light_mvr::MvrDocument {
+        fixtures: vec![source],
+        ..Default::default()
+    };
+    let bound = bind_mvr_sources(&document, &[profile], &[], |_, _| Ok(None), |_| vec![]).unwrap();
+    assert!(bound.definitions.is_empty());
+    assert!(
+        bound
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("disappeared during preview"))
+    );
 }

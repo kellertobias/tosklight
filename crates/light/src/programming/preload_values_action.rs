@@ -36,6 +36,11 @@ pub enum ProgrammingPreloadValueMutation {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProgrammingPreloadValuesCommand {
+    /// Retire only the matching runtime capture and Undo gesture; never change values.
+    FinishGesture {
+        attribute: AttributeKey,
+        undo_group: String,
+    },
     ApplyIntent {
         intent: ProgrammingValueIntent,
     },
@@ -67,7 +72,7 @@ pub enum ProgrammingPreloadValuesCommand {
 impl ProgrammingPreloadValuesCommand {
     pub fn mutations(&self) -> Cow<'_, [ProgrammingPreloadValueMutation]> {
         match self {
-            Self::ApplyIntent { .. } => Cow::Borrowed(&[]),
+            Self::ApplyIntent { .. } | Self::FinishGesture { .. } => Cow::Borrowed(&[]),
             Self::SetFixture {
                 fixture_id,
                 attribute,
@@ -111,7 +116,8 @@ impl ProgrammingPreloadValuesCommand {
     pub const fn intent(&self) -> Option<&ProgrammingValueIntent> {
         match self {
             Self::ApplyIntent { intent } => Some(intent),
-            Self::SetFixture { .. }
+            Self::FinishGesture { .. }
+            | Self::SetFixture { .. }
             | Self::ReleaseFixture { .. }
             | Self::SetGroup { .. }
             | Self::ReleaseGroup { .. }
@@ -160,4 +166,8 @@ pub struct ProgrammingPreloadValuesResult {
     pub interaction_event_sequence: Option<u64>,
     pub replayed: bool,
     pub warning: Option<String>,
+    /// TL-594: set when the action was held quietly instead of applied.
+    pub hold: Option<crate::ProgrammingValuesHold>,
+    /// TL-554: the semantic starting value the first semantic edit of a Direct value adopted.
+    pub color_adoption: Option<crate::ProgrammingColorAdoption>,
 }

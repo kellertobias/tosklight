@@ -32,6 +32,19 @@ impl ProgrammingService {
         context: &ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingOutcome, ActionError> {
+        // Same order as the HTTP/WS Programmer Undo action: the latest Freeze/Unfreeze step first.
+        if let Some(changed) = ports.undo_fixture_freeze(context)? {
+            let warning = ports.persist(context, "programmer.undo");
+            return Ok(accepted(
+                if changed {
+                    ProgrammingAction::Undone
+                } else {
+                    ProgrammingAction::NoChange
+                },
+                None,
+                warning,
+            ));
+        }
         if self.undo_show_mutation(context, ports)? {
             return Ok(accepted(ProgrammingAction::Undone, None, None));
         }
@@ -60,14 +73,16 @@ impl ProgrammingService {
         context: &ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingOutcome, ActionError> {
-        self.programmers.deactivate_alignment(session);
         let programmer = self
             .programmers
             .get(session)
             .ok_or_else(unknown_programmer)?;
         if programmer.blind {
             return Ok(match ports.commit_preload(context) {
-                Ok(warning) => accepted(ProgrammingAction::PreloadCommitted, None, warning),
+                Ok(warning) => {
+                    self.programmers.deactivate_alignment(session);
+                    accepted(ProgrammingAction::PreloadCommitted, None, warning)
+                }
                 Err(error) => ProgrammingOutcome::Rejected { error },
             });
         }
@@ -79,6 +94,7 @@ impl ProgrammingService {
                     .ok_or_else(|| "programmer does not exist".to_owned())
             })
             .map_err(action_error)?;
+        self.programmers.deactivate_alignment(session);
         let warning = ports.persist(context, "preload.enter");
         Ok(accepted(ProgrammingAction::PreloadEntered, None, warning))
     }
@@ -107,7 +123,8 @@ pub(super) fn interaction_change(
         (before.command_line != after.command_line).then(|| after.command_line.clone());
     let selection = (before.selection_revision != after.selection_revision)
         .then(|| programmers.selection(session).unwrap_or_default());
-    ProgrammingInteractionChange::from_components(desk_id, command_line, selection)
+    let alignment = (before.alignment != after.alignment).then(|| after.alignment.clone());
+    ProgrammingInteractionChange::with_alignment(desk_id, command_line, selection, alignment)
 }
 
 fn clear_staged(

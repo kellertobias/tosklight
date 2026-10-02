@@ -195,6 +195,38 @@ fn normalized_patch(
     references: &PositionReferences,
 ) -> Result<PatchedFixturePatch, ActionError> {
     let mut patch = input.patch.clone();
+    // Preserved observations may be stale after replacement. An authored change must match
+    // the current profile, and a newly created physical copy has no inherited measurement.
+    if let Some(calibration) = &patch.color_calibration
+        && existing.and_then(|p| p.color_calibration.as_ref()) != Some(calibration)
+    {
+        mode.validate_color_calibration(calibration)?;
+    }
+    for copy in &patch.multipatch {
+        let old = existing
+            .and_then(|p| p.multipatch.iter().find(|v| v.id == copy.id))
+            .and_then(|p| p.color_calibration.as_ref());
+        if let Some(calibration) = &copy.color_calibration
+            && old != Some(calibration)
+        {
+            mode.validate_color_calibration(calibration)?;
+        }
+    }
+    if let Some(calibration) = &patch.position_calibration
+        && existing.and_then(|p| p.position_calibration.as_ref()) != Some(calibration)
+    {
+        mode.validate_position_calibration(calibration)?;
+    }
+    for copy in &patch.multipatch {
+        let old = existing
+            .and_then(|p| p.multipatch.iter().find(|v| v.id == copy.id))
+            .and_then(|p| p.position_calibration.as_ref());
+        if let Some(calibration) = &copy.position_calibration
+            && old != Some(calibration)
+        {
+            mode.validate_position_calibration(calibration)?;
+        }
+    }
     let existing_heads = existing
         .map(|patch| patch.logical_heads.clone())
         .unwrap_or_default();

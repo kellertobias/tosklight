@@ -1,4 +1,9 @@
 use super::locations::{formatted_id, scalar_id};
+use super::{
+    dynamic_identity::{reidentify_automatic_angle_partners, reidentify_embedded_references},
+    installed_color::rebase_installed_color_calibrations,
+    native_color::{PinnedProfileMap, rewrite_native_color_sources},
+};
 use crate::selective_import::{ImportObjectDescriptor, ImportProfileKey, ImportReferenceLocation};
 use light_show::PortableShowObjectKey;
 use serde_json::{Number, Value};
@@ -13,8 +18,21 @@ pub(crate) fn rewrite_body(
     descriptor: &ImportObjectDescriptor,
     identities: &IdentityMap,
     profiles: &ProfileMap,
+    pinned_profiles: &PinnedProfileMap,
 ) -> Result<Value, String> {
     let mut rewritten = body.clone();
+    // These exact pointers may live below fixture/group map keys. Rewrite their values before
+    // renaming containing keys, then process ordinary references deepest first.
+    rewrite_native_color_sources(
+        &mut rewritten,
+        &descriptor.native_color_references,
+        pinned_profiles,
+    )?;
+    rebase_installed_color_calibrations(
+        &mut rewritten,
+        &descriptor.installed_color_references,
+        pinned_profiles,
+    )?;
     for identity in &descriptor.identities {
         let Some(location) = &identity.location else {
             continue;
@@ -26,17 +44,22 @@ pub(crate) fn rewrite_body(
             rewrite_location(&mut rewritten, location, &identity.value, destination)?;
         }
     }
-    for reference in &descriptor.references {
-        let destination = identities
-            .get(&(reference.target.clone(), reference.target_slot.clone()))
-            .ok_or_else(|| {
-                format!(
-                    "no destination identity for {}/{} slot {}",
-                    reference.target.kind(),
-                    reference.target.id(),
-                    reference.target_slot
-                )
-            })?;
+    let mut references = descriptor.references.iter().collect::<Vec<_>>();
+    references.sort_by_key(|reference| std::cmp::Reverse(location_depth(&reference.location)));
+    for reference in references {
+        let Some(destination) =
+            identities.get(&(reference.target.clone(), reference.target_slot.clone()))
+        else {
+            if reference.allow_missing {
+                continue;
+            }
+            return Err(format!(
+                "no destination identity for {}/{} slot {}",
+                reference.target.kind(),
+                reference.target.id(),
+                reference.target_slot
+            ));
+        };
         if destination != &reference.source_identity {
             rewrite_location(
                 &mut rewritten,
@@ -61,7 +84,28 @@ pub(crate) fn rewrite_body(
             }
         }
     }
+    if owner.kind() == "dynamic"
+        && let (Ok(source), Some(destination)) = (
+            uuid::Uuid::parse_str(owner.id()),
+            rewritten
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(|id| uuid::Uuid::parse_str(id).ok()),
+        )
+    {
+        reidentify_automatic_angle_partners(&mut rewritten, source, destination);
+    }
+    reidentify_embedded_references(body, &mut rewritten, owner.kind())?;
     Ok(rewritten)
+}
+
+fn location_depth(location: &ImportReferenceLocation) -> usize {
+    match location {
+        ImportReferenceLocation::Value { pointer, .. } => pointer.matches('/').count(),
+        ImportReferenceLocation::ObjectKey { object_pointer, .. } => {
+            object_pointer.matches('/').count() + 1
+        }
+    }
 }
 
 fn rewrite_location(

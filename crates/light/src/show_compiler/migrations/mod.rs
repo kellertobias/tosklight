@@ -35,6 +35,7 @@ pub(super) fn stage_touched_object_migrations(
         .cloned()
         .collect::<Vec<_>>();
     let mut staged = transaction.clone();
+    super::dynamic_presets::stage_retention(document, &mut staged, None)?;
     let updates = {
         let candidate = candidate(document, &staged)?;
         keys.iter()
@@ -64,6 +65,7 @@ fn stage_candidate_migrations_preserving(
     preserved: Option<&PortableShowObjectKey>,
 ) -> Result<(), ActionError> {
     let mut staged = transaction.clone();
+    super::dynamic_presets::stage_retention(document, &mut staged, preserved)?;
     control_mappings::stage_removal_report(document, &mut staged)?;
     stage_object_migrations(document, &mut staged, preserved)?;
     patch::stage_inline_migrations(document, &mut staged, preserved)?;

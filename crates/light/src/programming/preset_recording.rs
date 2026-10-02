@@ -94,6 +94,9 @@ pub struct ProgrammingPresetProjection {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingPresetCommitResult {
     pub changed: bool,
+    /// The authoritative transaction created this object, rather than overwriting it.
+    /// Request revision guards cannot determine this for entered commands using Current.
+    pub created: bool,
     pub projection: ProgrammingPresetProjection,
     pub show_revision: PortableShowRevision,
     pub event_sequence: Option<u64>,

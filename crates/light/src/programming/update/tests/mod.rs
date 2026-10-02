@@ -15,6 +15,7 @@ use uuid::Uuid;
 use super::*;
 
 mod cue_cases;
+mod direct_cases;
 mod object_cases;
 mod workflow_cases;
 

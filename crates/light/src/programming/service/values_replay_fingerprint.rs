@@ -45,6 +45,14 @@ fn request_hasher(domain: &[u8], expected_revision: u64, capture_revision: u64) 
 
 fn hash_values_command(hasher: &mut Sha256, command: &ProgrammingValuesCommand) {
     match command {
+        ProgrammingValuesCommand::FinishGesture {
+            attribute,
+            undo_group,
+        } => {
+            hasher.update([7]);
+            hash_bytes(hasher, attribute.0.as_bytes());
+            hash_bytes(hasher, undo_group.as_bytes());
+        }
         ProgrammingValuesCommand::ApplyIntent { intent } => {
             hasher.update([6]);
             hash_len(hasher, intent.fixture_ids.len());
@@ -61,6 +69,10 @@ fn hash_values_command(hasher: &mut Sha256, command: &ProgrammingValuesCommand) 
                 ProgrammingValueOperation::RelativeStep(delta) => {
                     hasher.update([1]);
                     hasher.update(delta.to_bits().to_le_bytes());
+                }
+                ProgrammingValueOperation::ComponentEdits(edits) => {
+                    hasher.update([2]);
+                    hash_intent(hasher, edits);
                 }
             }
             hash_optional_bytes(&mut *hasher, intent.undo_group.as_deref());
@@ -162,6 +174,14 @@ fn hash_value_mutation(hasher: &mut Sha256, mutation: &ProgrammingValueMutation)
 
 fn hash_preload_command(hasher: &mut Sha256, command: &ProgrammingPreloadValuesCommand) {
     match command {
+        ProgrammingPreloadValuesCommand::FinishGesture {
+            attribute,
+            undo_group,
+        } => {
+            hasher.update([6]);
+            hash_bytes(hasher, attribute.0.as_bytes());
+            hash_bytes(hasher, undo_group.as_bytes());
+        }
         ProgrammingPreloadValuesCommand::ApplyIntent { intent } => {
             hasher.update([5]);
             hash_len(hasher, intent.fixture_ids.len());
@@ -178,6 +198,10 @@ fn hash_preload_command(hasher: &mut Sha256, command: &ProgrammingPreloadValuesC
                 ProgrammingValueOperation::RelativeStep(delta) => {
                     hasher.update([1]);
                     hasher.update(delta.to_bits().to_le_bytes());
+                }
+                ProgrammingValueOperation::ComponentEdits(edits) => {
+                    hasher.update([2]);
+                    hash_intent(hasher, edits);
                 }
             }
             hash_optional_bytes(&mut *hasher, intent.undo_group.as_deref());
@@ -335,12 +359,62 @@ fn hash_attribute_value(hasher: &mut Sha256, value: &AttributeValue) {
             hash_f32(hasher, value.y);
             hash_f32(hasher, value.z);
         }
+        AttributeValue::ColorProgram(value) => {
+            hasher.update([6]);
+            hash_intent(hasher, value.as_ref());
+        }
+        AttributeValue::Position(value) => {
+            hasher.update([7]);
+            hash_intent(hasher, value.as_ref());
+        }
+        AttributeValue::GroupFamily(value) => {
+            hasher.update([9]);
+            hash_intent(hasher, value.as_ref());
+        }
+        AttributeValue::Zoom(value) => {
+            hasher.update([8]);
+            hash_intent(hasher, value.as_ref());
+        }
         AttributeValue::RawDmx(value) => hasher.update([4, *value]),
         AttributeValue::RawDmxExact(value) => {
             hasher.update([5]);
             hasher.update(value.to_le_bytes());
         }
     }
+}
+
+// Rich owners are serialized directly into the digest, without a temporary JSON tree or buffer.
+// Signed zero must fingerprint identically, just as scalar values do above.
+fn hash_intent(hasher: &mut Sha256, value: &impl serde::Serialize) {
+    struct DigestWriter<'a>(&'a mut Sha256);
+    impl std::io::Write for DigestWriter<'_> {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.update(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    struct CanonicalFloats;
+    impl serde_json::ser::Formatter for CanonicalFloats {
+        fn write_f32<W: std::io::Write + ?Sized>(
+            &mut self,
+            writer: &mut W,
+            value: f32,
+        ) -> std::io::Result<()> {
+            serde_json::ser::Formatter::write_f32(
+                &mut serde_json::ser::CompactFormatter,
+                writer,
+                if value == 0.0 { 0.0 } else { value },
+            )
+        }
+    }
+    let mut serializer =
+        serde_json::Serializer::with_formatter(DigestWriter(hasher), CanonicalFloats);
+    value
+        .serialize(&mut serializer)
+        .expect("typed intent serialization into an infallible digest");
 }
 
 fn hash_f32(hasher: &mut Sha256, value: f32) {
@@ -379,5 +453,36 @@ mod tests {
         assert_eq!(first, values_request_fingerprint(3, &request(0.2)));
         assert_ne!(first, values_request_fingerprint(3, &request(0.3)));
         assert_ne!(first, values_request_fingerprint(4, &request(0.2)));
+    }
+    #[test]
+    fn rich_owner_fingerprints_preserve_uv_identity_and_canonical_zero() {
+        use light_core::programming::{ColorIntent, ColorProgram, PositionIntent, TargetReference};
+        let fingerprint = |value| {
+            let mut hash = Sha256::new();
+            hash_attribute_value(&mut hash, &value);
+            <[u8; 32]>::from(hash.finalize())
+        };
+        let angles =
+            |pan| AttributeValue::Position(std::sync::Arc::new(PositionIntent::angles(pan, 90.0)));
+        assert_eq!(fingerprint(angles(0.0)), fingerprint(angles(-0.0)));
+        assert_ne!(fingerprint(angles(360.0)), fingerprint(angles(0.0)));
+        let target = AttributeValue::Position(std::sync::Arc::new(PositionIntent::target(
+            TargetReference::Origin,
+            [0.0; 3],
+        )));
+        assert_ne!(fingerprint(target), fingerprint(angles(0.0)));
+        let mut intent = ColorIntent::default();
+        let before = fingerprint(AttributeValue::ColorProgram(std::sync::Arc::new(
+            ColorProgram::Semantic {
+                intent: intent.clone(),
+            },
+        )));
+        intent.uv.amount = 0.7;
+        assert_ne!(
+            before,
+            fingerprint(AttributeValue::ColorProgram(std::sync::Arc::new(
+                ColorProgram::Semantic { intent }
+            )))
+        );
     }
 }

@@ -58,6 +58,18 @@ fn apply_update(
                 patch.invert_tilt = *invert_tilt;
             }
         },
+        PatchFixtureUpdateAction::SetPositionCalibration { calibration } => {
+            match exact_copy(patch, update.multipatch_instance_id)? {
+                Some(instance) => instance.position_calibration = calibration.clone(),
+                None => patch.position_calibration = calibration.clone(),
+            }
+        }
+        PatchFixtureUpdateAction::SetColorCalibration { calibration } => {
+            match exact_copy(patch, update.multipatch_instance_id)? {
+                Some(instance) => instance.color_calibration = calibration.clone(),
+                None => patch.color_calibration = calibration.clone(),
+            }
+        }
         PatchFixtureUpdateAction::SetMoveInBlack {
             enabled,
             delay_millis,

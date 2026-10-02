@@ -5,6 +5,7 @@ use super::{
         add_fixture_map_keys, add_fixture_value, add_optional_direct_reference, direct_reference,
         id_descriptor, key_only_descriptor, primary_identity, scalar_id, value_location,
     },
+    programming::ProgrammingReferences,
 };
 use crate::selective_import::{ImportIdentityFormat, ImportObjectDescriptor};
 use light_show::PortableShowObject;
@@ -40,6 +41,15 @@ pub(super) fn group_descriptor(
         "group",
         &mut descriptor,
     )?;
+    // Live-Group stored programming (`GroupDefinition::programming`) is an AttributeValue map
+    // that may hold GroupFamily member fixture keys and nested Point targets.
+    ProgrammingReferences {
+        body,
+        source,
+        target,
+        descriptor: &mut descriptor,
+    }
+    .attribute_map("/programming")?;
     Ok(descriptor)
 }
 
@@ -165,6 +175,13 @@ fn add_dynamic_definition_references(
     target: &FixtureIdentityCatalog,
     descriptor: &mut ImportObjectDescriptor,
 ) -> Result<(), String> {
+    ProgrammingReferences {
+        body,
+        source,
+        target,
+        descriptor,
+    }
+    .dynamic(prefix)?;
     add_optional_direct_reference(
         body,
         &format!("{prefix}/target_binding/group_id"),
@@ -271,6 +288,13 @@ pub(super) fn preset_descriptor(
     };
     add_fixture_map_keys(object.body(), "/values", source, target, &mut descriptor)?;
     add_direct_map_keys(object.body(), "/group_values", "group", &mut descriptor)?;
+    ProgrammingReferences {
+        body: object.body(),
+        source,
+        target,
+        descriptor: &mut descriptor,
+    }
+    .preset()?;
     Ok(descriptor)
 }
 
@@ -291,6 +315,13 @@ pub(super) fn cue_list_descriptor(
             .flatten()
             .enumerate()
         {
+            ProgrammingReferences {
+                body: object.body(),
+                source,
+                target,
+                descriptor: &mut descriptor,
+            }
+            .value(&format!("/cues/{cue_index}/changes/{change_index}/value"))?;
             add_fixture_value(
                 change,
                 "/fixture_id",
@@ -307,6 +338,15 @@ pub(super) fn cue_list_descriptor(
             .flatten()
             .enumerate()
         {
+            ProgrammingReferences {
+                body: object.body(),
+                source,
+                target,
+                descriptor: &mut descriptor,
+            }
+            .value(&format!(
+                "/cues/{cue_index}/group_changes/{change_index}/value"
+            ))?;
             add_direct_value(
                 change,
                 "/group_id",
@@ -323,6 +363,13 @@ pub(super) fn cue_list_descriptor(
             .enumerate()
         {
             let prefix = format!("/cues/{cue_index}/dynamic_changes/{change_index}");
+            ProgrammingReferences {
+                body: object.body(),
+                source,
+                target,
+                descriptor: &mut descriptor,
+            }
+            .dynamic_semantic(&format!("{prefix}/value"))?;
             add_fixture_value(
                 change,
                 "/fixture_id",

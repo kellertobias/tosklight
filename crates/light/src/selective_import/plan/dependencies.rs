@@ -18,6 +18,18 @@ impl<P: crate::selective_import::SelectiveShowImportPorts> Planner<'_, P> {
         descriptor: &ImportObjectDescriptor,
     ) {
         for reference in &descriptor.references {
+            if reference.allow_missing
+                && self
+                    .source
+                    .object(reference.target.kind(), reference.target.id())
+                    .is_none()
+                && self
+                    .target
+                    .object(reference.target.kind(), reference.target.id())
+                    .is_none()
+            {
+                continue;
+            }
             self.visit_dependency(owner, reference.target.clone());
         }
     }

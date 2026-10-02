@@ -944,3 +944,6 @@ impl ProgrammingPorts for LifecyclePorts {
         Ok(None)
     }
 }
+
+#[path = "semantic_storage_tests.rs"]
+mod semantic_storage;

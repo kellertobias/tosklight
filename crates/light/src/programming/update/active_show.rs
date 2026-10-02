@@ -6,7 +6,9 @@ use super::{
     ProgrammingUpdateTargetsResult, UpdateMode, plan_cue_update, plan_group_update,
     plan_preset_update, preview_cue_update, preview_group_update, preview_preset_update,
 };
-use crate::active_show::{CompletedActiveShowTransaction, PreparedActiveShowTransaction};
+use crate::active_show::{
+    CompletedActiveShowTransaction, PreparedActiveShowTransaction, migration_changes,
+};
 use crate::{
     ActionContext, ActionError, ActiveShowObjectChange, ActiveShowObjectKind,
     ActiveShowObjectsChange, ActiveShowService, EventBus, EventDraft, lossless_json,
@@ -324,13 +326,19 @@ fn complete_update<P: ProgrammingUpdatePorts>(
         prepared.projection.raw_body.as_ref().clone(),
     )
     .expect("prepared Programming projection must match its typed family");
+    // TL-557: the candidate also carries every Dynamic whose retained Preset source the show
+    // compiler restaged (and any compatibility write-back). They share this commit, so they ride
+    // the same completion event with their exact committed bodies, as Preset recording does.
+    let mut changes = vec![change];
+    let additional = migration_changes(&commit, &changes);
+    changes.extend(additional);
     let event_sequence = events
         .publish(EventDraft::active_show_objects_changed(
             context,
             ActiveShowObjectsChange {
                 show_id: prepared.projection.show_id,
                 show_revision: prepared.show_revision,
-                changes: vec![change],
+                changes,
             },
         ))
         .sequence;

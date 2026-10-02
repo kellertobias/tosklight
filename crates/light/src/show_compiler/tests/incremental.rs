@@ -118,6 +118,66 @@ fn preset_edit_reuses_every_runtime_projection() {
 }
 
 #[test]
+fn semantic_preset_requirement_reaches_engine_activation_and_incremental_deletion() {
+    use light_core::{
+        AttributeKey, AttributeValue,
+        programming::{ColorIntent, ColorProgram},
+    };
+    let (store, document) = normalized_document();
+    let previous = prepare_show_candidate(&document, document.transaction())
+        .unwrap()
+        .into_parts()
+        .1;
+    let preset = light_programmer::Preset {
+        family: light_programmer::PresetFamily::Color,
+        number: 1,
+        universal_values: [(
+            AttributeKey::color(),
+            AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic {
+                intent: ColorIntent::default(),
+            })),
+        )]
+        .into(),
+        ..Default::default()
+    };
+    let mut transaction = document.transaction();
+    transaction.put("preset", "2.1", serde_json::to_value(preset).unwrap());
+    let next =
+        prepare_normalized_show_candidate_incremental(&document, transaction.clone(), &previous)
+            .unwrap()
+            .into_parts()
+            .1;
+    assert_eq!(next.required_programming_contract(), 1);
+    assert_eq!(
+        compile_show_candidate(document.candidate(&transaction).unwrap())
+            .unwrap()
+            .required_programming_contract(),
+        1
+    );
+    let legacy = light_engine::Engine::with_programming_contract_support(
+        light_programmer::ProgrammerRegistry::default(),
+        0,
+    );
+    legacy.replace_snapshot(previous).unwrap();
+    assert!(legacy.prepare_snapshot(next.clone()).is_err());
+    assert!(
+        light_engine::Engine::new(light_programmer::ProgrammerRegistry::default())
+            .prepare_snapshot(next.clone())
+            .is_ok()
+    );
+    store.apply_portable_transaction(transaction).unwrap();
+    let updated = store.portable_document().unwrap();
+    let mut deletion = updated.transaction();
+    deletion.delete("preset", "2.1");
+    let restored = prepare_normalized_show_candidate_incremental(&updated, deletion, &next)
+        .unwrap()
+        .into_parts()
+        .1;
+    assert_eq!(restored.required_programming_contract(), 0);
+    assert!(legacy.prepare_snapshot(restored).is_ok());
+}
+
+#[test]
 fn touched_legacy_object_is_normalized_without_sweeping_unrelated_objects() {
     let (_store, document) = normalized_document();
     let previous = prepare_show_candidate(&document, document.transaction())

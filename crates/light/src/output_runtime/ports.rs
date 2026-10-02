@@ -21,4 +21,10 @@ pub trait OutputRuntimePorts: Send + Sync {
         context: &ActionContext,
         command: OutputRuntimeCommand,
     ) -> Result<OutputRuntimeApplication, ActionError>;
+
+    /// Records a fresh, authorized, expectation-valid command whose supplied fields already equal
+    /// the current projection. It must not change values, revision, events or persistence; only
+    /// write identity of explicitly supplied fields may be refreshed. Cached replays and rejected
+    /// commands never reach this hook.
+    fn reassert(&self, _context: &ActionContext, _command: OutputRuntimeCommand) {}
 }

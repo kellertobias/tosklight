@@ -359,8 +359,15 @@ fn normalize_body(
         )
         .map(ActiveShowObjectBody::Schedule),
         ActiveShowObjectBody::Psn(request) => {
-            normalize_passthrough(existing.and_then(ActiveShowObjectBody::psn), request)
-                .map(ActiveShowObjectBody::Psn)
+            // Validate writes without tightening the lossless reader: older malformed tracking
+            // rows remain readable, and the runtime withholds only ambiguous binding identities.
+            let previous = existing.and_then(ActiveShowObjectBody::psn);
+            match previous {
+                Some(previous) => request.typed().validate_update(previous.typed()),
+                None => request.typed().validate(),
+            }
+            .map_err(invalid)?;
+            normalize_passthrough(previous, request).map(ActiveShowObjectBody::Psn)
         }
         ActiveShowObjectBody::StageLayout(request) => normalize_passthrough(
             existing.and_then(ActiveShowObjectBody::stage_layout),
@@ -424,7 +431,8 @@ fn normalize_dynamic(
     let mut normalized = request.typed().clone();
     let object_id = uuid::Uuid::parse_str(&mutation.object_id)
         .map_err(|error| invalid(format!("invalid Dynamic storage id: {error}")))?;
-    normalized.id = object_id;
+    normalized.reidentify(object_id);
+    normalized.normalize_angle_pair();
     validate_definition(&normalized).map_err(invalid)?;
     LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
 }

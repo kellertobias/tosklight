@@ -116,41 +116,41 @@ fn write_cue_event(
         }
         IncomingValue::Dynamic(value) => {
             let address = incoming.address();
-            let existing = cue
-                .dynamic_changes
-                .iter_mut()
-                .find(|change| dynamic_address(change) == address);
-            if let Some(change) = existing {
-                change.value = value.value.clone();
-                change.automatic_restore = false;
-            } else if append_if_missing {
-                cue.dynamic_changes.push(CueDynamicChange {
-                    fixture_id: value.fixture_id,
-                    attribute: value.attribute.clone(),
-                    value: value.value.clone(),
-                    automatic_restore: false,
-                });
-            } else {
+            if !append_if_missing
+                && !cue
+                    .dynamic_changes
+                    .iter()
+                    .any(|change| dynamic_address(change) == address)
+            {
                 return Err(missing_source("Dynamic"));
             }
+            cue.dynamic_changes.retain(|change| {
+                !value.value.replaces_address(
+                    value.fixture_id,
+                    &value.attribute,
+                    change.value.track_key(),
+                    change.fixture_id,
+                    &change.attribute,
+                )
+            });
+            cue.dynamic_changes.push(CueDynamicChange {
+                fixture_id: value.fixture_id,
+                attribute: value.attribute.clone(),
+                value: value.value.clone(),
+                automatic_restore: false,
+            });
         }
     }
     Ok(())
 }
 
 fn dynamic_address(change: &CueDynamicChange) -> super::model::UpdateAddress {
-    use light_dynamics::DynamicSemanticValue;
-    let instance_link = match &change.value {
-        DynamicSemanticValue::DynamicOn { instance_link, .. }
-        | DynamicSemanticValue::DynamicOff { instance_link, .. } => Some(*instance_link),
-        DynamicSemanticValue::Static { .. }
-        | DynamicSemanticValue::FixAt { .. }
-        | DynamicSemanticValue::Release => None,
-    };
     super::model::UpdateAddress::DynamicAttribute {
         fixture_id: change.fixture_id,
         attribute: change.attribute.clone(),
-        instance_link,
+        instance_link: change.value.track_key().instance_link,
+        lane_id: change.value.track_key().lane_id,
+        component: change.value.track_key().component,
     }
 }
 
@@ -184,6 +184,7 @@ pub fn plan_cue_update(
         })?;
     let mut updated = cue_list.clone();
     apply_preview(&mut updated, current_index, programmer, &preview)?;
+    light_playback::refresh_cue_only_restorations(&mut updated);
     updated
         .validate()
         .map_err(|reason| UpdateError::InvalidTarget { reason })?;

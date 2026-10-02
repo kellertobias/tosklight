@@ -5,7 +5,7 @@ use crate::{
         AppliedImportObject, ImportBlocker, ImportDependency, ImportManagedAssetAction,
         ImportManagedAssetPreview, ImportObjectAction, ImportProfilePreview,
         SelectiveShowImportPorts, SelectiveShowImportPreview,
-        references::{IdentityMap, ProfileMap, rewrite_body},
+        references::{IdentityMap, PinnedProfileMap, ProfileMap, rewrite_body},
     },
 };
 use light_show::PortableShowObjectKey;
@@ -31,7 +31,26 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
         &mut self,
         identities: &IdentityMap,
         profiles: &ProfileMap,
+        copies: &[light_show::FixtureProfileRevision],
     ) -> Vec<PlannedWrite> {
+        let pinned_profiles: PinnedProfileMap = profiles
+            .iter()
+            .filter_map(|(source, destination)| {
+                let original = self.required_profiles.get(source)?.profile.clone()?;
+                let copied = copies
+                    .iter()
+                    .find(|copy| {
+                        copy.id().profile_id() == destination.profile_id
+                            && copy.id().revision() == destination.revision
+                    })
+                    .or_else(|| {
+                        self.target
+                            .fixture_profile_revision(destination.profile_id, destination.revision)
+                    })?
+                    .clone();
+                Some((*source, (original, copied)))
+            })
+            .collect();
         let mut writes = Vec::new();
         for (source, item) in &self.items {
             if !matches!(
@@ -43,7 +62,14 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
             ) {
                 continue;
             }
-            match rewrite_body(&item.body, source, &item.descriptor, identities, profiles) {
+            match rewrite_body(
+                &item.body,
+                source,
+                &item.descriptor,
+                identities,
+                profiles,
+                &pinned_profiles,
+            ) {
                 Ok(mut body) => {
                     if source.kind() == "schedule" {
                         reset_schedule_anchor(&mut body);

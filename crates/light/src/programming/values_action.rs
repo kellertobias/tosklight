@@ -46,16 +46,60 @@ pub struct ProgrammingValueIntent {
     pub operation: ProgrammingValueOperation,
     pub undo_group: Option<String>,
     pub timing: ProgrammingValueTiming,
+    /// TL-594: the accepted source the surface displayed. Present, first-edit adoption uses
+    /// only that leased source and holds quietly when it is gone. Absent (OSC, HTTP
+    /// integrators), adoption keeps reading the latest accepted source of the lane.
+    pub displayed_source: Option<ProgrammingDisplayedSource>,
+    /// TL-554: Direct reference head and explicit semantic starting colour, when supplied.
+    pub color_adoption: super::ProgrammingColorAdoptionRequest,
+}
+
+/// Which lane's accepted source a displayed-source lease names.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProgrammingDisplayedLane {
+    Normal,
+    Preload,
+}
+
+/// An opaque, session-scoped lease of one source the server delivered to that session.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProgrammingDisplayedSource {
+    pub lane: ProgrammingDisplayedLane,
+    pub lease: u64,
+}
+
+/// Why a values action was held quietly: no mutation, revision or Undo step. The surface
+/// re-reads and retries from fresh state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProgrammingValuesHold {
+    /// The named displayed source is unknown, expired, of another lane, or no longer current.
+    DisplayedSourceUnavailable,
+    /// TL-554: a Direct (native) edit has no verified reference head, original model or
+    /// published premaster output to adopt.
+    NativeColorUnavailable,
+    /// TL-554: a Direct value's visible appearance is unknown; the first semantic edit needs
+    /// the operator's explicit starting colour.
+    ExplicitColorStartRequired,
+    /// TL-637 follow-up: a Zoom edit has no seed in degrees: no authored Zoom and no opening
+    /// measurable in a known convention on the displayed output (unknown or unsupported model).
+    ZoomUnavailable,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProgrammingValueOperation {
     AbsoluteSet(AttributeValue),
     RelativeStep(f32),
+    /// Component operations produce one complete owner, adopted independently per target.
+    ComponentEdits(Vec<light_core::programming::ComponentEdit>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProgrammingValuesCommand {
+    /// Retire only the matching runtime capture and Undo gesture; never change values.
+    FinishGesture {
+        attribute: AttributeKey,
+        undo_group: String,
+    },
     ApplyIntent {
         intent: ProgrammingValueIntent,
     },
@@ -88,7 +132,7 @@ pub enum ProgrammingValuesCommand {
 impl ProgrammingValuesCommand {
     pub fn mutations(&self) -> Cow<'_, [ProgrammingValueMutation]> {
         match self {
-            Self::ApplyIntent { .. } => Cow::Borrowed(&[]),
+            Self::ApplyIntent { .. } | Self::FinishGesture { .. } => Cow::Borrowed(&[]),
             Self::SetFixture {
                 fixture_id,
                 attribute,
@@ -186,4 +230,8 @@ pub struct ProgrammingValuesResult {
     pub interaction_event_sequence: Option<u64>,
     pub replayed: bool,
     pub warning: Option<String>,
+    /// TL-594: set when the action was held quietly instead of applied.
+    pub hold: Option<ProgrammingValuesHold>,
+    /// TL-554: the semantic starting value the first semantic edit of a Direct value adopted.
+    pub color_adoption: Option<super::ProgrammingColorAdoption>,
 }

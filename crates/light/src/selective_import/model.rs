@@ -140,6 +140,28 @@ pub struct ImportObjectReference {
     pub target_slot: String,
     pub source_identity: String,
     pub location: ImportReferenceLocation,
+    /// Retained Dynamic sources can outlive a deleted Preset. Import the live dependency
+    /// when present, but keep the retained source usable when both shows lack that object.
+    pub allow_missing: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImportNativeColorReference {
+    pub source: light_core::NativeColorIdentity,
+    /// Whole identity object, not just profile_id: duplicating a profile changes its digest.
+    pub pointer: String,
+}
+
+/// Passive installed Color calibration of one physical instance (root or multipatch copy).
+/// Unlike a Direct recipe it adds no profile dependency and never blocks import.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImportInstalledColorReference {
+    /// The owning fixture's selected profile, never a key read from the observation itself.
+    pub key: ImportProfileKey,
+    pub mode_id: uuid::Uuid,
+    /// Whole calibration object; every path identity is rebased together or not at all.
+    pub pointer: String,
+    pub sources: Vec<light_core::NativeColorIdentity>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -156,6 +178,8 @@ pub struct ImportObjectDescriptor {
     pub identities: Vec<ImportOwnedIdentity>,
     pub references: Vec<ImportObjectReference>,
     pub profile_references: Vec<ImportProfileReference>,
+    pub native_color_references: Vec<ImportNativeColorReference>,
+    pub installed_color_references: Vec<ImportInstalledColorReference>,
     pub managed_assets: Vec<AssetReference>,
 }
 

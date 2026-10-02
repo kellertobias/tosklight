@@ -13,8 +13,11 @@ pub struct ProgrammingSelectionEnvironment {
     pub groups: HashMap<String, GroupDefinition>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ProgrammingValuesEnvironment {
+    /// Production advertises only complete runtime contracts. Domain fixtures default to the
+    /// current contract so foundation behavior remains independently testable.
+    pub supported_programming_contract: u16,
     pub fixture_ids: HashSet<FixtureId>,
     /// Group id → resolved ordered-membership size, so value validation can reject
     /// multi-point spreads with more control points than the Group has members.
@@ -22,6 +25,8 @@ pub struct ProgrammingValuesEnvironment {
     /// Group id → evaluated spatial-rank count. Equal spatial keys share one rank and therefore
     /// one spread value. Missing entries retain legacy membership-count validation.
     pub group_rank_counts: HashMap<String, usize>,
+    /// Authoritative evaluated rank per current member, including equal spatial ranks.
+    pub group_ranks: HashMap<String, HashMap<FixtureId, usize>>,
     /// Group id → resolved ordered membership. Relative Group intents use this frozen membership
     /// and the same current-value view as fixture intents.
     pub group_members: HashMap<String, Vec<FixtureId>>,
@@ -36,6 +41,40 @@ pub struct ProgrammingValuesEnvironment {
     /// Application policy input. Empty in current production configuration; tests and the future
     /// attribute registry can inject ordered linked attributes without changing the transport.
     pub activation_links: HashMap<AttributeKey, Vec<AttributeKey>>,
+    /// Frozen semantic adoption data. Concrete feature adapters populate these from one frame.
+    pub family_contexts: HashMap<FixtureId, ProgrammingFamilyContext>,
+    /// Explicit shared adoption context for a live Group owner, never inferred from its first lamp.
+    pub group_family_contexts: HashMap<String, ProgrammingFamilyContext>,
+    /// Declarative complete templates for future members. Adapters supply physical Zoom and
+    /// pinned Direct defaults here; these are never inferred from the first member.
+    pub group_family_templates: HashMap<(String, AttributeKey), light_core::AttributeValue>,
+    /// TL-594: set by `prepare_family_edit_context` when the edit named a displayed source
+    /// that cannot be resolved. The service then holds the whole action quietly.
+    pub displayed_source_hold: Option<super::ProgrammingValuesHold>,
+    /// TL-554: set during capture when the first semantic edit adopted Direct values.
+    pub color_adoption: Option<super::ProgrammingColorAdoption>,
+}
+
+impl Default for ProgrammingValuesEnvironment {
+    fn default() -> Self {
+        Self {
+            supported_programming_contract: light_core::programming::PROGRAMMING_CONTRACT_VERSION,
+            fixture_ids: Default::default(),
+            group_memberships: Default::default(),
+            group_rank_counts: Default::default(),
+            group_ranks: Default::default(),
+            group_members: Default::default(),
+            current_values: Default::default(),
+            default_values: Default::default(),
+            supported_attributes: Default::default(),
+            activation_links: Default::default(),
+            family_contexts: Default::default(),
+            group_family_contexts: Default::default(),
+            group_family_templates: Default::default(),
+            displayed_source_hold: None,
+            color_adoption: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -126,6 +165,32 @@ pub trait ProgrammingPorts: Send + Sync {
         ))
     }
 
+    /// Capture immutable family adoption inputs for the first real component edit of a
+    /// gesture, or once for a one-shot edit. The application has validated the intent and
+    /// capture lane under its Programmer/desk boundary. A retained gesture, including one
+    /// whose first capture was absent, does not call this port again.
+    fn prepare_family_edit_context(
+        &self,
+        _context: &ActionContext,
+        _preload: bool,
+        _intent: &super::ProgrammingValueIntent,
+        _environment: &mut ProgrammingValuesEnvironment,
+    ) -> Result<(), ActionError> {
+        Ok(())
+    }
+
+    /// TL-554: the verified original native Color model of `source` from the active runtime
+    /// generation, used to forward-evaluate a Direct value's estimate for semantic adoption.
+    /// `None` keeps the recorded estimate (transports without a model catalogue).
+    fn native_color_model(
+        &self,
+        _context: &ActionContext,
+        _source: &light_core::NativeColorIdentity,
+    ) -> Option<std::sync::Arc<dyn light_core::programming::NativeColorEditModel + Send + Sync>>
+    {
+        None
+    }
+
     fn persist(&self, context: &ActionContext, operation: &'static str) -> Option<String>;
 
     /// Whether relative movement for one normalized fixture attribute wraps at its endpoints.
@@ -149,6 +214,15 @@ pub trait ProgrammingPorts: Send + Sync {
     ) {
     }
 
+    /// Undoes the desk's most recent Fixture Freeze or Unfreeze when it is the latest Programmer
+    /// Undo step. `Ok(None)` means no Freeze step applies, so the ordinary Programmer Undo
+    /// continues; `Ok(Some(changed))` means the Freeze step was consumed. This is the same
+    /// Freeze-aware step the HTTP and WebSocket Programmer Undo actions run first, so `[UND]`
+    /// behaves identically from every attached surface.
+    fn undo_fixture_freeze(&self, _context: &ActionContext) -> Result<Option<bool>, ActionError> {
+        Ok(None)
+    }
+
     fn undo_show_recording(
         &self,
         _context: &ActionContext,
@@ -170,3 +244,5 @@ pub trait ProgrammingPorts: Send + Sync {
 
     fn commit_preload(&self, context: &ActionContext) -> Result<Option<String>, String>;
 }
+
+pub use light_core::programming::OwnedFamilyEditContext as ProgrammingFamilyContext;

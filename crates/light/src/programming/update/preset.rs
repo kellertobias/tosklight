@@ -1,4 +1,6 @@
-use light_core::AttributeValue;
+use std::collections::HashMap;
+
+use light_core::{AttributeKey, AttributeValue};
 use light_programmer::{Preset, ProgrammerUpdateContent};
 
 use super::error::UpdateError;
@@ -37,7 +39,7 @@ fn preset_preview_item(
     incoming: IncomingValue<'_>,
 ) -> UpdatePreviewItem {
     let address = incoming.address();
-    let existing = stored_value(preset, &address);
+    let existing = stored_value(preset, &address).map(StoredValue::value);
     let outcome = match (mode, existing) {
         (_, Some(value)) if Some(value) == incoming.ordinary_value() => {
             UpdateItemOutcome::Unchanged { source: None }
@@ -51,22 +53,99 @@ fn preset_preview_item(
     UpdatePreviewItem { address, outcome }
 }
 
-fn stored_value<'a>(preset: &'a Preset, address: &UpdateAddress) -> Option<&'a AttributeValue> {
-    match address {
+/// Where an address's existing Preset content comes from.
+///
+/// An explicit fixture or Group entry wins. Otherwise a universal value — one shared intent that
+/// recall applies to every selected fixture and live Group, named or not — is that address's
+/// existing content, so Update can change it like any other stored value.
+#[derive(Clone, Copy)]
+enum StoredValue<'a> {
+    Explicit(&'a AttributeValue),
+    Universal(&'a AttributeValue),
+}
+
+impl<'a> StoredValue<'a> {
+    fn value(self) -> &'a AttributeValue {
+        match self {
+            Self::Explicit(value) | Self::Universal(value) => value,
+        }
+    }
+}
+
+fn stored_value<'a>(preset: &'a Preset, address: &UpdateAddress) -> Option<StoredValue<'a>> {
+    let (explicit, attribute) = match address {
         UpdateAddress::FixtureAttribute {
             fixture_id,
             attribute,
-        } => preset
-            .values
-            .get(fixture_id)
-            .and_then(|attributes| attributes.get(attribute)),
+        } => (
+            preset
+                .values
+                .get(fixture_id)
+                .and_then(|attributes| attributes.get(attribute)),
+            attribute,
+        ),
         UpdateAddress::GroupAttribute {
             group_id,
             attribute,
-        } => preset
-            .group_values
-            .get(group_id)
-            .and_then(|attributes| attributes.get(attribute)),
+        } => (
+            preset
+                .group_values
+                .get(group_id)
+                .and_then(|attributes| attributes.get(attribute)),
+            attribute,
+        ),
+        UpdateAddress::DynamicAttribute { .. } | UpdateAddress::GroupMembership { .. } => {
+            return None;
+        }
+    };
+    explicit.map(StoredValue::Explicit).or_else(|| {
+        preset
+            .universal_values
+            .get(attribute)
+            .map(StoredValue::Universal)
+    })
+}
+
+/// The new universal value per attribute: the one intent every Programmer address that reads
+/// that universal value now shares. Addresses that disagree keep the universal value and store
+/// their own explicit value instead, so deliberately different values never auto-extend.
+fn shared_universal_updates(
+    preset: &Preset,
+    incoming: &[IncomingValue<'_>],
+) -> HashMap<AttributeKey, AttributeValue> {
+    let mut shared = HashMap::<AttributeKey, Option<&AttributeValue>>::new();
+    for value in incoming {
+        let address = value.address();
+        let (Some(StoredValue::Universal(_)), Some(requested)) =
+            (stored_value(preset, &address), value.ordinary_value())
+        else {
+            continue;
+        };
+        let Some(attribute) = ordinary_attribute(&address) else {
+            continue;
+        };
+        // A live Group family assignment (template plus member exceptions) is valid only on its
+        // Group owner, never as a universal value; it stays the Group's explicit value.
+        let candidate = (!matches!(requested, AttributeValue::GroupFamily(_))).then_some(requested);
+        shared
+            .entry(attribute.clone())
+            .and_modify(|current| {
+                if *current != candidate {
+                    *current = None;
+                }
+            })
+            .or_insert(candidate);
+    }
+    shared
+        .into_iter()
+        .filter_map(|(attribute, value)| value.map(|value| (attribute, value.clone())))
+        .collect()
+}
+
+fn ordinary_attribute(address: &UpdateAddress) -> Option<&AttributeKey> {
+    match address {
+        UpdateAddress::FixtureAttribute { attribute, .. }
+        | UpdateAddress::GroupAttribute { attribute, .. } => Some(attribute),
         UpdateAddress::DynamicAttribute { .. } | UpdateAddress::GroupMembership { .. } => None,
     }
 }
@@ -107,16 +186,28 @@ pub fn plan_preset_update(
         });
     }
     let mut updated = preset.clone();
-    for (incoming, item) in incoming_preset_values(preset, programmer)
-        .into_iter()
-        .zip(&preview.items)
-    {
-        if item.outcome.changes_data() {
+    let incoming = incoming_preset_values(preset, programmer);
+    let universal = shared_universal_updates(preset, &incoming);
+    for (incoming, item) in incoming.into_iter().zip(&preview.items) {
+        if !item.outcome.changes_data() {
+            continue;
+        }
+        let replaces_universal = matches!(
+            stored_value(preset, &item.address),
+            Some(StoredValue::Universal(_))
+        ) && ordinary_attribute(&item.address)
+            .is_some_and(|attribute| universal.contains_key(attribute));
+        if !replaces_universal {
             write_preset_value(&mut updated, incoming);
         }
     }
-    // Only a Color Intent show records universal presets. Updating one with that same colour
-    // keeps it universal; a different colour stays specific to the fixtures it was set on.
+    // A universal value read by every Programmer address with one shared new intent stays
+    // universal and takes that intent; disagreeing addresses were stored explicitly above.
+    for (attribute, value) in universal {
+        updated.universal_values.insert(attribute, value);
+    }
+    // Universal Color Presets come from recording one shared colour. Updating one with a single
+    // shared colour keeps it universal; a different colour stays specific to its fixtures.
     if preset.is_universal() {
         updated.consolidate_universal_color();
     }

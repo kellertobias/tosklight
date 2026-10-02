@@ -53,7 +53,6 @@ impl ProgrammingService {
         if let Some(result) = self.cached_group_recording(&identity, &envelope.command)? {
             return Ok(result);
         }
-        self.programmers.deactivate_alignment(identity.session_id);
         let capture = self
             .programmers
             .capture_group_recording_selection(identity.session_id)
@@ -73,6 +72,7 @@ impl ProgrammingService {
             &commit,
             completion,
         )?;
+        self.finish_alignment(&envelope.context, identity.session_id);
         self.finish_successful_group_gesture(&envelope, &commit);
         if result.outcome.event_sequence().is_some() {
             let projection = result.outcome.projection();

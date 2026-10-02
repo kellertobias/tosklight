@@ -690,3 +690,57 @@ fn preset(attributes: Value) -> Value {
         "group_values": {}
     })
 }
+
+#[test]
+fn psn_object_mutation_rejects_duplicate_binding_ids_without_tightening_the_reader() {
+    let binding = json!({
+        "id": FIXTURE_ID, "trackerId": 3, "pointFixtureId": CUE_LIST_ID, "enabled": true
+    });
+    let raw = json!({"enabled": true, "bindings": [binding.clone(), binding], "future_tracking": {"keep": true}});
+    let decoded = ActiveShowObjectBody::decode(ActiveShowObjectKind::Psn, raw.clone()).unwrap();
+    assert_eq!(
+        decoded.encode(),
+        raw,
+        "old data must remain readable without repair"
+    );
+    let edit = mutation(ActiveShowObjectKind::Psn, "main", raw.clone());
+    let error = normalize_body(None, &edit, &decoded)
+        .err()
+        .expect("duplicate new identities must be rejected");
+    assert!(error.message.contains("binding ID"));
+
+    let mut repair = raw.clone();
+    repair["bindings"].as_array_mut().unwrap().pop();
+    let normalized = normalize(&raw, ActiveShowObjectKind::Psn, "main", repair);
+    assert_eq!(normalized["bindings"].as_array().unwrap().len(), 1);
+    assert_eq!(normalized["future_tracking"], raw["future_tracking"]);
+}
+
+#[test]
+fn psn_object_updates_allow_receive_off_and_incremental_repair_of_existing_collisions() {
+    let first =
+        json!({"id": FIXTURE_ID, "trackerId": 3, "pointFixtureId": CUE_LIST_ID, "enabled": true});
+    let second =
+        json!({"id": DYNAMIC_ID, "trackerId": 4, "pointFixtureId": CUE_LIST_ID, "enabled": true});
+    let existing = json!({"enabled": true, "bindings": [first.clone(), first.clone(), first, second.clone(), second]});
+    let mut disabled = existing.clone();
+    disabled["enabled"] = json!(false);
+    let disabled = normalize(&existing, ActiveShowObjectKind::Psn, "main", disabled);
+    assert_eq!(disabled["enabled"], false);
+    let mut partial = disabled.clone();
+    partial["bindings"].as_array_mut().unwrap().remove(0);
+    let partial = normalize(&disabled, ActiveShowObjectKind::Psn, "main", partial);
+    assert_eq!(partial["bindings"].as_array().unwrap().len(), 4);
+
+    let previous = ActiveShowObjectBody::decode(ActiveShowObjectKind::Psn, partial).unwrap();
+    let request =
+        ActiveShowObjectBody::decode(ActiveShowObjectKind::Psn, existing.clone()).unwrap();
+    assert!(
+        normalize_body(
+            Some(&previous),
+            &mutation(ActiveShowObjectKind::Psn, "main", existing),
+            &request
+        )
+        .is_err()
+    );
+}

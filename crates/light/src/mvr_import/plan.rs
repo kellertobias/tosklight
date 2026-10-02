@@ -3,7 +3,7 @@ use super::model::{
     ApplyActiveMvrImportCommand, MvrImportResolution, PlannedFixture, PlannedPatchChange,
     PreparedMvrImportState,
 };
-use super::projection::{profile_projections, project_fixture};
+use super::projection::{ProjectionCache, profile_projections, project_fixture};
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_fixture::{FixtureDefinition, PatchedFixture, PatchedHead, PortablePatchedFixtureRecord};
 use light_mvr::MvrFixture;
@@ -11,7 +11,10 @@ use light_show::{PortableShowDocument, PortableShowTransaction};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
-type OccupiedPatch = (u16, u16, u16, String);
+use super::occupied::{
+    OccupiedPatch, apply_mvr_primary_address, fixture_occupied_patches, occupied_patches,
+    primary_footprint,
+};
 
 struct ImportChanges {
     occupied: Vec<OccupiedPatch>,
@@ -22,14 +25,14 @@ struct ImportChanges {
 }
 
 impl ImportChanges {
-    fn new(document: &PortableShowDocument, existing: &[&light_show::PortableShowObject]) -> Self {
-        Self {
-            occupied: occupied_patches(existing),
+    fn new(document: &PortableShowDocument) -> Result<Self, ActionError> {
+        Ok(Self {
+            occupied: occupied_patches(document)?,
             transaction: document.transaction(),
             fixtures: Vec::new(),
             removed_fixture_ids: Vec::new(),
             warnings: Vec::new(),
-        }
+        })
     }
 
     fn resolve_address(
@@ -49,7 +52,7 @@ impl ImportChanges {
         let Some((requested_universe, requested_address)) = universe.zip(address) else {
             return (universe, address);
         };
-        let end = requested_address.saturating_add(definition.footprint.saturating_sub(1));
+        let end = requested_address.saturating_add(primary_footprint(definition).saturating_sub(1));
         let conflict = self
             .occupied
             .iter()
@@ -103,27 +106,44 @@ pub(super) fn plan_import(
     if document.id() != command.show_id {
         return Err(not_found("requested show is not active"));
     }
-    validate_unique_source_ids(&command.document.fixtures)?;
+    plan_document(
+        document,
+        context,
+        &command.document,
+        &command.definitions,
+        &command.resolutions,
+    )
+}
+
+fn plan_document(
+    document: &PortableShowDocument,
+    context: ActionContext,
+    source_document: &light_mvr::MvrDocument,
+    command_definitions: &HashMap<Uuid, FixtureDefinition>,
+    command_resolutions: &HashMap<Uuid, MvrImportResolution>,
+) -> Result<PlannedMvrImport, ActionError> {
+    validate_unique_source_ids(&source_document.fixtures)?;
     let existing = document
         .objects_of_kind("patched_fixture")
         .collect::<Vec<_>>();
-    let metadata = document.objects_of_kind("mvr_fixture").collect::<Vec<_>>();
-    let fixture_ids = mvr_fixture_ids(&metadata);
-    let embedded_fixtures = crate::mvr_export::tosklight_mvr_fixture_metadata(&command.document);
+    let embedded_fixtures = crate::mvr_export::tosklight_mvr_fixture_metadata(source_document);
+    let fixture_ids = mvr_destination_fixture_ids(document, &embedded_fixtures);
     let mut layers = MvrLayerPlan::new(
-        &command.document,
+        source_document,
         document
             .objects_of_kind("patch_layer")
             .map(|object| (object.key().id().to_owned(), object.body().clone())),
     );
-    let mut changes = ImportChanges::new(document, &existing);
+    let mut changes = ImportChanges::new(document)?;
     let mut imported_ids = HashSet::new();
+    let mut projection_cache = ProjectionCache::default();
     let mut imported = 0;
     let mut unresolved = 0;
+    let mut retained_sources = super::RetainedMvrSources::new(source_document);
 
-    for source in &command.document.fixtures {
+    for source in &source_document.fixtures {
         if matches!(
-            command.resolutions.get(&source.uuid),
+            command_resolutions.get(&source.uuid),
             Some(MvrImportResolution::Skip)
         ) {
             continue;
@@ -131,12 +151,12 @@ pub(super) fn plan_import(
         let embedded = embedded_fixtures.get(&source.uuid);
         let Some(definition) = embedded
             .map(|embedded| embedded.fixture.definition.clone())
-            .or_else(|| resolve_mvr_definition(&command.definitions, source))
+            .or_else(|| command_definitions.get(&source.uuid).cloned())
         else {
             changes.transaction.put(
                 "unresolved_mvr_fixture",
                 source.uuid.to_string(),
-                serde_json::to_value(source).map_err(invalid)?,
+                retained_sources.unresolved_fixture(source)?,
             );
             unresolved += 1;
             changes.warnings.push(format!(
@@ -145,12 +165,7 @@ pub(super) fn plan_import(
             ));
             continue;
         };
-        let fixture_id = fixture_ids
-            .get(&source.uuid)
-            .and_then(|id| Uuid::parse_str(id).ok())
-            .map(light_core::FixtureId)
-            .or_else(|| embedded.map(|embedded| embedded.fixture.fixture_id))
-            .unwrap_or_default();
+        let fixture_id = fixture_ids.get(&source.uuid).copied().unwrap_or_default();
         if !imported_ids.insert(fixture_id) {
             return Err(invalid(format!(
                 "MVR fixtures resolve to duplicate show fixture identity {}",
@@ -161,7 +176,7 @@ pub(super) fn plan_import(
             source,
             fixture_id,
             &definition,
-            command.resolutions.get(&source.uuid),
+            command_resolutions.get(&source.uuid),
         );
         let patched = patched_fixture(
             source,
@@ -171,12 +186,22 @@ pub(super) fn plan_import(
             layers.layer_for(source.layer.as_deref()),
             &existing,
             embedded,
+            matches!(
+                command_resolutions.get(&source.uuid),
+                Some(MvrImportResolution::ImportUnpatched)
+            ) || ((source.universe.zip(source.address).is_some()
+                || matches!(
+                    command_resolutions.get(&source.uuid),
+                    Some(MvrImportResolution::Address { .. })
+                ))
+                && address.0.zip(address.1).is_none()),
         );
-        let projection = project_fixture(patched.clone())?;
+        let occupied = fixture_occupied_patches(&patched, &fixture_id.0.to_string());
+        let projection = project_fixture(patched, &mut projection_cache)?;
         changes.transaction.put(
             "patched_fixture",
             fixture_id.0.to_string(),
-            serde_json::to_value(patched).map_err(invalid)?,
+            projection.record.clone(),
         );
         changes.transaction.put(
             "mvr_fixture",
@@ -188,15 +213,22 @@ pub(super) fn plan_import(
             }),
         );
         changes.fixtures.push(projection);
-        if let (Some(universe), Some(address)) = address {
-            changes.occupied.push((
-                universe,
-                address,
-                definition.footprint,
-                fixture_id.0.to_string(),
-            ));
-        }
+        changes
+            .occupied
+            .retain(|row| row.3 != fixture_id.0.to_string());
+        changes.occupied.extend(occupied);
         imported += 1;
+    }
+    for (id, archive) in retained_sources.archives() {
+        if document
+            .object(super::MVR_SOURCE_ARCHIVE_KIND, id)
+            .is_some_and(|object| object.body() != archive)
+        {
+            return Err(invalid("retained MVR source archive hash conflicts"));
+        }
+        changes
+            .transaction
+            .put(super::MVR_SOURCE_ARCHIVE_KIND, id, archive.clone());
     }
     // Only layers an imported fixture landed on are created, in the same change as the fixtures.
     for (id, body) in layers.created() {
@@ -207,13 +239,22 @@ pub(super) fn plan_import(
     if !changes.fixtures.is_empty() || !changes.removed_fixture_ids.is_empty() {
         changes.transaction.mark_patch_changed();
     }
-    if !command.document.geometry.is_empty() {
+    if !source_document.geometry.is_empty() {
         changes.warnings.push(
             "MVR scene geometry was not imported. Add scenery from the Venue fixture library in Show Patch."
                 .into(),
         );
     }
-    let profiles = profile_projections(&changes.fixtures);
+    let profiles = profile_projections(&changes.fixtures)?;
+    for profile in &profiles {
+        let retained =
+            light_show::FixtureProfileRevision::from_profile(profile.profile_snapshot.clone())
+                .map_err(invalid)?;
+        changes
+            .transaction
+            .put_fixture_profile_revision(retained)
+            .map_err(invalid)?;
+    }
     Ok(PlannedMvrImport {
         transaction: changes.transaction,
         state: PreparedMvrImportState {
@@ -234,22 +275,22 @@ pub fn resolve_mvr_definition(
     definitions: &[FixtureDefinition],
     fixture: &MvrFixture,
 ) -> Option<FixtureDefinition> {
-    let spec = fixture
-        .gdtf_spec
+    let normalized = fixture.gdtf_spec.replace('\\', "/").to_ascii_lowercase();
+    let spec = normalized
         .rsplit('/')
         .next()
-        .unwrap_or(&fixture.gdtf_spec)
+        .unwrap_or(&normalized)
         .trim_end_matches(".gdtf");
-    definitions
-        .iter()
-        .find(|definition| {
-            definition.mode.eq_ignore_ascii_case(&fixture.gdtf_mode)
-                && (definition.model.eq_ignore_ascii_case(spec)
-                    || definition.name.eq_ignore_ascii_case(spec)
-                    || format!("{}@{}", definition.manufacturer, definition.model)
-                        .eq_ignore_ascii_case(spec))
-        })
-        .cloned()
+    let mut matches = definitions.iter().filter(|definition| {
+        definition.mode.eq_ignore_ascii_case(&fixture.gdtf_mode)
+            && (definition.model.eq_ignore_ascii_case(spec)
+                || definition.name.eq_ignore_ascii_case(spec)
+                || format!("{}@{}", definition.manufacturer, definition.model)
+                    .eq_ignore_ascii_case(spec))
+    });
+    let first = matches.next()?;
+    // A name is only a fallback when it has one meaning in this library.
+    matches.next().is_none().then(|| first.clone())
 }
 
 fn validate_unique_source_ids(fixtures: &[MvrFixture]) -> Result<(), ActionError> {
@@ -261,37 +302,28 @@ fn validate_unique_source_ids(fixtures: &[MvrFixture]) -> Result<(), ActionError
     }
 }
 
-fn occupied_patches(objects: &[&light_show::PortableShowObject]) -> Vec<OccupiedPatch> {
-    objects
+/// Existing source association wins over a native export ID. Preview and Apply share ownership.
+pub fn mvr_destination_fixture_ids(
+    destination: &PortableShowDocument,
+    native: &HashMap<Uuid, crate::mvr_export::ToskLightMvrFixture>,
+) -> HashMap<Uuid, light_core::FixtureId> {
+    let mut ids = native
         .iter()
-        .filter_map(|object| {
-            serde_json::from_value::<PatchedFixture>(object.body().clone())
-                .ok()
-                .and_then(|fixture| {
-                    Some((
-                        fixture.universe?,
-                        fixture.address?,
-                        fixture.definition.footprint,
-                        object.key().id().to_owned(),
-                    ))
-                })
-        })
-        .collect()
-}
-
-fn mvr_fixture_ids(objects: &[&light_show::PortableShowObject]) -> HashMap<Uuid, String> {
-    objects
-        .iter()
-        .filter_map(|object| {
-            Uuid::parse_str(object.key().id()).ok().and_then(|uuid| {
-                object
-                    .body()
-                    .get("fixture_id")?
-                    .as_str()
-                    .map(|id| (uuid, id.to_owned()))
-            })
-        })
-        .collect()
+        .map(|(uuid, entry)| (*uuid, entry.fixture.fixture_id))
+        .collect::<HashMap<_, _>>();
+    for object in destination.objects_of_kind("mvr_fixture") {
+        if let (Ok(source), Some(id)) = (
+            Uuid::parse_str(object.key().id()),
+            object
+                .body()
+                .get("fixture_id")
+                .and_then(|v| v.as_str())
+                .and_then(|id| Uuid::parse_str(id).ok()),
+        ) {
+            ids.insert(source, light_core::FixtureId(id));
+        }
+    }
+    ids
 }
 
 fn patched_fixture(
@@ -302,6 +334,7 @@ fn patched_fixture(
     layer_id: String,
     existing: &[&light_show::PortableShowObject],
     embedded: Option<&crate::mvr_export::ToskLightMvrFixture>,
+    suppress_all_outputs: bool,
 ) -> PatchedFixture {
     // A matrix this desk wrote carries its bracket about its hinge; that comes back out here.
     let (location, rotation) = crate::mvr_export::mvr_fixture_placement(source.matrix, embedded);
@@ -363,6 +396,12 @@ fn patched_fixture(
             invert_tilt: existing_patch
                 .as_ref()
                 .is_some_and(|fixture| fixture.invert_tilt),
+            position_calibration: existing_patch
+                .as_ref()
+                .and_then(|fixture| fixture.position_calibration.clone()),
+            color_calibration: existing_patch
+                .as_ref()
+                .and_then(|fixture| fixture.color_calibration.clone()),
             // An MVR source owns the root transform and address, but knows nothing about installed
             // lamp/filter/mechanical settings or desk-owned physical copies. Retain those exact
             // values across a reference-only portable record as well as a legacy inline record.
@@ -400,12 +439,15 @@ fn patched_fixture(
         patched.grand_master_enabled = existing_patch.grand_master_enabled;
         patched.invert_pan = existing_patch.invert_pan;
         patched.invert_tilt = existing_patch.invert_tilt;
+        patched.position_calibration = existing_patch.position_calibration.clone();
+        patched.color_calibration = existing_patch.color_calibration.clone();
         patched.bracket_angle = existing_patch.bracket_angle;
         patched.shaper_angle = existing_patch.shaper_angle;
         patched.installed_appearance = existing_patch.installed_appearance;
         patched.freeze = existing_patch.freeze;
         patched.multipatch = existing_patch.multipatch;
     }
+    apply_mvr_primary_address(&mut patched, address, suppress_all_outputs);
     patched
 }
 
@@ -415,4 +457,29 @@ fn invalid(error: impl std::fmt::Display) -> ActionError {
 
 fn not_found(message: impl Into<String>) -> ActionError {
     ActionError::new(ActionErrorKind::NotFound, message)
+}
+
+/// Shared, transport-neutral plan for an inactive/new show. The caller validates and commits the
+/// returned transaction to its isolated candidate file before replacing any live destination.
+pub struct MvrDocumentImport {
+    pub transaction: PortableShowTransaction,
+    pub imported_fixtures: usize,
+    pub unresolved_fixtures: usize,
+    pub warnings: Vec<String>,
+}
+
+pub fn plan_mvr_document_import(
+    document: &PortableShowDocument,
+    context: ActionContext,
+    source: &light_mvr::MvrDocument,
+    definitions: &HashMap<Uuid, FixtureDefinition>,
+    resolutions: &HashMap<Uuid, MvrImportResolution>,
+) -> Result<MvrDocumentImport, ActionError> {
+    let planned = plan_document(document, context, source, definitions, resolutions)?;
+    Ok(MvrDocumentImport {
+        transaction: planned.transaction,
+        imported_fixtures: planned.state.imported_fixtures,
+        unresolved_fixtures: planned.state.unresolved_fixtures,
+        warnings: planned.state.warnings,
+    })
 }

@@ -11,6 +11,7 @@
 //! was.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use uuid::Uuid;
 
@@ -50,10 +51,9 @@ pub struct PsnConfiguration {
 
 /// Where the tracking system's stage is, in the show's stage.
 ///
-/// PosiStageNet and ToskLight already agree on units and axes — metres, positive x right, positive
-/// y up, positive z depth — so the identity is the honest default, and a rig whose origin is the
-/// show's origin needs nothing here. What differs in practice is where the tracking system was
-/// told its origin is and which way round it was set up, so those are the two knobs.
+/// PSN is X-right/Y-up/Z-depth in metres. Convert `(x, y, z)` to desk `(x, -z, y)`
+/// once at ingress; positive source depth is towards the audience. Calibration then
+/// applies a yaw about desk Z and a desk-space XYZ offset. Bindings and zones use desk axes.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PsnCalibration {
@@ -137,6 +137,18 @@ impl PsnConfiguration {
     /// # Errors
     /// When a field would leave the desk listening to nothing, or a zone that cannot be entered.
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_against(None)
+    }
+
+    /// Validate an edit without preventing safe operation or incremental repair of an older
+    /// malformed show. Existing duplicate identities may remain or decrease in multiplicity;
+    /// an edit must not introduce or enlarge a collision. The receiver withholds every remaining
+    /// conflicting row, independently of whether tracking or an individual row is enabled.
+    pub fn validate_update(&self, previous: &Self) -> Result<(), String> {
+        self.validate_against(Some(previous))
+    }
+
+    fn validate_against(&self, previous: Option<&Self>) -> Result<(), String> {
         if !self.group.is_multicast() {
             return Err(format!(
                 "{} is not a multicast group; PosiStageNet transmits to one",
@@ -150,6 +162,23 @@ impl PsnConfiguration {
             return Err("the stale timeout must be between 50 and 60000 milliseconds".into());
         }
         self.calibration.validate()?;
+        let mut previous_counts = HashMap::<Uuid, usize>::new();
+        if let Some(previous) = previous {
+            for binding in &previous.bindings {
+                *previous_counts.entry(binding.id).or_default() += 1;
+            }
+        }
+        let mut binding_counts = HashMap::<Uuid, usize>::with_capacity(self.bindings.len());
+        for binding in &self.bindings {
+            let count = binding_counts.entry(binding.id).or_default();
+            *count += 1;
+            if *count > previous_counts.get(&binding.id).copied().unwrap_or(1) {
+                return Err(format!(
+                    "binding ID {} is used more than once; each PSN binding needs its own ID",
+                    binding.id
+                ));
+            }
+        }
         for zone in &self.zones {
             zone.validate()?;
         }
@@ -172,16 +201,16 @@ impl PsnCalibration {
         let (sin, cos) = self.rotation_degrees.to_radians().sin_cos();
         let scaled = [
             position[0] * self.scale,
+            -position[2] * self.scale,
             position[1] * self.scale,
-            position[2] * self.scale,
         ];
         // About the up axis only: a tracking system set up facing the other way is the case this
         // exists for, and offering roll and pitch would invite a calibration nobody can check by
         // walking on stage.
         [
-            scaled[0] * cos + scaled[2] * sin + self.offset_metres[0],
-            scaled[1] + self.offset_metres[1],
-            -scaled[0] * sin + scaled[2] * cos + self.offset_metres[2],
+            scaled[0] * cos - scaled[1] * sin + self.offset_metres[0],
+            scaled[0] * sin + scaled[1] * cos + self.offset_metres[1],
+            scaled[2] + self.offset_metres[2],
         ]
     }
 

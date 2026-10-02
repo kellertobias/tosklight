@@ -63,6 +63,12 @@ pub enum PatchFixtureUpdateAction {
         invert_pan: bool,
         invert_tilt: bool,
     },
+    SetPositionCalibration {
+        calibration: Option<light_fixture::InstalledPositionCalibration>,
+    },
+    SetColorCalibration {
+        calibration: Option<light_fixture::InstalledColorCalibration>,
+    },
     SetMoveInBlack {
         enabled: bool,
         delay_millis: u64,
@@ -164,6 +170,8 @@ pub struct PatchModeProjection {
     pub mode_id: Uuid,
     pub name: String,
     pub splits: Vec<FixtureSplit>,
+    pub native_color_identities: Vec<light_fixture::NativeColorIdentity>,
+    pub position_calibration_identity: Option<light_fixture::PositionCalibrationIdentity>,
 }
 
 /// Deduplicated metadata for one immutable profile revision referenced by a patch projection.

@@ -108,7 +108,13 @@ pub(super) fn validate_release_targets(
                         fixture.fixture_id == target.fixture_id || Some(head.index) == head_index
                     })
                     .flat_map(|head| &head.parameters)
-                    .any(|parameter| parameter.attribute == target.attribute)
+                    .any(|parameter| {
+                        parameter.attribute == target.attribute
+                            // The semantic Position owner is carried by the Pan/Tilt channels.
+                            || (target.attribute
+                                == light_core::programming::ProgrammingOwner::Position.key()
+                                && matches!(&*parameter.attribute.0, "pan" | "tilt"))
+                    })
         });
         if !supported {
             return Err(ActionError::new(
@@ -253,6 +259,90 @@ pub(super) fn resolve_targets(
     Ok((targets, None))
 }
 
+/// One logical authored Dynamic in the current Programmer. Runtime identity is scoped to the
+/// Programmer; the stored link remains unchanged when an edit moves through Preload.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProgrammerDynamicController {
+    pub authored_link: Uuid,
+    pub controller_id: Uuid,
+    pub dynamic_id: Option<Uuid>,
+    pub targets: Vec<FixtureId>,
+}
+
+pub(super) fn effective_programmer_dynamic_values(
+    state: &light_programmer::ProgrammerState,
+) -> Vec<&light_dynamics::DynamicAddressValue> {
+    light_dynamics::merge_dynamic_address_values(
+        state
+            .dynamic_values
+            .iter()
+            .chain(state.preload_dynamic_active.iter())
+            .chain(
+                (state.blind && state.preload_capture_programmer)
+                    .then_some(state.preload_dynamic_pending.iter())
+                    .into_iter()
+                    .flatten(),
+            ),
+    )
+}
+
+/// Resolve all editable Dynamic controllers from the same effective authored layers used by
+/// reconciliation. A committed Preload remains editable after GO returns input to Live.
+pub fn effective_programmer_dynamic_controllers(
+    state: &light_programmer::ProgrammerState,
+) -> Vec<ProgrammerDynamicController> {
+    let mut result = Vec::<ProgrammerDynamicController>::new();
+    let mut indices = HashMap::<Uuid, (usize, &light_dynamics::DynamicAddressValue)>::new();
+    for stored in effective_programmer_dynamic_values(state) {
+        let DynamicSemanticValue::DynamicOn {
+            instance_link,
+            dynamic,
+            ..
+        } = &stored.value
+        else {
+            continue;
+        };
+        let (index, latest) = indices.entry(*instance_link).or_insert_with(|| {
+            let index = result.len();
+            result.push(ProgrammerDynamicController {
+                authored_link: *instance_link,
+                controller_id: light_dynamics::programmer_dynamic_controller_id(
+                    state.id,
+                    *instance_link,
+                ),
+                dynamic_id: dynamic.dynamic_id,
+                targets: Vec::new(),
+            });
+            (index, stored)
+        });
+        if light_dynamics::dynamic_address_edit_is_later(stored, latest) {
+            result[*index].dynamic_id = dynamic.dynamic_id;
+            *latest = stored;
+        }
+        if !result[*index].targets.contains(&stored.fixture_id) {
+            result[*index].targets.push(stored.fixture_id);
+        }
+    }
+    result.sort_by_key(|controller| controller.controller_id);
+    result
+}
+
+/// Accept an authored link or its runtime UUID only when this Programmer actually owns its
+/// effective authored rows. Never resolve a controller from another desk's runtime alone.
+pub fn resolve_programmer_dynamic_controller(
+    state: &light_programmer::ProgrammerState,
+    authored_or_runtime_id: Uuid,
+) -> Option<ProgrammerDynamicController> {
+    let mut matches = effective_programmer_dynamic_controllers(state)
+        .into_iter()
+        .filter(|value| {
+            value.authored_link == authored_or_runtime_id
+                || value.controller_id == authored_or_runtime_id
+        });
+    let found = matches.next()?;
+    matches.next().is_none().then_some(found)
+}
+
 pub(super) fn matching_programmer_controller(
     programmers: &ProgrammerRegistry,
     session: SessionId,
@@ -264,47 +354,17 @@ pub(super) fn matching_programmer_controller(
         .iter()
         .copied()
         .collect::<std::collections::HashSet<_>>();
-    let mut by_controller = HashMap::<Uuid, std::collections::HashSet<FixtureId>>::new();
-    for value in state
-        .dynamic_values
-        .iter()
-        .chain(state.preload_dynamic_pending.iter())
-    {
-        if let DynamicSemanticValue::DynamicOn {
-            instance_link,
-            dynamic,
-            ..
-        } = &value.value
-            && dynamic.dynamic_id == Some(dynamic_id)
-        {
-            by_controller
-                .entry(*instance_link)
-                .or_default()
-                .insert(value.fixture_id);
-        }
-    }
-    by_controller
+    effective_programmer_dynamic_controllers(&state)
         .into_iter()
-        .find_map(|(controller, found)| (found == target_set).then_some(controller))
-}
-
-pub(super) fn controller_dynamic_id(
-    programmers: &ProgrammerRegistry,
-    session: SessionId,
-    controller_id: Uuid,
-) -> Option<Uuid> {
-    let state = programmers.get(session)?;
-    state
-        .dynamic_values
-        .iter()
-        .chain(state.preload_dynamic_pending.iter())
-        .find_map(|stored| match &stored.value {
-            DynamicSemanticValue::DynamicOn {
-                instance_link,
-                dynamic,
-                ..
-            } if *instance_link == controller_id => dynamic.dynamic_id,
-            _ => None,
+        .find_map(|controller| {
+            (controller.dynamic_id == Some(dynamic_id)
+                && controller
+                    .targets
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>()
+                    == target_set)
+                .then_some(controller.controller_id)
         })
 }
 
@@ -384,32 +444,6 @@ pub(super) fn programmer_preload_active(
         .is_some_and(|state| state.blind && state.preload_capture_programmer)
 }
 
-pub(super) fn controller_targets(
-    programmers: &ProgrammerRegistry,
-    session: SessionId,
-    controller_id: Uuid,
-) -> Vec<FixtureId> {
-    let Some(state) = programmers.get(session) else {
-        return Vec::new();
-    };
-    let mut targets = Vec::new();
-    for stored in state
-        .dynamic_values
-        .iter()
-        .chain(state.preload_dynamic_pending.iter())
-    {
-        if matches!(
-            stored.value,
-            DynamicSemanticValue::DynamicOn { instance_link, .. }
-                if instance_link == controller_id
-        ) && !targets.contains(&stored.fixture_id)
-        {
-            targets.push(stored.fixture_id);
-        }
-    }
-    targets
-}
-
 pub(super) fn store_off(
     programmers: &ProgrammerRegistry,
     session: SessionId,
@@ -419,28 +453,27 @@ pub(super) fn store_off(
     let state = programmers
         .get(session)
         .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "Programmer is unavailable"))?;
-    let preload = state.blind && state.preload_capture_programmer;
-    let mutations = state
-        .dynamic_values
-        .iter()
-        .chain(
-            preload
-                .then(|| state.preload_dynamic_pending.iter())
-                .into_iter()
-                .flatten(),
-        )
+    let controller =
+        resolve_programmer_dynamic_controller(&state, controller_id).ok_or_else(|| {
+            ActionError::new(
+                ActionErrorKind::NotFound,
+                "Dynamic controller is not present in this Programmer",
+            )
+        })?;
+    let mutations = effective_programmer_dynamic_values(&state)
+        .into_iter()
         .filter(|stored| {
             matches!(
                 stored.value,
                 DynamicSemanticValue::DynamicOn { instance_link, .. }
-                    if instance_link == controller_id
+                    if instance_link == controller.authored_link
             )
         })
         .map(|stored| DynamicProgrammerValueMutation::Set {
             fixture_id: stored.fixture_id,
             attribute: stored.attribute.clone(),
             value: DynamicSemanticValue::DynamicOff {
-                instance_link: controller_id,
+                instance_link: controller.authored_link,
                 timing,
             },
         })

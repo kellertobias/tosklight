@@ -25,7 +25,7 @@ impl ProgrammingService {
     ) -> Result<ProgrammingPresetRecordResult, ActionError> {
         let identity = recording_identity(&envelope)?;
         self.with_programmer_and_desk_gate(envelope.context.desk_id, || {
-            self.apply_preset_recording(envelope, ports, identity)
+            self.apply_preset_recording(envelope, ports, identity, None, true)
         })
     }
 
@@ -41,7 +41,40 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPresetRecordingPorts,
     ) -> Result<ProgrammingPresetRecordResult, ActionError> {
         let identity = recording_identity(&envelope)?;
-        self.apply_preset_recording(envelope, ports, identity)
+        self.apply_preset_recording(envelope, ports, identity, None, false)
+    }
+
+    /// Store a server-resolved Position relation inside an entered command's existing gates.
+    /// This is not a transport-supplied value or a second recording lifecycle: it uses the
+    /// same authorization, capture-mode check, replay, commit, events and Show Undo as Record.
+    pub fn record_position_preset_within_interaction(
+        &self,
+        envelope: ActionEnvelope<ProgrammingPresetRecordRequest>,
+        ports: &dyn ProgrammingPresetRecordingPorts,
+        position: light_programmer::Preset,
+    ) -> Result<ProgrammingPresetRecordResult, ActionError> {
+        let valid = envelope.command.address.family == light_programmer::PresetFamily::Position
+            && position.family == light_programmer::PresetFamily::Position
+            && position.values.is_empty()
+            && position.group_values.is_empty()
+            && ((position.aim_at_fixture_number.is_some() && position.universal_values.is_empty())
+                || (position.aim_at_fixture_number.is_none()
+                    && position.universal_values.len() == 1
+                    && position.universal_values.values().all(|value| {
+                        value.programming_owner()
+                            == Some(light_core::programming::ProgrammingOwner::Position)
+                    })));
+        if !valid {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "Position relation recording requires one complete Position intent",
+            ));
+        }
+        position
+            .validate_programming()
+            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))?;
+        let identity = recording_identity(&envelope)?;
+        self.apply_preset_recording(envelope, ports, identity, Some(position), false)
     }
 
     fn apply_preset_recording(
@@ -49,6 +82,8 @@ impl ProgrammingService {
         envelope: ActionEnvelope<ProgrammingPresetRecordRequest>,
         ports: &dyn ProgrammingPresetRecordingPorts,
         identity: RecordingIdentity,
+        position: Option<light_programmer::Preset>,
+        publish_alignment: bool,
     ) -> Result<ProgrammingPresetRecordResult, ActionError> {
         ports.authorize_preset_recording(&envelope.context)?;
         self.assert_preset_owner(identity.session_id)?;
@@ -56,12 +91,25 @@ impl ProgrammingService {
         if let Some(result) = self.cached_preset_recording(&identity, &envelope.command)? {
             return Ok(result);
         }
-        self.programmers.deactivate_alignment(identity.session_id);
         self.assert_normal_capture(identity.session_id)?;
-        let captured = self.capture_preset(identity.session_id, &envelope.command)?;
+        let captured = match position {
+            Some(mut captured) => {
+                captured.number = envelope.command.address.number;
+                captured.name = envelope.command.name.clone();
+                captured
+            }
+            None => self.capture_preset(identity.session_id, &envelope.command)?,
+        };
         let commit = ProgrammingPresetCommit::new(&envelope.command, captured);
         let completion = ports.commit_preset(&envelope.context, &commit)?;
+        let created = completion.created;
         let result = complete_result(&envelope, &identity.request_id, completion)?;
+        if publish_alignment {
+            self.finish_alignment(&envelope.context, identity.session_id);
+        } else {
+            // The enclosing entered command publishes its complete interaction delta once.
+            self.programmers.deactivate_alignment(identity.session_id);
+        }
         if result.outcome.event_sequence().is_some() {
             let projection = result.outcome.projection();
             self.remember_show_mutation(
@@ -73,10 +121,7 @@ impl ProgrammingService {
                         kind: ActiveShowObjectKind::Preset,
                         object_id: projection.object_id.clone(),
                         expected_object_revision: projection.object_revision,
-                        operation: if matches!(
-                            envelope.command.expected_object_revision,
-                            ProgrammingPresetRevisionExpectation::Exact(0)
-                        ) {
+                        operation: if created {
                             ProgrammingShowUndoOperation::DeleteCreated
                         } else {
                             ProgrammingShowUndoOperation::RestorePrevious
@@ -258,7 +303,11 @@ fn validate_completion(
         (Some(expected), false) => completion.show_revision == expected,
         (None, _) => true,
     };
-    if event_matches && revision_matches && show_revision_matches {
+    if event_matches
+        && revision_matches
+        && show_revision_matches
+        && (!completion.created || completion.changed)
+    {
         Ok(())
     } else {
         Err(invalid_completion())

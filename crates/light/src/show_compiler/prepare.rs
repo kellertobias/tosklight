@@ -41,6 +41,7 @@ pub fn prepare_normalized_show_candidate_incremental(
     super::migrations::stage_touched_object_migrations(document, &mut transaction)?;
     let mut dirty = ShowCompileDirty {
         fixtures: transaction.patch_changed() || transaction.fixture_profile_revisions_changed(),
+        native_sources: transaction.fixture_profile_revisions_changed(),
         ..ShowCompileDirty::default()
     };
     for kind in transaction.changed_object_kinds() {

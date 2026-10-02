@@ -1,5 +1,6 @@
 use super::*;
 
+mod finalization;
 #[path = "tests_migration_riders.rs"]
 mod migration_riders;
 mod output_routes;

@@ -59,7 +59,6 @@ impl ProgrammingService {
         if let Some(result) = self.cached_cue_recording(&identity, &envelope.command)? {
             return Ok(result);
         }
-        self.programmers.deactivate_alignment(identity.session_id);
         let environment = ports.cue_recording_environment(&envelope.context, &envelope.command)?;
         validate_environment(&envelope.command, &environment)?;
         let capture = self.capture_cue(identity.session_id, envelope.command.capture_policy)?;
@@ -68,6 +67,7 @@ impl ProgrammingService {
         let commit = ProgrammingCueCommit::new(envelope.command.clone(), environment, capture);
         let completion = ports.commit_cue(&envelope.context, &commit)?;
         validate_completion(&envelope.command, &commit, &completion)?;
+        self.finish_alignment(&envelope.context, identity.session_id);
         let activation =
             activate_if_authorized(&envelope, &commit, &completion, captured_source, ports)?;
         if activation.succeeded {

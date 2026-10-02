@@ -1,12 +1,17 @@
 mod descriptors;
+mod dynamic_identity;
 mod fixtures;
+mod installed_color;
 mod locations;
+mod native_color;
+mod programming;
 mod rewrite;
 
 use super::ImportObjectDescriptor;
 use light_show::PortableShowObject;
 
 pub(super) use fixtures::FixtureIdentityCatalog;
+pub(super) use native_color::PinnedProfileMap;
 pub(super) use rewrite::{IdentityMap, ProfileMap, rewrite_body};
 
 #[derive(Clone, Copy)]

@@ -53,6 +53,7 @@ impl OutputRuntimeService {
         validate_expectation(envelope.command.expectation, before)?;
         let desired = envelope.command.desired(before);
         let result = if desired == before {
+            ports.reassert(&envelope.context, envelope.command);
             unchanged(&envelope.context, before)
         } else {
             let next_revision = before.revision.checked_add(1).ok_or_else(|| {
