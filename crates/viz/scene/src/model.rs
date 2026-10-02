@@ -149,6 +149,11 @@ impl ModelPartKind {
 /// One drawable piece of a model.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct ModelPart {
+    /// Exact profile geometry binding after neutral-pose baking.
+    #[serde(default)]
+    pub geometry_node_id: Option<uuid::Uuid>,
+    #[serde(default)]
+    pub node_ancestry: Vec<String>,
     pub name: String,
     pub kind: ModelPartKind,
     /// Interleaved position and normal, already in fixture space.
@@ -238,13 +243,13 @@ fn read_glb_nodes_limited(
             .collect()
     };
 
-    let mut stack: Vec<(usize, Mat4, ModelPartKind)> = roots
+    let mut stack: Vec<(usize, Mat4, ModelPartKind, Vec<String>)> = roots
         .into_iter()
-        .map(|index| (index, Mat4::IDENTITY, ModelPartKind::Base))
+        .map(|index| (index, Mat4::IDENTITY, ModelPartKind::Base, Vec::new()))
         .collect();
     let mut visited = vec![false; nodes.len()];
 
-    while let Some((index, parent, inherited)) = stack.pop() {
+    while let Some((index, parent, inherited, mut ancestry)) = stack.pop() {
         let Some(node) = nodes.get(index) else {
             continue;
         };
@@ -260,6 +265,7 @@ fn read_glb_nodes_limited(
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default()
             .to_owned();
+        ancestry.push(name.clone());
         let transform = parent * node_transform(node);
         let kind = match ModelPartKind::from_node_name(&name) {
             ModelPartKind::Base => inherited,
@@ -271,7 +277,8 @@ fn read_glb_nodes_limited(
         {
             match read_mesh(&document, binary, mesh, transform, &name, kind) {
                 Ok(parts) => {
-                    for part in parts {
+                    for mut part in parts {
+                        part.node_ancestry = ancestry.clone();
                         for position in &part.positions {
                             let point = Vec3::from_array(*position);
                             bounds_min = bounds_min.min(point);
@@ -291,7 +298,7 @@ fn read_glb_nodes_limited(
             .unwrap_or_default()
         {
             if let Some(child) = child.as_u64() {
-                stack.push((child as usize, transform, kind));
+                stack.push((child as usize, transform, kind, ancestry.clone()));
             }
         }
     }
@@ -622,6 +629,8 @@ fn read_mesh(
         let surface = primitive_surface(document, primitive);
 
         parts.push(ModelPart {
+            geometry_node_id: None,
+            node_ancestry: Vec::new(),
             name: name.to_owned(),
             kind,
             positions: positions

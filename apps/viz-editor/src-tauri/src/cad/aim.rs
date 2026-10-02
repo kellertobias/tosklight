@@ -54,12 +54,9 @@ impl EmitterFrame {
     }
 }
 
-/// The placement's rotation in model axes: desk `(rx, ry, rz)` as `Rx(rx) · Ry(rz) · Rz(ry)`,
-/// exactly as `rotateModelPoint` turns the plan's model geometry.
+/// Basis-conjugated desk XYZ rotation, shared with native Stage.
 fn mounting_rotation(rotation: [f32; 3]) -> Quat {
-    Quat::from_rotation_x(rotation[0].to_radians())
-        * Quat::from_rotation_y(rotation[2].to_radians())
-        * Quat::from_rotation_z(rotation[1].to_radians())
+    viz_project::viz_scene::euler_degrees(viz_project::viz_scene::desk_rotation_to_world(rotation))
 }
 
 /// Model (renderer) axes to plan (desk) axes: the inverse of the Visualizer's `(x, z, −y)`.
@@ -287,8 +284,8 @@ mod tests {
         for rotation in [[0.0, 0.0, 0.0], [0.0, 0.0, 90.0], [-20.0, 0.0, -135.0]] {
             let (offset, direction) = frame.aimed(rotation, 45.0);
             let fixture = viz_scene::FixtureInstance {
-                // Desk (rx, ry, rz) is the renderer's (rx, rz, ry).
-                rotation_degrees: Vec3::new(rotation[0], rotation[2], rotation[1]),
+                // Change the desk basis exactly once.
+                rotation_degrees: viz_scene::desk_rotation_to_world(rotation),
                 bracket_degrees: 45.0,
                 bracket_hinge: Some(hinge * chosen.scale),
                 ..viz_scene::FixtureInstance::default()

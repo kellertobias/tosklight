@@ -182,6 +182,10 @@ pub struct MultipatchDto {
     pub invert_pan: bool,
     #[serde(default)]
     pub invert_tilt: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_calibration: Option<light_fixture::InstalledPositionCalibration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_calibration: Option<light_fixture::InstalledColorCalibration>,
     #[serde(default)]
     pub bracket_angle: f32,
     #[serde(default)]
@@ -224,6 +228,10 @@ pub struct FixtureDto {
     pub invert_pan: bool,
     #[serde(default)]
     pub invert_tilt: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_calibration: Option<light_fixture::InstalledPositionCalibration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_calibration: Option<light_fixture::InstalledColorCalibration>,
     /// Degrees the mounting bracket is set to, positive nose-down.
     #[serde(default)]
     pub bracket_angle: f32,
@@ -334,6 +342,9 @@ impl From<SceneryOptionsDto> for SceneryOptions {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModeDto {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub native_color_identities: Vec<light_fixture::NativeColorIdentity>,
+    pub position_calibration_identity: Option<light_fixture::PositionCalibrationIdentity>,
     pub mode_id: Uuid,
     pub name: String,
     pub splits: Vec<ModeSplitDto>,
@@ -471,6 +482,8 @@ impl From<PatchFixtureProjection> for FixtureDto {
             grand_master_enabled: patch.grand_master_enabled,
             invert_pan: patch.invert_pan,
             invert_tilt: patch.invert_tilt,
+            position_calibration: patch.position_calibration.clone(),
+            color_calibration: patch.color_calibration.clone(),
             bracket_angle: patch.bracket_angle,
             shaper_angle: patch.shaper_angle,
             installed_appearance: InstalledAppearanceDto::from(&patch.installed_appearance),
@@ -532,6 +545,8 @@ impl From<PatchProfileRevisionProjection> for ProfileRevisionDto {
 impl From<PatchModeProjection> for ModeDto {
     fn from(mode: PatchModeProjection) -> Self {
         Self {
+            native_color_identities: mode.native_color_identities,
+            position_calibration_identity: mode.position_calibration_identity,
             mode_id: mode.mode_id,
             name: mode.name,
             splits: mode
@@ -596,6 +611,8 @@ impl From<&MultiPatchInstance> for MultipatchDto {
             rotation: VectorDto::from(&value.rotation),
             invert_pan: value.invert_pan,
             invert_tilt: value.invert_tilt,
+            position_calibration: value.position_calibration.clone(),
+            color_calibration: value.color_calibration.clone(),
             bracket_angle: value.bracket_angle,
             shaper_angle: value.shaper_angle,
             installed_appearance: InstalledAppearanceDto::from(&value.installed_appearance),
@@ -727,6 +744,8 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                 grand_master_enabled: dto.grand_master_enabled,
                 invert_pan: dto.invert_pan,
                 invert_tilt: dto.invert_tilt,
+                position_calibration: dto.position_calibration.clone(),
+                color_calibration: dto.color_calibration.clone(),
                 bracket_angle: dto.bracket_angle,
                 shaper_angle: dto.shaper_angle,
                 installed_appearance: InstalledFixtureAppearance::from(dto.installed_appearance),
@@ -775,6 +794,8 @@ impl From<MultipatchDto> for MultiPatchInstance {
             },
             invert_pan: dto.invert_pan,
             invert_tilt: dto.invert_tilt,
+            position_calibration: dto.position_calibration.clone(),
+            color_calibration: dto.color_calibration.clone(),
             bracket_angle: dto.bracket_angle,
             shaper_angle: dto.shaper_angle,
             installed_appearance: InstalledFixtureAppearance::from(dto.installed_appearance),
@@ -1133,5 +1154,67 @@ mod tests {
             command.placements[0].splits[0].mode,
             PatchSplitPlacementMode::Consecutive
         );
+    }
+    #[test]
+    fn position_calibration_survives_architect_patch_read_edit_write() {
+        let color = serde_json::json!({"version":1,"revision":2,"paths":[{
+            "source_identity":{"profile_id":Uuid::new_v4(),"profile_revision":1,"profile_digest":"a".repeat(64),
+                "mode_id":Uuid::new_v4(),"head_id":Uuid::new_v4(),"path_id":Uuid::new_v4(),"model_revision":3,"native_layout_signature":"b".repeat(64)},
+            "emitters":[{"emitter_id":Uuid::new_v4(),"output_gain":0.0,"provenance":{"quality":"estimated","revision":1}}],"measurements":[]
+        }]});
+        let calibration = serde_json::json!({
+            "revision": 3, "quality": "measured", "source": "Rig record",
+            "pan_zero_degrees": -720.5, "tilt_zero_degrees": 12.25,
+        });
+        let fixture_id = Uuid::new_v4();
+        let copy_id = Uuid::new_v4();
+        let mut fixture: FixtureDto = serde_json::from_value(serde_json::json!({
+            "fixtureId": fixture_id, "fixtureNumber": 1, "virtualFixtureNumber": null,
+            "name": "Calibrated", "profileId": Uuid::new_v4(), "profileRevision": 1,
+            "modeId": Uuid::new_v4(), "splitPatches": [{"split":1,"universe":null,"address":null}],
+            "layerId": "default", "directControl": null,
+            "location": {"x":1000,"y":2000,"z":3000}, "rotation": {"x":0,"y":0,"z":0},
+            "colorCalibration":color,
+            "positionCalibration": calibration, "moveInBlackEnabled": true, "moveInBlackDelayMillis": 0,
+            "highlightOverrides": [], "multipatch": [{
+                "id":copy_id,"name":"Copy","splitPatches":[{"split":1,"universe":null,"address":null}],
+                "location":{"x":0,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0},
+                "positionCalibration":{"pan_zero_degrees":90}, "invertPan":true,
+                "colorCalibration":color,
+            }],
+        })).unwrap();
+        fixture.name = "Renamed without recalibrating".into();
+        let candidate = PatchFixtureCandidate::from(fixture);
+        assert_eq!(
+            candidate
+                .patch
+                .position_calibration
+                .as_ref()
+                .unwrap()
+                .pan_zero_degrees,
+            -720.5
+        );
+        assert_eq!(
+            candidate.patch.multipatch[0]
+                .position_calibration
+                .as_ref()
+                .unwrap()
+                .pan_zero_degrees,
+            90.0
+        );
+        let projection = PatchFixtureProjection {
+            fixture_revision: 1,
+            profile: candidate.profile,
+            patch: candidate.patch,
+        };
+        let returned = serde_json::to_value(FixtureDto::from(projection)).unwrap();
+        assert_eq!(returned["positionCalibration"], calibration);
+        assert_eq!(returned["colorCalibration"], color);
+        assert_eq!(returned["multipatch"][0]["colorCalibration"], color);
+        assert_eq!(
+            returned["multipatch"][0]["positionCalibration"]["pan_zero_degrees"],
+            90.0
+        );
+        assert_eq!(returned["multipatch"][0]["invertPan"], true);
     }
 }

@@ -59,6 +59,8 @@ fn tilt_turns_the_head_about_its_trunnions_and_leaves_the_base_alone() {
     use viz_scene::{FixtureModel, ModelPart, ModelPartKind};
 
     let part = |name: &str, kind: ModelPartKind, height: f32| ModelPart {
+        geometry_node_id: None,
+        node_ancestry: Vec::new(),
         name: name.into(),
         kind,
         positions: vec![[0.0, height, 0.0], [0.1, height, 0.0], [0.0, height, 0.1]],
@@ -376,6 +378,8 @@ fn shipped_profile_svg_reaches_the_literal_plan_artwork_mesh() {
         profile: std::sync::Arc::new(profile),
         mode_id,
         instances: vec![viz_project::PhysicalInstance {
+            color_calibration: None,
+            position_calibration: None,
             model_scale: 1.0,
             scenery_size_metres: None,
             scenery_options: Default::default(),
@@ -892,6 +896,8 @@ mod lines_view {
     pub(super) fn package_model() -> FixtureModel {
         FixtureModel {
             parts: vec![ModelPart {
+                geometry_node_id: None,
+                node_ancestry: Vec::new(),
                 name: "authored-body".into(),
                 kind: ModelPartKind::Base,
                 positions: vec![[-0.2, -0.3, 0.0], [0.2, -0.3, 0.0], [0.0, 0.3, 0.0]],
@@ -1556,6 +1562,8 @@ mod selection {
     fn fixture_model() -> FixtureModel {
         FixtureModel {
             parts: vec![ModelPart {
+                geometry_node_id: None,
+                node_ancestry: Vec::new(),
                 name: "body".into(),
                 kind: ModelPartKind::Base,
                 positions: vec![[-0.2, -0.3, 0.0], [0.2, -0.3, 0.0], [0.0, 0.3, 0.0]],
@@ -1841,4 +1849,26 @@ fn a_lines_view_draws_the_model_without_an_emitter_aperture() {
         "the emitting face belongs only to a simulated-light view"
     );
     assert!(!frame.lines.is_empty(), "and the aim line is still drawn");
+}
+
+#[test]
+fn predicted_source_xyz_is_not_tinted_again_by_nominal_profile_temperature() {
+    let mut scene = Scene::default();
+    let mut lamp = fixture();
+    lamp.installed_colour = [1., 0.4, 0.1];
+    scene.fixtures.push(lamp);
+    scene.emitters.push(emitter());
+    let mut values = SceneValues::default();
+    values.resize(1);
+    let value = &mut values.emitters[0];
+    value.intensity = 1.;
+    value.colour = [0.8, 0.4, 0.2];
+    value.physical_color = Some(viz_scene::PhysicalColorState {
+        visible_complete: true,
+        ..Default::default()
+    });
+    let expected = Vec3::from(value.colour);
+    let frame = build(&scene, &values, &FrameStyle::default());
+    assert!((Vec3::from_slice(&frame.beams[0].colour[..3]) - expected).length() < 1e-6);
+    assert!((semantic_lights(&scene, &values)[0].colour - expected).length() < 1e-6);
 }

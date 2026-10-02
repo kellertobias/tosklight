@@ -150,3 +150,64 @@ fn a_layer_preview_requests_alpha_preservation_from_the_master_shader() {
     let program = MasterUniform::new(&MasterState::default(), None, false, None);
     assert_eq!(program.flip_mask[3], 0.0);
 }
+
+#[test]
+fn the_color_uniforms_pack_the_decoded_media_color_and_keep_dimmers_separate() {
+    let mut slots = [0u8; media_domain::personality::LAYER_SLOTS as usize];
+    use media_domain::personality::channels::layer as channel;
+    slots[channel::DIMMER] = 102;
+    slots[channel::MAGENTA] = 128;
+    slots[channel::YELLOW] = 255;
+    slots[channel::GRAYSCALE] = 191;
+    let layer = media_domain::personality::decode::layer_state(&slots);
+    let color = media_domain::MediaColor::of_layer(&layer);
+    let uniform = LayerUniform::new(
+        &layer,
+        Size::new(4, 4),
+        Size::new(4, 4),
+        None,
+        OutputId::default(),
+        Timestamp::ZERO,
+    );
+    assert_eq!(
+        uniform.tint,
+        [color.tint.red, color.tint.green, color.tint.blue, 0.4]
+    );
+    assert_eq!(uniform.controls, [191.0 / 255.0, 0.0, 0.0, 0.0]);
+
+    let out_of_range = LayerState {
+        grayscale: 1.5,
+        ..Default::default()
+    };
+    let clamped = LayerUniform::new(
+        &out_of_range,
+        Size::new(4, 4),
+        Size::new(4, 4),
+        None,
+        OutputId::default(),
+        Timestamp::ZERO,
+    );
+    assert_eq!(
+        clamped.controls[0], 1.0,
+        "White Blend is clamped before the shader"
+    );
+
+    let master = MasterState {
+        tint: Tint::new(1.0, 0.5, 0.25),
+        dimmer: 0.3,
+        ..Default::default()
+    };
+    let packed = MasterUniform::new(&master, None, false, None);
+    assert_eq!(packed.tint, [1.0, 0.5, 0.25, 0.3]);
+}
+
+#[test]
+fn master_shader_with_the_linear_color_stage_is_valid_wgsl() {
+    let module = naga::front::wgsl::parse_str(include_str!("../shaders/master.wgsl")).unwrap();
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .unwrap();
+}

@@ -174,10 +174,8 @@ export function FileBar({
 			{!browser && <output aria-live="polite" className="viz-editor-status">{status}</output>}
 			{pendingMvr && (
 				<MvrImport
-					// Keyed by the archive, so choosing another one starts its own decisions
-					// rather than inheriting the last archive's.
-					key={pendingMvr.path}
-					path={pendingMvr.path}
+					// Each prepared preview starts its own decisions.
+					key={pendingMvr.preview.token}
 					preview={pendingMvr.preview}
 					onImported={(summary) => finishMvr(summary, true)}
 					onCancel={() =>

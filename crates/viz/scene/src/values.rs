@@ -11,6 +11,8 @@ use uuid::Uuid;
 /// [`crate::Scene::emitters`].
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct SceneValues {
+    #[serde(default)]
+    pub physical_positions: Vec<crate::PhysicalPositionValues>,
     pub emitters: Vec<EmitterValues>,
     /// Scan paths, parallel to [`Self::emitters`]. Every entry exists; only laser emitters ever
     /// have points in theirs.
@@ -77,6 +79,7 @@ impl SceneValues {
     /// targets. Replacing all three every time a 10 Hz DMX snapshot arrives makes a moving head
     /// repeatedly jump back to its provider-side home position.
     pub fn retain_visual_motion_runtime_from(&mut self, previous: &Self) {
+        self.retain_calibrated_motion_from(previous);
         fn retain_kinematics(next: &mut PhysicalMotionState, previous: &PhysicalMotionState) {
             next.position_degrees = previous.position_degrees;
             next.velocity_degrees_per_second = previous.velocity_degrees_per_second;
@@ -178,7 +181,8 @@ impl SceneValues {
                     (index as f32 + 0.5) / emitter.gobo_wheel_motion.slot_count.max(1) as f32;
             }
             emitter.colour_wheel_motion.advance(elapsed);
-            if let Some(index) = emitter.colour_wheel_motion.visible_slot()
+            if emitter.physical_color.is_none()
+                && let Some(index) = emitter.colour_wheel_motion.visible_slot()
                 && let Some(colour) = emitter.colour_wheel_palette.get(index)
             {
                 emitter.colour = *colour;
@@ -192,27 +196,32 @@ impl SceneValues {
     /// motion metadata. A position target which has settled is static; a velocity target is
     /// time-driven even while it is still accelerating from zero.
     pub fn is_time_driven(&self, persistence: &PersistencePreference) -> bool {
-        self.emitters.iter().any(|emitter| {
-            (persistence.is_active()
-                && (emitter.held_intensity > emitter.visible_intensity() + f32::EPSILON
+        self.physical_positions
+            .iter()
+            .any(|p| p.axes.iter().any(|a| a.motion.is_moving()))
+            || self.emitters.iter().any(|emitter| {
+                (persistence.is_active()
+                    && (emitter.held_intensity > emitter.visible_intensity() + f32::EPSILON
+                        || emitter
+                            .cells
+                            .iter()
+                            .any(|cell| cell.held_intensity > cell.intensity + f32::EPSILON)))
                     || emitter
-                        .cells
+                        .gobo_wheels
                         .iter()
-                        .any(|cell| cell.held_intensity > cell.intensity + f32::EPSILON)))
-                || emitter
-                    .gobo_wheels
-                    .iter()
-                    .chain(&emitter.prism_wheels)
-                    .any(|wheel| {
-                        wheel.rotation_motion.is_moving() || wheel.wheel_motion.motion.is_moving()
-                    })
-                || emitter.pan_motion.is_moving()
-                || emitter.tilt_motion.is_moving()
-                || emitter.gobo_rotation_motion.is_moving()
-                || emitter.prism_rotation_motion.is_moving()
-                || emitter.gobo_wheel_motion.motion.is_moving()
-                || emitter.colour_wheel_motion.motion.is_moving()
-        }) || self.laser_scans.iter().any(|scan| !scan.points.is_empty())
+                        .chain(&emitter.prism_wheels)
+                        .any(|wheel| {
+                            wheel.rotation_motion.is_moving()
+                                || wheel.wheel_motion.motion.is_moving()
+                        })
+                    || emitter.pan_motion.is_moving()
+                    || emitter.tilt_motion.is_moving()
+                    || emitter.gobo_rotation_motion.is_moving()
+                    || emitter.prism_rotation_motion.is_moving()
+                    || emitter.gobo_wheel_motion.motion.is_moving()
+                    || emitter.colour_wheel_motion.motion.is_moving()
+            })
+            || self.laser_scans.iter().any(|scan| !scan.points.is_empty())
             || self
                 .effect_frames
                 .iter()
@@ -231,10 +240,36 @@ impl SceneValues {
     /// its look instead of going black for however long the desk holds the same frame. A head
     /// that is genuinely new starts at its defaults.
     pub fn carry_over(&mut self, previous: &Scene, next: &Scene) {
-        let mut held: HashMap<(Uuid, u16), (EmitterValues, LaserScan, EffectFrame)> =
+        // Authored emitter UUID distinguishes two lenses driven by one logical head. Legacy
+        // synthetic scenes retain per-head ordering without depending on global emitter indices.
+        fn keys(scene: &Scene) -> Vec<(Uuid, u16, Uuid)> {
+            let mut ordinal = HashMap::<(Uuid, u16), u128>::new();
+            scene
+                .emitters
+                .iter()
+                .enumerate()
+                .map(|(i, e)| {
+                    let instance = scene
+                        .fixtures
+                        .get(e.fixture_index as usize)
+                        .map_or(Uuid::nil(), |f| f.instance_id);
+                    let nth = ordinal.entry((instance, e.head_index)).or_default();
+                    let id = scene
+                        .emitter_ids
+                        .get(i)
+                        .copied()
+                        .unwrap_or_else(|| Uuid::from_u128(*nth));
+                    *nth += 1;
+                    (instance, e.head_index, id)
+                })
+                .collect()
+        }
+        let previous_keys = keys(previous);
+        let next_keys = keys(next);
+        let mut held: HashMap<(Uuid, u16, Uuid), (EmitterValues, LaserScan, EffectFrame)> =
             HashMap::with_capacity(previous.emitters.len());
         for (index, emitter) in previous.emitters.iter().enumerate() {
-            let Some(fixture) = previous.fixtures.get(emitter.fixture_index as usize) else {
+            let Some(_) = previous.fixtures.get(emitter.fixture_index as usize) else {
                 continue;
             };
             let Some(values) = self.emitters.get(index) else {
@@ -242,18 +277,16 @@ impl SceneValues {
             };
             let scan = self.laser_scans.get(index).cloned().unwrap_or_default();
             let effect = self.effect_frames.get(index).cloned().unwrap_or_default();
-            held.insert(
-                (fixture.instance_id, emitter.head_index),
-                (values.clone(), scan, effect),
-            );
+            held.insert(previous_keys[index], (values.clone(), scan, effect));
         }
         let carried: Vec<_> = next
             .emitters
             .iter()
-            .map(|emitter| {
+            .enumerate()
+            .map(|(index, emitter)| {
                 next.fixtures
                     .get(emitter.fixture_index as usize)
-                    .and_then(|fixture| held.remove(&(fixture.instance_id, emitter.head_index)))
+                    .and_then(|_| held.remove(&next_keys[index]))
                     .unwrap_or_default()
             })
             .collect();
@@ -375,6 +408,14 @@ pub struct EmitterValues {
     /// Raw additive primary drive, independent of mixed beam colour.
     #[serde(default)]
     pub source_primaries: [f32; 3],
+    #[serde(default)]
+    pub physical_color: Option<PhysicalColorState>,
+    #[serde(default)]
+    pub uv_drive: f32,
+    #[serde(default)]
+    pub physical_optics: Option<PhysicalOpticsState>,
+    #[serde(default)]
+    pub physical_pose: Option<crate::PhysicalPoseState>,
     /// Pan parameter `0..=1` mapped through the emitter's pan axis.
     pub pan: f32,
     /// Simulated physical Pan. Its authored zero is the geometry node's local transform.
@@ -448,6 +489,10 @@ impl Default for EmitterValues {
             intensity: 0.0,
             colour: [1.0, 1.0, 1.0],
             source_primaries: [0.0; 3],
+            physical_color: None,
+            uv_drive: 0.,
+            physical_optics: None,
+            physical_pose: None,
             pan: 0.5,
             pan_motion: PhysicalMotionState::default(),
             tilt: 0.5,
@@ -695,9 +740,29 @@ impl EmitterValues {
         FACETS[index]
     }
 
-    /// Effective visible intensity including the shutter gate.
+    fn has_visible_output(&self) -> bool {
+        // An authoritative zero visible prediction must not draw an opaque black beam. Native
+        // dimmer and UV drive remain independent, including unknown UV spill and measured zero.
+        self.physical_color.is_none() || self.colour.iter().any(|c| *c > 0.0)
+    }
+
+    /// Effective visible intensity including the shutter gate and known visible emission.
     pub fn visible_intensity(&self) -> f32 {
-        (self.intensity * self.shutter).clamp(0.0, 1.0)
+        if self.has_visible_output() {
+            (self.intensity * self.shutter).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// Visible display intensity with the existing persistence tail. A tail cannot turn a
+    /// physically black/UV-only color into an opaque cone when visible output is absent.
+    pub fn retained_visible_intensity(&self) -> f32 {
+        if self.has_visible_output() {
+            self.held_intensity.max(self.visible_intensity())
+        } else {
+            0.0
+        }
     }
 }
 
@@ -709,6 +774,41 @@ mod tests {
         FixtureInstance,
     };
     use glam::Vec3;
+
+    #[test]
+    fn physical_uv_only_has_no_visible_persistence_without_changing_native_drive() {
+        let mut value = EmitterValues {
+            intensity: 1.0,
+            shutter: 1.0,
+            held_intensity: 1.0,
+            colour: [0.0; 3],
+            uv_drive: 1.0,
+            physical_color: Some(PhysicalColorState::default()),
+            ..Default::default()
+        };
+        assert_eq!(value.visible_intensity(), 0.0);
+        assert_eq!(value.retained_visible_intensity(), 0.0);
+        assert_eq!((value.intensity, value.uv_drive), (1.0, 1.0));
+        value.physical_color.as_mut().unwrap().visible_complete = true;
+        assert_eq!(
+            value.retained_visible_intensity(),
+            0.0,
+            "measured zero is also invisible"
+        );
+        value.colour[0] = 0.01;
+        assert_eq!(
+            value.visible_intensity(),
+            1.0,
+            "known visible color retains its encoded level"
+        );
+        value.colour = [0.0; 3];
+        value.physical_color = None;
+        assert_eq!(
+            value.retained_visible_intensity(),
+            1.0,
+            "legacy render semantics stay unchanged"
+        );
+    }
 
     fn fixture(instance_id: Uuid, name: &str) -> FixtureInstance {
         FixtureInstance {
@@ -1125,4 +1225,27 @@ pub struct ScanPoint {
     /// both a timing and a brightness: a point the scanner dwells on receives proportionally more
     /// of the frame's light, which is why the corners of a real laser figure are the bright parts.
     pub dwell: f32,
+}
+
+/// Passive prediction metadata. UV is native drive, never visible violet or optical watts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PhysicalColorState {
+    pub known_xyz: [f32; 3],
+    pub visible_complete: bool,
+    /// 0 unknown, 1 estimated, 2 manufacturer, 3 measured.
+    pub quality: u8,
+    pub flags: u32,
+    pub uv_drive: f32,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PhysicalOpticsState {
+    /// Nominal distribution fitted to the authored opening convention, not measured photometry.
+    pub zoom_shape_half_angle: Option<f32>,
+    pub shape_nominal: bool,
+    /// None means no known angle. An angle without a convention remains uncertain.
+    pub zoom_full_degrees: Option<f32>,
+    pub zoom_is_field: Option<bool>,
+    pub zoom_uncertain: bool,
+    pub focus_uncertain: bool,
+    pub focus_nominal: bool,
 }

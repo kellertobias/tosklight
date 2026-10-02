@@ -12,9 +12,22 @@ use viz_scene::{
     PhysicalMotionTarget, Scene, SceneValues,
 };
 
+/// Borrowed final-native record; transport ownership stays outside the projection crate.
+pub struct NativeInstanceValues<'a> {
+    pub fixture_id: uuid::Uuid,
+    pub instance_id: uuid::Uuid,
+    pub native_identity: &'a str,
+    pub raw: &'a [u32],
+    pub owned_channels: Option<&'a [bool]>,
+}
+
 /// Holds the latest frame per logical universe and applies it to the emitter values.
 pub struct Decoder {
     bindings: Vec<EmitterBinding>,
+    physical: Vec<crate::physical::PhysicalRuntime>,
+    physical_indices: Vec<Option<usize>>,
+    physical_instances: HashMap<uuid::Uuid, usize>,
+    native_updated: Vec<bool>,
     external_camera: Option<ExternalCameraBinding>,
     /// The 3D Points with a DMX address, read off the wire like any lantern.
     position_points: Vec<PositionPointBinding>,
@@ -27,6 +40,7 @@ pub struct Decoder {
     /// When the previous decode happened. A strobe gate is integrated from here to now rather
     /// than sampled at now, which is the difference between a strobe and an aliasing artefact.
     last_time_seconds: Option<f32>,
+    previous_time_seconds: Option<f32>,
 }
 
 impl Decoder {
@@ -44,7 +58,28 @@ impl Decoder {
                 readers.entry(*universe).or_default().push(index);
             }
         }
+        let mut physical = Vec::<crate::physical::PhysicalRuntime>::new();
+        let mut by_instance = HashMap::new();
+        let physical_indices = bindings
+            .iter()
+            .map(|binding| {
+                binding.physical.as_ref().map(|binding| {
+                    *by_instance
+                        .entry(binding.plan.instance_id)
+                        .or_insert_with(|| {
+                            let i = physical.len();
+                            physical
+                                .push(crate::physical::PhysicalRuntime::new(binding.plan.clone()));
+                            i
+                        })
+                })
+            })
+            .collect();
         Self {
+            native_updated: vec![false; physical.len()],
+            physical_instances: by_instance,
+            physical,
+            physical_indices,
             bindings,
             external_camera,
             position_points: Vec::new(),
@@ -54,7 +89,80 @@ impl Decoder {
             frame_counter: 0,
             newest_input_micros: 0,
             last_time_seconds: None,
+            previous_time_seconds: None,
         }
+    }
+
+    fn begin_time(&mut self, now: f32) -> f32 {
+        if self.last_time_seconds != Some(now) {
+            self.previous_time_seconds = self.last_time_seconds;
+            self.last_time_seconds = Some(now);
+        }
+        self.previous_time_seconds.unwrap_or(now)
+    }
+    pub fn accepts_native_snapshot<'a>(
+        &self,
+        identities: impl IntoIterator<Item = (uuid::Uuid, &'a str)>,
+    ) -> bool {
+        let identities: HashMap<_, _> = identities.into_iter().collect();
+        self.physical.iter().all(|p| {
+            identities
+                .get(&p.plan.instance_id)
+                .is_some_and(|id| *id == p.plan.native_identity)
+        })
+    }
+
+    /// Read complete server-resolved raw values without advertising private fixture buffers as
+    /// network universes. Live fills genuinely unpatched channels; Preload replaces only explicitly owned channels.
+    pub fn apply_native<'a>(
+        &mut self,
+        scene: &Scene,
+        records: impl IntoIterator<Item = NativeInstanceValues<'a>>,
+        preload: bool,
+        values: &mut SceneValues,
+        time_seconds: f32,
+    ) -> usize {
+        self.native_updated.fill(false);
+        for record in records {
+            let Some(&index) = self.physical_instances.get(&record.instance_id) else {
+                continue;
+            };
+            let runtime = &mut self.physical[index];
+            if runtime.plan.fixture_id == record.fixture_id
+                && runtime.plan.native_identity == record.native_identity
+            {
+                self.native_updated[index] =
+                    runtime.update_native(record.raw, record.owned_channels, preload, &self.frames);
+            }
+        }
+        values.resize(scene.emitters.len());
+        values.reconcile_physical_positions(scene);
+        let previous = self.begin_time(time_seconds);
+        let mut count = 0;
+        for (index, binding) in self.bindings.iter().enumerate() {
+            let Some(i) = self.physical_indices[index] else {
+                continue;
+            };
+            if !self.native_updated[i] {
+                continue;
+            }
+            if let (Some(physical), Some(emitter), Some(value)) = (
+                &binding.physical,
+                scene.emitters.get(index),
+                values.emitters.get_mut(index),
+            ) {
+                self.physical[i].decode_native(physical, emitter, value, previous, time_seconds);
+                count += 1;
+            }
+        }
+        for (i, runtime) in self.physical.iter().enumerate() {
+            if self.native_updated[i] {
+                runtime.apply_position(values);
+            }
+        }
+        values.apply_calibrated_motion(scene, 0.);
+        self.last_time_seconds = Some(time_seconds);
+        count
     }
 
     /// Read the show's patched 3D Points off the wire as well.
@@ -83,9 +191,13 @@ impl Decoder {
     /// under the same limits as a later authoritative DMX update.
     pub fn initialize_motion(&self, scene: &Scene, values: &mut SceneValues) {
         values.resize(scene.emitters.len());
+        values.reconcile_physical_positions(scene);
         values.resize_physics(scene.physics_scenery.len());
         for (index, (binding, emitter)) in self.bindings.iter().zip(&scene.emitters).enumerate() {
             let value = &mut values.emitters[index];
+            if let Some(runtime) = self.physical_indices[index].and_then(|i| self.physical.get(i)) {
+                runtime.clear_retired_ownership(value);
+            }
             set_axis_default(
                 &mut value.pan_motion,
                 binding.pan.as_ref(),
@@ -126,6 +238,10 @@ impl Decoder {
             );
             value.colour_wheel_palette = wheel_palette(binding.colour.wheel.as_ref());
         }
+        for runtime in &self.physical {
+            runtime.apply_home(values);
+        }
+        values.apply_calibrated_motion(scene, 0.);
     }
 
     /// Reconcile a retained camera pose with the newly compiled patch without resetting it.
@@ -171,12 +287,18 @@ impl Decoder {
                 affected.extend_from_slice(readers);
             }
         }
+        for physical in &mut self.physical {
+            if physical.affected(received) {
+                physical.update(&self.frames);
+            }
+        }
         affected.sort_unstable();
         affected.dedup();
 
         values.resize(scene.emitters.len());
+        values.reconcile_physical_positions(scene);
         values.resize_physics(scene.physics_scenery.len());
-        let previous_time = self.last_time_seconds.unwrap_or(time_seconds);
+        let previous_time = self.begin_time(time_seconds);
         for index in &affected {
             let Some(binding) = self.bindings.get(*index) else {
                 continue;
@@ -185,7 +307,20 @@ impl Decoder {
                 continue;
             };
             let mut value = values.emitters[*index].clone();
-            self.decode_emitter(binding, emitter, &mut value, previous_time, time_seconds);
+            SlotReader {
+                frames: &self.frames,
+                stale: &self.stale,
+            }
+            .decode_emitter(binding, emitter, &mut value, previous_time, time_seconds);
+            if let Some(runtime) = self.physical_indices[*index].and_then(|i| self.physical.get(i))
+                && let Some(physical) = &binding.physical
+            {
+                let dimmer = binding
+                    .intensity
+                    .as_ref()
+                    .map(|c| c.normalised(&self.slots(c.logical_universe)));
+                runtime.apply(physical, &mut value, dimmer, emitter);
+            }
             values.emitters[*index] = value;
             // A laser's script reads raw slots, so the decoder's job for one is to capture the
             // footprint rather than to interpret it. Running the script here would put a
@@ -236,6 +371,10 @@ impl Decoder {
         if points_affected {
             self.decode_position_points(values);
         }
+        for physical in &self.physical {
+            physical.apply_position(values);
+        }
+        values.apply_calibrated_motion(scene, 0.);
         self.last_time_seconds = Some(time_seconds);
         self.frame_counter += 1;
         values.frame = self.frame_counter;
@@ -249,8 +388,21 @@ impl Decoder {
             .copied()
             .unwrap_or([0; DMX_SLOTS])
     }
+}
 
-    fn decode_emitter(
+pub(crate) struct SlotReader<'a> {
+    pub frames: &'a HashMap<u16, [u8; DMX_SLOTS]>,
+    pub stale: &'a HashMap<u16, bool>,
+}
+impl SlotReader<'_> {
+    fn slots(&self, universe: u16) -> [u8; DMX_SLOTS] {
+        self.frames
+            .get(&universe)
+            .copied()
+            .unwrap_or([0; DMX_SLOTS])
+    }
+
+    pub(crate) fn decode_emitter(
         &self,
         binding: &EmitterBinding,
         emitter: &EmitterInstance,
@@ -266,6 +418,7 @@ impl Decoder {
 
         let colour = colour::resolve(&binding.colour, &reader);
         value.colour = colour.rgb;
+        value.uv_drive = read(&binding.colour.ultraviolet).unwrap_or(0.);
         value.source_primaries = [
             read(&binding.colour.red).unwrap_or(0.0),
             read(&binding.colour.green).unwrap_or(0.0),
@@ -762,6 +915,7 @@ mod tests {
                 dmx_to: 255,
                 attribute: AttributeKey("gobo.2.rotation".into()),
                 priority: 0,
+                physical_mapping: None,
                 angular_motion: Some(AngularMotion {
                     kind,
                     max_speed_degrees_per_second: Some(720.0),
@@ -1115,6 +1269,7 @@ mod tests {
             dmx_to: 191,
             attribute: AttributeKey("pan".into()),
             priority: 0,
+            physical_mapping: None,
             angular_motion: Some(AngularMotion {
                 kind: AngularMotionKind::AbsolutePosition,
                 max_speed_degrees_per_second: Some(180.0),

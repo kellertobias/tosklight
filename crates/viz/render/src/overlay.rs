@@ -10,7 +10,7 @@ use bytemuck::{Pod, Zeroable};
 /// cell used for panels and rules.
 pub const ATLAS_GLYPHS: usize = 95;
 /// Code points beyond ASCII that the operator surface actually uses.
-const EXTRA_GLYPHS: [char; 3] = ['\u{2192}', '\u{2022}', '\u{00b0}'];
+const EXTRA_GLYPHS: [char; 4] = ['\u{2192}', '\u{2022}', '\u{00b0}', '\u{26a0}'];
 const ATLAS_CELLS: usize = ATLAS_GLYPHS + EXTRA_GLYPHS.len() + 1;
 /// Square edge, in atlas pixels, reserved for the application icon below the glyph strip. The
 /// icon is real artwork rather than a drawn mark, so the atlas carries colour and the glyph cells

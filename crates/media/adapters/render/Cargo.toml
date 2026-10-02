@@ -20,6 +20,9 @@ winit.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
+# TL-593: the desk's semantic Color translation (shared kernel) drives the White Blend renders.
+light-core = { path = "../../../shared/core" }
+light-fixture = { path = "../../../shared/fixture" }
 png.workspace = true
 naga = { version = "30", features = ["wgsl-in"] }
 # The reference renders encode a real HAP frame and put it on screen, so the compressed upload

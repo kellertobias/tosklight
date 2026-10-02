@@ -184,6 +184,8 @@ pub struct DeskProvider {
     /// thing is not presented again. The desk serves its output at a fixed rate whether or not a
     /// level moved; the value frame counts changes, because the renderer redraws on it.
     presented_desk_output: Option<u64>,
+    /// Frame-identity admission for this connection epoch; see [`desk_output::DeskOutputAdmission`].
+    desk_output_admission: desk_output::DeskOutputAdmission,
     /// The planning window's preview values, and the revision of them already folded in.
     ///
     /// Empty for a lighting desk, which never serves them.
@@ -214,6 +216,30 @@ impl DeskProvider {
             .name("viz-desk".into())
             .spawn(move || run(worker_connection, outbox, orders, worker_stop))
             .ok();
+        Self::with_worker(connection, epoch, inbox, commands, stop, worker)
+    }
+
+    /// A provider fed by a test instead of a connection thread: the same inbox, the same
+    /// ingestion and lifecycle, but the messages a worker would send are sent by hand.
+    #[cfg(test)]
+    fn detached(connection: DeskConnection, epoch: Instant) -> (Self, Sender<Message>) {
+        let (outbox, inbox) = channel();
+        let (commands, _orders) = tokio::sync::mpsc::unbounded_channel();
+        let stop = Arc::new(AtomicBool::new(false));
+        (
+            Self::with_worker(connection, epoch, inbox, commands, stop, None),
+            outbox,
+        )
+    }
+
+    fn with_worker(
+        connection: DeskConnection,
+        epoch: Instant,
+        inbox: Receiver<Message>,
+        commands: tokio::sync::mpsc::UnboundedSender<Command>,
+        stop: Arc<AtomicBool>,
+        worker: Option<std::thread::JoinHandle<()>>,
+    ) -> Self {
         Self {
             connection,
             inbox,
@@ -234,6 +260,7 @@ impl DeskProvider {
             reported_input_micros: 0,
             value_frame: 0,
             presented_desk_output: None,
+            desk_output_admission: desk_output::DeskOutputAdmission::default(),
             preview: crate::wire::PreviewSnapshot::default(),
             selection: crate::wire::SelectionSnapshot::default(),
             desk_output: None,
@@ -278,6 +305,8 @@ impl DeskProvider {
         self.reported_input_micros = 0;
         self.scene = Some(scene);
         self.diagnostics = diagnostics;
+        // A new scene is a new source: nothing proven about the last one's frames still holds.
+        self.reset_desk_output_acceptance();
         self.pending_snapshot = true;
         self.pending_delta = false;
     }
@@ -423,7 +452,11 @@ impl DeskProvider {
     fn drain_messages(&mut self, events: &mut Vec<ProviderEvent>) {
         loop {
             match self.inbox.try_recv() {
-                Ok(Message::Connection(state)) => events.push(ProviderEvent::Connection(state)),
+                Ok(Message::Connection(state)) => {
+                    // Every connection message bounds an epoch of the worker's connection.
+                    self.reset_desk_output_acceptance();
+                    events.push(ProviderEvent::Connection(state));
+                }
                 Ok(Message::Scene {
                     plan,
                     bindings,
@@ -469,7 +502,7 @@ impl DeskProvider {
                         events.push(ProviderEvent::Values(Box::new(self.values.clone())));
                     }
                 }
-                Ok(Message::DeskOutput(value)) => self.desk_output = Some(*value),
+                Ok(Message::DeskOutput(value)) => self.queue_desk_output(*value),
                 Ok(Message::Preload2(value)) => self.preload_projection = *value,
                 Ok(Message::View(view)) => {
                     self.pending_view = self
@@ -969,10 +1002,14 @@ async fn watch(
         }
         if connection.values_from_desk_output {
             if let Some(output) = client.output_dmx().await {
+                // Older servers retain their normalized overlay. Native lanes include the
+                // desk's complete Preload and require no second volatile poll.
+                if output.native_protocol == 0
+                    && let Some(preload) = client.preload_projection().await
+                {
+                    let _ = outbox.send(Message::Preload2(Box::new(preload)));
+                }
                 let _ = outbox.send(Message::DeskOutput(Box::new(output)));
-            }
-            if let Some(preload) = client.preload_projection().await {
-                let _ = outbox.send(Message::Preload2(Box::new(preload)));
             }
         }
         let poll = if connection.values_from_desk_output {

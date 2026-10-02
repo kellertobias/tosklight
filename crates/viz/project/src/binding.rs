@@ -414,6 +414,7 @@ mod tests {
                 dmx_to: 63,
                 attribute: AttributeKey("shutter".into()),
                 priority: 0,
+                physical_mapping: None,
                 angular_motion: None,
                 behavior: ChannelFunctionBehavior::Fixed {
                     semantic_id: "closed".into(),
@@ -428,6 +429,7 @@ mod tests {
                 dmx_to: 200,
                 attribute: AttributeKey("shutter".into()),
                 priority: 1,
+                physical_mapping: None,
                 angular_motion: None,
                 behavior: ChannelFunctionBehavior::Continuous {
                     physical_min: 1.0,

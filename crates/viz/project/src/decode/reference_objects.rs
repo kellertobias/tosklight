@@ -9,7 +9,7 @@ impl Decoder {
     ///
     /// The desk writes each axis in its own axes — across the stage, upstage, up — and the
     /// renderer keeps `x` across, `y` up and `z` towards the audience, so the offset is turned by
-    /// `(x, z, -y)` and the rotation by `(x, z, y)`, the same conversion every placement takes.
+    /// `(x, z, -y)` and the rotation by basis conjugation, as for every placement.
     /// An axis the mode does not carry, or whose universe has not arrived, reads as no movement:
     /// a point is never put somewhere nothing said it was.
     pub(super) fn decode_position_points(&self, values: &mut SceneValues) {
@@ -36,7 +36,7 @@ impl Decoder {
                 fixture_id: point.fixture_id,
                 origin_metres: point.origin.to_array(),
                 offset_metres: [offset[0], offset[2], -offset[1]],
-                rotation_degrees: [turn[0], turn[2], turn[1]],
+                rotation_degrees: viz_scene::desk_rotation_to_world(turn).to_array(),
             };
             match values
                 .position_points

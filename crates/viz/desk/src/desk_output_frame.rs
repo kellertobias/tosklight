@@ -8,6 +8,7 @@ use viz_scene::SceneValues;
 pub(crate) fn desk_output_signature(
     output: &crate::wire::OutputDmxSnapshot,
     preload: Option<&crate::wire::PreloadProjection>,
+    following_preload: bool,
     scene_revision: u64,
 ) -> u64 {
     use std::hash::{Hash, Hasher};
@@ -25,6 +26,33 @@ pub(crate) fn desk_output_signature(
         point.fixture_id.hash(&mut hasher);
         for value in point.offset_metres.iter().chain(&point.rotation_degrees) {
             value.to_bits().hash(&mut hasher);
+        }
+    }
+    following_preload.hash(&mut hasher);
+    for lane in [
+        output.native.as_ref(),
+        if following_preload {
+            output.preload.as_ref()
+        } else {
+            None
+        },
+    ]
+    .into_iter()
+    .flatten()
+    {
+        lane.show_id.hash(&mut hasher);
+        for instance in &lane.instances {
+            instance.fixture_id.hash(&mut hasher);
+            instance.instance_id.hash(&mut hasher);
+            instance.native_identity.hash(&mut hasher);
+            instance.owned_channels.hash(&mut hasher);
+            instance.raw.hash(&mut hasher);
+        }
+        for point in &lane.points {
+            point.fixture_id.hash(&mut hasher);
+            for v in point.offset_metres.iter().chain(&point.rotation_degrees) {
+                v.to_bits().hash(&mut hasher);
+            }
         }
     }
     if let Some(preload) = preload {
@@ -47,4 +75,34 @@ pub(crate) fn stamp_desk_output_frame(values: &mut SceneValues, value_frame: &mu
     *value_frame = value_frame.saturating_add(1);
     values.newest_input_micros = now;
     values.frame = *value_frame;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn same_raw_with_changed_preload_ownership_is_a_new_frame() {
+        use light_wire::v2::output_control::*;
+        let mut output = OutputDmxSnapshot {
+            preload: Some(OutputNativeLane {
+                show_id: None,
+                revision: 1,
+                frame: None,
+                points: vec![],
+                instances: vec![OutputNativeInstance {
+                    fixture_id: uuid::Uuid::new_v4(),
+                    instance_id: uuid::Uuid::new_v4(),
+                    native_identity: "fixture".into(),
+                    raw: vec![64, 128],
+                    owned_channels: Some(vec![true, false]),
+                }],
+            }),
+            ..Default::default()
+        };
+        let initial = desk_output_signature(&output, None, true, 1);
+        let live = desk_output_signature(&output, None, false, 1);
+        output.preload.as_mut().unwrap().instances[0].owned_channels = Some(vec![false, true]);
+        assert_ne!(initial, desk_output_signature(&output, None, true, 1));
+        assert_eq!(live, desk_output_signature(&output, None, false, 1));
+    }
 }

@@ -528,6 +528,19 @@ fn push_model(
     let tilt_about_trunnions = Mat4::from_translation(pivot)
         * Mat4::from_quat(tilt_rotation)
         * Mat4::from_translation(-pivot);
+    let physical = scene
+        .physical_position_indices
+        .get(fixture_index)
+        .copied()
+        .flatten()
+        .and_then(|i| {
+            scene
+                .physical_positions
+                .get(i)
+                .zip(values.physical_positions.get(i))
+        });
+    let (physical_position, physical_orientation) = fixture.mounted_by(points);
+    let physical_mount = Mat4::from_rotation_translation(physical_orientation, physical_position);
     for (part_index, part) in model.parts.iter().enumerate() {
         let transform = match part.kind {
             viz_scene::ModelPartKind::Base => match mounted {
@@ -545,11 +558,24 @@ fn push_model(
             fixture_appearance::scanner_part_transform(model, part, base, pan, tilt)
                 .unwrap_or(transform)
         };
+        let transform = if let Some((plan, state)) = physical {
+            let delta = plan
+                .model_part_nodes
+                .get(part_index)
+                .copied()
+                .flatten()
+                .and_then(|node| state.node_deltas.get(node).copied().flatten());
+            delta.map_or(transform, |delta| {
+                physical_mount * Mat4::from_scale(Vec3::splat(plan.model_scale)) * delta
+            })
+        } else {
+            transform
+        };
         let emission = emitter_value.map_or(Vec3::ZERO, |value| {
             fixture_appearance::source_part_emission(
                 part,
                 value.source_primaries,
-                value.held_intensity.max(value.visible_intensity()),
+                value.retained_visible_intensity(),
                 Vec3::from(fixture.installed_colour),
             )
         });
@@ -768,6 +794,41 @@ pub fn emitter_pose(
     }
 }
 
+/// Select the physical lens pose when a declared model owns Position. Unknown geometry does
+/// not silently become a neutral achieved angle. Legacy profiles keep their explicit proxy.
+fn resolved_emitter_pose(
+    scene: &Scene,
+    fixture: &FixtureInstance,
+    emitter: &EmitterInstance,
+    value: &EmitterValues,
+    pan: f32,
+    tilt: f32,
+    points: &[viz_scene::PointPose],
+) -> Option<EmitterPose> {
+    if let Some(physical) = value.physical_pose {
+        let local = physical.local?;
+        let scale = scene
+            .physical_position_indices
+            .get(emitter.fixture_index as usize)
+            .copied()
+            .flatten()
+            .and_then(|i| scene.physical_positions.get(i))
+            .map_or(1., |p| p.model_scale);
+        let (position, mount) = fixture.mounted_by(points);
+        let local_rotation = Quat::from_mat3(&glam::Mat3::from_mat4(local));
+        let orientation = mount * local_rotation;
+        return Some(EmitterPose {
+            origin: position + mount * (local.transform_point3(Vec3::ZERO) * scale),
+            direction: (orientation * Vec3::NEG_Y).normalize_or(Vec3::NEG_Y),
+            orientation,
+            half_angle: emitter.cone_half_angle(value.zoom),
+        });
+    }
+    Some(emitter_pose(
+        fixture, emitter, pan, tilt, value.zoom, points,
+    ))
+}
+
 /// The optical state of one head, resolved from its values into what the shaders need.
 ///
 /// Zoom, iris, focus and frost all change the same two things — the shape of the cone and how
@@ -785,7 +846,10 @@ struct BeamOptics {
 }
 
 fn resolve_optics(emitter: &EmitterInstance, value: &EmitterValues) -> BeamOptics {
-    let zoomed = emitter.cone_half_angle(value.zoom);
+    let zoomed = value
+        .physical_optics
+        .and_then(|v| v.zoom_shape_half_angle)
+        .unwrap_or_else(|| emitter.cone_half_angle(value.zoom));
     // Light is flux spread over a cone, so the angle decides the intensity: the same lamp through
     // a narrower gate is brighter, and a flood laying the same light across a wall is dimmer. One
     // reference angle serves every fixture, so this holds between a beam and a flood as well as
@@ -838,37 +902,46 @@ fn push_emitters(
             continue;
         };
         let value = values.emitters.get(index).unwrap_or(&fallback);
-        let installed_colour = Vec3::from(fixture.installed_colour);
+        let installed_colour = if value.physical_color.is_some() {
+            Vec3::ONE
+        } else {
+            Vec3::from(fixture.installed_colour)
+        };
         let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
         let optics = resolve_optics(emitter, value);
-        let mut pose = emitter_pose(
+        let Some(mut pose) = resolved_emitter_pose(
+            scene,
             fixture,
             emitter,
+            value,
             pan,
             tilt,
-            value.zoom,
             &values.position_points,
-        );
+        ) else {
+            continue;
+        };
         let model = fixture
             .model
             .and_then(|index| scene.models.get(index as usize));
-        if let Some(scanner_pose) = model.and_then(|model| {
-            fixture_appearance::scanner_emitter_pose(
-                model,
-                fixture,
-                emitter,
-                pan,
-                tilt,
-                value.zoom,
-                &values.position_points,
-            )
-        }) {
+        if value.physical_pose.is_none()
+            && let Some(scanner_pose) = model.and_then(|model| {
+                fixture_appearance::scanner_emitter_pose(
+                    model,
+                    fixture,
+                    emitter,
+                    pan,
+                    tilt,
+                    value.zoom,
+                    &values.position_points,
+                )
+            })
+        {
             pose = scanner_pose;
         }
         pose.half_angle = optics.half_angle;
         // What an observer still has, not what the desk is sending this instant. For most heads
         // the two agree; for a strobe or a laser they are the whole point of the difference.
-        let intensity = value.held_intensity.max(value.visible_intensity());
+        let intensity = value.retained_visible_intensity();
         if emitter.kind == EmitterKind::Laser {
             push_laser_emitter(
                 frame,

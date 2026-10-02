@@ -114,7 +114,9 @@ impl Application {
             .min(0.25);
         self.last_persistence = now;
         values.apply_persistence(&self.preferences.persistence, since_last_frame);
+        let motion_was_active = values.is_time_driven(&self.preferences.persistence);
         values.apply_physical_motion(since_last_frame);
+        values.apply_calibrated_motion(&session.scene, since_last_frame);
 
         self.overlay.clear();
         self.hotspots.clear();
@@ -170,6 +172,7 @@ impl Application {
             notice,
             camera_control,
             time,
+            motion_was_active,
         );
         session.values = values;
         let Some(result) = result else {
@@ -220,6 +223,7 @@ impl Application {
         notice: Option<(String, bool)>,
         camera_control: ui::DmxCameraControlStatus,
         time: f32,
+        motion_was_active: bool,
     ) -> Option<Result<viz_render::FrameStats, RenderError>> {
         let renderer = self.renderer.as_mut()?;
         renderer.set_crowd_amount(self.preferences.crowd_amount);
@@ -237,8 +241,8 @@ impl Application {
             notice,
             camera_control,
         );
-        let time_driven =
-            crate::redraw::is_time_driven(values, view, &self.preferences.persistence);
+        let time_driven = motion_was_active
+            || crate::redraw::is_time_driven(values, view, &self.preferences.persistence);
         build_overlay(
             &mut self.overlay,
             &mut self.hotspots,

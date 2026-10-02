@@ -353,11 +353,11 @@ export function rotateModelPoint(
 	point: readonly [number, number, number],
 	rotation: readonly [number, number, number],
 ): [number, number, number] {
-	// Desk rotations map to renderer-world (rx, rz, ry), where the shared scene contract is
-	// Rx * Ry * Rz. Applying the rightmost rotation first keeps CAD identical to the 3D renderer.
+	// B * Rdesk * B^-1: bring the model point to desk space, apply XYZ, return to model.
+	point = [point[0], -point[2], point[1]];
 	const rx = (rotation[0] * Math.PI) / 180;
-	const ry = (rotation[2] * Math.PI) / 180;
-	const rz = (rotation[1] * Math.PI) / 180;
+	const ry = (rotation[1] * Math.PI) / 180;
+	const rz = (rotation[2] * Math.PI) / 180;
 	const cosZ = Math.cos(rz);
 	const sinZ = Math.sin(rz);
 	const afterZ: [number, number, number] = [
@@ -376,8 +376,8 @@ export function rotateModelPoint(
 	const sinX = Math.sin(rx);
 	return [
 		afterY[0],
-		afterY[1] * cosX - afterY[2] * sinX,
 		afterY[1] * sinX + afterY[2] * cosX,
+		-(afterY[1] * cosX - afterY[2] * sinX),
 	];
 }
 

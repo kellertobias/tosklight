@@ -146,7 +146,10 @@ pub(super) fn push_plot(
             continue;
         }
         let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
-        let pose = emitter_pose(fixture, emitter, pan, tilt, value.zoom, points);
+        let Some(pose) = resolved_emitter_pose(scene, fixture, emitter, value, pan, tilt, points)
+        else {
+            continue;
+        };
         // Every beam on a plan is the same colour, so the eye reads them as beams rather than
         // trying to read a colour off a line. The lamp's real colour is shown beside the symbol.
         push_aim_line(frame, pose.origin, pose, intensity, style.beam_ink);

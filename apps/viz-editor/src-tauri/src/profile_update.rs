@@ -18,7 +18,7 @@
 //!   both, with the library's copy kept in the show under it. Elements still on the old revision
 //!   keep drawing exactly as they did.
 
-use crate::contract::{MutationDto, OutcomeDto};
+use crate::contract::{MultipatchDto, MutationDto, OutcomeDto};
 use crate::session::{Session, apply_patch_mutation};
 use light_application::PatchFixtureProjection;
 use light_core::FixtureId;
@@ -239,6 +239,8 @@ fn mutation(fixture: &PatchFixtureProjection, profile: &FixtureProfile) -> Mutat
         "shaperAngle": patch.shaper_angle,
         "invertPan": patch.invert_pan,
         "invertTilt": patch.invert_tilt,
+        "positionCalibration": patch.position_calibration,
+        "colorCalibration": patch.color_calibration,
         "groupMastersEnabled": patch.group_masters_enabled,
         "grandMasterEnabled": patch.grand_master_enabled,
         "moveInBlackEnabled": patch.move_in_black_enabled,
@@ -246,7 +248,7 @@ fn mutation(fixture: &PatchFixtureProjection, profile: &FixtureProfile) -> Mutat
         "modelScale": patch.model_scale,
         "sceneryOptions": serde_json::to_value(&patch.scenery_options).unwrap_or(serde_json::Value::Null),
         "scenerySizeMetres": size,
-        "multipatch": serde_json::to_value(&patch.multipatch).unwrap_or(serde_json::Value::Null),
+        "multipatch": patch.multipatch.iter().map(MultipatchDto::from).collect::<Vec<_>>(),
     });
     serde_json::from_value(serde_json::json!({
         "requestId": Uuid::new_v4().to_string(),
@@ -356,6 +358,8 @@ mod tests {
                         grand_master_enabled: true,
                         invert_pan: false,
                         invert_tilt: false,
+                        position_calibration: None,
+                        color_calibration: None,
                         bracket_angle: 0.0,
                         shaper_angle: None,
                         installed_appearance: Default::default(),
@@ -433,6 +437,52 @@ mod tests {
             serde_json::to_value(size).expect("the size it writes"),
             serde_json::json!({ "x": 8000.0, "y": 290.0, "z": 290.0 })
         );
+    }
+
+    #[test]
+    fn position_calibration_survives_architect_profile_revision_update() {
+        let root = workspace("position-calibration");
+        let library = FixtureLibrary::open(root.join("fixtures.sqlite")).expect("library");
+        let profile = library.save_profile(truss(0.29), 0).expect("profile");
+        let document = PlanningDocument::create(root.join("show.show"), "Show")
+            .expect("show")
+            .with_library_at(root.join("fixtures.sqlite"))
+            .expect("library");
+        let fixture_id = patch(&document, &profile, 8.0, 0.29);
+        let mut snapshot = document.patch_snapshot().expect("snapshot");
+        let fixture = snapshot
+            .fixtures
+            .iter_mut()
+            .find(|fixture| fixture.patch.fixture_id.0 == fixture_id)
+            .unwrap();
+        fixture.patch.position_calibration = Some(light_fixture::InstalledPositionCalibration {
+            pan_zero_degrees: -720.5,
+            ..Default::default()
+        });
+        fixture.patch.multipatch.push(
+            serde_json::from_value(serde_json::json!({
+                "id": Uuid::new_v4(), "name": "Copy", "universe": null, "address": null,
+                "split_patches": [{"split": 1, "universe": null, "address": null}],
+                "location": {"x": 0, "y": 0, "z": 0}, "rotation": {"x": 0, "y": 0, "z": 0},
+                "invert_tilt": true, "position_calibration": {"pan_zero_degrees": 90},
+            }))
+            .unwrap(),
+        );
+        let written = mutation(fixture, &profile);
+        let candidate = written.into_command(document.show_id()).fixtures.remove(0);
+        assert_eq!(
+            candidate.patch.position_calibration,
+            fixture.patch.position_calibration
+        );
+        assert_eq!(
+            candidate.patch.multipatch[0].position_calibration,
+            fixture.patch.multipatch[0].position_calibration
+        );
+        assert_eq!(
+            candidate.patch.multipatch[0].split_patches,
+            fixture.patch.multipatch[0].split_patches
+        );
+        assert!(candidate.patch.multipatch[0].invert_tilt);
     }
 
     /// Two libraries number their own revisions, so a show can hold a different revision 2.

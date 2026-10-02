@@ -159,9 +159,12 @@ impl DeskClient {
     /// numbers the desk is sending, read from the desk rather than heard from the network, because
     /// there may be no network: a desk with no output routes still has a Stage to draw.
     pub async fn output_dmx(&self) -> Option<crate::wire::OutputDmxSnapshot> {
-        self.get_json::<crate::wire::OutputDmxSnapshot>("/api/v2/output/dmx", "desk output")
-            .await
-            .ok()
+        self.get_json::<crate::wire::OutputDmxSnapshot>(
+            "/api/v2/output/dmx?include_preload=true",
+            "desk output",
+        )
+        .await
+        .ok()
     }
 
     /// The desk's preload, for a renderer drawing its Stage.

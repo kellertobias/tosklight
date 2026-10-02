@@ -2,14 +2,46 @@
 //!
 //! DMX exposes tint subtractively — cyan, magenta, and yellow — while the domain and the renderer
 //! work in linear RGB multipliers.
+//!
+//! # Transfer boundary
+//!
+//! Every Media source texture, the program target and the output surface carry sRGB-encoded
+//! values: decoders, uploads and composition never convert them. The color stage is the one place
+//! that needs linear light, so it decodes a sample exactly once, applies White Blend and tint
+//! there, and encodes the result exactly once on the way back into the encoded pipeline.
+//! [`MediaColor::apply_encoded`] is the CPU reference for that stage; the layer and master
+//! shaders implement the same formula.
 
 use serde::{Deserialize, Serialize};
 
 use crate::dmx;
+use crate::layer::LayerState;
+use crate::master::MasterState;
 
-/// The luminance weights the legacy renderer used, kept so a migrated show's grayscale looks the
-/// same: `0.299 R + 0.587 G + 0.114 B`.
-pub const LUMINANCE_WEIGHTS: [f32; 3] = [0.299, 0.587, 0.114];
+/// Rec.709 / linear sRGB luminance coefficients. They apply to linear light only; applying them
+/// to encoded values would desaturate in gamma space.
+pub const REC709_LUMINANCE: [f32; 3] = [0.2126, 0.7152, 0.0722];
+
+/// The sRGB electro-optical transfer function (IEC 61966-2-1): an encoded `0..=1` value to linear
+/// light. Negative input is treated as black.
+pub fn srgb_to_linear(encoded: f32) -> f32 {
+    let encoded = encoded.max(0.0);
+    if encoded <= 0.040_45 {
+        encoded / 12.92
+    } else {
+        ((encoded + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// The inverse of [`srgb_to_linear`]: linear light to an encoded value.
+pub fn linear_to_srgb(linear: f32) -> f32 {
+    let linear = linear.max(0.0);
+    if linear <= 0.003_130_8 {
+        linear * 12.92
+    } else {
+        1.055 * linear.powf(1.0 / 2.4) - 0.055
+    }
+}
 
 /// A multiplicative RGB color.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -83,13 +115,13 @@ impl Tint {
         }
     }
 
-    /// The luminance of this color under [`LUMINANCE_WEIGHTS`].
+    /// The Rec.709 luminance of this color, read as linear light.
     pub fn luminance(self) -> f32 {
-        let [red, green, blue] = LUMINANCE_WEIGHTS;
+        let [red, green, blue] = REC709_LUMINANCE;
         self.red * red + self.green * green + self.blue * blue
     }
 
-    /// Interpolates between the original color and its luminance.
+    /// Interpolates between this linear color and its luminance: White Blend on one linear value.
     pub fn desaturate(self, amount: f32) -> Self {
         let amount = amount.clamp(0.0, 1.0);
         let gray = self.luminance();
@@ -104,6 +136,66 @@ impl Tint {
 impl Default for Tint {
     fn default() -> Self {
         Self::WHITE
+    }
+}
+
+/// The Media adapter's reading of the shared Color intent.
+///
+/// The desk's Color intent reaches Media through the existing tint and grayscale controls: the
+/// retained base color becomes the linear RGB [`Tint`], and White Blend drives the legacy
+/// grayscale control as source desaturation. This is derived from those controls whenever it is
+/// needed and is never stored, so it cannot become a second color authority.
+///
+/// Layer dimmer, alpha, masks and the master dimmer stay outside it: they remain independent
+/// multipliers applied after the color stage.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MediaColor {
+    /// Linear RGB multiplier. [`Tint::WHITE`] is the neutral value, not an authored white.
+    pub tint: Tint,
+    /// Source desaturation in `0..=1`. `None` where the surface has no White Blend control, such
+    /// as the master: that is unsupported rather than an authored 0%, and it renders unchanged.
+    pub white_blend: Option<f32>,
+}
+
+impl MediaColor {
+    /// The color stage of one layer: its tint and its grayscale control as White Blend.
+    pub fn of_layer(layer: &LayerState) -> Self {
+        Self {
+            tint: layer.tint,
+            white_blend: Some(layer.grayscale),
+        }
+    }
+
+    /// The color stage of the master, which has a tint but no White Blend control.
+    pub fn of_master(master: &MasterState) -> Self {
+        Self {
+            tint: master.tint,
+            white_blend: None,
+        }
+    }
+
+    /// The White Blend amount the renderer applies: clamped to `0..=1`, and zero when the control
+    /// is absent or not a number.
+    pub fn white_blend_amount(self) -> f32 {
+        match self.white_blend {
+            Some(amount) if amount.is_finite() => amount.clamp(0.0, 1.0),
+            _ => 0.0,
+        }
+    }
+
+    /// Applies White Blend and then the tint to one linear RGB value.
+    pub fn apply_linear(self, linear: [f32; 3]) -> [f32; 3] {
+        let blended = Tint::new(linear[0], linear[1], linear[2])
+            .desaturate(self.white_blend_amount())
+            .multiply(self.tint);
+        [blended.red, blended.green, blended.blue]
+    }
+
+    /// The CPU reference for the render color stage: decode an sRGB-encoded value once, apply
+    /// [`Self::apply_linear`], and encode the result once.
+    pub fn apply_encoded(self, encoded: [f32; 3]) -> [f32; 3] {
+        self.apply_linear(encoded.map(srgb_to_linear))
+            .map(linear_to_srgb)
     }
 }
 
@@ -166,10 +258,10 @@ mod tests {
     }
 
     #[test]
-    fn luminance_uses_the_documented_weights() {
-        assert!(close(Tint::new(1.0, 0.0, 0.0).luminance(), 0.299));
-        assert!(close(Tint::new(0.0, 1.0, 0.0).luminance(), 0.587));
-        assert!(close(Tint::new(0.0, 0.0, 1.0).luminance(), 0.114));
+    fn luminance_uses_the_rec709_linear_weights() {
+        assert!(close(Tint::new(1.0, 0.0, 0.0).luminance(), 0.2126));
+        assert!(close(Tint::new(0.0, 1.0, 0.0).luminance(), 0.7152));
+        assert!(close(Tint::new(0.0, 0.0, 1.0).luminance(), 0.0722));
         assert!(close(Tint::WHITE.luminance(), 1.0));
     }
 
@@ -179,10 +271,10 @@ mod tests {
         assert_eq!(red.desaturate(0.0), red);
 
         let gray = red.desaturate(1.0);
-        assert!(close(gray.red, 0.299) && close(gray.green, 0.299) && close(gray.blue, 0.299));
+        assert!(close(gray.red, 0.2126) && close(gray.green, 0.2126) && close(gray.blue, 0.2126));
 
         let half = red.desaturate(0.5);
-        assert!(close(half.red, 0.6495));
+        assert!(close(half.red, 0.6063));
     }
 
     #[test]

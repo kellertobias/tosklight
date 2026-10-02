@@ -171,6 +171,10 @@ pub struct PatchFixture {
     pub invert_pan: bool,
     #[serde(default)]
     pub invert_tilt: bool,
+    #[serde(default)]
+    pub color_calibration: Option<light_fixture::InstalledColorCalibration>,
+    #[serde(default)]
+    pub position_calibration: Option<light_fixture::InstalledPositionCalibration>,
     /// Degrees the mounting bracket is set to, positive nose-down.
     #[serde(default)]
     pub bracket_angle: f32,
@@ -234,6 +238,10 @@ pub struct MultiPatch {
     pub invert_pan: bool,
     #[serde(default)]
     pub invert_tilt: bool,
+    #[serde(default)]
+    pub color_calibration: Option<light_fixture::InstalledColorCalibration>,
+    #[serde(default)]
+    pub position_calibration: Option<light_fixture::InstalledPositionCalibration>,
     #[serde(default)]
     pub bracket_angle: f32,
     #[serde(default)]
@@ -370,33 +378,7 @@ pub struct PreviewSnapshot {
 /// Read only by a renderer the desk is running inside its own window. A renderer on the network
 /// gets its values as real Art-Net or sACN and this is none of its business — see
 /// [`crate::DeskConnection::values_from_desk_output`] for why the distinction is not a loophole.
-#[derive(Clone, Debug, Deserialize)]
-pub struct OutputDmxSnapshot {
-    #[serde(default)]
-    pub revision: u64,
-    #[serde(default)]
-    pub universes: Vec<PreviewUniverse>,
-    /// The live pose of every 3D Point in the show, as the desk resolves it.
-    ///
-    /// A point carries no light and may carry no DMX at all, so the Stage cannot always read it out
-    /// of the universes. The desk states the poses here, in its own axes and metres, and the Stage
-    /// draws everything slaved to a point where the desk says the point is. Absent from a desk
-    /// written before points reported, which leaves every slave where it was rigged.
-    #[serde(default)]
-    pub points: Vec<OutputPointPose>,
-}
-
-/// One 3D Point's live pose, in desk axes: `x` across the stage, `y` upstage, `z` up.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct OutputPointPose {
-    pub fixture_id: Uuid,
-    /// How far the operator has moved the point from where it was patched, in metres.
-    #[serde(default)]
-    pub offset_metres: [f32; 3],
-    /// How far the operator has turned it about its own origin, in degrees.
-    #[serde(default)]
-    pub rotation_degrees: [f32; 3],
-}
+pub use light_wire::v2::output_control::{OutputDmxSnapshot, OutputPointPose};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct PreviewUniverse {

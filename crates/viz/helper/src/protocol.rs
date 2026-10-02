@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 // Plan artwork gained drawn edge lines alongside its filled silhouette. That changes the postcard
 // shape of a scene, so a stale helper must be refused instead of accepting a message it cannot
 // decode.
-pub const PROTOCOL_MAJOR: u16 = 4;
+pub const PROTOCOL_MAJOR: u16 = 5;
 // Minor 1 is where the handshake started naming frame transports, so it stays at least 1.
 pub const PROTOCOL_MINOR: u16 = 1;
 

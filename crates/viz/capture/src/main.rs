@@ -159,6 +159,8 @@ fn run(options: &Options) -> Result<u32, String> {
     // Exposure is not among them: it is fixed, so that a rig at half never records as a rig at
     // full drawn dimmer.
     for frame in 0..options.settle {
+        values.apply_physical_motion(options.step);
+        values.apply_calibrated_motion(&scene, options.step);
         let seconds = frame as f32 * options.step;
         renderer
             .capture(&scene, &values, &view, &overlay, seconds)
@@ -167,6 +169,8 @@ fn run(options: &Options) -> Result<u32, String> {
 
     let mut written = 0;
     for frame in 0..options.frames {
+        values.apply_physical_motion(options.step);
+        values.apply_calibrated_motion(&scene, options.step);
         let seconds = (options.settle + frame) as f32 * options.step;
         let image = renderer
             .capture(&scene, &values, &view, &overlay, seconds)

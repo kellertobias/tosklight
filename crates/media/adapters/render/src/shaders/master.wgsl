@@ -1,7 +1,7 @@
 // The master pass: the finished composite, tinted, dimmed, and flipped onto the output.
 
 struct Master {
-    // Master tint in rgb; master dimmer in a.
+    // Linear master tint in rgb; master dimmer in a.
     tint: vec4<f32>,
     // xy: flip signs. z: master mask enabled. w: negative for an alpha-preserving layer preview.
     flip_mask: vec4<f32>,
@@ -72,6 +72,26 @@ fn vertex(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 const LUMINANCE = vec3<f32>(0.299, 0.587, 0.114);
 
+// The master's color stage: the same single decode/encode as the layer shader, with a tint and
+// no White Blend control. It matches media_domain::color::MediaColor::apply_encoded.
+fn srgb_to_linear(encoded: vec3<f32>) -> vec3<f32> {
+    let value = max(encoded, vec3<f32>(0.0));
+    return select(
+        pow((value + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4)),
+        value / 12.92,
+        value <= vec3<f32>(0.04045),
+    );
+}
+
+fn linear_to_srgb(linear: vec3<f32>) -> vec3<f32> {
+    let value = max(linear, vec3<f32>(0.0));
+    return select(
+        1.055 * pow(value, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055),
+        value * 12.92,
+        value <= vec3<f32>(0.0031308),
+    );
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let centred = in.uv - vec2<f32>(0.5);
@@ -105,5 +125,6 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // fewer pass.
     let contribution = master.tint.a * strength;
     let output_alpha = select(1.0, sampled.a * contribution, master.flip_mask.w < 0.0);
-    return vec4<f32>(sampled.rgb * master.tint.rgb * contribution, output_alpha);
+    let tinted = linear_to_srgb(srgb_to_linear(sampled.rgb) * master.tint.rgb);
+    return vec4<f32>(tinted * contribution, output_alpha);
 }

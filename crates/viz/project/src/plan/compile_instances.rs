@@ -25,7 +25,9 @@ pub(super) fn compile_instances(
     effect: Option<EffectProgram>,
     physics: Option<PhysicsProgram>,
 ) {
-    let geometry = fixture.profile.mode_geometry(mode);
+    // A derived Position model's aim-only lens is not drawn; the head keeps its fallback layout.
+    let geometry =
+        light_fixture::without_derived_position_lens(fixture.profile.mode_geometry(mode));
     let point = is_position_point(mode);
     let shared_addresses = fixture
         .instances
@@ -112,6 +114,7 @@ pub(super) fn compile_instances(
         if point {
             continue;
         }
+        let emitter_start = scene.emitters.len();
         build_emitters(
             scene,
             bindings,
@@ -127,6 +130,16 @@ pub(super) fn compile_instances(
             mount.scaled(instance.model_scale),
             laser.clone(),
             effect.clone(),
+        );
+        crate::physical::attach(
+            fixture,
+            mode,
+            instance,
+            primary_slots,
+            &address_map(instance),
+            scene,
+            emitter_start,
+            &mut bindings[emitter_start..],
         );
         if let Some(body_index) = physics_body_index
             && let Some(binding) = bindings.last_mut()

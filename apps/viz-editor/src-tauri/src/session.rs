@@ -31,6 +31,7 @@ pub struct Session {
     pub(crate) desk_save_gate: tokio::sync::Mutex<()>,
     pub(crate) pending_desk_save: Mutex<Option<crate::discovery::show_library::PendingDeskSave>>,
     document_generation: std::sync::atomic::AtomicU64,
+    pending_mvr: Mutex<Option<mvr_preview::PendingMvrImport>>,
     library_path: Mutex<Option<PathBuf>>,
     recent: Mutex<Option<RecentShow>>,
     pub(crate) desk_source: Mutex<Option<crate::discovery::DeskSource>>,
@@ -114,6 +115,9 @@ pub struct AttributeDescriptorDto {
 }
 
 type Answer<T> = Result<T, String>;
+
+#[path = "session/mvr_preview.rs"]
+mod mvr_preview;
 
 impl Session {
     pub fn set_library_path(&self, path: Option<PathBuf>) {
@@ -273,6 +277,7 @@ impl Session {
         let document = self.attach_library(document)?;
         let summary = summarize(&document)?;
         self.source.open(document);
+        *self.pending_mvr.lock() = None;
         self.document_generation
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         *self.desk_source.lock() = std::fs::read(path.with_extension("show.desk-source.json"))
@@ -1068,31 +1073,7 @@ pub fn export_mvr(session: tauri::State<'_, Session>, path: String) -> Answer<us
 /// What the archive holds and how it lands here, before anything is written.
 #[tauri::command]
 pub fn preview_mvr(session: tauri::State<'_, Session>, path: String) -> Answer<MvrPreviewDto> {
-    session.with(|document| {
-        let archive = read_archive(&path)?;
-        let preview = document
-            .preview_mvr(&archive)
-            .map_err(|error| error.to_string())?;
-        Ok(MvrPreviewDto {
-            fixtures: preview
-                .fixtures
-                .into_iter()
-                .map(|fixture| MvrPreviewFixtureDto {
-                    uuid: fixture.uuid.to_string(),
-                    name: fixture.name,
-                    gdtf_spec: fixture.gdtf_spec,
-                    gdtf_mode: fixture.gdtf_mode,
-                    universe: fixture.universe,
-                    address: fixture.address,
-                    matched: fixture.matched,
-                    conflicted: fixture.conflicted,
-                })
-                .collect(),
-            scenery: preview.scenery,
-            missing_profiles: preview.missing_profiles,
-            address_conflicts: preview.address_conflicts,
-        })
-    })
+    session.prepare_mvr(&path)
 }
 
 /// Imports the archive, with whatever the operator decided about the fixtures that needed a
@@ -1102,23 +1083,19 @@ pub fn import_mvr(
     app: tauri::AppHandle,
     window: tauri::Window,
     session: tauri::State<'_, Session>,
-    path: String,
+    token: String,
     resolutions: HashMap<String, ResolutionDto>,
 ) -> Answer<MvrImportReport> {
-    let resolutions = decode_resolutions(resolutions)?;
-    let report = session.change(|document| {
-        let archive = read_archive(&path)?;
-        let outcome = document
-            .import_mvr(archive, resolutions.clone())
-            .map_err(|error| error.to_string())?;
-        Ok(MvrImportReport {
-            imported_fixtures: outcome.imported_fixtures,
-            unresolved_fixtures: outcome.unresolved_fixtures,
-            warnings: outcome.warnings,
-        })
-    })?;
-    announce_document_change(&app, &window)?;
-    Ok(report)
+    let report = session.apply_mvr(&token, decode_resolutions(resolutions)?)?;
+    Ok(mvr_preview::after_notification(
+        report,
+        announce_document_change(&app, &window),
+    ))
+}
+
+#[tauri::command]
+pub fn cancel_mvr_preview(session: tauri::State<'_, Session>, token: String) {
+    session.cancel_mvr(&token);
 }
 
 fn read_archive(path: &str) -> Answer<light_mvr::MvrDocument> {
@@ -1162,6 +1139,8 @@ pub struct ResolutionDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MvrPreviewDto {
+    pub token: String,
+    pub warnings: Vec<String>,
     pub fixtures: Vec<MvrPreviewFixtureDto>,
     pub scenery: usize,
     pub missing_profiles: Vec<String>,

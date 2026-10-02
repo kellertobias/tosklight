@@ -87,20 +87,28 @@ pub fn semantic_lights(scene: &Scene, values: &SceneValues) -> Vec<SemanticLight
             continue;
         };
         let value = values.emitters.get(index).unwrap_or(&fallback);
-        let installed_colour = Vec3::from(fixture.installed_colour);
+        let installed_colour = if value.physical_color.is_some() {
+            Vec3::ONE
+        } else {
+            Vec3::from(fixture.installed_colour)
+        };
         let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
         let optics = resolve_optics(emitter, value);
-        let mut pose = emitter_pose(
+        let Some(mut pose) = resolved_emitter_pose(
+            scene,
             fixture,
             emitter,
+            value,
             pan,
             tilt,
-            value.zoom,
             &values.position_points,
-        );
-        if let Some(model) = fixture
-            .model
-            .and_then(|index| scene.models.get(index as usize))
+        ) else {
+            continue;
+        };
+        if value.physical_pose.is_none()
+            && let Some(model) = fixture
+                .model
+                .and_then(|index| scene.models.get(index as usize))
             && let Some(scanner_pose) = fixture_appearance::scanner_emitter_pose(
                 model,
                 fixture,
@@ -182,7 +190,7 @@ pub(super) fn cell_states(
 ) -> Vec<(f32, Vec3)> {
     let shutter = value.shutter.clamp(0.0, 1.0);
     if value.cells.is_empty() {
-        let intensity = value.held_intensity.max(value.visible_intensity());
+        let intensity = value.retained_visible_intensity();
         return vec![
             (intensity, Vec3::from(value.colour) * installed_colour,);
             emitter.cells.len()

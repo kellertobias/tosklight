@@ -5,6 +5,8 @@ edition.workspace = true
 license-file.workspace = true
 
 [dependencies]
+light-core = { path = "../../shared/core" }
+light-fixture = { path = "../../shared/fixture" }
 glam.workspace = true
 serde.workspace = true
 serde_json.workspace = true

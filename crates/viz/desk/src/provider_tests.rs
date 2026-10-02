@@ -88,22 +88,23 @@ mod network_rule_tests {
     fn a_desk_output_read_that_changes_nothing_is_not_a_new_frame() {
         let snapshot = |slot: u8| crate::wire::OutputDmxSnapshot {
             revision: 1,
-            universes: vec![crate::wire::PreviewUniverse {
+            universes: vec![light_wire::v2::output_control::OutputDmxUniverse {
                 universe: 1,
                 slots: vec![slot; viz_dmx::DMX_SLOTS],
             }],
             points: Vec::new(),
+            ..Default::default()
         };
-        let same = desk_output_signature(&snapshot(7), None, 3);
-        assert_eq!(same, desk_output_signature(&snapshot(7), None, 3));
+        let same = desk_output_signature(&snapshot(7), None, false, 3);
+        assert_eq!(same, desk_output_signature(&snapshot(7), None, false, 3));
         assert_ne!(
             same,
-            desk_output_signature(&snapshot(8), None, 3),
+            desk_output_signature(&snapshot(8), None, false, 3),
             "a level moved"
         );
         assert_ne!(
             same,
-            desk_output_signature(&snapshot(7), None, 4),
+            desk_output_signature(&snapshot(7), None, false, 4),
             "the scene changed"
         );
         let preload = crate::wire::PreloadProjection {
@@ -115,16 +116,17 @@ mod network_rule_tests {
         };
         assert_ne!(
             same,
-            desk_output_signature(&snapshot(7), Some(&preload), 3),
+            desk_output_signature(&snapshot(7), Some(&preload), false, 3),
             "a followed preload is part of the picture"
         );
         let empty = crate::wire::OutputDmxSnapshot {
             revision: 1,
             universes: vec![],
             points: Vec::new(),
+            ..Default::default()
         };
         assert_ne!(
-            desk_output_signature(&empty, None, 3),
+            desk_output_signature(&empty, None, false, 3),
             same,
             "an unpatched rig is its own picture, and still a first frame"
         );
@@ -137,7 +139,7 @@ mod network_rule_tests {
             ..snapshot(7)
         };
         assert_ne!(
-            desk_output_signature(&moved, None, 3),
+            desk_output_signature(&moved, None, false, 3),
             same,
             "a 3D Point flown down moves everything hung on it without touching a slot"
         );
@@ -198,7 +200,10 @@ mod network_rule_tests {
         assert_eq!(pose.fixture_id, point);
         assert_eq!(pose.origin_metres, [2.0, 6.0, -1.0]);
         assert_eq!(pose.offset_metres, [0.0, -1.5, 0.0]);
-        assert_eq!(pose.rotation_degrees, [0.0, 90.0, 0.0]);
+        let rotation = viz_scene::euler_degrees(glam::Vec3::from_array(pose.rotation_degrees));
+        // Desk +Z maps to renderer +Y; compare the rotated basis, not ambiguous Euler values.
+        assert!((rotation * glam::Vec3::X + glam::Vec3::Z).length() < 1e-5);
+        assert!((rotation * glam::Vec3::Y - glam::Vec3::Y).length() < 1e-5);
         // A later read replaces the pose rather than stacking a second one.
         super::desk_output::apply_point_poses(
             &scene,

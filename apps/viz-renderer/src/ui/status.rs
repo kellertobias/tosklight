@@ -602,7 +602,7 @@ pub fn build_fixture_labels(
         return;
     }
 
-    // The colour a fixture is emitting, taken from its brightest head.
+    // Visible colour comes from the brightest head; passive Color/UV status includes every head.
     let lit = fixture_lighting(scene, values);
 
     if view.mode.is_plot() {
@@ -647,7 +647,7 @@ fn build_perspective_fixture_labels(
     line: f32,
     label_ink: [f32; 4],
     theme: Theme,
-    lit: &[Option<(f32, [f32; 3])>],
+    lit: &[Option<FixtureLighting>],
     points: &[viz_scene::PointPose],
 ) {
     // A 3D picture with overlapping labels is unreadable, so a label is dropped when it would collide
@@ -711,6 +711,7 @@ fn build_perspective_fixture_labels(
             Some((universe, address)) => format!("{universe}.{address}"),
             None => "unpatched".to_owned(),
         };
+        let number = lit[index].unwrap().label(number);
         let text_width = Overlay::measure(&number, scale).max(Overlay::measure(&address, scale));
         let offset = 9.0 * scale;
         let right = x + offset;
@@ -763,9 +764,30 @@ fn build_perspective_fixture_labels(
     }
 }
 
-fn fixture_lighting(scene: &Scene, values: &SceneValues) -> Vec<Option<(f32, [f32; 3])>> {
+#[derive(Clone, Copy, Debug, Default)]
+struct FixtureLighting {
+    intensity: f32,
+    colour: [f32; 3],
+    uv_active: bool,
+    color_uncertain: bool,
+}
+
+impl FixtureLighting {
+    fn label(self, number: String) -> String {
+        // Existing labels are optional and collision bounded. These marks never create a notice,
+        // capture focus, change selection or suggest that a display can reproduce UV emission.
+        match (self.uv_active, self.color_uncertain) {
+            (true, true) => format!("{number} UV ⚠"),
+            (true, false) => format!("{number} UV"),
+            (false, true) => format!("{number} ⚠"),
+            (false, false) => number,
+        }
+    }
+}
+
+fn fixture_lighting(scene: &Scene, values: &SceneValues) -> Vec<Option<FixtureLighting>> {
     let fallback = viz_scene::EmitterValues::default();
-    let mut lit = vec![None; scene.fixtures.len()];
+    let mut lit: Vec<Option<FixtureLighting>> = vec![None; scene.fixtures.len()];
     for (index, emitter) in scene.emitters.iter().enumerate() {
         if emitter.kind == viz_scene::EmitterKind::Atmosphere {
             continue;
@@ -775,9 +797,19 @@ fn fixture_lighting(scene: &Scene, values: &SceneValues) -> Vec<Option<(f32, [f3
         let Some(slot) = lit.get_mut(emitter.fixture_index as usize) else {
             continue;
         };
-        if slot.is_none_or(|(existing, _)| intensity > existing) {
-            *slot = Some((intensity, value.colour));
+        let light = slot.get_or_insert(FixtureLighting {
+            intensity,
+            colour: value.colour,
+            ..Default::default()
+        });
+        if intensity > light.intensity {
+            light.intensity = intensity;
+            light.colour = value.colour;
         }
+        light.uv_active |= value.uv_drive.is_finite() && value.uv_drive > 0.0;
+        light.color_uncertain |= value
+            .physical_color
+            .is_some_and(|color| !color.visible_complete || color.quality <= 1 || color.flags != 0);
     }
     lit
 }
@@ -793,7 +825,7 @@ fn build_plot_fixture_labels(
     line: f32,
     label_ink: [f32; 4],
     show_labels: bool,
-    lit: &[Option<(f32, [f32; 3])>],
+    lit: &[Option<FixtureLighting>],
 ) {
     // Preserve the established plan contract exactly: emission dots remain even with labels
     // hidden, text follows scene order, and only direct label collisions drop text.
@@ -808,8 +840,9 @@ fn build_plot_fixture_labels(
         if y > height - 40.0 * ui_scale(width) {
             continue;
         }
-        if let Some((intensity, colour)) = lit[index].filter(|(level, _)| *level > 0.004) {
-            let level = 0.35 + 0.65 * intensity;
+        if let Some(light) = lit[index].filter(|light| light.intensity > 0.004) {
+            let colour = light.colour;
+            let level = 0.35 + 0.65 * light.intensity;
             overlay.disc(
                 x - 8.0 * scale,
                 y,
@@ -828,6 +861,7 @@ fn build_plot_fixture_labels(
             Some((universe, address)) => format!("{universe}.{address}"),
             None => "unpatched".to_owned(),
         };
+        let number = lit[index].unwrap().label(number);
         let text_width = Overlay::measure(&number, scale).max(Overlay::measure(&address, scale));
         let rect = [x + 9.0 * scale, y - line, text_width, line * 2.0];
         if placed.iter().any(|existing| overlaps(*existing, rect)) {
@@ -923,6 +957,167 @@ mod fixture_label_tests {
             shaper_roles: [false; 4],
             live_shaper_rotation_role: false,
         });
+    }
+
+    #[test]
+    fn passive_color_marks_include_dark_uv_heads_without_tinting_visible_color() {
+        let mut scene = Scene::default();
+        push_lamp(&mut scene, fixture(7, Vec3::ZERO));
+        let mut second_head = scene.emitters[0].clone();
+        second_head.head_index = 1;
+        scene.emitters.push(second_head);
+        let mut values = SceneValues::default();
+        values.resize(2);
+        values.emitters[0].intensity = 1.0;
+        values.emitters[0].held_intensity = 1.0;
+        values.emitters[0].colour = [1.0, 0.0, 0.0];
+        values.emitters[1].uv_drive = 1.0 / 255.0;
+        values.emitters[1].colour = [0.0; 3];
+        values.emitters[1].physical_color = Some(viz_scene::PhysicalColorState {
+            visible_complete: false,
+            uv_drive: 1.0 / 255.0,
+            ..Default::default()
+        });
+        let light = fixture_lighting(&scene, &values)[0].unwrap();
+        assert_eq!(light.colour, [1.0, 0.0, 0.0]);
+        assert_eq!(light.label("7".to_owned()), "7 UV ⚠");
+
+        // A measured-zero visible spill still has UV activity, but needs no uncertainty mark.
+        values.emitters[1]
+            .physical_color
+            .as_mut()
+            .unwrap()
+            .visible_complete = true;
+        values.emitters[1].physical_color.as_mut().unwrap().quality = 3;
+        assert_eq!(
+            fixture_lighting(&scene, &values)[0]
+                .unwrap()
+                .label("7".into()),
+            "7 UV"
+        );
+        values.emitters[1].uv_drive = 0.0;
+        assert_eq!(
+            fixture_lighting(&scene, &values)[0]
+                .unwrap()
+                .label("7".into()),
+            "7"
+        );
+    }
+
+    /// Optional native GPU evidence: real packaged RGBWAUV optics through raw DMX decoding,
+    /// physical evaluation, the normal Stage labels and the normal render core. Values are
+    /// estimated fixture data, not claims of measured physical color matching.
+    #[test]
+    #[ignore = "requires a native GPU and LIGHT_VISUAL_DIR for capture artifacts"]
+    fn physical_color_reference_capture() {
+        let output = std::path::PathBuf::from(
+            std::env::var_os("LIGHT_VISUAL_DIR").expect("canonical capture output"),
+        );
+        std::fs::create_dir_all(&output).unwrap();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/fixture-library/cameo--root-par-6.toskfixture");
+        let profile = light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap();
+        let mode_id = profile
+            .modes
+            .iter()
+            .find(|m| m.channels.len() == 7)
+            .unwrap()
+            .id;
+        let fixture_id = viz_scene::uuid::Uuid::new_v4();
+        let plan = viz_project::compile(&[viz_project::PatchedFixture {
+            fixture_id,
+            number: Some(7),
+            name: "RGBWAUV reference".into(),
+            profile: std::sync::Arc::new(profile),
+            mode_id,
+            instances: vec![viz_project::PhysicalInstance {
+                instance_id: fixture_id,
+                name: "RGBWAUV reference".into(),
+                split_patches: vec![(1, Some((1, 1)))],
+                position: Vec3::new(0.0, 3.0, 0.0),
+                rotation_degrees: Vec3::ZERO,
+                invert_pan: false,
+                invert_tilt: false,
+                bracket_angle: 0.0,
+                shaper_angle: None,
+                installed_appearance: Default::default(),
+                scenery_size_metres: None,
+                scenery_options: Default::default(),
+                model_scale: 1.0,
+                color_calibration: None,
+                position_calibration: None,
+            }],
+        }]);
+        let mut decoder = viz_project::Decoder::new(plan.bindings);
+        let mut values = SceneValues::default();
+        let mut view = ViewConfiguration::default();
+        view.show_labels = true;
+        view.camera.position = Vec3::new(2.0, 2.3, 4.0);
+        view.camera.target = Vec3::new(0.0, 2.0, 0.0);
+        view.camera.fov_degrees = 35.0;
+        let mut renderer = viz_render::Renderer::headless(960, 720).expect("native GPU");
+        for (name, raw, uv, complete) in [
+            ("magenta", [255, 0, 255, 0, 0, 0], false, true),
+            ("warm-white", [255, 190, 110, 80, 0, 0], false, true),
+            ("uv-only", [0, 0, 0, 0, 0, 255], true, false),
+            ("magenta-uv", [255, 0, 255, 0, 0, 255], true, false),
+        ] {
+            let mut slots = [0; viz_dmx::DMX_SLOTS];
+            slots[..6].copy_from_slice(&raw);
+            decoder.apply(
+                &plan.scene,
+                &[viz_dmx::UniverseFrame {
+                    logical_universe: 1,
+                    slots,
+                    received_micros: 0,
+                    stale: false,
+                }],
+                &mut values,
+                0.0,
+            );
+            values.atmosphere.density = 0.45;
+            let light = fixture_lighting(&plan.scene, &values)[0].unwrap();
+            assert_eq!(light.uv_active, uv);
+            assert_eq!(
+                values.emitters[0].physical_color.unwrap().visible_complete,
+                complete
+            );
+            if name == "uv-only" {
+                assert_eq!(values.emitters[0].colour, [0.0; 3]);
+                assert!(
+                    viz_render::semantic_lights(&plan.scene, &values).is_empty(),
+                    "UV alone emits no visible light or black occluding cone"
+                );
+            }
+            for (width, height) in [(960, 720), (560, 560)] {
+                renderer.resize(width, height);
+                let camera = ResolvedCamera::resolve(
+                    &view.camera,
+                    view.mode,
+                    width as f32 / height as f32,
+                    plan.scene.bounds,
+                );
+                let mut overlay = Overlay::default();
+                build_fixture_labels(
+                    &mut overlay,
+                    &plan.scene,
+                    &values,
+                    &camera,
+                    &view,
+                    width as f32,
+                    height as f32,
+                );
+                assert!(!overlay.quads.is_empty(), "fixture label in frame");
+                let image = renderer
+                    .capture(&plan.scene, &values, &view, &overlay, 0.0)
+                    .unwrap();
+                std::fs::write(
+                    output.join(format!("tl546-{name}-{width}.png")),
+                    crate::png::encode_rgba(image.width, image.height, &image.rgba),
+                )
+                .unwrap();
+            }
+        }
     }
 
     #[test]

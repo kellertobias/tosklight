@@ -23,6 +23,8 @@ fn patched(fixture_type: &str, optics: ProfileOptics) -> PatchedFixture {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            color_calibration: None,
+            position_calibration: None,
             model_scale: 1.0,
             scenery_options: Default::default(),
             scenery_size_metres: None,
@@ -125,6 +127,8 @@ fn embedded_robin_dls_open_shutter_band_stays_lit_on_stage() {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            color_calibration: None,
+            position_calibration: None,
             model_scale: 1.0,
             scenery_options: Default::default(),
             scenery_size_metres: None,
@@ -206,6 +210,8 @@ fn shipped_jbled_a7_home_shutter_is_steady_and_open_on_stage() {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            color_calibration: None,
+            position_calibration: None,
             model_scale: 1.0,
             scenery_options: Default::default(),
             scenery_size_metres: None,
@@ -273,6 +279,8 @@ fn shipped_moving_light_models_apply_the_profile_head_offset() {
             profile: Arc::new(profile),
             mode_id,
             instances: vec![PhysicalInstance {
+                color_calibration: None,
+                position_calibration: None,
                 model_scale: 1.0,
                 scenery_options: Default::default(),
                 scenery_size_metres: None,

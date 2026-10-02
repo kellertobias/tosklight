@@ -9,6 +9,7 @@ base64.workspace = true
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 futures-util.workspace = true
 glam.workspace = true
+light-wire = { path = "../../light/contracts/wire" }
 light-fixture = { path = "../../shared/fixture" }
 reqwest.workspace = true
 serde.workspace = true

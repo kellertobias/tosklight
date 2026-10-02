@@ -393,6 +393,7 @@ fn main() {
             company_logo::save_lighting_designer_default,
             session::export_mvr,
             session::preview_mvr,
+            session::cancel_mvr_preview,
             session::import_mvr,
             session::recent_documents,
             session::recent_document_details,

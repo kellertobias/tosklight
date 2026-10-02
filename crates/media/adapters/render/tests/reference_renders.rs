@@ -1093,7 +1093,7 @@ fn a_layer_tint_multiplies_the_source() {
 }
 
 #[test]
-fn grayscale_uses_the_documented_luminance_weights() {
+fn grayscale_uses_rec709_weights_in_linear_light() {
     let mut bench = Bench::new();
     let red = bench.solid(Size::new(4, 4), RED);
     let state = ready(LayerState {
@@ -1110,9 +1110,13 @@ fn grayscale_uses_the_documented_luminance_weights() {
         &MasterState::default(),
     );
     let [red_channel, green_channel, blue_channel, _] = image.center();
-    // 0.299 of full scale is 76.
+    // Linear red has luminance 0.2126, which encodes to 127 of 255. The legacy gamma-space
+    // weights produced 76; see white_blend_renders.rs for the full reference set.
     for channel in [red_channel, green_channel, blue_channel] {
-        assert!((75..=77).contains(&channel), "expected ~76, got {channel}");
+        assert!(
+            (126..=128).contains(&channel),
+            "expected ~127, got {channel}"
+        );
     }
 }
 

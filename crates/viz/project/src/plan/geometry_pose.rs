@@ -26,9 +26,9 @@ pub(super) fn apply_profile_model_pose(
     }
 
     let mut world = HashMap::<Uuid, Mat4>::new();
-    for _ in 0..=bound.len() {
+    for _ in 0..=geometry.nodes.len() {
         let mut progressed = false;
-        for node in &bound {
+        for node in &geometry.nodes {
             if world.contains_key(&node.id) {
                 continue;
             }
@@ -47,6 +47,7 @@ pub(super) fn apply_profile_model_pose(
         }
     }
 
+    let mut exact = HashMap::new();
     let mut transforms = HashMap::new();
     for node in bound {
         let Some(name) = node.glb_node.as_deref() else {
@@ -55,17 +56,26 @@ pub(super) fn apply_profile_model_pose(
         let Some(transform) = world.get(&node.id).copied() else {
             continue;
         };
+        exact.insert(name.to_owned(), (node.id, transform));
         transforms.insert(viz_scene::ModelPartKind::from_node_name(name), transform);
-    }
-    if transforms
-        .values()
-        .all(|matrix| matrix.abs_diff_eq(Mat4::IDENTITY, 1e-6))
-    {
-        return;
     }
 
     for part in &mut model.parts {
-        let Some(transform) = transforms.get(&part.kind).copied() else {
+        let exact_binding = part
+            .node_ancestry
+            .iter()
+            .rev()
+            .find_map(|name| exact.get(name))
+            .or_else(|| exact.get(&part.name));
+        let transform = if let Some((id, transform)) = exact_binding {
+            part.geometry_node_id = Some(*id);
+            *transform
+        } else if geometry.physical_contract.is_none() {
+            let Some(transform) = transforms.get(&part.kind).copied() else {
+                continue;
+            };
+            transform
+        } else {
             continue;
         };
         for position in &mut part.positions {

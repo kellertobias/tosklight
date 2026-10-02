@@ -879,6 +879,8 @@ mod tests {
             ),
         ];
         let mut part = ModelPart {
+            geometry_node_id: None,
+            node_ancestry: Vec::new(),
             name: name.into(),
             kind,
             positions: Vec::new(),

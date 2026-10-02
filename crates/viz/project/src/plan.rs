@@ -33,6 +33,8 @@ pub struct PhysicalInstance {
     pub rotation_degrees: Vec3,
     pub invert_pan: bool,
     pub invert_tilt: bool,
+    pub color_calibration: Option<light_fixture::InstalledColorCalibration>,
+    pub position_calibration: Option<light_fixture::InstalledPositionCalibration>,
     /// Degrees the bracket tilts the whole fixture about its yoke or clamp axis, positive nose-down.
     pub bracket_angle: f32,
     /// Degrees a fitted shaper or barn-door module is turned to, or `None` when none is fitted.
@@ -68,6 +70,8 @@ pub struct OpticalWheelBinding {
 /// Everything one emitter needs from DMX.
 #[derive(Clone, Debug, Default)]
 pub struct EmitterBinding {
+    /// Shared per-instance forward plan; the decoder evaluates it once for all heads.
+    pub physical: Option<crate::physical::PhysicalEmitterBinding>,
     pub intensity: Option<ChannelRef>,
     pub pan: Option<ChannelRef>,
     pub tilt: Option<ChannelRef>,
@@ -586,7 +590,7 @@ fn compile_channels(
 /// an officially open raw value such as 116 to be decoded as strobe. Revision 3 carries the exact
 /// table, while this compatibility projection keeps already-patched default shows visually aligned
 /// with the DMX they continue to emit.
-fn stage_channel_functions(
+pub(crate) fn stage_channel_functions(
     profile: &FixtureProfile,
     channel: &FixtureChannel,
 ) -> Vec<ChannelFunction> {
@@ -608,6 +612,7 @@ fn stage_channel_functions(
         dmx_to: to,
         attribute: channel.attribute.clone(),
         priority: 0,
+        physical_mapping: None,
         angular_motion: None,
         behavior: ChannelFunctionBehavior::Fixed {
             semantic_id: semantic.into(),
@@ -622,6 +627,7 @@ fn stage_channel_functions(
         dmx_to: to,
         attribute: channel.attribute.clone(),
         priority: 0,
+        physical_mapping: None,
         angular_motion: None,
         behavior: ChannelFunctionBehavior::Continuous {
             physical_min: 0.0,
@@ -780,6 +786,7 @@ fn build_emitters(
             emitter.field_angle_degrees,
             &binding,
         );
+        scene.emitter_ids.push(emitter.id);
         scene.emitters.push(EmitterInstance {
             fixture_index,
             head_index,
@@ -886,6 +893,7 @@ fn build_fallback_emitters(
         let mut binding = build_binding(owned, instance, mode, head.id, channels);
         let kind = emitter_kind(class, &binding);
         let (narrow, wide) = cone_angles(class, &binding);
+        scene.emitter_ids.push(head.id);
         scene.emitters.push(EmitterInstance {
             fixture_index,
             head_index: head_index as u16,
@@ -1176,7 +1184,7 @@ fn cone_angles(class: OpticalClass, binding: &EmitterBinding) -> (f32, f32) {
 }
 
 mod assets;
-mod bindings;
+pub(crate) mod bindings;
 mod compile_instances;
 mod geometry_pose;
 mod head_geometry;

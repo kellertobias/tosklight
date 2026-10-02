@@ -33,6 +33,14 @@ function fixture(
 }
 
 describe("duplicating CAD elements", () => {
+ it("does not copy installed Color observations onto new physical lamps", () => {
+  const calibration = { version:1,revision:2,paths:[] };
+  const original = fixture("lamp",1,null,{colorCalibration:calibration,multipatch:[{id:"copy",name:"Copy",splitPatches:[],location:{x:0,y:0,z:0},rotation:{x:0,y:0,z:0},colorCalibration:calibration}]});
+  const [duplicate] = duplicateFixtures([original],["lamp"],[0,0,0]);
+  expect(duplicate.colorCalibration).toBeNull();expect(duplicate.multipatch[0].colorCalibration).toBeNull();
+  expect(original.colorCalibration).toBe(calibration);expect(original.multipatch[0].colorCalibration).toBe(calibration);
+ });
+
 	it("gives each copy its own ID and the next free numbers, unpatched and a step along the view", () => {
 		const all = [
 			fixture("lamp", 101, null),
@@ -123,3 +131,10 @@ describe("a duplicating move's preview", () => {
 		expect(withDuplicatePreview(entities, move)).toEqual({ entities, preview: move });
 	});
 });
+
+ it("does not inherit Position measurements on duplicated hardware",()=>{
+  const calibration={revision:1,quality:"measured" as const,source:"Meter log",pan_zero_degrees:17,tilt_zero_degrees:-4};
+  const original=fixture("lamp",1,null,{positionCalibration:calibration,multipatch:[{id:"copy",name:"Copy",splitPatches:[],location:{x:0,y:0,z:0},rotation:{x:0,y:0,z:0},positionCalibration:calibration}]});
+  const [copy]=duplicateFixtures([original],["lamp"],[0,0,0]);
+  expect(copy.positionCalibration).toBeNull();expect(copy.multipatch[0].positionCalibration).toBeNull();expect(original.positionCalibration).toBe(calibration);
+ });
