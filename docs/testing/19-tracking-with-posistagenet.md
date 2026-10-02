@@ -16,6 +16,15 @@ once per crossing rather than once per frame.
    status line names the sender.
 4. Confirm no fixture value and no DMX output changed. Traffic alone moves nothing.
 
+## Coordinate boundary
+
+1. With zero calibration send PSN `(1, 2, -3)` metres. Confirm the desk shows `(1, 3, 2)` metres.
+2. Increase only PSN Y. Confirm the Point rises in desk Z without moving across/upstage.
+3. Apply 90° calibration rotation. Confirm the Point rotates in the desk XY plane with height unchanged.
+4. With compound mount and Point rotations, confirm the displayed beam and desk Aim calculation
+   agree on the same target. Existing pre-v1 calibration files use the corrected axes; no inferred
+   migration of an operator's previous offsets is performed.
+
 ## A marker moves a point
 
 1. Patch a 3D Point and aim a moving light at it. Bind tracker 1 to that point on the Tracking tab.

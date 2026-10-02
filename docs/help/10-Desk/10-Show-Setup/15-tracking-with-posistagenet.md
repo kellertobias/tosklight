@@ -88,8 +88,9 @@ off stage, so nothing runs and the zones stay as they were.
 
 ## Calibration
 
-PosiStageNet and ToskLight already agree: metres, x to the right, y up, z into the depth of the
-stage. A tracking system whose origin is your show's origin needs no calibration at all.
+PosiStageNet uses metres with X right, Y up and Z depth. The desk converts this to its
+stage coordinates: X across, Y upstage and Z up. Positive PSN depth becomes downstage.
+Calibration offsets and zone corners use desk coordinates; **Rotation** turns about desk Z.
 
 Use **Origin x/y/z** when the tracking system was told its origin is somewhere else, and
 **Rotation** when it was set up facing another way. **Scale** is there for a system reporting in

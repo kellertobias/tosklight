@@ -225,9 +225,11 @@ Now that you understand how we can make a selection and record groups, we use `<
 
 Alternatively, you can also select the fixtures or groups and then turn the intensity encoder. This sets the value as well. Encoders work incrementally/ decrementally; They do not set the absolute value of all fixtures, but usually increase the value the fixture currently has by 1 per ratchet. If you want to do finer adjustments, hold `[^]` while turning the encoder. Increasing / Decreasing intensity also works via command line: `<selection>[AT][+] 10` adds 10% to the current values of intensity of the selected fixtures, while `<selection>[AT][-] 10` removes 10%.
 
-You can set more than just dimmer values. If you switch the encoder to the encoder attribute group of e.g. "color", the first encoder is usually the value for "red", the second the value for "green", then "blue", and so on. Clicking the encoder attribute group again sometimes reveals more pages. For color this for example could be a color wheel.
+You can set more than just dimmer values. If you switch the encoder to the encoder attribute group of e.g. "color", the first encoders are "Red", "Green" and "Blue", followed by "White Blend". Clicking the encoder attribute group again sometimes reveals more pages: depending on the desk's Color setting this is Amber and UV, or Temperature, Duv and the color wheels (see [Color Intent](05-color-intent.md#easy-and-advanced)). Pages 3 and 4 are the reference head's own colour controls (see [Direct Color](07-direct-color.md)); paging there changes nothing until you turn one.
 
 You can also access other encoder attribute groups by pressing and holding `[^0]` through `[^9]`. The fastest way however is still the touch buttons.
+
+A valid `AT`, `FixAT`, Release or Aim command, an encoder turn, a Color pick or a preset recall with no applicable fixture selected changes nothing and shows no message: it leaves the Programmer, Undo and the selection as they were. Invalid syntax and a preset or aim target that does not exist are still rejected.
 
 Whenever you changed a value, the selection phase of the command is over and when you now select a group or fixture via either UI or command line, this starts a new selection.
 
@@ -263,7 +265,7 @@ Now that we have created a look, we might want to be able to recall this look la
 
 There are two different types of presets:
 - "All Presets" store all attribute types that are currently in the programmer. This can be used to store full looks.
-- "Attribute Group Presets" (e.g. a Color Preset or Intensity Preset) only store attributes of the given attribute group. That means that e.g. a color preset only stores color values, but never intensity values.
+- "Attribute Group Presets" (e.g. a Color Preset or Intensity Preset) only store attributes of the given attribute group. That means that e.g. a color preset only stores color values, but never intensity values. A color preset stores either a Color Intent or a Direct recipe, exactly as programmed (see [Direct Color](07-direct-color.md)).
 
 After you have set the fixtures onto the values you want to store, you can record your preset with `[REC]` and then touching a preset tile in one of the preset pools. Alternatively you can use `[REC][^2] 22` for e.g. storing the color preset 22. When the preset is already recorded, the touch version asks you if you want to overwrite the existing preset, while the command line version directly overwrites it. If you wan to merge/ append, use `[REC][+][^2] 22` this adds.
 

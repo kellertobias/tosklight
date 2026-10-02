@@ -71,6 +71,10 @@ Every subscription snapshot publishes `global-paused`, `runtime-count`, and one
 `runtime/{runtime-uuid}/{active|pool-number|name|target-count|controller-count|winning-controller|paused}`
 family per running instance. Each controller publishes
 `controller/{controller-uuid}/{runtime-instance|source|priority|size|speed|phase|paused|winning|releasing}`.
+`source` names the controller's current owner as `programmer:{uuid}`, `cue:{cuelist-uuid}:{link}`,
+`playback:{number}` or `virtual-playback:{page}:{number}`. When a running Playback Dynamic moves to
+another Playback or changes priority, `source` and `priority` follow the current assignment without
+restarting the Dynamic.
 Programmer-owned summaries remain under `feedback/dynamic/instance/{uuid}` and
 `feedback/dynamic/{pool-number}/active`. Treat `runtime-count` and the identities in each refresh
 as authoritative replacements for a locally cached instance list.

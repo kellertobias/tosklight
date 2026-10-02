@@ -9,6 +9,10 @@ A show programs colour in one of two ways, chosen per show:
   fixture by fixture, how to show that colour as closely as each fixture can. An RGBW wash, a CMY
   spot and a wheel-only profile given the same colour each do their best with what they have.
 
+Earlier builds could store Red, Green, Blue and the other single colour channels as separate
+percentages. The desk does not open a show that still holds them. See
+[Shows programmed before fixture-independent programming](../10-Show-Setup/05-users-sessions-and-recovery.md#shows-programmed-before-fixture-independent-programming).
+
 ## Choosing the model
 
 **Setup → Attributes & encoders → Color model** shows and switches the model of the show that is
@@ -35,15 +39,65 @@ a starting point only: changing it later never changes a show that already exist
 
 In a Color Intent show the Color special dialog programs one colour for the whole selection. Every
 selected fixture receives the same colour, including fixtures that cannot show it; they stay
-selected and say so (see below).
+selected and the desk describes what they achieve (see below).
 
-- **Intensity sets the level.** The colour is only the colour: the dialog has no Brightness control,
-  and each fixture shows the colour as brightly as its colour engine allows before its dimmer.
+- **A first edit starts from open white.** On a fixture that holds no colour yet, the first Color
+  encoder turn or picker touch edits open white, the colour the fixture shows at rest.
+- **Intensity sets the level.** The colour is only the colour: it has no level of its own, and each
+  fixture shows it as brightly as its colour engine allows before its dimmer.
+- **White Blend mixes towards white.** At 0% the colour is shown as picked, at 50% it is half way to
+  the chosen white, and at 100% the fixture shows only that white. White Blend never changes the
+  level.
+- **Temperature and Duv choose the white.** Temperature sets the white in kelvin; Duv moves it off
+  the black-body line, towards magenta below zero and towards green above it. Both faders are white
+  at their centre.
+- **UV is separate.** A UV request never changes the visible colour, and White Blend never changes
+  UV. A fixture without UV keeps the request stored and simply shows no UV.
 - **Native colour channels are not controls.** Red, Green, Blue, White, Amber, CMY, colour wheels,
-  Hue, Saturation, Colour Temperature and Tint leave the encoders, Fixture Sheet columns and channel
-  faders. Setting one from the command line or another surface is refused with a message.
-- **Media levels remain.** A media-server layer that has its own Grayscale level keeps that control;
-  it is a picture setting, not a lamp colour.
+  Hue, Saturation, Colour Temperature and Tint channels leave the encoders, Fixture Sheet columns and
+  channel faders. The Color encoders and the special dialog author the colour instead.
+
+### Easy and Advanced
+
+**Setup → Attributes & encoders → Color model → Color controls on this desk** chooses which Color
+controls this desk's encoders offer. It belongs to the desk, not to the show, and switching it never
+changes programmed colour:
+
+- **Easy** — Red, Green, Blue and White Blend on the first Color encoder page.
+- **Easy with Amber and UV** — adds a second page with Amber and UV.
+- **Advanced** — adds a second page with Temperature, Duv and the colour wheels.
+
+Pages 3 and 4 hold the reference head's own colour controls; see [Direct Color](07-direct-color.md).
+
+### The Color special dialog
+
+When the lower encoder area has room — at least 680 × 210 pixels of the area itself, whatever the
+screen size — **Special Dialog** opens the compact dialog in place of the encoders:
+
+- The first page holds the colour picker (hue left to right, saturation bottom to top) and the
+  coloured **White Blend** fader, with **White balance** and **Expand** below the fader.
+- **White balance** shows the second page, **Temperature** and **Duv**; **Color** returns to the
+  first. Pressing **Special Dialog** again also switches between the two pages.
+- Tapping the active **Color** tab returns to the encoders on the page they were on.
+
+Where the area is smaller, and after **Expand**, the dialog opens as the full **Color** window: a large
+hue ring with **Saturation**, **White Blend**, **Temperature** and **Duv** beside it, and the
+per-fixture results below.
+
+To spread a range, hold **Shift** (the desk key, the on-screen **SHIFT** or the attached hardware) and
+touch the first value, then the last. The first touch only marks endpoint 1; the range is written
+when the last endpoint is touched, in the order touched, so a range may run downwards. The first
+selected fixture receives the first value and the last receives the last. Hue takes the shorter way
+round the colour wheel, so 350° to 10° passes through red; a range of exactly half the wheel turns
+clockwise, towards increasing hue. Touching a control again without Shift returns only that control
+to one value; every other range stays.
+
+### Media layers
+
+A selection of Media Server layers uses the same dialog titled **Media color**. The picker sets the
+layer's tint and **White Blend** turns the picture towards greyscale under that tint; the second
+page shows a preview instead of Temperature and Duv. Layer and Master Intensity stay on the
+Intensity controls. A selection that mixes lamps and Media layers uses the lamp dialog.
 
 ## How a fixture shows the colour
 
@@ -56,13 +110,24 @@ For each fixture head the desk:
 3. never parks a wheel on a split colour, a scroll, a rotation or an effect, unless the fixture
    profile marks that position as usable for a steady colour.
 
+Colour controls that are not part of the chosen engine are held still so they cannot tint it:
+colour temperature (CTC), tint, colour point, a colour wheel or colour macro in front of LED
+emitters or CMY flags, and a second colour wheel. Each one is set to its neutral position — the
+range the profile names *Open*, *No function* or *Off*, otherwise its default value — every time
+the colour is output. A fixture that has only such controls, such as a tunable-white fixture, shows
+white. On a fixture with several cells under one main head, colour controls of the main head stay at
+their defaults while each cell shows the colour.
+
+A Hue/Saturation engine is driven through a nominal hue and saturation table, so its colour is
+typical rather than measured.
+
 The same colour on the same fixture always gives exactly the same DMX, whether it comes from the
 Programmer, a Preset, a Cue, the command line, OSC or an attached control surface.
 
-### What the dialog tells you
+### What the desk tells you
 
-Below the picker, the Color dialog lists every selected fixture that does not show the colour
-exactly:
+The full Color window lists each selected fixture head with the colour it shows in the output that
+was actually sent, never a separate estimate. The visible colour and UV are reported separately:
 
 | Label | Meaning |
 |---|---|
@@ -70,11 +135,20 @@ exactly:
 | **Out of gamut** | The fixture cannot make this colour and shows the nearest one it can. |
 | **Wheel-limited** | The fixture can only choose the nearest wheel slot. |
 | **Uncalibrated** | The fixture profile has no colour calibration; the colour is a best guess from its channel names. |
-| **Unsupported** | The fixture has no colour engine and keeps its colour as it is. |
+| **Unsupported** | The fixture's colour controls cannot be described, so it keeps its colour as it is. The entry names the reason, for example LED emitters layered over a Hue/Saturation engine. |
 
-When every selected fixture matches, the dialog says so. Each entry shows the remaining difference as
-Δu′v′, the distance between the two colours on the CIE 1976 chromaticity diagram; about 0.004 and
-below is not visible on stage.
+An entry also names the colour controls that are held at their neutral position, and says when a
+fixture can show only white.
+
+The UV column reads **UV applied**, **UV limited by the emitter** or **UV unavailable on this
+fixture**. Each visible entry shows the remaining difference as Δu′v′, the distance between the two
+colours on the CIE 1976 chromaticity diagram; about 0.004 and below is not visible on stage. A
+fixture that nothing programs a colour for is not listed.
+
+These are normal capability results, not errors. Nothing interrupts programming: no message, sound
+or window opens. The Fixture Sheet shows at most one small, steady triangle beside a fixture's
+Color value when it cannot show the request as asked; tap or select it to open the full Color window
+on that fixture's details.
 
 ## Universal Color presets
 
@@ -86,8 +160,7 @@ pool tile reads **Universal** followed by the number of fixtures currently showi
 A Color preset recorded from fixtures holding different colours keeps each fixture's own colour and
 only ever applies to those fixtures; it is never stretched over the rest of the selection.
 
-Recalling a universal preset with nothing selected selects nothing and tells you to select
-fixtures first. Updating a universal preset with its own colour keeps it universal; merging a
+Recalling a universal preset with nothing selected quietly leaves the desk unchanged. Updating a universal preset with its own colour keeps it universal; merging a
 different colour for a few fixtures keeps the universal colour for everyone else.
 
 ## Fixture profiles
