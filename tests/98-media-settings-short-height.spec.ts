@@ -261,8 +261,12 @@ for (const viewport of [
 			await expect(content).toBeFocused();
 			await page.keyboard.press("End");
 			await expectAtBottom(content);
+			// A key pressed while the previous key's smooth scroll is still running can be lost
+			// to it, so each key waits for the section to come to rest.
+			await expectScrollSettled(content);
 			await page.keyboard.press("Home");
 			await expect.poll(async () => (await scrollState(content)).top).toBe(0);
+			await expectScrollSettled(content);
 			await page.keyboard.press("PageDown");
 			await expect
 				.poll(async () => (await scrollState(content)).top)

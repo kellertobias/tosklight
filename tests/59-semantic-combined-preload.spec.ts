@@ -115,6 +115,8 @@ scenario(
 		});
 
 		await t.preload.release();
+		// Output, and the visualization that reports it, change with the next published frame.
+		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 0.25 });
 		await t.playback.expect(physicalPlayback).runtime({ enabled: true });
 		await t.virtualPlayback.expect.runtime(virtualPlayback, {

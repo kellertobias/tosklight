@@ -125,6 +125,9 @@ export class BrowserCommandHistory {
 		await expect
 			.poll(async () => (await this.entries()).length)
 			.toBe(historyLength + 1);
+		// The history entry lands before the command line settles. Wait for the settled state
+		// (completed or rejected) so the next entry is not clobbered by this one's late reset.
+		await expect(input).toHaveClass(/\b(completed|error)\b/u);
 	}
 
 	private entries(): Promise<CommandHistoryEntry[]> {

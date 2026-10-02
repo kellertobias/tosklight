@@ -233,6 +233,8 @@ const preload001ApiSupplement = async ({
 			showId: prepared.showId,
 		}),
 	).toMatchObject({ status: "changed", active: false });
+	// Output, and the visualization that reports it, change with the next published frame.
+	await bench.tick(0);
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(before1, 5);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(before2, 5);
 	expect((await activePlayback(api, 30))?.current_cue_number).toBe("1");
