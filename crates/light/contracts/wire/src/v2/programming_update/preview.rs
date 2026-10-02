@@ -24,6 +24,12 @@ pub enum ProgrammingUpdateAddress {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional = nullable)]
         instance_link: Option<Uuid>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        lane_id: Option<Uuid>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        component: Option<crate::v2::programming_intent::ProgrammingComponent>,
     },
     GroupMembership {
         fixture_id: Uuid,

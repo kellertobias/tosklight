@@ -10,6 +10,10 @@ const SCHEMA_DIRECTORY: &str = "crates/light/contracts/wire/schemas/v2-output";
 
 pub(super) fn artifacts() -> Vec<GeneratedArtifact> {
     vec![
+        response_schema::<crate::v2::output_control::OutputDmxSnapshot>("output-dmx-snapshot"),
+        response_schema::<crate::v2::output_readouts::OutputReadoutSnapshot>(
+            "output-readout-snapshot",
+        ),
         request_schema::<OutputRuntimeActionRequest>("output-runtime-action-request"),
         response_schema::<OutputRuntimeActionOutcome>("output-runtime-action-outcome"),
         response_schema::<OutputRuntimeErrorResponse>("output-runtime-error-response"),

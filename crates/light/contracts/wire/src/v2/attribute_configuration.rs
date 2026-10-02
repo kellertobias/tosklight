@@ -23,6 +23,7 @@ pub enum AttributeEncoderGroup {
 pub enum AttributeValueType {
     Continuous,
     Color,
+    Position,
     Indexed,
     Control,
 }
@@ -237,10 +238,71 @@ pub struct ColorIntentHeadReport {
     pub delta_uv: Option<f32>,
     /// The chosen colour system's calibration revision; absent for inferred systems.
     pub calibration_revision: Option<u32>,
+    /// TL-550: the head's UV result, reported separately from the visible match. Present only
+    /// in the accepted-frame report for a lamp head; absent for Media and the legacy report.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub uv: Option<ColorIntentUvReport>,
+    /// TL-554: the head's Direct replay status when it shows a Direct (native) value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub direct: Option<super::native_color::ColorIntentDirectReport>,
+    /// TL-552: how the head shows colour without a profile colour model (controls parked at
+    /// neutral, shared controls left at default, a nominal hue/saturation grid, white only), or
+    /// why it has no colour model at all. Absent when there is nothing to say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub note: Option<String>,
+}
+
+/// What the fitter did with a head's requested UV, independent of the visible colour.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorIntentUvStatus {
+    /// No UV requested and the head has no UV emitter.
+    NotRequested,
+    /// Every UV emitter is driven at the requested amount (zero closes them).
+    Applied,
+    /// A UV amount is requested on a head without UV emitters; the request stays stored.
+    Unsupported,
+}
+
+/// One head's UV result in an accepted output frame.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ColorIntentUvReport {
+    pub status: ColorIntentUvStatus,
+    /// The requested amount was limited by the emitter's drive range.
+    pub clipped: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ColorIntentReport {
     pub color_model: ColorProgrammingModel,
     pub heads: Vec<ColorIntentHeadReport>,
+    /// Present only when the report is read from the accepted output frame (the family
+    /// adapters are engaged). Heads are then only those with an active requested colour in that
+    /// frame; nothing is reported against an invented white. Absent for the legacy report.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub accepted_frame: Option<ColorIntentAcceptedFrame>,
+}
+
+/// The accepted output frame a colour report was read from.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ColorIntentAcceptedFrame {
+    pub state: ColorIntentFrameState,
+    /// The published output frame whose Color results the heads report.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub frame: Option<super::output_control::OutputFrameIdentity>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ColorIntentFrameState {
+    /// `heads` come from the published frame's Color results.
+    Accepted,
+    /// No accepted output frame with Color results matches the published frame yet (or the
+    /// patch moved on since). Passive: `heads` is empty; read again.
+    NotYetAvailable,
 }

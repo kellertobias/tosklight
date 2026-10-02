@@ -2,9 +2,13 @@
 
 use super::dynamics::{
     DynamicDefinitionProjection, DynamicInstanceOverridesProjection, DynamicReferenceProjection,
-    DynamicValueTimingProjection,
+    DynamicValueAddressProjection, DynamicValueTimingProjection,
 };
 use super::events::EventSnapshotCursor;
+use super::programming_intent::{
+    ProgrammingColorProgram, ProgrammingComponent, ProgrammingGroupFamilyAssignment,
+    ProgrammingPositionIntent, ProgrammingZoomIntent,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -24,6 +28,10 @@ pub enum ProgrammingAttributeValue {
     Spread(Vec<f32>),
     Discrete(String),
     ColorXyz(ProgrammingColorXyz),
+    ColorProgram(ProgrammingColorProgram),
+    Position(ProgrammingPositionIntent),
+    Zoom(ProgrammingZoomIntent),
+    GroupFamily(Box<ProgrammingGroupFamilyAssignment>),
     RawDmx(u8),
     RawDmxExact(u32),
 }
@@ -82,7 +90,21 @@ pub enum ProgrammingDynamicSemanticValue {
         value: f32,
         timing: DynamicValueTimingProjection,
     },
+    ProgrammingFixAt {
+        mask: ProgrammingFamilyFixAt,
+        timing: DynamicValueTimingProjection,
+    },
+    ProgrammingRelease {
+        component: Option<ProgrammingComponent>,
+    },
     Release,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProgrammingFamilyFixAt {
+    pub address: DynamicValueAddressProjection,
+    pub family: ProgrammingAttributeValue,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -160,6 +182,12 @@ pub struct ProgrammingDynamicValueAddress {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub instance_link: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub lane_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub component: Option<ProgrammingComponent>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -196,6 +224,13 @@ pub struct ProgrammingIndexedPresetTarget {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingValuesAction {
+    /// Ends only this session/desk/lane's retained semantic gesture. Does not change values.
+    /// Stale revisions and an already-ended gesture return a quiet no-change outcome.
+    FinishGesture {
+        attribute: String,
+        #[schemars(length(min = 1, max = 128))]
+        undo_group: String,
+    },
     /// One application-owned fixture/head value intent. The server resolves ordered spreads,
     /// relative steps, and any configured linked-attribute captures atomically.
     ApplyIntent {
@@ -215,6 +250,22 @@ pub enum ProgrammingValuesAction {
         undo_group: Option<String>,
         #[serde(default)]
         timing: ProgrammingValueTiming,
+        /// TL-594: the exact accepted source the surface displayed. First-edit adoption uses
+        /// only that leased source and holds quietly when it is gone; omitted, the edit keeps
+        /// the latest-accepted adoption (OSC and HTTP integrators).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        displayed_source: Option<super::output_readouts::DisplayedSourceRef>,
+        /// TL-554: the reference head a Direct (`native`) edit names. Absent, the server takes
+        /// the first verified head of the ordered selection.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        native_reference: Option<super::native_color::NativeColorReferenceRef>,
+        /// TL-554: the operator's explicit starting colour when the first semantic edit of a
+        /// Direct value cannot adopt its (unknown) visible appearance.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        explicit_color_start: Option<super::native_color::ExplicitColorStart>,
     },
     /// Resolves authored fixed/indexed functions from the active show's embedded fixture
     /// revisions after checking that the selection shown by the modal is still current.
@@ -283,8 +334,16 @@ pub enum ProgrammingValuesAction {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingValueOperation {
-    AbsoluteSet { value: ProgrammingAttributeValue },
-    RelativeStep { delta: f32 },
+    ComponentEdits {
+        #[schemars(length(max = 512))]
+        edits: Vec<super::programming_intent::ProgrammingComponentEdit>,
+    },
+    AbsoluteSet {
+        value: ProgrammingAttributeValue,
+    },
+    RelativeStep {
+        delta: f32,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -376,6 +435,14 @@ pub struct ProgrammingValuesActionOutcome {
     #[serde(flatten)]
     pub outcome: ProgrammingValuesActionState,
     pub replayed: bool,
+    /// TL-594: present when an edit that named a displayed source was held quietly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub hold: Option<super::output_readouts::ProgrammingValuesHoldReason>,
+    /// TL-554: the first semantic edit of a Direct value adopted this starting value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub color_adoption: Option<super::native_color::ColorAdoptionReport>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub warning: Option<String>,
@@ -489,6 +556,8 @@ mod tests {
             capture_mode_revision: 3,
             outcome: ProgrammingValuesActionState::NoChange,
             replayed: false,
+            hold: None,
+            color_adoption: None,
             warning: None,
         };
         let json = serde_json::to_value(outcome).unwrap();

@@ -34,6 +34,7 @@ use crate::v2::preset_recording::*;
 use crate::v2::programmer_lifecycle::*;
 use crate::v2::programmer_priority::*;
 use crate::v2::programming::*;
+use crate::v2::programming_intent::*;
 use crate::v2::programming_update::*;
 use crate::v2::psn::*;
 use crate::v2::runtime::*;
@@ -60,6 +61,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(event_subscription(config));
     declarations.extend(extensions(config));
     declarations.extend(files(config));
+    declarations.extend(programming_values(config));
     declarations.extend(programming(config));
     declarations.extend(programming_update(config));
     declarations.extend(playback_projection(config));
@@ -252,6 +254,25 @@ fn dynamics(config: &Config) -> Vec<String> {
         DynamicSpatialPreviewResponse::decl(config),
         DynamicTargetBindingProjection::decl(config),
         DynamicLaneProjection::decl(config),
+        DynamicLaneBodyProjection::decl(config),
+        DynamicLegacyScalarLaneProjection::decl(config),
+        DynamicRandomRangeProjection::decl(config),
+        DynamicSemanticColorBasisProjection::decl(config),
+        DynamicFamilyRepresentationProjection::decl(config),
+        DynamicValueAddressProjection::decl(config),
+        DynamicValueProjection::decl(config),
+        DynamicValueFallbackProjection::decl(config),
+        DynamicPresetTemplateProjection::decl(config),
+        DynamicPresetGroupTemplateProjection::decl(config),
+        DynamicPresetFixtureTemplateProjection::decl(config),
+        DynamicValueSourceProjection::decl(config),
+        DynamicProgrammingLaneProjection::decl(config),
+        DynamicProgrammingLaneConfigurationProjection::decl(config),
+        DynamicProgrammingKeyframesProjection::decl(config),
+        DynamicProgrammingKeyframeProjection::decl(config),
+        DynamicProgrammingMaxMinProjection::decl(config),
+        DynamicProgrammingMiddleAmplitudeProjection::decl(config),
+        DynamicProgrammingRandomRangeProjection::decl(config),
         DynamicLaneModeProjection::decl(config),
         DynamicPhaseSpreadModeProjection::decl(config),
         DynamicKeyframeConfigurationProjection::decl(config),
@@ -316,9 +337,13 @@ fn live_actions(config: &Config) -> Vec<String> {
         ProgrammerCaptureModeHttpActionRequest::decl(config),
         ProgrammerCaptureModeOutcome::decl(config),
         ProgrammingAlignMode::decl(config),
+        ProgrammingAlignAction::decl(config),
         ProgrammingAlignLiveActionRequest::decl(config),
         ProgrammingAlignHttpActionRequest::decl(config),
         ProgrammingAlignOutcome::decl(config),
+        ProgrammingAlignmentProjection::decl(config),
+        ProgrammingAlignmentBinding::decl(config),
+        ProgrammingAlignmentLane::decl(config),
         FixtureControlLiveActionRequest::decl(config),
         FixtureControlHttpActionRequest::decl(config),
         FixtureControlTarget::decl(config),
@@ -382,6 +407,14 @@ fn desk_management(config: &Config) -> Vec<String> {
 
 fn output_control(config: &Config) -> Vec<String> {
     vec![
+        OutputFrameIdentity::decl(config),
+        OutputTrackingIdentity::decl(config),
+        OutputDmxSnapshot::decl(config),
+        OutputDmxUniverse::decl(config),
+        OutputDmxOverride::decl(config),
+        OutputPointPose::decl(config),
+        OutputNativeLane::decl(config),
+        OutputNativeInstance::decl(config),
         DmxOverrideRequest::decl(config),
         HighlightAction::decl(config),
         HighlightActionRequest::decl(config),
@@ -412,6 +445,10 @@ fn output_control(config: &Config) -> Vec<String> {
 
 fn fixture_library(config: &Config) -> Vec<String> {
     vec![
+        FixtureGdtfPreviewRequest::decl(config),
+        FixtureGdtfDiagnostic::decl(config),
+        FixtureGdtfPreview::decl(config),
+        FixtureGdtfImportRequest::decl(config),
         FixtureDefinitionsSnapshot::decl(config),
         FixtureProfilesSnapshot::decl(config),
         FixtureLibraryWarningsSnapshot::decl(config),
@@ -666,6 +703,50 @@ fn event_subscription(config: &Config) -> Vec<String> {
     ]
 }
 
+pub(super) fn programming_values(config: &Config) -> Vec<String> {
+    vec![
+        ProgrammingColorXyz::decl(config),
+        ProgrammingPhysicalDataQuality::decl(config),
+        ProgrammingOpeningConvention::decl(config),
+        ProgrammingNativeColorBinding::decl(config),
+        ProgrammingNativeColorValue::decl(config),
+        ProgrammingNativeColorIdentity::decl(config),
+        ProgrammingScalarDomain::decl(config),
+        ProgrammingScalarInterpolation::decl(config),
+        ProgrammingScalarIntent::decl(config),
+        ProgrammingOwner::decl(config),
+        ProgrammingColorComponent::decl(config),
+        ProgrammingComponent::decl(config),
+        ProgrammingComponentRole::decl(config),
+        ProgrammingComponentUnit::decl(config),
+        ProgrammingAuthoringCapability::decl(config),
+        ProgrammingComponentDescriptor::decl(config),
+        ProgrammingScalarEdit::decl(config),
+        ProgrammingNativeColorEdit::decl(config),
+        ProgrammingComponentEdit::decl(config),
+        ProgrammingVirtualColorRecipe::decl(config),
+        ProgrammingWhiteTarget::decl(config),
+        ProgrammingUvIntent::decl(config),
+        ProgrammingColorAllocation::decl(config),
+        ProgrammingColorWheelConstraint::decl(config),
+        ProgrammingColorComponentSpread::decl(config),
+        ProgrammingColorIntent::decl(config),
+        ProgrammingNativeColorRecipe::decl(config),
+        ProgrammingNativeColorSpread::decl(config),
+        ProgrammingNativeColorComponentDescriptor::decl(config),
+        ProgrammingPortableVisibleColor::decl(config),
+        ProgrammingPortableUv::decl(config),
+        ProgrammingPortableColorEstimate::decl(config),
+        ProgrammingColorProgram::decl(config),
+        ProgrammingTargetReference::decl(config),
+        ProgrammingPositionIntent::decl(config),
+        ProgrammingZoomIntent::decl(config),
+        ProgrammingAttributeBounds::decl(config),
+        ProgrammingGroupFamilyAssignment::decl(config),
+        ProgrammingAttributeValue::decl(config),
+    ]
+}
+
 fn programming(config: &Config) -> Vec<String> {
     let mut declarations = vec![
         ProgrammingLifecycleSession::decl(config),
@@ -682,11 +763,10 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammerPriorityActionOutcome::decl(config),
         ProgrammerPriorityErrorKind::decl(config),
         ProgrammerPriorityErrorResponse::decl(config),
-        ProgrammingColorXyz::decl(config),
-        ProgrammingAttributeValue::decl(config),
         ProgrammingFixtureValue::decl(config),
         ProgrammingGroupValue::decl(config),
         ProgrammingDynamicSemanticValue::decl(config),
+        ProgrammingFamilyFixAt::decl(config),
         ProgrammingDynamicValue::decl(config),
         ProgrammingCaptureModeProjection::decl(config),
         ProgrammingCaptureModeChange::decl(config),
@@ -980,6 +1060,19 @@ fn patch(config: &Config) -> Vec<String> {
         PatchGelDefinitionSnapshot::decl(config),
         PatchGelAssignment::decl(config),
         PatchInstalledFixtureAppearance::decl(config),
+        PatchCalibrationQuality::decl(config),
+        PatchPositionCalibration::decl(config),
+        PatchAxisOverrides::decl(config),
+        PatchAxisCalibration::decl(config),
+        PatchPositionCalibrationIdentity::decl(config),
+        PatchColorCalibration::decl(config),
+        PatchColorPathCalibration::decl(config),
+        PatchNativeColorIdentity::decl(config),
+        PatchEmitterCalibration::decl(config),
+        PatchOpticalProvenance::decl(config),
+        PatchColorRecipeMeasurement::decl(config),
+        PatchNativeColorValue::decl(config),
+        PatchColorXyz::decl(config),
         PatchMultiPatchInput::decl(config),
         PatchHighlightOverrideInput::decl(config),
         PatchFixtureInput::decl(config),
@@ -1040,6 +1133,10 @@ fn psn(config: &Config) -> Vec<String> {
         PsnZoneProjection::decl(config),
         PsnConfigurationProjection::decl(config),
         PsnHealthProjection::decl(config),
+        PsnAcceptedSampleProjection::decl(config),
+        PsnIngressDiagnosticsProjection::decl(config),
+        PsnSourceProjection::decl(config),
+        PsnReceiverDiagnosticsProjection::decl(config),
         PsnTrackerProjection::decl(config),
         PsnPlacementProjection::decl(config),
         PsnStatusProjection::decl(config),

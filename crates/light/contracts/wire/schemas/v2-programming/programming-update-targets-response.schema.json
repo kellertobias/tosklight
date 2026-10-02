@@ -35,6 +35,190 @@
     "targets"
   ],
   "$defs": {
+    "ProgrammingColorComponent": {
+      "type": "string",
+      "enum": [
+        "red",
+        "green",
+        "blue",
+        "amber",
+        "hue",
+        "saturation",
+        "white_blend",
+        "temperature",
+        "duv",
+        "uv",
+        "relative_output"
+      ]
+    },
+    "ProgrammingComponent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "$ref": "#/$defs/ProgrammingColorComponent"
+            },
+            "kind": {
+              "type": "string",
+              "const": "color"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "color_wheel"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "$ref": "#/$defs/ProgrammingNativeColorBinding"
+            },
+            "kind": {
+              "type": "string",
+              "const": "native_color"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "pan"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tilt"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_reference"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_x"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_y"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_z"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "focus"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "zoom"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "ProgrammingNativeColorBinding": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "function_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "channel_id",
+        "function_id"
+      ]
+    },
     "ProgrammingUpdateAddress": {
       "oneOf": [
         {
@@ -86,11 +270,28 @@
             "attribute": {
               "type": "string"
             },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ProgrammingComponent"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "fixture_id": {
               "type": "string",
               "format": "uuid"
             },
             "instance_link": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            },
+            "lane_id": {
               "type": [
                 "string",
                 "null"

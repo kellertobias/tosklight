@@ -8,7 +8,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum CueDeletionAddress {
     Pool { playback_number: u16 },
     CurrentPage { expected_page: u8, slot: u8 },
@@ -16,7 +16,6 @@ pub enum CueDeletionAddress {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct CueDeletionAuthority {
     pub playback_number: u16,
     pub cue_list_id: Uuid,
@@ -29,7 +28,6 @@ pub struct CueDeletionAuthority {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct CueDeletionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -127,7 +125,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn request_is_strict_and_keeps_scope_server_authored() {
+    fn request_ignores_unknown_fields_and_keeps_scope_server_authored() {
         let request = serde_json::json!({
             "request_id":"delete-1",
             "address":{"type":"current_page","expected_page":2,"slot":3},
@@ -140,17 +138,30 @@ mod tests {
                 "cue_id":Uuid::from_u128(2)
             }
         });
-        assert!(serde_json::from_value::<CueDeletionRequest>(request.clone()).is_ok());
+        let expected: CueDeletionRequest = serde_json::from_value(request.clone()).unwrap();
         for forged in ["desk_id", "show_id", "user_id", "expected_show_revision"] {
             let mut forged_request = request.clone();
             forged_request[forged] = serde_json::json!("forged");
-            assert!(serde_json::from_value::<CueDeletionRequest>(forged_request).is_err());
+            forged_request["address"]["future"] = serde_json::json!(true);
+            forged_request["authority"]["future"] = serde_json::json!(true);
+            assert_eq!(
+                serde_json::from_value::<CueDeletionRequest>(forged_request).unwrap(),
+                expected
+            );
         }
+        let mut invalid = request;
+        invalid["authority"]["object_revision"] = serde_json::json!("four");
+        assert!(serde_json::from_value::<CueDeletionRequest>(invalid).is_err());
     }
 
     #[test]
-    fn tagged_addresses_and_outcomes_reject_unknown_fields() {
+    fn tagged_addresses_ignore_extras_but_validate_known_fields_and_outcomes_remain_strict() {
         let address = serde_json::json!({"type":"pool","playback_number":1,"page":2});
+        assert_eq!(
+            serde_json::from_value::<CueDeletionAddress>(address).unwrap(),
+            CueDeletionAddress::Pool { playback_number: 1 }
+        );
+        let address = serde_json::json!({"type":"pool","playback_number":"one"});
         assert!(serde_json::from_value::<CueDeletionAddress>(address).is_err());
         let outcome = serde_json::json!({"status":"changed","unexpected":true});
         assert!(serde_json::from_value::<CueDeletionOutcome>(outcome).is_err());

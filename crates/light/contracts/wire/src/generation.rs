@@ -1,7 +1,11 @@
 //! Deterministic checked-in artifacts derived from the Rust wire DTOs.
 
 mod declarations;
+mod family_encoders;
+mod native_color;
 mod output;
+mod output_readouts;
+mod pending_output;
 
 use std::{fs, io, path::Path};
 
@@ -111,7 +115,13 @@ pub struct GeneratedArtifact {
 /// Render every checked-in artifact without touching the filesystem.
 pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
     let mut artifacts = command_and_event_artifacts();
+    artifacts.push(GeneratedArtifact {
+        path: "apps/patch-library/src/generated/programming-values.ts".into(),
+        contents: render_typescript(declarations::programming_values(&Config::default())),
+    });
     artifacts.extend(output::artifacts());
+    artifacts.extend(family_encoders::artifacts());
+    artifacts.extend(native_color::artifacts());
     artifacts.extend(programming_artifacts());
     artifacts.extend(playback_and_show_artifacts());
     artifacts.extend(schedule_artifacts());
@@ -464,7 +474,17 @@ fn schema_artifact<T: JsonSchema>(name: &str, settings: SchemaSettings) -> Gener
 }
 
 fn typescript_bindings() -> String {
-    let declarations = declarations::all(&Config::default())
+    let config = Config::default();
+    let mut declarations = declarations::all(&config);
+    declarations.extend(output_readouts::declarations(&config));
+    declarations.extend(family_encoders::declarations(&config));
+    declarations.extend(native_color::declarations(&config));
+    declarations.extend(pending_output::declarations(&config));
+    render_typescript(declarations)
+}
+
+fn render_typescript(declarations: Vec<String>) -> String {
+    let declarations = declarations
         .into_iter()
         .map(export_declaration)
         .collect::<Vec<_>>()

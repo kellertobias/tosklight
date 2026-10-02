@@ -207,12 +207,23 @@ pub struct ProgrammerCaptureModeOutcome {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingAlignLiveActionRequest {
     pub request_id: String,
-    pub mode: ProgrammingAlignMode,
+    pub mode: ProgrammingAlignAction,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingAlignHttpActionRequest {
-    pub mode: ProgrammingAlignMode,
+    pub mode: ProgrammingAlignAction,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgrammingAlignAction {
+    Off,
+    Left,
+    Right,
+    Out,
+    In,
+    Cycle,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -265,6 +276,7 @@ pub struct ProgrammingAlignOutcome {
     pub revision: Option<u64>,
     pub bound_attribute: Option<String>,
     pub fixture_count: usize,
+    pub alignment: crate::v2::command_line::ProgrammingAlignmentProjection,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

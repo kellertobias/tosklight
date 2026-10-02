@@ -51,6 +51,11 @@ pub enum VisualizationClientMessage {
         /// disabled and continue to receive one JSON object per frame.
         #[serde(default)]
         batched_messages: bool,
+        /// TL-594: claim typed readouts for these owners from the same accepted Normal
+        /// source as the lane messages. A new Subscribe replaces the claim.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        readouts: Option<super::output_readouts::VisualizationReadoutClaim>,
     },
     Unsubscribe {
         lanes: Vec<VisualizationLane>,
@@ -172,6 +177,15 @@ pub enum VisualizationServerMessage {
         source_timestamp: String,
         published_at: String,
         snapshot: VisualizationLaneSnapshot,
+        /// TL-594: opaque session-scoped lease of this delivered accepted source. Absent for a
+        /// lane that has no accepted source to lease (Preload until TL-548 publishes one).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable, type = "number | null")]
+        lease: Option<u64>,
+        /// TL-594: the Pending episode and ticket of a gated Preload lane message.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        pending: Option<super::output_readouts::VisualizationPendingStamp>,
     },
     Delta {
         lane: VisualizationLane,
@@ -183,6 +197,24 @@ pub enum VisualizationServerMessage {
         source_timestamp: String,
         published_at: String,
         delta: VisualizationLaneDelta,
+        /// TL-594: opaque session-scoped lease of this delivered accepted source. Absent for a
+        /// lane that has no accepted source to lease (Preload until TL-548 publishes one).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable, type = "number | null")]
+        lease: Option<u64>,
+        /// TL-594: the Pending episode and ticket of a gated Preload lane message.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        pending: Option<super::output_readouts::VisualizationPendingStamp>,
+    },
+    /// TL-594: typed readouts of the claimed owners, built from the same accepted source and
+    /// carrying the same lease as the Normal lane message of this publication.
+    Readouts {
+        #[ts(type = "number")]
+        sequence: u64,
+        #[ts(type = "number")]
+        source_frame: u64,
+        readouts: super::output_readouts::OutputReadoutSnapshot,
     },
     Heartbeat {
         scope: VisualizationScope,
@@ -223,6 +255,7 @@ mod tests {
                 include_dynamic_stack: false,
                 sparse_dynamic_stack: false,
                 batched_messages: false,
+                readouts: None,
             }
         );
     }

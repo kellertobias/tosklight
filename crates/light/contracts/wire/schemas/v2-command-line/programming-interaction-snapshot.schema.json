@@ -497,10 +497,281 @@
         }
       ]
     },
+    "ProgrammingAlignMode": {
+      "type": "string",
+      "enum": [
+        "off",
+        "left",
+        "right",
+        "out",
+        "in"
+      ]
+    },
+    "ProgrammingAlignmentBinding": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "attribute"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "attribute"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "$ref": "#/$defs/ProgrammingComponent"
+            },
+            "group_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "family"
+            },
+            "lane": {
+              "$ref": "#/$defs/ProgrammingAlignmentLane"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "component",
+            "lane",
+            "group_id"
+          ]
+        }
+      ]
+    },
+    "ProgrammingAlignmentLane": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "preload"
+      ]
+    },
+    "ProgrammingAlignmentProjection": {
+      "type": "object",
+      "properties": {
+        "binding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammingAlignmentBinding"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixture_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "mode": {
+          "$ref": "#/$defs/ProgrammingAlignMode"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "mode",
+        "binding",
+        "fixture_count"
+      ]
+    },
+    "ProgrammingColorComponent": {
+      "type": "string",
+      "enum": [
+        "red",
+        "green",
+        "blue",
+        "amber",
+        "hue",
+        "saturation",
+        "white_blend",
+        "temperature",
+        "duv",
+        "uv",
+        "relative_output"
+      ]
+    },
+    "ProgrammingComponent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "$ref": "#/$defs/ProgrammingColorComponent"
+            },
+            "kind": {
+              "type": "string",
+              "const": "color"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "color_wheel"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "$ref": "#/$defs/ProgrammingNativeColorBinding"
+            },
+            "kind": {
+              "type": "string",
+              "const": "native_color"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "pan"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tilt"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_reference"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_x"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_y"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_z"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "focus"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "zoom"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
     "ProgrammingInteractionProjection": {
       "description": "Authoritative interaction context shared by every control surface attached to one desk.",
       "type": "object",
       "properties": {
+        "alignment": {
+          "$ref": "#/$defs/ProgrammingAlignmentProjection"
+        },
         "command_line": {
           "$ref": "#/$defs/CommandLineResponse"
         },
@@ -515,7 +786,25 @@
       "required": [
         "desk_id",
         "command_line",
-        "selection"
+        "selection",
+        "alignment"
+      ]
+    },
+    "ProgrammingNativeColorBinding": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "function_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "channel_id",
+        "function_id"
       ]
     }
   }
