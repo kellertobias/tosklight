@@ -9,6 +9,11 @@ export type DynamicKeyframeSource =
 	| { preset: { family: PresetFamily; number: number } };
 
 export interface DynamicLaneIntent {
+	/**
+	 * A scalar address (`intensity`), or since the TL-552 cutover a semantic family component:
+	 * `position:pan` / `position:tilt` (Angles in degrees) or `color:<recipe component>` (0–1).
+	 * Programming contract 1 refuses scalar lanes on legacy `pan`, `tilt` and `color.*`.
+	 */
 	attribute: string;
 	/** Positions through one cycle, 0 to 1, each with the value the lane passes through there. */
 	keyframes: Array<[position: number, source: DynamicKeyframeSource]>;
@@ -113,7 +118,62 @@ function definition(intent: DynamicIntent) {
 	};
 }
 
+/** The typed Programming address of a semantic lane, or undefined for a scalar lane. */
+function semanticAddress(attribute: string) {
+	const [owner, component, ...rest] = attribute.split(":");
+	if (component === undefined) return undefined;
+	if (rest.length === 0 && owner === "position" && (component === "pan" || component === "tilt"))
+		return { representation: { kind: "angles" }, component: { kind: component } };
+	if (
+		rest.length === 0 &&
+		owner === "color" &&
+		["red", "green", "blue", "amber", "white_blend"].includes(component)
+	)
+		return {
+			representation: { kind: "semantic_color", basis: "recipe" },
+			component: { kind: "color", component },
+		};
+	throw new Error(`Dynamic lane address ${attribute} is not a semantic family component`);
+}
+
+function semanticLane(
+	intent: DynamicLaneIntent,
+	address: NonNullable<ReturnType<typeof semanticAddress>>,
+) {
+	return {
+		id: crypto.randomUUID(),
+		speed_multiplier: { numerator: 1, denominator: 1 },
+		width: 1,
+		random_group_id: null,
+		phase: null,
+		programming: {
+			address,
+			configuration: {
+				mode: "keyframes",
+				configuration: {
+					points: intent.keyframes.map(([position, source]) => ({
+						position: Math.min(position, 0.999),
+						source:
+							typeof source === "number"
+								? { kind: "value", value: { kind: "scalar", value: source } }
+								: {
+										kind: "preset",
+										preset_id: presetId(source),
+										address,
+										last_valid_by_target: [],
+									},
+						interpolation: "linear",
+					})),
+					size: 1,
+				},
+			},
+		},
+	};
+}
+
 function lane(intent: DynamicLaneIntent) {
+	const address = semanticAddress(intent.attribute);
+	if (address) return semanticLane(intent, address);
 	const unused = {
 		function: "sinus",
 		size: 1,
@@ -155,13 +215,17 @@ function scalar(attribute: string, source: DynamicKeyframeSource) {
 	if (typeof source === "number") return { type: "value", value: source };
 	return {
 		type: "preset",
-		preset_id: presetStorageKey({
-			family: source.preset.family as Parameters<
-				typeof presetStorageKey
-			>[0]["family"],
-			number: source.preset.number,
-		}),
+		preset_id: presetId(source),
 		attribute,
 		last_valid_by_target: [],
 	};
+}
+
+function presetId(source: Exclude<DynamicKeyframeSource, number>) {
+	return presetStorageKey({
+		family: source.preset.family as Parameters<
+			typeof presetStorageKey
+		>[0]["family"],
+		number: source.preset.number,
+	});
 }

@@ -46,8 +46,9 @@ describe("Plan 76 Virtual Playback exclusion zones", () => {
 			movementDefinitions.every(
 				(definition) =>
 					definition?.target_binding.group_id === "4" &&
-					definition.lanes.some((lane: { attribute: string }) =>
-						["pan", "tilt"].includes(lane.attribute),
+					// TL-552: movement lanes are typed Angles Programming lanes.
+					definition.lanes.some((lane: any) =>
+						["pan", "tilt"].includes(lane.programming?.address?.component?.kind),
 					),
 			),
 		).toBe(true);

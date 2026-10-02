@@ -11,7 +11,7 @@ HARDWARE_UI="$ROOT/apps/light-hardware-controls"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
 # Backs the root package.json test scripts; invoke via `npm run test:<name>`.
-usage(){ echo "Usage: npm run test:{unit|typescript-unit|verify|rust-workspace|architecture|ui-package|patch-package|patch-mcp|viz-editor|media-app|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
+usage(){ echo "Usage: npm run test:{unit|typescript-unit|verify|rust-workspace|architecture|ui-package|patch-package|patch-mcp|viz-editor|media-app|storybook|e2e-build|e2e|e2e-api|e2e-ui|e2e-performance|e2e-semantic|e2e-semantic-build|app-icons|artifact-paths|documentation-screenshots|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
 build_e2e(){
   if [[ "${LIGHT_REUSE_E2E_BUILD:-0}" == "1" ]]; then
     local server="${LIGHT_E2E_SERVER:-$LIGHT_CARGO_TARGET_DIR/debug/light-headless}"
@@ -28,6 +28,36 @@ build_e2e(){
   # assets from disk in debug builds, so opt into a self-contained UI for the transferable binary.
   light_with_cargo_command_lock "npm run test:e2e build" \
     cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features --features e2e-embedded-ui
+}
+# The E2E semantic test server: the same embedded-UI debug server plus the `e2e-semantic-contract`
+# cargo feature, copied to its own path. The default E2E binary at debug/light-headless is restored
+# afterwards. Since TL-552 the feature is a retained no-op: every build reports contract 1.
+E2E_SEMANTIC_SERVER_DIR="$LIGHT_CARGO_TARGET_DIR/e2e-semantic"
+build_e2e_semantic(){
+  local default_server="$LIGHT_CARGO_TARGET_DIR/debug/light-headless"
+  local semantic_server="$E2E_SEMANTIC_SERVER_DIR/light-headless"
+  local preserved="$LIGHT_TMP_DIR/e2e-semantic-preserved-light-headless"
+  if [[ "${LIGHT_REUSE_FRONTEND_BUILD:-0}" != "1" ]]; then
+    (cd "$UI" && npm run build)
+  fi
+  mkdir -p "$E2E_SEMANTIC_SERVER_DIR" "$LIGHT_TMP_DIR"
+  rm -f "$preserved"
+  [[ -x "$default_server" ]] && /bin/cp -f "$default_server" "$preserved"
+  light_with_cargo_command_lock "npm run test:e2e-semantic build" \
+    cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features \
+      --features e2e-embedded-ui,e2e-semantic-contract
+  /bin/cp -f "$default_server" "$semantic_server"
+  if [[ -f "$preserved" ]]; then
+    /bin/cp -f "$preserved" "$default_server"
+    rm -f "$preserved"
+  else
+    rm -f "$default_server"
+  fi
+}
+e2e_semantic(){
+  build_e2e_semantic
+  (cd "$UI" && LIGHT_E2E_SEMANTIC_SERVER="$E2E_SEMANTIC_SERVER_DIR/light-headless" \
+    npx playwright test --config ../../playwright.e2e-semantic.config.ts "$@")
 }
 architecture_check(){
   local label="$1"
@@ -56,6 +86,7 @@ architecture(){
   architecture_check "Performance publication" node --test "$ROOT/tools/performance-publication.test.mjs"
   architecture_check "Release performance runner" node --test "$ROOT/tools/run-release-performance.test.mjs"
   architecture_check "Sustained output benchmark" node --test "$ROOT/tools/run-sustained-output-benchmark.test.mjs"
+  architecture_check "Semantic performance workloads" node --test "$ROOT/tools/semantic-performance-workload.test.mjs" "$ROOT/tools/semantic-performance-report.test.mjs" "$ROOT/tools/semantic-source-manifest.test.mjs"
   architecture_check "Semantic test documentation" node --test "$ROOT/tools/semantic-test-docs/"*.test.mjs
   architecture_check "Dependency directions" node "$ROOT/tools/check-architecture.mjs"
   architecture_check "Application icons" node "$ROOT/tools/test-app-icons.mjs"
@@ -167,6 +198,8 @@ case "$command" in
   e2e-api) e2e_api "$@" ;;
   e2e-ui) e2e_ui "$@" ;;
   e2e-performance) e2e_performance "$@" ;;
+  e2e-semantic-build) build_e2e_semantic ;;
+  e2e-semantic) e2e_semantic "$@" ;;
   documentation-screenshots) documentation_screenshots "$@" ;;
   marketing-screenshots) marketing_screenshots "$@" ;;
   help-screenshots) help_screenshots "$@" ;;

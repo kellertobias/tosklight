@@ -22,8 +22,10 @@ export class BrowserOscEncoderRoute {
 		await this.desk.click(
 			this.page.getByRole("button", { name: family, exact: true }),
 		);
+		// A semantic Pan/Tilt slot read back from the displayed output says so (`Tilt · Resolved`,
+		// TL-549) in the attached-hardware layout exactly as in the software layout.
 		const display = this.page.getByLabel(
-			new RegExp(`^Encoder \\d+: ${escapeRegex(label)},`),
+			new RegExp(`^Encoder \\d+: ${escapeRegex(label)}(?: · Resolved)?,`),
 		);
 		await expect(display).toBeVisible();
 		const ariaLabel = await display.getAttribute("aria-label");

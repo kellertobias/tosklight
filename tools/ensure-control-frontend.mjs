@@ -22,6 +22,8 @@ const inputs = [
 	"apps/light-desktop/src",
 	"apps/ui-library/package.json",
 	"apps/ui-library/src",
+	"apps/patch-library/package.json",
+	"apps/patch-library/src",
 ];
 const signaturePath = path.join(
 	artifactPaths.root,

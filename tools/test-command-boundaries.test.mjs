@@ -356,3 +356,64 @@ test("an unversioned baseline is rejected", () => {
 		"test command boundary baseline version must be 2",
 	]);
 });
+
+// TL-552: every build now reports the semantic programming contract, so the feature is a retained
+// no-op. The boundary still holds: only the separately named E2E semantic server enables it, and
+// no production, release, desktop or CI path names it.
+test("only the E2E semantic test server build enables the retained no-op semantic contract feature", () => {
+	const feature = "e2e-semantic-contract";
+	const testScript = fs.readFileSync(path.join(repositoryRoot, "tools/test.sh"), "utf8");
+	const functionBody = (name) =>
+		new RegExp(`^${name}\\(\\)\\{\\n([\\s\\S]*?)^\\}`, "mu").exec(testScript)?.[1] ?? "";
+	// The default E2E build (also reused by CI shards) and every other test lane stay production.
+	assert.match(functionBody("build_e2e"), /--features e2e-embedded-ui\b/u);
+	assert.doesNotMatch(functionBody("build_e2e"), new RegExp(feature, "u"));
+	assert.match(functionBody("build_e2e_semantic"), new RegExp(`--features e2e-embedded-ui,${feature}\\b`, "u"));
+	assert.equal(
+		testScript.match(new RegExp(`--features [\\w,-]*${feature}`, "gu"))?.length,
+		1,
+		"exactly one cargo command in tools/test.sh enables the feature",
+	);
+	// The feature is never a default and is forwarded only by the light-headless binary crate.
+	for (const manifest of [
+		"crates/light/adapters/headless/Cargo.toml",
+		"apps/light-headless/Cargo.toml",
+	]) {
+		const text = fs.readFileSync(path.join(repositoryRoot, manifest), "utf8");
+		const defaults = /^default\s*=\s*\[([^\]]*)\]/mu.exec(text)?.[1] ?? "";
+		assert.doesNotMatch(defaults, new RegExp(feature, "u"), manifest);
+	}
+	// No build, release, desktop or CI path outside the allowed files mentions the feature.
+	const allowed = new Set([
+		"Cargo.lock",
+		"crates/light/adapters/headless/Cargo.toml",
+		"crates/light/adapters/headless/src/runtime/e2e_semantic_contract.rs",
+		"crates/light/adapters/headless/src/runtime/startup_state.rs",
+		"apps/light-headless/Cargo.toml",
+		"tools/test.sh",
+		"tools/test-command-boundaries.test.mjs",
+		"playwright.e2e-semantic.config.ts",
+		"tests/bench/core/lightBench.ts",
+		"tests/bench/core/fixtures.ts",
+		"tests/bench/core/semanticContract.ts",
+	]);
+	const roots = [".github", ".forgejo", "tools", "apps", "crates", "package.json", "Cargo.toml"];
+	const offenders = [];
+	const visit = (relative) => {
+		const absolute = path.join(repositoryRoot, relative);
+		if (!fs.existsSync(absolute)) return;
+		const stat = fs.statSync(absolute);
+		if (stat.isDirectory()) {
+			for (const entry of fs.readdirSync(absolute)) {
+				if (entry === "node_modules" || entry.startsWith(".artifacts") || entry === "target") continue;
+				visit(path.join(relative, entry));
+			}
+			return;
+		}
+		if (stat.size > 2_000_000 || !/\.(rs|toml|sh|mjs|cjs|js|ts|tsx|json|ya?ml)$/u.test(relative)) return;
+		if (allowed.has(relative.split(path.sep).join("/"))) return;
+		if (fs.readFileSync(absolute, "utf8").includes(feature)) offenders.push(relative);
+	};
+	for (const root of roots) visit(root);
+	assert.deepEqual(offenders, []);
+});

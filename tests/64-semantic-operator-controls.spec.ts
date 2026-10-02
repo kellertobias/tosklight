@@ -64,12 +64,13 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 		await t.command.execute("FIXTURE 101 THRU 105");
+		// Pan is an Angle in degrees since the TL-552 cutover: ±270° are the ends of a 540° travel.
 		await t.encoder.position.pan.via.ui.set([
-			100,
+			270,
 			ProgrammerToken.Thru,
-			0,
+			-270,
 			ProgrammerToken.Thru,
-			100,
+			270,
 		]);
 		await t.clock.advanceBy("3s");
 		for (const [number, value] of [255, 128, 0, 128, 255].entries())

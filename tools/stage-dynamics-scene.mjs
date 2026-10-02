@@ -1,19 +1,35 @@
 import { LARGE_STAGE_DYNAMIC_INSTANCES } from "./stage-large-scene.mjs";
 
-const DYNAMIC_ATTRIBUTES = new Set([
-	"intensity",
-	"color.red",
-	"color.green",
-	"color.blue",
-	"color.cyan",
-	"color.magenta",
-	"color.yellow",
-	"color.amber",
-	"color.white",
-	"color.uv",
-	"pan",
-	"tilt",
+/**
+ * Profile channel attributes that carry an animated Large Stage lane, mapped to the lane the
+ * contract-1 desk accepts (TL-552). Intensity stays a scalar lane. Color and Position are
+ * semantic families since the cutover, so their channels map to one component of the owner:
+ * subtractive CMY flags drive the matching recipe primary, White drives White Blend, and Pan and
+ * Tilt drive Angles in degrees. One lane per (target, component) keeps the workload's address
+ * count and motion of the legacy scalar scene.
+ */
+const DYNAMIC_ATTRIBUTES = new Map([
+	["intensity", "intensity"],
+	["color.red", "color.red"],
+	["color.cyan", "color.red"],
+	["color.green", "color.green"],
+	["color.magenta", "color.green"],
+	["color.blue", "color.blue"],
+	["color.yellow", "color.blue"],
+	["color.amber", "color.amber"],
+	["color.white", "color.white_blend"],
+	["color.uv", "color.uv"],
+	["pan", "position.pan"],
+	["tilt", "position.tilt"],
 ]);
+
+/** Nominal centred travel used to express the legacy 20–80 % Pan/Tilt sweep in degrees. */
+export const LARGE_STAGE_PAN_TRAVEL_DEGREES = 540;
+export const LARGE_STAGE_TILT_TRAVEL_DEGREES = 270;
+
+/** The family a lane belongs to; one Dynamic animates one family, as an operator would. */
+const laneFamily = (lane) =>
+	lane === "intensity" ? "intensity" : lane.startsWith("color.") ? "color" : "position";
 
 export function createLargeStageDynamicsPlan(patch, largeScene) {
 	const dynamicRoots = new Set(largeScene.dynamicFixtureIds);
@@ -41,14 +57,30 @@ export function createLargeStageDynamicsPlan(patch, largeScene) {
 			attribute,
 		})),
 	);
-	const buckets = partitionAddresses(addresses, LARGE_STAGE_DYNAMIC_INSTANCES);
+	// A Color or Position owner is one family value per target, so the components of one target
+	// share one Dynamic (two Dynamics on one owner would replace each other, not add up). Each
+	// partition unit is one target's family with its component lanes.
+	const units = [
+		...Map.groupBy(
+			addresses,
+			(address) =>
+				`${laneFamily(address.attribute)}\u0000${address.target}`,
+		).values(),
+	].map((group) => ({
+		target: group[0].target,
+		family: laneFamily(group[0].attribute),
+		lanes: group.map((address) => address.attribute).sort(),
+	}));
+	const buckets = partitionUnits(units, LARGE_STAGE_DYNAMIC_INSTANCES);
 	const activations = buckets.map((bucket, index) => ({
-		definition: dynamicDefinition(bucket[0].attribute, index),
-		targets: bucket.map((address) => address.target),
+		definition: dynamicDefinition(bucket, index),
+		targets: bucket.map((unit) => unit.target),
 	}));
 	const identities = buckets.flatMap((bucket) =>
-		bucket.map((address) => `${address.target}:${address.attribute}`),
+		bucket.flatMap((unit) => unit.lanes.map((lane) => `${unit.target}:${lane}`)),
 	);
+	if (identities.length !== addresses.length)
+		throw new Error("Large Stage Dynamic partitions lost an address");
 	if (new Set(identities).size !== identities.length)
 		throw new Error("Large Stage Dynamic address partitions overlap");
 	return {
@@ -58,10 +90,10 @@ export function createLargeStageDynamicsPlan(patch, largeScene) {
 		dynamicTargetCount: addresses.length,
 		staticControlFixtureIds: [...largeScene.staticControlFixtureIds],
 		laneCoverage: Object.fromEntries(
-			[...DYNAMIC_ATTRIBUTES]
-				.map((attribute) => [
-					attribute,
-					addresses.filter((address) => address.attribute === attribute).length,
+			[...new Set(DYNAMIC_ATTRIBUTES.values())]
+				.map((lane) => [
+					lane,
+					addresses.filter((address) => address.attribute === lane).length,
 				])
 				.filter(([, count]) => count > 0),
 		),
@@ -87,9 +119,14 @@ function fixtureTargetDescriptors(fixture, profiles) {
 		);
 		const attributes = new Set(
 			channels
-				.map((channel) => channel.attribute)
-				.filter((attribute) => DYNAMIC_ATTRIBUTES.has(attribute)),
+				.map((channel) => DYNAMIC_ATTRIBUTES.get(channel.attribute))
+				.filter((lane) => lane !== undefined),
 		);
+		// Angles are a pair: a head with either axis animates both.
+		if (attributes.has("position.pan") || attributes.has("position.tilt")) {
+			attributes.add("position.pan");
+			attributes.add("position.tilt");
+		}
 		if (
 			!attributes.has("intensity") &&
 			channels.some((channel) => channel.reacts_to_virtual_intensity)
@@ -120,40 +157,52 @@ function fixtureTargetDescriptors(fixture, profiles) {
 	return descriptors;
 }
 
-function partitionAddresses(addresses, count) {
+/**
+ * Splits the units into `count` Dynamics. Units group by family and lane signature (one Dynamic
+ * holds one lane set); instances are allotted to the heaviest groups by address load, and each
+ * group's units are dealt round-robin over its instances.
+ */
+function partitionUnits(units, count) {
 	const groups = new Map();
-	for (const address of addresses) {
-		const group = groups.get(address.attribute) ?? [];
-		group.push(address);
-		groups.set(address.attribute, group);
+	for (const unit of units) {
+		const signature = `${unit.family}:${unit.lanes.join("|")}`;
+		const group = groups.get(signature) ?? [];
+		group.push(unit);
+		groups.set(signature, group);
 	}
 	if (groups.size > count)
 		throw new Error(
-			`Large Stage has ${groups.size} attributes but only ${count} instances`,
+			`Large Stage has ${groups.size} lane sets but only ${count} instances`,
 		);
+	const load = (signature) =>
+		groups.get(signature).reduce((sum, unit) => sum + unit.lanes.length, 0);
 	const allocations = new Map(
 		[...groups.keys()].map((signature) => [signature, 1]),
 	);
 	while (
 		[...allocations.values()].reduce((sum, value) => sum + value, 0) < count
 	) {
-		const signature = [...groups.keys()].sort((left, right) => {
-			const leftLoad = groups.get(left).length / allocations.get(left);
-			const rightLoad = groups.get(right).length / allocations.get(right);
-			return rightLoad - leftLoad || left.localeCompare(right);
-		})[0];
+		const signature = [...groups.keys()]
+			.filter((key) => allocations.get(key) < groups.get(key).length)
+			.sort((left, right) => {
+				const leftLoad = load(left) / allocations.get(left);
+				const rightLoad = load(right) / allocations.get(right);
+				return rightLoad - leftLoad || left.localeCompare(right);
+			})[0];
+		if (!signature)
+			throw new Error(`Large Stage has too few targets for ${count} instances`);
 		allocations.set(signature, allocations.get(signature) + 1);
 	}
 	const buckets = [];
-	for (const [attribute, group] of [...groups.entries()].sort(
+	for (const [signature, group] of [...groups.entries()].sort(
 		([left], [right]) => left.localeCompare(right),
 	)) {
 		const allocated = Array.from(
-			{ length: allocations.get(attribute) },
+			{ length: allocations.get(signature) },
 			() => [],
 		);
-		group.forEach((descriptor, index) => {
-			allocated[index % allocated.length].push(descriptor);
+		group.forEach((unit, index) => {
+			allocated[index % allocated.length].push(unit);
 		});
 		buckets.push(...allocated);
 	}
@@ -162,19 +211,23 @@ function partitionAddresses(addresses, count) {
 	return buckets;
 }
 
-function dynamicDefinition(attribute, index) {
+function dynamicDefinition(bucket, index) {
 	const number = index + 1;
+	const id = deterministicUuid("3", number);
 	return {
-		id: deterministicUuid("3", number),
+		id,
 		pool_number: 9_000 + number,
 		revision: 1,
 		name: `Stage capacity Dynamic ${String(number).padStart(2, "0")}`,
 		color: null,
 		icon: null,
 		target_binding: { type: "targetless" },
-		lanes: [dynamicLane(attribute, number, 0)],
+		lanes: bucket[0].lanes.map((lane, laneIndex) =>
+			dynamicLane(lane, number, laneIndex),
+		),
 		random_groups: [],
 		phase_mode: "uniform",
+		spatial_mapping: { projection: { type: "inherit" }, shape: { type: "inherit" } },
 		phase: {
 			ordering: { type: "selection" },
 			offset_degrees: (index * 19) % 360,
@@ -195,54 +248,54 @@ function dynamicDefinition(attribute, index) {
 	};
 }
 
-function dynamicLane(attribute, dynamicNumber, laneIndex) {
-	const [minimum, maximum] =
-		attribute === "intensity"
-			? [0.25, 0.9]
-			: attribute === "pan" || attribute === "tilt"
-				? [0.2, 0.8]
-				: [0.1, 1];
-	const pwm = {
-		attack: 0,
-		on: 0.5,
-		decay: 0,
-		off: 0.5,
-		attack_interpolation: "linear",
-		decay_interpolation: "linear",
-	};
+const PWM = Object.freeze({
+	attack: 0,
+	on: 0.5,
+	decay: 0,
+	off: 0.5,
+	attack_interpolation: "linear",
+	decay_interpolation: "linear",
+});
+
+/** The legacy sweep of each lane (normalized), and how it maps onto the lane's semantic unit. */
+function laneSweep(lane) {
+	if (lane === "intensity") return { minimum: 0.25, maximum: 0.9, scale: (value) => value };
+	if (lane === "position.pan")
+		return {
+			minimum: 0.2,
+			maximum: 0.8,
+			scale: (value) => (value - 0.5) * LARGE_STAGE_PAN_TRAVEL_DEGREES,
+		};
+	if (lane === "position.tilt")
+		return {
+			minimum: 0.2,
+			maximum: 0.8,
+			scale: (value) => (value - 0.5) * LARGE_STAGE_TILT_TRAVEL_DEGREES,
+		};
+	return { minimum: 0.1, maximum: 1, scale: (value) => value };
+}
+
+function semanticAddress(lane) {
+	if (lane === "position.pan" || lane === "position.tilt")
+		return {
+			representation: { kind: "angles" },
+			component: { kind: lane.slice("position.".length) },
+		};
+	const component = lane.slice("color.".length);
 	return {
+		// UV is orthogonal to the recipe; it keeps whatever recipe the target holds.
+		representation:
+			component === "uv"
+				? { kind: "semantic_color", basis: "retain" }
+				: { kind: "semantic_color", basis: "recipe" },
+		component: { kind: "color", component },
+	};
+}
+
+function dynamicLane(lane, dynamicNumber, laneIndex) {
+	const { minimum, maximum, scale } = laneSweep(lane);
+	const shared = {
 		id: deterministicUuid("4", dynamicNumber * 100 + laneIndex + 1),
-		attribute,
-		mode: "max_min",
-		keyframes: {
-			points: [
-				{
-					position: 0,
-					source: { type: "value", value: minimum },
-					interpolation: "linear",
-				},
-				{
-					position: 0.5,
-					source: { type: "value", value: maximum },
-					interpolation: "linear",
-				},
-			],
-			size: 1,
-		},
-		max_min: {
-			minimum: { type: "value", value: minimum },
-			maximum: { type: "value", value: maximum },
-			function: laneIndex % 2 === 0 ? "sinus" : "cosinus",
-			size: 1,
-			pwm,
-		},
-		middle_amplitude: {
-			middle: { type: "current" },
-			amplitude: (maximum - minimum) / 2,
-			function: "sinus",
-			size: 1,
-			pwm,
-		},
 		speed_multiplier: {
 			numerator: laneIndex + 1,
 			denominator: Math.max(1, laneIndex),
@@ -250,6 +303,54 @@ function dynamicLane(attribute, dynamicNumber, laneIndex) {
 		width: 1,
 		random_group_id: null,
 		phase: null,
+	};
+	const fn = laneIndex % 2 === 0 ? "sinus" : "cosinus";
+	if (lane === "intensity")
+		return {
+			...shared,
+			attribute: lane,
+			mode: "max_min",
+			keyframes: {
+				points: [
+					{ position: 0, source: { type: "value", value: minimum }, interpolation: "linear" },
+					{ position: 0.5, source: { type: "value", value: maximum }, interpolation: "linear" },
+				],
+				size: 1,
+			},
+			max_min: {
+				minimum: { type: "value", value: minimum },
+				maximum: { type: "value", value: maximum },
+				function: fn,
+				size: 1,
+				pwm: { ...PWM },
+			},
+			middle_amplitude: {
+				middle: { type: "current" },
+				amplitude: (maximum - minimum) / 2,
+				function: "sinus",
+				size: 1,
+				pwm: { ...PWM },
+			},
+		};
+	const value = (number) => ({
+		kind: "value",
+		value: { kind: "scalar", value: Math.round(scale(number) * 1e6) / 1e6 },
+	});
+	return {
+		...shared,
+		programming: {
+			address: semanticAddress(lane),
+			configuration: {
+				mode: "max_min",
+				configuration: {
+					minimum: value(minimum),
+					maximum: value(maximum),
+					function: fn,
+					size: 1,
+					pwm: { ...PWM },
+				},
+			},
+		},
 	};
 }
 

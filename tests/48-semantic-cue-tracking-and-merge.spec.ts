@@ -52,33 +52,33 @@ scenario(
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
 			intensity: 0.5,
-			"color.red": 0,
-			"color.green": 1,
-			"color.blue": 0,
+			"color:red": 0,
+			"color:green": 1,
+			"color:blue": 0,
 		});
 		await t.playback.go(playback);
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
 			intensity: 0.5,
-			"color.red": 0,
-			"color.green": 0,
-			"color.blue": 1,
+			"color:red": 0,
+			"color:green": 0,
+			"color:blue": 1,
 		});
 		await t.playback.go(playback);
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
 			intensity: 0.5,
-			"color.red": 0,
-			"color.green": 0,
-			"color.blue": 1,
+			"color:red": 0,
+			"color:green": 0,
+			"color:blue": 1,
 		});
 		await t.playback.off(playback);
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
 			intensity: 0,
-			"color.red": 0,
-			"color.green": 1,
-			"color.blue": 0,
+			"color:red": 0,
+			"color:green": 1,
+			"color:blue": 0,
 		});
 	},
 );
@@ -133,7 +133,7 @@ scenario(
 		await t.selection.fixtures.via.api.item(22);
 		await t.encoder.color.blue.via.api.set(80);
 		await t.clock.advanceBy("1ms");
-		await t.expectFixtureValue(fixture(22), { "color.blue": 0.8 });
+		await t.expectFixtureValue(fixture(22), { "color:blue": 0.8 });
 
 		await t.command.clear();
 		await t.playback.select(sequenceA);
@@ -142,15 +142,15 @@ scenario(
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
 			intensity: 0.6,
-			"color.red": 0,
-			"color.green": 0,
-			"color.blue": 1,
+			"color:red": 0,
+			"color:green": 0,
+			"color:blue": 1,
 		});
 		await t.expectFixtureValue(fixture(22), {
 			intensity: 0.4,
-			"color.red": 1,
-			"color.green": 0.7,
-			"color.blue": 0.8,
+			"color:red": 1,
+			"color:green": 0.7,
+			"color:blue": 0.8,
 		});
 	},
 );
@@ -227,9 +227,9 @@ scenario(
 		await t.clock.advanceStep();
 		await t.playback.expect(underlying).runtime({ enabled: false });
 		await t.expectFixtureValue(fixture(21), {
-			"color.red": 1,
-			"color.green": 0,
-			"color.blue": 0,
+			"color:red": 1,
+			"color:green": 0,
+			"color:blue": 0,
 		});
 
 		await t.playback.configure(underlying, { autoOff: false });
@@ -242,9 +242,9 @@ scenario(
 		await t.playback.via.api.off(replacing);
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
-			"color.red": 0,
-			"color.green": 0,
-			"color.blue": 1,
+			"color:red": 0,
+			"color:green": 0,
+			"color:blue": 1,
 		});
 
 		await t.playback.configure(underlying, { autoOff: true });
@@ -253,32 +253,32 @@ scenario(
 			await t.clock.advanceStep();
 			await t.playback.expect(underlying).runtime({ enabled: true });
 			await t.expectFixtureValue(fixture(21), {
-				"color.red": 1,
-				"color.green": 0,
-				"color.blue": 0,
+				"color:red": 1,
+				"color:green": 0,
+				"color:blue": 0,
 			});
 		});
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
-			"color.red": 0,
-			"color.green": 0,
-			"color.blue": 1,
+			"color:red": 0,
+			"color:green": 0,
+			"color:blue": 1,
 		});
 
 		await t.playback.via.ui.temp(replacing);
 		await t.clock.advanceStep();
 		await t.playback.expect(underlying).runtime({ enabled: true });
 		await t.expectFixtureValue(fixture(21), {
-			"color.red": 1,
-			"color.green": 0,
-			"color.blue": 0,
+			"color:red": 1,
+			"color:green": 0,
+			"color:blue": 0,
 		});
 		await t.playback.via.ui.temp(replacing);
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
-			"color.red": 0,
-			"color.green": 0,
-			"color.blue": 1,
+			"color:red": 0,
+			"color:green": 0,
+			"color:blue": 1,
 		});
 
 		await t.playback.via.api.off(underlying);
@@ -290,9 +290,9 @@ scenario(
 		await t.playback.expect(partialUnderlying).runtime({ enabled: true });
 		await t.expectFixtureValue(fixture(21), {
 			intensity: 1,
-			"color.red": 1,
-			"color.green": 0,
-			"color.blue": 0,
+			"color:red": 1,
+			"color:green": 0,
+			"color:blue": 0,
 		});
 	},
 );

@@ -86,21 +86,22 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 		await t.playback.fader(47, 25);
-		await t.clock.advanceBy("0ms");
 		await t.playback.expect(47).runtime({
 			current_cue_number: "1",
 			manual_xfade_position: 0.25,
 			manual_xfade_progress: 0.25,
 			manual_xfade_direction: "towards_high",
 		});
+		// The visualization reads the last published frame; publish after the fader write landed.
+		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 0.25 });
 		await t.playback.fader(47, 100);
-		await t.clock.advanceBy("0ms");
 		await t.playback.expect(47).runtime({
 			current_cue_number: "2",
 			manual_xfade_position: 1,
 			manual_xfade_direction: "towards_low",
 		});
+		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 1 });
 		await t.cue
 			.expect(47, 1)
@@ -128,6 +129,7 @@ scenario(
 		await t.expectFixtureValue(fixture(3), { intensity: 0.4 });
 		await t.playback.via.ui.temp(55);
 		await t.playbackConfiguration.expectTemporary(55, false);
+		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 0.3 });
 
 		await t.playback.via.ui.swap(55).hold(async () => {
@@ -138,6 +140,7 @@ scenario(
 			await t.expectFixtureValue(fixture(3), { intensity: 0.4 });
 		});
 		await t.playbackConfiguration.expectSwap(55, false);
+		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 0.3 });
 		await t.expectFixtureValue(fixture(2), { intensity: 0.6 });
 		await t.expectFixtureValue(fixture(3), { intensity: 0.4 });

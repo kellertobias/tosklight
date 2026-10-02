@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PLANNED_DEMO_FIXTURES } from "../../support/plannedDemoManifest";
 import { installPlannedDemoPlaybacks } from "../../support/plannedDemoPlaybacks";
+import { semanticAngles, semanticColor } from "../../support/plannedDemoSemantic";
 
 describe("Plan 76 initial Playback topology", () => {
 	it("creates Group Masters, individual ACLs, Hazer, Start, and the Speed D chase", async () => {
@@ -51,21 +52,19 @@ describe("Plan 76 initial Playback topology", () => {
 				.filter((change) => change.attribute === "intensity")
 				.every((change) => change.value.value === 1),
 		).toBe(true);
-		for (const attribute of [
-			"color.red",
-			"color.green",
-			"color.blue",
-			"pan",
-			"tilt",
-		]) {
+		// TL-552: the Start Cue authors contract-1 intent: semantic White and centred Angles.
+		for (const [attribute, expected] of [
+			["color", semanticColor("White")],
+			["position", semanticAngles(0.5, 0.5)],
+		] as const) {
 			const values = startChanges
 				.filter((change) => change.attribute === attribute)
-				.map((change) => change.value.value);
+				.map((change) => JSON.stringify(change.value));
 			expect(values.length).toBeGreaterThan(0);
-			expect(new Set(values)).toEqual(
-				new Set([attribute.startsWith("color.") ? 1 : 0.5]),
-			);
+			expect(new Set(values)).toEqual(new Set([JSON.stringify(expected)]));
 		}
+		for (const legacy of ["color.red", "color.green", "color.blue", "pan", "tilt"])
+			expect(startChanges.some((change) => change.attribute === legacy)).toBe(false);
 		const hazer = result.cuelists.find((item) => item.name === "Hazer")!;
 		expect(hazer.cues[0].changes).toHaveLength(2);
 		expect(

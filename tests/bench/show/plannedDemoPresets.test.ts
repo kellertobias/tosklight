@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PLANNED_DEMO_FIXTURES } from "../../support/plannedDemoManifest";
 import { installPlannedDemoPresets } from "../../support/plannedDemoPresets";
+import { semanticAngles } from "../../support/plannedDemoSemantic";
 
 describe("Plan 76 preset library", () => {
 	it("defines the exact 13 Color, 7 Position, and 10 Beam presets", async () => {
@@ -58,16 +59,16 @@ describe("Plan 76 preset library", () => {
 			writes.find((write) => write.body.name === "Blind")?.body.values[
 				"fixture-101"
 			],
-		).toHaveProperty("pan");
+		).toEqual({ position: semanticAngles(0.5, 0.05) });
+		// TL-552: Position presets author Angles in degrees, never normalized pan/tilt.
 		const fanOut = writes.find((write) => write.body.name === "Fan Out")?.body;
 		expect(fanOut?.values["fixture-101"]).toEqual({
-			pan: { kind: "normalized", value: 0.18 },
-			tilt: { kind: "normalized", value: 0.44 },
+			position: semanticAngles(0.18, 0.44),
 		});
 		expect(
 			new Set(
-				Object.values(fanOut?.values ?? {}).map(
-					(value: any) => `${value.pan.value}:${value.tilt.value}`,
+				Object.values(fanOut?.values ?? {}).map((value: any) =>
+					JSON.stringify(value.position),
 				),
 			).size,
 		).toBeGreaterThan(2);

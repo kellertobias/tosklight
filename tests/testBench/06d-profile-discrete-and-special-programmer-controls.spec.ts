@@ -82,12 +82,24 @@ test("BENCH-DISCRETE-SPECIAL-002 @bench @ui › Position, Beam, Shapers, and Con
 	const selection = new BrowserSelection(api);
 	const special = new BrowserProgrammerSpecials(api, page, desk, selection);
 
+	// Since the TL-552 cutover Pan is an Angle of the semantic Position owner, in degrees: the old
+	// 40 % with a 20 % step is −54° stepped by 108° on a 540° travel.
 	await applyProgrammerSelectionValue(api, {
 		surface: "api",
 		showId: show.id,
 		fixtureIds,
-		attribute: "pan",
-		operation: { type: "absolute_set", value: { kind: "normalized", value: 0.4 } },
+		attribute: "position",
+		operation: {
+			type: "absolute_set",
+			value: {
+				kind: "position",
+				value: {
+					kind: "angles",
+					pan_degrees: { kind: "value", value: -54 },
+					tilt_degrees: { kind: "value", value: 0 },
+				},
+			},
+		} as never,
 		timing: { fade: false, fadeMillis: null, delayMillis: null },
 	});
 	await special.position.alignViaApi("left");
@@ -95,16 +107,25 @@ test("BENCH-DISCRETE-SPECIAL-002 @bench @ui › Position, Beam, Shapers, and Con
 		surface: "api",
 		showId: show.id,
 		fixtureIds,
-		attribute: "pan",
-		operation: { type: "relative_step", delta: 0.2 },
+		attribute: "position",
+		operation: {
+			type: "component_edits",
+			edits: [
+				{
+					kind: "scalar",
+					component: { kind: "pan" },
+					operation: { kind: "relative", value: 108 },
+				},
+			],
+		} as never,
 		timing: { fade: false, fadeMillis: null, delayMillis: null },
 	});
 	await expect
-		.poll(async () => programmerValues(api, "pan"))
-		.toEqual([0.4, 0.6]);
+		.poll(async () => programmerPans(api))
+		.toEqual([-54, 54]);
 	await special.position.returnHome();
-	const home = 0.5019608;
-	await expect.poll(async () => programmerValues(api, "pan")).toEqual([home, home]);
+	// Return Home: each head's profile default, 50 % of the travel, is home (0°).
+	await expect.poll(async () => programmerPans(api)).toEqual([0, 0]);
 
 	// Beam has no Special Dialog: the families that carry one are Color, Position, Shapers,
 	// Control, and Media.
@@ -261,6 +282,24 @@ async function programmerValues(
 		.map((entry) => {
 			const value = entry.value as { kind?: string; value?: number };
 			return typeof value === "number" ? value : (value.value ?? Number.NaN);
+		})
+		.sort((left, right) => left - right);
+}
+
+/** The programmed Pan Angles, ascending. */
+async function programmerPans(
+	api: Parameters<typeof programmer>[0],
+): Promise<number[]> {
+	return (await programmer(api)).values
+		.filter((entry) => entry.attribute === "position")
+		.map((entry) => {
+			const value = entry.value as {
+				kind?: string;
+				value?: { kind?: string; pan_degrees?: { value?: number } };
+			};
+			return value.kind === "position" && value.value?.kind === "angles"
+				? Math.round((value.value.pan_degrees?.value ?? Number.NaN) * 1000) / 1000
+				: Number.NaN;
 		})
 		.sort((left, right) => left - right);
 }

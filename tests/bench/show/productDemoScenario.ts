@@ -206,16 +206,16 @@ export const PRODUCT_DEMO_SCRIPT = {
 		},
 		placements: [
 			{
-				targets: "0.1 primary THRU multipatch 3",
-				location: { x: "-3 THRU 3", y: "4", z: "4.15" },
+				targets: "0.1",
+				location: { x: "-3", y: "4", z: "4.15" },
 			},
 			{
-				targets: "0.2 primary THRU multipatch 3",
-				location: { x: "-3 THRU 3", y: "0", z: "4.15" },
+				targets: "0.2",
+				location: { x: "-3", y: "0", z: "4.15" },
 			},
 			{
-				targets: "0.3 primary THRU multipatch 3",
-				location: { x: "-3 THRU 3", y: "-3", z: "4.15" },
+				targets: "0.3",
+				location: { x: "-3", y: "-3", z: "4.15" },
 			},
 			{
 				targets: "1 THRU 3",
@@ -240,7 +240,7 @@ export const PRODUCT_DEMO_SCRIPT = {
 			{
 				targets: "601 primary THRU multipatch 7",
 				location: { x: "-1 THRU 1", y: "4", z: "4.4" },
-				rotation: { x: "0", y: "-18 THRU 18", z: "0" },
+				rotation: { x: "0", y: "18 THRU -18", z: "0" },
 			},
 			{
 				targets: "901 primary THRU multipatch 3",
@@ -470,31 +470,14 @@ export class BrowserProductDemo {
 					pauseForFixtureLibrary: truss === 1,
 					pauseForPlacement: truss === 1,
 				});
+				// A truss run is one Venue object per two-metre span, placed one at a time
+				// (Venue objects take no multi-patch copies). The touch UI places the first
+				// span; the scenery step below adds the run's other spans beside it.
 				const trussPrimary = fixtureRow(patchWindow, `0.${truss}`);
 				if (truss > 1) desk.setRecordingClickPace("typing");
 				await desk.click(trussPrimary);
-				for (let segment = 1; segment <= 3; segment++) {
-					await desk.click(
-						patchWindow.getByRole("button", {
-							name: "+ Add multi-patch",
-							exact: true,
-						}),
-					);
-					await expect(patchWindow.locator(".multipatch-row")).toHaveCount(
-						(truss - 1) * 3 + segment,
-					);
-					if (truss === 1 && segment === 1) desk.setRecordingClickPace("rapid");
-				}
-				const allMultipatches = patchWindow.locator(".multipatch-row");
-				const lastPhysicalRow = allMultipatches.nth(truss * 3 - 1);
-				if (truss > 1) desk.setRecordingClickPace("typing");
-				await desk.click(trussPrimary);
-				await desk.click(lastPhysicalRow.locator("td").first(), {
-					modifiers: ["Shift"],
-				});
-				const placement = demoPatchPlacement(
-					`0.${truss} primary THRU multipatch 3`,
-				);
+				if (truss === 1) desk.setRecordingClickPace("rapid");
+				const placement = demoPatchPlacement(`0.${truss}`);
 				for (const [axis, keys] of [
 					["X", valuePadKeys(placement.location.x)],
 					["Y", valuePadKeys(placement.location.y)],
@@ -502,7 +485,7 @@ export class BrowserProductDemo {
 				] as const)
 					await spreadPhysicalPatchVectorThroughTouchUi(
 						desk,
-						lastPhysicalRow,
+						trussPrimary,
 						"location",
 						axis,
 						keys,
@@ -836,7 +819,9 @@ export class BrowserProductDemo {
 			expect(canonical.patch).toMatchObject({
 				fixtureRecords: 254,
 				physicalInstances: 287,
-				occupiedSlots: 3_378,
+				// Includes the Media Servers' 158-slot mapping personality, as the demo generator
+				// (DEMO-GENERATOR-001) counts it.
+				occupiedSlots: 3_544,
 			});
 			await expect
 				.poll(async () => (await api.patch()).fixtures.length)
@@ -844,7 +829,9 @@ export class BrowserProductDemo {
 			await expect(patchWindow.locator(".ui-window-info")).toContainText(
 				`${PLANNED_DEMO_TOTAL_FIXTURE_RECORDS} fixtures`,
 			);
-			await expect(fixtureRow(patchWindow, 417)).toBeVisible();
+			// The progressive patch ends on its last items, the two Media Servers, so their layer
+			// is the one left in view.
+			await expect(fixtureRow(patchWindow, 1001)).toBeVisible();
 			await expect(fixtureRow(patchWindow, 101)).toHaveCount(0);
 			await configureOutput(desk, page, app, bench, api, showId);
 			performanceBaseline = await captureProductDemoPerformance(page);
@@ -1300,7 +1287,9 @@ async function addFixtureThroughTouchUi(
 		.nth(1);
 	await desk.click(
 		fixtureColumn.getByRole("button", {
-			name: new RegExp(`^${escapeRegex(input.family)}\\b`),
+			// The family name, then its lowercase category or the mode count: a longer family
+			// that merely starts with the same words ("Four-Point Truss Corner …") is not it.
+			name: new RegExp(`^${escapeRegex(input.family)}(?:\\s+\\p{Ll}|\\s+·|$)`, "u"),
 		}),
 	);
 	const modeTrigger = browser
@@ -2602,7 +2591,7 @@ async function demonstrateBuskingAndPreload(
 					api,
 					showId,
 					preparedLook.washFixtureIds,
-					new Set(["color.red", "color.green", "color.blue"]),
+					new Set(["color"]),
 				),
 				washColorValues,
 			),
@@ -2626,12 +2615,14 @@ async function demonstrateBuskingAndPreload(
 	const fanOut = await api.showObject<any>(showId, "preset", "3.4");
 	if (!fanOut)
 		throw new Error("The Busking Preload look requires Position 3.4 Fan Out");
-	const beamPositionValues = normalizedPresetFixtureValues(
+	const beamPositionValues = presetFixtureValues(
 		fanOut.body.values,
 		preparedLook.beamFixtureIds,
-		new Set(["pan", "tilt"]),
+		new Set(["position"]),
 	);
-	expect(new Set(Object.values(beamPositionValues)).size).toBeGreaterThan(2);
+	expect(
+		new Set(Object.values(beamPositionValues).map((value) => JSON.stringify(value))).size,
+	).toBeGreaterThan(2);
 	await recallPresetThroughTouchWithRetry(
 		desk,
 		presetTile(presets, "3.4"),
@@ -2641,7 +2632,7 @@ async function demonstrateBuskingAndPreload(
 					api,
 					showId,
 					preparedLook.beamFixtureIds,
-					new Set(["pan", "tilt"]),
+					new Set(["position"]),
 				),
 				beamPositionValues,
 			),
@@ -2664,16 +2655,19 @@ async function demonstrateBuskingAndPreload(
 					api,
 					showId,
 					preparedLook.beamFixtureIds,
-					new Set(["color.red", "color.green", "color.blue"]),
+					new Set(["color"]),
 				),
 				beamColorValues,
 			),
 	);
 	await expect
 		.poll(async () =>
-			visualizationColorLook(api, preparedLook.fixtureIds, true),
+			valuesMatch(
+				await visualizationColorLook(api, preparedLook.fixtureIds, true),
+				preparedLook.values,
+			),
 		)
-		.toEqual(preparedLook.values);
+		.toBe(true);
 	await api.request("PUT", "/api/v2/configuration", {
 		programmer_fade_millis: PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis,
 	});
@@ -2755,8 +2749,8 @@ async function demonstrateBuskingAndPreload(
 	await setProgrammerFixtureValues(api, finalIntensityValues);
 	await expect
 		.poll(async () =>
-			valuesMatch(
-				await visualizationAttributeLook(
+			numbersMatch(
+				await visualizationNumberLook(
 					api,
 					finalIntensityOwners,
 					new Set(["intensity"]),
@@ -2787,16 +2781,19 @@ async function demonstrateBuskingAndPreload(
 		.toEqual([...visibleFinalFixtures].sort());
 	await expect
 		.poll(async () =>
-			visualizationColorLook(api, preparedLook.fixtureIds, false),
+			valuesMatch(
+				await visualizationColorLook(api, preparedLook.fixtureIds, false),
+				preparedLook.values,
+			),
 		)
-		.toEqual(preparedLook.values);
+		.toBe(true);
 	await expect
 		.poll(async () =>
 			valuesMatch(
 				await visualizationAttributeLook(
 					api,
 					preparedLook.beamFixtureIds,
-					new Set(["pan", "tilt"]),
+					new Set(["position"]),
 					false,
 				),
 				beamPositionValues,
@@ -2828,31 +2825,33 @@ function lastFixtureId(fixtureIds: string[]) {
 	return fixtureId;
 }
 
+/**
+ * The prepared Busking look as the semantic owners the Color presets store (programming
+ * contract 1): Wash fixtures take Dark Blue (2.9) and Beam fixtures Yellow (2.3), each as the
+ * fixture's own whole `color`, never separate channel percentages.
+ */
 async function expectedPreloadColorLook(api: ApiDriver, showId: string) {
-	const [washShow, beamAudience] = await Promise.all([
+	const [washShow, beamAudience, darkBlue, yellow] = await Promise.all([
 		api.showObject<any>(showId, "group", "11"),
 		api.showObject<any>(showId, "group", "2"),
+		api.showObject<any>(showId, "preset", "2.9"),
+		api.showObject<any>(showId, "preset", "2.3"),
 	]);
 	if (!washShow || !beamAudience)
 		throw new Error("The Busking Preload look requires Groups 11 and 2");
+	if (!darkBlue || !yellow)
+		throw new Error("The Busking Preload look requires Color 2.9 and 2.3");
 	const washFixtures = washShow.body.fixtures as string[];
 	const beamFixtures = beamAudience.body.fixtures as string[];
+	const color = new Set(["color"]);
 	return {
 		washFixtureIds: washFixtures,
 		beamFixtureIds: beamFixtures,
 		fixtureIds: [...washFixtures, ...beamFixtures],
-		values: Object.fromEntries([
-			...washFixtures.flatMap((fixtureId) => [
-				[`${fixtureId}:color.red`, 0],
-				[`${fixtureId}:color.green`, 0],
-				[`${fixtureId}:color.blue`, 1],
-			]),
-			...beamFixtures.flatMap((fixtureId) => [
-				[`${fixtureId}:color.red`, 1],
-				[`${fixtureId}:color.green`, 1],
-				[`${fixtureId}:color.blue`, 0],
-			]),
-		]),
+		values: {
+			...presetFixtureValues(darkBlue.body.values, washFixtures, color),
+			...presetFixtureValues(yellow.body.values, beamFixtures, color),
+		},
 	};
 }
 
@@ -2911,10 +2910,9 @@ async function setProgrammerFixtureValues(
 	);
 }
 
-function valuesForFixtures(
-	values: Record<string, number>,
-	fixtureIds: readonly string[],
-) {
+type SemanticLook = Record<string, unknown>;
+
+function valuesForFixtures(values: SemanticLook, fixtureIds: readonly string[]) {
 	const targets = new Set(fixtureIds);
 	return Object.fromEntries(
 		Object.entries(values).filter(([key]) =>
@@ -2923,23 +2921,50 @@ function valuesForFixtures(
 	);
 }
 
-function normalizedPresetFixtureValues(
+/** `${fixture}:${attribute}` → the stored value, for the given semantic owners. */
+function presetFixtureValues(
 	values: Record<string, Record<string, any>>,
 	fixtureIds: readonly string[],
 	attributes: ReadonlySet<string>,
-) {
+): SemanticLook {
 	return Object.fromEntries(
 		fixtureIds.flatMap((fixtureId) =>
 			Object.entries(values[fixtureId] ?? {}).flatMap(([attribute, value]) =>
-				attributes.has(attribute) && value?.kind === "normalized"
-					? [[`${fixtureId}:${attribute}`, value.value]]
-					: [],
+				attributes.has(attribute) && value ? [[`${fixtureId}:${attribute}`, value]] : [],
 			),
 		),
 	);
 }
 
-function valuesMatch(
+/** Exact semantic equality; numbers within f32 round-trip tolerance (stored vs wire). */
+function sameValue(actual: unknown, expected: unknown): boolean {
+	if (typeof actual === "number" && typeof expected === "number")
+		return Math.abs(actual - expected) <= 0.000_01;
+	if (Array.isArray(actual) || Array.isArray(expected))
+		return (
+			Array.isArray(actual) &&
+			Array.isArray(expected) &&
+			actual.length === expected.length &&
+			actual.every((item, index) => sameValue(item, expected[index]))
+		);
+	if (actual && expected && typeof actual === "object" && typeof expected === "object") {
+		const a = actual as Record<string, unknown>;
+		const e = expected as Record<string, unknown>;
+		const keys = new Set([...Object.keys(a), ...Object.keys(e)]);
+		return [...keys].every((key) => sameValue(a[key], e[key]));
+	}
+	return actual === expected;
+}
+
+function valuesMatch(actual: SemanticLook, expected: SemanticLook) {
+	const keys = Object.keys(expected);
+	return (
+		Object.keys(actual).length === keys.length &&
+		keys.every((key) => key in actual && sameValue(actual[key], expected[key]))
+	);
+}
+
+function numbersMatch(
 	actual: Record<string, number>,
 	expected: Record<string, number>,
 ) {
@@ -2950,11 +2975,21 @@ function valuesMatch(
 	);
 }
 
+/** The resolved semantic Color owner of each fixture, from the visualization source values. */
 async function visualizationColorLook(
 	api: ApiDriver,
 	fixtureIds: readonly string[],
 	preload: boolean,
 ) {
+	return visualizationAttributeLook(api, fixtureIds, new Set(["color"]), preload);
+}
+
+async function visualizationAttributeLook(
+	api: ApiDriver,
+	fixtureIds: readonly string[],
+	attributes: ReadonlySet<string>,
+	preload: boolean,
+): Promise<SemanticLook> {
 	const snapshot = await api.request<any>(
 		"GET",
 		`/api/v2/output/visualization${preload ? "?preload=true" : ""}`,
@@ -2962,16 +2997,14 @@ async function visualizationColorLook(
 	const targets = new Set(fixtureIds);
 	return Object.fromEntries(
 		snapshot.values.flatMap((entry: any) =>
-			targets.has(entry.fixture_id) &&
-			entry.attribute.startsWith("color.") &&
-			entry.value.kind === "normalized"
-				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value.value]]
+			targets.has(entry.fixture_id) && attributes.has(entry.attribute)
+				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value]]
 				: [],
 		),
 	);
 }
 
-async function visualizationAttributeLook(
+async function visualizationNumberLook(
 	api: ApiDriver,
 	fixtureIds: readonly string[],
 	attributes: ReadonlySet<string>,
@@ -3032,12 +3065,13 @@ async function expectProfileColorSeparation(
 		.toEqual({ washBlue: true, beamYellow: true, distinct: true });
 }
 
+/** `${fixture}:${attribute}` → the pending Preload value, Group values expanded to members. */
 async function preloadProgrammerAttributeLook(
 	api: ApiDriver,
 	showId: string,
 	fixtureIds: readonly string[],
 	attributes: ReadonlySet<string>,
-) {
+): Promise<SemanticLook> {
 	const sessionId = api.session?.session_id;
 	if (!sessionId)
 		throw new Error("The product demo requires an authenticated user");
@@ -3046,22 +3080,19 @@ async function preloadProgrammerAttributeLook(
 		`/api/v2/programmer/preload-values/snapshot`,
 	);
 	const targets = new Set(fixtureIds);
-	const values = Object.fromEntries(
+	const values: SemanticLook = Object.fromEntries(
 		snapshot.projection.fixture_values.flatMap((entry: any) =>
-			targets.has(entry.fixture_id) &&
-			attributes.has(entry.attribute) &&
-			entry.value.kind === "normalized"
-				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value.value]]
+			targets.has(entry.fixture_id) && attributes.has(entry.attribute)
+				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value]]
 				: [],
 		),
 	);
 	for (const entry of snapshot.projection.group_values) {
-		if (!attributes.has(entry.attribute) || entry.value.kind !== "normalized")
-			continue;
+		if (!attributes.has(entry.attribute)) continue;
 		const group = await api.showObject<any>(showId, "group", entry.group_id);
 		for (const fixtureId of group?.body.fixtures ?? []) {
 			if (targets.has(fixtureId))
-				values[`${fixtureId}:${entry.attribute}`] = entry.value.value;
+				values[`${fixtureId}:${entry.attribute}`] = entry.value;
 		}
 	}
 	return values;

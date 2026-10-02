@@ -20,6 +20,26 @@ const SERVER =
     process.platform === "win32" ? "light-headless.exe" : "light-headless",
   );
 
+/**
+ * The E2E semantic test server (`npm run test:e2e-semantic`): `light-headless` built with the
+ * `e2e-semantic-contract` cargo feature, copied out of the default debug path so the regular E2E
+ * binary stays the production feature set. Since TL-552 every build reports the semantic
+ * programming contract, so the feature and {@link SEMANTIC_CONTRACT_ENV} are retained no-ops.
+ */
+export const SEMANTIC_SERVER =
+  process.env.LIGHT_E2E_SEMANTIC_SERVER ??
+  path.join(
+    artifactPaths.cargo,
+    "e2e-semantic",
+    process.platform === "win32" ? "light-headless.exe" : "light-headless",
+  );
+export const SEMANTIC_CONTRACT_ENV = "LIGHT_E2E_SEMANTIC_PROGRAMMING_CONTRACT";
+
+export interface LightBenchOptions {
+  /** Start the E2E semantic test server with the semantic programming contract opt-in. */
+  semanticProgrammingContract?: boolean;
+}
+
 export interface TestShow { id: string; fixtureIds: string[]; session: Session }
 export interface ClockFrame {
   now: string;
@@ -42,6 +62,12 @@ export class LightBench {
   oscPort = 0;
   artnet!: DmxReceiver;
   sacn!: DmxReceiver;
+
+  constructor(private readonly options: LightBenchOptions = {}) {}
+
+  get semanticProgrammingContract(): boolean {
+    return this.options.semanticProgrammingContract === true;
+  }
 
   async start(workerIndex: number): Promise<void> {
     await fs.mkdir(artifactPaths.tmp, { recursive: true });
@@ -98,14 +124,19 @@ export class LightBench {
 
   private async spawnServer(): Promise<void> {
     const httpPort = Number(new URL(this.baseUrl).port);
-    this.process = spawn(SERVER, [
+    const semantic = this.semanticProgrammingContract;
+    // The opt-in is never inherited: only a semantic bench sets it, and only for its own server.
+    const env = { ...process.env };
+    delete env[SEMANTIC_CONTRACT_ENV];
+    if (semantic) env[SEMANTIC_CONTRACT_ENV] = "1";
+    this.process = spawn(semantic ? SEMANTIC_SERVER : SERVER, [
       "--data-dir", this.dataDir,
       "--fixture-package-dir", path.join(ROOT, "assets", "fixture-library"),
       "--bind", `127.0.0.1:${httpPort}`,
       "--test-bench",
       "--osc-bind", `127.0.0.1:${this.oscPort}`,
       "--output-bind-ip", "127.0.0.1",
-    ], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
+    ], { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
     const collect = (chunk: Buffer) => {
       this.log.push(chunk.toString());
       if (this.log.length > 500) this.log.shift();

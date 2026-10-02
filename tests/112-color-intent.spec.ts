@@ -6,6 +6,7 @@ import type { ApiDriver } from "./bench/core/api";
 import type { DeskDriver } from "./bench/core/desk";
 import { expect, test } from "./bench/core/fixtures";
 import type { LightBench } from "./bench/core/lightBench";
+import { requireSemanticContract } from "./bench/core/semanticContract";
 import { recallPreset } from "./bench/groups-presets/presetRecall";
 import {
 	batchProgrammerValues,
@@ -47,8 +48,6 @@ const GREEN = { hue: 1 / 3, saturation: 1 };
 const BLUE = { hue: 2 / 3, saturation: 1 };
 /** sRGB red at half its level: a Direct colour that carries its own brightness. */
 const HALF_RED: Xyz = { x: 0.4124564 / 2, y: 0.2126729 / 2, z: 0.0193339 / 2 };
-const UNIVERSAL_RECALL_HINT =
-	/universal Color preset applies to whatever is selected/;
 
 interface ColorShow {
 	id: string;
@@ -72,7 +71,9 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		await openSetup(page, "Defaults", "New shows");
 		await expect(defaultModelField(page)).toContainText("Direct");
 
-		// Created while the desk default reads Direct: Direct, nothing stored, native programming.
+		// Created while the desk default reads Direct: Direct and nothing stored. Since programming
+		// contract 1 the Color dialog programs the whole colour on `color` in every model, never a
+		// separate channel percentage, and the DMX is unchanged.
 		const direct = await createRiggedShow(api, page, desk, "Direct");
 		expect(await colorModel(api, direct.id)).toBe("direct");
 		expect(await storedColorModel(api, direct.id)).toBeUndefined();
@@ -80,10 +81,10 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		await programColor(api, direct, [1, 2], RED);
 		await setIntensity(api, direct, [2], 1);
 		const directValues = await programmerValues(api);
-		expect(attributesOf(directValues, direct.ids[1])).toEqual(
-			expect.arrayContaining(["color.red", "color.green", "color.blue"]),
-		);
-		expect(attributesOf(directValues, direct.ids[1])).not.toContain("color");
+		expect(attributesOf(directValues, direct.ids[1])).toEqual(["color"]);
+		expect(
+			directValues.filter((value) => value.attribute.startsWith("color.")),
+		).toEqual([]);
 		expect(await fixtureDmx(bench, 1)).toEqual({ red: 255, green: 0, blue: 0 });
 		expect(await fixtureDmx(bench, 2)).toEqual({
 			dimmer: 255,
@@ -149,10 +150,13 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		await desk.open(api.baseUrl);
 		const dialog = await openColorDialog(page);
 		await expect(dialog.getByText("Brightness", { exact: true })).toHaveCount(0);
+		await expect(dialog.getByRole("slider", { name: /brightness/i })).toHaveCount(0);
 		await expect(dialog.getByRole("button", { name: /brightness/i })).toHaveCount(0);
 		await expect(dialog.getByText("Tint", { exact: true })).toHaveCount(0);
-		await expect(dialog.getByRole("button", { name: /tint/i })).toHaveCount(0);
-		await clickPickerCorner(page);
+		await expect(dialog.getByRole("slider", { name: /tint/i })).toHaveCount(0);
+		await pickPureRed(page, dialog);
+		// Every colour-capable fixture takes the one whole colour; Dimmer 5 has no colour owner.
+		const colored = all.filter((id) => id !== show.ids[5]);
 		await expect
 			.poll(async () =>
 				(await programmerValues(api))
@@ -160,10 +164,10 @@ test.describe("docs/testing/26-color-intent.md", () => {
 					.map((value) => value.fixture_id)
 					.sort(),
 			)
-			.toEqual([...all].sort());
+			.toEqual([...colored].sort());
 		const picked = await programmerValues(api);
 		for (const value of picked.filter((entry) => entry.attribute === "color"))
-			expect(value.value.kind).toBe("color_xyz");
+			expect(value.value.kind).toBe("color_program");
 		expect(
 			picked.filter((value) => value.attribute.startsWith("color.")),
 		).toEqual([]);
@@ -211,8 +215,8 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		});
 		await setIntensity(api, show, [1, 2, 3, 4, 5], 1);
 
-		// A darker shade of the same red is the same colour.
-		await programColor(api, show, [1, 2, 3, 4, 5], RED, 0.4);
+		// Picking the same red again changes nothing: the colour carries no level of its own.
+		await programColor(api, show, [1, 2, 3, 4, 5], RED);
 		expect(await universe(bench)).toEqual(full);
 
 		// Native colour channels are not programmable, and the refusal names Color Intent.
@@ -234,7 +238,7 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		).toEqual([]);
 		expect(await universe(bench)).toEqual(full);
 
-		// A media-server layer keeps its Grayscale level in the Color dialog.
+		// A media-server layer selection opens Media color, whose White Blend is the greyscale.
 		const patch = new BrowserPatch(api, page, desk);
 		await patch.via.api.add({
 			number: 9,
@@ -248,21 +252,16 @@ test.describe("docs/testing/26-color-intent.md", () => {
 			(fixture) => fixture.fixture_number === 9,
 		);
 		if (!media) throw new Error("Media Server 9 was not patched");
-		await select(api, show, [
-			media.fixture_id,
-			...media.logical_heads.map((head) => head.fixture_id),
-		]);
-		const mediaDialog = await openColorDialog(page);
-		await expect(
-			mediaDialog.getByText("Grayscale", { exact: true }),
-		).toBeVisible();
-		await expect(
-			mediaDialog.getByRole("button", { name: "Increase grayscale" }),
-		).toBeVisible();
+		await select(api, show, media.logical_heads.map((head) => head.fixture_id));
+		const mediaDialog = await openColorDialog(page, "Media color");
+		await expect(mediaDialog.getByRole("slider", { name: "White Blend" })).toBeVisible();
 		await expect(
 			mediaDialog.getByText("Brightness", { exact: true }),
 		).toHaveCount(0);
 		await closeDialog(mediaDialog);
+		// A selection mixing lamps and layers opens the lamp dialog.
+		await select(api, show, [show.ids[1], ...media.logical_heads.map((head) => head.fixture_id)]);
+		await closeDialog(await openColorDialog(page));
 	});
 
 	test("COLORINTENT-002 @ui › the encoders offer no fixture-native colour control", async ({
@@ -294,7 +293,9 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		await setIntensity(api, show, [1, 2, 3, 4, 5], 1);
 		await programColor(api, show, [1, 2, 3, 4, 5], RED);
 
-		const report = await colorReport(api, show.id, all);
+		// The report reads the output frame that was sent. Dimmer 5 has no colour engine and
+		// nothing programs a colour for it, so it is not listed.
+		const report = await acceptedColorReport(api, bench, show.id, all);
 		expect(report.color_model).toBe("intent");
 		expect(
 			Object.fromEntries(
@@ -305,26 +306,36 @@ test.describe("docs/testing/26-color-intent.md", () => {
 			2: "uncalibrated",
 			3: "uncalibrated",
 			4: "uncalibrated",
-			5: "unsupported",
 		});
 
 		await desk.open(api.baseUrl);
 		let dialog = await openColorDialog(page);
 		let results = colorResults(dialog);
-		for (const number of [1, 2, 3, 4])
+		for (const number of [1, 2, 3, 4] as const)
 			await expect(
-				results
-					.locator('li[data-quality="uncalibrated"]')
-					.filter({ hasText: new RegExp(`Fixture ${number}\\b`) }),
+				resultRow(results, show.ids[number]).locator('td[data-quality="uncalibrated"]'),
 			).toContainText("Uncalibrated");
-		await expect(
-			results
-				.locator('li[data-quality="unsupported"]')
-				.filter({ hasText: /Fixture 5\b/ }),
-		).toContainText("Unsupported");
-		await expect(results.locator("li")).toHaveCount(5);
-		await expect(results.locator('li[data-quality="exact"]')).toHaveCount(0);
+		await expect(resultRow(results, show.ids[5])).toHaveCount(0);
+		await expect(results.locator("tbody tr")).toHaveCount(4);
+		await expect(results.locator('td[data-quality="exact"]')).toHaveCount(0);
 		await expect(results).not.toContainText("exactly");
+		await closeDialog(dialog);
+
+		// UV is its own column: a UV request on RGB 1 is unavailable there, the visible match stays.
+		await colorEdits(api, [show.ids[1]], [scalarColorEdit("uv", 1)]);
+		await expect
+			.poll(async () => {
+				const [rgb] = (await acceptedColorReport(api, bench, show.id, [show.ids[1]])).heads;
+				return [rgb?.quality, rgb?.uv?.status];
+			})
+			.toEqual(["uncalibrated", "unsupported"]);
+		dialog = await openColorDialog(page);
+		await expect(resultRow(colorResults(dialog), show.ids[1])).toContainText(
+			"UV unavailable on this fixture",
+		);
+		await expect(
+			resultRow(colorResults(dialog), show.ids[1]).locator('td[data-quality="uncalibrated"]'),
+		).toBeVisible();
 		await closeDialog(dialog);
 
 		// A fixture whose profile authors a measured RGB colour system shows pure red exactly.
@@ -342,12 +353,8 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		await select(api, show, [measuredId]);
 		await setIntensityById(api, show, [measuredId], 1);
 		await programColorById(api, show, [measuredId], RED);
-		expect((await colorReport(api, show.id, [measuredId])).heads).toEqual([
-			expect.objectContaining({
-				quality: "exact",
-				engine: "additive",
-				calibration_revision: 1,
-			}),
+		expect((await acceptedColorReport(api, bench, show.id, [measuredId])).heads).toEqual([
+			expect.objectContaining({ fixture_id: measuredId, quality: "exact" }),
 		]);
 		expect((await universe(bench)).slice(50, 54)).toEqual([255, 255, 0, 0]);
 		dialog = await openColorDialog(page);
@@ -355,19 +362,24 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		await expect(
 			results.getByText("Every selected fixture shows this colour exactly."),
 		).toBeVisible();
-		await expect(results.locator("li")).toHaveCount(0);
+		await expect(results.locator('td[data-quality="exact"]')).toHaveCount(1);
+		await expect(results.locator('td:not([data-quality="exact"])[data-quality]')).toHaveCount(0);
 		await closeDialog(dialog);
 
 		// Saturated spectral cyan (about 490 nm) lies outside that fixture's gamut.
-		await setWholeColor(api, show, measuredId, chromaticity(0.0454, 0.295, 0.5));
-		const [cyan] = (await colorReport(api, show.id, [measuredId])).heads;
-		expect(cyan.quality).toBe("out_of_gamut");
+		await colorEdits(api, [measuredId], [
+			{ kind: "coordinates", xyz: chromaticity(0.0454, 0.295, 0.5) },
+		]);
+		await expect
+			.poll(async () => (await acceptedColorReport(api, bench, show.id, [measuredId])).heads[0]?.quality)
+			.toBe("out_of_gamut");
+		const [cyan] = (await acceptedColorReport(api, bench, show.id, [measuredId])).heads;
 		expect(cyan.delta_uv).toBeGreaterThan(0.004);
 		dialog = await openColorDialog(page);
 		await expect(
-			colorResults(dialog).locator('li[data-quality="out_of_gamut"]'),
+			resultRow(colorResults(dialog), measuredId).locator('td[data-quality="out_of_gamut"]'),
 		).toHaveText(
-			`Out of gamut Fixture 6 cannot reach it and shows the nearest colour it can make (Δu′v′ ${cyan.delta_uv?.toFixed(3)})`,
+			`Out of gamut Shows the nearest colour it can · Δu′v′ ${cyan.delta_uv?.toFixed(4)}`,
 		);
 		await closeDialog(dialog);
 
@@ -389,8 +401,8 @@ test.describe("docs/testing/26-color-intent.md", () => {
 			hue: 30 / 360,
 			saturation: 1,
 		});
-		const [orange] = (await colorReport(api, show.id, [wheelId])).heads;
-		expect(orange).toMatchObject({ quality: "wheel_limited", engine: "wheel" });
+		const [orange] = (await acceptedColorReport(api, bench, show.id, [wheelId])).heads;
+		expect(orange).toMatchObject({ fixture_id: wheelId, quality: "wheel_limited" });
 		const [, wheelSlot] = (await universe(bench)).slice(60, 62);
 		expect(
 			wheel.steadySlots.some(
@@ -402,8 +414,8 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		).toBe(true);
 		dialog = await openColorDialog(page);
 		await expect(
-			colorResults(dialog).locator('li[data-quality="wheel_limited"]'),
-		).toContainText(/^Wheel-limited Fixture 7 can only choose the nearest colour-wheel slot/);
+			resultRow(colorResults(dialog), wheelId).locator('td[data-quality="wheel_limited"]'),
+		).toContainText(/^Wheel-limited Uses the nearest wheel slot/);
 		await closeDialog(dialog);
 	});
 
@@ -424,7 +436,7 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		const color1 = await presetBody(api, show.id, 1);
 		expect(color1.values).toEqual({});
 		expect(color1.universal_values).toEqual({
-			color: { kind: "color_xyz", value: expect.any(Object) },
+			color: { kind: "color_program", value: expect.any(Object) },
 		});
 
 		await desk.open(api.baseUrl);
@@ -487,15 +499,16 @@ test.describe("docs/testing/26-color-intent.md", () => {
 			attributesOf(await programmerValues(api), show.ids[3]),
 		).not.toContain("color");
 
-		// With nothing selected, Color 1 selects nothing and says it applies to the selection.
+		// With nothing selected, a universal preset leaves the desk unchanged and silent.
 		await clearProgrammer(api, show);
 		await select(api, show, []);
 		const empty = await recall(api, show.id, 1);
 		expect(empty.appliedFixtures).toBe(0);
-		expect(empty.warning).toMatch(UNIVERSAL_RECALL_HINT);
+		expect(empty.warning).toBeNull();
 		expect((await programmer(api)).selected).toEqual([]);
 		await presetCard(page, 1).click();
-		await expect(page.getByText(UNIVERSAL_RECALL_HINT).first()).toBeVisible();
+		await expect(page.getByLabel("Desk notice")).toHaveCount(0);
+		await expect(page.getByText("Desk needs attention")).toHaveCount(0);
 		expect((await programmer(api)).selected).toEqual([]);
 		expect(await programmerValues(api)).toEqual([]);
 	});
@@ -531,26 +544,39 @@ test.describe("docs/testing/26-color-intent.md", () => {
 	}) => {
 		test.setTimeout(120_000);
 		const show = await createRiggedShow(api, page, desk, "Direct");
-		// A Direct Color preset holding a half-level red whole colour and a White channel value.
+		// A fixture-native colour value that a contract-1 show can hold: a colour-wheel slot on
+		// a wheel fixture. (A single colour-channel percentage such as White is legacy
+		// programming since programming contract 1 and is refused before it is stored.)
+		const wheel = await saveMeasuredWheelProfile(api);
+		await new BrowserPatch(api, page, desk).via.api.add({
+			number: 7,
+			name: "Wheel 7",
+			manufacturer: wheel.manufacturer,
+			profile: wheel.name,
+			mode: wheel.mode,
+			address: "1.61",
+		});
+		const wheelId = (await fixtureIds(api))[7];
+		// A Direct Color preset holding a half-level red whole colour and a colour-wheel value.
 		await api.seedShowObject(show.id, "preset", "2.1", {
 			family: "Color",
 			number: 1,
 			name: "Color 1",
 			group_values: {},
 			values: {
-				[show.ids[3]]: {
-					color: { kind: "color_xyz", value: HALF_RED },
-					"color.white": normalized(0.5),
-				},
+				[show.ids[3]]: { color: { kind: "color_xyz", value: HALF_RED } },
+				[wheelId]: { "color.wheel.1": { kind: "discrete", value: "deep_green" } },
 			},
 		});
 		const stored = await api.showObject(show.id, "preset", "2.1");
 		if (!stored) throw new Error("Color 1 was not stored");
-		await select(api, show, [show.ids[3]]);
-		await setIntensity(api, show, [3], 1);
+		const wheelSlot = async () => (await universe(bench))[61];
+		await select(api, show, [show.ids[3], wheelId]);
+		await setIntensityById(api, show, [show.ids[3], wheelId], 1);
 		await recall(api, show.id, 1);
-		// Direct plays the stored White channel value.
-		expect((await fixtureDmx(bench, 3)).white).toBe(128);
+		// Direct plays the stored wheel slot.
+		const slot = await wheelSlot();
+		expect(wheel.steadySlots.some(([from, to]) => slot >= from && slot <= to)).toBe(true);
 		await clearProgrammer(api, show);
 
 		await desk.open(api.baseUrl);
@@ -586,17 +612,17 @@ test.describe("docs/testing/26-color-intent.md", () => {
 			body: stored.body,
 		});
 
-		// Color Intent: the half-level red plays at full brightness and the White value still plays.
-		await select(api, show, [show.ids[3]]);
-		await setIntensity(api, show, [3], 1);
+		// Color Intent: the half-level red plays at full brightness and the wheel value still plays.
+		await select(api, show, [show.ids[3], wheelId]);
+		await setIntensityById(api, show, [show.ids[3], wheelId], 1);
 		await recall(api, show.id, 1);
-		expect(await fixtureDmx(bench, 3)).toEqual({
+		expect(await fixtureDmx(bench, 3)).toMatchObject({
 			dimmer: 255,
 			red: 255,
 			green: 0,
 			blue: 0,
-			white: 128,
 		});
+		expect(await wheelSlot()).toBe(slot);
 		await clearProgrammer(api, show);
 
 		// Back to Direct: the whole colour sits on an uncalibrated fixture and would be lost.
@@ -679,7 +705,10 @@ async function activeShowId(api: ApiDriver): Promise<string | null> {
 async function deskConfiguration(api: ApiDriver) {
 	return (
 		await api.request<{
-			configuration: { color_programming_model_default: ColorModel };
+			configuration: {
+				color_programming_model_default: ColorModel;
+				color_presentation?: string;
+			};
 		}>("GET", "/api/v2/configuration")
 	).configuration;
 }
@@ -810,52 +839,76 @@ function programColor(
 	show: ColorShow,
 	numbers: number[],
 	color: { hue: number; saturation: number },
-	brightness = 1,
 ) {
 	return programColorById(
 		api,
 		show,
 		numbers.map((number) => show.ids[number]),
 		color,
-		brightness,
 	);
 }
 
-function programColorById(
+/** A complete semantic white: the start a fresh pick edits, exactly as the dialog's picker. */
+const SEMANTIC_WHITE = {
+	kind: "color_program",
+	value: {
+		kind: "semantic",
+		intent: {
+			base_xyz: { x: 0.95047, y: 1, z: 1.08883 },
+			recipe: { version: 1, rgb: [1, 1, 1], amber: 0, approximate: false },
+			white_blend: 0,
+			white_target: { kelvin: 6500, duv: 0 },
+			uv: { amount: 0 },
+			relative_output: 1,
+			allocation: "preserve_recipe",
+		},
+	},
+};
+
+/**
+ * The semantic Color dialog's write (programming contract 1): the whole colour of `color`,
+ * edited by its Hue and Saturation components, from a white start for every fixture.
+ */
+async function programColorById(
 	api: ApiDriver,
-	show: ColorShow,
+	_show: ColorShow,
 	fixtureIds: string[],
 	color: { hue: number; saturation: number },
-	brightness = 1,
 ) {
-	return mutate(api, show, [
-		{
-			action: "set_selection_color_range",
-			fixtureIds,
-			start: color,
-			end: color,
-			hueTravel: 0,
-			brightness,
-			timing: NOW,
-		},
+	await valuesAction(api, {
+		type: "batch",
+		mutations: fixtureIds.map((fixture_id) => ({
+			type: "set_fixture",
+			fixture_id,
+			attribute: "color",
+			value: SEMANTIC_WHITE,
+			timing: { fade: false },
+		})),
+	});
+	await colorEdits(api, fixtureIds, [
+		scalarColorEdit("hue", color.hue * 360),
+		scalarColorEdit("saturation", color.saturation),
 	]);
 }
 
-function setWholeColor(
-	api: ApiDriver,
-	show: ColorShow,
-	fixtureId: string,
-	value: Xyz,
-) {
-	return mutate(api, show, [
-		{
-			action: "set_fixture",
-			fixtureId,
-			attribute: "color",
-			value: { kind: "color_xyz", value } as unknown as AttributeValue,
-			timing: NOW,
-		},
-	]);
+function scalarColorEdit(component: string, value: number) {
+	return {
+		kind: "scalar",
+		component: { kind: "color", component },
+		operation: { kind: "set", value: { kind: "value", value } },
+	};
+}
+
+/** One atomic `component_edits` action on the whole colour of the given fixtures. */
+async function colorEdits(api: ApiDriver, fixtureIds: string[], edits: unknown[]) {
+	const outcome = await valuesAction(api, {
+		type: "apply_intent",
+		fixture_ids: fixtureIds,
+		attribute: "color",
+		operation: { type: "component_edits", edits },
+		timing: { fade: false },
+	});
+	expect(outcome.status, JSON.stringify(outcome)).toBe("changed");
 }
 
 /** CIE 1931 xy chromaticity at the given luminance. */
@@ -980,7 +1033,28 @@ interface ColorIntentReport {
 		engine: string | null;
 		delta_uv: number | null;
 		calibration_revision: number | null;
+		uv?: { status: string; clipped: boolean } | null;
 	}>;
+	accepted_frame?: { state: string } | null;
+}
+
+/** The report of the output frame that was sent: tick once and read until it is accepted. */
+async function acceptedColorReport(
+	api: ApiDriver,
+	bench: LightBench,
+	showId: string,
+	fixtureIds: string[],
+): Promise<ColorIntentReport> {
+	let report: ColorIntentReport | undefined;
+	await expect
+		.poll(async () => {
+			await bench.tick(0);
+			report = await colorReport(api, showId, fixtureIds);
+			return report.accepted_frame?.state;
+		})
+		.toBe("accepted");
+	if (!report) throw new Error("no accepted Color report");
+	return report;
 }
 
 function colorReport(api: ApiDriver, showId: string, fixtureIds: string[]) {
@@ -1218,37 +1292,53 @@ async function chooseOption(
 	await page.getByRole("option", { name: new RegExp(`^${label} — `) }).click();
 }
 
-async function openColorDialog(page: Page): Promise<Locator> {
+/**
+ * Opens the semantic Color dialog as the full modal (its approximation lives there): the Color
+ * tab, then **Special Dialog**, then **Expand** when it opened compact in the encoder area. The
+ * lamp and the Media variant share the dialog's accessible name; the full modal's visible title
+ * (**Color** or **Media color**) tells them apart.
+ */
+async function openColorDialog(page: Page, title = "Color"): Promise<Locator> {
 	await page.getByRole("button", { name: "Color", exact: true }).first().click();
 	await page
 		.getByRole("button", { name: "Special Dialog", exact: true })
 		.click();
-	const dialog = page.locator(".modal-card").filter({
-		has: page.getByRole("heading", {
-			name: "Color · Special Dialog",
-			exact: true,
-		}),
+	const opened = page.getByRole("dialog", { name: "Color Special Dialog" });
+	await expect(opened).toBeVisible();
+	const expand = opened.getByRole("button", { name: "Expand", exact: true });
+	if (await expand.count()) await expand.click();
+	const dialog = page.locator(".ui-modal-stack-layer").filter({
+		has: page.getByRole("dialog", { name: "Color Special Dialog" }),
 	});
 	await expect(dialog).toBeVisible();
+	await expect(
+		dialog.getByRole("heading", { level: 2, name: title, exact: true }),
+	).toBeVisible();
 	return dialog;
 }
 
+/** The per-fixture approximation of the full Color modal (accepted-frame report rows). */
 function colorResults(dialog: Locator) {
-	return dialog.getByRole("region", { name: "Color Intent results" });
+	return dialog.getByTestId("color-approximation");
+}
+
+function resultRow(results: Locator, fixtureId: string) {
+	return results.locator(`tbody tr[data-fixture-id="${fixtureId}"]`);
 }
 
 async function closeDialog(dialog: Locator) {
-	await dialog
-		.getByRole("button", { name: "Close modal", exact: true })
-		.click();
+	const close = dialog.getByRole("button", { name: "Close modal", exact: true });
+	if (await close.count()) await close.click();
+	else await dialog.page().keyboard.press("Escape");
 	await expect(dialog).toBeHidden();
 }
 
-/** Hue 0 and full saturation sit in the picker's top-left corner, inside its rounded edge. */
-async function clickPickerCorner(page: Page) {
-	const box = await page.locator(".color-sheet").boundingBox();
-	if (!box) throw new Error("Color sheet has no pointer box");
-	await page.mouse.click(box.x + 6, box.y + 6);
+/** Pure red on the full modal's own controls: Hue 0° (Home) and Saturation 100% (End). */
+async function pickPureRed(page: Page, dialog: Locator) {
+	await dialog.getByRole("slider", { name: "Hue" }).focus();
+	await page.keyboard.press("Home");
+	await dialog.getByRole("slider", { name: "Saturation" }).focus();
+	await page.keyboard.press("End");
 }
 
 /** Shows the Color family in the Preset pool, as BrowserPresets does. */
@@ -1271,3 +1361,255 @@ function presetCard(page: Page, number: number) {
 		.locator('[data-pane-type="presets"] .preset-card:visible')
 		.nth(number - 1);
 }
+
+/**
+ * docs/testing/36-semantic-color-controls.md (TL-550): the production semantic Color dialog.
+ *
+ * Production reports programming contract 1 since TL-552, so these cases run under
+ * `npm run test:e2e` too; the gate below only skips on an older (contract 0) runtime.
+ */
+const SEMANTIC_GATE =
+	"semantic programming contract is not enabled on this runtime (production contract 0; run npm run test:e2e-semantic)";
+
+async function semanticColorPages(api: ApiDriver, fixtureIds: readonly string[]) {
+	return api
+		.request<{ semantic: boolean; families: Array<{ family: string; pages: unknown[] }> }>(
+			"GET",
+			`/api/v2/programming/family-encoder-pages?fixture_ids=${fixtureIds.join(",")}`,
+		)
+		.catch(() => null);
+}
+
+async function programmerValuesRevision(api: ApiDriver) {
+	const snapshot = await api.request<{ projection: { revision: number } }>(
+		"GET",
+		"/api/v2/programmer/values/snapshot",
+	);
+	return snapshot.projection.revision;
+}
+
+test.describe("docs/testing/36-semantic-color-controls.md", () => {
+	test("SEMANTIC-COLOR-001 @ui › compact in the measured encoder area, the active Color tab returns to the encoders", async ({
+		api,
+		desk,
+		page,
+	}) => {
+		const show = await createRiggedShow(api, page, desk, "Semantic", "intent");
+		const rgb = [show.ids[1], show.ids[2], show.ids[3]];
+		const pages = await semanticColorPages(api, rgb);
+		requireSemanticContract(Boolean(pages?.semantic), SEMANTIC_GATE);
+		await select(api, show, rgb);
+		await desk.open(api.baseUrl);
+		const revision = await programmerValuesRevision(api);
+		await page.getByRole("button", { name: "Color", exact: true }).first().click();
+		const area = page.locator(".parameter-surfaces").first();
+		const box = await area.boundingBox();
+		if (!box) throw new Error("the lower encoder area has no box");
+		await page.getByRole("button", { name: "Special Dialog", exact: true }).click();
+		const dialog = page.getByRole("dialog", { name: "Color Special Dialog" });
+		await expect(dialog).toBeVisible();
+		if (box.width >= 680 && box.height >= 210) {
+			await expect(area.getByRole("dialog", { name: "Color Special Dialog" })).toBeVisible();
+			await expect(dialog.getByRole("slider", { name: "White Blend" })).toBeVisible();
+			await expect(dialog.getByRole("button")).toHaveText(["White balance", "Expand"]);
+			await page.getByRole("button", { name: "Color", exact: true }).first().click();
+			await expect(dialog).toBeHidden();
+			await expect(area.getByRole("group").first()).toBeVisible();
+		} else {
+			await expect(dialog.locator("xpath=ancestor::*[contains(@class,'ui-modal-stack-layer')]")).toHaveCount(1);
+			await expect(dialog.getByRole("slider", { name: "Hue" })).toBeVisible();
+		}
+		expect(await programmerValuesRevision(api)).toBe(revision);
+	});
+
+	test("SEMANTIC-COLOR-004 @api › Easy and Advanced belong to the desk and leave programmed colour alone", async ({
+		api,
+		desk,
+		page,
+	}) => {
+		const show = await createRiggedShow(api, page, desk, "Presentation", "intent");
+		const rgb = [show.ids[1], show.ids[2]];
+		requireSemanticContract(Boolean((await semanticColorPages(api, rgb))?.semantic), SEMANTIC_GATE);
+		await select(api, show, rgb);
+		await programColor(api, show, [1, 2], RED);
+		const before = await programmerValues(api);
+		const revision = await programmerValuesRevision(api);
+		const colorPages = async () =>
+			(await semanticColorPages(api, rgb))?.families.find((group) => group.family === "color")
+				?.pages.length;
+		for (const [presentation, count] of [["easy_rgbw", 1], ["advanced", 2], ["easy_rgbw", 1]] as const) {
+			await api.request("POST", "/api/v2/configuration/update", {
+				request_id: crypto.randomUUID(),
+				patch: { color_presentation: presentation },
+			});
+			expect((await deskConfiguration(api)).color_presentation).toBe(presentation);
+			await expect.poll(colorPages).toBe(count);
+		}
+		expect(await programmerValues(api)).toEqual(before);
+		expect(await programmerValuesRevision(api)).toBe(revision);
+	});
+});
+
+/**
+ * docs/testing/37-direct-color-pages.md (TL-554): Direct (native) Color pages 3/4 on the E2E
+ * semantic server. Reading pages, choosing a reference head and reading reports are inert; the
+ * first native edit seeds the reference head's premaster output once and atomically selects
+ * Direct for the whole mixed selection; the report names exact replay versus best-effort match.
+ */
+interface NativePages {
+	semantic: boolean;
+	reference?: { fixture_id: string; head_id: string; chosen: boolean } | null;
+	candidates: Array<{ fixture_id: string }>;
+	pages: Array<{
+		number: number;
+		controls: Array<{
+			channel_id: string;
+			raw_max: number;
+			functions: Array<{ function_id: string; raw_to: number; continuous: boolean }>;
+		} | null>;
+	}>;
+	values?: { controls: Array<{ channel_id: string; raw: number }> } | null;
+	fixtures: Array<{ fixture_id: string; replay: string }>;
+}
+
+const SEMANTIC_RED = {
+	kind: "color_program",
+	value: {
+		kind: "semantic",
+		intent: {
+			base_xyz: { x: 0.4124564, y: 0.2126729, z: 0.0193339 },
+			recipe: { version: 1, rgb: [1, 0, 0], amber: 0, approximate: false },
+			white_blend: 0,
+			white_target: { kelvin: 6500, duv: 0 },
+			uv: { amount: 0 },
+			relative_output: 1,
+			allocation: "preserve_recipe",
+		},
+	},
+};
+
+/** Two verified ROOT PAR 6 heads (A1, A2) and one verified fixture of another type (B). */
+const DIRECT_RIG = [
+	{ number: 101, name: "Par A1", manufacturer: "Cameo", profile: "ROOT PAR 6", mode: "D7CH — Delay Off, virtual dimmer", address: 101 },
+	{ number: 102, name: "Par A2", manufacturer: "Cameo", profile: "ROOT PAR 6", mode: "D7CH — Delay Off, virtual dimmer", address: 111 },
+	{ number: 103, name: "Lustr B", manufacturer: "ETC", profile: "Source Four LED Series 2 Lustr", mode: "Direct", address: 121 },
+] as const;
+
+async function createDirectShow(api: ApiDriver, page: Page, desk: DeskDriver): Promise<ColorShow> {
+	await api.request("PUT", "/api/v2/configuration", { programmer_fade_millis: 0 });
+	const show = await api.createShow<{ id: string }>({ name: `DIRECT-COLOR ${crypto.randomUUID()}` });
+	await openShow(api, show.id);
+	if ((await colorModel(api, show.id)) !== "intent") await switchColorModel(api, show.id, "intent");
+	const patch = new BrowserPatch(api, page, desk);
+	for (const rig of DIRECT_RIG)
+		await patch.via.api.add({
+			number: rig.number,
+			name: rig.name,
+			manufacturer: rig.manufacturer,
+			profile: rig.profile,
+			mode: rig.mode,
+			address: `1.${rig.address}`,
+		});
+	return { id: show.id, ids: await fixtureIds(api) };
+}
+
+async function valuesAction(api: ApiDriver, action: Record<string, unknown>) {
+	const capture = await api.request<{ projection: { revision: number } }>(
+		"GET",
+		"/api/v2/programmer/capture-mode/snapshot",
+	);
+	return api.request<Record<string, unknown>>("POST", "/api/v2/programmer/values/actions", {
+		request_id: crypto.randomUUID(),
+		expected_revision: await programmerValuesRevision(api),
+		expected_capture_mode_revision: capture.projection.revision,
+		action,
+	});
+}
+
+test.describe("docs/testing/37-direct-color-pages.md", () => {
+	test("DIRECT-COLOR-001 @api › native pages are inert; the first native edit seeds the shown premaster output once", async ({
+		api,
+		bench,
+		desk,
+		page,
+	}) => {
+		const show = await createDirectShow(api, page, desk);
+		const [a1, a2, b] = [show.ids[101], show.ids[102], show.ids[103]];
+		const mixed = [a1, a2, b];
+		requireSemanticContract(Boolean((await semanticColorPages(api, mixed))?.semantic), SEMANTIC_GATE);
+		await select(api, show, mixed);
+		for (const fixtureId of mixed)
+			await valuesAction(api, {
+				type: "set_fixture",
+				fixture_id: fixtureId,
+				attribute: "color",
+				value: SEMANTIC_RED,
+				timing: {},
+			});
+		await bench.tick(25);
+		const nativePages = (query = "") =>
+			api.request<NativePages>(
+				"GET",
+				`/api/v2/programming/color/native-pages?fixture_ids=${mixed.join(",")}${query}`,
+			);
+		const revision = await programmerValuesRevision(api);
+		const pages = await nativePages();
+		expect(pages.semantic).toBe(true);
+		expect(pages.reference?.fixture_id, JSON.stringify(pages)).toBe(a1);
+		expect(pages.pages[0]?.number).toBe(3);
+		expect(pages.fixtures.map((fixture) => fixture.replay)).toEqual(["exact", "exact", "fallback"]);
+		expect((await nativePages(`&reference=${b}`)).reference?.chosen).toBe(true);
+		await api.request("GET", `/api/v2/color-intent/report?fixtures=${mixed.join(",")}`);
+		expect(await programmerValuesRevision(api), "reading pages is inert").toBe(revision);
+
+		const control = pages.pages[0]?.controls[0];
+		const shown = pages.values?.controls.find((value) => value.channel_id === control?.channel_id);
+		expect(control && shown, "the reference head's shown premaster value").toBeTruthy();
+		if (!control || !shown || !pages.reference) return;
+		const edit = (value: number) => ({
+			type: "apply_intent",
+			fixture_ids: mixed,
+			attribute: "color",
+			operation: {
+				type: "component_edits",
+				edits: [
+					{
+						kind: "native",
+						binding: { channel_id: control.channel_id, function_id: control.functions[0].function_id },
+						operation: { kind: "relative", value },
+					},
+				],
+			},
+			undo_group: "native-e2e",
+			timing: {},
+			native_reference: { fixture_id: pages.reference?.fixture_id, head_id: pages.reference?.head_id },
+		});
+		const step = -Math.min(10, shown.raw);
+		const first = await valuesAction(api, edit(step));
+		expect(first.status, JSON.stringify(first)).toBe("changed");
+		await bench.tick(25);
+		await valuesAction(api, edit(step));
+		await valuesAction(api, { type: "finish_gesture", attribute: "color", undo_group: "native-e2e" });
+		const recipes = (await programmerValues(api))
+			.filter((value) => value.attribute === "color" && mixed.includes(value.fixture_id))
+			.map((value) => (value as unknown as { value: { value: { kind: string; recipe?: { channels: Array<{ channel_id: string; raw: number }> } } } }).value.value);
+		expect(recipes).toHaveLength(3);
+		for (const program of recipes) {
+			expect(program.kind, "the whole selection is Direct").toBe("direct");
+			expect(
+				program.recipe?.channels.find((channel) => channel.channel_id === control.channel_id)?.raw,
+				"seeded once from the shown premaster value, then edited in place",
+			).toBe(shown.raw + 2 * step);
+		}
+		await bench.tick(25);
+		const report = await api.request<{
+			heads: Array<{ fixture_id: string; direct?: { replay: string } | null }>;
+		}>("GET", `/api/v2/color-intent/report?fixtures=${mixed.join(",")}`);
+		const replay = (fixtureId: string) =>
+			report.heads.find((head) => head.fixture_id === fixtureId)?.direct?.replay;
+		expect(replay(a1)).toBe("exact");
+		expect(replay(a2)).toBe("exact");
+		expect(["fallback", "native_only"]).toContain(replay(b));
+	});
+});
+

@@ -15,9 +15,17 @@ const MOVER = {
 } as const;
 const GROUP_ONE = [1, 2, 3, 4];
 const GROUP_TWO = [5, 6, 7, 8];
-/** Down and Up, as percentages of pan and tilt. */
-const DOWN = { pan: 40, tilt: 20 };
-const UP = { pan: 60, tilt: 80 };
+/**
+ * The Robin 300 LEDWash's declared travel, Pan 450° and Tilt 300°, centred on home: its derived
+ * nominal Position model (TL-552) maps Angles through the channels' own declared degrees.
+ */
+const TRAVEL = { pan: 450, tilt: 300 };
+/** Down and Up as Angles in degrees: 38 %/23 % and 62 %/77 % of the travel. */
+const DOWN = { pan: -54, tilt: -81 };
+const UP = { pan: 54, tilt: 81 };
+/** The share of the channel an Angle lands on, as a percentage. */
+const percentOfTravel = (axis: "pan" | "tilt", degrees: number) =>
+	(degrees / TRAVEL[axis] + 0.5) * 100;
 const CYCLE_MILLIS = 4_000;
 
 /** A byte range around a level, give or take a couple of DMX steps of rounding and interpolation. */
@@ -75,7 +83,7 @@ scenario(
 			gridAngleDegrees: 0,
 			lanes: [
 				{ attribute: "intensity", keyframes: [[0, 0], [1, 1]] },
-				...(["pan", "tilt"] as const).map((attribute) => ({
+				...(["position:pan", "position:tilt"] as const).map((attribute) => ({
 					attribute,
 					keyframes: [
 						[0, { preset: { family: PresetFamily.Position, number: 1 } }],
@@ -128,12 +136,15 @@ scenario(
 		const expectRising = async (members: number[], progress: number) => {
 			for (const [index, number] of members.entries()) {
 				const phase = (progress + index * 0.25) % 1;
-				const between = (from: number, to: number) =>
-					near((from + (to - from) * phase) / 100);
+				const between = (axis: "pan" | "tilt") => {
+					const from = percentOfTravel(axis, DOWN[axis]);
+					const to = percentOfTravel(axis, UP[axis]);
+					return near((from + (to - from) * phase) / 100);
+				};
 				await t.expectFixtureDMX(fixture(number), {
 					Intensity: near(phase),
-					"Tilt coarse": between(DOWN.tilt, UP.tilt),
-					"Pan coarse": between(DOWN.pan, UP.pan),
+					"Tilt coarse": between("tilt"),
+					"Pan coarse": between("pan"),
 				});
 			}
 		};

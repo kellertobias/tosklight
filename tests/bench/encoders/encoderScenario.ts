@@ -13,7 +13,9 @@ import { BrowserDiscreteEncoders } from "./discreteEncoderScenario";
 import {
 	BeamAttribute,
 	ColorAttribute,
+	degreesEncoderValue,
 	EncoderGroup,
+	type EncoderCatalogEntry,
 	encoderCatalogEntry,
 	FocusAttribute,
 	IntensityAttribute,
@@ -270,7 +272,11 @@ export class BrowserEncoders {
 			throw new Error(`${catalog.label} requires a typed discrete value`);
 		if (operation !== "set") assertPositiveSteps(input);
 		const value =
-			operation === "set" ? normalizedEncoderValue(input) : (input as number);
+			operation !== "set"
+				? (input as number)
+				: catalog.semantic?.unit === "degrees"
+					? degreesAttributeValue(input)
+					: normalizedEncoderValue(input);
 		await this.desk.recordStep(
 			"ENCODER",
 			`${operation} ${catalog.familyLabel} ${catalog.label} through the ${route.toUpperCase()} route.`,
@@ -280,7 +286,7 @@ export class BrowserEncoders {
 				await this.visibleSet(
 					catalog.familyLabel,
 					catalog.label,
-					value as AttributeValue,
+					value as AttributeValue | DegreesValue,
 				);
 			else
 				await this.visibleStep(
@@ -304,7 +310,105 @@ export class BrowserEncoders {
 			);
 			return;
 		}
-		await this.apiMutation(catalog.attribute, operation, value);
+		if (catalog.semantic) {
+			await this.semanticApiMutation(catalog, operation, input);
+			return;
+		}
+		await this.apiMutation(
+			catalog.attribute,
+			operation,
+			value as AttributeValue | number,
+		);
+	}
+
+	/**
+	 * Color and Position are semantic families at programming contract 1 (TL-552): an encoder edits
+	 * one component of the selection's whole Color or Angles with `component_edits`, exactly as the
+	 * software encoders do. Color components are recipe percentages; Pan and Tilt are degrees, one
+	 * relative step is one percent or one degree.
+	 */
+	private async semanticApiMutation(
+		catalog: EncoderCatalogEntry,
+		operation: EncoderOperation,
+		input: number | ProgrammerExpression,
+	): Promise<void> {
+		const semantic = catalog.semantic;
+		if (!semantic) throw new Error(`${catalog.label} is not a semantic encoder`);
+		const context = await this.programmerContext();
+		const degrees = semantic.unit === "degrees";
+		const scalar =
+			operation === "set"
+				? {
+						kind: "set" as const,
+						value: degrees
+							? degreesEncoderValue(input)
+							: scalarPercentages(normalizedEncoderValue(input)),
+					}
+				: {
+						kind: "relative" as const,
+						value:
+							(operation === "add" ? 1 : -1) *
+							(input as number) *
+							(degrees ? 1 : 0.01),
+					};
+		const edit = { kind: "scalar", component: semantic.component, operation: scalar };
+		if (semantic.owner === "position")
+			await this.seedAngles(context);
+		await applyProgrammerSelectionValue(this.api, {
+			surface: "api",
+			showId: context.showId,
+			fixtureIds: context.fixtureIds,
+			attribute: semantic.owner,
+			operation: { type: "component_edits", edits: [edit] } as never,
+			timing: { fade: false, fadeMillis: null, delayMillis: null },
+		});
+	}
+
+	/**
+	 * A Pan or Tilt edit changes one axis of the fixture's Angles. A lamp without a Position
+	 * physical graph has no displayed pose to start from, so a selected fixture that holds no
+	 * Programmer Angles yet starts at home (0°, 0°), the centre of travel a legacy untouched
+	 * axis rested at. Fixtures already holding Angles keep their other axis.
+	 */
+	private async seedAngles(
+		context: { showId: string; fixtureIds: readonly string[] },
+	): Promise<void> {
+		const snapshot = await this.api.request<{
+			projection: {
+				fixture_values?: Array<{
+					fixture_id: string;
+					attribute: string;
+					value: { kind: string; value?: { kind?: string } };
+				}>;
+			};
+		}>("GET", "/api/v2/programmer/values/snapshot");
+		const holding = new Set(
+			(snapshot.projection.fixture_values ?? [])
+				.filter(
+					(entry) =>
+						entry.attribute === "position" &&
+						entry.value.kind === "position" &&
+						entry.value.value?.kind === "angles",
+				)
+				.map((entry) => entry.fixture_id),
+		);
+		const missing = context.fixtureIds.filter((id) => !holding.has(id));
+		if (missing.length === 0) return;
+		const home = { kind: "value", value: 0 };
+		await batchProgrammerValues(this.api, {
+			surface: "api",
+			showId: context.showId,
+			mutations: missing.map((fixtureId) => ({
+				action: "set_fixture",
+				fixtureId,
+				attribute: "position",
+				value: {
+					kind: "position",
+					value: { kind: "angles", pan_degrees: home, tilt_degrees: home },
+				} as never,
+				timing: { fade: false, fadeMillis: null, delayMillis: null },
+			})),
+		});
 	}
 
 	private async apiMutation(
@@ -344,7 +448,7 @@ export class BrowserEncoders {
 
 	private async programmerContext(): Promise<{
 		showId: string;
-		fixtureIds: string[];
+		fixtureIds: readonly string[];
 	}> {
 		const [selection, bootstrap] = await Promise.all([
 			this.selection.observe(),
@@ -365,7 +469,7 @@ export class BrowserEncoders {
 	private async visibleSet(
 		family: string,
 		label: string,
-		value: AttributeValue,
+		value: AttributeValue | DegreesValue,
 	): Promise<void> {
 		await this.activateFamily(family);
 		const control = this.softwareControl(label);
@@ -375,11 +479,11 @@ export class BrowserEncoders {
 		).toBeVisible();
 		await control
 			.getByRole("button", {
-				name: new RegExp(`^Set Enc \\d+ · ${escapeRegex(label)} value$`),
+				name: new RegExp(`^Set Enc \\d+ · ${escapeRegex(label)}${READOUT_SUFFIX} value$`),
 			})
 			.click();
 		const dialog = this.page.getByRole("dialog", {
-			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)} value$`),
+			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)}${READOUT_SUFFIX} value$`),
 		});
 		await expect(dialog).toBeVisible();
 		for (const token of valueTokens(value))
@@ -433,7 +537,7 @@ export class BrowserEncoders {
 
 	private softwareControl(label: string): Locator {
 		return this.page.getByRole("group", {
-			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)}$`),
+			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)}${READOUT_SUFFIX}$`),
 		});
 	}
 
@@ -450,11 +554,12 @@ export class BrowserEncoders {
 	}
 }
 
-function valueTokens(value: AttributeValue): string[] {
+function valueTokens(value: AttributeValue | DegreesValue): string[] {
+	const degrees = value.kind === "degrees" || value.kind === "degrees_spread";
 	const points =
-		value.kind === "normalized"
+		value.kind === "normalized" || value.kind === "degrees"
 			? [value.value]
-			: value.kind === "spread"
+			: value.kind === "spread" || value.kind === "degrees_spread"
 				? value.value
 				: [];
 	if (points.length === 0)
@@ -462,15 +567,36 @@ function valueTokens(value: AttributeValue): string[] {
 	return points
 		.flatMap((point, index) => [
 			...(index === 0 ? [] : [ProgrammerToken.Thru]),
-			...percentageTokens(point * 100),
+			...numberTokens(degrees ? point : point * 100),
 		])
 		.concat("ENTER");
 }
 
-function percentageTokens(value: number): string[] {
-	return String(value)
-		.split("")
-		.map((token) => (token === "." ? "." : token));
+/** Typed Position entry: the encoder value dialog takes degrees, with its − key for a sign. */
+type DegreesValue =
+	| { kind: "degrees"; value: number }
+	| { kind: "degrees_spread"; value: number[] };
+
+function degreesAttributeValue(
+	value: number | ProgrammerExpression,
+): DegreesValue {
+	const intent = degreesEncoderValue(value);
+	return intent.kind === "value"
+		? { kind: "degrees", value: intent.value }
+		: { kind: "degrees_spread", value: intent.value };
+}
+
+function scalarPercentages(
+	value: AttributeValue,
+): { kind: "value"; value: number } | { kind: "spread"; value: number[] } {
+	if (value.kind === "normalized") return { kind: "value", value: value.value };
+	if (value.kind === "spread") return { kind: "spread", value: value.value };
+	throw new Error("Semantic Color encoder entry requires numeric points");
+}
+
+function numberTokens(value: number): string[] {
+	const text = String(Math.abs(value)).split("");
+	return value < 0 ? ["−", ...text] : text;
 }
 
 function assertPositiveSteps(value: number | ProgrammerExpression): void {
@@ -486,6 +612,12 @@ function stableIndex(value: string, length: number): number {
 	}
 	return (hash >>> 0) % length;
 }
+
+/**
+ * A semantic Pan/Tilt slot read back from the displayed output says so (`Pan · Resolved`, TL-549);
+ * it is still the same encoder.
+ */
+const READOUT_SUFFIX = "(?: · Resolved)?";
 
 function escapeRegex(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

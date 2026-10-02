@@ -18,7 +18,6 @@
     "apps/light-desktop/src/components/control/playbackFaderBank/PlaybackSlot.tsx::javascript:function:PlaybackSlot:01d2b20e0b9c:1": 152,
     "apps/light-desktop/src/components/control/softwareKeypad.ts::javascript:function:editTargetedCommandWithSoftwareKey:9c7efa542284:1": 183,
     "apps/light-desktop/src/components/modals/specialDialogs/shapers.tsx::javascript:function:ShapersDialog:7b819b7b6a73:1": 237,
-    "apps/light-desktop/src/components/modals/SpecialDialogsModal.tsx::javascript:function:SpecialDialogsModal:8f00c5dcbdc5:1": 191,
     "apps/light-desktop/src/components/modals/SystemControlsModal.tsx::javascript:function:useSystemControlsModel:e0900c5a21a7:1": 153,
     "apps/light-desktop/src/components/modals/VisualizationPaneSettings.tsx::javascript:function:WidgetEditor:6778b594cf10:1": 271,
     "apps/light-desktop/src/features/controlSurfaceInteraction/SetInteractionProvider.tsx::javascript:function:SetInteractionProvider:7ad4c5cbb6a4:1": 155,

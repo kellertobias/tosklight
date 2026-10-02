@@ -290,7 +290,7 @@ describe("overall demo show patch builder", () => {
 				{
 					targets: "601 primary THRU multipatch 7",
 					location: { x: "-2 THRU 2", y: "3", z: "4" },
-					rotation: { x: "0", y: "-21 THRU 21", z: "0" },
+					rotation: { x: "0", y: "21 THRU -21", z: "0" },
 				},
 			],
 			movingFixtureRotation: { x: 0, y: 0, z: 0 },
