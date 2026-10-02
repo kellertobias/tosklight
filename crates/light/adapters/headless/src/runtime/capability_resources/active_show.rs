@@ -212,6 +212,52 @@ impl ActiveShowResource {
         self.patch_lifecycle.pause_if_armed();
     }
 
+    #[cfg(test)]
+    pub(in crate::runtime) fn activation_before_admission_probe(
+        &self,
+    ) -> Arc<ActiveShowLifecyclePause> {
+        Arc::clone(&self.activation_before_admission)
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn pause_activation_before_admission_if_armed(&self) {
+        self.activation_before_admission.pause_if_armed();
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn activation_after_admission_probe(
+        &self,
+    ) -> Arc<ActiveShowLifecyclePause> {
+        Arc::clone(&self.activation_after_admission)
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn pause_activation_after_admission_if_armed(&self) {
+        self.activation_after_admission.pause_if_armed();
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn activation_completed_probe(&self) -> Arc<ActiveShowLifecyclePause> {
+        Arc::clone(&self.activation_completed)
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn pause_activation_completed_if_armed(&self) {
+        self.activation_completed.pause_if_armed();
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn activation_before_commit_probe(
+        &self,
+    ) -> Arc<ActiveShowLifecyclePause> {
+        Arc::clone(&self.activation_before_commit)
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn pause_activation_before_commit_if_armed(&self) {
+        self.activation_before_commit.pause_if_armed();
+    }
+
     pub(in crate::runtime) async fn acquire(&self) -> ActiveShowPermit {
         self.activation.acquire().await
     }

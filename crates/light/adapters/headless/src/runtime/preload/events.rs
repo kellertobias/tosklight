@@ -3,30 +3,26 @@ use preparation::{PlaybackIdentity, PlaybackProjection};
 use std::collections::{BTreeMap, HashMap};
 
 pub(super) struct PreloadChangeEvents {
-    pub(super) drafts: Vec<light_application::EventDraft>,
-    pub(super) projections: Vec<PlaybackProjection>,
+    pub(super) changes: Vec<(light_application::EventDraft, PlaybackProjection)>,
     exclusion_activations: Vec<(u16, Vec<u16>)>,
 }
 
 pub(super) fn preload_change_events(
-    state: &AppState,
     context: &light_application::ActionContext,
-    identities: &[PlaybackIdentity],
     before: Vec<(PlaybackIdentity, PlaybackProjection)>,
+    after: Vec<(PlaybackIdentity, PlaybackProjection)>,
     actions: &[StagedPreloadPlaybackAction],
 ) -> Result<PreloadChangeEvents, String> {
-    let after = preparation::read_projections(state, context, identities)?;
     let transitions = ordered_transitions(before, after)?;
     let exclusion_activations = final_exclusion_activations(&transitions, actions);
-    let (drafts, projections) = transitions
+    let changes = transitions
         .into_iter()
         .filter_map(|(identity, before, projection)| {
             change_event(context, identity, before, projection, actions)
         })
-        .unzip();
+        .collect();
     Ok(PreloadChangeEvents {
-        drafts,
-        projections,
+        changes,
         exclusion_activations,
     })
 }
@@ -105,7 +101,7 @@ fn final_event_cause(
     actions: &[StagedPreloadPlaybackAction],
     identity: PlaybackIdentity,
 ) -> FinalEventCause {
-    let PlaybackIdentity::Playback(number) = identity else {
+    let Some(number) = event_playback_number(&identity) else {
         return no_event_cause();
     };
     for action in actions.iter().rev() {
@@ -136,7 +132,7 @@ fn navigation_cause(
     actions: &[StagedPreloadPlaybackAction],
     identity: PlaybackIdentity,
 ) -> Option<light_application::PlaybackTransitionCause> {
-    let PlaybackIdentity::Playback(number) = identity else {
+    let Some(number) = event_playback_number(&identity) else {
         return None;
     };
     actions.iter().rev().find_map(|action| {
@@ -181,12 +177,15 @@ fn final_released_numbers(
     transitions
         .iter()
         .filter(|(_, before, after)| playback_was_released(before, after))
-        .filter_map(|(identity, _, _)| match identity {
-            PlaybackIdentity::Playback(number) => Some(*number),
-            PlaybackIdentity::Virtual(_)
-            | PlaybackIdentity::CueList(_)
-            | PlaybackIdentity::Group(_) => None,
-        })
+        .filter_map(|(identity, _, _)| event_playback_number(identity))
+}
+
+fn event_playback_number(identity: &PlaybackIdentity) -> Option<u16> {
+    match identity {
+        PlaybackIdentity::Playback(number) => Some(*number),
+        PlaybackIdentity::Virtual(address) => Some(address.number().get()),
+        PlaybackIdentity::CueList(_) | PlaybackIdentity::Group(_) => None,
+    }
 }
 
 fn final_action_for(

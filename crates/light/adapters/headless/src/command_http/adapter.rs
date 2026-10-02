@@ -356,11 +356,33 @@ pub(super) fn preset_record_address(
         .is_some_and(|token| matches!(token.as_str(), "RECORD" | "REC"))
         || timing.fade_millis.is_some()
         || timing.delay_millis.is_some()
-        || tokens.len() != 4
+        || !(tokens.len() == 4 || preset_record_aim_target(command)?.is_some())
     {
         return Ok(None);
     }
-    Ok(super::super::command_preset_address(&tokens[1..]).ok())
+    Ok(super::super::command_preset_address(&tokens[1..4]).ok())
+}
+
+/// Only the exact existing Aim suffix is a typed relation recording command.
+pub(super) fn preset_record_aim_target(command: &str) -> Result<Option<u32>, String> {
+    let (tokens, timing) = super::super::tokenize_programmer_command(command)?;
+    if timing.fade_millis.is_some() || timing.delay_millis.is_some() {
+        return Ok(None);
+    }
+    match tokens.as_slice() {
+        [record, _, dot, _, at, fixture, number]
+            if matches!(record.as_str(), "RECORD" | "REC")
+                && dot == "."
+                && at == "AT"
+                && matches!(fixture.as_str(), "FIXTURE" | "FIXTURES" | "FIX") =>
+        {
+            number
+                .parse::<u32>()
+                .map(Some)
+                .map_err(|_| "Aim target must be a fixture number".into())
+        }
+        _ => Ok(None),
+    }
 }
 
 pub(super) fn group_record_command(
@@ -642,7 +664,7 @@ pub(crate) fn route_osc_command_gesture_outcome(
     )
 }
 
-fn publish_osc_rejection(state: &AppState, session: &Session, error: String) {
+pub(crate) fn publish_osc_rejection(state: &AppState, session: &Session, error: String) {
     super::super::emit(
         state,
         "programmer_command_rejected",

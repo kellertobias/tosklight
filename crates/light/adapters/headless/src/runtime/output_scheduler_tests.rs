@@ -127,7 +127,7 @@ fn dynamic_playback_full_control_requires_complete_persistent_coverage_and_honor
     let runtime = runtime_with_controllers(vec![
         dynamic_controller(
             source_controller,
-            DynamicControllerSource::Playback { playback_number: 1 },
+            DynamicControllerSource::physical_playback(1),
             10,
             100,
         ),
@@ -135,6 +135,7 @@ fn dynamic_playback_full_control_requires_complete_persistent_coverage_and_honor
             covering_controller,
             DynamicControllerSource::Programmer {
                 programmer_id: Uuid::new_v4(),
+                instance_link: None,
             },
             11,
             101,
@@ -201,13 +202,13 @@ fn temporary_dynamic_playback_coverage_never_triggers_full_control_auto_off() {
     let runtime = runtime_with_controllers(vec![
         dynamic_controller(
             source_controller,
-            DynamicControllerSource::Playback { playback_number: 1 },
+            DynamicControllerSource::physical_playback(1),
             10,
             100,
         ),
         dynamic_controller(
             temporary_controller,
-            DynamicControllerSource::Playback { playback_number: 2 },
+            DynamicControllerSource::physical_playback(2),
             11,
             101,
         ),
@@ -241,6 +242,7 @@ fn scheduler_emits_typed_dynamic_runtime_boundaries() {
         controller_id,
         DynamicControllerSource::Programmer {
             programmer_id: Uuid::new_v4(),
+            instance_link: None,
         },
         10,
         100,
@@ -298,6 +300,36 @@ fn scheduler_emits_typed_dynamic_runtime_boundaries() {
         dynamic_event_kinds(dynamic_transition_events(&paused, &after_active, 500)),
         vec![light_application::DynamicRuntimeEventKind::Resumed],
     );
+
+    let mut covered = after_active.clone();
+    covered.instances[0].controller_transitions.push(
+        light_dynamics::DynamicControllerTransitionSnapshot {
+            controller_id,
+            output_gate: Some(light_dynamics::DynamicControllerOutputGateSnapshot {
+                started_at_millis: 600,
+                delay_millis: 0,
+                duration_millis: 100,
+                from: 1.0,
+                to: 0.0,
+            }),
+            ..Default::default()
+        },
+    );
+    for (before, after) in [(&after_active, &covered), (&covered, &after_active)] {
+        assert_eq!(
+            dynamic_event_kinds(dynamic_transition_events(before, after, 600)),
+            vec![light_application::DynamicRuntimeEventKind::ControllerUpdated],
+            "a retained output mask change refreshes observers without a new instance event",
+        );
+    }
+    assert!(dynamic_transition_events(&covered, &covered, 700).is_empty());
+    assert_eq!(
+        crate::runtime::dynamics_http::runtime_transition_mix(
+            covered.instances[0].controller_transitions[0],
+            650
+        ),
+        0.5
+    );
 }
 
 fn dynamic_event_kinds(
@@ -340,8 +372,12 @@ fn dynamic_sample(
         controller_id,
         target,
         lane_id: Uuid::new_v4(),
-        attribute: AttributeKey(attribute.into()),
-        value: 0.5,
+        expression: light_dynamics::DynamicSampleExpression::LegacyScalar {
+            attribute: AttributeKey(attribute.into()),
+            value: 0.5,
+            occurrence: None,
+            dependency_occurrence: None,
+        },
         priority,
         activated_at_millis,
         activation_mix: 1.0,
@@ -371,6 +407,9 @@ fn runtime_with_controllers(controllers: Vec<DynamicController>) -> DynamicRunti
     DynamicRuntimeSnapshot {
         global_paused: false,
         instances: vec![DynamicInstanceSnapshot {
+            expression_tape: None,
+            preset_source_values: Vec::new(),
+            lane_selections: Vec::new(),
             id: Uuid::new_v4(),
             definition: serde_json::from_value(serde_json::json!({
                 "id": Uuid::new_v4(),
@@ -414,6 +453,7 @@ fn runtime_with_controllers(controllers: Vec<DynamicController>) -> DynamicRunti
             synchronized_resume_transition: None,
             last_sample_values: Vec::new(),
             synchronized_hold_values: Vec::new(),
+            synchronized_hold_captured: false,
         }],
     }
 }

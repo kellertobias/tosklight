@@ -257,16 +257,27 @@ pub(super) async fn visualization_snapshot(
             true,
             true,
             None,
-            None,
         )?;
-        project_fixture_sheet_snapshot(
-            &mut snapshot,
-            ordinary.as_ref(),
-            requested_visualization_fixture_ids(query.fixture_ids.as_deref()).as_ref(),
-        );
+        let fixture_ids = requested_visualization_fixture_ids(query.fixture_ids.as_deref());
+        project_fixture_sheet_snapshot(&mut snapshot, ordinary.as_ref(), fixture_ids.as_ref());
+        // TL-552: the sheet's Pan/Tilt read the commanded pose, as the encoders do.
+        if !query.preload
+            && let Some(ids) = &fixture_ids
+            && let Some(object) = snapshot.as_object_mut()
+        {
+            let rows = super::position_readout::fixture_sheet_commanded_positions(&state, ids);
+            object.insert("commanded_positions".into(), rows.into());
+        }
         snapshot
     } else {
-        let mut snapshot = visualization_snapshot_for_session(&state, &session, query.preload)?;
+        let mut snapshot = visualization_snapshot_for_session_content_from_resolved(
+            &state,
+            &session,
+            query.preload,
+            true,
+            false,
+            source.as_deref(),
+        )?;
         if let Some(fixture_ids) = requested_visualization_fixture_ids(query.fixture_ids.as_deref())
         {
             retain_visualization_fixtures(&mut snapshot, &fixture_ids);
@@ -274,7 +285,12 @@ pub(super) async fn visualization_snapshot(
         snapshot
     };
     let projection_duration = projection_started.elapsed();
-    if let Some(source) = source.as_ref()
+    // Pending/ordinary Fixture Sheet projections still have their own observational path.
+    // Do not label independently evaluated values with an unrelated accepted Live frame.
+    let accepted_source = (!query.preload && !query.dynamic_stack_only)
+        .then_some(source.as_deref())
+        .flatten();
+    if let Some(source) = accepted_source
         && let Some(snapshot) = snapshot.as_object_mut()
     {
         snapshot.insert("source_frame".into(), source.sequence.into());
@@ -294,7 +310,7 @@ pub(super) async fn visualization_snapshot(
         projection_duration,
         serialization_duration,
         payload_bytes,
-        source.as_deref(),
+        accepted_source,
     );
     Ok(Json(snapshot))
 }
@@ -582,42 +598,50 @@ mod scoped_visualization_tests {
     }
 }
 
-pub(super) fn visualization_snapshot_for_session(
-    state: &AppState,
-    session: &Session,
-    preload: bool,
-) -> Result<serde_json::Value, ApiError> {
-    visualization_snapshot_for_session_content(state, session, preload, true)
-}
-
-pub(super) fn visualization_snapshot_for_session_content(
-    state: &AppState,
-    session: &Session,
-    preload: bool,
-    include_dynamic_stack: bool,
-) -> Result<serde_json::Value, ApiError> {
-    visualization_snapshot_for_session_content_from_resolved(
-        state,
-        session,
-        preload,
-        include_dynamic_stack,
-        false,
-        None,
-        None,
-    )
-}
-
 pub(super) fn visualization_snapshot_for_session_content_from_resolved(
     state: &AppState,
     session: &Session,
     preload: bool,
     include_dynamic_stack: bool,
     summarize_dynamic_stack: bool,
-    authoritative_resolved: Option<&light_engine::ResolvedValues>,
-    authoritative_profile_output: Option<&light_engine::ResolvedValues>,
+    authoritative_frame: Option<&super::visualization_frame::PublishedVisualizationFrame>,
 ) -> Result<serde_json::Value, ApiError> {
-    let snapshot = state.output.snapshot();
-    let options = state.output.render_options();
+    // TL-594: a Preload lane read beside an accepted Live frame (HTTP snapshot and stream)
+    // presents the accepted Pending publication when the family adapters are engaged. The
+    // Fixture Sheet's stored-intent path (no authoritative frame) keeps its observational path.
+    if preload
+        && authoritative_frame.is_some()
+        && let Some(published) = super::pending_preload_readers::published_preload(state)
+    {
+        return Ok(super::pending_preload_readers::visualization_content(
+            state, &published,
+        ));
+    }
+    resolved_visualization_content(
+        state,
+        session,
+        preload,
+        include_dynamic_stack,
+        summarize_dynamic_stack,
+        authoritative_frame,
+    )
+}
+
+fn resolved_visualization_content(
+    state: &AppState,
+    session: &Session,
+    preload: bool,
+    include_dynamic_stack: bool,
+    summarize_dynamic_stack: bool,
+    authoritative_frame: Option<&super::visualization_frame::PublishedVisualizationFrame>,
+) -> Result<serde_json::Value, ApiError> {
+    let authoritative_frame = authoritative_frame.filter(|_| !preload);
+    let snapshot = authoritative_frame.map_or_else(
+        || state.output.snapshot(),
+        |frame| Arc::clone(&frame.source_snapshot),
+    );
+    let options =
+        authoritative_frame.map_or_else(|| state.output.render_options(), |frame| frame.options);
     let programmer = preload.then(|| state.programming.get(session.id)).flatten();
     let extra_dynamic_values = programmer
         .as_ref()
@@ -637,39 +661,137 @@ pub(super) fn visualization_snapshot_for_session_content_from_resolved(
             || !programmer.preload_group_pending.is_empty()
             || !extra_dynamic_values.is_empty()
     });
-    let ordinary = include_dynamic_stack
+    let needs_ordinary_detail = include_dynamic_stack && !summarize_dynamic_stack;
+    let observer_ordinary = (needs_ordinary_detail && authoritative_frame.is_none())
         .then(|| state.output.cached_visualization_ordinary_values())
         .unwrap_or_default();
-    let authoritative = authoritative_resolved.filter(|_| extra_dynamic_values.is_empty());
-    let cached_dynamics = include_dynamic_stack
-        .then(|| state.output.cached_visualization_dynamics())
-        .flatten();
-    let (mut resolved, dynamic_runtime, dynamic_samples) =
-        match (authoritative, include_dynamic_stack, cached_dynamics) {
-            (Some(resolved), false, _) => (
-                std::borrow::Cow::Borrowed(resolved),
-                light_dynamics::DynamicRuntimeSnapshot::default(),
-                Vec::new(),
+    let captured_dynamics = authoritative_frame.and_then(|frame| frame.dynamics.as_deref());
+    let empty_runtime = light_dynamics::DynamicRuntimeSnapshot::default();
+    let ordinary = needs_ordinary_detail
+        .then(|| captured_dynamics.and_then(|sources| sources.ordinary.as_ref()))
+        .flatten()
+        .map(|values| values.values())
+        .unwrap_or(observer_ordinary.as_ref());
+    let (mut resolved, dynamic_runtime, dynamic_samples) = match authoritative_frame {
+        Some(frame) => (
+            std::borrow::Cow::Borrowed(frame.values.values()),
+            std::borrow::Cow::Borrowed(
+                captured_dynamics.map_or(&empty_runtime, |sources| &sources.runtime),
             ),
-            (Some(resolved), true, Some(cached)) => (
-                std::borrow::Cow::Borrowed(resolved),
-                cached.runtime,
-                cached.samples,
+            std::borrow::Cow::Borrowed(
+                captured_dynamics.map_or(&[][..], |sources| sources.samples.as_slice()),
             ),
-            _ => {
-                let (resolved, runtime, samples) = state
-                    .output
-                    .visualization_dynamic_projection(&extra_dynamic_values, preload);
-                (std::borrow::Cow::Owned(resolved), runtime, samples)
-            }
-        };
-    if preload && let Some(programmer) = programmer {
+        ),
+        None => {
+            let (resolved, runtime, samples) = state
+                .output
+                .visualization_dynamic_projection(&extra_dynamic_values, preload);
+            (
+                std::borrow::Cow::Owned(resolved),
+                std::borrow::Cow::Owned(runtime),
+                std::borrow::Cow::Owned(samples),
+            )
+        }
+    };
+    let mut overridden = if preload {
+        apply_preload_values(&snapshot, programmer.as_ref(), resolved.to_mut())
+    } else {
+        HashSet::new()
+    };
+    for (_, _, value) in &extra_dynamic_values {
+        if !matches!(
+            value.value,
+            light_dynamics::DynamicSemanticValue::DynamicOff { .. }
+                | light_dynamics::DynamicSemanticValue::Release
+        ) {
+            overridden.insert((value.fixture_id, value.attribute.clone()));
+        }
+    }
+    let profile_output_values = if has_preload_overrides {
+        let projected = state
+            .output
+            .engine()
+            .profile_visualization_projection_at(
+                resolved.as_ref(),
+                options,
+                Some(&snapshot),
+                &overridden,
+            )
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+        visualization_wire_values(&projected.values)
+    } else if let Some(frame) = authoritative_frame {
+        visualization_wire_values(frame.profile_visualization_values.as_ref())
+    } else {
+        let projected = state
+            .output
+            .profile_visualization_values(resolved.as_ref(), options)
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+        visualization_wire_values(&projected)
+    };
+    let values = visualization_wire_values(resolved.as_ref());
+    // Only unretained observer/Preload projections may acquire current sources here.
+    let observer_programmer = (authoritative_frame.is_none() && include_dynamic_stack)
+        .then(|| state.output.dynamic_programmer_values());
+    let observer_cues = (authoritative_frame.is_none() && include_dynamic_stack)
+        .then(|| state.output.active_cue_dynamic_values())
+        .unwrap_or_default();
+    let programmer_values = captured_dynamics
+        .map(|sources| sources.programmer_values.as_slice())
+        .or_else(|| observer_programmer.as_ref().map(|values| values.as_slice()))
+        .unwrap_or(&[]);
+    let cue_values = captured_dynamics.map_or(observer_cues.as_slice(), |sources| {
+        sources.cue_values.as_ref()
+    });
+    let now = authoritative_frame
+        .map_or_else(|| state.output.application_time(), |frame| frame.sampled_at);
+    let dynamic_stack = include_dynamic_stack
+        .then(|| {
+            dynamic_stack_projection(
+                u64::try_from(now.timestamp_millis()).unwrap_or_default(),
+                programmer_values,
+                cue_values,
+                ordinary,
+                resolved.as_ref(),
+                &dynamic_runtime,
+                &dynamic_samples,
+                &extra_dynamic_values,
+                summarize_dynamic_stack,
+            )
+        })
+        .unwrap_or_default();
+    let show_id = authoritative_frame.map_or_else(
+        || state.active_show.current().map(|show| show.id.0),
+        |frame| frame.scope.show_id,
+    );
+    Ok(serde_json::json!({
+        "scope": {
+            "show_id": show_id,
+        },
+        "revision": snapshot.revision,
+        "generated_at": chrono::Utc::now(),
+        "grand_master": options.grand_master,
+        "blackout": options.blackout,
+        "preload": preload,
+        "values": values,
+        "dynamic_stack": dynamic_stack,
+        "profile_output_values": profile_output_values,
+    }))
+}
+
+pub(super) fn apply_preload_values(
+    snapshot: &light_engine::EngineSnapshot,
+    programmer: Option<&light_programmer::ProgrammerState>,
+    resolved: &mut light_engine::ResolvedValues,
+) -> std::collections::HashSet<(light_core::FixtureId, light_core::AttributeKey)> {
+    let mut affected = std::collections::HashSet::new();
+    if let Some(programmer) = programmer {
         for value in programmer
             .preload_active
             .iter()
             .chain(&programmer.preload_pending)
         {
-            resolved.to_mut().insert(
+            affected.insert((value.fixture_id, value.attribute.clone()));
+            resolved.insert(
                 (value.fixture_id, value.attribute.clone()),
                 value.value.clone(),
             );
@@ -688,7 +810,8 @@ pub(super) fn visualization_snapshot_for_session_content_from_resolved(
                 let fixture_count = fixtures.len();
                 for (index, fixture) in fixtures.into_iter().enumerate() {
                     for (attribute, value) in attributes {
-                        resolved.to_mut().insert(
+                        affected.insert((fixture, attribute.clone()));
+                        resolved.insert(
                             (fixture, attribute.clone()),
                             fixture_sheet_value_for_ordered_position(
                                 &value.value,
@@ -701,52 +824,12 @@ pub(super) fn visualization_snapshot_for_session_content_from_resolved(
             }
         }
     }
-    let profile_output_values = if has_preload_overrides {
-        let projected = state
-            .output
-            .profile_visualization_values(resolved.as_ref(), options)
-            .map_err(|error| ApiError::internal(error.to_string()))?;
-        visualization_wire_values(&projected)
-    } else if let Some(authoritative) = authoritative_profile_output {
-        visualization_wire_values(authoritative)
-    } else {
-        let projected = state
-            .output
-            .profile_visualization_values(resolved.as_ref(), options)
-            .map_err(|error| ApiError::internal(error.to_string()))?;
-        visualization_wire_values(&projected)
-    };
-    let values = visualization_wire_values(resolved.as_ref());
-    let dynamic_stack = include_dynamic_stack
-        .then(|| {
-            dynamic_stack_projection(
-                state,
-                ordinary.as_ref(),
-                resolved.as_ref(),
-                &dynamic_runtime,
-                &dynamic_samples,
-                &extra_dynamic_values,
-                summarize_dynamic_stack,
-            )
-        })
-        .unwrap_or_default();
-    let show_id = state.active_show.current().map(|show| show.id.0);
-    Ok(serde_json::json!({
-        "scope": {
-            "show_id": show_id,
-        },
-        "revision": snapshot.revision,
-        "generated_at": chrono::Utc::now(),
-        "grand_master": options.grand_master,
-        "blackout": options.blackout,
-        "preload": preload,
-        "values": values,
-        "dynamic_stack": dynamic_stack,
-        "profile_output_values": profile_output_values,
-    }))
+    affected
 }
 
-fn visualization_wire_values(values: &light_engine::ResolvedValues) -> Vec<serde_json::Value> {
+pub(super) fn visualization_wire_values(
+    values: &light_engine::ResolvedValues,
+) -> Vec<serde_json::Value> {
     values
         .iter()
         .map(|((fixture_id, attribute), value)| {
@@ -783,8 +866,11 @@ struct DynamicStackEntry {
     resolved_value: Option<light_core::AttributeValue>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dynamic_stack_projection(
-    state: &AppState,
+    now_millis: u64,
+    programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+    cue_values: &[light_playback::ActiveCueDynamicValue],
     ordinary: &light_engine::ResolvedValues,
     resolved: &light_engine::ResolvedValues,
     runtime: &light_dynamics::DynamicRuntimeSnapshot,
@@ -792,8 +878,6 @@ fn dynamic_stack_projection(
     extra: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
     summary: bool,
 ) -> Vec<DynamicStackEntry> {
-    let now_millis =
-        u64::try_from(state.output.application_time().timestamp_millis()).unwrap_or_default();
     let mut entries = Vec::new();
     push_runtime_stack_entries(
         &mut entries,
@@ -804,9 +888,7 @@ fn dynamic_stack_projection(
         now_millis,
         summary,
     );
-    for (programmer_id, priority, stored) in state
-        .output
-        .dynamic_programmer_values()
+    for (programmer_id, priority, stored) in programmer_values
         .iter()
         .cloned()
         .chain(extra.iter().cloned())
@@ -820,13 +902,13 @@ fn dynamic_stack_projection(
             summary,
         );
     }
-    for stored in state.output.active_cue_dynamic_values() {
+    for stored in cue_values {
         push_semantic_stack_entry(
             &mut entries,
             light_dynamics::DynamicAddressValue {
                 fixture_id: stored.fixture_id,
-                attribute: stored.attribute,
-                value: stored.value,
+                attribute: stored.attribute.clone(),
+                value: stored.value.clone(),
                 changed_at_millis: stored.changed_at_millis,
                 programmer_order: 0,
             },
@@ -859,10 +941,12 @@ fn push_runtime_stack_entries(
     let mut ordinary_entries = HashSet::new();
     let dynamic_winners = samples
         .iter()
+        .filter(|sample| sample.activation_mix > 0.0)
+        .filter_map(light_dynamics::DynamicRuntimeSample::legacy)
         .fold(
             HashMap::<
                 (light_core::FixtureId, light_core::AttributeKey),
-                &light_dynamics::DynamicRuntimeSample,
+                light_dynamics::LegacyDynamicSample<'_>,
             >::new(),
             |mut winners, sample| {
                 let key = (sample.target, sample.attribute.clone());
@@ -889,6 +973,7 @@ fn push_runtime_stack_entries(
     let sample_values = (!summary).then(|| {
         samples
             .iter()
+            .filter_map(light_dynamics::DynamicRuntimeSample::legacy)
             .map(|sample| {
                 (
                     (sample.controller_id, sample.target, sample.lane_id),
@@ -918,11 +1003,11 @@ fn push_runtime_stack_entries(
                 super::dynamics_http::runtime_transition_mix(transition, now_millis);
             for target in &instance.targets {
                 for lane in &instance.definition.lanes {
-                    let key = (*target, lane.attribute.clone());
+                    let key = (*target, lane.output_owner());
                     let winner = dynamic_winners.get(&key).copied();
                     entries.push(DynamicStackEntry {
                         fixture_id: target.0,
-                        attribute: lane.attribute.0.to_string(),
+                        attribute: lane.output_owner().0.to_string(),
                         entry_type: "dynamic",
                         priority: controller.priority,
                         changed_at_millis: controller.activated_at_millis,
@@ -955,7 +1040,7 @@ fn push_runtime_stack_entries(
                     {
                         entries.push(DynamicStackEntry {
                             fixture_id: target.0,
-                            attribute: lane.attribute.0.to_string(),
+                            attribute: lane.output_owner().0.to_string(),
                             entry_type: "ordinary_static",
                             priority: i16::MIN,
                             changed_at_millis: 0,
@@ -1007,7 +1092,11 @@ fn push_semantic_stack_entry(
         light_dynamics::DynamicSemanticValue::Static { value, .. } => {
             ("static", "Static".into(), None, Some(value))
         }
+        light_dynamics::DynamicSemanticValue::ProgrammingFixAt { mask, .. } => {
+            ("fix_at", "FixAT".into(), None, Some(mask.family))
+        }
         light_dynamics::DynamicSemanticValue::DynamicOn { .. }
+        | light_dynamics::DynamicSemanticValue::ProgrammingRelease { .. }
         | light_dynamics::DynamicSemanticValue::Release => return,
     };
     entries.push(DynamicStackEntry {

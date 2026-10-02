@@ -580,6 +580,12 @@ pub(super) fn apply_bound_control(
             input,
         ),
         (CanonicalControlIntent::GrandMaster, ControlInput::Absolute { value, .. }) => {
+            // The persisted checkpoint and selected show must belong to the same activation.
+            // Like WS controls, refuse the brief commit boundary before touching any value.
+            let _activation = state
+                .active_show
+                .try_acquire()
+                .map_err(|_| PortError::new("show activation is in progress"))?;
             output_runtime_service::execute(
                 state,
                 session.as_ref(),
@@ -591,6 +597,12 @@ pub(super) fn apply_bound_control(
             Ok(())
         }
         (CanonicalControlIntent::Blackout, ControlInput::Button { pressed, .. }) => {
+            // The persisted checkpoint and selected show must belong to the same activation.
+            // Like WS controls, refuse the brief commit boundary before touching any value.
+            let _activation = state
+                .active_show
+                .try_acquire()
+                .map_err(|_| PortError::new("show activation is in progress"))?;
             output_runtime_service::execute(
                 state,
                 session.as_ref(),

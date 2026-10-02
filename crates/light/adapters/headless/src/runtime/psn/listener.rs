@@ -16,6 +16,7 @@
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddrV4};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio_util::sync::CancellationToken;
@@ -29,11 +30,6 @@ const TICK: Duration = Duration::from_millis(20);
 /// A PSN datagram is capped at 1500 bytes by the protocol; this leaves room for a sender that
 /// ignores the cap, so an oversized packet is read and rejected rather than silently truncated.
 const DATAGRAM_BUFFER: usize = 2_048;
-/// How often the stored configuration is read again. The desk's own edits are installed as they
-/// are accepted, so this is only for the changes that arrive another way: a show being opened, an
-/// undo, an import.
-const RELOAD_EVERY: Duration = Duration::from_secs(2);
-
 pub(in crate::runtime) async fn run(
     state: AppState,
     cancellation: CancellationToken,
@@ -43,12 +39,8 @@ pub(in crate::runtime) async fn run(
     let mut buffer = vec![0_u8; DATAGRAM_BUFFER];
     let mut ticker = tokio::time::interval(TICK);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let mut reloaded_at = std::time::Instant::now() - RELOAD_EVERY;
+    let mut patch = PointLocationCache::default();
     loop {
-        if reloaded_at.elapsed() >= RELOAD_EVERY {
-            reloaded_at = std::time::Instant::now();
-            reload(&state);
-        }
         let generation = state.psn.generation();
         if generation != bound_generation {
             bound_generation = generation;
@@ -60,10 +52,12 @@ pub(in crate::runtime) async fn run(
             Some(listening) => {
                 tokio::select! {
                     _ = cancellation.cancelled() => return Ok(()),
-                    _ = ticker.tick() => tick(&state),
+                    _ = ticker.tick() => tick(&state, &mut patch),
                     received = listening.recv_from(&mut buffer) => match received {
                         Ok((length, source)) => {
-                            state.psn.observe(source, &buffer[..length], now_millis());
+                            state.psn.observe_for_generation(
+                                bound_generation, source, &buffer[..length], now_millis(),
+                            );
                         }
                         Err(error) => {
                             // The socket is gone rather than the packet being bad: drop it and
@@ -80,30 +74,9 @@ pub(in crate::runtime) async fn run(
             None => {
                 tokio::select! {
                     _ = cancellation.cancelled() => return Ok(()),
-                    _ = ticker.tick() => tick(&state),
+                    _ = ticker.tick() => tick(&state, &mut patch),
                 }
             }
-        }
-    }
-}
-
-/// Take the configuration the show holds.
-///
-/// The desk's own edits are installed as they are accepted, so this catches what arrives another
-/// way — a show opened, an undo, a selective import — and a show with no tracking configuration at
-/// all installs the default, which is off and bound to nothing.
-fn reload(state: &AppState) {
-    let Some(show) = state.active_show.current() else {
-        return;
-    };
-    match super::super::psn_http::stored_configuration(state, show.id) {
-        Ok((_, configuration)) => {
-            if configuration != state.psn.configuration() {
-                state.psn.install(configuration);
-            }
-        }
-        Err(error) => {
-            tracing::debug!(error = %error.message, "the tracking configuration could not be read");
         }
     }
 }
@@ -157,17 +130,47 @@ fn open(configuration: &PsnConfiguration) -> std::io::Result<UdpSocket> {
     UdpSocket::from_std(socket.into())
 }
 
-fn tick(state: &AppState) {
-    state
-        .psn
-        .install_point_locations(point_locations(&state.output.snapshot()));
+fn tick(state: &AppState, patch: &mut PointLocationCache) {
+    // A show/patch install and its tracking ownership change are one activation boundary.
+    // Hold the last output when it is busy rather than applying old-source poses to a new patch.
+    let Ok(_activation) = state.active_show.try_acquire() else {
+        return;
+    };
+    patch.refresh(&state.psn, &state.output.snapshot());
     let outcome = state.psn.tick(now_millis());
-    state
-        .output
-        .engine()
-        .set_tracked_overrides(outcome.overrides);
+    super::output::publish(state, outcome.tracking);
     for (zone_id, transition) in outcome.zone_transitions {
         super::zone_macros::run(state, zone_id, transition);
+    }
+}
+
+/// Patch edits replace an immutable fixture projection. Motion does not: compare its Arc before
+/// scanning Point personalities, so a tracking tick never walks the whole patch unnecessarily.
+#[derive(Default)]
+struct PointLocationCache {
+    fixtures: Option<Arc<Vec<light_fixture::PatchedFixture>>>,
+    source_generation: u64,
+}
+
+impl PointLocationCache {
+    fn refresh(
+        &mut self,
+        resource: &super::service::PsnResource,
+        snapshot: &light_engine::EngineSnapshot,
+    ) -> bool {
+        let source_generation = resource.generation();
+        if self.source_generation == source_generation
+            && self
+                .fixtures
+                .as_ref()
+                .is_some_and(|fixtures| Arc::ptr_eq(fixtures, &snapshot.fixtures))
+        {
+            return false;
+        }
+        resource.install_point_locations(point_locations(snapshot));
+        self.fixtures = Some(Arc::clone(&snapshot.fixtures));
+        self.source_generation = source_generation;
+        true
     }
 }
 
@@ -205,3 +208,7 @@ pub(in crate::runtime) fn now_millis() -> u64 {
         .elapsed()
         .as_millis() as u64
 }
+
+#[cfg(test)]
+#[path = "listener_tests.rs"]
+mod tests;

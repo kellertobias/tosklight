@@ -4,10 +4,11 @@ use super::attribute_configuration::InstalledAttributeConfiguration;
 use super::capabilities::runtime::supervisor::CapabilitySupervisors;
 use super::capability_resources::*;
 use super::discovery_http;
+use super::dynamic_snapshot_publication::DynamicSnapshotPublication;
+use super::dynamic_source_origins::{DynamicSourceOrigins, SharedDynamicSourceOrigins};
 use super::{
-    ActionTimingResource, AppState, HighlightRegistry, matter,
-    normalize_restored_virtual_playback_exclusions, output_scheduler, playback_telemetry,
-    refresh_matter_bridge, refresh_speed_group_engine, router, startup_options,
+    ActionTimingResource, AppState, HighlightRegistry, matter, output_scheduler,
+    playback_telemetry, refresh_matter_bridge, refresh_speed_group_engine, router, startup_options,
     startup_state::StartupState,
 };
 use axum::Router;
@@ -86,6 +87,8 @@ struct RuntimeResources {
     pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
     pub(super) activation: ActiveShowCoordinator,
     pub(super) dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
+    pub(super) dynamic_snapshot: Arc<DynamicSnapshotPublication>,
+    pub(super) dynamic_source_origins: SharedDynamicSourceOrigins,
     pub(super) dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackIdentity>>>,
     pub(super) visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
     pub(super) internal_audio: Arc<Mutex<super::internal_audio::InternalAudioRuntime>>,
@@ -202,27 +205,44 @@ impl RuntimeResources {
         let playback_service = PlaybackService::new(events.clone());
         let active_show = Arc::new(RwLock::new(startup.persistent.active_show.clone()));
         let activation = ActiveShowCoordinator::new();
-        let dynamics = Arc::new(Mutex::new(light_dynamics::DynamicRuntime::default()));
+        let dynamics = Arc::clone(&startup.dynamics);
+        let dynamic_snapshot = Arc::new(DynamicSnapshotPublication::new(startup.engine.snapshot()));
+        let dynamic_source_origins: SharedDynamicSourceOrigins = Arc::new(
+            arc_swap::ArcSwap::from_pointee(DynamicSourceOrigins::default()),
+        );
         let dynamic_auto_offs = Arc::new(Mutex::new(Vec::new()));
         let visualization_frames =
             Arc::new(super::visualization_frame::VisualizationFrameHub::default());
-        dynamics
-            .lock()
-            .install_definitions(startup.engine.snapshot().dynamics.iter().cloned())
-            .expect("validated startup snapshot contains valid Dynamic definitions");
-        let restored_dynamic_runtime =
-            persisted_runtime
-                .dynamic_runtime
-                .clone()
-                .is_some_and(
-                    |snapshot| match dynamics.lock().restore_snapshot(snapshot) {
-                        Ok(()) => true,
-                        Err(error) => {
-                            tracing::warn!(%error, "ignoring invalid persisted Dynamic runtime");
-                            false
-                        }
-                    },
-                );
+        let restored_dynamic_runtime = match persisted_runtime.dynamic_source_checkpoint() {
+            Ok(Some(mut checkpoint)) => {
+                let restore = (|| -> anyhow::Result<()> {
+                    super::normalize_programmer_dynamic_checkpoint(
+                        &startup.programmers,
+                        &mut checkpoint.runtime,
+                    )?;
+                    OutputResource::restore_dynamic_source_state(
+                        &startup.engine,
+                        &dynamics,
+                        &dynamic_source_origins,
+                        &dynamic_snapshot,
+                        checkpoint,
+                    )?;
+                    Ok(())
+                })();
+                match restore {
+                    Ok(()) => true,
+                    Err(error) => {
+                        tracing::warn!(%error, "ignoring invalid persisted Dynamic runtime");
+                        false
+                    }
+                }
+            }
+            Ok(None) => false,
+            Err(error) => {
+                tracing::warn!(%error, "ignoring invalid persisted Dynamic source checkpoint");
+                false
+            }
+        };
         if !restored_dynamic_runtime {
             restore_programmer_dynamics(
                 &dynamics,
@@ -246,6 +266,8 @@ impl RuntimeResources {
             active_show: ActiveShowProjection::new(Arc::clone(&active_show)),
             activation: activation.clone(),
             dynamics: Arc::clone(&dynamics),
+            dynamic_snapshot: Arc::clone(&dynamic_snapshot),
+            dynamic_source_origins: Arc::clone(&dynamic_source_origins),
             speed_groups: Arc::clone(&startup.speed_groups),
             dynamic_auto_offs: Arc::clone(&dynamic_auto_offs),
             visualization_frames: Arc::clone(&visualization_frames),
@@ -272,6 +294,8 @@ impl RuntimeResources {
             active_show,
             activation,
             dynamics,
+            dynamic_snapshot,
+            dynamic_source_origins,
             dynamic_auto_offs,
             visualization_frames,
             internal_audio,
@@ -284,8 +308,11 @@ fn restore_programmer_dynamics(
     programmers: &light_programmer::ProgrammerRegistry,
     snapshot: &light_engine::EngineSnapshot,
 ) {
-    struct RestoredController {
+    struct RestoredController<'a> {
+        authored: &'a light_dynamics::DynamicAddressValue,
         definition: light_dynamics::DynamicDefinition,
+        reference: light_dynamics::DynamicReference,
+        lane_rows: Vec<(light_core::FixtureId, Uuid)>,
         overrides: light_dynamics::DynamicInstanceOverrides,
         targets: Vec<light_core::FixtureId>,
         activated_at_millis: u64,
@@ -313,34 +340,66 @@ fn restore_programmer_dynamics(
     let mut runtime = runtime.lock();
     for programmer in programmers.active_for_sessions() {
         let mut controllers = HashMap::<Uuid, RestoredController>::new();
-        for stored in programmer.dynamic_values.iter() {
+        for stored in light_dynamics::merge_dynamic_address_values(
+            programmer
+                .dynamic_values
+                .iter()
+                .chain(programmer.preload_dynamic_active.iter()),
+        ) {
             let light_dynamics::DynamicSemanticValue::DynamicOn {
                 instance_link,
                 dynamic,
                 overrides,
+                lane_id,
                 ..
             } = &stored.value
             else {
                 continue;
             };
-            let fallback = dynamic.embedded_fallback.definition.as_ref().clone();
+            let definition = dynamic
+                .dynamic_id
+                .and_then(|id| {
+                    snapshot
+                        .dynamics
+                        .iter()
+                        .find(|definition| definition.id == id)
+                })
+                .cloned()
+                .unwrap_or_else(|| dynamic.embedded_fallback.definition.as_ref().clone());
             let entry = controllers
                 .entry(*instance_link)
                 .or_insert_with(|| RestoredController {
-                    definition: fallback,
+                    authored: stored,
+                    definition: definition.clone(),
+                    reference: dynamic.clone(),
+                    lane_rows: Vec::new(),
                     overrides: overrides.clone(),
                     targets: Vec::new(),
                     activated_at_millis: stored.changed_at_millis,
                 });
-            entry.activated_at_millis = entry.activated_at_millis.max(stored.changed_at_millis);
+            if light_dynamics::dynamic_address_edit_is_later(stored, entry.authored) {
+                entry.authored = stored;
+                entry.definition = definition;
+                entry.reference = dynamic.clone();
+                entry.overrides = overrides.clone();
+                entry.activated_at_millis = stored.changed_at_millis;
+            }
+            entry.lane_rows.push((stored.fixture_id, *lane_id));
             if !entry.targets.contains(&stored.fixture_id) {
                 entry.targets.push(stored.fixture_id);
             }
         }
-        for (controller_id, restored) in controllers {
+        for (instance_link, restored) in controllers {
+            let controller_id =
+                light_dynamics::programmer_dynamic_controller_id(programmer.id, instance_link);
             if restored.targets.is_empty() {
                 continue;
             }
+            let lane_selection = light_dynamics::DynamicLaneSelection::for_recorded_values(
+                &restored.reference,
+                &restored.definition,
+                &restored.lane_rows,
+            );
             let live_group = match &restored.definition.target_binding {
                 light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
                     light_programmer::resolve_group_spatial(group_id, &groups, &stage_positions)
@@ -368,6 +427,7 @@ fn restore_programmer_dynamics(
                     id: controller_id,
                     source: light_dynamics::DynamicControllerSource::Programmer {
                         programmer_id: programmer.id.0,
+                        instance_link: Some(instance_link),
                     },
                     priority: programmer.priority,
                     activated_at_millis: restored.activated_at_millis,
@@ -387,6 +447,9 @@ fn restore_programmer_dynamics(
                 activation_policy_override: None,
                 reuse_matching_targetless: true,
             });
+            let result = result.and_then(|instance_id| {
+                runtime.set_controller_lane_selection(instance_id, controller_id, lane_selection)
+            });
             if let Err(error) = result {
                 tracing::warn!(
                     %controller_id,
@@ -404,16 +467,38 @@ struct RunningServer {
     pub(super) supervisors: CapabilitySupervisors,
 }
 
+/// No supervisor owns queued tasks yet. Drop their receiver to break captures of AppState
+/// (notably extension feedback) before returning an early startup error.
+async fn discard_unstarted_runtime(state: &AppState, resources: RuntimeResources) {
+    state.lifecycle.request_shutdown();
+    drop(state.lifecycle.take_task_receiver());
+    resources.cancellation.cancel();
+    resources.output_cancellation.cancel();
+    // Cancellation and dropping the start sender finish this unstarted scheduler and
+    // release its future's Engine/Dynamics/resource ownership.
+    if let Err(error) = resources.scheduler.into_task().await {
+        tracing::warn!(%error, "failed startup scheduler cleanup");
+    }
+}
+
 impl RunningServer {
     async fn start(mut startup: StartupState) -> anyhow::Result<Self> {
+        let originals = super::startup_state::OriginalStartupOwners::capture(&startup.persistent)?;
         let mut resources = RuntimeResources::start(&mut startup).await?;
         let bind = startup.persistent.bind;
         let state = build_app_state(startup, &resources)?;
-        normalize_restored_virtual_playback_exclusions(&state)
-            .map_err(|error| anyhow::anyhow!(error.message))?;
+        if let Err(error) =
+            super::startup_state::finalize_restored_owners_for_startup(&state, originals)
+        {
+            discard_unstarted_runtime(&state, resources).await;
+            return Err(error);
+        }
         refresh_matter_bridge(&state);
         refresh_speed_group_engine(&state);
-        resources.scheduler.start_rendering()?;
+        if let Err(error) = resources.scheduler.start_rendering() {
+            discard_unstarted_runtime(&state, resources).await;
+            return Err(error);
+        }
         let supervisors = CapabilitySupervisors::start(
             resources.cancellation,
             resources.output_cancellation,
@@ -523,9 +608,12 @@ fn build_app_state(
             startup.manual_clock,
             startup.speed_groups,
             Arc::clone(&resources.dynamics),
+            Arc::clone(&resources.dynamic_snapshot),
+            Arc::clone(&resources.dynamic_source_origins),
             Arc::clone(&resources.dynamic_auto_offs),
             Arc::clone(&resources.visualization_frames),
-        ),
+        )
+        .with_live_family_adapters(resources.scheduler.family_adapters()),
         active_show: ActiveShowResource::new(
             resources.activation.clone(),
             Arc::clone(&resources.active_show),
@@ -547,11 +635,19 @@ fn build_app_state(
         lifecycle: LifecycleResource::new(resources.cancellation.clone()),
         discovery,
     };
+    // TL-560: a runtime that started at contract ≥ 1 rejects legacy-programming shows on
+    // activation as well as at startup. Dormant at contract 0 (production today).
+    state
+        .active_show
+        .engage_legacy_programming_gate(state.output.supported_programming_contract());
     state
         .output
         .engine()
         .set_color_model(state.attributes.color_model());
     state.extensions.attach_state(state.clone());
+    super::psn_http::install_current_show(&state);
+    // TL-548 C4: the Pending episode worker starts only behind the family-adapter gate.
+    state.programming.pending_episodes().start_if_gated(&state);
     Ok(state)
 }
 
@@ -599,5 +695,32 @@ mod log_filter_tests {
         // Quiet enough to live with, loud enough that a failing request is recorded at all.
         assert!(DEFAULT_LOG_FILTER.contains("light_headless_runtime=info"));
         assert!(DEFAULT_LOG_FILTER.contains("tower_http=info"));
+    }
+}
+
+#[cfg(test)]
+#[path = "startup_owner_recovery_tests.rs"]
+mod startup_owner_recovery_tests;
+
+/// TL-560 test-only: a real `StartupState` turned into the served `AppState` (the same
+/// `RuntimeResources::start` + `build_app_state` steps as `RunningServer::start`, without
+/// supervisors or rendering), so startup-harness tests can drive HTTP routes after a
+/// contract-specific startup. Release it with `close`.
+#[cfg(test)]
+pub(in crate::runtime) struct ServedStartupForTests {
+    pub(in crate::runtime) state: AppState,
+    resources: RuntimeResources,
+}
+
+#[cfg(test)]
+impl ServedStartupForTests {
+    pub(in crate::runtime) async fn start(mut startup: StartupState) -> Self {
+        let resources = RuntimeResources::start(&mut startup).await.unwrap();
+        let state = build_app_state(startup, &resources).unwrap();
+        Self { state, resources }
+    }
+
+    pub(in crate::runtime) async fn close(self) {
+        discard_unstarted_runtime(&self.state, self.resources).await;
     }
 }

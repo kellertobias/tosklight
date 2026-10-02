@@ -172,7 +172,8 @@ async fn switching_a_programmed_show_is_refused_until_its_lossy_impact_is_acknow
     let show_id = show["id"].as_str().unwrap().to_owned();
     let path = show["path"].as_str().unwrap().to_owned();
     let fixture = Uuid::new_v4();
-    // A half-level red and one fixture-native channel value, stored the way Direct records them.
+    // A half-level red and one fixture-native channel value (a colour-wheel slot, which stays a
+    // native indexed address at contract 1; TL-552 retired the legacy `color.white` component).
     let dim_red = light_fixture::srgb_to_xyz(0.5, 0.0, 0.0);
     ActiveShowRepository::open(&path)
         .unwrap()
@@ -186,7 +187,7 @@ async fn switching_a_programmed_show_is_refused_until_its_lossy_impact_is_acknow
                 "values": {
                     fixture.to_string(): {
                         "color": {"kind": "color_xyz", "value": dim_red},
-                        "color.white": {"kind": "normalized", "value": 0.5},
+                        "color.wheel.1": {"kind": "normalized", "value": 0.5},
                     }
                 },
             }),

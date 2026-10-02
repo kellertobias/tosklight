@@ -4,7 +4,7 @@ use light_application::{
     PatchFixtureUpdateIntent, PatchFixturesCommand,
 };
 use light_core::{AttributeKey, AttributeValue, FixtureId};
-use light_fixture::{FixtureFreezeState, FreezeFamily, FrozenFixtureTarget};
+use light_fixture::{FixtureFreezeState, FreezeFamily, FrozenFixtureTarget, FrozenPositionOutput};
 use light_wire::v2::live_action::{
     FixtureFreezeActionOutcome, FixtureFreezeFamily, FixtureFreezeLiveActionRequest,
     FixtureFreezeOperation,
@@ -93,10 +93,8 @@ fn apply_selected(
         .selection(session.id)
         .map(|selection| selection.selected)
         .unwrap_or_default();
-    if fixture_ids.is_empty() {
-        return Err(ApiError::bad_request(
-            "Freeze requires at least one selected fixture",
-        ));
+    if fixture_ids.is_empty() && state.active_show.current().is_none() {
+        return Ok(quiet_outcome(0));
     }
     let show_id = state
         .active_show
@@ -122,15 +120,18 @@ fn apply_selected(
             .active_show
             .patch_snapshot(context, show_id, &ports)
             .map_err(api_error)?;
-        let rendered = state
-            .output
-            .engine()
-            .render(state.output.render_options())
-            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        if fixture_ids.is_empty() {
+            return Ok(quiet_outcome(snapshot.patch_revision.value()));
+        }
+        let Some(captured) =
+            prepare_freeze_capture(state, &snapshot, &fixture_ids, &families, request.operation)?
+        else {
+            return Ok(quiet_outcome(snapshot.patch_revision.value()));
+        };
         let (command, affected_fixtures, previous) = freeze_command(
             show_id,
             &snapshot,
-            &rendered,
+            &captured,
             &fixture_ids,
             &families,
             request.operation,
@@ -177,6 +178,183 @@ fn apply_selected(
     unreachable!("the bounded Freeze retry loop always returns")
 }
 
+struct FreezeCapturedOutput {
+    values: light_engine::FrameValues,
+    visual: Option<Arc<light_engine::Pooled<light_engine::ResolvedValues>>>,
+    native: HashMap<FixtureId, FrozenPositionOutput>,
+    /// Alias clearing is command-time only; no channel search or hashing occurs at frame rate.
+    position_aliases: HashMap<FixtureId, HashSet<AttributeKey>>,
+}
+
+fn quiet_outcome(patch_revision: u64) -> FixtureFreezeActionOutcome {
+    FixtureFreezeActionOutcome {
+        changed: false,
+        patch_revision,
+        affected_fixtures: 0,
+    }
+}
+
+fn prepare_freeze_capture(
+    state: &AppState,
+    patch: &light_application::PatchSnapshot,
+    selected: &[FixtureId],
+    families: &[FreezeFamily],
+    operation: FixtureFreezeOperation,
+) -> Result<Option<FreezeCapturedOutput>, ApiError> {
+    let engine_snapshot = state.output.snapshot();
+    let accepted = state.output.latest_visualization_frame().filter(|frame| {
+        Arc::ptr_eq(&engine_snapshot, &frame.source_snapshot)
+            && frame.scope.show_id == Some(patch.show_id.0)
+    });
+    let mut native = HashMap::new();
+    let mut position_aliases = HashMap::new();
+    let mut need_values = false;
+    for root in &patch.fixtures {
+        let mut owners = HashSet::new();
+        for &owner in selected {
+            if owner == root.patch.fixture_id && !root.patch.logical_heads.is_empty() {
+                owners.extend(root.patch.logical_heads.iter().map(|head| head.fixture_id));
+            } else if owner == root.patch.fixture_id
+                || root
+                    .patch
+                    .logical_heads
+                    .iter()
+                    .any(|head| head.fixture_id == owner)
+            {
+                owners.insert(owner);
+            }
+        }
+        for owner in owners {
+            let previous = root.patch.freeze.targets.get(&owner);
+            let full = previous.is_some_and(|target| target.full);
+            let position = full
+                || previous.is_some_and(|target| target.families.contains(&FreezeFamily::Position));
+            let adds = if families.is_empty() {
+                !matches!(operation, FixtureFreezeOperation::Unfreeze) && !full
+            } else if full {
+                matches!(operation, FixtureFreezeOperation::Toggle)
+            } else {
+                !matches!(operation, FixtureFreezeOperation::Unfreeze)
+                    && !previous.is_some_and(|target| {
+                        families
+                            .iter()
+                            .all(|family| target.families.contains(family))
+                    })
+            };
+            need_values |= adds;
+            let wants_position = families.is_empty() || families.contains(&FreezeFamily::Position);
+            let captures_position = adds && wants_position && (!position || full);
+            if wants_position
+                && let Some(previous) = previous.and_then(|target| target.position_native.as_ref())
+            {
+                native.insert(owner, previous.clone());
+            }
+            if captures_position
+                && state
+                    .output
+                    .engine()
+                    .position_has_native_controls(&engine_snapshot, owner)
+            {
+                let Some(frame) = accepted.as_ref() else {
+                    return Ok(None);
+                };
+                let Some(output) = state.output.engine().position_freeze_from_physical(
+                    frame.generation,
+                    &frame.physical,
+                    owner,
+                ) else {
+                    return Ok(None);
+                };
+                native.insert(owner, output);
+            }
+            if let Some(output) = native.get(&owner)
+                && let Some(fixture) = engine_snapshot
+                    .fixtures
+                    .iter()
+                    .find(|fixture| fixture.fixture_id == root.patch.fixture_id)
+                && let Some(profile) = fixture.definition.profile_snapshot.as_deref()
+                && let Some(mode) = fixture.definition.mode_id.and_then(|id| profile.mode(id))
+            {
+                let controls: HashSet<_> = output
+                    .instances
+                    .iter()
+                    .flat_map(|instance| instance.controls.iter().map(|control| control.channel_id))
+                    .collect();
+                let mut aliases = HashSet::new();
+                for channel in mode
+                    .channels
+                    .iter()
+                    .filter(|channel| controls.contains(&channel.id))
+                {
+                    aliases.insert(channel.attribute.clone());
+                    aliases.insert(channel.fixture_attribute.clone());
+                    aliases.insert(light_fixture::FixtureMode::control_action_attribute(
+                        channel.id,
+                    ));
+                    aliases.extend(
+                        channel
+                            .functions
+                            .iter()
+                            .map(|function| function.attribute.clone()),
+                    );
+                }
+                position_aliases.insert(owner, aliases);
+            }
+        }
+    }
+    // Existing non-physical/legacy capture remains available before a scheduler publication.
+    // A new compiled Position hold above never reaches this fallback without an accepted frame.
+    let (values, visual) = if let Some(frame) = accepted {
+        (
+            frame.values.clone(),
+            Some(Arc::clone(&frame.profile_visualization_values)),
+        )
+    } else if need_values {
+        let rendered = state
+            .output
+            .engine()
+            .render(state.output.render_options())
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        (
+            rendered.resolved_values.clone(),
+            Some(Arc::clone(&rendered.profile_visualization_values)),
+        )
+    } else {
+        // Removal/idempotent commands need no physical sample. Reuse only an immutable empty
+        // observation for the scalar carrier; no clocks, fitting or new output are requested.
+        return Ok(Some(FreezeCapturedOutput {
+            values: light_engine::FrameValues::empty(),
+            visual: None,
+            native,
+            position_aliases,
+        }));
+    };
+    Ok(Some(FreezeCapturedOutput {
+        values,
+        visual,
+        native,
+        position_aliases,
+    }))
+}
+
+fn clear_captured_position_aliases(
+    captured: &FreezeCapturedOutput,
+    owner: FixtureId,
+    target: &mut FrozenFixtureTarget,
+) {
+    if target.position_native.is_none() {
+        return;
+    }
+    let semantic = light_core::programming::ProgrammingOwner::Position.key();
+    target.values.retain(|attribute, _| {
+        *attribute != semantic
+            && captured
+                .position_aliases
+                .get(&owner)
+                .is_none_or(|aliases| !aliases.contains(attribute))
+    });
+}
+
 fn domain_family(family: FixtureFreezeFamily) -> FreezeFamily {
     match family {
         FixtureFreezeFamily::Intensity => FreezeFamily::Intensity,
@@ -189,7 +367,7 @@ fn domain_family(family: FixtureFreezeFamily) -> FreezeFamily {
 fn freeze_command(
     show_id: light_core::ShowId,
     snapshot: &light_application::PatchSnapshot,
-    rendered: &light_engine::RenderResult,
+    captured: &FreezeCapturedOutput,
     fixture_ids: &[FixtureId],
     families: &[FreezeFamily],
     operation: FixtureFreezeOperation,
@@ -231,6 +409,10 @@ fn freeze_command(
                     vec![fixture_id]
                 }
             })
+            .scan(HashSet::new(), |seen, owner| {
+                Some(seen.insert(owner).then_some(owner))
+            })
+            .flatten()
             .collect::<Vec<_>>();
         if selected.is_empty() {
             continue;
@@ -239,7 +421,7 @@ fn freeze_command(
         previous.insert(root.patch.fixture_id, freeze.clone());
         for fixture_id in selected {
             affected.insert(fixture_id);
-            apply_target(&mut freeze, fixture_id, &families, rendered, operation);
+            apply_target(&mut freeze, fixture_id, &families, captured, operation);
         }
         updates.push(PatchFixtureUpdateIntent {
             fixture_id: root.patch.fixture_id,
@@ -283,7 +465,7 @@ fn apply_target(
     freeze: &mut FixtureFreezeState,
     fixture_id: FixtureId,
     families: &[FreezeFamily],
-    rendered: &light_engine::RenderResult,
+    captured: &FreezeCapturedOutput,
     operation: FixtureFreezeOperation,
 ) {
     if families.is_empty() {
@@ -303,11 +485,20 @@ fn apply_target(
         freeze.targets.insert(
             fixture_id,
             FrozenFixtureTarget {
+                position_native: captured.native.get(&fixture_id).cloned().or_else(|| {
+                    freeze
+                        .targets
+                        .get(&fixture_id)
+                        .and_then(|target| target.position_native.clone())
+                }),
                 full: true,
                 families: Vec::new(),
-                values: captured_values(rendered, fixture_id, None),
+                values: captured_values(captured, fixture_id, None),
             },
         );
+        if let Some(target) = freeze.targets.get_mut(&fixture_id) {
+            clear_captured_position_aliases(captured, fixture_id, target);
+        }
         return;
     }
 
@@ -317,6 +508,13 @@ fn apply_target(
     // Operators can first Unfreeze the fixture and then apply the desired partial Freeze.
     if target.full && !matches!(operation, FixtureFreezeOperation::Toggle) {
         return;
+    }
+    if target.full {
+        // Toggle from full to selected families transfers only their holds. The old complete
+        // scalar map must not keep unrelated attributes frozen after full ownership is removed.
+        target.values.clear();
+        target.position_native = None;
+        target.families.clear();
     }
     target.full = false;
     let removing = matches!(operation, FixtureFreezeOperation::Unfreeze)
@@ -329,6 +527,9 @@ fn apply_target(
         target
             .values
             .retain(|attribute, _| !families.iter().any(|family| family.accepts(attribute)));
+        if families.contains(&FreezeFamily::Position) {
+            target.position_native = None;
+        }
     } else {
         for family in families {
             if !target.families.contains(family) {
@@ -337,7 +538,13 @@ fn apply_target(
         }
         target
             .values
-            .extend(captured_values(rendered, fixture_id, Some(families)));
+            .extend(captured_values(captured, fixture_id, Some(families)));
+        if families.contains(&FreezeFamily::Position) {
+            if let Some(native) = captured.native.get(&fixture_id) {
+                target.position_native = Some(native.clone());
+            }
+            clear_captured_position_aliases(captured, fixture_id, target);
+        }
     }
     if target.families.is_empty() {
         freeze.targets.remove(&fixture_id);
@@ -418,14 +625,20 @@ pub(super) fn undo_latest(
 }
 
 fn captured_values(
-    rendered: &light_engine::RenderResult,
+    captured: &FreezeCapturedOutput,
     fixture_id: FixtureId,
     families: Option<&[FreezeFamily]>,
 ) -> HashMap<AttributeKey, AttributeValue> {
-    rendered
-        .resolved_values
+    captured
+        .values
         .iter()
-        .chain(rendered.profile_visualization_values.iter())
+        .chain(
+            captured
+                .visual
+                .as_deref()
+                .into_iter()
+                .flat_map(|values| values.iter()),
+        )
         .filter(|((owner, attribute), _)| {
             *owner == fixture_id
                 && families
@@ -495,3 +708,6 @@ pub(super) fn append_command_family(state: &AppState, session: &Session, digit: 
         .programming
         .set_command_line(session.id, format!("{current} {family}"))
 }
+
+#[cfg(test)]
+mod native_capture_tests;

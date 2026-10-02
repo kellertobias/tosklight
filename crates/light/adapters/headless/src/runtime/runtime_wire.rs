@@ -151,6 +151,7 @@ const fn attribute_value_type(value: attribute_wire::AttributeValueType) -> &'st
     match value {
         attribute_wire::AttributeValueType::Continuous => "continuous",
         attribute_wire::AttributeValueType::Color => "color",
+        attribute_wire::AttributeValueType::Position => "position",
         attribute_wire::AttributeValueType::Indexed => "indexed",
         attribute_wire::AttributeValueType::Control => "control",
     }

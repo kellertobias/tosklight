@@ -3,12 +3,23 @@ use super::*;
 fn source(sequence: u64) -> Arc<super::super::visualization_frame::PublishedVisualizationFrame> {
     Arc::new(
         super::super::visualization_frame::PublishedVisualizationFrame {
+            tracking: Arc::default(),
             sequence,
+            generation: sequence,
+            sampled_at: chrono::Utc::now(),
+            source_snapshot: Arc::new(light_engine::EngineSnapshot {
+                revision: sequence,
+                ..Default::default()
+            }),
+            points: Arc::new(light_engine::Pooled::default()),
+            mounts: Arc::new(light_engine::Pooled::default()),
             generated_at: std::time::SystemTime::now(),
             scope: VisualizationScope { show_id: None },
             show_revision: sequence,
             options: light_engine::RenderOptions::default(),
             values: light_engine::FrameValues::empty(),
+            dynamics: None,
+            physical: Arc::new(light_engine::Pooled::default()),
             profile_visualization_values: Arc::new(light_engine::Pooled::default()),
         },
     )
@@ -51,6 +62,7 @@ fn client_messages_tolerate_unknown_fields_through_the_logged_decoder() {
             include_dynamic_stack: false,
             sparse_dynamic_stack: false,
             batched_messages: false,
+            readouts: None,
         }
     );
 }
@@ -254,3 +266,6 @@ fn stage_stream_keeps_only_attributes_consumed_by_the_renderer() {
         assert!(!stage_visualization_attribute(attribute), "{attribute}");
     }
 }
+
+#[path = "readout_tests.rs"]
+mod readout_tests;

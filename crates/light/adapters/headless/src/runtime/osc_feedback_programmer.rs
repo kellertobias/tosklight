@@ -227,18 +227,7 @@ fn send_runtime_dynamic_feedback(state: &AppState, subscriber: &OscSubscriber, p
         }
         for controller in &instance.controllers {
             let controller_prefix = format!("{prefix}/controller/{}", controller.id);
-            let source = match &controller.source {
-                light_dynamics::DynamicControllerSource::Programmer { programmer_id } => {
-                    format!("programmer:{programmer_id}")
-                }
-                light_dynamics::DynamicControllerSource::Cue {
-                    cue_list_id,
-                    instance_link,
-                } => format!("cue:{cue_list_id}:{instance_link}"),
-                light_dynamics::DynamicControllerSource::Playback { playback_number } => {
-                    format!("playback:{playback_number}")
-                }
-            };
+            let source = osc_dynamic_source(&controller.source);
             for (suffix, arguments) in [
                 (
                     "runtime-instance",
@@ -311,7 +300,10 @@ fn send_programmer_dynamic_feedback(
                     });
                     entry.3 += 1;
                 }
-                light_dynamics::DynamicSemanticValue::FixAt { .. } => fix_at_count += 1,
+                light_dynamics::DynamicSemanticValue::FixAt { .. }
+                | light_dynamics::DynamicSemanticValue::ProgrammingFixAt { .. } => {
+                    fix_at_count += 1
+                }
                 _ => {}
             }
         }
@@ -494,4 +486,25 @@ pub(super) fn send_programmer_osc_feedback(
         highlight_fixtures,
         highlight_groups,
     );
+}
+
+/// OSC `source` feedback of a controller's current operational owner.
+pub(super) fn osc_dynamic_source(source: &light_dynamics::DynamicControllerSource) -> String {
+    match source {
+        light_dynamics::DynamicControllerSource::Programmer { programmer_id, .. } => {
+            format!("programmer:{programmer_id}")
+        }
+        light_dynamics::DynamicControllerSource::Cue {
+            cue_list_id,
+            instance_link,
+        } => format!("cue:{cue_list_id}:{instance_link}"),
+        light_dynamics::DynamicControllerSource::Playback {
+            playback_number,
+            virtual_page: None,
+        } => format!("playback:{playback_number}"),
+        light_dynamics::DynamicControllerSource::Playback {
+            playback_number,
+            virtual_page: Some(page),
+        } => format!("virtual-playback:{page}:{playback_number}"),
+    }
 }

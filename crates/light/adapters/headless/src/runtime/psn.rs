@@ -9,6 +9,7 @@
 pub(in crate::runtime) mod bindings;
 pub(in crate::runtime) mod config;
 pub(in crate::runtime) mod listener;
+pub(in crate::runtime) mod output;
 pub(in crate::runtime) mod service;
 pub(in crate::runtime) mod zone_macros;
 pub(in crate::runtime) mod zones;

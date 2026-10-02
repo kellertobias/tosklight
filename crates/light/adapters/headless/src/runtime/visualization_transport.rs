@@ -321,6 +321,7 @@ impl ClientPublicationState {
                 };
                 responses.push(invalidation.clone());
                 replacement_responses.push(invalidation);
+                super::visualization_readouts::evict_on_invalidation(state, session, lane);
                 *previous = 0;
                 *previous_snapshot = None;
             }
@@ -351,14 +352,17 @@ impl ClientPublicationState {
             let published_at = chrono::Utc::now().to_rfc3339();
             let source_timestamp =
                 chrono::DateTime::<chrono::Utc>::from(snapshot.source_generated_at).to_rfc3339();
+            let stamp = super::visualization_readouts::lane_stamp(state, session, lane, &source);
             let snapshot_response = VisualizationServerMessage::Snapshot {
                 lane,
                 scope: source.scope,
                 sequence: self.outgoing_sequence,
-                source_frame: snapshot.lane_source_sequence,
+                source_frame: stamp.source_frame.unwrap_or(snapshot.lane_source_sequence),
                 source_timestamp: source_timestamp.clone(),
                 published_at: published_at.clone(),
                 snapshot: snapshot.snapshot.as_ref().clone(),
+                lease: stamp.lease,
+                pending: stamp.pending.clone(),
             };
             let response = if !self.force_snapshot && *previous != 0 && previous_snapshot.is_some()
             {
@@ -377,16 +381,31 @@ impl ClientPublicationState {
                     lane,
                     scope: source.scope,
                     sequence: self.outgoing_sequence,
-                    source_frame: snapshot.lane_source_sequence,
+                    source_frame: stamp.source_frame.unwrap_or(snapshot.lane_source_sequence),
                     source_timestamp,
                     published_at,
                     delta,
+                    lease: stamp.lease,
+                    pending: stamp.pending.clone(),
                 }
             } else {
                 snapshot_response.clone()
             };
             responses.push(response);
             replacement_responses.push(snapshot_response);
+            let normal_lease = stamp.lease.filter(|_| lane == VisualizationLane::Normal);
+            if let Some(readouts) = normal_lease.and_then(|lease| {
+                super::visualization_readouts::readouts_message(
+                    state,
+                    subscribed.readouts.as_deref(),
+                    &source,
+                    lease,
+                    &mut self.outgoing_sequence,
+                )
+            }) {
+                responses.push(readouts.clone());
+                replacement_responses.push(readouts);
+            }
             *previous = source.sequence;
             *previous_snapshot = Some(Arc::clone(&snapshot.snapshot));
             *previous_structure = Some((source.scope, source.show_revision));
@@ -512,6 +531,8 @@ struct SubscriptionClaims {
     lanes: HashSet<VisualizationLane>,
     include_dynamic_stack: bool,
     sparse_dynamic_stack: bool,
+    /// TL-594 readout claim (Normal lane); replaced by every Subscribe.
+    readouts: Option<Vec<light_core::FixtureId>>,
 }
 
 impl SubscriptionClaims {
@@ -522,6 +543,7 @@ impl SubscriptionClaims {
             lanes: HashSet::new(),
             include_dynamic_stack: false,
             sparse_dynamic_stack: false,
+            readouts: None,
         }
     }
 
@@ -693,6 +715,7 @@ async fn handle_socket_messages(
                                 include_dynamic_stack,
                                 sparse_dynamic_stack,
                                 batched_messages,
+                                readouts,
                             } => {
                                 if max_rate_hz == 0 || max_rate_hz > VISUALIZATION_MAX_RATE_HZ {
                                     let response = VisualizationServerMessage::Error {
@@ -707,6 +730,8 @@ async fn handle_socket_messages(
                                 }
                                 subscribed.set_include_dynamic_stack(include_dynamic_stack);
                                 subscribed.set_sparse_dynamic_stack(sparse_dynamic_stack);
+                                subscribed.readouts =
+                                    super::visualization_readouts::claimed_owners(readouts);
                                 outgoing.set_batched_messages(batched_messages);
                                 subscribed.subscribe(lanes);
                                 publication.set_acknowledgements(acknowledgements);
@@ -900,20 +925,28 @@ fn lane_snapshot(
     include_dynamic_stack: bool,
 ) -> Result<VisualizationLaneSnapshot, ApiError> {
     let preload = lane == VisualizationLane::Preload;
-    let mut snapshot: VisualizationLaneSnapshot =
-        serde_json::from_value(visualization_snapshot_for_session_content_from_resolved(
+    // TL-594: gated Preload content and its message stamp come from ONE publication read.
+    let content = match preload
+        .then(|| super::pending_preload_readers::published_preload(state))
+        .flatten()
+    {
+        Some(published) => {
+            super::visualization_readouts::gated_preload_content(state, session, source, published)
+        }
+        None => visualization_snapshot_for_session_content_from_resolved(
             state,
             session,
             preload,
             include_dynamic_stack,
             true,
-            Some(source.values.values()),
-            Some(source.profile_visualization_values.as_ref()),
-        )?)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
-    snapshot.scope = source.scope;
-    snapshot.revision = source.show_revision;
+            Some(source),
+        )?,
+    };
+    let mut snapshot: VisualizationLaneSnapshot =
+        serde_json::from_value(content).map_err(|error| ApiError::internal(error.to_string()))?;
     if !preload {
+        snapshot.scope = source.scope;
+        snapshot.revision = source.show_revision;
         snapshot.generated_at =
             chrono::DateTime::<chrono::Utc>::from(source.generated_at).to_rfc3339();
         snapshot.grand_master = source.options.grand_master;

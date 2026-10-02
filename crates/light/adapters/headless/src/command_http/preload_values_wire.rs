@@ -1,3 +1,4 @@
+use super::intent_wire::{IntoIntentDomain, ToIntentWire};
 use light_application as application;
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_wire::v2::{events::EventSnapshotCursor, preload_values as wire};
@@ -6,6 +7,13 @@ pub(crate) fn command(
     action: wire::ProgrammingPreloadValuesAction,
 ) -> application::ProgrammingPreloadValuesCommand {
     match action {
+        wire::ProgrammingPreloadValuesAction::FinishGesture {
+            attribute,
+            undo_group,
+        } => application::ProgrammingPreloadValuesCommand::FinishGesture {
+            attribute: AttributeKey(attribute.into()),
+            undo_group,
+        },
         wire::ProgrammingPreloadValuesAction::ApplyIntent {
             fixture_ids,
             group_id,
@@ -13,6 +21,9 @@ pub(crate) fn command(
             operation,
             undo_group,
             timing,
+            displayed_source,
+            native_reference,
+            explicit_color_start,
         } => application::ProgrammingPreloadValuesCommand::ApplyIntent {
             intent: application::ProgrammingValueIntent {
                 fixture_ids: fixture_ids.into_iter().map(FixtureId).collect(),
@@ -24,6 +35,11 @@ pub(crate) fn command(
                             value,
                         ))
                     }
+                    wire::ProgrammingPreloadValueOperation::ComponentEdits { edits } => {
+                        application::ProgrammingValueOperation::ComponentEdits(
+                            edits.into_intent_domain(),
+                        )
+                    }
                     wire::ProgrammingPreloadValueOperation::RelativeStep { delta } => {
                         application::ProgrammingValueOperation::RelativeStep(delta)
                     }
@@ -34,6 +50,11 @@ pub(crate) fn command(
                     fade_millis: timing.fade_millis,
                     delay_millis: timing.delay_millis,
                 },
+                displayed_source: displayed_source.map(super::displayed_source),
+                color_adoption: super::color_adoption_request(
+                    native_reference,
+                    explicit_color_start,
+                ),
             },
         },
         wire::ProgrammingPreloadValuesAction::ApplyIndexedPreset { .. } => {
@@ -108,6 +129,8 @@ pub(crate) fn outcome(
         outcome,
         replayed: result.replayed,
         warning: result.warning,
+        hold: result.hold.map(super::hold_reason),
+        color_adoption: result.color_adoption.map(super::color_adoption_report),
     }
 }
 
@@ -202,7 +225,7 @@ const fn application_timing(
     }
 }
 
-fn application_value(value: wire::ProgrammingPreloadAttributeValue) -> AttributeValue {
+pub(super) fn application_value(value: wire::ProgrammingPreloadAttributeValue) -> AttributeValue {
     match value {
         wire::ProgrammingPreloadAttributeValue::Normalized(value) => {
             AttributeValue::Normalized(value)
@@ -214,6 +237,18 @@ fn application_value(value: wire::ProgrammingPreloadAttributeValue) -> Attribute
             y: value.y,
             z: value.z,
         }),
+        wire::ProgrammingPreloadAttributeValue::ColorProgram(value) => {
+            AttributeValue::ColorProgram(std::sync::Arc::new(value.into_intent_domain()))
+        }
+        wire::ProgrammingPreloadAttributeValue::Position(value) => {
+            AttributeValue::Position(std::sync::Arc::new(value.into_intent_domain()))
+        }
+        wire::ProgrammingPreloadAttributeValue::Zoom(value) => {
+            AttributeValue::Zoom(std::sync::Arc::new(value.into_intent_domain()))
+        }
+        wire::ProgrammingPreloadAttributeValue::GroupFamily(value) => {
+            AttributeValue::GroupFamily(std::sync::Arc::new((*value).into_intent_domain()))
+        }
         wire::ProgrammingPreloadAttributeValue::RawDmx(value) => AttributeValue::RawDmx(value),
         wire::ProgrammingPreloadAttributeValue::RawDmxExact(value) => {
             AttributeValue::RawDmxExact(value)
@@ -249,7 +284,7 @@ fn group_value(
     }
 }
 
-fn attribute_value(value: &AttributeValue) -> wire::ProgrammingPreloadAttributeValue {
+pub(crate) fn attribute_value(value: &AttributeValue) -> wire::ProgrammingPreloadAttributeValue {
     match value {
         AttributeValue::Normalized(value) => {
             wire::ProgrammingPreloadAttributeValue::Normalized(*value)
@@ -267,6 +302,18 @@ fn attribute_value(value: &AttributeValue) -> wire::ProgrammingPreloadAttributeV
                 z: value.z,
             })
         }
+        AttributeValue::ColorProgram(value) => {
+            wire::ProgrammingPreloadAttributeValue::ColorProgram(value.as_ref().to_intent_wire())
+        }
+        AttributeValue::Position(value) => {
+            wire::ProgrammingPreloadAttributeValue::Position(value.as_ref().to_intent_wire())
+        }
+        AttributeValue::Zoom(value) => {
+            wire::ProgrammingPreloadAttributeValue::Zoom(value.as_ref().to_intent_wire())
+        }
+        AttributeValue::GroupFamily(value) => wire::ProgrammingPreloadAttributeValue::GroupFamily(
+            Box::new(value.as_ref().to_intent_wire()),
+        ),
         AttributeValue::RawDmx(value) => wire::ProgrammingPreloadAttributeValue::RawDmx(*value),
         AttributeValue::RawDmxExact(value) => {
             wire::ProgrammingPreloadAttributeValue::RawDmxExact(*value)

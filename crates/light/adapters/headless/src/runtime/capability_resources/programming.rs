@@ -1,6 +1,16 @@
 use super::*;
 
 impl ProgrammingResource {
+    /// Enter after activation and before the ActiveShowService operation mutex. Existing
+    /// commands reuse the reentrant Programmer gate. Desk ownership remains with interaction
+    /// and selection callbacks, which must not be nested under another non-reentrant desk gate.
+    pub(in crate::runtime) fn run_active_show_boundary<T>(
+        &self,
+        operation: impl FnOnce() -> T,
+    ) -> T {
+        self.programmers.serialized(operation)
+    }
+
     pub(in crate::runtime) fn with_detached_command<T, E>(
         &self,
         session_id: SessionId,
@@ -15,10 +25,11 @@ impl ProgrammingResource {
                     programmers: detached_programmers.clone(),
                     service: light_application::ProgrammingService::new(
                         detached_programmers.clone(),
-                        self.service.events().clone(),
+                        light_application::EventBus::default(),
                         HighlightResource::detached_registry(),
                     ),
                     command_history: Arc::new(Mutex::new(HashMap::new())),
+                    pending_episodes: self.pending_episodes.clone(),
                 };
                 operation(&detached)
             })
@@ -47,6 +58,21 @@ impl ProgrammingResource {
 
     pub(in crate::runtime) fn alignment_active(&self, session_id: SessionId) -> bool {
         self.programmers.alignment(session_id).is_some()
+    }
+
+    pub(in crate::runtime) fn cycle_alignment(
+        &self,
+        context: &light_application::ActionContext,
+        ports: &dyn light_application::ProgrammingPorts,
+    ) -> Result<Option<light_programmer::ProgrammerAlignmentState>, light_application::ActionError>
+    {
+        self.service.cycle_alignment(context, ports)
+    }
+
+    pub(in crate::runtime) fn alignment_projection(
+        &self,
+    ) -> light_programmer::ProgrammerAlignmentProjection {
+        self.programmers.alignment_projection()
     }
 
     pub(in crate::runtime) fn preload_output_active(&self) -> bool {
@@ -102,8 +128,13 @@ impl ProgrammingResource {
             .with_staged_command(session_id, |staged_programmers| {
                 let staged = Self {
                     programmers: staged_programmers.clone(),
-                    service: self.service.clone(),
+                    service: light_application::ProgrammingService::new(
+                        staged_programmers.clone(),
+                        light_application::EventBus::default(),
+                        HighlightResource::detached_registry(),
+                    ),
                     command_history: Arc::clone(&self.command_history),
+                    pending_episodes: self.pending_episodes.clone(),
                 };
                 operation(&staged)
             })
@@ -114,7 +145,16 @@ impl ProgrammingResource {
         session_id: SessionId,
         operation: impl FnOnce() -> Result<T, E>,
     ) -> Result<T, E> {
-        self.programmers.with_transaction(session_id, operation)
+        self.service
+            .with_value_gesture_transaction(session_id, operation)
+    }
+
+    pub(in crate::runtime) fn run_value_gesture_boundary<T>(
+        &self,
+        context: &light_application::ActionContext,
+        operation: impl FnOnce() -> T,
+    ) -> T {
+        self.service.run_value_gesture_boundary(context, operation)
     }
 
     pub(in crate::runtime) fn start(
@@ -126,14 +166,17 @@ impl ProgrammingResource {
 
     #[cfg(test)]
     pub(in crate::runtime) fn restore(&self, state: light_programmer::ProgrammerState) {
+        self.service.forget_value_gesture(None);
         self.programmers.restore(state);
     }
 
     pub(in crate::runtime) fn disconnect(&self, session_id: SessionId) {
         self.programmers.disconnect(session_id);
+        self.service.forget_value_gesture(Some(session_id));
     }
 
     pub(in crate::runtime) fn reset_all(&self) {
+        self.service.forget_value_gesture(None);
         self.programmers.reset_all();
     }
 
@@ -361,7 +404,11 @@ impl ProgrammingResource {
     }
 
     pub(in crate::runtime) fn clear(&self, session_id: SessionId) -> bool {
-        self.programmers.clear(session_id)
+        let changed = self.programmers.clear(session_id);
+        if changed {
+            self.service.forget_value_gesture(None);
+        }
+        changed
     }
 
     #[cfg(test)]
@@ -499,7 +546,13 @@ impl ProgrammingResource {
     }
 
     pub(in crate::runtime) fn release_preload(&self, session_id: SessionId) -> bool {
-        self.programmers.release_preload(session_id)
+        let released = self.programmers.release_preload(session_id);
+        if released {
+            // TL-548 C4: a released Preload ends (or, when re-armed, recreates) the episode.
+            self.pending_episodes
+                .trigger(output_scheduler::PendingTrigger::Clear);
+        }
+        released
     }
 
     #[cfg(test)]
@@ -737,6 +790,19 @@ impl ProgrammingResource {
     ) -> Result<light_application::ProgrammingPresetRecordResult, light_application::ActionError>
     {
         self.service.record_preset_within_interaction(action, ports)
+    }
+
+    pub(in crate::runtime) fn record_position_preset_within_interaction(
+        &self,
+        action: light_application::ActionEnvelope<
+            light_application::ProgrammingPresetRecordRequest,
+        >,
+        ports: &dyn light_application::ProgrammingPresetRecordingPorts,
+        position: light_programmer::Preset,
+    ) -> Result<light_application::ProgrammingPresetRecordResult, light_application::ActionError>
+    {
+        self.service
+            .record_position_preset_within_interaction(action, ports, position)
     }
 
     pub(in crate::runtime) fn handle_group_recording(

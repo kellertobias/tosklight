@@ -101,7 +101,7 @@ fn release_command_stores_a_non_contributing_instruction_and_preserves_other_tra
     let mut snapshot = light_engine::EngineSnapshot::default();
     let mut patched = operational_fixture(fixture);
     let mut color = patched.definition.heads[0].parameters[0].clone();
-    color.attribute = light_core::AttributeKey("color.red".into());
+    color.attribute = light_core::AttributeKey("color.wheel.1".into());
     patched.definition.heads[0].parameters.push(color);
     snapshot.fixtures = vec![patched].into();
     state.output.replace_snapshot(snapshot).unwrap();
@@ -114,7 +114,7 @@ fn release_command_stores_a_non_contributing_instruction_and_preserves_other_tra
     state.programming.programmers().set_faded(
         session.id,
         fixture,
-        light_core::AttributeKey("color.red".into()),
+        light_core::AttributeKey("color.wheel.1".into()),
         light_core::AttributeValue::Normalized(0.25),
     );
     let controller = Uuid::new_v4();
@@ -138,7 +138,7 @@ fn release_command_stores_a_non_contributing_instruction_and_preserves_other_tra
     );
     let programmer = state.programming.get(session.id).unwrap();
     assert_eq!(programmer.values.len(), 1);
-    assert_eq!(&*programmer.values[0].attribute.0, "color.red");
+    assert_eq!(&*programmer.values[0].attribute.0, "color.wheel.1");
     assert!(programmer.dynamic_values.iter().any(|value| matches!(
         value.value,
         light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. }
@@ -158,7 +158,7 @@ fn release_command_stores_a_non_contributing_instruction_and_preserves_other_tra
     assert_eq!(color_release.values.len(), 1);
     assert!(color_release.values[0].attribute.is_intensity());
     assert!(color_release.dynamic_values.iter().any(|value| {
-        *value.attribute.0 == *"color.red"
+        *value.attribute.0 == *"color.wheel.1"
             && matches!(value.value, light_dynamics::DynamicSemanticValue::Release)
     }));
     assert_eq!(
@@ -488,7 +488,7 @@ fn startup_load_restores_persisted_dynamic_runtime_and_programmer_identity() {
             instance_link,
             overrides,
             ..
-        } if instance_link == &started.controller_id
+        } if light_dynamics::programmer_dynamic_controller_id(restored_programmer.id, *instance_link) == started.controller_id
             && (overrides.size - 0.65).abs() < f32::EPSILON
             && (overrides.speed_multiplier.factor() - 1.5).abs() < f64::EPSILON
             && (overrides.phase_offset_degrees - 45.0).abs() < f32::EPSILON
@@ -570,7 +570,7 @@ fn startup_loads_legacy_dynamic_phase_spread_as_uniform() {
 }
 
 #[test]
-fn malformed_show_runtime_is_cleared_without_discarding_valid_dynamic_definitions() {
+fn malformed_show_runtime_is_rejected_without_discarding_valid_dynamic_state() {
     let (state, data_dir) = test_state();
     let dynamic_id = Uuid::new_v4();
     let definition = command_test_dynamic(dynamic_id, 8);
@@ -598,6 +598,7 @@ fn malformed_show_runtime_is_cleared_without_discarding_valid_dynamic_definition
                 id: Uuid::new_v4(),
                 source: light_dynamics::DynamicControllerSource::Programmer {
                     programmer_id: Uuid::new_v4(),
+                    instance_link: None,
                 },
                 priority: 0,
                 activated_at_millis: 1_000,
@@ -618,10 +619,11 @@ fn malformed_show_runtime_is_cleared_without_discarding_valid_dynamic_definition
             reuse_matching_targetless: false,
         })
         .unwrap();
-    let mut malformed = state.output.dynamic_runtime_snapshot();
+    let original = state.output.dynamic_runtime_snapshot();
+    let mut malformed = original.clone();
     malformed.instances[0].controllers.clear();
 
-    restore_output_runtime_for_show(
+    let result = restore_output_runtime_for_show(
         &state,
         show.id,
         PersistedOutputRuntime {
@@ -630,7 +632,8 @@ fn malformed_show_runtime_is_cleared_without_discarding_valid_dynamic_definition
         },
     );
 
-    assert!(state.output.dynamic_runtime_snapshot().instances.is_empty());
+    assert!(result.is_err());
+    assert_eq!(state.output.dynamic_runtime_snapshot(), original);
     assert_eq!(
         state.output.snapshot().dynamics.len(),
         1,
@@ -1183,7 +1186,7 @@ fn ambiguous_targetless_dynamic_command_retains_typed_exact_instance_choice() {
                 instance_link,
                 overrides,
                 ..
-            } => Some((*instance_link, overrides.size)),
+            } => Some((light_dynamics::programmer_dynamic_controller_id(programmer.id, *instance_link), overrides.size)),
             _ => None,
         })
         .collect::<std::collections::HashMap<_, _>>();
@@ -1370,4 +1373,91 @@ fn command_test_dynamic(id: uuid::Uuid, pool_number: u16) -> light_dynamics::Dyn
         "default_activation": "start_now"
     }))
     .unwrap()
+}
+
+#[test]
+fn empty_selection_commands_are_quiet_noops_but_malformed_commands_still_fail() {
+    let (state, data_dir) = test_state();
+    let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: SessionId::new(), token: "quiet-empty-selection".into(),
+        connected: true, desk: test_control_desk(),
+    };
+    state.programming.start(session.id);
+    state.sessions.insert_session(session.clone());
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    for blind in [false, true] {
+        state.programming.set_modes(session.id, Some(blind), None, None, None);
+        let before = state.programming.get(session.id).unwrap();
+        for command in ["AT 50", "AT + 10", "AT 0 THRU 50 THRU 100", "FixAT 50", "ATTRIBUTE pan FixAT 50", "RELEASE", "RELEASE COLOR"] {
+            assert_eq!(execute_programmer_command_from(&state, &session, command, &context), Ok(0), "{command}");
+        }
+        for command in ["AT invalid", "AT 101", "AT 1 2", "AT 0 THRU 500", "FixAT nope", "FixAT 101", "RELEASE invalid"] {
+            assert!(execute_programmer_command_from(&state, &session, command, &context).is_err(), "{command}");
+        }
+        let after = state.programming.get(session.id).unwrap();
+        assert_eq!(serde_json::to_value(&after).unwrap(), serde_json::to_value(&before).unwrap());
+        assert_eq!(after.undo.len(), before.undo.len());
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn quiet_command_guards_preserve_empty_live_groups_and_explicit_noops() {
+    // These are scalar production-contract guards. Semantic Position retains requested intent
+    // even on an unsupported fixture; its separate contract1 route tests assert that behavior.
+    let (state, data_dir) = test_state_with_programming_contract(ProgrammerRegistry::default(), None, 0);
+    let session = Session { capability: light_core::SurfaceCapability::Programming, id: SessionId::new(), token: "quiet-group-and-aim".into(), connected: true, desk: test_control_desk() };
+    state.programming.start(session.id);
+    state.sessions.insert_session(session.clone());
+    let mut first = operational_fixture(light_core::FixtureId::new());
+    first.fixture_number = Some(1);
+    let mut target = operational_fixture(light_core::FixtureId::new());
+    target.fixture_number = Some(2);
+    target.address = Some(2);
+    let snapshot = light_engine::EngineSnapshot {
+        fixtures: vec![first, target].into(),
+        groups: vec![light_programmer::GroupDefinition { id: "1".into(), ..Default::default() }].into(),
+        ..Default::default()
+    };
+    state.output.replace_snapshot(snapshot).unwrap();
+    let show_path = data_dir.join("shows/quiet-groups.show");
+    let show_id = default_show::initialise_legacy_test_show(&show_path).unwrap();
+    let entry = ShowEntry { is_base_show: false, id: show_id, name: "Quiet group".into(), path: show_path.display().to_string(), revision: 0, updated_at: String::new(), created_at: None, last_loaded_at: None, revision_copy: None };
+    state.active_show.replace_current(Some(entry.clone()));
+    let preset = light_programmer::Preset {
+        family: light_programmer::PresetFamily::Intensity, number: 7,
+        group_values: HashMap::from([("1".into(), HashMap::from([(light_core::AttributeKey::intensity(), light_core::AttributeValue::Normalized(0.8))]))]),
+        ..Default::default()
+    };
+    ActiveShowRepository::open(&entry.path).unwrap().put_object("preset", "1.7", &serde_json::to_value(preset).unwrap(), 0).unwrap();
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    for blind in [false, true] {
+        state.programming.select(session.id, []);
+        state.programming.set_modes(session.id, Some(blind), None, None, None);
+        let before = state.programming.get(session.id).unwrap();
+        for command in ["AT 1.7", "FixAT INTENSITY PRESET 7", "FIXTURE 1 AT 1.7", "FIXTURE 1 RELEASE COLOR", "FIXTURE 1 AT FIXTURE 2"] {
+            assert_eq!(execute_programmer_command_from(&state, &session, command, &context), Ok(0), "{command}");
+        }
+        for command in ["FIXTURE 1 AT FIXTURE 999", "AT 1.999", "FixAT INTENSITY PRESET 999"] {
+            assert!(execute_programmer_command_from(&state, &session, command, &context).is_err(), "{command}");
+        }
+        let after = state.programming.get(session.id).unwrap();
+        assert_eq!(serde_json::to_value(&after).unwrap(), serde_json::to_value(&before).unwrap());
+        assert_eq!(after.undo.len(), before.undo.len());
+        execute_programmer_command_from(&state, &session, "GROUP 1", &context).unwrap();
+        execute_programmer_command_from(&state, &session, "AT 50", &context).unwrap();
+        let current = state.programming.get(session.id).unwrap();
+        let groups = if blind { &current.preload_group_pending } else { &current.group_values };
+        assert_eq!(groups["1"][&light_core::AttributeKey::intensity()].value, light_core::AttributeValue::Normalized(0.5));
+        execute_programmer_command_from(&state, &session, "AT 1.7", &context).unwrap();
+        let current = state.programming.get(session.id).unwrap();
+        let groups = if blind { &current.preload_group_pending } else { &current.group_values };
+        assert_eq!(groups["1"][&light_core::AttributeKey::intensity()].value, light_core::AttributeValue::Normalized(0.8));
+        execute_programmer_command_from(&state, &session, "RELEASE", &context).unwrap();
+        let current = state.programming.get(session.id).unwrap();
+        let groups = if blind { &current.preload_group_pending } else { &current.group_values };
+        assert!(groups.get("1").is_none_or(|attributes| attributes.is_empty()));
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
 }

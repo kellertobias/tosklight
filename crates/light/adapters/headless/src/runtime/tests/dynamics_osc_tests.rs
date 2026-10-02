@@ -1,4 +1,43 @@
 #[test]
+fn fix_at_osc_empty_and_identical_actions_preserve_state_without_rejection_feedback() {
+    let (state, data_dir) = test_state();
+    let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: SessionId::new(), token: "quiet-fix-at-osc".into(), connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id);
+    attach_session_command_context(&state, &session);
+    state.sessions.insert_session(session.clone());
+    let source: SocketAddr = "127.0.0.1:19131".parse().unwrap();
+    state.integrations.register_osc_subscriber("quiet-fix-at-osc".into(), OscSubscriber {
+        capability: light_core::SurfaceCapability::Programming,
+        path: "desk".into(), target: "127.0.0.1:19132".parse().unwrap(), command_source: source,
+        session_id: session.id, last_seen: Instant::now(), shifted: false, shift_held: false,
+        update_record_started: None, update_first_release: None, last_highlight_action: None,
+    });
+    let arguments = [OscArgument::String("intensity".into()), OscArgument::Float(0.4)];
+    let address = "/light/desk/programmer/fix-at";
+    let before = serde_json::to_value(state.programming.get(session.id).unwrap()).unwrap();
+    assert!(!handle_dynamics_osc(&state, address, &arguments, Some(&source.to_string())));
+    assert_eq!(serde_json::to_value(state.programming.get(session.id).unwrap()).unwrap(), before);
+
+    let fixture = light_core::FixtureId::new();
+    state.output.replace_snapshot(EngineSnapshot {
+        fixtures: vec![operational_fixture(fixture)].into(), ..Default::default()
+    }).unwrap();
+    state.programming.select(session.id, [fixture]);
+    assert!(handle_dynamics_osc(&state, address, &arguments, Some(&source.to_string())));
+    let held = state.programming.get(session.id).unwrap();
+    assert!(!handle_dynamics_osc(&state, address, &arguments, Some(&source.to_string())));
+    let after = state.programming.get(session.id).unwrap();
+    assert_eq!(after.undo.len(), held.undo.len());
+    assert_eq!(after.dynamic_values, held.dynamic_values);
+    assert!(!state.integrations.captured_osc_feedback().iter().any(|(_, path, _)| path.ends_with("/error")));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn dynamics_osc_actions_and_feedback_share_exact_runtime_identity() {
     let (state, data_dir) = test_state();
     let session = Session {

@@ -10,6 +10,8 @@ pub(in crate::runtime) struct SessionResource {
     /// operator session stays exactly as it was.
     roles: Arc<RwLock<HashMap<SessionId, RuntimeSessionRole>>>,
     visualizer_connections: Arc<RwLock<HashMap<SessionId, usize>>>,
+    /// TL-594: per-session displayed-source leases; released when the session is removed.
+    displayed_sources: Arc<crate::runtime::output_readouts::DisplayedSources>,
 }
 
 pub(crate) enum SessionFileInputRoute {
@@ -26,6 +28,7 @@ impl SessionResource {
             file_input_contexts: Arc::default(),
             roles: Arc::default(),
             visualizer_connections: Arc::default(),
+            displayed_sources: Arc::default(),
         }
     }
 
@@ -109,8 +112,15 @@ impl SessionResource {
         self.sessions.write().insert(session.id, session)
     }
 
+    pub(in crate::runtime) fn displayed_sources(
+        &self,
+    ) -> &crate::runtime::output_readouts::DisplayedSources {
+        &self.displayed_sources
+    }
+
     pub(in crate::runtime) fn remove_session(&self, id: SessionId) -> Option<Session> {
         self.roles.write().remove(&id);
+        self.displayed_sources.close_session(id);
         self.sessions.write().remove(&id)
     }
 

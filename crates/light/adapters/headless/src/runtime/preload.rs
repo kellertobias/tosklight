@@ -5,6 +5,9 @@ use light_engine::{
 
 #[path = "preload/authority.rs"]
 mod authority;
+#[path = "preload/captured_commands.rs"]
+mod captured_commands;
+pub(in crate::runtime) use captured_commands::CapturedPreloadPlaybackContext;
 #[path = "preload/events.rs"]
 mod events;
 #[path = "preload/preparation.rs"]
@@ -13,6 +16,8 @@ mod preparation;
 mod programmer;
 #[path = "preload/response.rs"]
 mod response;
+#[path = "preload/retained_history.rs"]
+pub(in crate::runtime) mod retained_history;
 #[path = "preload/transaction.rs"]
 mod transaction;
 
@@ -151,6 +156,11 @@ pub(super) fn commit_preload_while_show_stable(
         context,
     });
     let committed = completed.output?;
+    // TL-548 C4: GO starts a new Pending episode from the committed state.
+    state
+        .programming
+        .pending_episodes()
+        .trigger(output_scheduler::PendingTrigger::Go);
     Ok(response::preload_commit_response(
         state,
         session,
@@ -172,7 +182,15 @@ pub(super) fn commit_preload_lifecycle_while_show_stable(
         request,
     });
     let (committed, authority) = completed.output?;
-    typed_commit_result(committed, authority, completed.event_sequences)
+    state
+        .programming
+        .pending_episodes()
+        .trigger(output_scheduler::PendingTrigger::Go);
+    Ok(typed_commit_result(
+        committed,
+        authority,
+        completed.event_sequences,
+    ))
 }
 
 struct CommitPreload<'a> {
@@ -192,8 +210,12 @@ impl light_application::PlaybackUnitOfWork for CommitPreload<'_> {
                 transaction::commit_preload_transaction(self.state, self.session, self.context)
             });
         match result {
-            Ok(mut committed) => {
-                let events = std::mem::take(&mut committed.events);
+            Ok(committed) => {
+                let events = committed
+                    .runtime_changes
+                    .iter()
+                    .map(|(draft, _)| draft.clone())
+                    .collect();
                 light_application::PlaybackOperation::with_events(Ok(committed), events)
             }
             Err(error) => light_application::PlaybackOperation::new(Err(error)),
@@ -230,8 +252,12 @@ impl light_application::PlaybackUnitOfWork for CommitTypedPreload<'_> {
             })
             .map_err(preload_commit_error);
         match result {
-            Ok(mut committed) => {
-                let events = std::mem::take(&mut committed.events);
+            Ok(committed) => {
+                let events = committed
+                    .runtime_changes
+                    .iter()
+                    .map(|(draft, _)| draft.clone())
+                    .collect();
                 light_application::PlaybackOperation::with_events(
                     Ok((committed, authority)),
                     events,
@@ -246,30 +272,25 @@ fn typed_commit_result(
     committed: transaction::CommittedPreload,
     authority: authority::PreloadCommitAuthority,
     event_sequences: Vec<u64>,
-) -> Result<light_application::ProgrammingPreloadCommitResult, light_application::ActionError> {
-    if committed.runtime_projections.len() != event_sequences.len() {
-        return Err(light_application::ActionError::new(
-            light_application::ActionErrorKind::Internal,
-            "Preload runtime projections did not match their event sequences",
-        ));
-    }
+) -> light_application::ProgrammingPreloadCommitResult {
+    // Both units of work derive their drafts from these pairs; PlaybackService publishes each
+    // draft exactly once and returns one sequence per draft. No fallible assembly after GO.
     let playback_event_sequence_after = event_sequences
         .last()
         .copied()
         .unwrap_or(authority.playback_event_sequence);
     let runtime_changes = committed
-        .runtime_projections
-        .iter()
-        .cloned()
+        .runtime_changes
+        .into_iter()
         .zip(event_sequences)
-        .map(
-            |(projection, event_sequence)| light_application::ProgrammingPreloadRuntimeChange {
+        .map(|((_, projection), event_sequence)| {
+            light_application::ProgrammingPreloadRuntimeChange {
                 projection,
                 event_sequence,
-            },
-        )
+            }
+        })
         .collect();
-    Ok(light_application::ProgrammingPreloadCommitResult {
+    light_application::ProgrammingPreloadCommitResult {
         show_id: authority.show_id,
         show_revision: authority.show_revision,
         playback_event_sequence_before: authority.playback_event_sequence,
@@ -280,7 +301,7 @@ fn typed_commit_result(
         executed: committed.executed_projection,
         runtime_changes,
         warnings: committed.warnings,
-    })
+    }
 }
 
 fn compatibility_context(session: &Session) -> light_application::ActionContext {

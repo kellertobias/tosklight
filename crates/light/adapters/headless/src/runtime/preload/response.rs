@@ -12,8 +12,7 @@ pub(super) fn preload_commit_response(
         programmer_fade_millis,
         executed,
         warnings,
-        events: _,
-        runtime_projections: _,
+        runtime_changes: _,
         executed_projection: _,
     } = committed;
     let mut payload = serde_json::json!({

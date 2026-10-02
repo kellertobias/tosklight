@@ -51,7 +51,7 @@ pub(super) async fn open_show_revision(
     State(state): State<AppState>,
     Path((id, revision)): Path<(Uuid, u64)>,
     headers: HeaderMap,
-    Json(input): Json<OpenShow>,
+    TolerantJson(input): TolerantJson<OpenShow>,
 ) -> Result<Json<ShowEntry>, ApiError> {
     let session = authenticate(&state, &headers)?;
     let id = light_core::ShowId(id);
@@ -103,9 +103,9 @@ pub(super) async fn open_show_revision(
         let _ = std::fs::remove_file(&copy_path);
         return Err(ApiError::store(error));
     }
-    let _show_change = state.active_show.acquire_show_change().await;
+    let show_change = state.active_show.acquire_show_change().await;
     let output_runtime = load_output_runtime_for_show(&state, copy.id)?;
-    let prepared = match prepare_show_for_runtime(&state, &copy) {
+    let prepared = match prepare_show_activation_for_runtime(&state, &copy) {
         Ok(prepared) => prepared,
         Err(error) => {
             let _ = state.installation.remove_show(copy.id);
@@ -116,7 +116,7 @@ pub(super) async fn open_show_revision(
     let previous = state.active_show.current().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
     let context = operator_action_context(&session, light_application::ActionSource::Http);
-    activate_prepared_show(
+    let activated = activate_prepared_show(
         &state,
         prepared,
         &context,
@@ -124,27 +124,17 @@ pub(super) async fn open_show_revision(
         input.transition_millis,
         copy.clone(),
         output_runtime,
+        ActivationCompletion::RevisionCopy {
+            previous,
+            source: revision_copy,
+        },
+        show_change,
     )
-    .await?;
-    state
-        .installation
-        .set_active_show(Some(copy.id))
-        .map_err(ApiError::store)?;
-    if let Some(previous) = &previous
-        && previous.id != copy.id
-    {
-        state
-            .installation
-            .set_setting("previous_active_show_id", &previous.id.0.to_string())
-            .map_err(ApiError::store)?;
+    .await;
+    if activated.is_err() {
+        discard_unactivated_destination(&state, &copy).await;
     }
-    let copy = record_explicit_show_load(&state, copy.id)?;
-    emit(
-        &state,
-        "show_opened",
-        serde_json::json!({"show":copy,"revision_copy":revision_copy,"transition":transition}),
-    );
-    Ok(Json(copy))
+    Ok(Json(activated?))
 }
 pub(super) async fn upload_show(
     State(state): State<AppState>,

@@ -11,8 +11,9 @@ pub(super) fn active_show_is(state: &AppState, show_id: light_core::ShowId) -> b
 pub(super) struct ActiveMvrImport {
     pub entry: ShowEntry,
     pub document: light_mvr::MvrDocument,
-    pub definitions: Vec<light_fixture::FixtureDefinition>,
-    pub new_definitions: Vec<(light_fixture::FixtureDefinition, Vec<u8>)>,
+    pub definitions: HashMap<Uuid, light_fixture::FixtureDefinition>,
+    pub new_profiles: Vec<light_fixture::FixtureProfile>,
+    pub warnings: Vec<String>,
     pub resolutions: HashMap<Uuid, MvrResolution>,
 }
 
@@ -25,7 +26,8 @@ pub(super) async fn apply_active_mvr_import(
         entry,
         document,
         definitions,
-        new_definitions,
+        new_profiles,
+        mut warnings,
         resolutions,
     } = import;
     let context = operator_action_context(session, light_application::ActionSource::Http);
@@ -47,8 +49,8 @@ pub(super) async fn apply_active_mvr_import(
     .await
     .map_err(|error| ApiError::internal(format!("MVR import task failed: {error}")))?
     .map_err(application_api_error)?;
-    let mut warnings = result.warnings;
-    publish_mvr_definitions(state, new_definitions, &mut warnings);
+    warnings.extend(result.warnings);
+    publish_mvr_profiles(state, new_profiles, &mut warnings);
     emit(
         state,
         "mvr_imported",
@@ -69,46 +71,31 @@ pub(super) async fn apply_active_mvr_import(
     }))
 }
 
-fn application_mvr_resolutions(
-    resolutions: HashMap<Uuid, MvrResolution>,
-) -> HashMap<Uuid, light_application::MvrImportResolution> {
-    resolutions
-        .into_iter()
-        .map(|(id, resolution)| {
-            let resolution = match resolution {
-                MvrResolution::Import => light_application::MvrImportResolution::Import,
-                MvrResolution::Skip => light_application::MvrImportResolution::Skip,
-                MvrResolution::ImportUnpatched => {
-                    light_application::MvrImportResolution::ImportUnpatched
-                }
-                MvrResolution::Replace => light_application::MvrImportResolution::Replace,
-                MvrResolution::Address { universe, address } => {
-                    light_application::MvrImportResolution::Address { universe, address }
-                }
-            };
-            (id, resolution)
-        })
-        .collect()
-}
-
-pub(super) fn publish_mvr_definitions(
+pub(super) fn publish_mvr_profiles(
     state: &AppState,
-    definitions: Vec<(light_fixture::FixtureDefinition, Vec<u8>)>,
+    profiles: Vec<light_fixture::FixtureProfile>,
     warnings: &mut Vec<String>,
 ) {
-    for (definition, source) in definitions {
-        let label = format!(
-            "{} {} mode {}",
-            definition.manufacturer, definition.model, definition.mode
-        );
-        if let Err(error) = state
+    let mut inserted = 0;
+    for profile in profiles {
+        match state
             .installation
-            .import_fixture_definition_with_source(&definition, &source)
+            .publish_fixture_profile_revision(&profile)
         {
-            warnings.push(format!(
-                "Imported {label}, but could not publish its fixture profile: {error}"
-            ));
+            Ok(true) => inserted += 1,
+            Ok(false) => {}
+            Err(error) => warnings.push(format!(
+                "Imported {} {}, but could not publish exact fixture profile revision {}: {error}",
+                profile.manufacturer, profile.name, profile.revision
+            )),
         }
+    }
+    if inserted > 0 {
+        emit(
+            state,
+            "fixture_library_changed",
+            serde_json::json!({"reason":"mvr_import", "profiles":inserted}),
+        );
     }
 }
 

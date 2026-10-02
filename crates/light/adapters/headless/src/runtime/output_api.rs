@@ -1,21 +1,157 @@
 use super::*;
 
+#[derive(Default, serde::Deserialize)]
+pub(super) struct DmxSnapshotQuery {
+    #[serde(default)]
+    include_preload: bool,
+}
+
 pub(super) async fn dmx_snapshot(
     State(state): State<AppState>,
     show: ShowContext,
-) -> Result<Json<serde_json::Value>, ApiError> {
+    headers: HeaderMap,
+    Query(query): Query<DmxSnapshotQuery>,
+) -> Result<Json<light_wire::v2::output_control::OutputDmxSnapshot>, ApiError> {
     show.verify(&state)?;
+    if query.include_preload {
+        authenticate(&state, &headers)?;
+    }
+    let (mut output, source) = state.output.dmx_snapshot();
+    // TL-594: with the family adapters engaged, Preload is the accepted Pending publication
+    // with its own identity, independent of the Live source; never a fresh projection.
+    let published = query
+        .include_preload
+        .then(|| super::pending_preload_readers::published_preload(&state))
+        .flatten();
+    if let Some(published) = &published {
+        super::pending_preload_readers::attach_dmx_preload(&mut output, published);
+    }
+    let Some(source) = source else {
+        return Ok(Json(output));
+    };
+    output.frame = Some(source.identity());
     let snapshot = state.output.snapshot();
-    let mut output = state.output.dmx_snapshot(snapshot.revision);
-    // The Stage draws everything slaved to a 3D Point where the point is, and a point may carry
-    // no DMX to read that from. The desk states each point's resolved pose beside the universes.
-    let resolved = state.output.resolved_values();
-    output["points"] = serde_json::to_value(super::programmer_aim_command::point_poses(
-        &snapshot, &resolved,
-    ))
-    .map_err(|error| ApiError::internal(error.to_string()))?;
+    if source.show_revision != snapshot.revision
+        || source.scope.show_id != state.active_show.current().map(|s| s.id.0)
+    {
+        return Ok(Json(output));
+    }
+    // The output publication already contains these poses. A read must never resample
+    // tracking, rebuild the whole value map, or combine newer geometry with held DMX.
+    let points = native_points(&source.points);
+    output.points = points.clone();
+    let mut live = native_lane(&source, &source.physical, points);
+    live.frame = Some(source.identity());
+    output.native = Some(live);
+    if query.include_preload && published.is_none() {
+        let snapshot = Arc::clone(&source.source_snapshot);
+        // A read-only Stage observes the desk's existing programmer; it never creates one.
+        let programmer = state
+            .programming
+            .desk_interaction_context()
+            .and_then(|id| state.programming.get(id));
+        let extra = programmer
+            .as_ref()
+            .map(|p| {
+                p.preload_dynamic_pending
+                    .iter()
+                    .cloned()
+                    .map(|v| (p.id.0, p.priority, v))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let mut resolved = if extra.is_empty() {
+            source.values.values().clone()
+        } else {
+            state
+                .output
+                .visualization_dynamic_projection(&extra, true)
+                .0
+        };
+        let mut affected =
+            operator_api::apply_preload_values(&snapshot, programmer.as_ref(), &mut resolved);
+        let mut previewed = affected.clone();
+        // DynamicAddressValue already carries each authoritative target and attribute. Never
+        // infer ownership by comparing samples taken at different instants.
+        for (_, _, value) in &extra {
+            previewed.insert((value.fixture_id, value.attribute.clone()));
+            if !matches!(
+                value.value,
+                light_dynamics::DynamicSemanticValue::DynamicOff { .. }
+                    | light_dynamics::DynamicSemanticValue::Release
+            ) {
+                affected.insert((value.fixture_id, value.attribute.clone()));
+            }
+        }
+        if let Ok(projected) = state.output.engine().profile_preload_projection_at(
+            &resolved,
+            source.options,
+            Some(&snapshot),
+            &affected,
+            &previewed,
+        ) && Arc::ptr_eq(&snapshot, &state.output.snapshot())
+        {
+            let mut lane = native_lane(
+                &source,
+                &projected.physical,
+                native_points(&projected.points),
+            );
+            lane.instances.retain_mut(|i| {
+                let Some(mask) = projected
+                    .native_ownership
+                    .get(&light_core::FixtureId(i.fixture_id))
+                else {
+                    return false;
+                };
+                i.owned_channels = Some(mask.to_vec());
+                true
+            });
+            output.preload = Some(lane);
+        }
+    }
     Ok(Json(output))
 }
+
+fn native_points(
+    points: &[light_engine::ResolvedPointPose],
+) -> Vec<light_wire::v2::output_control::OutputPointPose> {
+    points
+        .iter()
+        .map(|p| light_wire::v2::output_control::OutputPointPose {
+            fixture_id: p.fixture_id.0,
+            offset_metres: p.offset_metres,
+            rotation_degrees: p.rotation_degrees,
+        })
+        .collect()
+}
+fn native_lane(
+    source: &super::visualization_frame::PublishedVisualizationFrame,
+    physical: &light_engine::PhysicalForwardFrame,
+    points: Vec<light_wire::v2::output_control::OutputPointPose>,
+) -> light_wire::v2::output_control::OutputNativeLane {
+    use light_wire::v2::output_control::*;
+    OutputNativeLane {
+        show_id: source.scope.show_id,
+        revision: source.show_revision,
+        // Only the published Live lane has this identity. The pending preview adapter
+        // must provide its own coherent stamp when it moves to retained publication.
+        frame: None,
+        points,
+        instances: physical
+            .instances
+            .iter()
+            .filter(|i| i.complete)
+            .map(|i| OutputNativeInstance {
+                fixture_id: i.fixture_id.0,
+                instance_id: i.instance_id,
+                native_identity: i.native_identity.to_string(),
+                raw: i.native_raw.to_vec(),
+                owned_channels: None,
+            })
+            .collect(),
+    }
+}
+
 pub(super) async fn update_dmx_override(
     State(state): State<AppState>,
     show: ShowContext,

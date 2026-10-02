@@ -24,6 +24,43 @@ use uuid::Uuid;
 pub(super) const VISUALIZATION_SOURCE_SAMPLE_INTERVAL: Duration = Duration::from_millis(40);
 const DYNAMIC_STACK_PUBLICATION_INTERVAL: Duration = Duration::from_millis(250);
 
+/// Source state sampled by the same successful transaction as its semantic output. Readers
+/// borrow this retained frame instead of joining values to a newer mutable runtime/catalogue.
+#[derive(Debug)]
+pub(in crate::runtime) struct FrameDynamicSources {
+    pub(in crate::runtime) sample_boundary: Option<light_dynamics::DynamicSampleBoundary>,
+    pub(in crate::runtime) runtime: light_dynamics::DynamicRuntimeSnapshot,
+    pub(in crate::runtime) samples: Vec<light_dynamics::DynamicRuntimeSample>,
+    pub(in crate::runtime) origins: Arc<super::dynamic_source_origins::DynamicSourceOrigins>,
+    pub(in crate::runtime) programmer_values:
+        Arc<Vec<(Uuid, i16, light_dynamics::DynamicAddressValue)>>,
+    pub(in crate::runtime) cue_values: Arc<[light_playback::ActiveCueDynamicValue]>,
+    /// Present only when sampling already evaluated the captured ordinary source. Publishing
+    /// source evidence must never trigger another resolution merely to fill an observer cache.
+    pub(in crate::runtime) ordinary: Option<light_engine::FrameValues>,
+}
+
+/// Carries one completed render and its matching sources to the Hold/publication boundary.
+#[derive(Debug)]
+pub(in crate::runtime) struct RenderedSemanticFrame {
+    pub(in crate::runtime) rendered: RenderResult,
+    pub(in crate::runtime) options: RenderOptions,
+    pub(in crate::runtime) dynamics: Option<Arc<FrameDynamicSources>>,
+}
+
+impl RenderedSemanticFrame {
+    /// A direct engine render supplies no Dynamic source proof. Never fill this absence from
+    /// the current global runtime, which may already belong to another output frame.
+    #[cfg(test)]
+    pub(in crate::runtime) fn untraced(rendered: RenderResult, options: RenderOptions) -> Self {
+        Self {
+            rendered,
+            options,
+            dynamics: None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) enum VisualizationProjectionKey {
     Normal {
@@ -88,13 +125,39 @@ pub(super) struct VisualizationMetrics {
 #[derive(Clone, Debug)]
 pub(super) struct PublishedVisualizationFrame {
     pub(super) sequence: u64,
+    pub(super) generation: u64,
+    pub(super) sampled_at: chrono::DateTime<chrono::Utc>,
+    pub(super) source_snapshot: Arc<light_engine::EngineSnapshot>,
+    pub(super) tracking: Arc<light_engine::TrackedInputFrame>,
+    pub(super) points: Arc<light_engine::Pooled<Vec<light_engine::ResolvedPointPose>>>,
+    pub(super) mounts: Arc<light_engine::Pooled<light_engine::FixtureMountFrame>>,
     pub(super) generated_at: SystemTime,
     pub(super) scope: VisualizationScope,
     pub(super) show_revision: u64,
     pub(super) options: RenderOptions,
     pub(super) values: light_engine::FrameValues,
+    pub(super) dynamics: Option<Arc<FrameDynamicSources>>,
+    pub(super) physical: Arc<light_engine::Pooled<light_engine::PhysicalForwardFrame>>,
     pub(super) profile_visualization_values:
         Arc<light_engine::Pooled<light_engine::ResolvedValues>>,
+}
+
+impl PublishedVisualizationFrame {
+    pub(super) fn identity(&self) -> light_wire::v2::output_control::OutputFrameIdentity {
+        light_wire::v2::output_control::OutputFrameIdentity {
+            generation: self.generation,
+            sequence: self.sequence,
+            sampled_at: self.sampled_at.to_rfc3339(),
+            tracking: Some(light_wire::v2::output_control::OutputTrackingIdentity {
+                show_id: self.tracking.show_id.map(|id| id.0),
+                configuration_generation: self.tracking.configuration_generation,
+                point_generation: self.tracking.point_generation,
+                source_generation: self.tracking.source_generation,
+                accepted_sequence: self.tracking.accepted_sequence,
+                sampled_at_millis: self.tracking.sampled_at_millis,
+            }),
+        }
+    }
 }
 
 /// Capacity-one, non-blocking publication. Slow or disconnected observers cannot apply
@@ -136,21 +199,25 @@ pub(super) struct VisualizationFrameHub {
 }
 
 impl VisualizationFrameHub {
-    pub(super) fn publish(
-        &self,
-        rendered: &RenderResult,
-        options: RenderOptions,
-        scope: VisualizationScope,
-    ) {
+    pub(super) fn publish(&self, completed: &RenderedSemanticFrame, scope: VisualizationScope) {
+        let rendered = &completed.rendered;
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed) + 1;
         self.latest
             .store(Some(Arc::new(PublishedVisualizationFrame {
                 sequence,
+                generation: rendered.generation,
+                sampled_at: rendered.sampled_at,
+                source_snapshot: Arc::clone(&rendered.source_snapshot),
+                tracking: Arc::clone(&rendered.tracking),
+                points: Arc::clone(&rendered.points),
+                mounts: Arc::clone(&rendered.mounts),
                 generated_at: SystemTime::now(),
                 scope,
                 show_revision: rendered.revision,
-                options,
+                options: completed.options,
                 values: rendered.resolved_values.clone(),
+                dynamics: completed.dynamics.clone(),
+                physical: Arc::clone(&rendered.physical),
                 profile_visualization_values: Arc::clone(&rendered.profile_visualization_values),
             })));
         self.source_notify.notify_one();
@@ -589,16 +656,29 @@ mod tests {
         thread,
     };
 
-    fn rendered(revision: u64) -> RenderResult {
-        RenderResult {
-            universes: light_engine::Pooled::default(),
-            resolved_values: light_engine::FrameValues::empty(),
-            profile_visualization_values: Arc::new(light_engine::Pooled::default()),
-            patched_slots: light_engine::Pooled::default(),
-            revision,
-            routes: Arc::<[OutputRoute]>::from([]),
-            automatic_playback_transitions: Vec::new(),
-        }
+    fn rendered(revision: u64) -> RenderedSemanticFrame {
+        RenderedSemanticFrame::untraced(
+            RenderResult {
+                tracking: Arc::default(),
+                source_snapshot: Arc::new(light_engine::EngineSnapshot {
+                    revision,
+                    ..Default::default()
+                }),
+                generation: revision,
+                sampled_at: chrono::Utc::now(),
+                points: Arc::new(light_engine::Pooled::default()),
+                mounts: Arc::new(light_engine::Pooled::default()),
+                physical: Arc::new(light_engine::Pooled::default()),
+                universes: light_engine::Pooled::default(),
+                resolved_values: light_engine::FrameValues::empty(),
+                profile_visualization_values: Arc::new(light_engine::Pooled::default()),
+                patched_slots: light_engine::Pooled::default(),
+                revision,
+                routes: Arc::<[OutputRoute]>::from([]),
+                automatic_playback_transitions: Vec::new(),
+            },
+            RenderOptions::default(),
+        )
     }
 
     fn scope(show_id: Uuid) -> VisualizationScope {
@@ -654,9 +734,9 @@ mod tests {
     fn retains_only_the_latest_complete_frame() {
         let hub = VisualizationFrameHub::default();
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
-        hub.publish(&rendered(20), RenderOptions::default(), scope);
-        hub.publish(&rendered(30), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(20), scope);
+        hub.publish(&rendered(30), scope);
 
         let latest = hub.latest().expect("a frame was published");
         assert_eq!(latest.sequence, 3);
@@ -665,10 +745,53 @@ mod tests {
     }
 
     #[test]
+    fn source_sidecar_is_shared_with_values_and_released_with_the_last_frame_reader() {
+        let hub = VisualizationFrameHub::default();
+        let scope = scope(Uuid::new_v4());
+        let sources = Arc::new(FrameDynamicSources {
+            sample_boundary: None,
+            runtime: Default::default(),
+            samples: Vec::new(),
+            origins: Arc::default(),
+            programmer_values: Arc::default(),
+            cue_values: Arc::from([]),
+            ordinary: None,
+        });
+        let weak = Arc::downgrade(&sources);
+        let mut first = rendered(10);
+        first.dynamics = Some(sources);
+        hub.publish(&first, scope);
+        let retained = hub.latest().unwrap();
+        assert!(Arc::ptr_eq(&first.rendered.mounts, &retained.mounts));
+        assert!(Arc::ptr_eq(
+            first.dynamics.as_ref().unwrap(),
+            retained.dynamics.as_ref().unwrap(),
+        ));
+        drop(first);
+        hub.publish(&rendered(20), scope);
+        let latest = hub.latest().unwrap();
+        assert_eq!(latest.sequence, 2);
+        assert!(
+            latest.dynamics.is_none(),
+            "untraced frames must not inherit old sources"
+        );
+        assert!(
+            weak.upgrade().is_some(),
+            "an existing reader retains the old source pair"
+        );
+        assert_eq!(retained.show_revision, 10);
+        drop(retained);
+        assert!(
+            weak.upgrade().is_none(),
+            "the hub must not accumulate source history"
+        );
+    }
+
+    #[test]
     fn shares_one_projection_for_the_same_lane_and_source_frame() {
         let hub = VisualizationFrameHub::default();
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         let source = hub.latest().unwrap();
         let builds = AtomicUsize::new(0);
         let build = |_| {
@@ -718,7 +841,7 @@ mod tests {
         let key = VisualizationProjectionKey::Normal {
             include_dynamic_stack: true,
         };
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         let first_source = hub.latest().unwrap();
         hub.projection(key, &first_source, |refresh| {
             assert!(refresh);
@@ -726,7 +849,7 @@ mod tests {
         })
         .unwrap();
 
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         let second_source = hub.latest().unwrap();
         let second = hub
             .projection(key, &second_source, |refresh| {
@@ -738,7 +861,7 @@ mod tests {
         assert!(second.delta.dynamic_stack.is_none());
 
         std::thread::sleep(DYNAMIC_STACK_PUBLICATION_INTERVAL);
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         let third_source = hub.latest().unwrap();
         let third = hub
             .projection(key, &third_source, |refresh| {
@@ -753,7 +876,7 @@ mod tests {
     fn sampler_publishes_one_shared_source_only_while_subscribed() {
         let hub = VisualizationFrameHub::default();
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         hub.sample_latest();
         assert!(hub.sampled().is_none());
 
@@ -761,7 +884,7 @@ mod tests {
         hub.sample_latest();
         assert_eq!(hub.sampled().unwrap().sequence, 1);
 
-        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        hub.publish(&rendered(20), scope);
         assert_eq!(hub.sampled().unwrap().sequence, 1);
         hub.sample_latest();
         assert_eq!(hub.sampled().unwrap().sequence, 2);
@@ -773,7 +896,7 @@ mod tests {
         let cancellation = CancellationToken::new();
         let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         tokio::time::advance(Duration::from_secs(1)).await;
         assert!(hub.sampled().is_none());
 
@@ -782,7 +905,7 @@ mod tests {
         assert_eq!(hub.sampled().unwrap().sequence, 1);
 
         hub.change_subscribers(VisualizationLane::Normal, -1);
-        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        hub.publish(&rendered(20), scope);
         tokio::time::advance(Duration::from_secs(1)).await;
         assert_eq!(hub.sampled().unwrap().sequence, 1);
 
@@ -796,7 +919,7 @@ mod tests {
         let cancellation = CancellationToken::new();
         let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
 
         let first_waiter = {
             let hub = Arc::clone(&hub);
@@ -809,7 +932,7 @@ mod tests {
             let hub = Arc::clone(&hub);
             tokio::spawn(async move { hub.wait_for_sample_after(1).await.sequence })
         };
-        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        hub.publish(&rendered(20), scope);
         tokio::task::yield_now().await;
         assert!(!second_waiter.is_finished());
 
@@ -827,7 +950,7 @@ mod tests {
         let cancellation = CancellationToken::new();
         let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         hub.change_subscribers(VisualizationLane::Normal, 1);
         assert_eq!(hub.wait_for_sample_after(0).await.sequence, 1);
         tokio::task::yield_now().await;
@@ -840,7 +963,7 @@ mod tests {
         tokio::task::yield_now().await;
         assert!(!next_waiter.is_finished());
 
-        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        hub.publish(&rendered(20), scope);
         assert_eq!(next_waiter.await.unwrap(), 2);
 
         hub.change_subscribers(VisualizationLane::Normal, -1);
@@ -854,19 +977,19 @@ mod tests {
         let cancellation = CancellationToken::new();
         let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         hub.change_subscribers(VisualizationLane::Normal, 1);
         assert_eq!(hub.wait_for_sample_after(0).await.sequence, 1);
         tokio::task::yield_now().await;
 
         tokio::time::advance(VISUALIZATION_SOURCE_SAMPLE_INTERVAL / 2).await;
         hub.change_subscribers(VisualizationLane::Normal, -1);
-        hub.publish(&rendered(20), RenderOptions::default(), scope);
+        hub.publish(&rendered(20), scope);
         hub.change_subscribers(VisualizationLane::Normal, 1);
         assert_eq!(hub.wait_for_sample_after(1).await.sequence, 2);
         tokio::task::yield_now().await;
 
-        hub.publish(&rendered(30), RenderOptions::default(), scope);
+        hub.publish(&rendered(30), scope);
         let next_waiter = {
             let hub = Arc::clone(&hub);
             tokio::spawn(async move { hub.wait_for_sample_after(2).await.sequence })
@@ -886,7 +1009,7 @@ mod tests {
     fn preload_projection_uses_its_own_authoritative_source_identity_and_timestamp() {
         let hub = VisualizationFrameHub::default();
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         let source = hub.latest().unwrap();
         let stale_timestamp = "2020-01-01T00:00:00Z";
 
@@ -943,7 +1066,7 @@ mod tests {
         };
         let scope = scope(Uuid::new_v4());
         hub.change_projection_claim(key, 1);
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         let source = hub.latest().unwrap();
         let builds = AtomicUsize::new(0);
         let mut build = |_| {
@@ -1033,7 +1156,7 @@ mod tests {
     fn projection_work_cannot_block_latest_frame_publication() {
         let hub = Arc::new(VisualizationFrameHub::default());
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), RenderOptions::default(), scope);
+        hub.publish(&rendered(10), scope);
         let source = hub.latest().unwrap();
         let (projection_started_tx, projection_started_rx) = mpsc::channel();
         let (release_projection_tx, release_projection_rx) = mpsc::channel();
@@ -1068,7 +1191,7 @@ mod tests {
         let (published_tx, published_rx) = mpsc::channel();
         let publisher_hub = Arc::clone(&hub);
         thread::spawn(move || {
-            publisher_hub.publish(&rendered(20), RenderOptions::default(), scope);
+            publisher_hub.publish(&rendered(20), scope);
             published_tx.send(()).unwrap();
         });
         published_rx

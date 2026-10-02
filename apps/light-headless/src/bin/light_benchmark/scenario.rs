@@ -6,10 +6,11 @@ use light_core::{
 };
 use light_dynamics::{
     ActivationBoundary, ActivationPolicy, DynamicDefinition, DynamicEvaluationContext,
-    DynamicEvaluator, DynamicKeyframe, DynamicLane, DynamicLaneMode, DynamicRandomGroup,
-    DynamicSpeed, DynamicTargetBinding, KeyframeConfiguration, MaxMinConfiguration,
-    MiddleAmplitudeConfiguration, PeriodicFunction, PhaseDistribution, PhaseOrdering, PwmShape,
-    Rational, ScalarInterpolation, ScalarSource, ScalarSourceResolver, SpeedGroup,
+    DynamicEvaluator, DynamicKeyframe, DynamicLane, DynamicLaneBody, DynamicLaneMode,
+    DynamicRandomGroup, DynamicRandomRange, DynamicSpeed, DynamicTargetBinding,
+    KeyframeConfiguration, LegacyScalarLaneBody, MaxMinConfiguration, MiddleAmplitudeConfiguration,
+    PeriodicFunction, PhaseDistribution, PhaseOrdering, PwmShape, Rational, ScalarInterpolation,
+    ScalarSource, ScalarSourceResolver, SpeedGroup,
 };
 use light_engine::{
     ContributionBatch, ContributionSample, ContributionSourceId, Engine, EnginePlaybackCommand,
@@ -335,6 +336,8 @@ fn packed_fixture(
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -517,8 +520,9 @@ impl BenchmarkDynamic {
                     .map(|(lane_index, attribute)| {
                         let mut lane = seed.clone();
                         lane.id = fixed_uuid(0x5c + index as u64, lane_index as u64 + 1);
-                        lane.attribute = attribute.clone();
-                        for point in &mut lane.keyframes.points {
+                        let body = lane.legacy_mut().expect("legacy benchmark fixture");
+                        body.attribute = attribute.clone();
+                        for point in &mut body.keyframes.points {
                             if let ScalarSource::Preset {
                                 attribute: source_attribute,
                                 ..
@@ -583,7 +587,7 @@ impl BenchmarkDynamic {
                 for lane in &definition.lanes {
                     // The desk's Dynamics runtime remembers these; the benchmark asks each tick,
                     // outside the timed path, and hands the engine the same numbers.
-                    let address = addresser.frame_address(*target, &lane.attribute);
+                    let address = addresser.frame_address(*target, &lane.output_owner());
                     let Some(mut value) = evaluator.sample_lane(
                         lane,
                         DynamicEvaluationContext {
@@ -614,7 +618,7 @@ impl BenchmarkDynamic {
                     samples.push(
                         ContributionSample::independent(TimedValue {
                             fixture_id: *target,
-                            attribute: lane.attribute.clone(),
+                            attribute: lane.output_owner(),
                             value: AttributeValue::Normalized(value),
                             priority: 10 + definition_index as i16 + controller_switch,
                             changed_at: at,
@@ -630,7 +634,7 @@ impl BenchmarkDynamic {
                         samples.push(
                             ContributionSample::independent(TimedValue {
                                 fixture_id: *target,
-                                attribute: lane.attribute.clone(),
+                                attribute: lane.output_owner(),
                                 value: AttributeValue::Normalized(0.65),
                                 priority: 40,
                                 changed_at: at,
@@ -656,42 +660,44 @@ fn benchmark_dynamic_definition(
 ) -> DynamicDefinition {
     let lane = DynamicLane {
         id: fixed_uuid(0x5a, 2),
-        attribute: attribute.clone(),
-        mode: DynamicLaneMode::Keyframes,
-        keyframes: KeyframeConfiguration {
-            points: vec![
-                DynamicKeyframe {
-                    position: 0.0,
-                    source: ScalarSource::Current,
-                    interpolation: ScalarInterpolation::Linear,
-                },
-                DynamicKeyframe {
-                    position: 0.5,
-                    source: ScalarSource::Preset {
-                        preset_id: "benchmark:1".into(),
-                        attribute,
-                        last_valid_by_target: Vec::new(),
+        body: DynamicLaneBody::LegacyScalar(LegacyScalarLaneBody {
+            attribute: attribute.clone(),
+            mode: DynamicLaneMode::Keyframes,
+            keyframes: KeyframeConfiguration {
+                points: vec![
+                    DynamicKeyframe {
+                        position: 0.0,
+                        source: ScalarSource::Current,
+                        interpolation: ScalarInterpolation::Linear,
                     },
-                    interpolation: ScalarInterpolation::EaseInOut,
-                },
-            ],
-            size: 1.0,
-        },
-        max_min: MaxMinConfiguration {
-            minimum: ScalarSource::Value { value: 0.1 },
-            maximum: ScalarSource::Value { value: 0.9 },
-            function: PeriodicFunction::Sinus,
-            size: 1.0,
-            pwm: PwmShape::default(),
-        },
-        middle_amplitude: MiddleAmplitudeConfiguration {
-            middle: ScalarSource::Current,
-            amplitude: 0.4,
-            function: PeriodicFunction::Sinus,
-            size: 1.0,
-            pwm: PwmShape::default(),
-            invert_waveform: false,
-        },
+                    DynamicKeyframe {
+                        position: 0.5,
+                        source: ScalarSource::Preset {
+                            preset_id: "benchmark:1".into(),
+                            attribute,
+                            last_valid_by_target: Vec::new(),
+                        },
+                        interpolation: ScalarInterpolation::EaseInOut,
+                    },
+                ],
+                size: 1.0,
+            },
+            max_min: MaxMinConfiguration {
+                minimum: ScalarSource::Value { value: 0.1 },
+                maximum: ScalarSource::Value { value: 0.9 },
+                function: PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: PwmShape::default(),
+            },
+            middle_amplitude: MiddleAmplitudeConfiguration {
+                middle: ScalarSource::Current,
+                amplitude: 0.4,
+                function: PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: PwmShape::default(),
+                invert_waveform: false,
+            },
+        }),
         speed_multiplier: Rational::ONE,
         width: 1.0,
         phase: None,
@@ -735,9 +741,10 @@ fn benchmark_dynamic_variants(definition: &DynamicDefinition) -> [DynamicDefinit
     pwm.id = fixed_uuid(0x5a, 4);
     pwm.pool_number = 2;
     pwm.name = "Benchmark PWM Speed Group".into();
-    pwm.lanes[0].mode = DynamicLaneMode::MaxMin;
-    pwm.lanes[0].max_min.function = PeriodicFunction::Pwm;
-    pwm.lanes[0].max_min.pwm = PwmShape {
+    let body = pwm.lanes[0].legacy_mut().expect("legacy benchmark fixture");
+    body.mode = DynamicLaneMode::MaxMin;
+    body.max_min.function = PeriodicFunction::Pwm;
+    body.max_min.pwm = PwmShape {
         attack: 0.1,
         on: 0.35,
         decay: 0.15,
@@ -761,9 +768,12 @@ fn benchmark_dynamic_variants(definition: &DynamicDefinition) -> [DynamicDefinit
     middle.id = fixed_uuid(0x5a, 5);
     middle.pool_number = 3;
     middle.name = "Benchmark Current wet/dry wave".into();
-    middle.lanes[0].mode = DynamicLaneMode::MiddleAmplitude;
-    middle.lanes[0].middle_amplitude.middle = ScalarSource::Current;
-    middle.lanes[0].middle_amplitude.amplitude = 0.45;
+    let body = middle.lanes[0]
+        .legacy_mut()
+        .expect("legacy benchmark fixture");
+    body.mode = DynamicLaneMode::MiddleAmplitude;
+    body.middle_amplitude.middle = ScalarSource::Current;
+    body.middle_amplitude.amplitude = 0.45;
     middle.speed = DynamicSpeed::Fixed {
         duration_millis: 180,
     };
@@ -777,13 +787,18 @@ fn benchmark_dynamic_variants(definition: &DynamicDefinition) -> [DynamicDefinit
     random.id = fixed_uuid(0x5a, 7);
     random.pool_number = 4;
     random.name = "Benchmark seeded Random pulses".into();
-    random.lanes[0].mode = DynamicLaneMode::Random;
+    random.lanes[0]
+        .legacy_mut()
+        .expect("legacy benchmark fixture")
+        .mode = DynamicLaneMode::Random;
     random.lanes[0].random_group_id = Some(random_group_id);
     random.random_groups = vec![DynamicRandomGroup {
         id: random_group_id,
         seed: 0x5a17,
-        low: ScalarSource::Value { value: 0.05 },
-        high: ScalarSource::Value { value: 0.95 },
+        range: DynamicRandomRange::LegacyScalar {
+            low: ScalarSource::Value { value: 0.05 },
+            high: ScalarSource::Value { value: 0.95 },
+        },
         decision_interval_millis: 80,
         start_probability: 0.55,
         mean_duration_millis: 160,

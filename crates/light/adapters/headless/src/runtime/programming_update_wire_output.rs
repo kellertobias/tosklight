@@ -1,5 +1,6 @@
 //! Authoritative application-to-wire projections for the v2 Programming Update surface.
 
+use super::command_http::ToIntentWire;
 use super::programming_update_wire::{wire_cue_mode, wire_existing_mode};
 use light_application as app;
 use light_application::programming_update as application;
@@ -205,10 +206,14 @@ fn wire_preview_item(
                 fixture_id,
                 attribute,
                 instance_link,
+                lane_id,
+                component,
             } => wire::ProgrammingUpdateAddress::DynamicAttribute {
                 fixture_id: fixture_id.0,
                 attribute: attribute.0.to_string(),
                 instance_link,
+                lane_id,
+                component: component.as_ref().map(ToIntentWire::to_intent_wire),
             },
             application::UpdateAddress::GroupMembership { fixture_id } => {
                 wire::ProgrammingUpdateAddress::GroupMembership {

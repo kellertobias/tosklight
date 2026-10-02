@@ -5,8 +5,15 @@ use super::*;
 use crate::tolerant_json::TolerantJson;
 use light_wire::v2::fixture_library as wire;
 
+mod gdtf;
+
 pub(super) fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/v2/fixture-library/gdtf/preview", post(gdtf::preview))
+        .route(
+            "/api/v2/fixture-library/profiles/{profile_id}/update",
+            post(gdtf::import),
+        )
         .route("/api/v2/fixture-library", post(fixture_library_action))
         .route(
             "/api/v2/fixture-library/definitions",
@@ -727,7 +734,7 @@ fn require_known_canonical_attributes(
     )))
 }
 
-fn unknown_canonical_attributes(
+pub(super) fn unknown_canonical_attributes(
     state: &AppState,
     profile: &light_fixture::FixtureProfile,
 ) -> Vec<(String, light_core::AttributeValueType)> {
@@ -785,6 +792,7 @@ fn import_value_type_rank(value_type: light_core::AttributeValueType) -> u8 {
     match value_type {
         light_core::AttributeValueType::Continuous => 0,
         light_core::AttributeValueType::Color => 1,
+        light_core::AttributeValueType::Position => 4,
         light_core::AttributeValueType::Indexed => 2,
         light_core::AttributeValueType::Control => 3,
     }
@@ -796,6 +804,7 @@ fn fixture_import_value_type(
     match value_type {
         light_core::AttributeValueType::Continuous => wire::AttributeValueType::Continuous,
         light_core::AttributeValueType::Color => wire::AttributeValueType::Color,
+        light_core::AttributeValueType::Position => wire::AttributeValueType::Position,
         light_core::AttributeValueType::Indexed => wire::AttributeValueType::Indexed,
         light_core::AttributeValueType::Control => wire::AttributeValueType::Control,
     }

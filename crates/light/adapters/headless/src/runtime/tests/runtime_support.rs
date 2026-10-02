@@ -1,4 +1,4 @@
-fn test_state() -> (AppState, PathBuf) {
+pub(in crate::runtime) fn test_state() -> (AppState, PathBuf) {
     test_state_with_programmers(ProgrammerRegistry::default(), None)
 }
 
@@ -50,9 +50,31 @@ fn test_state_with_programmers(
     programmers: ProgrammerRegistry,
     manual_clock: Option<Arc<ManualClock>>,
 ) -> (AppState, PathBuf) {
+    test_state_with_programming_contract(programmers, manual_clock, light_core::programming::PROGRAMMING_CONTRACT_VERSION)
+}
+
+/// TL-548 C3: contract 1 AND the explicit all-family Live opt-in. `test_state` stays legacy.
+pub(in crate::runtime) fn test_state_with_family_adapters(
+    programmers: ProgrammerRegistry,
+    manual_clock: Option<Arc<ManualClock>>,
+    supported_contract: u16,
+) -> (AppState, PathBuf) {
+    let (mut state, data_dir) =
+        test_state_with_programming_contract(programmers, manual_clock, supported_contract);
+    let adapters = Arc::new(output_scheduler::LiveFamilyAdapters::new(true));
+    state.output = state.output.with_live_family_adapters(adapters);
+    (state, data_dir)
+}
+
+fn test_state_with_programming_contract(
+    programmers: ProgrammerRegistry,
+    manual_clock: Option<Arc<ManualClock>>,
+    supported_contract: u16,
+) -> (AppState, PathBuf) {
     let data_dir = std::env::temp_dir().join(format!("light-headless-test-{}", Uuid::new_v4()));
     std::fs::create_dir_all(data_dir.join("shows")).unwrap();
-    let engine = Arc::new(Engine::new(programmers.clone()));
+    let engine = Arc::new(Engine::with_programming_contract_support(programmers.clone(), supported_contract));
+    let dynamic_snapshot = Arc::new(DynamicSnapshotPublication::new(engine.snapshot()));
     let application_events = EventBus::default();
     let active_show_service = ActiveShowService::new(application_events.clone());
     let highlight = Arc::new(HighlightRegistry::default());
@@ -63,7 +85,7 @@ fn test_state_with_programmers(
     );
     let output_rate = Arc::new(AtomicU16::new(44));
     let active_show_service_for_patch = active_show_service.clone();
-    (
+    let state = (
         AppState {
             action_timing: ActionTimingResource::default(),
             attributes: AttributeConfigurationResource::new(
@@ -121,6 +143,10 @@ fn test_state_with_programmers(
                     .unwrap()
                 }))),
                 Arc::new(Mutex::new(light_dynamics::DynamicRuntime::default())),
+                dynamic_snapshot,
+                Arc::new(arc_swap::ArcSwap::from_pointee(
+                    crate::runtime::dynamic_source_origins::DynamicSourceOrigins::default(),
+                )),
                 Arc::new(Mutex::new(Vec::new())),
                 Arc::new(crate::runtime::visualization_frame::VisualizationFrameHub::default()),
             ),
@@ -153,7 +179,11 @@ fn test_state_with_programmers(
             discovery: crate::runtime::discovery_http::DiscoveryResource::default(),
         },
         data_dir,
-    )
+    );
+    // TL-552: synthetic test states engage the show-activation legacy-programming gate at their
+    // engine contract, exactly like `build_app_state` does for a real startup.
+    state.0.active_show.engage_legacy_programming_gate(supported_contract);
+    state
 }
 
 fn assert_programming_selection_event(

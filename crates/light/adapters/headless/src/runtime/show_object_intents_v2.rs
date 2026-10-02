@@ -28,6 +28,25 @@ pub(super) fn router() -> Router<AppState> {
         .route("/api/v2/preload/record", post(preload_record_action))
 }
 
+fn rewrite_dynamic_lane_ids(body: &mut serde_json::Value, changed: &[(Uuid, Uuid)]) {
+    if let Some(lanes) = body
+        .get_mut("lanes")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        for lane in lanes {
+            if let Some(id) = lane
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|id| Uuid::parse_str(id).ok())
+                && let Some((_, replacement)) = changed.iter().find(|(old, _)| *old == id)
+                && let Some(lane) = lane.as_object_mut()
+            {
+                lane.insert("id".into(), replacement.to_string().into());
+            }
+        }
+    }
+}
+
 async fn dynamic_create_action(
     State(state): State<AppState>,
     context: ShowContext,
@@ -62,8 +81,10 @@ async fn dynamic_create_action(
         ));
     }
     ensure_dynamic_pool_slot_free(&state, show_id, definition.pool_number, None)?;
-    definition.id = Uuid::new_v4();
+    let changed_lanes = definition.reidentify(Uuid::new_v4());
+    rewrite_dynamic_lane_ids(&mut body, &changed_lanes);
     definition.revision = 1;
+    definition.normalize_angle_pair();
     light_dynamics::validate_definition(&definition)
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
     let id = definition.id.to_string();
@@ -154,7 +175,7 @@ async fn dynamic_pool_action(
         return Ok(Json(outcome));
     }
     ensure_dynamic_pool_slot_free(&state, show_id, request.pool_number, Some(id))?;
-    let raw_body = load_body(&state, show_id, "dynamic", &id.to_string())?;
+    let mut raw_body = load_body(&state, show_id, "dynamic", &id.to_string())?;
     let (object_revision, mut definition) = load_dynamic(&state, show_id, id)?;
     if object_revision != request.expected_revision {
         return Err(ApiError::conflict(format!(
@@ -163,7 +184,8 @@ async fn dynamic_pool_action(
         )));
     }
     let (target_id, expected_revision) = if copy {
-        definition.id = Uuid::new_v4();
+        let changed_lanes = definition.reidentify(Uuid::new_v4());
+        rewrite_dynamic_lane_ids(&mut raw_body, &changed_lanes);
         definition.name = format!("{} Copy", definition.name);
         definition.revision = 1;
         (definition.id, 0)
@@ -258,7 +280,28 @@ async fn dynamic_update_action(
         ));
     }
     let snapshot = state.output.snapshot();
+    let previous_definition = definition.clone();
     apply_dynamic_update_intent(&mut definition, request.intent.clone(), &snapshot)?;
+    definition.normalize_angle_pair();
+    if definition == previous_definition
+        && matches!(request.intent, wire::DynamicUpdateIntent::DeleteLane { .. })
+    {
+        // An untouched Current partner is required while its animated axis exists. Deleting
+        // that already-default partner is a quiet no-op, with no revision, event or Undo churn.
+        let outcome = committed_outcome(
+            &state,
+            show_id,
+            "dynamic",
+            &id.to_string(),
+            request.request_id,
+            None,
+        )?;
+        state
+            .replay
+            .insert_show_object_intent(key, replay_action, outcome.clone())
+            .await;
+        return Ok(Json(outcome));
+    }
     definition.revision = definition.revision.saturating_add(1);
     light_dynamics::validate_definition(&definition)
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
@@ -806,6 +849,13 @@ fn apply_dynamic_update_intent(
             *stored = lane;
         }
         DynamicUpdateIntent::DeleteLane { lane_id } => {
+            if definition
+                .lanes
+                .iter()
+                .any(|lane| lane.id == lane_id && definition.is_automatic_angle_partner(lane))
+            {
+                return Ok(());
+            }
             let before = definition.lanes.len();
             definition.lanes.retain(|lane| lane.id != lane_id);
             if definition.lanes.len() == before {
@@ -1072,8 +1122,10 @@ fn seed_lane_phase(
 
 fn decode_dynamic_part<T: serde::de::DeserializeOwned>(
     label: &str,
-    value: serde_json::Value,
+    value: impl serde::Serialize,
 ) -> Result<T, ApiError> {
+    let value = serde_json::to_value(value)
+        .map_err(|error| ApiError::bad_request(format!("invalid Dynamic {label}: {error}")))?;
     serde_json::from_value(value)
         .map_err(|error| ApiError::bad_request(format!("invalid Dynamic {label}: {error}")))
 }

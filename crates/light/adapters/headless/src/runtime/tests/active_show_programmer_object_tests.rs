@@ -437,6 +437,110 @@ async fn inactive_object_put_keeps_legacy_runtime_and_returns_null_cursor() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+/// A Position preset body with one fixture value: legacy normalized `pan` (pre-cutover) or
+/// semantic Angles.
+fn position_preset(fixture: &str, number: u32, legacy: bool) -> serde_json::Value {
+    let mut body = preset_body("Down", light_programmer::PresetFamily::Position, number);
+    body["values"] = if legacy {
+        serde_json::json!({fixture: {"pan": {"kind": "normalized", "value": 0.5}}})
+    } else {
+        let angles = light_core::AttributeValue::Position(std::sync::Arc::new(
+            light_core::programming::PositionIntent::angles(10.0, -20.0),
+        ));
+        serde_json::json!({fixture: {"position": angles}})
+    };
+    body
+}
+
+/// TL-552 owner decision: at contract 1 an Undo or Redo that would restore a pre-cutover legacy
+/// programming body is refused quietly: nothing changes (show revision, backups, runtime,
+/// events), the reply is an actionable 400, and nothing crashes. A contract-0 runtime still
+/// restores it.
+#[tokio::test]
+async fn undo_and_redo_refuse_a_legacy_programming_body_quietly_at_contract_one() {
+    for contract in [light_core::programming::PROGRAMMING_CONTRACT_VERSION, 0] {
+        let (state, data_dir) =
+            test_state_with_programming_contract(ProgrammerRegistry::default(), None, contract);
+        let app = router(state.clone());
+        let (token, _) = login(&app, "Operator").await;
+        let show = create_show(&app, &token, "Legacy history").await;
+        let show_id = show["id"].as_str().unwrap();
+        let show_uuid = light_core::ShowId(Uuid::parse_str(show_id).unwrap());
+        let entry = state.installation.show(show_uuid).unwrap().unwrap();
+        open_show_for_test(&app, &token, show_id).await;
+        let fixture = Uuid::new_v4().to_string();
+        let store = ShowStore::open(&entry.path).unwrap();
+        // 3.1: legacy history behind a semantic current version (Undo target is legacy).
+        store
+            .put_object("preset", "3.1", &position_preset(&fixture, 1, true), 0)
+            .unwrap();
+        store
+            .put_object("preset", "3.1", &position_preset(&fixture, 1, false), 1)
+            .unwrap();
+        // 3.2: a semantic version, then a legacy one written by an older desk.
+        store
+            .put_object("preset", "3.2", &position_preset(&fixture, 2, false), 0)
+            .unwrap();
+        store
+            .put_object("preset", "3.2", &position_preset(&fixture, 2, true), 1)
+            .unwrap();
+        drop(store);
+
+        let before = ActiveUndoBoundary::capture(&state, &entry, &data_dir);
+        let undo = undo_show_object(&state, &token, show_id, "preset", "3.1", 2).await;
+        if contract == 0 {
+            assert_eq!(undo.status(), StatusCode::OK, "contract 0 restores it");
+            let _ = std::fs::remove_dir_all(data_dir);
+            continue;
+        }
+        assert_eq!(undo.status(), StatusCode::BAD_REQUEST);
+        let message = json(undo).await.to_string();
+        for expected in [
+            "Undo would restore preset 3.1",
+            "before semantic programming contract 1",
+            "pan",
+            "left the current version unchanged",
+            "Re-record it",
+        ] {
+            assert!(
+                message.contains(expected),
+                "{expected:?} missing: {message}"
+            );
+        }
+        before.assert_unchanged(&state, &entry, &data_dir);
+        assert_eq!(
+            stored_object(&ShowStore::open(&entry.path).unwrap(), "preset", "3.1")
+                .unwrap()
+                .body,
+            position_preset(&fixture, 1, false),
+            "the current semantic version is kept"
+        );
+
+        // Undoing 3.2 back to its semantic version is allowed and leaves the legacy body as the
+        // Redo step, which is then refused the same way.
+        let undo = undo_show_object(&state, &token, show_id, "preset", "3.2", 2).await;
+        let status = undo.status();
+        assert_eq!(status, StatusCode::OK, "{}", json(undo).await);
+        let before = ActiveUndoBoundary::capture(&state, &entry, &data_dir);
+        let unit = super::super::active_show_adapter::ServerActiveShowUnitOfWork::begin(
+            &state,
+            show_uuid,
+            super::super::active_show_adapter::ActiveShowBackupKind::ShowObjects,
+        )
+        .unwrap();
+        let error = unit.prepare_object_redo("preset", "3.2", 3).unwrap_err();
+        drop(unit);
+        assert_eq!(error.kind, light_application::ActionErrorKind::Invalid);
+        assert!(
+            error.message.contains("Redo would restore preset 3.2"),
+            "{}",
+            error.message
+        );
+        before.assert_unchanged(&state, &entry, &data_dir);
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+}
+
 struct ActiveUndoBoundary {
     show_revision: u64,
     backup_count: usize,
@@ -778,7 +882,7 @@ fn record_and_delete_commands_each_cross_one_active_show_boundary() {
     scenario.state.programming.set(
         scenario.session.id,
         fixtures[0],
-        light_core::AttributeKey("pan".into()),
+        light_core::AttributeKey("gobo.1".into()),
         light_core::AttributeValue::Normalized(0.4),
     );
     let before_preset_record = scenario.boundary();
@@ -895,6 +999,7 @@ fn generated_presets_share_one_show_commit_backup_and_runtime_install() {
         dmx_to: 255,
         attribute: light_core::AttributeKey("gobo.1".into()),
         priority: 100,
+        physical_mapping: None,
         angular_motion: None,
         behavior: light_fixture::ChannelFunctionBehavior::Indexed {
             semantic_id: "gobo.open".into(),
@@ -1076,7 +1181,7 @@ fn group_and_preset_updates_each_install_the_exact_committed_revision() {
             .unwrap();
         let mut preset = preset_body("Update color", light_programmer::PresetFamily::Color, 9);
         preset["values"] = serde_json::json!({
-            first.0.to_string(): {"color.red":{"kind":"normalized","value":0.2}}
+            first.0.to_string(): {"color.wheel.1":{"kind":"normalized","value":0.2}}
         });
         preset["future_preset_field"] = serde_json::json!("retained");
         store.put_object("preset", "2.9", &preset, 0).unwrap();
@@ -1110,7 +1215,7 @@ fn group_and_preset_updates_each_install_the_exact_committed_revision() {
     scenario.state.programming.set(
         scenario.session.id,
         first,
-        light_core::AttributeKey("color.blue".into()),
+        light_core::AttributeKey("color.wheel.2".into()),
         light_core::AttributeValue::Normalized(0.8),
     );
     let before_preset = scenario.boundary();
@@ -1128,11 +1233,11 @@ fn group_and_preset_updates_each_install_the_exact_committed_revision() {
     assert_eq!(preset.body["future_preset_field"], "retained");
     let preset: light_programmer::Preset = serde_json::from_value(preset.body).unwrap();
     assert_eq!(
-        preset.values[&first][&light_core::AttributeKey("color.red".into())],
+        preset.values[&first][&light_core::AttributeKey("color.wheel.1".into())],
         light_core::AttributeValue::Normalized(0.2)
     );
     assert_eq!(
-        preset.values[&first][&light_core::AttributeKey("color.blue".into())],
+        preset.values[&first][&light_core::AttributeKey("color.wheel.2".into())],
         light_core::AttributeValue::Normalized(0.8)
     );
 }

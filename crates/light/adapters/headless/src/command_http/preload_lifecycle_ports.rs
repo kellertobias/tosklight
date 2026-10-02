@@ -50,6 +50,13 @@ impl ProgrammingPreloadLifecyclePorts for ServerProgrammingPorts<'_> {
         context: &ActionContext,
         operation: &'static str,
     ) -> Option<String> {
+        if matches!(operation, "preload.clear" | "preload.release") {
+            // TL-548 C4: clear/release invalidates the Pending episode.
+            self.state()
+                .programming
+                .pending_episodes()
+                .trigger(crate::runtime::output_scheduler::PendingTrigger::Clear);
+        }
         match operation {
             "preload.clear" => {
                 self.state().output.set_dynamic_definitions_pinned(false);

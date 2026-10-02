@@ -22,27 +22,97 @@ pub(in crate::runtime) fn interaction_projection(
         desk_id: projection.desk_id,
         command_line: command_line_from_state(projection.command_line.clone()),
         selection: selection_projection(&projection.selection),
+        alignment: alignment_projection(&projection.alignment),
     }
 }
 
 pub(in crate::runtime) fn interaction_change(
     change: &application::ProgrammingInteractionChange,
 ) -> wire::ProgrammingInteractionChange {
-    match (change.command_line(), change.selection()) {
-        (Some(command_line), Some(selection)) => wire::ProgrammingInteractionChange::Both {
+    match (
+        change.command_line(),
+        change.selection(),
+        change.alignment(),
+    ) {
+        (Some(command_line), Some(selection), Some(alignment)) => {
+            wire::ProgrammingInteractionChange::All {
+                desk_id: change.desk_id(),
+                command_line: command_line_from_state(command_line.clone()),
+                selection: selection_projection(selection),
+                alignment: alignment_projection(alignment),
+            }
+        }
+        (Some(command_line), None, Some(alignment)) => {
+            wire::ProgrammingInteractionChange::CommandLineAlignment {
+                desk_id: change.desk_id(),
+                command_line: command_line_from_state(command_line.clone()),
+                alignment: alignment_projection(alignment),
+            }
+        }
+        (None, Some(selection), Some(alignment)) => {
+            wire::ProgrammingInteractionChange::SelectionAlignment {
+                desk_id: change.desk_id(),
+                selection: selection_projection(selection),
+                alignment: alignment_projection(alignment),
+            }
+        }
+        (None, None, Some(alignment)) => wire::ProgrammingInteractionChange::Alignment {
+            desk_id: change.desk_id(),
+            alignment: alignment_projection(alignment),
+        },
+        (Some(command_line), Some(selection), None) => wire::ProgrammingInteractionChange::Both {
             desk_id: change.desk_id(),
             command_line: command_line_from_state(command_line.clone()),
             selection: selection_projection(selection),
         },
-        (Some(command_line), None) => wire::ProgrammingInteractionChange::CommandLine {
+        (Some(command_line), None, None) => wire::ProgrammingInteractionChange::CommandLine {
             desk_id: change.desk_id(),
             command_line: command_line_from_state(command_line.clone()),
         },
-        (None, Some(selection)) => wire::ProgrammingInteractionChange::Selection {
+        (None, Some(selection), None) => wire::ProgrammingInteractionChange::Selection {
             desk_id: change.desk_id(),
             selection: selection_projection(selection),
         },
-        (None, None) => unreachable!("application Programming changes are non-empty"),
+        (None, None, None) => unreachable!("application Programming changes are non-empty"),
+    }
+}
+
+pub(in crate::runtime) fn alignment_projection(
+    value: &light_programmer::ProgrammerAlignmentProjection,
+) -> wire::ProgrammingAlignmentProjection {
+    use super::intent_wire::ToIntentWire;
+    use light_programmer::{
+        ProgrammerAlignmentLane as Lane, ProgrammerAlignmentMode as Mode,
+        ProgrammerAlignmentProjectionBinding as Binding,
+    };
+    use light_wire::v2::live_action::ProgrammingAlignMode as WireMode;
+    wire::ProgrammingAlignmentProjection {
+        revision: value.revision,
+        fixture_count: value.fixture_count,
+        mode: match value.mode {
+            None => WireMode::Off,
+            Some(Mode::Left) => WireMode::Left,
+            Some(Mode::Right) => WireMode::Right,
+            Some(Mode::Out) => WireMode::Out,
+            Some(Mode::In) => WireMode::In,
+        },
+        binding: value.binding.as_ref().map(|binding| match binding {
+            Binding::Attribute { attribute } => wire::ProgrammingAlignmentBinding::Attribute {
+                attribute: attribute.0.to_string(),
+            },
+            Binding::Family {
+                component,
+                lane,
+                group_id,
+            } => wire::ProgrammingAlignmentBinding::Family {
+                component: component.to_intent_wire(),
+                lane: match lane {
+                    Lane::Normal => wire::ProgrammingAlignmentLane::Normal,
+                    Lane::Preload => wire::ProgrammingAlignmentLane::Preload,
+                },
+                group_id: group_id.clone(),
+            },
+        }),
     }
 }
 

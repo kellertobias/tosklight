@@ -125,8 +125,14 @@ async fn runtime_snapshot(
                 snapshot.global_paused,
             )
         })
+        .filter(|instance| !instance.controllers.is_empty())
         .collect();
     Ok(Json(DynamicRuntimeSnapshotProjection {
+        programmer_id: state
+            .programming
+            .programmers()
+            .programmer_id()
+            .map(|id| id.0),
         global_paused: snapshot.global_paused,
         instances,
         definitions,
@@ -219,6 +225,13 @@ fn runtime_instance_projection(
     let controllers = instance
         .controllers
         .into_iter()
+        // Covered sources keep an internal clock but are no longer an editable On in this
+        // Programmer. Do not offer an Off/update action which cannot address an active source.
+        .filter(|controller| {
+            !transitions
+                .get(&controller.id)
+                .is_some_and(|transition| transition.output_gate.is_some_and(|gate| gate.to == 0.0))
+        })
         .map(|controller| {
             let transition = transitions.get(&controller.id).copied().unwrap_or(
                 light_dynamics::DynamicControllerTransitionSnapshot {
@@ -229,6 +242,18 @@ fn runtime_instance_projection(
             );
             DynamicRuntimeControllerProjection {
                 controller_id: controller.id,
+                programmer_id: match controller.source {
+                    light_dynamics::DynamicControllerSource::Programmer {
+                        programmer_id, ..
+                    } => Some(programmer_id),
+                    _ => None,
+                },
+                programmer_instance_link: match controller.source {
+                    light_dynamics::DynamicControllerSource::Programmer {
+                        instance_link, ..
+                    } => instance_link,
+                    _ => None,
+                },
                 source: dynamic_source_label(&controller.source),
                 priority: controller.priority,
                 size: controller.size,
@@ -323,7 +348,7 @@ fn dynamic_definition_status(
                             .heads
                             .iter()
                             .flat_map(|head| &head.parameters)
-                            .any(|parameter| parameter.attribute == lane.attribute)
+                            .any(|parameter| parameter.attribute == lane.output_owner())
                     })
                 })
                 .map(|fixture| fixture.fixture_id)
@@ -380,13 +405,28 @@ pub(super) fn dynamic_source_label(source: &light_dynamics::DynamicControllerSou
     match source {
         light_dynamics::DynamicControllerSource::Programmer { .. } => "Programmer".into(),
         light_dynamics::DynamicControllerSource::Cue { .. } => "Cue".into(),
-        light_dynamics::DynamicControllerSource::Playback { playback_number } => {
-            format!("Playback {playback_number}")
-        }
+        light_dynamics::DynamicControllerSource::Playback {
+            playback_number,
+            virtual_page: None,
+        } => format!("Playback {playback_number}"),
+        light_dynamics::DynamicControllerSource::Playback {
+            playback_number,
+            virtual_page: Some(page),
+        } => format!("Virtual Playback {playback_number} (page {page})"),
     }
 }
 
 pub(super) fn runtime_transition_mix(
+    transition: light_dynamics::DynamicControllerTransitionSnapshot,
+    now_millis: u64,
+) -> f32 {
+    runtime_ungated_transition_mix(transition, now_millis)
+        * transition
+            .output_gate
+            .map_or(1.0, |gate| gate.mix_at(now_millis))
+}
+
+fn runtime_ungated_transition_mix(
     transition: light_dynamics::DynamicControllerTransitionSnapshot,
     now_millis: u64,
 ) -> f32 {
@@ -647,7 +687,7 @@ async fn fix_at(
     show.verify(&state)?;
     run_fire_and_forget_http_programming_action(state, session, move |state, session| {
         let ports = ServerDynamicsPorts { state, session };
-        state
+        let applied = state
             .dynamics
             .fix_at(
                 &context(session),
@@ -660,11 +700,13 @@ async fn fix_at(
                 &ports,
             )
             .map_err(|error| error.message)?;
-        persist_programmer(state, session).map_err(|error| error.message)?;
-        persist_output_runtime(state).map_err(|error| error.message)?;
+        if applied > 0 {
+            persist_programmer(state, session).map_err(|error| error.message)?;
+            persist_output_runtime(state).map_err(|error| error.message)?;
+        }
         Ok(DynamicControllerHttpActionOutcome {
             controller_id: Uuid::nil(),
-            changed: true,
+            changed: applied > 0,
         })
     })
     .await

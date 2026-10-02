@@ -277,6 +277,8 @@ fn dmx_lookup_resolves_footprints_splits_multipatches_and_all_logical_heads() {
         rotation: Default::default(),
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),

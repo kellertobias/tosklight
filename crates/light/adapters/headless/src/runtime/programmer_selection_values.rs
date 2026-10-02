@@ -10,9 +10,11 @@ pub(super) fn apply_current_selection_value(
         .programming
         .get(session.id)
         .ok_or("programmer does not exist")?;
-    if current.selected.is_empty() {
-        return Err("AT requires a current selection".into());
-    }
+    let live_groups = current
+        .selection_expression
+        .as_ref()
+        .map(light_programmer::SelectionExpression::live_group_owners)
+        .unwrap_or_default();
     if value.len() == 3 && value[1] == "." {
         apply_command_preset(
             state,
@@ -24,18 +26,21 @@ pub(super) fn apply_current_selection_value(
     }
     if value.iter().any(|token| token == "THRU") {
         let points = parse_spread_points(value)?;
+        if current.selected.is_empty() && live_groups.is_empty() {
+            return Ok(0);
+        }
         ensure_spread_fits(&points, current.selected.len())?;
-        if let Some(light_programmer::SelectionExpression::LiveGroup { group_id, .. }) =
-            current.selection_expression.clone()
-        {
-            state.programming.set_group_faded_with_timing(
-                session.id,
-                group_id,
-                light_core::AttributeKey::intensity(),
-                light_core::AttributeValue::Spread(points),
-                timing.fade_millis,
-                timing.delay_millis,
-            );
+        if !live_groups.is_empty() {
+            for group_id in live_groups {
+                state.programming.set_group_faded_with_timing(
+                    session.id,
+                    group_id,
+                    light_core::AttributeKey::intensity(),
+                    light_core::AttributeValue::Spread(points.clone()),
+                    timing.fade_millis,
+                    timing.delay_millis,
+                );
+            }
             return Ok(current.selected.len());
         }
         let count = current.selected.len();
@@ -68,22 +73,25 @@ pub(super) fn apply_current_selection_value(
     if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
         return Err("level must be within 0-100".into());
     }
-    if let Some(light_programmer::SelectionExpression::LiveGroup { group_id, .. }) =
-        current.selection_expression.clone()
-    {
+    if current.selected.is_empty() && live_groups.is_empty() {
+        return Ok(0);
+    }
+    if !live_groups.is_empty() {
         if relative {
             return Err(
                 "relative group values require DEGROUP so each fixture keeps its own offset".into(),
             );
         }
-        state.programming.set_group_faded_with_timing(
-            session.id,
-            group_id,
-            light_core::AttributeKey::intensity(),
-            light_core::AttributeValue::Normalized(percent / 100.0),
-            timing.fade_millis,
-            timing.delay_millis,
-        );
+        for group_id in live_groups {
+            state.programming.set_group_faded_with_timing(
+                session.id,
+                group_id,
+                light_core::AttributeKey::intensity(),
+                light_core::AttributeValue::Normalized(percent / 100.0),
+                timing.fade_millis,
+                timing.delay_millis,
+            );
+        }
         return Ok(current.selected.len());
     }
     let resolved = relative.then(|| state.output.resolved_values());

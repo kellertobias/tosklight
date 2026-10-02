@@ -629,3 +629,54 @@ fn canonical_extension_controls_never_act_through_a_read_only_visualizer_session
     assert!(state.programming.get(watcher.id).is_none());
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn extension_master_controls_cannot_cross_show_activation_commit() {
+    let (state, data_dir) = test_state();
+    let desk = state.installation.desk().unwrap();
+    let host = HostControlContext {
+        extension_id: "de.tosklight.surface".into(),
+        extension_instance_id: "activation-check".into(),
+        desk_id: desk.id.to_string(),
+        source: "native_extension",
+    };
+    let master = BoundControlInput {
+        input: ControlInputEvent {
+            input_id: 1,
+            occurred_at_micros: 100,
+            control: ControlInput::Absolute {
+                control_id: "grand-master".into(),
+                value: 0.42,
+            },
+        },
+        intent: CanonicalControlIntent::GrandMaster,
+    };
+    let blackout = BoundControlInput {
+        input: ControlInputEvent {
+            input_id: 2,
+            occurred_at_micros: 101,
+            control: ControlInput::Button {
+                control_id: "blackout".into(),
+                pressed: true,
+            },
+        },
+        intent: CanonicalControlIntent::Blackout,
+    };
+    let before = state.output.control_projection();
+    let events = state.events.audit_events().len();
+    let commit = state.active_show.acquire_blocking();
+    assert!(extensions_runtime::apply_bound_control(&state, &host, &master).is_err());
+    assert!(extensions_runtime::apply_bound_control(&state, &host, &blackout).is_err());
+    let rejected = state.output.control_projection();
+    assert_eq!(rejected.revision, before.revision);
+    assert_eq!(rejected.grand_master, before.grand_master);
+    assert_eq!(rejected.blackout, before.blackout);
+    assert_eq!(state.events.audit_events().len(), events);
+    drop(commit);
+    extensions_runtime::apply_bound_control(&state, &host, &master).unwrap();
+    extensions_runtime::apply_bound_control(&state, &host, &blackout).unwrap();
+    assert_eq!(state.output.control_projection().grand_master, 0.42);
+    assert!(state.output.control_projection().blackout);
+    drop(state);
+    let _ = std::fs::remove_dir_all(data_dir);
+}

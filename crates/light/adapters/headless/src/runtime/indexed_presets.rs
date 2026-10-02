@@ -37,6 +37,9 @@ pub(super) fn programming_action(
         },
         undo_group: None,
         timing: programming_wire::ProgrammingValueTiming::default(),
+        displayed_source: None,
+        native_reference: None,
+        explicit_color_start: None,
     })
 }
 
@@ -69,6 +72,9 @@ pub(super) fn preload_action(
         },
         undo_group: None,
         timing: preload_wire::ProgrammingPreloadValueTiming::default(),
+        displayed_source: None,
+        native_reference: None,
+        explicit_color_start: None,
     })
 }
 

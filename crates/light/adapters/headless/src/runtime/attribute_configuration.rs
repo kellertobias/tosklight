@@ -580,6 +580,7 @@ fn wire_value_type(value: light_core::AttributeValueType) -> wire::AttributeValu
     match value {
         light_core::AttributeValueType::Continuous => wire::AttributeValueType::Continuous,
         light_core::AttributeValueType::Color => wire::AttributeValueType::Color,
+        light_core::AttributeValueType::Position => wire::AttributeValueType::Position,
         light_core::AttributeValueType::Indexed => wire::AttributeValueType::Indexed,
         light_core::AttributeValueType::Control => wire::AttributeValueType::Control,
     }
@@ -589,6 +590,7 @@ fn domain_value_type(value: wire::AttributeValueType) -> light_core::AttributeVa
     match value {
         wire::AttributeValueType::Continuous => light_core::AttributeValueType::Continuous,
         wire::AttributeValueType::Color => light_core::AttributeValueType::Color,
+        wire::AttributeValueType::Position => light_core::AttributeValueType::Position,
         wire::AttributeValueType::Indexed => light_core::AttributeValueType::Indexed,
         wire::AttributeValueType::Control => light_core::AttributeValueType::Control,
     }

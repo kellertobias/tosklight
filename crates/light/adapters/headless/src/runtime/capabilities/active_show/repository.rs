@@ -14,6 +14,12 @@ use light_show::{
 };
 use std::path::Path;
 
+/// TL-552: direct object writes (`put_object`, `delete_object`, `mutate_objects_atomically`, for
+/// example the object routes on an inactive show) stamp the show's programming-contract marker
+/// with the contract this runtime binary supports, exactly as the unit-of-work commit does.
+const WRITER_CONTRACT: u16 =
+    crate::runtime::e2e_semantic_contract::supported_programming_contract();
+
 pub(crate) struct ActiveShowRepository {
     store: ShowStore,
 }
@@ -176,7 +182,8 @@ impl ActiveShowRepository {
         body: &serde_json::Value,
         expected: Revision,
     ) -> Result<Revision, StoreError> {
-        self.store.put_object(kind, object_id, body, expected)
+        self.store
+            .put_object_at_contract(kind, object_id, body, expected, WRITER_CONTRACT)
     }
 
     pub(crate) fn cue_thumbnail_index(&self) -> Result<Vec<CueThumbnailEntry>, StoreError> {
@@ -202,7 +209,8 @@ impl ActiveShowRepository {
     }
 
     pub(crate) fn delete_object(&self, kind: &str, object_id: &str) -> Result<bool, StoreError> {
-        self.store.delete_object(kind, object_id)
+        self.store
+            .delete_object_at_contract(kind, object_id, WRITER_CONTRACT)
     }
 
     pub(crate) fn mutate_objects_atomically(
@@ -210,7 +218,8 @@ impl ActiveShowRepository {
         writes: &[AtomicObjectWrite<'_>],
         deletes: &[AtomicObjectDelete<'_>],
     ) -> Result<Vec<Revision>, StoreError> {
-        self.store.mutate_objects_atomically(writes, deletes)
+        self.store
+            .mutate_objects_atomically_at_contract(writes, deletes, WRITER_CONTRACT)
     }
 }
 

@@ -129,9 +129,9 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
                     "expected_revision":0,
                     "expected_capture_mode_revision":0,
                     "action":{"type":"batch","mutations":[
-                        {"type":"set_fixture","fixture_id":fixture_id,"attribute":"pan",
+                        {"type":"set_fixture","fixture_id":fixture_id,"attribute":"focus",
                          "value":{"kind":"normalized","value":0.25},"timing":{"fade":true}},
-                        {"type":"set_fixture","fixture_id":fixture_id,"attribute":"tilt",
+                        {"type":"set_fixture","fixture_id":fixture_id,"attribute":"iris",
                          "value":{"kind":"normalized","value":0.75},"timing":{"fade":true}}
                     ]}
                 }
@@ -183,10 +183,10 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
                     "expected_revision":1,
                     "expected_capture_mode_revision":0,
                     "action":{"type":"batch","mutations":[
-                        {"type":"set_fixture","fixture_id":fixture_id,"attribute":"pan",
+                        {"type":"set_fixture","fixture_id":fixture_id,"attribute":"focus",
                          "value":{"kind":"normalized","value":0.5}},
                         {"type":"set_fixture","fixture_id":light_core::FixtureId::new(),
-                         "attribute":"tilt","value":{"kind":"normalized","value":0.5}}
+                         "attribute":"iris","value":{"kind":"normalized","value":0.5}}
                     ]}
                 }
             }))

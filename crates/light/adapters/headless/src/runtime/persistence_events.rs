@@ -26,6 +26,21 @@ pub(super) fn output_runtime_setting(show_id: light_core::ShowId) -> String {
     format!("output_runtime:{}", show_id.0)
 }
 
+pub(super) fn normalize_programmer_dynamic_checkpoint(
+    programmers: &light_programmer::ProgrammerRegistry,
+    snapshot: &mut light_dynamics::DynamicRuntimeSnapshot,
+) -> Result<usize, light_dynamics::DynamicRuntimeError> {
+    let mut links = Vec::new();
+    if let Some((programmer, _, normal, active)) = programmers.retained_dynamic_source() {
+        for row in normal.iter().chain(active.iter()) {
+            if let Some(link) = row.value.track_key().instance_link {
+                links.push((light_core::ProgrammerId(programmer), link));
+            }
+        }
+    }
+    light_dynamics::normalize_legacy_programmer_controller_ids(snapshot, &links)
+}
+
 pub(super) fn load_output_runtime_for_show(
     state: &AppState,
     show_id: light_core::ShowId,
@@ -37,29 +52,65 @@ pub(super) fn load_output_runtime_for_show(
     else {
         return Ok(PersistedOutputRuntime::default());
     };
-    match serde_json::from_str::<PersistedOutputRuntime>(&serialized) {
-        Ok(runtime) if runtime.is_valid() => Ok(runtime),
-        Ok(_) => {
-            tracing::warn!(?show_id, "ignoring invalid persisted output runtime");
-            Ok(PersistedOutputRuntime::default())
-        }
-        Err(error) => {
-            tracing::warn!(?show_id, %error, "ignoring invalid persisted output runtime");
-            Ok(PersistedOutputRuntime::default())
-        }
-    }
+    PersistedOutputRuntime::decode_for_support(
+        &serialized,
+        state.output.supported_programming_contract(),
+    )
+    .map_err(|error| {
+        ApiError::internal(format!(
+            "stored Output runtime could not be restored: {error}"
+        ))
+    })
+}
+
+pub(super) fn prepare_output_runtime_checkpoint(
+    state: &AppState,
+    runtime: &PersistedOutputRuntime,
+) -> Result<super::dynamic_source_origins::DynamicRuntimeSourceCheckpoint, ApiError> {
+    runtime
+        .validate_for_support(state.output.supported_programming_contract())
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let mut checkpoint = runtime
+        .dynamic_source_checkpoint()
+        .map_err(|error| ApiError::internal(error.to_string()))?
+        .unwrap_or(
+            super::dynamic_source_origins::DynamicRuntimeSourceCheckpoint {
+                runtime: light_dynamics::DynamicRuntimeSnapshot::default(),
+                origins: None,
+            },
+        );
+    normalize_programmer_dynamic_checkpoint(
+        &state.programming.programmers(),
+        &mut checkpoint.runtime,
+    )
+    .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(checkpoint)
 }
 
 pub(super) fn restore_output_runtime_for_show(
     state: &AppState,
     show_id: light_core::ShowId,
     runtime: PersistedOutputRuntime,
-) {
+) -> Result<(), ApiError> {
     debug_assert_eq!(
         state.active_show.current().as_ref().map(|show| show.id),
         Some(show_id)
     );
-    restore_output_group_masters(state, &runtime);
+    let checkpoint = prepare_output_runtime_checkpoint(state, &runtime)?;
+    state
+        .output
+        .restore_dynamic_source_checkpoint(checkpoint)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    restore_prevalidated_output_controls(state, &runtime);
+    Ok(())
+}
+
+/// Called only after checkpoint/control validation and coherent destination publication.
+pub(super) fn restore_prevalidated_output_controls(
+    state: &AppState,
+    runtime: &PersistedOutputRuntime,
+) {
+    restore_output_group_masters(state, runtime);
     state
         .output
         .execute_playback(EnginePlaybackCommand::RestoreDynamicsPausedSince(
@@ -72,15 +123,7 @@ pub(super) fn restore_output_runtime_for_show(
             runtime.dynamic_playbacks.clone(),
         ))
         .expect("restoring validated Dynamic Playback state is infallible");
-    let snapshot = runtime.dynamic_runtime.clone().unwrap_or_default();
-    if let Err(error) = state.output.restore_dynamic_runtime_snapshot(snapshot) {
-        tracing::warn!(%error, "ignoring invalid persisted Dynamic runtime");
-        state
-            .output
-            .restore_dynamic_runtime_snapshot(Default::default())
-            .expect("an empty Dynamic runtime snapshot is always valid");
-    }
-    state.output.restore_runtime_control(&runtime);
+    state.output.restore_runtime_control(runtime);
     state.output.clear_runtime_replay();
 }
 
@@ -93,6 +136,11 @@ pub(super) fn restore_output_group_masters(state: &AppState, runtime: &Persisted
 }
 
 pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
+    // Recovery did not install the stored runtime. Global controls remain usable, but their
+    // empty runtime must not overwrite the retained show checkpoint.
+    if state.active_show.error().is_some() {
+        return Ok(());
+    }
     #[cfg(test)]
     {
         state.output.record_runtime_persistence_attempt()?;
@@ -101,13 +149,18 @@ pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
         return Ok(());
     };
     let control = state.output.control_projection();
+    let checkpoint = state
+        .output
+        .dynamic_source_checkpoint()
+        .map_err(|error| ApiError::internal(error.to_string()))?;
     let runtime = PersistedOutputRuntime {
         revision: control.revision,
         grand_master: control.grand_master,
         blackout: control.blackout,
         dynamics_paused_at: state.output.playback_dynamics().paused_since,
         dynamic_playbacks: state.output.active_dynamic_playbacks_for_persistence(),
-        dynamic_runtime: Some(state.output.dynamic_runtime_snapshot()),
+        dynamic_runtime: Some(checkpoint.runtime),
+        dynamic_source_origins: checkpoint.origins,
         group_masters: state
             .output
             .snapshot()
@@ -130,6 +183,9 @@ pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
 }
 
 pub(super) fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError> {
+    if state.active_show.error().is_some() {
+        return Ok(());
+    }
     let Some(show) = state.active_show.current().clone() else {
         return Ok(());
     };

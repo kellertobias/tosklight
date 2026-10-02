@@ -1,22 +1,10 @@
 use super::*;
 
-pub(super) fn record_explicit_show_load(
-    state: &AppState,
-    id: light_core::ShowId,
-) -> Result<ShowEntry, ApiError> {
-    let entry = state
-        .installation
-        .mark_show_loaded(id)
-        .map_err(ApiError::store)?;
-    state.active_show.replace_current(Some(entry.clone()));
-    Ok(entry)
-}
-
 pub(super) async fn open_show(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     headers: HeaderMap,
-    Json(input): Json<OpenShow>,
+    TolerantJson(input): TolerantJson<OpenShow>,
 ) -> Result<Json<ShowEntry>, ApiError> {
     let session = authenticate(&state, &headers)?;
     let entry = state
@@ -29,20 +17,14 @@ pub(super) async fn open_show(
     if !FsPath::new(&entry.path).exists() {
         return Err(ApiError::bad_request("show file is unavailable"));
     }
-    let _show_change = state.active_show.acquire_show_change().await;
+    let show_change = state.active_show.acquire_show_change().await;
     validate_show_file(&entry.path).map_err(ApiError::store)?;
     let output_runtime = load_output_runtime_for_show(&state, entry.id)?;
     let previous = state.active_show.current().clone();
-    if let Some(previous) = &previous {
-        state
-            .installation
-            .set_setting("previous_active_show_id", &previous.id.0.to_string())
-            .map_err(ApiError::store)?;
-    }
-    let prepared = prepare_show_for_runtime(&state, &entry)?;
+    let prepared = prepare_show_activation_for_runtime(&state, &entry)?;
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
     let context = operator_action_context(&session, light_application::ActionSource::Http);
-    activate_prepared_show(
+    let entry = activate_prepared_show(
         &state,
         prepared,
         &context,
@@ -50,24 +32,16 @@ pub(super) async fn open_show(
         input.transition_millis,
         entry.clone(),
         output_runtime,
+        ActivationCompletion::Open { previous },
+        show_change,
     )
     .await?;
-    state
-        .installation
-        .set_active_show(Some(entry.id))
-        .map_err(ApiError::store)?;
-    let entry = record_explicit_show_load(&state, entry.id)?;
-    emit(
-        &state,
-        "show_opened",
-        serde_json::json!({"show":entry,"transition":transition,"previous_show":previous}),
-    );
     Ok(Json(entry))
 }
 pub(super) async fn open_clean_default_show(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(input): Json<OpenShow>,
+    TolerantJson(input): TolerantJson<OpenShow>,
 ) -> Result<Json<ShowEntry>, ApiError> {
     let session = authenticate(&state, &headers)?;
     let name = available_show_name(&state, "Default Stage Show Clean Copy")?;
@@ -94,9 +68,9 @@ pub(super) async fn open_clean_default_show(
         let _ = std::fs::remove_file(&path);
         return Err(ApiError::store(error));
     }
-    let _show_change = state.active_show.acquire_show_change().await;
+    let show_change = state.active_show.acquire_show_change().await;
     let output_runtime = load_output_runtime_for_show(&state, entry.id)?;
-    let prepared = match prepare_show_for_runtime(&state, &entry) {
+    let prepared = match prepare_show_activation_for_runtime(&state, &entry) {
         Ok(prepared) => prepared,
         Err(error) => {
             let _ = state.installation.remove_show(entry.id);
@@ -107,7 +81,7 @@ pub(super) async fn open_clean_default_show(
     let previous = state.active_show.current().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
     let context = operator_action_context(&session, light_application::ActionSource::Http);
-    activate_prepared_show(
+    let activated = activate_prepared_show(
         &state,
         prepared,
         &context,
@@ -115,32 +89,22 @@ pub(super) async fn open_clean_default_show(
         input.transition_millis,
         entry.clone(),
         output_runtime,
+        ActivationCompletion::CleanDefault { previous },
+        show_change,
     )
-    .await?;
-    state
-        .installation
-        .set_active_show(Some(entry.id))
-        .map_err(ApiError::store)?;
-    if let Some(previous) = &previous {
-        state
-            .installation
-            .set_setting("previous_active_show_id", &previous.id.0.to_string())
-            .map_err(ApiError::store)?;
+    .await;
+    if activated.is_err() {
+        discard_unactivated_destination(&state, &entry).await;
     }
-    let entry = record_explicit_show_load(&state, entry.id)?;
-    emit(
-        &state,
-        "show_opened",
-        serde_json::json!({"show":entry,"transition":transition,"previous_show":previous,"source":"built_in_default"}),
-    );
-    Ok(Json(entry))
+    Ok(Json(activated?))
 }
 pub(super) async fn rollback_show(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(input): Json<OpenShow>,
+    TolerantJson(input): TolerantJson<OpenShow>,
 ) -> Result<Json<ShowEntry>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let show_change = state.active_show.acquire_show_change().await;
     let previous_id = state
         .installation
         .setting("previous_active_show_id")
@@ -155,13 +119,12 @@ pub(super) async fn rollback_show(
         .show(previous_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("rollback show"))?;
-    let _show_change = state.active_show.acquire_show_change().await;
     let output_runtime = load_output_runtime_for_show(&state, entry.id)?;
-    let prepared = prepare_show_for_runtime(&state, &entry)?;
+    let prepared = prepare_show_activation_for_runtime(&state, &entry)?;
     let current = state.active_show.current().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
     let context = operator_action_context(&session, light_application::ActionSource::Http);
-    activate_prepared_show(
+    let entry = activate_prepared_show(
         &state,
         prepared,
         &context,
@@ -169,24 +132,10 @@ pub(super) async fn rollback_show(
         input.transition_millis,
         entry.clone(),
         output_runtime,
+        ActivationCompletion::Rollback { previous: current },
+        show_change,
     )
     .await?;
-    state
-        .installation
-        .set_active_show(Some(entry.id))
-        .map_err(ApiError::store)?;
-    if let Some(current) = current {
-        state
-            .installation
-            .set_setting("previous_active_show_id", &current.id.0.to_string())
-            .map_err(ApiError::store)?;
-    }
-    let entry = record_explicit_show_load(&state, entry.id)?;
-    emit(
-        &state,
-        "show_rolled_back",
-        serde_json::json!({"show":entry,"transition":transition}),
-    );
     Ok(Json(entry))
 }
 pub(super) async fn download_show(

@@ -354,7 +354,7 @@ async fn preset_recall_http_redirects_fixture_and_live_group_values_to_pending_p
     let show_id = scenario.create_and_open_show("Preload Preset recall route").await;
     let fixture = light_core::FixtureId::new();
     let intensity = light_core::AttributeKey::intensity();
-    let pan = light_core::AttributeKey("pan".into());
+    let pan = light_core::AttributeKey("focus".into());
     let group = light_programmer::GroupDefinition {
         id: "5".into(),
         name: "Live Preload group".into(),

@@ -12,6 +12,7 @@ use light_wire::v2::cue_transfer::{
 
 use super::super::{ApiError, AppState, Session, ShowContext};
 use super::{ServerProgrammingCueTransferPorts, cue_transfer_wire, routes::http_context};
+use crate::tolerant_json::TolerantJson;
 
 const BODY_LIMIT: usize = 16 * 1024;
 
@@ -25,13 +26,13 @@ async fn transfer_cue(
     State(state): State<AppState>,
     show: ShowContext,
     headers: HeaderMap,
-    request: Result<Json<CueTransferRequest>, JsonRejection>,
+    request: Result<TolerantJson<CueTransferRequest>, JsonRejection>,
 ) -> Result<Response, CueTransferHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
     let show_id = show.resolve(&state).map_err(CueTransferHttpError::api)?;
     let expected_revision =
         super::super::parse_if_match(&headers).map_err(CueTransferHttpError::api)?;
-    let Json(request) = request.map_err(CueTransferHttpError::json)?;
+    let TolerantJson(request) = request.map_err(CueTransferHttpError::json)?;
     super::routes::validate_request_id(&request.request_id).map_err(CueTransferHttpError::api)?;
     let (request_id, command) = cue_transfer_wire::application_command(show_id, request)
         .map_err(CueTransferHttpError::invalid)?;
@@ -47,8 +48,12 @@ async fn run_action(
     session: Session,
     action: ActionEnvelope<light_application::ProgrammingCueTransferRequest>,
 ) -> Result<light_application::ProgrammingCueTransferResult, CueTransferHttpError> {
+    // ProgrammingService takes Programmer+desk. Acquire activation before those gates,
+    // avoiding a cycle with a Patch/install already owning activation and waiting Programmer.
+    let activation = state.active_show.acquire().await;
     tokio::task::spawn_blocking(move || {
-        let ports = ServerProgrammingCueTransferPorts::new(state.clone(), session, false);
+        let _activation = activation;
+        let ports = ServerProgrammingCueTransferPorts::with_activation_held(state.clone(), session);
         state
             .programming
             .handle_cue_transfer(action, &state.active_show, &ports)

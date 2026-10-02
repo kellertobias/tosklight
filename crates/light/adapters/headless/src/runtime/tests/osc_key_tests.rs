@@ -222,12 +222,13 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
             source: Some("127.0.0.1:9010".into()),
         },
     );
-    assert!(state.events.audit_events().iter().any(|event| {
+    assert!(!state.events.audit_events().iter().any(|event| {
         event.kind == "desk_action"
             && event.payload["action"] == "align"
             && event.payload["request_id"] == "hardware-align-1"
             && event.payload["session_id"] == serde_json::json!(session.id)
     }));
+    assert_eq!(state.programming.alignment_projection().mode, None);
     let timings_before_release = state.action_timing.snapshot().len();
     handle_control_event(
         &state,
@@ -440,6 +441,66 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
 			expected
 		);
 	}
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn osc_align_executes_once_without_a_browser_and_projects_the_same_desk_to_two_surfaces() {
+    let (state, data_dir) = test_state();
+    state.active_show.replace_current(Some(ShowEntry {
+        is_base_show: false,
+        id: light_core::ShowId::new(),
+        name: "OSC Align".into(),
+        path: data_dir.join("shows/align.toskshow").display().to_string(),
+        revision: 0,
+        updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
+        revision_copy: None,
+    }));
+    let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: SessionId::new(),
+        token: "align-osc-test".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id);
+    state.sessions.insert_session(session.clone());
+    let mut second = session.clone();
+    second.id = SessionId::new();
+    second.token = "align-second-surface".into();
+    state.programming.start(second.id);
+    state.sessions.insert_session(second.clone());
+    state.programming.select(session.id, [light_core::FixtureId::new(), light_core::FixtureId::new()]);
+    let source: SocketAddr = "127.0.0.1:9027".parse().unwrap();
+    state.integrations.register_osc_subscriber("align-test".into(), OscSubscriber {
+        capability: light_core::SurfaceCapability::Programming,
+        path: "main".into(), target: source, command_source: source,
+        session_id: session.id, last_seen: Instant::now(), shifted: false, shift_held: false,
+        update_record_started: None, update_first_release: None, last_highlight_action: None,
+    });
+    let send = |action: &str, down: bool, id: &str| handle_control_event(&state, ControlEvent::Osc {
+        address: format!("/light/main/programmer/{action}"),
+        arguments: vec![OscArgument::Bool(down), OscArgument::String(id.into())],
+        source: Some(source.to_string()),
+    });
+    send("align", true, "align-1");
+    let first = state.programming.alignment_projection();
+    assert_eq!(first.mode, Some(light_programmer::ProgrammerAlignmentMode::Left));
+    send("align", false, "align-1");
+    assert_eq!(state.programming.alignment_projection(), first);
+    send("align", true, "align-2");
+    assert_eq!(state.programming.alignment_projection().mode, Some(light_programmer::ProgrammerAlignmentMode::Right));
+    send("align", false, "align-2");
+    send("shift", true, "shift-1");
+    send("align", true, "align-off");
+    assert_eq!(state.programming.alignment_projection().mode, None);
+    assert!(!state.events.audit_events().iter().any(|event| event.kind == "desk_action" && (event.payload["action"] == "align" || event.payload["action"] == "shift-align")));
+    let feedback = state.integrations.captured_osc_feedback();
+    for active in [true, false] {
+        assert!(feedback.iter().any(|(_, address, arguments)| address == "/light/main/feedback/programmer/align/active" && arguments.first() == Some(&OscArgument::Bool(active))));
+    }
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

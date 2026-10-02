@@ -11,10 +11,13 @@ async fn active_show_document_cache_reuses_and_detects_out_of_band_writes() {
         .await
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);
-    assert!(state.active_show.document_cache().snapshot().is_none());
     let path = state.active_show.current().as_ref().unwrap().path.clone();
 
-    // The first mutation loads the document and leaves it cached at the committed revision.
+    // Activation installs the exact accepted document without rereading after commit.
+    assert_eq!(state.active_show.document_cache().snapshot().unwrap(),
+        ShowStore::open(&path).unwrap().portable_document().unwrap());
+
+    // The first mutation reuses that document and leaves it at the committed revision.
     assert_eq!(
         put_show_object(
             &state,

@@ -195,7 +195,7 @@ fn fixture_lines(definitions: &DefaultDefinitions) -> [FixtureLine<'_>; 7] {
             x: &[-5.0, -3.0, -1.0, 1.0, 3.0, 5.0],
             y: 2.5,
             z: 0.3,
-            rotation_y: -90.0,
+            rotation_y: 90.0,
         },
         FixtureLine {
             name: "Floor RGBW PAR",
@@ -205,7 +205,7 @@ fn fixture_lines(definitions: &DefaultDefinitions) -> [FixtureLine<'_>; 7] {
             x: &[-5.0, -3.0, -1.0, 1.0, 3.0, 5.0],
             y: 5.0,
             z: 0.3,
-            rotation_y: -90.0,
+            rotation_y: 90.0,
         },
     ]
 }

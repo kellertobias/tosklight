@@ -129,15 +129,14 @@ async fn set_playback_page(
                 page,
             ))
     } else {
-        state
-            .playback
-            .run_unit_of_work(playback_service::ChangePage {
-                state,
-                show: &show,
-                context,
-                desk_id: session.desk.id,
-                page,
-            })
+        playback_service::ChangePage {
+            state,
+            show: &show,
+            context,
+            desk_id: session.desk.id,
+            page,
+        }
+        .run()
     };
     let availability = completed.output?;
     if !availability.available() {

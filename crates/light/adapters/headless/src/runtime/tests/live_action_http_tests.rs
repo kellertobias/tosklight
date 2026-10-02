@@ -21,6 +21,57 @@ async fn post_live_action(
 }
 
 #[tokio::test]
+async fn fix_at_http_and_websocket_report_empty_and_identical_actions_without_changes() {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario.create_and_open_show("Quiet FixAT").await;
+    let before = serde_json::to_value(scenario.state.programming.get(scenario.session.id).unwrap()).unwrap();
+    for round in 0..2 {
+        let request = light_wire::v2::dynamics::DynamicFixAtActionRequest {
+            request_id: format!("fix-at-empty-{round}"), targets: vec![],
+            attribute: "intensity".into(), value: 0.4, timing: Default::default(),
+        };
+        let response = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
+            &scenario.session, &request.request_id,
+            light_wire::v2::live_action::LiveAction::DynamicFixAt(request.clone()),
+        ));
+        assert!(response.ok, "{:?}", response.error);
+        assert_eq!(response.payload.unwrap()["changed"], false);
+        let response = post_live_action(&scenario, &show_id, "/api/v2/programmer/values/fix-at",
+            serde_json::json!({"targets":[],"attribute":"intensity","value":0.4,"future_field":true}),
+        ).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(json(response).await["changed"], false);
+    }
+    assert_eq!(serde_json::to_value(scenario.state.programming.get(scenario.session.id).unwrap()).unwrap(), before);
+
+    let fixture = light_core::FixtureId::new();
+    scenario.state.output.replace_snapshot(EngineSnapshot {
+        fixtures: vec![operational_fixture(fixture)].into(), ..Default::default()
+    }).unwrap();
+    scenario.state.programming.select(scenario.session.id, [fixture]);
+    let first = post_live_action(&scenario, &show_id, "/api/v2/programmer/values/fix-at",
+        serde_json::json!({"targets":[],"attribute":"intensity","value":0.4}),
+    ).await;
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_eq!(json(first).await["changed"], true);
+    let held = scenario.state.programming.get(scenario.session.id).unwrap();
+    let request = light_wire::v2::dynamics::DynamicFixAtActionRequest {
+        request_id: "fix-at-repeat".into(), targets: vec![fixture.0],
+        attribute: "intensity".into(), value: 0.4, timing: Default::default(),
+    };
+    let response = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
+        &scenario.session, &request.request_id,
+        light_wire::v2::live_action::LiveAction::DynamicFixAt(request.clone()),
+    ));
+    assert!(response.ok, "{:?}", response.error);
+    assert_eq!(response.payload.unwrap()["changed"], false);
+    let after = scenario.state.programming.get(scenario.session.id).unwrap();
+    assert_eq!(after.undo.len(), held.undo.len());
+    assert_eq!(after.dynamic_values, held.dynamic_values);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
 async fn programming_align_http_and_websocket_report_the_same_empty_selection_no_op() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario
@@ -35,7 +86,7 @@ async fn programming_align_http_and_websocket_report_the_same_empty_selection_no
         .len();
     let request = light_wire::v2::live_action::ProgrammingAlignLiveActionRequest {
         request_id: "align-empty-selection".into(),
-        mode: light_wire::v2::live_action::ProgrammingAlignMode::Left,
+        mode: light_wire::v2::live_action::ProgrammingAlignAction::Left,
     };
     let websocket = dispatch_live_action(
         &scenario.state,
@@ -114,7 +165,7 @@ async fn programming_align_activation_and_mode_changes_are_value_neutral() {
         .len();
     let request = light_wire::v2::live_action::ProgrammingAlignLiveActionRequest {
         request_id: "align-value-neutral".into(),
-        mode: light_wire::v2::live_action::ProgrammingAlignMode::Left,
+        mode: light_wire::v2::live_action::ProgrammingAlignAction::Left,
     };
 
     let websocket = dispatch_live_action(

@@ -24,6 +24,15 @@ pub(super) fn execute_dynamic_command(
         .ok_or_else(|| format!("Dynamic {number} does not exist"))?;
     let targets = command_dynamic_targets(state, session, &snapshot, &tokens[..dynamic_index])?;
     let (explicit_controller, tail) = parse_dynamic_command_tail(&tokens[dynamic_index + 2..])?;
+    let explicit_controller = explicit_controller.map(|id| {
+        state
+            .programming
+            .get(session.id)
+            .and_then(|programmer| {
+                light_application::resolve_programmer_dynamic_controller(&programmer, id)
+            })
+            .map_or(id, |controller| controller.controller_id)
+    });
     let ports = dynamics_adapter::ServerDynamicsPorts { state, session };
     let command = light_application::DynamicStartCommand {
         dynamic_id: definition.id,
@@ -219,29 +228,13 @@ fn command_controller_candidates(
         .get(session.id)
         .ok_or("programmer does not exist")?;
     let expected = targets.iter().copied().collect::<HashSet<_>>();
-    let mut by_controller = HashMap::<Uuid, HashSet<light_core::FixtureId>>::new();
-    for stored in programmer
-        .dynamic_values
-        .iter()
-        .chain(programmer.preload_dynamic_pending.iter())
-    {
-        if let light_dynamics::DynamicSemanticValue::DynamicOn {
-            instance_link,
-            dynamic,
-            ..
-        } = &stored.value
-            && dynamic.dynamic_id == Some(dynamic_id)
-        {
-            by_controller
-                .entry(*instance_link)
-                .or_default()
-                .insert(stored.fixture_id);
-        }
-    }
-    let mut matches = by_controller
+    let mut matches = light_application::effective_programmer_dynamic_controllers(&programmer)
         .into_iter()
-        .filter_map(|(controller, found)| {
-            (expected.is_empty() || found == expected).then_some((controller, found.len()))
+        .filter(|controller| controller.dynamic_id == Some(dynamic_id))
+        .filter_map(|controller| {
+            let found = controller.targets.iter().copied().collect::<HashSet<_>>();
+            (expected.is_empty() || found == expected)
+                .then_some((controller.controller_id, found.len()))
         })
         .collect::<Vec<_>>();
     matches.sort_by_key(|(controller, _)| *controller);

@@ -7,6 +7,9 @@ license-file.workspace = true
 [features]
 default = ["native-audio-output"]
 e2e-embedded-ui = ["rust-embed/debug-embed"]
+# Retained no-op since TL-552 (every build reports the semantic programming contract). Only
+# `npm run test:e2e-semantic` enables it; see src/runtime/e2e_semantic_contract.rs.
+e2e-semantic-contract = []
 native-audio-output = ["dep:cpal", "dep:crossbeam-queue"]
 
 [dependencies]

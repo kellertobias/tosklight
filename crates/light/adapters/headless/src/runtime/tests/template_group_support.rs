@@ -38,6 +38,7 @@ fn template_fixture(
         fixture_number: None,
         virtual_fixture_number: None,
         definition: light_fixture::FixtureDefinition {
+            runtime_color_context: None,
             schema_version: 1,
             id: light_core::FixtureId::new(),
             revision: 1,
@@ -79,6 +80,8 @@ fn template_fixture(
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -251,7 +254,10 @@ struct TemplateGroupScenario {
 
 impl TemplateGroupScenario {
     async fn new() -> Self {
-        let (state, data_dir) = test_state();
+        // TL-552 follow-up: normalized Pan/Tilt template words are the older (contract 0)
+        // runtime's legacy channel programming; contract 1 refuses `pan`/`tilt` writes.
+        let (state, data_dir) =
+            test_state_with_programming_contract(ProgrammerRegistry::default(), None, 0);
         let app = router(state.clone());
         let (token, session_id) = login(&app, "Operator").await;
         let created = create_show(&app, &token, "Template group scenario").await;

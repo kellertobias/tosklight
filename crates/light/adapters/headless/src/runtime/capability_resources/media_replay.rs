@@ -215,6 +215,33 @@ impl ReplayResource {
             .insert(key, signature, outcome);
     }
 
+    /// Serialize lookup, synchronous edit and receipt publication so concurrent HTTP retries
+    /// cannot slip between the first lookup and commit.
+    pub(in crate::runtime) async fn execute_fixture_library_edit(
+        &self,
+        key: super::super::fixture_api_replay::ReplayKey,
+        signature: [u8; 32],
+        edit: impl FnOnce() -> Result<
+            light_wire::v2::fixture_library::FixtureLibraryActionResult,
+            super::super::api_error::ApiError,
+        >,
+    ) -> Result<
+        light_wire::v2::fixture_library::FixtureLibraryActionOutcome,
+        super::super::api_error::ApiError,
+    > {
+        let mut cache = self.fixture_library.lock().await;
+        if let Some(outcome) = cache.get(&key, &signature)? {
+            return Ok(outcome);
+        }
+        let outcome = light_wire::v2::fixture_library::FixtureLibraryActionOutcome {
+            request_id: key.request_id.clone(),
+            replayed: false,
+            result: edit()?,
+        };
+        cache.insert(key, signature, outcome.clone());
+        Ok(outcome)
+    }
+
     pub(in crate::runtime) async fn lookup_fixture_library(
         &self,
         key: &fixture_api_replay::ReplayKey,

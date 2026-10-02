@@ -62,7 +62,7 @@ async fn preload_values_batch_is_atomic_revisioned_replay_safe_and_sparse_on_no_
                 {
                     "type": "set_group",
                     "group_id": "1",
-                    "attribute": "pan",
+                    "attribute": "focus",
                     "value": {"kind": "spread", "value": [0.1, 0.9]}
                 }
             ]
@@ -231,7 +231,7 @@ async fn preload_values_fixture_and_group_releases_are_individual_atomic_actions
                     {
                         "type": "set_group",
                         "group_id": "1",
-                        "attribute": "pan",
+                        "attribute": "focus",
                         "value": {"kind": "spread", "value": [0.2, 0.8]}
                     }
                 ]
@@ -284,7 +284,7 @@ async fn preload_values_fixture_and_group_releases_are_individual_atomic_actions
                 "action": {
                     "type": "release_group",
                     "group_id": "1",
-                    "attribute": "pan"
+                    "attribute": "focus"
                 }
             }))
             .await,

@@ -215,6 +215,8 @@ pub(in crate::runtime) struct ProgrammingResource {
     programmers: ProgrammerRegistry,
     service: ProgrammingService,
     command_history: Arc<Mutex<HashMap<Uuid, VecDeque<CommandHistoryEntry>>>>,
+    /// TL-548 C4: the desk's Pending (Preload) episode executor. Inert unless gated on.
+    pending_episodes: output_scheduler::PendingEpisodeResource,
 }
 
 #[derive(Clone)]
@@ -241,6 +243,12 @@ impl AttributeConfigurationResource {
 
     pub(super) fn install_document(&self, document: &light_show::PortableShowDocument) {
         *self.installed.write() = InstalledAttributeConfiguration::for_document(document);
+    }
+
+    /// Memory-only installation of a configuration already derived from the compiled document.
+    #[cfg_attr(not(test), allow(dead_code))] // Called by TL-584's owned activation workflow.
+    pub(super) fn install_prepared(&self, installed: InstalledAttributeConfiguration) {
+        *self.installed.write() = installed;
     }
 
     /// The active show's colour programming model, which the engine must follow.
@@ -289,11 +297,16 @@ impl ProgrammingResource {
             programmers,
             service,
             command_history: Arc::default(),
+            pending_episodes: Default::default(),
         }
     }
 
     pub(in crate::runtime) fn programmers(&self) -> ProgrammerRegistry {
         self.programmers.clone()
+    }
+
+    pub(in crate::runtime) fn pending_episodes(&self) -> &output_scheduler::PendingEpisodeResource {
+        &self.pending_episodes
     }
 }
 
@@ -389,6 +402,10 @@ pub(in crate::runtime) struct ActiveShowResource {
     patch: ShowPatchService,
     selective_import: SelectiveShowImportService,
     mvr_imports: Arc<Mutex<HashMap<Uuid, StagedMvrImport>>>,
+    /// TL-560: the programming contract at which the legacy-programming show gate is engaged
+    /// (0 = dormant). Only the real startup path (`build_app_state`) sets it, to the contract the
+    /// runtime started with; synthetic test states keep it dormant.
+    legacy_programming_gate: Arc<std::sync::atomic::AtomicU16>,
     #[cfg(test)]
     patch_profile_resolution: Arc<PatchProfileResolutionPause>,
     #[cfg(test)]
@@ -397,9 +414,29 @@ pub(in crate::runtime) struct ActiveShowResource {
     preload_store_release_lifecycle: Arc<ActiveShowLifecyclePause>,
     #[cfg(test)]
     patch_lifecycle: Arc<ActiveShowLifecyclePause>,
+    #[cfg(test)]
+    activation_before_admission: Arc<ActiveShowLifecyclePause>,
+    #[cfg(test)]
+    activation_before_commit: Arc<ActiveShowLifecyclePause>,
+    #[cfg(test)]
+    activation_after_admission: Arc<ActiveShowLifecyclePause>,
+    #[cfg(test)]
+    activation_completed: Arc<ActiveShowLifecyclePause>,
 }
 
 impl ActiveShowResource {
+    /// TL-560: engages the show-activation legacy-programming gate at `contract` (≥ 1 engages).
+    pub(in crate::runtime) fn engage_legacy_programming_gate(&self, contract: u16) {
+        self.legacy_programming_gate
+            .store(contract, std::sync::atomic::Ordering::Release);
+    }
+
+    /// The contract the activation gate validates against; 0 means dormant.
+    pub(in crate::runtime) fn legacy_programming_gate(&self) -> u16 {
+        self.legacy_programming_gate
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
     pub(in crate::runtime) fn new(
         activation: ActiveShowCoordinator,
         active: Arc<RwLock<Option<ShowEntry>>>,
@@ -419,6 +456,7 @@ impl ActiveShowResource {
             patch,
             selective_import,
             mvr_imports: Arc::default(),
+            legacy_programming_gate: Arc::default(),
             #[cfg(test)]
             patch_profile_resolution: Arc::default(),
             #[cfg(test)]
@@ -427,6 +465,14 @@ impl ActiveShowResource {
             preload_store_release_lifecycle: Arc::default(),
             #[cfg(test)]
             patch_lifecycle: Arc::default(),
+            #[cfg(test)]
+            activation_before_admission: Arc::default(),
+            #[cfg(test)]
+            activation_before_commit: Arc::default(),
+            #[cfg(test)]
+            activation_after_admission: Arc::default(),
+            #[cfg(test)]
+            activation_completed: Arc::default(),
         }
     }
 }

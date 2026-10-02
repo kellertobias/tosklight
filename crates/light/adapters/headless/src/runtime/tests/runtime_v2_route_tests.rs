@@ -321,6 +321,8 @@ async fn visualization_snapshot_reports_authoritative_source_and_route_costs() {
         serde_json::json!([])
     );
     assert!(dynamic_stack["dynamic_stack"].is_array());
+    assert!(dynamic_stack.get("source_frame").is_none());
+    assert!(dynamic_stack.get("source_timestamp").is_none());
 
     let diagnostics = app
         .oneshot(
@@ -334,7 +336,10 @@ async fn visualization_snapshot_reports_authoritative_source_and_route_costs() {
     assert_eq!(diagnostics.status(), StatusCode::OK);
     let visualization_metrics = &json(diagnostics).await["visualization"];
     assert_eq!(visualization_metrics["snapshot_requests"], 2);
-    assert_eq!(visualization_metrics["snapshot_source_frame"], 1);
+    assert_eq!(
+        visualization_metrics["snapshot_source_frame"], 0,
+        "the last ordinary observer request has no accepted output frame identity"
+    );
     assert!(
         visualization_metrics["snapshot_projection_micros"].is_number(),
         "projection is measured independently"

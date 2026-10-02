@@ -224,7 +224,7 @@ fn fix_at_operation(
             },
             &ports,
         )
-        .map(|_| true)
+        .map(|applied| applied > 0)
         .map_err(|error| error.message)
 }
 

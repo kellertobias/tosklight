@@ -62,6 +62,7 @@ pub(super) struct SpeedGroupActionInput {
 #[derive(Clone)]
 pub(super) struct StagedMvrImport {
     pub(super) document: light_mvr::MvrDocument,
+    pub(super) definitions: MvrDefinitions,
     pub(super) created: Instant,
 }
 
@@ -103,7 +104,7 @@ pub(super) struct NewMvrShow {
     #[serde(default = "default_true")]
     pub(super) open_after_import: bool,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(super) enum MvrResolution {
     Import,
@@ -157,7 +158,11 @@ pub(super) struct OutputControl {
     pub(super) options: RenderOptions,
     pub(super) revision: u64,
     pub(super) grand_master_flash: bool,
+    // Legacy transition setter, retained until activation routes use owned leases.
     pub(super) hold: bool,
+    pub(super) transitions: Vec<OutputTransitionOverlay>,
+    pub(super) grand_master_write: Arc<()>,
+    pub(super) blackout_write: Arc<()>,
     pub(super) last_frames: HashMap<light_core::Universe, light_output::DmxFrame>,
     pub(super) last_routes: Arc<[light_output::OutputRoute]>,
     pub(super) last_patched_slots: HashMap<light_core::Universe, u16>,
@@ -174,6 +179,9 @@ pub(super) struct PersistedOutputRuntime {
     pub(super) dynamics_paused_at: Option<chrono::DateTime<chrono::Utc>>,
     pub(super) dynamic_playbacks: Vec<light_playback::ActiveDynamicPlayback>,
     pub(super) dynamic_runtime: Option<light_dynamics::DynamicRuntimeSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) dynamic_source_origins:
+        Option<super::dynamic_source_origins::DynamicSourceOriginsSnapshot>,
     pub(super) group_masters: HashMap<String, f32>,
 }
 
@@ -186,12 +194,52 @@ impl Default for PersistedOutputRuntime {
             dynamics_paused_at: None,
             dynamic_playbacks: Vec::new(),
             dynamic_runtime: None,
+            dynamic_source_origins: None,
             group_masters: HashMap::new(),
         }
     }
 }
 
 impl PersistedOutputRuntime {
+    pub(super) fn dynamic_source_checkpoint(
+        &self,
+    ) -> anyhow::Result<Option<super::dynamic_source_origins::DynamicRuntimeSourceCheckpoint>> {
+        match (&self.dynamic_runtime, &self.dynamic_source_origins) {
+            (Some(runtime), origins) => Ok(Some(
+                super::dynamic_source_origins::DynamicRuntimeSourceCheckpoint {
+                    runtime: runtime.clone(),
+                    origins: origins.clone(),
+                },
+            )),
+            (None, None) => Ok(None),
+            (None, Some(_)) => {
+                anyhow::bail!("stored Dynamic source origins have no matching runtime checkpoint")
+            }
+        }
+    }
+
+    pub(super) fn decode_for_support(
+        serialized: &str,
+        supported_contract: u16,
+    ) -> anyhow::Result<Self> {
+        let runtime: Self = serde_json::from_str(serialized)?;
+        runtime.validate_for_support(supported_contract)?;
+        Ok(runtime)
+    }
+
+    pub(super) fn validate_for_support(&self, supported_contract: u16) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.is_valid(),
+            "stored Output runtime contains invalid controls"
+        );
+        if let Some(checkpoint) = self.dynamic_source_checkpoint()? {
+            let (snapshot, _) = checkpoint.restore()?;
+            light_dynamics::DynamicRuntime::with_programming_contract_support(supported_contract)
+                .restore_snapshot(snapshot)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn is_valid(&self) -> bool {
         self.grand_master.is_finite()
             && (0.0..=1.0).contains(&self.grand_master)
@@ -208,13 +256,26 @@ impl PersistedOutputRuntime {
     }
 }
 impl OutputControl {
+    /// Retain exact DMX, routes, patched slots and visualization while any Hold owns output.
+    /// Semantic evaluation may continue; fade/blackout apply when the next frame is admitted.
+    pub(super) fn effective_hold(&self) -> bool {
+        self.hold || self.transitions.iter().any(|overlay| overlay.hold)
+    }
+
     pub(super) fn render_options(&self) -> RenderOptions {
+        let fade_gain: f32 = self
+            .transitions
+            .iter()
+            .filter_map(|overlay| overlay.fade_gain)
+            .product();
         RenderOptions {
-            grand_master: if self.grand_master_flash {
+            grand_master: (if self.grand_master_flash {
                 1.0
             } else {
                 self.options.grand_master
-            },
+            }) * fade_gain,
+            blackout: self.options.blackout
+                || self.transitions.iter().any(|overlay| overlay.blackout),
             ..self.options
         }
     }

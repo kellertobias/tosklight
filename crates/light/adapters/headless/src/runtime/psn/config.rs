@@ -11,9 +11,8 @@ pub(in crate::runtime) use light_application::{PsnBinding, PsnCalibration, PsnZo
 /// How far a stored 3D Point offset can reach along one axis, in metres.
 ///
 /// The same number the resolved value is read back with, so that writing a position and reading it
-/// produce the same metres. It lives beside the reader in `programmer_aim_command` and is
-/// re-exported rather than copied.
-pub(in crate::runtime) use super::super::programmer_aim_command::POINT_AXIS_METRES;
+/// produce the same metres. The engine Point-frame projection owns the shared encoding.
+pub(in crate::runtime) use light_engine::POINT_AXIS_METRES;
 
 #[cfg(test)]
 #[path = "config_tests.rs"]

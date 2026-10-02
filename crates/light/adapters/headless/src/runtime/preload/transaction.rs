@@ -5,37 +5,34 @@ pub(super) fn commit_preload_transaction(
     session: &Session,
     context: light_application::ActionContext,
 ) -> Result<CommittedPreload, String> {
-    let dynamic_runtime_changed = state
-        .programming
-        .get(session.id)
-        .is_some_and(|programmer| !programmer.preload_dynamic_pending.is_empty());
     let preparation::PreparedPreloadCommit {
         pending,
         committed_at,
         programmer_fade_millis,
         prepared_playback,
         staged_actions,
-        identities,
         before,
         context,
     } = preparation::prepare_preload_commit(state, session, context)?;
     let playback_runtime_changed = prepared_playback.effect().durable();
-    // The active-show coordinator excludes output ticks around this transaction. Publish the
-    // latest compiled Dynamic definitions before Programmer and Playback state become Live.
-    state.output.set_dynamic_definitions_pinned(false);
-    if let Err(error) = install_preload_commit(
+    // The outer Programmer transaction restores activation/queue on any preparation error.
+    // Final Dynamic owners and all fallible event projections are built before either Live swap.
+    let (changes, dynamic_runtime_changed) = install_preload_commit(
         state,
         session,
         pending,
         committed_at,
         programmer_fade_millis,
         prepared_playback,
-    ) {
-        state.output.set_dynamic_definitions_pinned(true);
-        return Err(error);
-    }
+        |snapshot, playback, runtime| {
+            let interval = 1_000_u64.div_ceil(u64::from(state.output.frame_rate_hz().max(1)));
+            let after = playback_service::prepared_runtime_projections(
+                snapshot, &before, playback, runtime, interval,
+            )?;
+            events::preload_change_events(&context, before, after, &staged_actions)
+        },
+    )?;
     if dynamic_runtime_changed {
-        state.output.reconcile_dynamic_runtime();
         state
             .events
             .publish(light_application::EventDraft::dynamic_runtime_changed(
@@ -52,8 +49,6 @@ pub(super) fn commit_preload_transaction(
                 },
             ));
     }
-    let changes =
-        events::preload_change_events(state, &context, &identities, before, &staged_actions)?;
     events::emit_exclusions(state, session, &changes);
     let executed_projection = executed_preload_projection(&staged_actions);
     let executed = executed_preload_actions(staged_actions, committed_at, programmer_fade_millis);
@@ -68,8 +63,7 @@ pub(super) fn commit_preload_transaction(
         programmer_fade_millis,
         executed,
         warnings,
-        events: changes.drafts,
-        runtime_projections: changes.projections,
+        runtime_changes: changes.changes,
         executed_projection,
     })
 }
@@ -79,8 +73,10 @@ pub(super) struct CommittedPreload {
     pub(super) programmer_fade_millis: u64,
     pub(super) executed: Vec<serde_json::Value>,
     pub(super) warnings: Vec<String>,
-    pub(super) events: Vec<light_application::EventDraft>,
-    pub(super) runtime_projections: Vec<light_application::PlaybackRuntimeProjection>,
+    pub(super) runtime_changes: Vec<(
+        light_application::EventDraft,
+        light_application::PlaybackRuntimeProjection,
+    )>,
     pub(super) executed_projection:
         Vec<light_application::ProgrammingPreloadExecutedPlaybackAction>,
 }
@@ -136,14 +132,19 @@ const fn application_queue_surface(
     }
 }
 
-fn install_preload_commit(
+fn install_preload_commit<T>(
     state: &AppState,
     session: &Session,
     pending: Vec<light_programmer::PreloadPlaybackAction>,
     committed_at: chrono::DateTime<chrono::Utc>,
     programmer_fade_millis: u64,
     prepared_playback: light_engine::PreparedPlaybackBatch,
-) -> Result<(), String> {
+    prepare: impl FnOnce(
+        &EngineSnapshot,
+        &light_playback::PlaybackEngine,
+        &light_dynamics::DynamicRuntimeSnapshot,
+    ) -> Result<T, String>,
+) -> Result<(T, bool), String> {
     state.programming.activate_preload_at_with_fade(
         session.id,
         committed_at,
@@ -155,7 +156,7 @@ fn install_preload_commit(
     }
     state
         .output
-        .install_prepared_playback_batch(prepared_playback)
+        .install_preload_playback_batch(prepared_playback, committed_at, prepare)
 }
 
 fn executed_preload_actions(

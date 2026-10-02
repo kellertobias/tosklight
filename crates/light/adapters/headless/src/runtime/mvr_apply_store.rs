@@ -1,328 +1,36 @@
 use super::*;
 
-type OccupiedPatch = (u16, u16, u16, String);
-
-fn occupied_patches(objects: &[light_show::VersionedObject]) -> Vec<OccupiedPatch> {
-    objects
-        .iter()
-        .filter_map(|object| {
-            serde_json::from_value::<light_fixture::PatchedFixture>(object.body.clone())
-                .ok()
-                .and_then(|fixture| {
-                    Some((
-                        fixture.universe?,
-                        fixture.address?,
-                        fixture.definition.footprint,
-                        object.id.clone(),
-                    ))
-                })
-        })
-        .collect()
-}
-
-fn mvr_fixture_ids(objects: &[light_show::VersionedObject]) -> HashMap<Uuid, String> {
-    objects
-        .iter()
-        .filter_map(|object| {
-            Uuid::parse_str(&object.id).ok().and_then(|uuid| {
-                object
-                    .body
-                    .get("fixture_id")?
-                    .as_str()
-                    .map(|id| (uuid, id.to_owned()))
-            })
-        })
-        .collect()
-}
-
-fn store_unresolved_mvr_fixture(
-    store: &ActiveShowRepository,
-    source: &light_mvr::MvrFixture,
-) -> Result<(), ApiError> {
-    let id = source.uuid.to_string();
-    let current = store
-        .objects("unresolved_mvr_fixture")
-        .map_err(ApiError::store)?
-        .into_iter()
-        .find(|object| object.id == id)
-        .map(|object| object.revision)
-        .unwrap_or(0);
-    store
-        .put_object(
-            "unresolved_mvr_fixture",
-            &id,
-            &serde_json::to_value(source)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?,
-            current,
-        )
-        .map_err(ApiError::store)?;
-    Ok(())
-}
-
-fn resolved_mvr_address(
-    store: &ActiveShowRepository,
-    source: &light_mvr::MvrFixture,
-    fixture_id: light_core::FixtureId,
-    definition: &light_fixture::FixtureDefinition,
-    resolution: Option<&MvrResolution>,
-    occupied: &mut Vec<OccupiedPatch>,
-    warnings: &mut Vec<String>,
-) -> Result<(Option<u16>, Option<u16>), ApiError> {
-    let (mut universe, mut address) = match resolution {
-        Some(MvrResolution::Address { universe, address }) => (Some(*universe), Some(*address)),
-        Some(MvrResolution::ImportUnpatched) => (None, None),
-        _ => (source.universe, source.address),
-    };
-    let Some((requested_universe, requested_address)) = universe.zip(address) else {
-        return Ok((universe, address));
-    };
-    let end = requested_address.saturating_add(definition.footprint.saturating_sub(1));
-    let conflict = occupied
-        .iter()
-        .find(|(other_universe, other_address, footprint, id)| {
-            *other_universe == requested_universe
-                && *id != fixture_id.0.to_string()
-                && *other_address <= end
-                && other_address.saturating_add(footprint.saturating_sub(1)) >= requested_address
-        })
-        .cloned();
-    if let Some((_, _, _, id)) = conflict {
-        if matches!(resolution, Some(MvrResolution::Replace)) {
-            store
-                .delete_object("patched_fixture", &id)
-                .map_err(ApiError::store)?;
-            occupied.retain(|item| item.3 != id);
-        } else {
-            universe = None;
-            address = None;
-            warnings.push(format!(
-                "{} imported unpatched because its requested address conflicts",
-                source.name
-            ));
-        }
-    }
-    Ok((universe, address))
-}
-
-fn patched_mvr_fixture(
-    source: &light_mvr::MvrFixture,
-    definition: &light_fixture::FixtureDefinition,
-    fixture_id: light_core::FixtureId,
-    address: (Option<u16>, Option<u16>),
-    layer_id: String,
-    existing: &[light_show::VersionedObject],
-    embedded: Option<&light_application::mvr_export::ToskLightMvrFixture>,
-) -> light_fixture::PatchedFixture {
-    // A matrix this desk wrote carries its bracket about its hinge; that comes back out here.
-    let (location, rotation) =
-        light_application::mvr_export::mvr_fixture_placement(source.matrix, embedded);
-    let existing_patch = existing
-        .iter()
-        .find(|object| object.id == fixture_id.0.to_string())
-        .and_then(|object| {
-            serde_json::from_value::<light_fixture::PatchedFixture>(object.body.clone()).ok()
-        });
-    let mut patched = embedded
-        .map(|embedded| embedded.fixture.clone())
-        .unwrap_or_else(|| light_fixture::PatchedFixture {
-            model_scale: None,
-            scenery_options: Default::default(),
-            scenery_size_metres: None,
-            fixture_id,
-            fixture_number: source
-                .fixture_id
-                .as_deref()
-                .and_then(|value| value.parse().ok()),
-            virtual_fixture_number: None,
-            name: source.name.clone(),
-            definition: definition.clone(),
-            universe: address.0,
-            address: address.1,
-            split_patches: Vec::new(),
-            layer_id: layer_id.clone(),
-            note: None,
-            position_master: None,
-            direct_control: None,
-            internal_bindings: Default::default(),
-            location,
-            rotation,
-            logical_heads: definition
-                .heads
-                .iter()
-                .filter(|head| !head.shared)
-                .map(|head| light_fixture::PatchedHead {
-                    profile_head_id: None,
-                    head_index: head.index,
-                    fixture_id: light_core::FixtureId::new(),
-                })
-                .collect(),
-            move_in_black_enabled: existing_patch
-                .as_ref()
-                .is_none_or(|fixture| fixture.move_in_black_enabled),
-            move_in_black_delay_millis: existing_patch
-                .as_ref()
-                .map_or(0, |fixture| fixture.move_in_black_delay_millis),
-            group_masters_enabled: existing_patch
-                .as_ref()
-                .is_none_or(|fixture| fixture.group_masters_enabled),
-            grand_master_enabled: existing_patch
-                .as_ref()
-                .is_none_or(|fixture| fixture.grand_master_enabled),
-            invert_pan: existing_patch
-                .as_ref()
-                .is_some_and(|fixture| fixture.invert_pan),
-            invert_tilt: existing_patch
-                .as_ref()
-                .is_some_and(|fixture| fixture.invert_tilt),
-            bracket_angle: existing_patch
-                .as_ref()
-                .map_or(0.0, |fixture| fixture.bracket_angle),
-            shaper_angle: existing_patch
-                .as_ref()
-                .and_then(|fixture| fixture.shaper_angle),
-            installed_appearance: Default::default(),
-            highlight_overrides: Default::default(),
-            freeze: existing_patch
-                .as_ref()
-                .map_or_else(Default::default, |fixture| fixture.freeze.clone()),
-            multipatch: Vec::new(),
-        });
-    patched.fixture_id = fixture_id;
-    patched.name = source.name.clone();
-    patched.definition = definition.clone();
-    patched.universe = address.0;
-    patched.address = address.1;
-    patched.layer_id = layer_id;
-    patched.location = location;
-    patched.rotation = rotation;
-    if let Some(existing_patch) = existing_patch {
-        patched.move_in_black_enabled = existing_patch.move_in_black_enabled;
-        patched.move_in_black_delay_millis = existing_patch.move_in_black_delay_millis;
-        patched.group_masters_enabled = existing_patch.group_masters_enabled;
-        patched.grand_master_enabled = existing_patch.grand_master_enabled;
-        patched.invert_pan = existing_patch.invert_pan;
-        patched.invert_tilt = existing_patch.invert_tilt;
-        patched.bracket_angle = existing_patch.bracket_angle;
-        patched.shaper_angle = existing_patch.shaper_angle;
-        patched.installed_appearance = existing_patch.installed_appearance;
-        patched.freeze = existing_patch.freeze;
-        patched.multipatch = existing_patch.multipatch;
-    }
-    patched
-}
-
-fn store_resolved_mvr_fixture(
-    store: &ActiveShowRepository,
-    source: &light_mvr::MvrFixture,
-    patched: &light_fixture::PatchedFixture,
-    existing: &[light_show::VersionedObject],
-    metadata: &[light_show::VersionedObject],
-) -> Result<String, ApiError> {
-    let id = patched.fixture_id.0.to_string();
-    let current = existing
-        .iter()
-        .find(|object| object.id == id)
-        .map(|object| object.revision)
-        .unwrap_or(0);
-    store
-        .put_object(
-            "patched_fixture",
-            &id,
-            &serde_json::to_value(patched)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?,
-            current,
-        )
-        .map_err(ApiError::store)?;
-    let meta_current = metadata
-        .iter()
-        .find(|object| object.id == source.uuid.to_string())
-        .map(|object| object.revision)
-        .unwrap_or(0);
-    store.put_object("mvr_fixture", &source.uuid.to_string(), &serde_json::json!({"fixture_id":id,"gdtf_spec":source.gdtf_spec,"gdtf_mode":source.gdtf_mode}), meta_current).map_err(ApiError::store)?;
-    Ok(id)
-}
-
 pub(super) fn apply_mvr_to_store(
     store: &ActiveShowRepository,
+    context: light_application::ActionContext,
     document: &light_mvr::MvrDocument,
-    definitions: &[light_fixture::FixtureDefinition],
+    definitions: &HashMap<Uuid, light_fixture::FixtureDefinition>,
     resolutions: &HashMap<Uuid, MvrResolution>,
 ) -> Result<(usize, usize, Vec<String>), ApiError> {
-    let existing_objects = store.objects("patched_fixture").map_err(ApiError::store)?;
-    let mut occupied = occupied_patches(&existing_objects);
-    let metadata = store.objects("mvr_fixture").map_err(ApiError::store)?;
-    let ids = mvr_fixture_ids(&metadata);
-    let embedded_fixtures = light_application::mvr_export::tosklight_mvr_fixture_metadata(document);
-    let mut layers = light_application::mvr_import::MvrLayerPlan::new(
+    let destination = store.portable_document().map_err(ApiError::store)?;
+    let planned = light_application::mvr_import::plan_mvr_document_import(
+        &destination,
+        context,
         document,
+        definitions,
+        &application_mvr_resolutions(resolutions.clone()),
+    )
+    .map_err(|error| ApiError::bad_request(error.message))?;
+    if !planned.transaction.is_empty() {
+        let candidate =
+            light_application::prepare_show_candidate(&destination, planned.transaction)
+                .map_err(|error| ApiError::bad_request(error.message))?;
+        let (transaction, snapshot) = candidate.into_parts();
+        snapshot
+            .validate()
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
         store
-            .objects("patch_layer")
-            .map_err(ApiError::store)?
-            .into_iter()
-            .map(|object| (object.id, object.body)),
-    );
-    let mut imported = 0;
-    let mut unresolved = 0;
-    let mut warnings = Vec::new();
-    for source in &document.fixtures {
-        if matches!(resolutions.get(&source.uuid), Some(MvrResolution::Skip)) {
-            continue;
-        }
-        let embedded = embedded_fixtures.get(&source.uuid);
-        let Some(definition) = embedded
-            .map(|embedded| embedded.fixture.definition.clone())
-            .or_else(|| resolve_mvr_definition(definitions, source))
-        else {
-            store_unresolved_mvr_fixture(store, source)?;
-            unresolved += 1;
-            warnings.push(format!(
-                "{} requires {} mode {}",
-                source.name, source.gdtf_spec, source.gdtf_mode
-            ));
-            continue;
-        };
-        let fixture_id = ids
-            .get(&source.uuid)
-            .and_then(|id| Uuid::parse_str(id).ok())
-            .map(light_core::FixtureId)
-            .or_else(|| embedded.map(|embedded| embedded.fixture.fixture_id))
-            .unwrap_or_default();
-        let address = resolved_mvr_address(
-            store,
-            source,
-            fixture_id,
-            &definition,
-            resolutions.get(&source.uuid),
-            &mut occupied,
-            &mut warnings,
-        )?;
-        let patched = patched_mvr_fixture(
-            source,
-            &definition,
-            fixture_id,
-            address,
-            layers.layer_for(source.layer.as_deref()),
-            &existing_objects,
-            embedded,
-        );
-        let id = store_resolved_mvr_fixture(store, source, &patched, &existing_objects, &metadata)?;
-        let (universe, address) = address;
-        if let (Some(u), Some(a)) = (universe, address) {
-            occupied.push((u, a, definition.footprint, id));
-        }
-        imported += 1;
-    }
-    // Only layers an imported fixture landed on are created.
-    for (id, body) in layers.created() {
-        store
-            .put_object("patch_layer", id, body, 0)
+            .apply_portable_transaction(transaction)
             .map_err(ApiError::store)?;
     }
-    if !document.geometry.is_empty() {
-        warnings.push(
-            "MVR scene geometry was not imported. Add scenery from the Venue fixture library in Show Patch."
-                .into(),
-        );
-    }
-    Ok((imported, unresolved, warnings))
+    Ok((
+        planned.imported_fixtures,
+        planned.unresolved_fixtures,
+        planned.warnings,
+    ))
 }
