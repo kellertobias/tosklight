@@ -5,6 +5,9 @@ use crate::programming::expression_family::{
     GraphOperationKind, GraphOperationOperand, GraphOperationPlanCallback, GraphOperationProgress,
     GraphOperationReachedCallback, GraphOperationSelection, GraphReachedAction,
 };
+use forest_compile::PositionForestCompilation;
+
+mod forest_compile;
 
 #[derive(Clone)]
 pub(crate) enum PositionForestNode {
@@ -57,183 +60,19 @@ impl CompiledCoupledExpression {
         forest_root: usize,
     ) -> Result<Self, TransitionError> {
         validate_forest_shape(forest, forest_root)?;
-        let mut nodes = vec![Node::Underlay];
-        let mut position_node_origins = vec![None];
-        let mut leaf_sources: Vec<Arc<[CoupledComponentEndpoint]>> = vec![Arc::from([])];
-        let mut mapped = Vec::with_capacity(forest.len());
-        let mut wholes = Vec::new();
-        let mut cohort_members = Vec::new();
+        let mut compilation = PositionForestCompilation::new(forest.len());
         for (forest_node, branch) in forest.iter().enumerate() {
-            let root = match branch {
-                PositionForestNode::AnglePair(pair) => {
-                    pair.validate()?;
-                    let root = nodes.len();
-                    nodes.push(Node::AnglePair(pair.clone()));
-                    position_node_origins
-                        .push(Some(PositionCompiledNodeLocation::Forest(forest_node)));
-                    leaf_sources.push(Arc::from([]));
-                    root
-                }
-                PositionForestNode::Whole {
-                    expression,
-                    lane_id,
-                    sources,
-                } => {
-                    let tape = Arc::new(RetainedExpressionTape::from_roots(std::slice::from_ref(
-                        expression,
-                    ))?);
-                    let root = tape.roots[0];
-                    let mut owner = None;
-                    preflight(&tape, root, &mut owner)?;
-                    if owner != Some(ProgrammingOwner::Position) {
-                        return Err(TransitionError::Requires(
-                            TransitionRequirement::CompatibleOwners,
-                        ));
-                    }
-                    let (imported, imported_root, original_map, imported_origins) =
-                        compile(&tape, root, None, &mut Vec::new())?;
-                    let offset = nodes.len() - 1;
-                    let remap = |id: usize| if id == 0 { 0 } else { id + offset };
-                    wholes.push(PositionForestWholeLineage {
-                        forest_node,
-                        lane_id: *lane_id,
-                        tape: Arc::clone(&tape),
-                        tape_to_compiled: original_map
-                            .into_iter()
-                            .map(|id| id.map(remap))
-                            .collect::<Vec<_>>()
-                            .into(),
-                    });
-                    for (mut node, origin) in imported.into_iter().zip(imported_origins).skip(1) {
-                        match &mut node {
-                            Node::Transition { from, to, .. } => {
-                                *from = remap(*from);
-                                *to = remap(*to);
-                            }
-                            Node::Scale { value, .. } => *value = remap(*value),
-                            _ => {}
-                        }
-                        let provenance: Arc<[CoupledComponentEndpoint]> = match &node {
-                            Node::Leaf {
-                                address,
-                                value,
-                                role,
-                                occurrence,
-                                dependency_occurrence,
-                            } => {
-                                if sources.is_empty() {
-                                    Arc::from([CoupledComponentEndpoint {
-                                        lane_id: *lane_id,
-                                        address: address.clone(),
-                                        value: value.clone(),
-                                        role: *role,
-                                        occurrence: *occurrence,
-                                        dependency_occurrence: dependency_occurrence.clone(),
-                                    }])
-                                } else {
-                                    sources.clone()
-                                }
-                            }
-                            // A Size baseline is a calculation dependency, never an authored
-                            // whole-family replacement. Its ID travels on the Scale node.
-                            _ => Arc::from([]),
-                        };
-                        nodes.push(node);
-                        position_node_origins.push(origin.map(|node| {
-                            PositionCompiledNodeLocation::WholeTape(forest_node, node)
-                        }));
-                        leaf_sources.push(provenance);
-                    }
-                    remap(imported_root)
-                }
-                PositionForestNode::Cohort(components) => {
-                    validate_cohort(components)?;
-                    cohort_members.extend(components.iter().enumerate().map(
-                        |(member_index, member)| PositionForestCohortMemberLineage {
-                            forest_node,
-                            member_index,
-                            lane_id: member.lane_id,
-                            whole_tape: None,
-                        },
-                    ));
-                    let root = nodes.len();
-                    nodes.push(Node::Cohort(CoupledBaseEndpoint::Components(
-                        components.clone(),
-                    )));
-                    position_node_origins
-                        .push(Some(PositionCompiledNodeLocation::Forest(forest_node)));
-                    leaf_sources.push(components.clone());
-                    root
-                }
-                PositionForestNode::SourceCohort(sources) => {
-                    if sources.is_empty() {
-                        return Err(IntentError("Position source cohort is empty".into()).into());
-                    }
-                    for (member_index, source) in sources.iter().enumerate() {
-                        let whole_tape = match source {
-                            CoupledCohortEndpoint::Materialized(source) => {
-                                if source.address.address().owner() != ProgrammingOwner::Position {
-                                    return Err(TransitionError::Requires(
-                                        TransitionRequirement::CompatibleOwners,
-                                    ));
-                                }
-                                source.address.validate_source_value(&source.value)?;
-                                None
-                            }
-                            CoupledCohortEndpoint::WholeExpression { expression, .. } => {
-                                if expression.owner() != ProgrammingOwner::Position {
-                                    return Err(TransitionError::Requires(
-                                        TransitionRequirement::CompatibleOwners,
-                                    ));
-                                }
-                                Some(Arc::new(RetainedExpressionTape::from_roots(&[Arc::new(
-                                    expression.expression().clone(),
-                                )])?))
-                            }
-                        };
-                        cohort_members.push(PositionForestCohortMemberLineage {
-                            forest_node,
-                            member_index,
-                            lane_id: source.lane_id(),
-                            whole_tape,
-                        });
-                    }
-                    let root = nodes.len();
-                    nodes.push(Node::Cohort(CoupledBaseEndpoint::Sources(sources.clone())));
-                    position_node_origins
-                        .push(Some(PositionCompiledNodeLocation::Forest(forest_node)));
-                    leaf_sources.push(Arc::from([]));
-                    root
-                }
-                PositionForestNode::Transition {
-                    from,
-                    to,
-                    progress,
-                    reason,
-                } => {
-                    let from = from.map_or(0, |id| mapped[id]);
-                    let to = to.map_or(0, |id| mapped[id]);
-                    if *progress == 0.0 {
-                        from
-                    } else if *progress == 1.0 {
-                        to
-                    } else {
-                        let root = nodes.len();
-                        nodes.push(Node::Transition {
-                            from,
-                            to,
-                            progress: *progress,
-                            reason: *reason,
-                        });
-                        position_node_origins
-                            .push(Some(PositionCompiledNodeLocation::Forest(forest_node)));
-                        leaf_sources.push(Arc::from([]));
-                        root
-                    }
-                }
-            };
-            mapped.push(root);
+            let root = compilation.compile_node(forest_node, branch)?;
+            compilation.mapped.push(root);
         }
+        let PositionForestCompilation {
+            nodes,
+            position_node_origins,
+            leaf_sources,
+            mapped,
+            wholes,
+            cohort_members,
+        } = compilation;
         let root = *mapped
             .get(forest_root)
             .ok_or_else(|| IntentError("Position forest has no root".into()))?;

@@ -11,8 +11,10 @@ use super::*;
 use crate::runtime::output_scheduler::physical_adapters::{
     color::{
         profiles::{patched, rgbw, rgbwauv},
-        tests::{magenta, program, uv_only_black},
-        tests_direct::{catalogue, direct},
+        tests::{
+            direct::{catalogue, direct},
+            magenta, program, uv_only_black,
+        },
     },
     media_color::tests::{media_fixture, shipped_media_server},
     optics::{

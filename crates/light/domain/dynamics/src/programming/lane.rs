@@ -368,23 +368,7 @@ impl CompiledProgrammingLane {
             "Dynamic Size must be finite and nonnegative",
         )?;
         let position = self.evaluation_position(context);
-        let needs_current = controller_size != 1.
-            || match &self.configuration {
-                Configuration::Keyframes(c) => {
-                    let (index, _) = keyframe_segment(&c.points, position);
-                    c.points[index].source.is_current()
-                        || c.points
-                            .get(index + 1)
-                            .unwrap_or(&c.points[0])
-                            .source
-                            .is_current()
-                        || (c.size != 1. && c.points[0].source.is_current())
-                }
-                Configuration::MaxMin(c) => c.minimum.is_current() || c.maximum.is_current(),
-                Configuration::MiddleAmplitude(c) => c.middle.is_current(),
-                Configuration::Random { low, high } => low.is_current() || high.is_current(),
-            };
-        if !needs_current {
+        if !self.angle_numeric_needs_current(position, controller_size) {
             return Ok(AngleNumericSample::NotApplicable);
         }
         let Some(original) = context
@@ -402,82 +386,14 @@ impl CompiledProgrammingLane {
         )?;
         let mut build = AngleNumericBuilder::default();
         let mut operations = AngleNumericOperationOrigins::default();
-        let mut root = match &self.configuration {
-            Configuration::Keyframes(c) => {
-                let (index, progress) = keyframe_segment(&c.points, position);
-                let left = &c.points[index];
-                let right = c.points.get(index + 1).unwrap_or(&c.points[0]);
-                let (Some(from), Some(to)) = (
-                    build.source(&left.source, context),
-                    build.source(&right.source, context),
-                ) else {
-                    return Ok(AngleNumericSample::Absent);
-                };
-                let value = build.push(AngleNumericNode::Transition { from, to, progress });
-                if let Some(operation) = operation {
-                    operations.0[0] = Some((
-                        value,
-                        operation.origin(DynamicOperationSite::KeyframeTransition {
-                            segment_index: index as u32,
-                        }),
-                    ));
-                }
-                if c.size == 1. {
-                    value
-                } else {
-                    let Some(pivot) = build.source(&c.points[0].source, context) else {
-                        return Ok(AngleNumericSample::Absent);
-                    };
-                    build.push(AngleNumericNode::ScaleFrom {
-                        pivot,
-                        value,
-                        factor: c.size,
-                    })
-                }
-            }
-            Configuration::MaxMin(c) => {
-                let (Some(low), Some(high)) = (
-                    build.source(&c.minimum, context),
-                    build.source(&c.maximum, context),
-                ) else {
-                    return Ok(AngleNumericSample::Absent);
-                };
-                build.push(AngleNumericNode::WaveBetween {
-                    low,
-                    high,
-                    amount: crate::evaluate::periodic(c.function, position, c.pwm),
-                    size: c.size,
-                })
-            }
-            Configuration::MiddleAmplitude(c) => {
-                let Some(middle) = build.source(&c.middle, context) else {
-                    return Ok(AngleNumericSample::Absent);
-                };
-                let amount =
-                    (f64::from(crate::evaluate::periodic(c.function, position, c.pwm)) * 2. - 1.)
-                        * f64::from(c.size);
-                build.push(AngleNumericNode::Around {
-                    middle,
-                    amplitude: c.amplitude.clone(),
-                    amount: if c.invert_waveform { -amount } else { amount },
-                })
-            }
-            Configuration::Random { low, high } => {
-                let Some(amount) = context.random_envelope else {
-                    return Ok(AngleNumericSample::Absent);
-                };
-                let (Some(low), Some(high)) =
-                    (build.source(low, context), build.source(high, context))
-                else {
-                    return Ok(AngleNumericSample::Absent);
-                };
-                build.push(AngleNumericNode::WaveBetween {
-                    low,
-                    high,
-                    amount: amount.clamp(0., 1.),
-                    size: 1.,
-                })
-            }
+        let Some(mut root) = self.build_angle_numeric_root(
+            context,
+            position,
+            operation,
+            &mut build,
+            &mut operations,
+        ) else {
+            return Ok(AngleNumericSample::Absent);
         };
         if controller_size != 1. {
             let pivot = build.current();
@@ -504,6 +420,115 @@ impl CompiledProgrammingLane {
         };
         program.validate()?;
         Ok(AngleNumericSample::Program(Arc::new(program)))
+    }
+
+    /// Whether numeric Angle arithmetic must read the adopted Position Current at `position`.
+    fn angle_numeric_needs_current(&self, position: f32, controller_size: f32) -> bool {
+        controller_size != 1.
+            || match &self.configuration {
+                Configuration::Keyframes(c) => {
+                    let (index, _) = keyframe_segment(&c.points, position);
+                    c.points[index].source.is_current()
+                        || c.points
+                            .get(index + 1)
+                            .unwrap_or(&c.points[0])
+                            .source
+                            .is_current()
+                        || (c.size != 1. && c.points[0].source.is_current())
+                }
+                Configuration::MaxMin(c) => c.minimum.is_current() || c.maximum.is_current(),
+                Configuration::MiddleAmplitude(c) => c.middle.is_current(),
+                Configuration::Random { low, high } => low.is_current() || high.is_current(),
+            }
+    }
+
+    /// Build the configuration's numeric Angle root, or `None` when a source is absent. The
+    /// keyframe transition receives the emission origin in `operations` slot 0.
+    fn build_angle_numeric_root(
+        &self,
+        context: &ProgrammingEvaluationContext<'_>,
+        position: f32,
+        operation: Option<DynamicOperationContext<'_>>,
+        build: &mut AngleNumericBuilder,
+        operations: &mut AngleNumericOperationOrigins,
+    ) -> Option<u32> {
+        Some(match &self.configuration {
+            Configuration::Keyframes(c) => {
+                let (index, progress) = keyframe_segment(&c.points, position);
+                let left = &c.points[index];
+                let right = c.points.get(index + 1).unwrap_or(&c.points[0]);
+                let (Some(from), Some(to)) = (
+                    build.source(&left.source, context),
+                    build.source(&right.source, context),
+                ) else {
+                    return None;
+                };
+                let value = build.push(AngleNumericNode::Transition { from, to, progress });
+                if let Some(operation) = operation {
+                    operations.0[0] = Some((
+                        value,
+                        operation.origin(DynamicOperationSite::KeyframeTransition {
+                            segment_index: index as u32,
+                        }),
+                    ));
+                }
+                if c.size == 1. {
+                    value
+                } else {
+                    let Some(pivot) = build.source(&c.points[0].source, context) else {
+                        return None;
+                    };
+                    build.push(AngleNumericNode::ScaleFrom {
+                        pivot,
+                        value,
+                        factor: c.size,
+                    })
+                }
+            }
+            Configuration::MaxMin(c) => {
+                let (Some(low), Some(high)) = (
+                    build.source(&c.minimum, context),
+                    build.source(&c.maximum, context),
+                ) else {
+                    return None;
+                };
+                build.push(AngleNumericNode::WaveBetween {
+                    low,
+                    high,
+                    amount: crate::evaluate::periodic(c.function, position, c.pwm),
+                    size: c.size,
+                })
+            }
+            Configuration::MiddleAmplitude(c) => {
+                let Some(middle) = build.source(&c.middle, context) else {
+                    return None;
+                };
+                let amount =
+                    (f64::from(crate::evaluate::periodic(c.function, position, c.pwm)) * 2. - 1.)
+                        * f64::from(c.size);
+                build.push(AngleNumericNode::Around {
+                    middle,
+                    amplitude: c.amplitude.clone(),
+                    amount: if c.invert_waveform { -amount } else { amount },
+                })
+            }
+            Configuration::Random { low, high } => {
+                let Some(amount) = context.random_envelope else {
+                    return None;
+                };
+                let (Some(low), Some(high)) =
+                    (build.source(low, context), build.source(high, context))
+                else {
+                    return None;
+                };
+                build.push(AngleNumericNode::WaveBetween {
+                    low,
+                    high,
+                    amount: amount.clamp(0., 1.),
+                    size: 1.,
+                })
+            }
+        })
     }
 
     pub fn sample(

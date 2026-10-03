@@ -30,6 +30,113 @@ fn same_authority(
     }
 }
 
+/// Instance links of every retained Programmer row, captured under the activation authority.
+fn retained_programmer_links(
+    authority: &Option<ActiveDynamicSessionSource>,
+) -> Vec<(light_core::ProgrammerId, Uuid)> {
+    authority
+        .as_ref()
+        .into_iter()
+        .flat_map(|(owner, _, normal, active)| {
+            normal.iter().chain(active.iter()).filter_map(move |row| {
+                row.value
+                    .track_key()
+                    .instance_link
+                    .map(|link| (light_core::ProgrammerId(*owner), link))
+            })
+        })
+        .collect::<Vec<_>>()
+}
+
+/// Rebinds restored Playback controllers to their finalized destination owner and priority.
+fn rebind_restored_playback_controllers(
+    engine: &light_engine::FinalizedEngineSnapshot,
+    snapshot: &EngineSnapshot,
+    checkpoint: &mut DynamicRuntimeSourceCheckpoint,
+) -> Result<(), IntentError> {
+    let playback_owners = engine
+        .dynamic_playbacks()
+        .iter()
+        .map(|active| {
+            let target = active
+                .dynamic_id
+                .expect("finalized restored Dynamic Playback has a stable target identity");
+            // Use the assignment selected by destination restoration, including
+            // the virtual page; another assignment of the same target may differ.
+            let playback = match active.playback_identity {
+                Some(light_playback::PlaybackIdentity::Virtual(address)) => snapshot
+                    .playback_pages
+                    .iter()
+                    .find(|page| page.number == address.page())
+                    .and_then(|page| page.virtual_playbacks.get(&address.number().get())),
+                _ => snapshot
+                    .playbacks
+                    .iter()
+                    .find(|playback| playback.number == active.playback_number),
+            }
+            .ok_or_else(|| {
+                IntentError("finalized Dynamic Playback assignment is missing".into())
+            })?;
+            let light_playback::PlaybackTarget::Dynamic { assignment } = &playback.target else {
+                return Err(IntentError(
+                    "finalized Playback assignment is not Dynamic".into(),
+                ));
+            };
+            Ok((
+                light_playback::dynamic_playback_controller_id(target),
+                (
+                    output_scheduler::dynamic_playback_owner(active),
+                    assignment.priority,
+                ),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, IntentError>>()?;
+    for controller in checkpoint
+        .runtime
+        .instances
+        .iter_mut()
+        .flat_map(|instance| &mut instance.controllers)
+    {
+        if matches!(
+            controller.source,
+            light_dynamics::DynamicControllerSource::Playback { .. }
+        ) {
+            if let Some((owner, priority)) = playback_owners.get(&controller.id) {
+                controller.source = owner.clone();
+                controller.priority = *priority;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Drops authored source-origin bindings whose instance controller did not survive restore.
+fn retain_active_origin_bindings(restored: &mut output_scheduler::RestoredDynamicCandidate) {
+    let projection = restored.runtime.output_projection_snapshot();
+    let active = projection
+        .instances
+        .iter()
+        .flat_map(|instance| {
+            instance
+                .controllers
+                .iter()
+                .map(move |controller| (instance.id, controller.id))
+        })
+        .collect::<std::collections::HashSet<_>>();
+    restored
+        .origins
+        .retain_bindings(|record| match record.binding {
+            DynamicSourceBinding::Authored {
+                instance_id,
+                controller_id,
+                ..
+            } => active.contains(&(instance_id, controller_id)),
+            DynamicSourceBinding::Fixed { .. } | DynamicSourceBinding::StaticBaseline { .. } => {
+                true
+            }
+        });
+}
+
 impl OutputResource {
     /// Normalize and prepare a raw checkpoint against finalized
     /// destination Playback owners. Release policy and saved-row normalization happen before
@@ -77,18 +184,7 @@ impl OutputResource {
                 }
                 // Normalization must use this same authority capture. An earlier missing link
                 // followed by Undo could otherwise discard a legacy owner's held/Random history.
-                let links = authority
-                    .as_ref()
-                    .into_iter()
-                    .flat_map(|(owner, _, normal, active)| {
-                        normal.iter().chain(active.iter()).filter_map(move |row| {
-                            row.value
-                                .track_key()
-                                .instance_link
-                                .map(|link| (light_core::ProgrammerId(*owner), link))
-                        })
-                    })
-                    .collect::<Vec<_>>();
+                let links = retained_programmer_links(&authority);
                 light_dynamics::normalize_legacy_programmer_controller_ids(
                     &mut checkpoint.runtime,
                     &links,
@@ -112,63 +208,7 @@ impl OutputResource {
                 // and supplies its stable target ID. Existing controllers survive by that ID;
                 // their operational address and priority follow the finalized owner before restore.
                 // Historical source-origin records remain the original immutable evidence.
-                let playback_owners = engine
-                    .dynamic_playbacks()
-                    .iter()
-                    .map(|active| {
-                        let target = active.dynamic_id.expect(
-                            "finalized restored Dynamic Playback has a stable target identity",
-                        );
-                        // Use the assignment selected by destination restoration, including
-                        // the virtual page; another assignment of the same target may differ.
-                        let playback = match active.playback_identity {
-                            Some(light_playback::PlaybackIdentity::Virtual(address)) => snapshot
-                                .playback_pages
-                                .iter()
-                                .find(|page| page.number == address.page())
-                                .and_then(|page| {
-                                    page.virtual_playbacks.get(&address.number().get())
-                                }),
-                            _ => snapshot
-                                .playbacks
-                                .iter()
-                                .find(|playback| playback.number == active.playback_number),
-                        }
-                        .ok_or_else(|| {
-                            IntentError("finalized Dynamic Playback assignment is missing".into())
-                        })?;
-                        let light_playback::PlaybackTarget::Dynamic { assignment } =
-                            &playback.target
-                        else {
-                            return Err(IntentError(
-                                "finalized Playback assignment is not Dynamic".into(),
-                            ));
-                        };
-                        Ok((
-                            light_playback::dynamic_playback_controller_id(target),
-                            (
-                                output_scheduler::dynamic_playback_owner(active),
-                                assignment.priority,
-                            ),
-                        ))
-                    })
-                    .collect::<Result<HashMap<_, _>, IntentError>>()?;
-                for controller in checkpoint
-                    .runtime
-                    .instances
-                    .iter_mut()
-                    .flat_map(|instance| &mut instance.controllers)
-                {
-                    if matches!(
-                        controller.source,
-                        light_dynamics::DynamicControllerSource::Playback { .. }
-                    ) {
-                        if let Some((owner, priority)) = playback_owners.get(&controller.id) {
-                            controller.source = owner.clone();
-                            controller.priority = *priority;
-                        }
-                    }
-                }
+                rebind_restored_playback_controllers(&engine, &snapshot, &mut checkpoint)?;
                 let mut restored = output_scheduler::prepare_restored_dynamic_candidate(
                     &snapshot,
                     &self.dynamics.lock(),
@@ -200,28 +240,7 @@ impl OutputResource {
                     &mut restored.runtime,
                 )
                 .map_err(|error| IntentError(error.to_string()))?;
-                let projection = restored.runtime.output_projection_snapshot();
-                let active = projection
-                    .instances
-                    .iter()
-                    .flat_map(|instance| {
-                        instance
-                            .controllers
-                            .iter()
-                            .map(move |controller| (instance.id, controller.id))
-                    })
-                    .collect::<std::collections::HashSet<_>>();
-                restored
-                    .origins
-                    .retain_bindings(|record| match record.binding {
-                        DynamicSourceBinding::Authored {
-                            instance_id,
-                            controller_id,
-                            ..
-                        } => active.contains(&(instance_id, controller_id)),
-                        DynamicSourceBinding::Fixed { .. }
-                        | DynamicSourceBinding::StaticBaseline { .. } => true,
-                    });
+                retain_active_origin_bindings(&mut restored);
                 Ok(PreparedOutputActivation {
                     owner: self.engine.clone(),
                     publication: self.dynamic_snapshot.clone(),

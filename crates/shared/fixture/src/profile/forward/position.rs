@@ -1,6 +1,7 @@
 use crate::{
-    AngularMotionKind, CompiledPhysicalMapping, EffectiveAxisCalibration, FixtureProfile,
-    GeometryBracket, GeometryMotionKind, InstalledPositionCalibration, PhysicalDataQuality,
+    AngularMotionKind, CompiledPhysicalMapping, EffectiveAxisCalibration, FixtureMode,
+    FixtureProfile, GeometryBracket, GeometryGraph, GeometryMotion, GeometryMotionKind,
+    GeometryNode, InstalledPositionCalibration, MotionFunctionBinding, PhysicalDataQuality,
     PositionAxisRole, PositionCalibrationContext, ProfileError, Vector3,
 };
 use light_core::spatial::RigidTransform as R;
@@ -139,6 +140,170 @@ fn metres(v: Vector3) -> [f64; 3] {
     vector(v).map(|v| v / 1000.)
 }
 
+/// Order every physical ancestor of emitters and moving nodes parent-first.
+fn physical_ancestry(
+    graph: &GeometryGraph,
+) -> Result<(HashMap<Uuid, usize>, Vec<&GeometryNode>), ProfileError> {
+    let source_nodes: HashMap<_, _> = graph.nodes.iter().map(|n| (n.id, n)).collect();
+    // Include every physical ancestor, independent of GLB artwork. Decorative scaled nodes
+    // outside physical ancestry belong to the renderer's static model, not this rigid model.
+    let mut needed = HashSet::new();
+    for start in graph.emitters.iter().map(|e| e.node_id).chain(
+        graph
+            .nodes
+            .iter()
+            .filter(|n| n.motion.is_some())
+            .map(|n| n.id),
+    ) {
+        let mut cursor = Some(start);
+        let mut seen = HashSet::new();
+        while let Some(id) = cursor {
+            if !seen.insert(id) {
+                return Err(invalid("cyclic ancestry"));
+            }
+            needed.insert(id);
+            cursor = source_nodes
+                .get(&id)
+                .ok_or_else(|| invalid("missing ancestor"))?
+                .parent_id;
+        }
+    }
+    let mut indices = HashMap::new();
+    let mut order = Vec::new();
+    while order.len() < needed.len() {
+        let before = order.len();
+        for n in &graph.nodes {
+            if needed.contains(&n.id)
+                && !indices.contains_key(&n.id)
+                && n.parent_id.is_none_or(|id| indices.contains_key(&id))
+            {
+                indices.insert(n.id, order.len());
+                order.push(n);
+            }
+        }
+        if order.len() == before {
+            return Err(invalid("unresolved ancestry"));
+        }
+    }
+    Ok((indices, order))
+}
+
+/// Compile the native drivers of one moving node with their effective motion limits.
+fn compile_drivers(
+    mode: &FixtureMode,
+    bindings: &[MotionFunctionBinding],
+    channel_indices: &HashMap<Uuid, usize>,
+    node_id: Uuid,
+    motion: &GeometryMotion,
+) -> Result<Box<[Driver]>, ProfileError> {
+    bindings
+        .iter()
+        .filter(|b| b.node_id == node_id)
+        .map(|binding| {
+            let channel = channel_indices[&binding.channel_id];
+            let c = &mode.channels[channel];
+            let f = c
+                .functions
+                .iter()
+                .find(|f| f.id == binding.function_id)
+                .unwrap();
+            let a = f.angular_motion.unwrap();
+            if [
+                a.max_speed_degrees_per_second,
+                a.acceleration_degrees_per_second_squared,
+                a.deceleration_degrees_per_second_squared,
+                motion.max_speed_per_second,
+                motion.acceleration_per_second_squared,
+                motion.deceleration_per_second_squared,
+            ]
+            .into_iter()
+            .flatten()
+            .any(|v| !v.is_finite() || v <= 0.)
+            {
+                return Err(invalid("motion limits must be finite and positive"));
+            }
+            Ok(Driver {
+                channel,
+                from: f.dmx_from,
+                to: f.dmx_to,
+                mapping: CompiledPhysicalMapping::compile(c, f)?.unwrap(),
+                velocity: a.kind == AngularMotionKind::AngularVelocity,
+                limits: ForwardMotionLimits {
+                    speed: a
+                        .max_speed_degrees_per_second
+                        .or(motion.max_speed_per_second)
+                        .map(f64::from),
+                    acceleration: a
+                        .acceleration_degrees_per_second_squared
+                        .or(motion.acceleration_per_second_squared)
+                        .map(f64::from),
+                    deceleration: a
+                        .deceleration_degrees_per_second_squared
+                        .or(motion.deceleration_per_second_squared)
+                        .map(f64::from),
+                },
+            })
+        })
+        .collect::<Result<Box<[_]>, ProfileError>>()
+}
+
+fn compile_lenses(graph: &GeometryGraph, indices: &HashMap<Uuid, usize>) -> Box<[Lens]> {
+    graph
+        .emitters
+        .iter()
+        .map(|e| Lens {
+            id: e.id,
+            head: e.head_id,
+            node: indices[&e.node_id],
+            local: R::translation(metres(e.origin))
+                .unwrap()
+                .compose(R::euler_xyz(vector(e.orientation_degrees)).unwrap()),
+        })
+        .collect()
+}
+
+/// A node's neutral and bracket-adjusted transforms around its pivot.
+struct NodeTransforms {
+    neutral_rotation: R,
+    neutral_before: R,
+    before: R,
+    after: R,
+}
+
+fn node_transforms(
+    n: &GeometryNode,
+    bracket: &GeometryBracket,
+    bracket_degrees: f64,
+) -> NodeTransforms {
+    let neutral_rotation = R::euler_xyz(vector(n.transform.rotation_degrees)).unwrap();
+    let neutral_before = R::translation(metres(n.transform.translation))
+        .unwrap()
+        .compose(R::translation(metres(n.pivot)).unwrap())
+        .compose(neutral_rotation);
+    let mut before = neutral_before;
+    if let GeometryBracket::Hinge {
+        node_id,
+        pivot,
+        axis,
+    } = *bracket
+        && node_id == n.id
+    {
+        before = R::about_pivot(
+            R::axis_angle(vector(axis), bracket_degrees).unwrap(),
+            metres(pivot),
+        )
+        .unwrap()
+        .compose(before);
+    }
+    let after = R::translation(metres(n.pivot).map(|v| -v)).unwrap();
+    NodeTransforms {
+        neutral_rotation,
+        neutral_before,
+        before,
+        after,
+    }
+}
+
 impl CompiledPositionForward {
     /// All profile identities, ancestry and calibration are compiled on configuration changes.
     /// None asks the caller to retain an explicitly nominal legacy representation.
@@ -179,47 +344,7 @@ impl CompiledPositionForward {
         {
             flags.0 |= PositionForwardFlags::UNSUPPORTED_BRACKET.0;
         }
-        let source_nodes: HashMap<_, _> = graph.nodes.iter().map(|n| (n.id, n)).collect();
-        // Include every physical ancestor, independent of GLB artwork. Decorative scaled nodes
-        // outside physical ancestry belong to the renderer's static model, not this rigid model.
-        let mut needed = HashSet::new();
-        for start in graph.emitters.iter().map(|e| e.node_id).chain(
-            graph
-                .nodes
-                .iter()
-                .filter(|n| n.motion.is_some())
-                .map(|n| n.id),
-        ) {
-            let mut cursor = Some(start);
-            let mut seen = HashSet::new();
-            while let Some(id) = cursor {
-                if !seen.insert(id) {
-                    return Err(invalid("cyclic ancestry"));
-                }
-                needed.insert(id);
-                cursor = source_nodes
-                    .get(&id)
-                    .ok_or_else(|| invalid("missing ancestor"))?
-                    .parent_id;
-            }
-        }
-        let mut indices = HashMap::new();
-        let mut order = Vec::new();
-        while order.len() < needed.len() {
-            let before = order.len();
-            for n in &graph.nodes {
-                if needed.contains(&n.id)
-                    && !indices.contains_key(&n.id)
-                    && n.parent_id.is_none_or(|id| indices.contains_key(&id))
-                {
-                    indices.insert(n.id, order.len());
-                    order.push(n);
-                }
-            }
-            if order.len() == before {
-                return Err(invalid("unresolved ancestry"));
-            }
-        }
+        let (indices, order) = physical_ancestry(&graph)?;
         let channel_indices: HashMap<_, _> = mode
             .channels
             .iter()
@@ -234,27 +359,12 @@ impl CompiledPositionForward {
         let mut nodes: Vec<Node> = Vec::new();
         for n in order {
             let parent = n.parent_id.map(|id| indices[&id]);
-            let neutral_rotation = R::euler_xyz(vector(n.transform.rotation_degrees)).unwrap();
-            let neutral_before = R::translation(metres(n.transform.translation))
-                .unwrap()
-                .compose(R::translation(metres(n.pivot)).unwrap())
-                .compose(neutral_rotation);
-            let mut before = neutral_before;
-            if let GeometryBracket::Hinge {
-                node_id,
-                pivot,
-                axis,
-            } = contract.bracket
-                && node_id == n.id
-            {
-                before = R::about_pivot(
-                    R::axis_angle(vector(axis), installed.bracket_degrees).unwrap(),
-                    metres(pivot),
-                )
-                .unwrap()
-                .compose(before);
-            }
-            let after = R::translation(metres(n.pivot).map(|v| -v)).unwrap();
+            let NodeTransforms {
+                neutral_rotation,
+                neutral_before,
+                before,
+                after,
+            } = node_transforms(n, &contract.bracket, installed.bracket_degrees);
             let axis_index = n.motion.as_ref().map(|_| axes.len());
             let mut direction = [0., 1., 0.];
             let mut translation = false;
@@ -276,55 +386,7 @@ impl CompiledPositionForward {
                         invert: false,
                     },
                 };
-                let drivers = bindings
-                    .iter()
-                    .filter(|b| b.node_id == n.id)
-                    .map(|binding| {
-                        let channel = channel_indices[&binding.channel_id];
-                        let c = &mode.channels[channel];
-                        let f = c
-                            .functions
-                            .iter()
-                            .find(|f| f.id == binding.function_id)
-                            .unwrap();
-                        let a = f.angular_motion.unwrap();
-                        if [
-                            a.max_speed_degrees_per_second,
-                            a.acceleration_degrees_per_second_squared,
-                            a.deceleration_degrees_per_second_squared,
-                            motion.max_speed_per_second,
-                            motion.acceleration_per_second_squared,
-                            motion.deceleration_per_second_squared,
-                        ]
-                        .into_iter()
-                        .flatten()
-                        .any(|v| !v.is_finite() || v <= 0.)
-                        {
-                            return Err(invalid("motion limits must be finite and positive"));
-                        }
-                        Ok(Driver {
-                            channel,
-                            from: f.dmx_from,
-                            to: f.dmx_to,
-                            mapping: CompiledPhysicalMapping::compile(c, f)?.unwrap(),
-                            velocity: a.kind == AngularMotionKind::AngularVelocity,
-                            limits: ForwardMotionLimits {
-                                speed: a
-                                    .max_speed_degrees_per_second
-                                    .or(motion.max_speed_per_second)
-                                    .map(f64::from),
-                                acceleration: a
-                                    .acceleration_degrees_per_second_squared
-                                    .or(motion.acceleration_per_second_squared)
-                                    .map(f64::from),
-                                deceleration: a
-                                    .deceleration_degrees_per_second_squared
-                                    .or(motion.deceleration_per_second_squared)
-                                    .map(f64::from),
-                            },
-                        })
-                    })
-                    .collect::<Result<Box<[_]>, ProfileError>>()?;
+                let drivers = compile_drivers(mode, bindings, &channel_indices, n.id, motion)?;
                 axes.push(Axis {
                     node_id: n.id,
                     role,
@@ -347,18 +409,7 @@ impl CompiledPositionForward {
                 neutral_world,
             });
         }
-        let lenses = graph
-            .emitters
-            .iter()
-            .map(|e| Lens {
-                id: e.id,
-                head: e.head_id,
-                node: indices[&e.node_id],
-                local: R::translation(metres(e.origin))
-                    .unwrap()
-                    .compose(R::euler_xyz(vector(e.orientation_degrees)).unwrap()),
-            })
-            .collect();
+        let lenses = compile_lenses(&graph, &indices);
         Ok(Some(Self {
             maxima: mode
                 .channels

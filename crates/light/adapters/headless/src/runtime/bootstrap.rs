@@ -108,90 +108,7 @@ impl RuntimeResources {
             )
             .map_err(|error| anyhow::anyhow!(error.message))?,
         );
-        let timecode_clock = super::timecode_clock::runtime_clock(startup.manual_clock.as_ref());
-        let audio_device = configuration.timecode_audio_output_device.as_ref().map_or(
-            super::timecode_audio_output::OutputDeviceSelector::SystemDefault,
-            |device| super::timecode_audio_output::OutputDeviceSelector::Name(device.clone()),
-        );
-        let trim_key = configuration
-            .timecode_audio_output_device
-            .as_deref()
-            .unwrap_or("$system_default");
-        let audio_configuration = super::timecode_audio_output::NativeTimecodeAudioConfig {
-            device: audio_device,
-            latency_trim_micros: configuration
-                .timecode_audio_latency_trim_micros_by_output
-                .get(trim_key)
-                .copied()
-                .unwrap_or(0),
-        };
-        let native_audio_output =
-            super::timecode_audio_output::NativeTimecodeAudioOutput::open_with_timeout(
-                Arc::clone(&managed_assets),
-                Arc::clone(&timecode_clock),
-                &audio_configuration,
-            )
-            .map_err(|error| tracing::warn!(%error, "native Timecode audio is unavailable"))
-            .ok();
-        let mut audio_outputs_by_device = HashMap::new();
-        if let Some(output) = &native_audio_output {
-            tracing::info!(device = ?audio_configuration.device, "native Timecode audio output initialized");
-            audio_outputs_by_device.insert(trim_key.to_owned(), output.internal_output());
-        }
-        let mut internal_outputs = std::collections::BTreeMap::new();
-        if let Some(output) = &native_audio_output {
-            internal_outputs.insert("default".to_owned(), output.internal_output());
-        }
-        for (binding, device_name) in &configuration.internal_audio_output_devices {
-            let output = if let Some(output) = audio_outputs_by_device.get(device_name) {
-                Some(output.clone())
-            } else {
-                let device = if device_name == "$system_default" {
-                    super::timecode_audio_output::OutputDeviceSelector::SystemDefault
-                } else {
-                    super::timecode_audio_output::OutputDeviceSelector::Name(device_name.clone())
-                };
-                let config = super::timecode_audio_output::NativeTimecodeAudioConfig {
-                    device,
-                    latency_trim_micros: configuration
-                        .timecode_audio_latency_trim_micros_by_output
-                        .get(device_name)
-                        .copied()
-                        .unwrap_or(0),
-                };
-                match super::timecode_audio_output::NativeTimecodeAudioOutput::open_with_timeout(
-                    Arc::clone(&managed_assets),
-                    Arc::clone(&timecode_clock),
-                    &config,
-                ) {
-                    Ok(output) => {
-                        let internal = output.internal_output();
-                        audio_outputs_by_device.insert(device_name.clone(), internal.clone());
-                        Some(internal)
-                    }
-                    Err(error) => {
-                        tracing::warn!(binding, device = device_name, %error, "Internal audio output is unavailable");
-                        None
-                    }
-                }
-            };
-            if let Some(output) = output {
-                internal_outputs.insert(binding.clone(), output);
-            }
-        }
-        let internal_audio = Arc::new(Mutex::new(
-            super::internal_audio::InternalAudioRuntime::new(
-                &configuration.internal_audio_library_roots,
-                internal_outputs,
-            ),
-        ));
-        let audio_output = native_audio_output
-            .map(|output| Arc::new(output) as Arc<dyn light_application::TimecodeAudioOutput>);
-        let timecodes = super::timecode_v2::new_service_with_clock(
-            timecode_clock,
-            audio_output,
-            events.clone(),
-        );
+        let (internal_audio, timecodes) = start_audio_runtime(startup, &managed_assets, &events);
         timecode_router
             .lock()
             .configure(configuration.timecode_router_config());
@@ -213,43 +130,13 @@ impl RuntimeResources {
         let dynamic_auto_offs = Arc::new(Mutex::new(Vec::new()));
         let visualization_frames =
             Arc::new(super::visualization_frame::VisualizationFrameHub::default());
-        let restored_dynamic_runtime = match persisted_runtime.dynamic_source_checkpoint() {
-            Ok(Some(mut checkpoint)) => {
-                let restore = (|| -> anyhow::Result<()> {
-                    super::normalize_programmer_dynamic_checkpoint(
-                        &startup.programmers,
-                        &mut checkpoint.runtime,
-                    )?;
-                    OutputResource::restore_dynamic_source_state(
-                        &startup.engine,
-                        &dynamics,
-                        &dynamic_source_origins,
-                        &dynamic_snapshot,
-                        checkpoint,
-                    )?;
-                    Ok(())
-                })();
-                match restore {
-                    Ok(()) => true,
-                    Err(error) => {
-                        tracing::warn!(%error, "ignoring invalid persisted Dynamic runtime");
-                        false
-                    }
-                }
-            }
-            Ok(None) => false,
-            Err(error) => {
-                tracing::warn!(%error, "ignoring invalid persisted Dynamic source checkpoint");
-                false
-            }
-        };
-        if !restored_dynamic_runtime {
-            restore_programmer_dynamics(
-                &dynamics,
-                &startup.programmers,
-                startup.engine.snapshot().as_ref(),
-            );
-        }
+        restore_dynamic_runtime(
+            startup,
+            &persisted_runtime,
+            &dynamics,
+            &dynamic_source_origins,
+            &dynamic_snapshot,
+        );
         let scheduler = output_scheduler::start(output_scheduler::Config {
             bind_ip: configuration.output_bind_ip,
             engine: Arc::clone(&startup.engine),
@@ -303,21 +190,168 @@ impl RuntimeResources {
     }
 }
 
+fn start_audio_runtime(
+    startup: &StartupState,
+    managed_assets: &Arc<dyn light_application::ManagedAssetStore>,
+    events: &EventBus,
+) -> (
+    Arc<Mutex<super::internal_audio::InternalAudioRuntime>>,
+    light_application::timeline::TimecodeRuntimeService,
+) {
+    let configuration = &startup.persistent.configuration;
+    let timecode_clock = super::timecode_clock::runtime_clock(startup.manual_clock.as_ref());
+    let audio_device = configuration.timecode_audio_output_device.as_ref().map_or(
+        super::timecode_audio_output::OutputDeviceSelector::SystemDefault,
+        |device| super::timecode_audio_output::OutputDeviceSelector::Name(device.clone()),
+    );
+    let trim_key = configuration
+        .timecode_audio_output_device
+        .as_deref()
+        .unwrap_or("$system_default");
+    let audio_configuration = super::timecode_audio_output::NativeTimecodeAudioConfig {
+        device: audio_device,
+        latency_trim_micros: configuration
+            .timecode_audio_latency_trim_micros_by_output
+            .get(trim_key)
+            .copied()
+            .unwrap_or(0),
+    };
+    let native_audio_output =
+        super::timecode_audio_output::NativeTimecodeAudioOutput::open_with_timeout(
+            Arc::clone(managed_assets),
+            Arc::clone(&timecode_clock),
+            &audio_configuration,
+        )
+        .map_err(|error| tracing::warn!(%error, "native Timecode audio is unavailable"))
+        .ok();
+    let mut audio_outputs_by_device = HashMap::new();
+    if let Some(output) = &native_audio_output {
+        tracing::info!(device = ?audio_configuration.device, "native Timecode audio output initialized");
+        audio_outputs_by_device.insert(trim_key.to_owned(), output.internal_output());
+    }
+    let mut internal_outputs = std::collections::BTreeMap::new();
+    if let Some(output) = &native_audio_output {
+        internal_outputs.insert("default".to_owned(), output.internal_output());
+    }
+    for (binding, device_name) in &configuration.internal_audio_output_devices {
+        let output = if let Some(output) = audio_outputs_by_device.get(device_name) {
+            Some(output.clone())
+        } else {
+            let device = if device_name == "$system_default" {
+                super::timecode_audio_output::OutputDeviceSelector::SystemDefault
+            } else {
+                super::timecode_audio_output::OutputDeviceSelector::Name(device_name.clone())
+            };
+            let config = super::timecode_audio_output::NativeTimecodeAudioConfig {
+                device,
+                latency_trim_micros: configuration
+                    .timecode_audio_latency_trim_micros_by_output
+                    .get(device_name)
+                    .copied()
+                    .unwrap_or(0),
+            };
+            match super::timecode_audio_output::NativeTimecodeAudioOutput::open_with_timeout(
+                Arc::clone(managed_assets),
+                Arc::clone(&timecode_clock),
+                &config,
+            ) {
+                Ok(output) => {
+                    let internal = output.internal_output();
+                    audio_outputs_by_device.insert(device_name.clone(), internal.clone());
+                    Some(internal)
+                }
+                Err(error) => {
+                    tracing::warn!(binding, device = device_name, %error, "Internal audio output is unavailable");
+                    None
+                }
+            }
+        };
+        if let Some(output) = output {
+            internal_outputs.insert(binding.clone(), output);
+        }
+    }
+    let internal_audio = Arc::new(Mutex::new(
+        super::internal_audio::InternalAudioRuntime::new(
+            &configuration.internal_audio_library_roots,
+            internal_outputs,
+        ),
+    ));
+    let audio_output = native_audio_output
+        .map(|output| Arc::new(output) as Arc<dyn light_application::TimecodeAudioOutput>);
+    let timecodes =
+        super::timecode_v2::new_service_with_clock(timecode_clock, audio_output, events.clone());
+    (internal_audio, timecodes)
+}
+
+/// Restores the persisted Dynamic source checkpoint, or else rebuilds programmer Dynamics.
+fn restore_dynamic_runtime(
+    startup: &StartupState,
+    persisted_runtime: &super::PersistedOutputRuntime,
+    dynamics: &Arc<Mutex<light_dynamics::DynamicRuntime>>,
+    dynamic_source_origins: &SharedDynamicSourceOrigins,
+    dynamic_snapshot: &Arc<DynamicSnapshotPublication>,
+) {
+    let restored_dynamic_runtime = match persisted_runtime.dynamic_source_checkpoint() {
+        Ok(Some(mut checkpoint)) => {
+            let restore = (|| -> anyhow::Result<()> {
+                super::normalize_programmer_dynamic_checkpoint(
+                    &startup.programmers,
+                    &mut checkpoint.runtime,
+                )?;
+                OutputResource::restore_dynamic_source_state(
+                    &startup.engine,
+                    dynamics,
+                    dynamic_source_origins,
+                    dynamic_snapshot,
+                    checkpoint,
+                )?;
+                Ok(())
+            })();
+            match restore {
+                Ok(()) => true,
+                Err(error) => {
+                    tracing::warn!(%error, "ignoring invalid persisted Dynamic runtime");
+                    false
+                }
+            }
+        }
+        Ok(None) => false,
+        Err(error) => {
+            tracing::warn!(%error, "ignoring invalid persisted Dynamic source checkpoint");
+            false
+        }
+    };
+    if !restored_dynamic_runtime {
+        restore_programmer_dynamics(
+            dynamics,
+            &startup.programmers,
+            startup.engine.snapshot().as_ref(),
+        );
+    }
+}
+
+struct RestoredController<'a> {
+    authored: &'a light_dynamics::DynamicAddressValue,
+    definition: light_dynamics::DynamicDefinition,
+    reference: light_dynamics::DynamicReference,
+    lane_rows: Vec<(light_core::FixtureId, Uuid)>,
+    overrides: light_dynamics::DynamicInstanceOverrides,
+    targets: Vec<light_core::FixtureId>,
+    activated_at_millis: u64,
+}
+
+/// Snapshot lookups shared by every restored programmer Dynamic controller.
+struct RestoreContext<'a> {
+    snapshot: &'a light_engine::EngineSnapshot,
+    groups: HashMap<String, light_programmer::GroupDefinition>,
+    stage_positions: HashMap<light_core::FixtureId, light_dynamics::Position3d>,
+}
+
 fn restore_programmer_dynamics(
     runtime: &Mutex<light_dynamics::DynamicRuntime>,
     programmers: &light_programmer::ProgrammerRegistry,
     snapshot: &light_engine::EngineSnapshot,
 ) {
-    struct RestoredController<'a> {
-        authored: &'a light_dynamics::DynamicAddressValue,
-        definition: light_dynamics::DynamicDefinition,
-        reference: light_dynamics::DynamicReference,
-        lane_rows: Vec<(light_core::FixtureId, Uuid)>,
-        overrides: light_dynamics::DynamicInstanceOverrides,
-        targets: Vec<light_core::FixtureId>,
-        activated_at_millis: u64,
-    }
-
     let groups = snapshot
         .groups
         .iter()
@@ -337,127 +371,154 @@ fn restore_programmer_dynamics(
             )
         })
         .collect::<HashMap<_, _>>();
+    let context = RestoreContext {
+        snapshot,
+        groups,
+        stage_positions,
+    };
     let mut runtime = runtime.lock();
     for programmer in programmers.active_for_sessions() {
-        let mut controllers = HashMap::<Uuid, RestoredController>::new();
-        for stored in light_dynamics::merge_dynamic_address_values(
-            programmer
-                .dynamic_values
-                .iter()
-                .chain(programmer.preload_dynamic_active.iter()),
-        ) {
-            let light_dynamics::DynamicSemanticValue::DynamicOn {
-                instance_link,
-                dynamic,
-                overrides,
-                lane_id,
-                ..
-            } = &stored.value
-            else {
-                continue;
-            };
-            let definition = dynamic
-                .dynamic_id
-                .and_then(|id| {
-                    snapshot
-                        .dynamics
-                        .iter()
-                        .find(|definition| definition.id == id)
-                })
-                .cloned()
-                .unwrap_or_else(|| dynamic.embedded_fallback.definition.as_ref().clone());
-            let entry = controllers
-                .entry(*instance_link)
-                .or_insert_with(|| RestoredController {
-                    authored: stored,
-                    definition: definition.clone(),
-                    reference: dynamic.clone(),
-                    lane_rows: Vec::new(),
-                    overrides: overrides.clone(),
-                    targets: Vec::new(),
-                    activated_at_millis: stored.changed_at_millis,
-                });
-            if light_dynamics::dynamic_address_edit_is_later(stored, entry.authored) {
-                entry.authored = stored;
-                entry.definition = definition;
-                entry.reference = dynamic.clone();
-                entry.overrides = overrides.clone();
-                entry.activated_at_millis = stored.changed_at_millis;
-            }
-            entry.lane_rows.push((stored.fixture_id, *lane_id));
-            if !entry.targets.contains(&stored.fixture_id) {
-                entry.targets.push(stored.fixture_id);
-            }
-        }
+        let controllers = collect_restored_controllers(&programmer, snapshot);
         for (instance_link, restored) in controllers {
-            let controller_id =
-                light_dynamics::programmer_dynamic_controller_id(programmer.id, instance_link);
-            if restored.targets.is_empty() {
-                continue;
-            }
-            let lane_selection = light_dynamics::DynamicLaneSelection::for_recorded_values(
-                &restored.reference,
-                &restored.definition,
-                &restored.lane_rows,
-            );
-            let live_group = match &restored.definition.target_binding {
-                light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
-                    light_programmer::resolve_group_spatial(group_id, &groups, &stage_positions)
-                        .ok()
-                }
-                light_dynamics::DynamicTargetBinding::FrozenTargets { .. }
-                | light_dynamics::DynamicTargetBinding::Targetless => None,
-            };
-            let targets = live_group
-                .as_ref()
-                .map_or(restored.targets, |resolved| resolved.source_order.clone());
-            let inherited_spatial_mapping =
-                live_group.and_then(|resolved| resolved.effective_mapping);
-            if let Err(error) = runtime.install_fallback_definition(restored.definition.clone()) {
-                tracing::warn!(
-                    %controller_id,
-                    %error,
-                    "ignoring invalid persisted Dynamic fallback"
-                );
-                continue;
-            }
-            let result = runtime.start(light_dynamics::DynamicStartRequest {
-                definition_id: restored.definition.id,
-                controller: light_dynamics::DynamicController {
-                    id: controller_id,
-                    source: light_dynamics::DynamicControllerSource::Programmer {
-                        programmer_id: programmer.id.0,
-                        instance_link: Some(instance_link),
-                    },
-                    priority: programmer.priority,
-                    activated_at_millis: restored.activated_at_millis,
-                    size: restored.overrides.size,
-                    speed_multiplier: restored.overrides.speed_multiplier.factor() as f32,
-                    phase_offset_degrees: restored.overrides.phase_offset_degrees,
-                    paused: false,
-                },
-                target_scope: light_dynamics::DynamicTargetScope {
-                    ordered_targets: targets,
-                },
-                stage_positions: snapshot.dynamic_stage_positions.as_ref().clone(),
-                inherited_spatial_mapping,
-                now_millis: restored.activated_at_millis,
-                activation_delay_millis: 0,
-                activation_duration_millis: 0,
-                activation_policy_override: None,
-                reuse_matching_targetless: true,
-            });
-            let result = result.and_then(|instance_id| {
-                runtime.set_controller_lane_selection(instance_id, controller_id, lane_selection)
-            });
-            if let Err(error) = result {
-                tracing::warn!(
-                    %controller_id,
-                    %error,
-                    "ignoring invalid persisted Dynamic controller"
-                );
-            }
+            start_restored_controller(&mut runtime, &context, &programmer, instance_link, restored);
         }
+    }
+}
+
+fn collect_restored_controllers<'a>(
+    programmer: &'a light_programmer::ProgrammerState,
+    snapshot: &light_engine::EngineSnapshot,
+) -> HashMap<Uuid, RestoredController<'a>> {
+    let mut controllers = HashMap::<Uuid, RestoredController>::new();
+    for stored in light_dynamics::merge_dynamic_address_values(
+        programmer
+            .dynamic_values
+            .iter()
+            .chain(programmer.preload_dynamic_active.iter()),
+    ) {
+        let light_dynamics::DynamicSemanticValue::DynamicOn {
+            instance_link,
+            dynamic,
+            overrides,
+            lane_id,
+            ..
+        } = &stored.value
+        else {
+            continue;
+        };
+        let definition = dynamic
+            .dynamic_id
+            .and_then(|id| {
+                snapshot
+                    .dynamics
+                    .iter()
+                    .find(|definition| definition.id == id)
+            })
+            .cloned()
+            .unwrap_or_else(|| dynamic.embedded_fallback.definition.as_ref().clone());
+        let entry = controllers
+            .entry(*instance_link)
+            .or_insert_with(|| RestoredController {
+                authored: stored,
+                definition: definition.clone(),
+                reference: dynamic.clone(),
+                lane_rows: Vec::new(),
+                overrides: overrides.clone(),
+                targets: Vec::new(),
+                activated_at_millis: stored.changed_at_millis,
+            });
+        if light_dynamics::dynamic_address_edit_is_later(stored, entry.authored) {
+            entry.authored = stored;
+            entry.definition = definition;
+            entry.reference = dynamic.clone();
+            entry.overrides = overrides.clone();
+            entry.activated_at_millis = stored.changed_at_millis;
+        }
+        entry.lane_rows.push((stored.fixture_id, *lane_id));
+        if !entry.targets.contains(&stored.fixture_id) {
+            entry.targets.push(stored.fixture_id);
+        }
+    }
+    controllers
+}
+
+fn start_restored_controller(
+    runtime: &mut light_dynamics::DynamicRuntime,
+    context: &RestoreContext<'_>,
+    programmer: &light_programmer::ProgrammerState,
+    instance_link: Uuid,
+    restored: RestoredController<'_>,
+) {
+    let snapshot = context.snapshot;
+    let controller_id =
+        light_dynamics::programmer_dynamic_controller_id(programmer.id, instance_link);
+    if restored.targets.is_empty() {
+        return;
+    }
+    let lane_selection = light_dynamics::DynamicLaneSelection::for_recorded_values(
+        &restored.reference,
+        &restored.definition,
+        &restored.lane_rows,
+    );
+    let live_group = match &restored.definition.target_binding {
+        light_dynamics::DynamicTargetBinding::LiveGroup { group_id } => {
+            light_programmer::resolve_group_spatial(
+                group_id,
+                &context.groups,
+                &context.stage_positions,
+            )
+            .ok()
+        }
+        light_dynamics::DynamicTargetBinding::FrozenTargets { .. }
+        | light_dynamics::DynamicTargetBinding::Targetless => None,
+    };
+    let targets = live_group
+        .as_ref()
+        .map_or(restored.targets, |resolved| resolved.source_order.clone());
+    let inherited_spatial_mapping = live_group.and_then(|resolved| resolved.effective_mapping);
+    if let Err(error) = runtime.install_fallback_definition(restored.definition.clone()) {
+        tracing::warn!(
+            %controller_id,
+            %error,
+            "ignoring invalid persisted Dynamic fallback"
+        );
+        return;
+    }
+    let result = runtime.start(light_dynamics::DynamicStartRequest {
+        definition_id: restored.definition.id,
+        controller: light_dynamics::DynamicController {
+            id: controller_id,
+            source: light_dynamics::DynamicControllerSource::Programmer {
+                programmer_id: programmer.id.0,
+                instance_link: Some(instance_link),
+            },
+            priority: programmer.priority,
+            activated_at_millis: restored.activated_at_millis,
+            size: restored.overrides.size,
+            speed_multiplier: restored.overrides.speed_multiplier.factor() as f32,
+            phase_offset_degrees: restored.overrides.phase_offset_degrees,
+            paused: false,
+        },
+        target_scope: light_dynamics::DynamicTargetScope {
+            ordered_targets: targets,
+        },
+        stage_positions: snapshot.dynamic_stage_positions.as_ref().clone(),
+        inherited_spatial_mapping,
+        now_millis: restored.activated_at_millis,
+        activation_delay_millis: 0,
+        activation_duration_millis: 0,
+        activation_policy_override: None,
+        reuse_matching_targetless: true,
+    });
+    let result = result.and_then(|instance_id| {
+        runtime.set_controller_lane_selection(instance_id, controller_id, lane_selection)
+    });
+    if let Err(error) = result {
+        tracing::warn!(
+            %controller_id,
+            %error,
+            "ignoring invalid persisted Dynamic controller"
+        );
     }
 }
 

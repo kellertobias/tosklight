@@ -32,7 +32,9 @@ mod orthogonal;
 mod preparation_origins_tests;
 #[cfg(test)]
 mod scratch_tests;
+mod stage_routing;
 mod whole;
+use stage_routing::*;
 
 #[derive(Clone)]
 pub enum FamilyCompositionSample {
@@ -153,162 +155,6 @@ impl FamilyCompositionSample {
                 Some(sample)
             }
             _ => None,
-        }
-    }
-}
-
-/// Lexical use metadata before original-registry binding. Source/member indices belong to
-/// their route level's prepared scratch and are never public boundary authority.
-#[derive(Clone)]
-pub(super) enum PreparedPositionStageUse {
-    RootFinalSegment,
-    /// Legacy materialized coupled endpoints have no original forest/member locator yet.
-    /// Keep their lexical use distinct so they cannot alias a final segment boundary.
-    UnsupportedCoupledEndpoint,
-    UnderlayFor {
-        consumer_origins: Vec<PreparedSourceOrigin>,
-    },
-    SourceCohort {
-        consumer_origins: Vec<PreparedSourceOrigin>,
-        expression: Arc<CompiledCoupledExpression>,
-        endpoint_nodes: Vec<usize>,
-    },
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum PreparedPositionStageKind {
-    Adoption {
-        component: Option<ProgrammingComponent>,
-    },
-    WholeSegmentTransition,
-    /// Post-expression envelope operation of the source named by the route trigger.
-    Envelope(position_completion::PositionCompletionStage),
-}
-#[derive(Clone)]
-pub(super) struct PreparedPositionStageRoute {
-    pub uses: Vec<PreparedPositionStageUse>,
-    pub trigger_origins: Vec<PreparedSourceOrigin>,
-    pub kind: PreparedPositionStageKind,
-}
-#[derive(Clone)]
-pub(super) enum PreparedPositionGraphExpression {
-    Whole(Arc<CompiledProgrammingFamilyExpression>),
-    Coupled(Arc<CompiledCoupledExpression>),
-}
-#[derive(Clone)]
-pub(super) struct PreparedPositionGraphRoute {
-    pub uses: Vec<PreparedPositionStageUse>,
-    pub trigger_origins: Vec<PreparedSourceOrigin>,
-    pub expression: PreparedPositionGraphExpression,
-    pub node: usize,
-    pub kind: GraphOperationKind,
-}
-type PreparedPositionGraphPlanCallback<'a> = dyn FnMut(&PreparedPositionGraphRoute) -> Result<Vec<GraphOperationSelection>, TransitionError>
-    + 'a;
-type PreparedPositionStopCallback<'a> = dyn FnMut(usize) + 'a;
-type PreparedPositionCohortCallback<'a> = dyn FnMut(
-        &[PreparedPositionStageUse],
-        &[PreparedSourceOrigin],
-        &Arc<CompiledCoupledExpression>,
-        &[usize],
-    ) -> Result<Option<usize>, TransitionError>
-    + 'a;
-type PreparedPositionGraphReachedCallback<'a> =
-    dyn FnMut(&PreparedPositionGraphRoute) -> Result<GraphReachedAction, TransitionError> + 'a;
-type PreparedPositionGraphCallback<'a> = dyn FnMut(&PreparedPositionGraphRoute) -> Result<Option<GraphOperationOperand>, TransitionError>
-    + 'a;
-type PreparedPositionStageCallback<'a> = dyn FnMut(
-        &PreparedPositionStageRoute,
-    ) -> Result<Option<position_segment::PositionSegmentOperand>, TransitionError>
-    + 'a;
-/// Ordinary composition carries routing only when needed; it never scans/clones per-sample
-/// stop candidates. Explicit operand replay opts into the matching work.
-pub(super) struct PreparedPositionStageMatcher<'a> {
-    callback: Option<&'a mut PreparedPositionStageCallback<'a>>,
-    graph_callback: Option<&'a mut PreparedPositionGraphCallback<'a>>,
-    graph_reached_callback: Option<&'a mut PreparedPositionGraphReachedCallback<'a>>,
-    graph_plan_callback: Option<&'a mut PreparedPositionGraphPlanCallback<'a>>,
-    stop_callback: Option<&'a mut PreparedPositionStopCallback<'a>>,
-    cohort_callback: Option<&'a mut PreparedPositionCohortCallback<'a>>,
-}
-impl<'a> PreparedPositionStageMatcher<'a> {
-    pub(super) fn disabled() -> Self {
-        Self {
-            callback: None,
-            graph_callback: None,
-            graph_reached_callback: None,
-            graph_plan_callback: None,
-            stop_callback: None,
-            cohort_callback: None,
-        }
-    }
-    pub(super) fn enabled(callback: &'a mut PreparedPositionStageCallback<'a>) -> Self {
-        Self {
-            callback: Some(callback),
-            graph_callback: None,
-            graph_reached_callback: None,
-            graph_plan_callback: None,
-            stop_callback: None,
-            cohort_callback: None,
-        }
-    }
-    pub(super) fn enabled_graph(callback: &'a mut PreparedPositionGraphCallback<'a>) -> Self {
-        Self {
-            callback: None,
-            graph_callback: Some(callback),
-            graph_reached_callback: None,
-            graph_plan_callback: None,
-            stop_callback: None,
-            cohort_callback: None,
-        }
-    }
-    pub(super) fn with_graph_reached(
-        mut self,
-        callback: Option<&'a mut PreparedPositionGraphReachedCallback<'a>>,
-    ) -> Self {
-        self.graph_reached_callback = callback;
-        self
-    }
-    pub(super) fn with_resume_plan(
-        mut self,
-        plan: &'a mut PreparedPositionGraphPlanCallback<'a>,
-        stop: &'a mut PreparedPositionStopCallback<'a>,
-        cohort: &'a mut PreparedPositionCohortCallback<'a>,
-    ) -> Self {
-        self.graph_plan_callback = Some(plan);
-        self.stop_callback = Some(stop);
-        self.cohort_callback = Some(cohort);
-        self
-    }
-    pub(super) fn completed_stop(&mut self, depth: usize) {
-        if let Some(callback) = self.stop_callback.as_deref_mut() {
-            callback(depth);
-        }
-    }
-    pub(super) fn graph_reached_is_enabled(&self) -> bool {
-        self.graph_reached_callback.is_some()
-    }
-    pub(super) fn graph_is_enabled(&self) -> bool {
-        self.graph_callback.is_some() || self.graph_plan_callback.is_some()
-    }
-    pub(super) fn match_graph(
-        &mut self,
-        route: &PreparedPositionGraphRoute,
-    ) -> Result<Option<GraphOperationOperand>, TransitionError> {
-        match &mut self.graph_callback {
-            Some(callback) => callback(route),
-            None => Ok(None),
-        }
-    }
-    pub(super) fn is_enabled(&self) -> bool {
-        self.callback.is_some()
-    }
-    pub(super) fn match_route(
-        &mut self,
-        route: &PreparedPositionStageRoute,
-    ) -> Result<Option<position_segment::PositionSegmentOperand>, TransitionError> {
-        match &mut self.callback {
-            Some(callback) => callback(route),
-            None => Ok(None),
         }
     }
 }
@@ -599,75 +445,119 @@ fn prepare_family_inputs_with_origins(
                 member: None,
             })
             .collect::<Vec<_>>();
-        sample.rank().validate()?;
-        endpoint_output::validate(sample.endpoint_control(context))?;
-        match &sample {
-            FamilyCompositionSample::CoupledExpression {
-                expression,
-                rank,
-                activation_mix,
-            } => {
-                for (sample, member) in coupled::prepare_with_membership(
-                    expression.clone(),
-                    *rank,
-                    *activation_mix,
-                    owner,
-                )? {
-                    let origins = origins
-                        .iter()
-                        .map(|origin| PreparedSourceOrigin {
-                            original_index: origin.original_index,
-                            member,
-                        })
-                        .collect::<Vec<_>>();
-                    match sample {
-                        FamilyCompositionSample::Known(sample) => {
-                            scratch.known.push(sample);
-                            scratch.known_origins.push(origins.clone());
-                        }
-                        sample => {
-                            scratch.sources.push(sample);
-                            scratch.source_origins.push(origins.clone());
-                        }
+        push_prepared_sample(owner, sample, origins, context, scratch)?;
+    }
+    collect_composition_sources(owner, scratch, tracing)?;
+    scratch.ordered.clear();
+    scratch.ordered.extend(0..scratch.sources.len());
+    scratch
+        .ordered
+        .sort_unstable_by_key(|&index| scratch.sources[index].order_key());
+    for pair in scratch.ordered.windows(2) {
+        match (&scratch.sources[pair[0]], &scratch.sources[pair[1]]) {
+            (FamilyCompositionSample::Known(a), FamilyCompositionSample::Known(b)) => {
+                validate_source_order(a, b)?;
+            }
+            (a, b) => ensure(
+                a.rank() != b.rank(),
+                "Dynamic composition requires distinct stable source/lane identities",
+            )?,
+        }
+    }
+    scratch.ordered.retain(|&index| {
+        !matches!(
+            scratch.sources[index].endpoint_control(context),
+            FamilyEndpointOutputControl::Suppressed
+        )
+    });
+    scratch.resolved.clear();
+    scratch.resolved.resize(scratch.sources.len(), None);
+    Ok(base_trace)
+}
+
+/// Validate one caller sample and stage it as Known or source input with its slot origins.
+/// Coupled expressions expand into their prepared members, each tagged with its member index.
+fn push_prepared_sample(
+    owner: ProgrammingOwner,
+    sample: FamilyCompositionSample,
+    origins: Vec<PreparedSourceOrigin>,
+    context: &FamilyCompositionContext<'_>,
+    scratch: &mut RetainedFamilyCompositionScratch,
+) -> Result<(), TransitionError> {
+    sample.rank().validate()?;
+    endpoint_output::validate(sample.endpoint_control(context))?;
+    match &sample {
+        FamilyCompositionSample::CoupledExpression {
+            expression,
+            rank,
+            activation_mix,
+        } => {
+            for (sample, member) in
+                coupled::prepare_with_membership(expression.clone(), *rank, *activation_mix, owner)?
+            {
+                let origins = origins
+                    .iter()
+                    .map(|origin| PreparedSourceOrigin {
+                        original_index: origin.original_index,
+                        member,
+                    })
+                    .collect::<Vec<_>>();
+                match sample {
+                    FamilyCompositionSample::Known(sample) => {
+                        scratch.known.push(sample);
+                        scratch.known_origins.push(origins.clone());
+                    }
+                    sample => {
+                        scratch.sources.push(sample);
+                        scratch.source_origins.push(origins.clone());
                     }
                 }
             }
-            FamilyCompositionSample::Known(sample) => {
-                ensure(
-                    sample.address.address().owner() == owner,
-                    "composition contains a different owner",
-                )?;
-                ensure(
-                    sample.activation_mix.is_finite()
-                        && (0.0..=1.0).contains(&sample.activation_mix),
-                    "Dynamic activation influence must be between zero and one",
-                )?;
-                sample.validate_value()?;
-                if sample.participates() {
-                    scratch.known.push(sample.clone());
-                    scratch.known_origins.push(origins);
-                }
+        }
+        FamilyCompositionSample::Known(sample) => {
+            ensure(
+                sample.address.address().owner() == owner,
+                "composition contains a different owner",
+            )?;
+            ensure(
+                sample.activation_mix.is_finite() && (0.0..=1.0).contains(&sample.activation_mix),
+                "Dynamic activation influence must be between zero and one",
+            )?;
+            sample.validate_value()?;
+            if sample.participates() {
+                scratch.known.push(sample.clone());
+                scratch.known_origins.push(origins);
             }
-            FamilyCompositionSample::WholeExpression {
-                expression,
-                activation_mix,
-                ..
-            } => {
-                ensure(
-                    expression.owner() == owner,
-                    "composition contains a different owner",
-                )?;
-                ensure(
-                    activation_mix.is_finite() && (0.0..=1.0).contains(activation_mix),
-                    "Dynamic activation influence must be between zero and one",
-                )?;
-                if *activation_mix > 0.0 && expression.participates() {
-                    scratch.sources.push(sample.clone());
-                    scratch.source_origins.push(origins);
-                }
+        }
+        FamilyCompositionSample::WholeExpression {
+            expression,
+            activation_mix,
+            ..
+        } => {
+            ensure(
+                expression.owner() == owner,
+                "composition contains a different owner",
+            )?;
+            ensure(
+                activation_mix.is_finite() && (0.0..=1.0).contains(activation_mix),
+                "Dynamic activation influence must be between zero and one",
+            )?;
+            if *activation_mix > 0.0 && expression.participates() {
+                scratch.sources.push(sample.clone());
+                scratch.source_origins.push(origins);
             }
         }
     }
+    Ok(())
+}
+
+/// Move the staged Known samples into the ordered source list. Position Angle components are
+/// bundled first; bundle membership unions the contributing samples' original slot origins.
+fn collect_composition_sources(
+    owner: ProgrammingOwner,
+    scratch: &mut RetainedFamilyCompositionScratch,
+    tracing: bool,
+) -> Result<(), TransitionError> {
     if owner == ProgrammingOwner::Position {
         if scratch.known_origins.iter().all(Vec::is_empty) {
             bundle_angles(
@@ -710,31 +600,7 @@ fn prepare_family_inputs_with_origins(
             .source_origins
             .extend(scratch.known_origins.iter().cloned());
     }
-    scratch.ordered.clear();
-    scratch.ordered.extend(0..scratch.sources.len());
-    scratch
-        .ordered
-        .sort_unstable_by_key(|&index| scratch.sources[index].order_key());
-    for pair in scratch.ordered.windows(2) {
-        match (&scratch.sources[pair[0]], &scratch.sources[pair[1]]) {
-            (FamilyCompositionSample::Known(a), FamilyCompositionSample::Known(b)) => {
-                validate_source_order(a, b)?;
-            }
-            (a, b) => ensure(
-                a.rank() != b.rank(),
-                "Dynamic composition requires distinct stable source/lane identities",
-            )?,
-        }
-    }
-    scratch.ordered.retain(|&index| {
-        !matches!(
-            scratch.sources[index].endpoint_control(context),
-            FamilyEndpointOutputControl::Suppressed
-        )
-    });
-    scratch.resolved.clear();
-    scratch.resolved.resize(scratch.sources.len(), None);
-    Ok(base_trace)
+    Ok(())
 }
 
 fn compose_masks(

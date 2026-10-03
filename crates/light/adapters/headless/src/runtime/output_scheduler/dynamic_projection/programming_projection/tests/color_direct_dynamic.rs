@@ -10,7 +10,7 @@
 //!   takeover; after Release it shows exactly what the uninterrupted reference shows.
 //! - The stored Dynamic definition and the FixAT request remain the saved recipes.
 use super::super::super::physical_adapter::color::profiles::{patched, rgbal, rgbw};
-use super::super::super::physical_adapter::color::tests_direct::{direct, identity};
+use super::super::super::physical_adapter::color::tests::direct::{direct, identity};
 use super::super::super::physical_adapter::color::{DirectEstimateOrigin, DirectReplayOutcome};
 use super::super::super::physical_adapter::*;
 use super::color_direct_transition::{Rig, is_semantic, semantic_value};

@@ -200,39 +200,7 @@ impl PositionSourceCompletion {
         tracing: bool,
     ) -> Result<CompletionProgress, TransitionError> {
         if self.captured.is_none() {
-            self.captured = Some((|| {
-                let control = endpoint_output::control(self.rank, context);
-                endpoint_output::validate(control)?;
-                let (current, occurrence) = if matches!(control,
-                    FamilyEndpointOutputControl::CrossfadeCurrent { mix } if mix < 1.0)
-                {
-                    let output = context.endpoint_output.expect("captured control context");
-                    let address = DynamicValueAddress::whole_family(
-                        ProgrammingOwner::Position,
-                        &self.target.value,
-                    )?;
-                    let current = output
-                        .current
-                        .try_current_family_base(output.target, &address)?
-                        .ok_or(TransitionError::Requires(requirement(&address)))?;
-                    validate_position(&current)?;
-                    let occurrence = tracing
-                        .then(|| {
-                            output
-                                .current
-                                .current_family_occurrence(output.target, &address)
-                        })
-                        .flatten();
-                    (Some(current), occurrence)
-                } else {
-                    (None, None)
-                };
-                Ok(CapturedOutput {
-                    control,
-                    current,
-                    occurrence,
-                })
-            })());
+            self.captured = Some(self.capture_output(context, tracing));
         }
         let captured = self
             .captured
@@ -253,60 +221,124 @@ impl PositionSourceCompletion {
                 )),
                 _ => None,
             };
-            let endpoint = if let Some((current, mix, occurrence)) = crossfade {
-                if self.stops_before(PositionCompletionStage::EndpointOutput) {
-                    return Ok(self.stop_before(
-                        PositionCompletionStage::EndpointOutput,
-                        current,
-                        self.target.value.clone(),
-                        mix,
-                    ));
-                }
-                let (value, transfer) = if mix == 0.0 {
-                    (current, None)
-                } else if let Some(result) = self.resumed.take() {
-                    result
-                } else {
-                    let request = CompletionRequest {
-                        stage: PositionCompletionStage::EndpointOutput,
-                        requirement: TransitionRequirement::LiveJointAngles,
-                        from: current,
-                        to: self.target.value.clone(),
-                        progress: mix,
-                    };
-                    let Some(result) = self.sample(request, frame, tracing)? else {
-                        return Ok(CompletionProgress::Needs(
-                            self.waiting.clone().expect("pending endpoint"),
-                        ));
-                    };
-                    result
-                };
-                let node = if tracing {
-                    let current = trace.source(FamilyTraceSource {
-                        rank: self.rank,
-                        footprint: FamilyTraceFootprint::Whole,
-                        role: FamilyTraceRole::CalculationDependency,
-                        occurrence,
-                    });
-                    Some(if mix == 0.0 {
-                        current
-                    } else {
-                        trace.mapped_blend(
-                            current,
-                            self.target.trace.expect("traced endpoint"),
-                            transfer,
-                        )
-                    })
-                } else {
-                    None
-                };
-                TracedValue { value, trace: node }
-            } else {
-                self.target.clone()
-            };
-            self.endpoint = Some(endpoint);
+            if let Some(progress) = self.complete_endpoint(crossfade, frame, trace, tracing)? {
+                return Ok(progress);
+            }
         }
         let endpoint = self.endpoint.as_ref().expect("completed endpoint").clone();
+        self.complete_activation(endpoint, controlled, context, frame, trace, tracing)
+    }
+    fn capture_output(
+        &self,
+        context: &FamilyCompositionContext<'_>,
+        tracing: bool,
+    ) -> Result<CapturedOutput, TransitionError> {
+        let control = endpoint_output::control(self.rank, context);
+        endpoint_output::validate(control)?;
+        let (current, occurrence) = if matches!(control,
+            FamilyEndpointOutputControl::CrossfadeCurrent { mix } if mix < 1.0)
+        {
+            let output = context.endpoint_output.expect("captured control context");
+            let address =
+                DynamicValueAddress::whole_family(ProgrammingOwner::Position, &self.target.value)?;
+            let current = output
+                .current
+                .try_current_family_base(output.target, &address)?
+                .ok_or(TransitionError::Requires(requirement(&address)))?;
+            validate_position(&current)?;
+            let occurrence = tracing
+                .then(|| {
+                    output
+                        .current
+                        .current_family_occurrence(output.target, &address)
+                })
+                .flatten();
+            (Some(current), occurrence)
+        } else {
+            (None, None)
+        };
+        Ok(CapturedOutput {
+            control,
+            current,
+            occurrence,
+        })
+    }
+    /// Resolve the endpoint-output stage once; `Some` is a stop the caller must surface.
+    fn complete_endpoint(
+        &mut self,
+        crossfade: Option<(
+            AttributeValue,
+            f32,
+            Option<crate::DynamicSourceOccurrenceId>,
+        )>,
+        frame: &dyn WholeFamilyExpressionFrameResolver,
+        trace: &mut FamilyTraceArena,
+        tracing: bool,
+    ) -> Result<Option<CompletionProgress>, TransitionError> {
+        let endpoint = if let Some((current, mix, occurrence)) = crossfade {
+            if self.stops_before(PositionCompletionStage::EndpointOutput) {
+                return Ok(Some(self.stop_before(
+                    PositionCompletionStage::EndpointOutput,
+                    current,
+                    self.target.value.clone(),
+                    mix,
+                )));
+            }
+            let (value, transfer) = if mix == 0.0 {
+                (current, None)
+            } else if let Some(result) = self.resumed.take() {
+                result
+            } else {
+                let request = CompletionRequest {
+                    stage: PositionCompletionStage::EndpointOutput,
+                    requirement: TransitionRequirement::LiveJointAngles,
+                    from: current,
+                    to: self.target.value.clone(),
+                    progress: mix,
+                };
+                let Some(result) = self.sample(request, frame, tracing)? else {
+                    return Ok(Some(CompletionProgress::Needs(
+                        self.waiting.clone().expect("pending endpoint"),
+                    )));
+                };
+                result
+            };
+            let node = if tracing {
+                let current = trace.source(FamilyTraceSource {
+                    rank: self.rank,
+                    footprint: FamilyTraceFootprint::Whole,
+                    role: FamilyTraceRole::CalculationDependency,
+                    occurrence,
+                });
+                Some(if mix == 0.0 {
+                    current
+                } else {
+                    trace.mapped_blend(
+                        current,
+                        self.target.trace.expect("traced endpoint"),
+                        transfer,
+                    )
+                })
+            } else {
+                None
+            };
+            TracedValue { value, trace: node }
+        } else {
+            self.target.clone()
+        };
+        self.endpoint = Some(endpoint);
+        Ok(None)
+    }
+    /// Apply the activation envelope over the underlay and record the completed value.
+    fn complete_activation(
+        &mut self,
+        endpoint: TracedValue,
+        controlled: bool,
+        context: &FamilyCompositionContext<'_>,
+        frame: &dyn WholeFamilyExpressionFrameResolver,
+        trace: &mut FamilyTraceArena,
+        tracing: bool,
+    ) -> Result<CompletionProgress, TransitionError> {
         if self.activation_mix < 1.0 && self.stops_before(PositionCompletionStage::Activation) {
             let underlay = self.underlay.as_ref().expect("activation underlay");
             return Ok(self.stop_before(

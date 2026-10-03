@@ -280,18 +280,6 @@ pub(super) fn apply(
     replay_instance: Option<Option<Uuid>>,
 ) -> Result<DynamicControlOutcome, DynamicRuntimeError> {
     let at = request.at_millis;
-    let resolve = |runtime: &DynamicRuntime, id| -> Result<Uuid, DynamicRuntimeError> {
-        let instance = runtime
-            .controller(id)
-            .ok_or(DynamicRuntimeError::MissingController)?
-            .0;
-        if replay_instance.is_some_and(|expected| expected != Some(instance)) {
-            return Err(DynamicRuntimeError::InvalidReplay(
-                "controller instance differs from recorded identity".into(),
-            ));
-        }
-        Ok(instance)
-    };
     let (instance, changed) = match &request.control {
         DynamicControl::InstallFallbackDefinition(definition) => {
             let absent = !runtime.definitions.contains_key(&definition.id);
@@ -336,40 +324,40 @@ pub(super) fn apply(
                 )?,
             )
         }
+        control => apply_controller_control(runtime, control, at, replay_instance)?,
+    };
+    Ok(DynamicControlOutcome {
+        instance_id: instance,
+        changed,
+        instance_removed: instance.is_some_and(|id| !runtime.instances.contains_key(&id)),
+    })
+}
+
+/// Apply one control addressed to an existing controller, reporting its instance and change.
+fn apply_controller_control(
+    runtime: &mut DynamicRuntime,
+    control: &DynamicControl,
+    at: u64,
+    replay_instance: Option<Option<Uuid>>,
+) -> Result<(Option<Uuid>, bool), DynamicRuntimeError> {
+    Ok(match control {
         DynamicControl::Off {
             controller,
             delay,
             duration,
         } => {
-            let id = resolve(runtime, *controller)?;
-            let before = runtime.instances[&id]
-                .controller_transitions
-                .get(controller)
-                .copied();
-            runtime.off_controller(id, *controller, at, *delay, *duration)?;
-            let after = runtime
-                .instances
-                .get(&id)
-                .and_then(|v| v.controller_transitions.get(controller))
-                .copied();
-            (Some(id), before != after)
+            let id = resolve_controller_instance(runtime, *controller, replay_instance)?;
+            let changed = apply_off(runtime, id, *controller, at, *delay, *duration)?;
+            (Some(id), changed)
         }
         DynamicControl::Pause {
             controller,
             paused,
             resume,
         } => {
-            let id = resolve(runtime, *controller)?;
-            let before = (
-                runtime.controller(*controller).unwrap().1.paused,
-                runtime.instances[&id].paused_at_millis,
-            );
-            runtime.set_controller_paused_with_resume(id, *controller, *paused, at, *resume)?;
-            let after = (
-                runtime.controller(*controller).unwrap().1.paused,
-                runtime.instances[&id].paused_at_millis,
-            );
-            (Some(id), before != after)
+            let id = resolve_controller_instance(runtime, *controller, replay_instance)?;
+            let changed = apply_pause(runtime, id, *controller, *paused, at, *resume)?;
+            (Some(id), changed)
         }
         DynamicControl::Update {
             controller,
@@ -377,7 +365,7 @@ pub(super) fn apply(
             speed,
             phase,
         } => {
-            let id = resolve(runtime, *controller)?;
+            let id = resolve_controller_instance(runtime, *controller, replay_instance)?;
             let before = runtime.controller(*controller).unwrap().1;
             runtime.update_controller(*controller, *size, *speed, *phase)?;
             (
@@ -390,7 +378,7 @@ pub(super) fn apply(
             priority,
             authored_at,
         } => {
-            let id = resolve(runtime, *controller)?;
+            let id = resolve_controller_instance(runtime, *controller, replay_instance)?;
             let before = runtime.controller(*controller).unwrap().1;
             runtime.update_controller_rank(*controller, *priority, *authored_at, at)?;
             (
@@ -403,14 +391,14 @@ pub(super) fn apply(
             source,
             priority,
         } => {
-            let id = resolve(runtime, *controller)?;
+            let id = resolve_controller_instance(runtime, *controller, replay_instance)?;
             (
                 Some(id),
                 runtime.update_controller_owner(*controller, source.clone(), *priority)?,
             )
         }
         DynamicControl::CancelRelease { controller } => {
-            let id = resolve(runtime, *controller)?;
+            let id = resolve_controller_instance(runtime, *controller, replay_instance)?;
             let changed = runtime.source_scope_is_releasing(id, *controller);
             runtime.cancel_controller_release(*controller)?;
             (Some(id), changed)
@@ -419,7 +407,7 @@ pub(super) fn apply(
             controller,
             selection,
         } => {
-            let id = resolve(runtime, *controller)?;
+            let id = resolve_controller_instance(runtime, *controller, replay_instance)?;
             (
                 Some(id),
                 runtime.set_controller_lane_selection(id, *controller, selection.clone())?,
@@ -431,7 +419,7 @@ pub(super) fn apply(
             delay,
             duration,
         } => {
-            let id = resolve(runtime, *controller)?;
+            let id = resolve_controller_instance(runtime, *controller, replay_instance)?;
             (
                 Some(id),
                 runtime.set_controller_output_enabled(
@@ -444,13 +432,74 @@ pub(super) fn apply(
             )
         }
         DynamicControl::ClearOutputGate { controller } => {
-            let id = resolve(runtime, *controller)?;
+            let id = resolve_controller_instance(runtime, *controller, replay_instance)?;
             (Some(id), runtime.clear_controller_output_gate(*controller)?)
         }
-    };
-    Ok(DynamicControlOutcome {
-        instance_id: instance,
-        changed,
-        instance_removed: instance.is_some_and(|id| !runtime.instances.contains_key(&id)),
+        DynamicControl::InstallFallbackDefinition(_)
+        | DynamicControl::Start(_)
+        | DynamicControl::GlobalPause(_)
+        | DynamicControl::Targets { .. } => {
+            unreachable!("instance-scoped controls are applied before controller controls")
+        }
     })
+}
+
+fn resolve_controller_instance(
+    runtime: &DynamicRuntime,
+    id: Uuid,
+    replay_instance: Option<Option<Uuid>>,
+) -> Result<Uuid, DynamicRuntimeError> {
+    let instance = runtime
+        .controller(id)
+        .ok_or(DynamicRuntimeError::MissingController)?
+        .0;
+    if replay_instance.is_some_and(|expected| expected != Some(instance)) {
+        return Err(DynamicRuntimeError::InvalidReplay(
+            "controller instance differs from recorded identity".into(),
+        ));
+    }
+    Ok(instance)
+}
+
+/// Release a controller, reporting whether its transition state changed.
+fn apply_off(
+    runtime: &mut DynamicRuntime,
+    id: Uuid,
+    controller: Uuid,
+    at: u64,
+    delay: u64,
+    duration: u64,
+) -> Result<bool, DynamicRuntimeError> {
+    let before = runtime.instances[&id]
+        .controller_transitions
+        .get(&controller)
+        .copied();
+    runtime.off_controller(id, controller, at, delay, duration)?;
+    let after = runtime
+        .instances
+        .get(&id)
+        .and_then(|v| v.controller_transitions.get(&controller))
+        .copied();
+    Ok(before != after)
+}
+
+/// Pause or resume a controller, reporting whether its or its instance's pause state changed.
+fn apply_pause(
+    runtime: &mut DynamicRuntime,
+    id: Uuid,
+    controller: Uuid,
+    paused: bool,
+    at: u64,
+    resume: Option<crate::ActivationPolicy>,
+) -> Result<bool, DynamicRuntimeError> {
+    let before = (
+        runtime.controller(controller).unwrap().1.paused,
+        runtime.instances[&id].paused_at_millis,
+    );
+    runtime.set_controller_paused_with_resume(id, controller, paused, at, resume)?;
+    let after = (
+        runtime.controller(controller).unwrap().1.paused,
+        runtime.instances[&id].paused_at_millis,
+    );
+    Ok(before != after)
 }

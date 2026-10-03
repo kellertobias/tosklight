@@ -125,174 +125,12 @@ impl ProfileProjectionIndex {
 
 impl FixtureProjectionPlan {
     fn compile(fixture: &PatchedFixture, mode: &FixtureMode) -> Result<Self, EngineError> {
-        let mut channels = vec![Vec::new(); mode.heads.len()];
-        let mut intensity_channels = vec![Vec::new(); mode.heads.len()];
-        let mut splits = vec![Vec::new(); mode.heads.len()];
-        let head_indices = mode
-            .heads
-            .iter()
-            .enumerate()
-            .map(|(index, head)| (head.id, index))
-            .collect::<HashMap<_, _>>();
-        for (channel_index, channel) in mode.channels.iter().enumerate() {
-            let head_index = head_indices.get(&channel.head_id).copied().ok_or_else(|| {
-                EngineError::Invalid("profile channel references a missing head".into())
-            })?;
-            channels[head_index].push(channel_index);
-            if channel.attribute.is_intensity() {
-                intensity_channels[head_index].push(channel_index);
-            }
-            if !splits[head_index].contains(&channel.split) {
-                splits[head_index].push(channel.split);
-            }
-        }
-        let mut heads: Box<[ProfileHeadPlan]> = mode
-            .heads
-            .iter()
-            .enumerate()
-            .map(|(head_index, head)| ProfileHeadPlan {
-                owner: profile_head_owner(fixture, head_index, head),
-                head_id: head.id,
-                channel_indices: std::mem::take(&mut channels[head_index]).into_boxed_slice(),
-                intensity_channel_indices: std::mem::take(&mut intensity_channels[head_index])
-                    .into_boxed_slice(),
-                splits: std::mem::take(&mut splits[head_index]).into_boxed_slice(),
-                axis_roles: Box::default(),
-            })
-            .collect();
-        let mut dependencies: HashMap<(FixtureId, AttributeKey), Vec<usize>> = HashMap::new();
-        let mut add = |owner, attribute: AttributeKey, index| {
-            let channels = dependencies.entry((owner, attribute)).or_default();
-            if !channels.contains(&index) {
-                channels.push(index);
-            }
-        };
-        for head in &heads {
-            for &index in &head.channel_indices {
-                let channel = &mode.channels[index];
-                if channel.behavior == light_fixture::ChannelBehavior::Static {
-                    continue;
-                }
-                add(head.owner, channel.attribute.clone(), index);
-                add(head.owner, channel.fixture_attribute.clone(), index);
-                add(
-                    head.owner,
-                    FixtureMode::control_action_attribute(channel.id),
-                    index,
-                );
-                for function in &channel.functions {
-                    add(head.owner, function.attribute.clone(), index);
-                }
-                if channel.reacts_to_virtual_intensity {
-                    add(head.owner, AttributeKey::intensity(), index);
-                }
-            }
-        }
-        // Ownership is geometry-derived, including root-owned shared ancestral motors.
-        // This cold-only compilation reuses the existing fitter's exact footprint rules.
-        let mut position_footprints = HashMap::new();
-        let mut position_adoption_emitters = HashMap::new();
-        if let Some(profile) = fixture.definition.profile_snapshot.as_deref()
-            && let Ok(Some(model)) = light_fixture::CompiledPositionFitting::compile(
-                profile,
-                mode.id,
-                light_fixture::forward::PositionInstallation::default(),
-            )
-        {
-            assign_axis_roles(mode, &model, &mut heads);
-            let owners: HashSet<_> = std::iter::once(fixture.fixture_id)
-                .chain(heads.iter().map(|head| head.owner))
-                .collect();
-            for owner in owners {
-                let mut channels = HashSet::new();
-                let mut adoption = Vec::new();
-                for emitter in model.emitters().filter(|emitter| {
-                    emitter
-                        .head_id
-                        .map_or(owner == fixture.fixture_id, |head_id| {
-                            heads
-                                .iter()
-                                .any(|head| head.owner == owner && head.head_id == head_id)
-                        })
-                }) {
-                    adoption.push(PositionAdoptionEmitter {
-                        emitter_id: emitter.emitter_id,
-                        commands: emitter.command_indices.map(|indices| {
-                            indices.map(|index| (index, model.axes()[index].node_id))
-                        }),
-                    });
-                    for &axis in emitter.ancestor_axes {
-                        let axis = &model.axes()[axis];
-                        if matches!(
-                            axis.role,
-                            Some(
-                                light_fixture::PositionAxisRole::Pan
-                                    | light_fixture::PositionAxisRole::Tilt
-                            )
-                        ) {
-                            channels.extend(
-                                axis.controls
-                                    .iter()
-                                    .map(|control| control.channel_index as usize),
-                            );
-                        }
-                    }
-                }
-                if !adoption.is_empty() {
-                    position_adoption_emitters.insert(owner, adoption.into_boxed_slice());
-                }
-                if !channels.is_empty() {
-                    let mut channels: Vec<_> = channels.into_iter().collect();
-                    channels.sort_unstable();
-                    position_footprints.insert(owner, channels.into_boxed_slice());
-                }
-            }
-        }
-        let mut position_freeze_signatures = HashMap::new();
-        if !position_footprints.is_empty()
-            && let Some(profile) = fixture.definition.profile_snapshot.as_deref()
-        {
-            let controls: HashSet<_> = position_footprints
-                .values()
-                .flat_map(|indices| indices.iter().copied())
-                .collect();
-            let instances = std::iter::once((
-                fixture.fixture_id.0,
-                light_fixture::forward::PositionInstallation {
-                    calibration: fixture.position_calibration.as_ref(),
-                    invert_pan: fixture.invert_pan,
-                    invert_tilt: fixture.invert_tilt,
-                    bracket_degrees: f64::from(fixture.bracket_angle),
-                },
-            ))
-            .chain(fixture.multipatch.iter().map(|copy| {
-                (
-                    copy.id,
-                    light_fixture::forward::PositionInstallation {
-                        calibration: copy.position_calibration.as_ref(),
-                        invert_pan: copy.invert_pan,
-                        invert_tilt: copy.invert_tilt,
-                        bracket_degrees: f64::from(copy.bracket_angle),
-                    },
-                )
-            }));
-            for (instance, installed) in instances {
-                let mut signatures = vec![None; mode.channels.len()];
-                for &index in &controls {
-                    // Compatibility is cold-only. An unsupported interpretation cannot be
-                    // captured; it does not prevent ordinary show activation or output.
-                    signatures[index] = light_fixture::position_freeze_control_signature(
-                        profile,
-                        mode.id,
-                        mode.channels[index].id,
-                        installed,
-                    )
-                    .ok()
-                    .flatten();
-                }
-                position_freeze_signatures.insert(instance, signatures.into_boxed_slice());
-            }
-        }
+        let mut heads = compile_heads(fixture, mode)?;
+        let dependencies = compile_native_dependencies(mode, &heads);
+        let (position_footprints, position_adoption_emitters) =
+            compile_position_ownership(fixture, mode, &mut heads);
+        let position_freeze_signatures =
+            compile_position_freeze_signatures(fixture, mode, &position_footprints);
         let position_freeze_inputs = compile_position_freeze_inputs(
             fixture,
             mode,
@@ -306,10 +144,7 @@ impl FixtureProjectionPlan {
             position_adoption_emitters,
             resolution: mode.compile_resolution_plan(),
             heads,
-            native_dependencies: dependencies
-                .into_iter()
-                .map(|(key, channels)| (key, channels.into_boxed_slice()))
-                .collect(),
+            native_dependencies: dependencies,
             native_virtual_intensity: mode
                 .channels
                 .iter()
@@ -400,6 +235,216 @@ impl ProfileHeadPlan {
             .find(|(key, _)| key == attribute)
             .map(|(_, role)| *role)
     }
+}
+
+/// Each head's channels, intensity channels and splits, in mode channel order.
+fn compile_heads(
+    fixture: &PatchedFixture,
+    mode: &FixtureMode,
+) -> Result<Box<[ProfileHeadPlan]>, EngineError> {
+    let mut channels = vec![Vec::new(); mode.heads.len()];
+    let mut intensity_channels = vec![Vec::new(); mode.heads.len()];
+    let mut splits = vec![Vec::new(); mode.heads.len()];
+    let head_indices = mode
+        .heads
+        .iter()
+        .enumerate()
+        .map(|(index, head)| (head.id, index))
+        .collect::<HashMap<_, _>>();
+    for (channel_index, channel) in mode.channels.iter().enumerate() {
+        let head_index = head_indices.get(&channel.head_id).copied().ok_or_else(|| {
+            EngineError::Invalid("profile channel references a missing head".into())
+        })?;
+        channels[head_index].push(channel_index);
+        if channel.attribute.is_intensity() {
+            intensity_channels[head_index].push(channel_index);
+        }
+        if !splits[head_index].contains(&channel.split) {
+            splits[head_index].push(channel.split);
+        }
+    }
+    let heads: Box<[ProfileHeadPlan]> = mode
+        .heads
+        .iter()
+        .enumerate()
+        .map(|(head_index, head)| ProfileHeadPlan {
+            owner: profile_head_owner(fixture, head_index, head),
+            head_id: head.id,
+            channel_indices: std::mem::take(&mut channels[head_index]).into_boxed_slice(),
+            intensity_channel_indices: std::mem::take(&mut intensity_channels[head_index])
+                .into_boxed_slice(),
+            splits: std::mem::take(&mut splits[head_index]).into_boxed_slice(),
+            axis_roles: Box::default(),
+        })
+        .collect();
+    Ok(heads)
+}
+
+/// The channels each owner's attribute reaches, for native ownership of previewed values.
+fn compile_native_dependencies(
+    mode: &FixtureMode,
+    heads: &[ProfileHeadPlan],
+) -> HashMap<(FixtureId, AttributeKey), Box<[usize]>> {
+    let mut dependencies: HashMap<(FixtureId, AttributeKey), Vec<usize>> = HashMap::new();
+    let mut add = |owner, attribute: AttributeKey, index| {
+        let channels = dependencies.entry((owner, attribute)).or_default();
+        if !channels.contains(&index) {
+            channels.push(index);
+        }
+    };
+    for head in heads {
+        for &index in &head.channel_indices {
+            let channel = &mode.channels[index];
+            if channel.behavior == light_fixture::ChannelBehavior::Static {
+                continue;
+            }
+            add(head.owner, channel.attribute.clone(), index);
+            add(head.owner, channel.fixture_attribute.clone(), index);
+            add(
+                head.owner,
+                FixtureMode::control_action_attribute(channel.id),
+                index,
+            );
+            for function in &channel.functions {
+                add(head.owner, function.attribute.clone(), index);
+            }
+            if channel.reacts_to_virtual_intensity {
+                add(head.owner, AttributeKey::intensity(), index);
+            }
+        }
+    }
+    dependencies
+        .into_iter()
+        .map(|(key, channels)| (key, channels.into_boxed_slice()))
+        .collect()
+}
+
+type PositionOwnership = (
+    HashMap<FixtureId, Box<[usize]>>,
+    HashMap<FixtureId, Box<[PositionAdoptionEmitter]>>,
+);
+
+/// Position footprints and adoption emitters per owner, assigning each head's axis roles.
+fn compile_position_ownership(
+    fixture: &PatchedFixture,
+    mode: &FixtureMode,
+    heads: &mut [ProfileHeadPlan],
+) -> PositionOwnership {
+    // Ownership is geometry-derived, including root-owned shared ancestral motors.
+    // This cold-only compilation reuses the existing fitter's exact footprint rules.
+    let mut position_footprints = HashMap::new();
+    let mut position_adoption_emitters = HashMap::new();
+    if let Some(profile) = fixture.definition.profile_snapshot.as_deref()
+        && let Ok(Some(model)) = light_fixture::CompiledPositionFitting::compile(
+            profile,
+            mode.id,
+            light_fixture::forward::PositionInstallation::default(),
+        )
+    {
+        assign_axis_roles(mode, &model, heads);
+        let owners: HashSet<_> = std::iter::once(fixture.fixture_id)
+            .chain(heads.iter().map(|head| head.owner))
+            .collect();
+        for owner in owners {
+            let mut channels = HashSet::new();
+            let mut adoption = Vec::new();
+            for emitter in model.emitters().filter(|emitter| {
+                emitter
+                    .head_id
+                    .map_or(owner == fixture.fixture_id, |head_id| {
+                        heads
+                            .iter()
+                            .any(|head| head.owner == owner && head.head_id == head_id)
+                    })
+            }) {
+                adoption.push(PositionAdoptionEmitter {
+                    emitter_id: emitter.emitter_id,
+                    commands: emitter
+                        .command_indices
+                        .map(|indices| indices.map(|index| (index, model.axes()[index].node_id))),
+                });
+                for &axis in emitter.ancestor_axes {
+                    let axis = &model.axes()[axis];
+                    if matches!(
+                        axis.role,
+                        Some(
+                            light_fixture::PositionAxisRole::Pan
+                                | light_fixture::PositionAxisRole::Tilt
+                        )
+                    ) {
+                        channels.extend(
+                            axis.controls
+                                .iter()
+                                .map(|control| control.channel_index as usize),
+                        );
+                    }
+                }
+            }
+            if !adoption.is_empty() {
+                position_adoption_emitters.insert(owner, adoption.into_boxed_slice());
+            }
+            if !channels.is_empty() {
+                let mut channels: Vec<_> = channels.into_iter().collect();
+                channels.sort_unstable();
+                position_footprints.insert(owner, channels.into_boxed_slice());
+            }
+        }
+    }
+    (position_footprints, position_adoption_emitters)
+}
+
+/// Cold Position Freeze compatibility signature of every footprint control per instance.
+fn compile_position_freeze_signatures(
+    fixture: &PatchedFixture,
+    mode: &FixtureMode,
+    position_footprints: &HashMap<FixtureId, Box<[usize]>>,
+) -> HashMap<Uuid, Box<[Option<String>]>> {
+    let mut position_freeze_signatures = HashMap::new();
+    if !position_footprints.is_empty()
+        && let Some(profile) = fixture.definition.profile_snapshot.as_deref()
+    {
+        let controls: HashSet<_> = position_footprints
+            .values()
+            .flat_map(|indices| indices.iter().copied())
+            .collect();
+        let instances = std::iter::once((
+            fixture.fixture_id.0,
+            light_fixture::forward::PositionInstallation {
+                calibration: fixture.position_calibration.as_ref(),
+                invert_pan: fixture.invert_pan,
+                invert_tilt: fixture.invert_tilt,
+                bracket_degrees: f64::from(fixture.bracket_angle),
+            },
+        ))
+        .chain(fixture.multipatch.iter().map(|copy| {
+            (
+                copy.id,
+                light_fixture::forward::PositionInstallation {
+                    calibration: copy.position_calibration.as_ref(),
+                    invert_pan: copy.invert_pan,
+                    invert_tilt: copy.invert_tilt,
+                    bracket_degrees: f64::from(copy.bracket_angle),
+                },
+            )
+        }));
+        for (instance, installed) in instances {
+            let mut signatures = vec![None; mode.channels.len()];
+            for &index in &controls {
+                // Compatibility is cold-only. An unsupported interpretation cannot be
+                // captured; it does not prevent ordinary show activation or output.
+                signatures[index] = light_fixture::position_freeze_control_signature(
+                    profile,
+                    mode.id,
+                    mode.channels[index].id,
+                    installed,
+                )
+                .ok()
+                .flatten();
+            }
+            position_freeze_signatures.insert(instance, signatures.into_boxed_slice());
+        }
+    }
+    position_freeze_signatures
 }
 
 /// Assign each head the attributes that select its Pan/Tilt-bound channel functions (TL-630).

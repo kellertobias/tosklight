@@ -34,6 +34,16 @@ pub(super) fn execute_dynamic_command(
             .map_or(id, |controller| controller.controller_id)
     });
     let ports = dynamics_adapter::ServerDynamicsPorts { state, session };
+    let address = DynamicCommandAddress {
+        state,
+        session,
+        tokens,
+        dynamic_index,
+        timing,
+        definition,
+        targets: &targets,
+        explicit_controller,
+    };
     let command = light_application::DynamicStartCommand {
         dynamic_id: definition.id,
         targets: targets.clone(),
@@ -60,42 +70,30 @@ pub(super) fn execute_dynamic_command(
                     .map_err(|error| error.message)?;
             }
         }
-        [off] if off == "OFF" => {
-            let candidates =
-                command_controller_candidates(state, session, definition.id, &targets)?;
-            match resolve_command_controller(
-                state,
-                definition,
-                explicit_controller,
-                tokens,
-                dynamic_index,
-                timing,
-                candidates,
-            )? {
-                ControllerResolution::Exact(controller_id) => {
-                    state
-                        .dynamics
-                        .off(
-                            context,
-                            light_application::DynamicOffCommand {
-                                controller_id,
-                                timing: command.timing,
-                            },
-                            &ports,
-                        )
-                        .map_err(|error| error.message)?;
-                }
-                ControllerResolution::Choice(choice) => {
-                    return Ok(super::ProgrammerCommandExecution::ChoiceRequired(choice));
-                }
-                ControllerResolution::Absent => {
-                    state
-                        .dynamics
-                        .off_matching(context, command, &ports)
-                        .map_err(|error| error.message)?;
-                }
+        [off] if off == "OFF" => match address.resolve_controller()? {
+            ControllerResolution::Exact(controller_id) => {
+                state
+                    .dynamics
+                    .off(
+                        context,
+                        light_application::DynamicOffCommand {
+                            controller_id,
+                            timing: command.timing,
+                        },
+                        &ports,
+                    )
+                    .map_err(|error| error.message)?;
             }
-        }
+            ControllerResolution::Choice(choice) => {
+                return Ok(super::ProgrammerCommandExecution::ChoiceRequired(choice));
+            }
+            ControllerResolution::Absent => {
+                state
+                    .dynamics
+                    .off_matching(context, command, &ports)
+                    .map_err(|error| error.message)?;
+            }
+        },
         [field, at, values @ ..] if at == "AT" => {
             if matches!(field.as_str(), "BLOCKS" | "REPEATS" | "WINGS")
                 || (field == "PHASE" && values.iter().any(|token| token == "THRU"))
@@ -104,48 +102,11 @@ pub(super) fn execute_dynamic_command(
                 persist_output_runtime(state).map_err(|error| error.message)?;
                 return Ok(super::ProgrammerCommandExecution::Applied(targets.len()));
             }
-            let candidates =
-                command_controller_candidates(state, session, definition.id, &targets)?;
-            let controller_id = match resolve_command_controller(
-                state,
-                definition,
-                explicit_controller,
-                tokens,
-                dynamic_index,
-                timing,
-                candidates,
-            )? {
-                ControllerResolution::Exact(controller_id) => controller_id,
-                ControllerResolution::Choice(choice) => {
-                    return Ok(super::ProgrammerCommandExecution::ChoiceRequired(choice));
-                }
-                ControllerResolution::Absent => {
-                    return Err("no matching Dynamic instance is active for this selection".into());
-                }
-            };
-            let value = parse_controller_value(field, values)?;
-            let (size, speed_multiplier, phase_offset_degrees) = match field.as_str() {
-                "SIZE" => (Some(value / 100.0), None, None),
-                "SPEED" => (None, Some(value), None),
-                "PHASE" => (None, None, Some(value)),
-                _ => {
-                    return Err("Dynamic instance parameter must be SIZE, SPEED, or PHASE".into());
-                }
-            };
-            state
-                .dynamics
-                .update_controller(
-                    context,
-                    light_application::DynamicControllerUpdate {
-                        controller_id,
-                        size,
-                        speed_multiplier,
-                        phase_offset_degrees,
-                        undo_group: context.request_id.clone(),
-                    },
-                    &ports,
-                )
-                .map_err(|error| error.message)?;
+            if let Some(execution) =
+                update_addressed_controller(&address, context, &ports, field, values)?
+            {
+                return Ok(execution);
+            }
         }
         _ => {
             return Err(
@@ -155,6 +116,85 @@ pub(super) fn execute_dynamic_command(
     }
     persist_output_runtime(state).map_err(|error| error.message)?;
     Ok(super::ProgrammerCommandExecution::Applied(targets.len()))
+}
+
+/// The addressed Dynamic, its selection targets and the command tokens that named them.
+struct DynamicCommandAddress<'a> {
+    state: &'a AppState,
+    session: &'a Session,
+    tokens: &'a [String],
+    dynamic_index: usize,
+    timing: CommandTiming,
+    definition: &'a light_dynamics::DynamicDefinition,
+    targets: &'a [light_core::FixtureId],
+    explicit_controller: Option<Uuid>,
+}
+
+impl DynamicCommandAddress<'_> {
+    fn resolve_controller(&self) -> Result<ControllerResolution, String> {
+        let candidates = command_controller_candidates(
+            self.state,
+            self.session,
+            self.definition.id,
+            self.targets,
+        )?;
+        resolve_command_controller(
+            self.state,
+            self.definition,
+            self.explicit_controller,
+            self.tokens,
+            self.dynamic_index,
+            self.timing,
+            candidates,
+        )
+    }
+}
+
+/// Applies `SIZE`, `SPEED` or `PHASE AT` to the addressed controller. `Some` ends the command
+/// early with that execution result.
+fn update_addressed_controller(
+    address: &DynamicCommandAddress<'_>,
+    context: &light_application::ActionContext,
+    ports: &dynamics_adapter::ServerDynamicsPorts<'_>,
+    field: &str,
+    values: &[String],
+) -> Result<Option<super::ProgrammerCommandExecution>, String> {
+    let controller_id = match address.resolve_controller()? {
+        ControllerResolution::Exact(controller_id) => controller_id,
+        ControllerResolution::Choice(choice) => {
+            return Ok(Some(super::ProgrammerCommandExecution::ChoiceRequired(
+                choice,
+            )));
+        }
+        ControllerResolution::Absent => {
+            return Err("no matching Dynamic instance is active for this selection".into());
+        }
+    };
+    let value = parse_controller_value(field, values)?;
+    let (size, speed_multiplier, phase_offset_degrees) = match field {
+        "SIZE" => (Some(value / 100.0), None, None),
+        "SPEED" => (None, Some(value), None),
+        "PHASE" => (None, None, Some(value)),
+        _ => {
+            return Err("Dynamic instance parameter must be SIZE, SPEED, or PHASE".into());
+        }
+    };
+    address
+        .state
+        .dynamics
+        .update_controller(
+            context,
+            light_application::DynamicControllerUpdate {
+                controller_id,
+                size,
+                speed_multiplier,
+                phase_offset_degrees,
+                undo_group: context.request_id.clone(),
+            },
+            ports,
+        )
+        .map_err(|error| error.message)?;
+    Ok(None)
 }
 
 fn parse_dynamic_command_tail(tokens: &[String]) -> Result<(Option<Uuid>, &[String]), String> {

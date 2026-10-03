@@ -34,9 +34,9 @@ use crate::runtime::dynamic_source_origins::DynamicSourceOrigins;
 use light_core::programming::PROGRAMMING_CONTRACT_VERSION;
 
 mod accepted_color;
-pub(in crate::runtime) use accepted_color::{AcceptedColorFrame, AcceptedColorFrames};
 #[cfg(test)]
 pub(in crate::runtime) use accepted_color::lamp_quality;
+pub(in crate::runtime) use accepted_color::{AcceptedColorFrame, AcceptedColorFrames};
 
 /// What `dynamic_output_frame` hands its `finish` step.
 #[allow(clippy::large_enum_variant)] // Built and consumed once per frame; boxing adds an allocation.

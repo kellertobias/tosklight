@@ -337,10 +337,6 @@ pub(super) fn successful_transition_trace(
     native_channels: Option<&[(Uuid, bool)]>,
 ) -> Result<ProgrammingTransitionTrace, TransitionError> {
     use ProgrammingTraceField as F;
-    let identity = |scope| ProgrammingFieldTransfer {
-        identity: scope,
-        remap: Arc::default(),
-    };
     if amount <= 0.0 {
         return Ok(ProgrammingTransitionTrace {
             from: identity(ProgrammingFieldScope::for_value(owner, from)?),
@@ -355,13 +351,6 @@ pub(super) fn successful_transition_trace(
     }
     let from_scope = ProgrammingFieldScope::for_value(owner, from)?;
     let to_scope = ProgrammingFieldScope::for_value(owner, to)?;
-    let both = |fields: Vec<F>| {
-        let transfer = identity(ProgrammingFieldScope::new(fields));
-        ProgrammingTransitionTrace {
-            from: transfer.clone(),
-            to: transfer,
-        }
-    };
     let mut trace = match (from, to) {
         (AttributeValue::Normalized(_), AttributeValue::Normalized(_)) => both(vec![F::Focus]),
         (AttributeValue::ColorXyz(_), AttributeValue::ColorXyz(_)) => {
@@ -416,97 +405,13 @@ pub(super) fn successful_transition_trace(
                 TransitionRequirement::ZoomConvention,
             ));
         }
-        (AttributeValue::ColorProgram(a), AttributeValue::ColorProgram(b)) => {
-            match (a.as_ref(), b.as_ref()) {
-                (ColorProgram::Semantic { intent: a }, ColorProgram::Semantic { intent: b }) => {
-                    let mut trace = both(vec![
-                        F::ColorXyz,
-                        F::WhiteBlend,
-                        F::Temperature,
-                        F::Duv,
-                        F::Uv,
-                        F::RelativeOutput,
-                    ]);
-                    if a.base_xyz != b.base_xyz || a.recipe != b.recipe {
-                        let remap: Arc<[_]> = vec![
-                            (F::ColorXyz, F::ColorRecipeRed),
-                            (F::ColorXyz, F::ColorRecipeGreen),
-                            (F::ColorXyz, F::ColorRecipeBlue),
-                        ]
-                        .into();
-                        trace.from.remap = remap.clone();
-                        trace.to.remap = remap;
-                        // set_coordinates generates Amber=0. Its prior recipe field is not an input.
-                    } else {
-                        let recipe = ProgrammingFieldScope::new([
-                            F::ColorRecipeRed,
-                            F::ColorRecipeGreen,
-                            F::ColorRecipeBlue,
-                            F::ColorRecipeAmber,
-                        ]);
-                        trace.from.identity = trace.from.identity.union(&recipe);
-                        trace.to.identity = trace.to.identity.union(&recipe);
-                    }
-                    let held = if scale && amount > 1.0 {
-                        &mut trace.to
-                    } else {
-                        &mut trace.from
-                    };
-                    held.identity = held
-                        .identity
-                        .union(&ProgrammingFieldScope::new([F::Allocation, F::ColorWheels]));
-                    trace
-                }
-                (
-                    ColorProgram::Direct { recipe: a, .. },
-                    ColorProgram::Direct { recipe: b, .. },
-                ) if a.source == b.source => {
-                    let channels = native_channels.ok_or(TransitionError::Requires(
-                        TransitionRequirement::NativeColorModel,
-                    ))?;
-                    let mut trace = ProgrammingTransitionTrace::default();
-                    trace.from.identity = ProgrammingFieldScope::new([F::NativeColorIdentity]);
-                    let mut from_fields = vec![];
-                    let mut to_fields = vec![];
-                    for &(channel, continuous) in channels {
-                        let field = F::NativeColorChannel(channel);
-                        if continuous || !(scale && amount > 1.0) {
-                            from_fields.push(field);
-                        }
-                        if continuous || (scale && amount > 1.0) {
-                            to_fields.push(field);
-                        }
-                    }
-                    trace.from.identity = trace
-                        .from
-                        .identity
-                        .union(&ProgrammingFieldScope::new(from_fields));
-                    trace.to.identity = ProgrammingFieldScope::new(to_fields);
-                    if from == to {
-                        // The value optimization retained the portable estimate instead of predicting.
-                        let prediction = ProgrammingFieldScope::new([F::NativePrediction]);
-                        trace.from.identity = trace.from.identity.union(&prediction);
-                        trace.to.identity = trace.to.identity.union(&prediction);
-                    } else {
-                        for transfer in [&mut trace.from, &mut trace.to] {
-                            transfer.remap = transfer
-                                .identity
-                                .fields()
-                                .iter()
-                                .copied()
-                                .map(|field| (field, F::NativePrediction))
-                                .collect();
-                        }
-                    }
-                    trace
-                }
-                _ => {
-                    return Err(TransitionError::Requires(
-                        TransitionRequirement::ColorAppearance,
-                    ));
-                }
-            }
-        }
+        (AttributeValue::ColorProgram(a), AttributeValue::ColorProgram(b)) => color_program_trace(
+            (a.as_ref(), b.as_ref()),
+            (from, to),
+            amount,
+            scale,
+            native_channels,
+        )?,
         _ => {
             return Err(TransitionError::Requires(
                 TransitionRequirement::CompatibleOwners,
@@ -518,6 +423,120 @@ pub(super) fn successful_transition_trace(
     trace.from.identity = trace.from.identity.intersection(&from_scope);
     trace.to.identity = trace.to.identity.intersection(&to_scope);
     Ok(trace)
+}
+
+fn identity(scope: ProgrammingFieldScope) -> ProgrammingFieldTransfer {
+    ProgrammingFieldTransfer {
+        identity: scope,
+        remap: Arc::default(),
+    }
+}
+
+fn both(fields: Vec<ProgrammingTraceField>) -> ProgrammingTransitionTrace {
+    let transfer = identity(ProgrammingFieldScope::new(fields));
+    ProgrammingTransitionTrace {
+        from: transfer.clone(),
+        to: transfer,
+    }
+}
+
+/// Trace one ColorProgram transition between the programs of the `from` and `to` endpoints.
+fn color_program_trace(
+    programs: (&ColorProgram, &ColorProgram),
+    (from, to): (&AttributeValue, &AttributeValue),
+    amount: f32,
+    scale: bool,
+    native_channels: Option<&[(Uuid, bool)]>,
+) -> Result<ProgrammingTransitionTrace, TransitionError> {
+    use ProgrammingTraceField as F;
+    Ok(match programs {
+        (ColorProgram::Semantic { intent: a }, ColorProgram::Semantic { intent: b }) => {
+            let mut trace = both(vec![
+                F::ColorXyz,
+                F::WhiteBlend,
+                F::Temperature,
+                F::Duv,
+                F::Uv,
+                F::RelativeOutput,
+            ]);
+            if a.base_xyz != b.base_xyz || a.recipe != b.recipe {
+                let remap: Arc<[_]> = vec![
+                    (F::ColorXyz, F::ColorRecipeRed),
+                    (F::ColorXyz, F::ColorRecipeGreen),
+                    (F::ColorXyz, F::ColorRecipeBlue),
+                ]
+                .into();
+                trace.from.remap = remap.clone();
+                trace.to.remap = remap;
+                // set_coordinates generates Amber=0. Its prior recipe field is not an input.
+            } else {
+                let recipe = ProgrammingFieldScope::new([
+                    F::ColorRecipeRed,
+                    F::ColorRecipeGreen,
+                    F::ColorRecipeBlue,
+                    F::ColorRecipeAmber,
+                ]);
+                trace.from.identity = trace.from.identity.union(&recipe);
+                trace.to.identity = trace.to.identity.union(&recipe);
+            }
+            let held = if scale && amount > 1.0 {
+                &mut trace.to
+            } else {
+                &mut trace.from
+            };
+            held.identity = held
+                .identity
+                .union(&ProgrammingFieldScope::new([F::Allocation, F::ColorWheels]));
+            trace
+        }
+        (ColorProgram::Direct { recipe: a, .. }, ColorProgram::Direct { recipe: b, .. })
+            if a.source == b.source =>
+        {
+            let channels = native_channels.ok_or(TransitionError::Requires(
+                TransitionRequirement::NativeColorModel,
+            ))?;
+            let mut trace = ProgrammingTransitionTrace::default();
+            trace.from.identity = ProgrammingFieldScope::new([F::NativeColorIdentity]);
+            let mut from_fields = vec![];
+            let mut to_fields = vec![];
+            for &(channel, continuous) in channels {
+                let field = F::NativeColorChannel(channel);
+                if continuous || !(scale && amount > 1.0) {
+                    from_fields.push(field);
+                }
+                if continuous || (scale && amount > 1.0) {
+                    to_fields.push(field);
+                }
+            }
+            trace.from.identity = trace
+                .from
+                .identity
+                .union(&ProgrammingFieldScope::new(from_fields));
+            trace.to.identity = ProgrammingFieldScope::new(to_fields);
+            if from == to {
+                // The value optimization retained the portable estimate instead of predicting.
+                let prediction = ProgrammingFieldScope::new([F::NativePrediction]);
+                trace.from.identity = trace.from.identity.union(&prediction);
+                trace.to.identity = trace.to.identity.union(&prediction);
+            } else {
+                for transfer in [&mut trace.from, &mut trace.to] {
+                    transfer.remap = transfer
+                        .identity
+                        .fields()
+                        .iter()
+                        .copied()
+                        .map(|field| (field, F::NativePrediction))
+                        .collect();
+                }
+            }
+            trace
+        }
+        _ => {
+            return Err(TransitionError::Requires(
+                TransitionRequirement::ColorAppearance,
+            ));
+        }
+    })
 }
 
 #[cfg(test)]

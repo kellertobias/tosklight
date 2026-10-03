@@ -261,6 +261,115 @@ fn combine(a: AddressSummary, b: AddressSummary) -> AddressSummary {
     }
 }
 
+/// Validate one node against its already-validated children and summarize its address.
+fn node_summary(
+    node: &RetainedExpressionNode,
+    summaries: &[AddressSummary],
+) -> Result<AddressSummary, IntentError> {
+    Ok(match node {
+        RetainedExpressionNode::LegacyScalar {
+            attribute,
+            value,
+            dependency_occurrence,
+            ..
+        } => {
+            if !attribute_descriptor(attribute).supports_dynamics() || !value.is_finite() {
+                return Err(IntentError("retained scalar is invalid".into()));
+            }
+            if dependency_occurrence.as_ref().is_some_and(|dependency| {
+                matches!(dependency.transfer, crate::DynamicSourceTransfer::Mapped(_))
+            }) {
+                return Err(IntentError(
+                    "legacy scalar dependency cannot carry family field transfers".into(),
+                ));
+            }
+            AddressSummary::Mixed
+        }
+        RetainedExpressionNode::Programming {
+            address,
+            value,
+            dependency_occurrence,
+            ..
+        } => {
+            address.validate_value_shape(value)?;
+            if let Some(dependency) = dependency_occurrence {
+                dependency.validate(address.owner())?;
+            }
+            AddressSummary::Exact(address.clone())
+        }
+        RetainedExpressionNode::AngleCurrent { address } => {
+            address.validate()?;
+            if address.representation != DynamicFamilyRepresentation::Angles
+                || !matches!(
+                    address.component,
+                    None | Some(ProgrammingComponent::Pan | ProgrammingComponent::Tilt)
+                )
+            {
+                return Err(IntentError(
+                    "retained Angle Current needs whole Angles or Pan/Tilt".into(),
+                ));
+            }
+            AddressSummary::Exact(address.clone())
+        }
+        RetainedExpressionNode::AngleNumeric { program } => {
+            program.validate()?;
+            if !program.operations.is_empty() {
+                return Err(IntentError(
+                    "retained numeric Angle origins belong to the tape object table".into(),
+                ));
+            }
+            AddressSummary::Exact(program.address.clone())
+        }
+        RetainedExpressionNode::Scale {
+            address,
+            base,
+            value,
+            factor,
+            ..
+        } => {
+            if address.component.is_some() || !factor.is_finite() || *factor < 0.0 {
+                return Err(IntentError("retained whole-family Size is invalid".into()));
+            }
+            address.validate()?;
+            let DynamicValue::Family(base) = base else {
+                return Err(IntentError(
+                    "retained Size requires a whole-family base".into(),
+                ));
+            };
+            DynamicValueAddress::whole_family(address.owner(), base)?;
+            if summaries[value.0 as usize] != AddressSummary::Exact(address.clone()) {
+                return Err(IntentError(
+                    "retained Size has a different family address".into(),
+                ));
+            }
+            AddressSummary::Exact(address.clone())
+        }
+        RetainedExpressionNode::Transition {
+            from,
+            to,
+            progress,
+            reason,
+        } => {
+            if (from.is_none() && to.is_none())
+                || !progress.is_finite()
+                || !(0.0..=1.0).contains(progress)
+            {
+                return Err(IntentError("retained transition is invalid".into()));
+            }
+            if let DynamicTransitionReason::Resume { occurrence_id } = reason
+                && occurrence_id.is_nil()
+            {
+                return Err(IntentError(
+                    "retained resume needs a stable occurrence".into(),
+                ));
+            }
+            let a = from.map_or(AddressSummary::Empty, |id| summaries[id.0 as usize].clone());
+            let b = to.map_or(AddressSummary::Empty, |id| summaries[id.0 as usize].clone());
+            combine(a, b)
+        }
+    })
+}
+
 impl RetainedExpressionTape {
     pub fn empty() -> Self {
         Self {
@@ -452,148 +561,52 @@ impl RetainedExpressionTape {
         }
         let mut summaries = Vec::<AddressSummary>::with_capacity(self.nodes.len());
         for (index, node) in self.nodes.iter().enumerate() {
-            if self.version < 3 && matches!(node, RetainedExpressionNode::AngleNumeric { .. }) {
-                return Err(IntentError(
-                    "numeric Angle expressions require retained tape version 3".into(),
-                ));
-            }
-            if self.version == 1
-                && match node {
-                    RetainedExpressionNode::LegacyScalar {
-                        occurrence,
-                        dependency_occurrence,
-                        ..
-                    } => occurrence.is_some() || dependency_occurrence.is_some(),
-                    RetainedExpressionNode::Programming {
-                        occurrence,
-                        dependency_occurrence,
-                        ..
-                    } => occurrence.is_some() || dependency_occurrence.is_some(),
-                    RetainedExpressionNode::Scale {
-                        baseline_occurrence,
-                        ..
-                    } => baseline_occurrence.is_some(),
-                    _ => false,
-                }
-            {
-                return Err(IntentError(
-                    "version 1 retained tape cannot carry source occurrences".into(),
-                ));
-            }
+            self.validate_node_version(node)?;
             for child in node.children() {
                 if child.0 as usize >= index {
                     return Err(IntentError("retained child must precede its parent".into()));
                 }
             }
-            let summary = match node {
-                RetainedExpressionNode::LegacyScalar {
-                    attribute,
-                    value,
-                    dependency_occurrence,
-                    ..
-                } => {
-                    if !attribute_descriptor(attribute).supports_dynamics() || !value.is_finite() {
-                        return Err(IntentError("retained scalar is invalid".into()));
-                    }
-                    if dependency_occurrence.as_ref().is_some_and(|dependency| {
-                        matches!(dependency.transfer, crate::DynamicSourceTransfer::Mapped(_))
-                    }) {
-                        return Err(IntentError(
-                            "legacy scalar dependency cannot carry family field transfers".into(),
-                        ));
-                    }
-                    AddressSummary::Mixed
-                }
-                RetainedExpressionNode::Programming {
-                    address,
-                    value,
-                    dependency_occurrence,
-                    ..
-                } => {
-                    address.validate_value_shape(value)?;
-                    if let Some(dependency) = dependency_occurrence {
-                        dependency.validate(address.owner())?;
-                    }
-                    AddressSummary::Exact(address.clone())
-                }
-                RetainedExpressionNode::AngleCurrent { address } => {
-                    address.validate()?;
-                    if address.representation != DynamicFamilyRepresentation::Angles
-                        || !matches!(
-                            address.component,
-                            None | Some(ProgrammingComponent::Pan | ProgrammingComponent::Tilt)
-                        )
-                    {
-                        return Err(IntentError(
-                            "retained Angle Current needs whole Angles or Pan/Tilt".into(),
-                        ));
-                    }
-                    AddressSummary::Exact(address.clone())
-                }
-                RetainedExpressionNode::AngleNumeric { program } => {
-                    program.validate()?;
-                    if !program.operations.is_empty() {
-                        return Err(IntentError(
-                            "retained numeric Angle origins belong to the tape object table".into(),
-                        ));
-                    }
-                    AddressSummary::Exact(program.address.clone())
-                }
-                RetainedExpressionNode::Scale {
-                    address,
-                    base,
-                    value,
-                    factor,
-                    ..
-                } => {
-                    if address.component.is_some() || !factor.is_finite() || *factor < 0.0 {
-                        return Err(IntentError("retained whole-family Size is invalid".into()));
-                    }
-                    address.validate()?;
-                    let DynamicValue::Family(base) = base else {
-                        return Err(IntentError(
-                            "retained Size requires a whole-family base".into(),
-                        ));
-                    };
-                    DynamicValueAddress::whole_family(address.owner(), base)?;
-                    if summaries[value.0 as usize] != AddressSummary::Exact(address.clone()) {
-                        return Err(IntentError(
-                            "retained Size has a different family address".into(),
-                        ));
-                    }
-                    AddressSummary::Exact(address.clone())
-                }
-                RetainedExpressionNode::Transition {
-                    from,
-                    to,
-                    progress,
-                    reason,
-                } => {
-                    if (from.is_none() && to.is_none())
-                        || !progress.is_finite()
-                        || !(0.0..=1.0).contains(progress)
-                    {
-                        return Err(IntentError("retained transition is invalid".into()));
-                    }
-                    if let DynamicTransitionReason::Resume { occurrence_id } = reason
-                        && occurrence_id.is_nil()
-                    {
-                        return Err(IntentError(
-                            "retained resume needs a stable occurrence".into(),
-                        ));
-                    }
-                    let a =
-                        from.map_or(AddressSummary::Empty, |id| summaries[id.0 as usize].clone());
-                    let b = to.map_or(AddressSummary::Empty, |id| summaries[id.0 as usize].clone());
-                    combine(a, b)
-                }
-            };
+            let summary = node_summary(node, &summaries)?;
             summaries.push(summary);
         }
         for root in &self.roots {
             self.require_existing(*root)?;
         }
         self.validate_operations()
+    }
+
+    /// Reject node shapes that the declared tape version cannot carry.
+    fn validate_node_version(&self, node: &RetainedExpressionNode) -> Result<(), IntentError> {
+        if self.version < 3 && matches!(node, RetainedExpressionNode::AngleNumeric { .. }) {
+            return Err(IntentError(
+                "numeric Angle expressions require retained tape version 3".into(),
+            ));
+        }
+        if self.version == 1
+            && match node {
+                RetainedExpressionNode::LegacyScalar {
+                    occurrence,
+                    dependency_occurrence,
+                    ..
+                } => occurrence.is_some() || dependency_occurrence.is_some(),
+                RetainedExpressionNode::Programming {
+                    occurrence,
+                    dependency_occurrence,
+                    ..
+                } => occurrence.is_some() || dependency_occurrence.is_some(),
+                RetainedExpressionNode::Scale {
+                    baseline_occurrence,
+                    ..
+                } => baseline_occurrence.is_some(),
+                _ => false,
+            }
+        {
+            return Err(IntentError(
+                "version 1 retained tape cannot carry source occurrences".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Object-table validation: one referenced entry per witness, ordered node references,

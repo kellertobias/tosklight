@@ -2,6 +2,7 @@
 //! Request IDs protect response routing; they never establish a shared mechanical cut.
 use super::*;
 use base_evaluation::{BaseEvaluation, BaseEvaluationProgress, BaseMaterializationRequest};
+use std::ops::ControlFlow;
 mod stage_recipe;
 pub use stage_recipe::*;
 mod stage_discovery;
@@ -67,6 +68,14 @@ struct MaskApplication {
     from: TracedValue,
     adopted: Option<AttributeValue>,
     response: Option<(AttributeValue, Option<ProgrammingTransitionTrace>)>,
+}
+
+/// How a settled base step continues the Position advance loop when it does not return.
+enum BaseStep {
+    /// The base driver needs another pass.
+    Pending,
+    /// The base segment completed before a whole mask that must be applied next.
+    Mask,
 }
 
 /// The coordinator owns the immutable frame, context and mechanical peer registry. Supply
@@ -292,289 +301,343 @@ impl PositionCompositionContinuation {
             ));
         }
         loop {
-            if let Some(base) = &mut self.base {
-                let reached_enabled =
-                    self.graph_discovery.is_some() || self.graph_materialization.is_some();
-                let binding = self.origin_binding.as_ref();
-                let mut reached = |route: &PreparedPositionGraphRoute| {
-                    let state = (&mut self.graph_discovery, &mut self.graph_materialization);
-                    graph_materialization::reached_action(state, binding, route)
-                };
-                let progress = if let Some(replay) = &self.resume_replay {
-                    let binding = self.origin_binding.as_ref().ok_or_else(|| {
-                        IntentError("Position Resume operand lost its original binding".into())
-                    })?;
-                    let mut graph =
-                        |route: &PreparedPositionGraphRoute| replay.graph_plan(route, binding);
-                    let mut stages =
-                        |route: &PreparedPositionStageRoute| replay.stage(route, binding);
-                    let mut stopped = |depth| replay.complete_stop(depth);
-                    let mut cohort = |uses: &[PreparedPositionStageUse],
-                                      origins: &[PreparedSourceOrigin],
-                                      expression: &Arc<CompiledCoupledExpression>,
-                                      endpoints: &[usize]| {
-                        replay.cohort(uses, origins, expression, endpoints, binding)
-                    };
-                    let matcher = if replay.enclosing_stage().is_some() {
-                        PreparedPositionStageMatcher::enabled(&mut stages)
-                    } else {
-                        PreparedPositionStageMatcher::disabled()
-                    };
-                    base.advance_with_stage(
-                        context,
-                        frame,
-                        &mut self.scratch,
-                        &mut matcher
-                            .with_resume_plan(&mut graph, &mut stopped, &mut cohort)
-                            .with_graph_reached(reached_enabled.then_some(&mut reached)),
-                    )?
-                } else if let Some((locator, operand)) = &self.graph_replay {
-                    let binding = self.origin_binding.as_ref().ok_or_else(|| {
-                        IntentError("Position graph operand lost its original binding".into())
-                    })?;
-                    let mut matcher = |route: &PreparedPositionGraphRoute| {
-                        Ok(binding
-                            .graph_locator(route)?
-                            .filter(|candidate| candidate == locator)
-                            .map(|_| operand.internal()))
-                    };
-                    base.advance_with_stage(
-                        context,
-                        frame,
-                        &mut self.scratch,
-                        &mut PreparedPositionStageMatcher::enabled_graph(&mut matcher)
-                            .with_graph_reached(reached_enabled.then_some(&mut reached)),
-                    )?
-                } else if let Some((locator, operand)) = stage {
-                    let binding = self.origin_binding.as_ref().ok_or_else(|| {
-                        IntentError("Position operand lost its original binding".into())
-                    })?;
-                    let mut matcher = |route: &PreparedPositionStageRoute| {
-                        Ok(binding
-                            .stage_locator(route)?
-                            .filter(|candidate| candidate == locator)
-                            .map(|_| operand.segment()))
-                    };
-                    base.advance_with_stage(
-                        context,
-                        frame,
-                        &mut self.scratch,
-                        &mut PreparedPositionStageMatcher::enabled(&mut matcher)
-                            .with_graph_reached(reached_enabled.then_some(&mut reached)),
-                    )?
-                } else if let Some(discovery) = &mut self.discovery {
-                    let binding = self.origin_binding.as_ref().ok_or_else(|| {
-                        IntentError("Position discovery lost its original binding".into())
-                    })?;
-                    let mut matcher = |route: &PreparedPositionStageRoute| {
-                        discovery.record(binding.stage_locator(route)?)?;
-                        Ok(None)
-                    };
-                    base.advance_with_stage(
-                        context,
-                        frame,
-                        &mut self.scratch,
-                        &mut PreparedPositionStageMatcher::enabled(&mut matcher)
-                            .with_graph_reached(reached_enabled.then_some(&mut reached)),
-                    )?
-                } else {
-                    base.advance_with_stage(
-                        context,
-                        frame,
-                        &mut self.scratch,
-                        &mut PreparedPositionStageMatcher::disabled()
-                            .with_graph_reached(reached_enabled.then_some(&mut reached)),
-                    )?
-                };
-                match progress {
-                    BaseEvaluationProgress::Pending => continue,
-                    BaseEvaluationProgress::OperandReady(value) => {
-                        ensure(
-                            self.operand_only,
-                            "speculative operand escaped into ordinary parent composition",
-                        )?;
-                        if self
-                            .resume_replay
-                            .as_ref()
-                            .is_some_and(|replay| !replay.requested_stopped())
-                        {
-                            self.completed = true;
-                        } else {
-                            self.stopped_operand = Some(value.clone());
-                        }
-                        return Ok(PositionCompositionProgress::Complete(value));
-                    }
-                    BaseEvaluationProgress::NeedsMaterialization {
-                        source_index,
-                        request,
-                    } => {
-                        let rank = request.source_rank(source_index, &self.scratch);
-                        return self.wait(
-                            request.requirement,
-                            PositionCompositionOperation::Base {
-                                source_index,
-                                rank,
-                                request,
-                            },
-                        );
-                    }
-                    BaseEvaluationProgress::Complete(value) => {
-                        self.current = value;
-                        self.base
-                            .take()
-                            .expect("completed base driver")
-                            .recycle(&mut self.scratch);
-                        if let Some(cursor) = self.next_mask {
-                            let source_index = self.scratch.ordered[cursor];
-                            let mask = self.scratch.sources[source_index]
-                                .whole_mask()
-                                .expect("partial mask")
-                                .clone();
-                            self.mask = Some(MaskApplication {
-                                source_index,
-                                mask,
-                                from: self.current.clone(),
-                                adopted: None,
-                                response: None,
-                            });
-                        } else {
-                            self.completed = true;
-                            if let Some(root) = self.current.trace {
-                                self.scratch.trace.set_root(root);
-                            }
-                            return Ok(PositionCompositionProgress::Complete(
-                                self.current.value.clone(),
-                            ));
-                        }
-                    }
+            if let Some(progress) = self.advance_base(context, frame, stage)? {
+                match self.settle_base(progress)? {
+                    ControlFlow::Continue(BaseStep::Pending) => continue,
+                    ControlFlow::Continue(BaseStep::Mask) => {}
+                    ControlFlow::Break(progress) => return Ok(progress),
                 }
             }
-            let application = self.mask.as_mut().expect("pending Position mask");
-            if application.adopted.is_none() {
-                if mask_stage(
-                    self.origin_binding.as_ref(),
-                    &self.scratch,
-                    self.discovery.as_mut(),
-                    application.source_index,
-                    PositionMaskStage::Adoption,
-                    stage,
-                )?
-                .is_some()
-                {
-                    // Only AdoptionInput belongs to this stage: the composed prefix.
-                    let value = application.from.value.clone();
-                    return self.stop_at_mask(value);
-                }
-                match adopt(
-                    application.from.value.clone(),
-                    application.mask.address.address(),
-                    context,
-                    &self.original_base,
-                ) {
-                    Ok(value) => {
-                        if self.scratch.trace_enabled
-                            && !application
-                                .mask
-                                .address
-                                .address()
-                                .matches_authored_source(&application.from.value)
-                        {
-                            let prior = application.from.trace.expect("traced mask adoption");
-                            application.from.trace =
-                                Some(self.scratch.trace.mapped_blend(prior, prior, None));
-                        }
-                        application.adopted = Some(value);
-                    }
-                    Err(TransitionError::Requires(requirement)) => {
-                        let operation = PositionCompositionOperation::MaskAdoption {
-                            source_index: application.source_index,
-                            rank: application.mask.rank,
-                            from: application.from.value.clone(),
-                            address: application.mask.address.address().clone(),
-                        };
-                        return self.wait(requirement, operation);
-                    }
-                    Err(error) => return Err(error),
-                }
+            if let Some(progress) = self.adopt_mask(context, stage)? {
+                return Ok(progress);
             }
-            let from = application.adopted.as_ref().expect("adopted mask prefix");
-            let Some(DynamicValue::Family(to)) = application.mask.materialized_value() else {
-                unreachable!("validated whole mask")
-            };
-            if application.response.is_none()
-                && let Some(operand) = mask_stage(
-                    self.origin_binding.as_ref(),
-                    &self.scratch,
-                    self.discovery.as_mut(),
-                    application.source_index,
-                    PositionMaskStage::Transition,
-                    stage,
-                )?
-            {
-                let value = match operand {
-                    PositionStageOperand::TransitionFrom => from.clone(),
-                    PositionStageOperand::TransitionTo => to.clone(),
-                    PositionStageOperand::AdoptionInput => {
-                        return Err(IntentError(
-                            "Position mask transition has no adoption operand".into(),
-                        )
-                        .into());
-                    }
-                };
-                return self.stop_at_mask(value);
+            if let Some(progress) = self.apply_mask(frame, stage)? {
+                return Ok(progress);
             }
-            let mut appearance = None;
-            let value = if let Some((value, transfer)) = application.response.take() {
-                appearance = Some(transfer);
-                value
-            } else {
-                let compiled = CompiledProgrammingTransition::new(from.clone(), to.clone(), None)?;
-                match compiled.sample(application.mask.activation_mix) {
-                    Ok(value) => value,
-                    Err(TransitionError::Requires(requirement)) => {
-                        match frame.resolve_with_trace(
-                            requirement,
-                            from,
-                            to,
-                            FamilyExpressionOperation::Transition {
-                                progress: application.mask.activation_mix,
-                            },
-                        ) {
-                            Ok((value, transfer)) => {
-                                position_completion::validate_position(&value)?;
-                                position_completion::validate_transfer(transfer.as_ref())?;
-                                appearance = Some(transfer);
-                                value
-                            }
-                            Err(TransitionError::Requires(requirement)) => {
-                                let operation = PositionCompositionOperation::MaskTransition {
-                                    source_index: application.source_index,
-                                    rank: application.mask.rank,
-                                    from: from.clone(),
-                                    to: to.clone(),
-                                    progress: application.mask.activation_mix,
-                                };
-                                return self.wait(requirement, operation);
-                            }
-                            Err(error) => return Err(error),
-                        }
-                    }
-                    Err(error) => return Err(error),
-                }
-            };
-            let trace = self.scratch.trace_enabled.then(|| {
-                whole_mask_trace(
-                    &application.mask,
-                    application.from.trace.expect("trace mask prefix"),
-                    appearance,
-                    &mut self.scratch.trace,
-                )
-            });
-            self.current = TracedValue { value, trace };
-            self.mask = None;
-            self.segment_start = self.next_mask.expect("completed mask cursor") + 1;
-            self.schedule_segment();
         }
+    }
+
+    /// Advance the pending base segment through the matcher selected by the replay mode.
+    fn advance_base(
+        &mut self,
+        context: &FamilyCompositionContext<'_>,
+        frame: &dyn WholeFamilyExpressionFrameResolver,
+        stage: Option<(&PositionStageLocator, PositionStageOperand)>,
+    ) -> Result<Option<BaseEvaluationProgress>, TransitionError> {
+        let Some(base) = &mut self.base else {
+            return Ok(None);
+        };
+        let reached_enabled =
+            self.graph_discovery.is_some() || self.graph_materialization.is_some();
+        let binding = self.origin_binding.as_ref();
+        let mut reached = |route: &PreparedPositionGraphRoute| {
+            let state = (&mut self.graph_discovery, &mut self.graph_materialization);
+            graph_materialization::reached_action(state, binding, route)
+        };
+        let progress = if let Some(replay) = &self.resume_replay {
+            let binding = self.origin_binding.as_ref().ok_or_else(|| {
+                IntentError("Position Resume operand lost its original binding".into())
+            })?;
+            let mut graph = |route: &PreparedPositionGraphRoute| replay.graph_plan(route, binding);
+            let mut stages = |route: &PreparedPositionStageRoute| replay.stage(route, binding);
+            let mut stopped = |depth| replay.complete_stop(depth);
+            let mut cohort = |uses: &[PreparedPositionStageUse],
+                              origins: &[PreparedSourceOrigin],
+                              expression: &Arc<CompiledCoupledExpression>,
+                              endpoints: &[usize]| {
+                replay.cohort(uses, origins, expression, endpoints, binding)
+            };
+            let matcher = if replay.enclosing_stage().is_some() {
+                PreparedPositionStageMatcher::enabled(&mut stages)
+            } else {
+                PreparedPositionStageMatcher::disabled()
+            };
+            base.advance_with_stage(
+                context,
+                frame,
+                &mut self.scratch,
+                &mut matcher
+                    .with_resume_plan(&mut graph, &mut stopped, &mut cohort)
+                    .with_graph_reached(reached_enabled.then_some(&mut reached)),
+            )?
+        } else if let Some((locator, operand)) = &self.graph_replay {
+            let binding = self.origin_binding.as_ref().ok_or_else(|| {
+                IntentError("Position graph operand lost its original binding".into())
+            })?;
+            let mut matcher = |route: &PreparedPositionGraphRoute| {
+                Ok(binding
+                    .graph_locator(route)?
+                    .filter(|candidate| candidate == locator)
+                    .map(|_| operand.internal()))
+            };
+            base.advance_with_stage(
+                context,
+                frame,
+                &mut self.scratch,
+                &mut PreparedPositionStageMatcher::enabled_graph(&mut matcher)
+                    .with_graph_reached(reached_enabled.then_some(&mut reached)),
+            )?
+        } else if let Some((locator, operand)) = stage {
+            let binding = self
+                .origin_binding
+                .as_ref()
+                .ok_or_else(|| IntentError("Position operand lost its original binding".into()))?;
+            let mut matcher = |route: &PreparedPositionStageRoute| {
+                Ok(binding
+                    .stage_locator(route)?
+                    .filter(|candidate| candidate == locator)
+                    .map(|_| operand.segment()))
+            };
+            base.advance_with_stage(
+                context,
+                frame,
+                &mut self.scratch,
+                &mut PreparedPositionStageMatcher::enabled(&mut matcher)
+                    .with_graph_reached(reached_enabled.then_some(&mut reached)),
+            )?
+        } else if let Some(discovery) = &mut self.discovery {
+            let binding = self.origin_binding.as_ref().ok_or_else(|| {
+                IntentError("Position discovery lost its original binding".into())
+            })?;
+            let mut matcher = |route: &PreparedPositionStageRoute| {
+                discovery.record(binding.stage_locator(route)?)?;
+                Ok(None)
+            };
+            base.advance_with_stage(
+                context,
+                frame,
+                &mut self.scratch,
+                &mut PreparedPositionStageMatcher::enabled(&mut matcher)
+                    .with_graph_reached(reached_enabled.then_some(&mut reached)),
+            )?
+        } else {
+            base.advance_with_stage(
+                context,
+                frame,
+                &mut self.scratch,
+                &mut PreparedPositionStageMatcher::disabled()
+                    .with_graph_reached(reached_enabled.then_some(&mut reached)),
+            )?
+        };
+        Ok(Some(progress))
+    }
+
+    fn settle_base(
+        &mut self,
+        progress: BaseEvaluationProgress,
+    ) -> Result<ControlFlow<PositionCompositionProgress, BaseStep>, TransitionError> {
+        match progress {
+            BaseEvaluationProgress::Pending => {
+                return Ok(ControlFlow::Continue(BaseStep::Pending));
+            }
+            BaseEvaluationProgress::OperandReady(value) => {
+                ensure(
+                    self.operand_only,
+                    "speculative operand escaped into ordinary parent composition",
+                )?;
+                if self
+                    .resume_replay
+                    .as_ref()
+                    .is_some_and(|replay| !replay.requested_stopped())
+                {
+                    self.completed = true;
+                } else {
+                    self.stopped_operand = Some(value.clone());
+                }
+                return Ok(ControlFlow::Break(PositionCompositionProgress::Complete(
+                    value,
+                )));
+            }
+            BaseEvaluationProgress::NeedsMaterialization {
+                source_index,
+                request,
+            } => {
+                let rank = request.source_rank(source_index, &self.scratch);
+                return self
+                    .wait(
+                        request.requirement,
+                        PositionCompositionOperation::Base {
+                            source_index,
+                            rank,
+                            request,
+                        },
+                    )
+                    .map(ControlFlow::Break);
+            }
+            BaseEvaluationProgress::Complete(value) => {
+                self.current = value;
+                self.base
+                    .take()
+                    .expect("completed base driver")
+                    .recycle(&mut self.scratch);
+                if let Some(cursor) = self.next_mask {
+                    let source_index = self.scratch.ordered[cursor];
+                    let mask = self.scratch.sources[source_index]
+                        .whole_mask()
+                        .expect("partial mask")
+                        .clone();
+                    self.mask = Some(MaskApplication {
+                        source_index,
+                        mask,
+                        from: self.current.clone(),
+                        adopted: None,
+                        response: None,
+                    });
+                } else {
+                    self.completed = true;
+                    if let Some(root) = self.current.trace {
+                        self.scratch.trace.set_root(root);
+                    }
+                    return Ok(ControlFlow::Break(PositionCompositionProgress::Complete(
+                        self.current.value.clone(),
+                    )));
+                }
+            }
+        }
+        Ok(ControlFlow::Continue(BaseStep::Mask))
+    }
+
+    fn adopt_mask(
+        &mut self,
+        context: &FamilyCompositionContext<'_>,
+        stage: Option<(&PositionStageLocator, PositionStageOperand)>,
+    ) -> Result<Option<PositionCompositionProgress>, TransitionError> {
+        let application = self.mask.as_mut().expect("pending Position mask");
+        if application.adopted.is_some() {
+            return Ok(None);
+        }
+        if mask_stage(
+            self.origin_binding.as_ref(),
+            &self.scratch,
+            self.discovery.as_mut(),
+            application.source_index,
+            PositionMaskStage::Adoption,
+            stage,
+        )?
+        .is_some()
+        {
+            // Only AdoptionInput belongs to this stage: the composed prefix.
+            let value = application.from.value.clone();
+            return self.stop_at_mask(value).map(Some);
+        }
+        match adopt(
+            application.from.value.clone(),
+            application.mask.address.address(),
+            context,
+            &self.original_base,
+        ) {
+            Ok(value) => {
+                if self.scratch.trace_enabled
+                    && !application
+                        .mask
+                        .address
+                        .address()
+                        .matches_authored_source(&application.from.value)
+                {
+                    let prior = application.from.trace.expect("traced mask adoption");
+                    application.from.trace =
+                        Some(self.scratch.trace.mapped_blend(prior, prior, None));
+                }
+                application.adopted = Some(value);
+            }
+            Err(TransitionError::Requires(requirement)) => {
+                let operation = PositionCompositionOperation::MaskAdoption {
+                    source_index: application.source_index,
+                    rank: application.mask.rank,
+                    from: application.from.value.clone(),
+                    address: application.mask.address.address().clone(),
+                };
+                return self.wait(requirement, operation).map(Some);
+            }
+            Err(error) => return Err(error),
+        }
+        Ok(None)
+    }
+
+    fn apply_mask(
+        &mut self,
+        frame: &dyn WholeFamilyExpressionFrameResolver,
+        stage: Option<(&PositionStageLocator, PositionStageOperand)>,
+    ) -> Result<Option<PositionCompositionProgress>, TransitionError> {
+        let application = self.mask.as_mut().expect("pending Position mask");
+        let from = application.adopted.as_ref().expect("adopted mask prefix");
+        let Some(DynamicValue::Family(to)) = application.mask.materialized_value() else {
+            unreachable!("validated whole mask")
+        };
+        if application.response.is_none()
+            && let Some(operand) = mask_stage(
+                self.origin_binding.as_ref(),
+                &self.scratch,
+                self.discovery.as_mut(),
+                application.source_index,
+                PositionMaskStage::Transition,
+                stage,
+            )?
+        {
+            let value = match operand {
+                PositionStageOperand::TransitionFrom => from.clone(),
+                PositionStageOperand::TransitionTo => to.clone(),
+                PositionStageOperand::AdoptionInput => {
+                    return Err(IntentError(
+                        "Position mask transition has no adoption operand".into(),
+                    )
+                    .into());
+                }
+            };
+            return self.stop_at_mask(value).map(Some);
+        }
+        let mut appearance = None;
+        let value = if let Some((value, transfer)) = application.response.take() {
+            appearance = Some(transfer);
+            value
+        } else {
+            let compiled = CompiledProgrammingTransition::new(from.clone(), to.clone(), None)?;
+            match compiled.sample(application.mask.activation_mix) {
+                Ok(value) => value,
+                Err(TransitionError::Requires(requirement)) => {
+                    match frame.resolve_with_trace(
+                        requirement,
+                        from,
+                        to,
+                        FamilyExpressionOperation::Transition {
+                            progress: application.mask.activation_mix,
+                        },
+                    ) {
+                        Ok((value, transfer)) => {
+                            position_completion::validate_position(&value)?;
+                            position_completion::validate_transfer(transfer.as_ref())?;
+                            appearance = Some(transfer);
+                            value
+                        }
+                        Err(TransitionError::Requires(requirement)) => {
+                            let operation = PositionCompositionOperation::MaskTransition {
+                                source_index: application.source_index,
+                                rank: application.mask.rank,
+                                from: from.clone(),
+                                to: to.clone(),
+                                progress: application.mask.activation_mix,
+                            };
+                            return self.wait(requirement, operation).map(Some);
+                        }
+                        Err(error) => return Err(error),
+                    }
+                }
+                Err(error) => return Err(error),
+            }
+        };
+        let trace = self.scratch.trace_enabled.then(|| {
+            whole_mask_trace(
+                &application.mask,
+                application.from.trace.expect("trace mask prefix"),
+                appearance,
+                &mut self.scratch.trace,
+            )
+        });
+        self.current = TracedValue { value, trace };
+        self.mask = None;
+        self.segment_start = self.next_mask.expect("completed mask cursor") + 1;
+        self.schedule_segment();
+        Ok(None)
     }
 
     /// Operand replay stops before the located mask operation: the operation itself and every

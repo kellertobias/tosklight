@@ -14,8 +14,8 @@
 //!
 //! No fitted DMX injection (TL-548) or cross-representation Size is asserted here.
 use super::super::super::physical_adapter::color::profiles::{rgbal, rgbw};
+use super::super::super::physical_adapter::color::tests::direct::{direct, identity};
 use super::super::super::physical_adapter::color::tests::intent;
-use super::super::super::physical_adapter::color::tests_direct::{direct, identity};
 use super::super::super::physical_adapter::*;
 use super::color_direct_dynamic::{
     Lane, assert_forward_fallback, direct_dynamic, dynamic_on, forward, portable,

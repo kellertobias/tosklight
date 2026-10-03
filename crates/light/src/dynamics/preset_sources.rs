@@ -100,80 +100,10 @@ pub fn compile_dynamic_preset_sources(
                 "Dynamic Preset source occurrences and identities must be unique".into(),
             ));
         }
-        let records = instance
-            .last_valid
-            .iter()
-            .filter(|record| record.matches(source))
-            .collect::<Vec<_>>();
-        if records.len() > 1 {
-            return Err(IntentError(
-                "duplicate last-valid Dynamic Preset occurrence".into(),
-            ));
-        }
-        if let Some(record) = records.first() {
-            let mut targets = HashSet::new();
-            for fallback in &record.values {
-                if fallback.target.0.is_nil() || !targets.insert(fallback.target) {
-                    return Err(IntentError(
-                        "Dynamic Preset last-valid targets must be unique stable identities".into(),
-                    ));
-                }
-                source.address.validate_value_shape(&fallback.value)?;
-            }
-        }
-        let mut values = instance
-            .last_valid
-            .iter()
-            .find(|record| record.matches(source))
-            .map(|record| {
-                record
-                    .values
-                    .iter()
-                    .filter(|fallback| selected.contains(&fallback.target))
-                    .map(|fallback| (fallback.target, fallback.value.clone()))
-                    .collect::<HashMap<_, _>>()
-            })
-            .unwrap_or_default();
+        let mut values = last_valid_values(instance, source, &selected)?;
         let mut context = OwnedFamilyEditContext::default();
-        let native = if let DynamicFamilyRepresentation::DirectColor { source: identity } =
-            &source.address.representation
-        {
-            Some(match native_models {
-                Some(models) => models.resolve_capability(identity)?,
-                None => NativeColorModelCapability::Unavailable(NativeColorModelUnavailable {
-                    source: identity.clone(),
-                    reason: NativeColorUnavailableReason::MissingResolver,
-                    detail: "Original native Color model is not available".into(),
-                }),
-            })
-        } else {
-            None
-        };
-        let (compiled, unavailable_native) = match native {
-            Some(NativeColorModelCapability::Unavailable(reason)) => {
-                if !matches!(&source.address.representation, DynamicFamilyRepresentation::DirectColor { source } if source == &reason.source)
-                {
-                    return Err(IntentError(
-                        "native capability refers to a different original source".into(),
-                    ));
-                }
-                (None, Some(reason))
-            }
-            capability => {
-                let model = match capability {
-                    Some(NativeColorModelCapability::Available(model)) => Some(model),
-                    _ => None,
-                };
-                context.native_model = model.clone();
-                (
-                    Some(CompiledDynamicValueAddress::new(
-                        source.address.clone(),
-                        model,
-                    )?),
-                    None,
-                )
-            }
-        };
+        let (compiled, unavailable_native) =
+            compile_source_address(source, native_models, &mut context)?;
         let latest = source.retained.as_deref();
         if let Some(template) = latest {
             template.validate(source.address.owner())?;
@@ -231,28 +161,12 @@ pub fn compile_dynamic_preset_sources(
                 }
             }
         } else {
-            result.unavailable.extend(
-                instance
-                    .ordered_targets
-                    .iter()
-                    .map(|target| (source.id, *target)),
+            push_unavailable_native(
+                &mut result,
+                source.id,
+                &instance.ordered_targets,
+                unavailable_native,
             );
-            let reason =
-                unavailable_native.expect("uncompiled Direct source has a typed capability gap");
-            result
-                .issues
-                .extend(
-                    instance
-                        .ordered_targets
-                        .iter()
-                        .map(|target| DynamicPresetSourceIssue {
-                            source_id: source.id,
-                            target: *target,
-                            reason: DynamicPresetSourceIssueReason::NativeUnavailable(
-                                reason.clone(),
-                            ),
-                        }),
-                );
         }
         result.values.push(DynamicPresetSourceValues {
             occurrence,
@@ -271,6 +185,121 @@ pub fn compile_dynamic_preset_sources(
         });
     }
     Ok(result)
+}
+
+/// The selected targets' last valid values of `source`, after validating the retained record.
+fn last_valid_values(
+    instance: &DynamicInstancePresetSources,
+    source: &DynamicPresetSourceBinding,
+    selected: &HashSet<FixtureId>,
+) -> Result<HashMap<FixtureId, DynamicValue>, IntentError> {
+    let records = instance
+        .last_valid
+        .iter()
+        .filter(|record| record.matches(source))
+        .collect::<Vec<_>>();
+    if records.len() > 1 {
+        return Err(IntentError(
+            "duplicate last-valid Dynamic Preset occurrence".into(),
+        ));
+    }
+    if let Some(record) = records.first() {
+        let mut targets = HashSet::new();
+        for fallback in &record.values {
+            if fallback.target.0.is_nil() || !targets.insert(fallback.target) {
+                return Err(IntentError(
+                    "Dynamic Preset last-valid targets must be unique stable identities".into(),
+                ));
+            }
+            source.address.validate_value_shape(&fallback.value)?;
+        }
+    }
+    Ok(instance
+        .last_valid
+        .iter()
+        .find(|record| record.matches(source))
+        .map(|record| {
+            record
+                .values
+                .iter()
+                .filter(|fallback| selected.contains(&fallback.target))
+                .map(|fallback| (fallback.target, fallback.value.clone()))
+                .collect::<HashMap<_, _>>()
+        })
+        .unwrap_or_default())
+}
+
+/// The compiled address of `source`, or the typed gap of an unavailable native Color model.
+fn compile_source_address(
+    source: &DynamicPresetSourceBinding,
+    native_models: Option<&dyn DynamicNativeModelResolver>,
+    context: &mut OwnedFamilyEditContext,
+) -> Result<
+    (
+        Option<CompiledDynamicValueAddress>,
+        Option<NativeColorModelUnavailable>,
+    ),
+    IntentError,
+> {
+    let native = if let DynamicFamilyRepresentation::DirectColor { source: identity } =
+        &source.address.representation
+    {
+        Some(match native_models {
+            Some(models) => models.resolve_capability(identity)?,
+            None => NativeColorModelCapability::Unavailable(NativeColorModelUnavailable {
+                source: identity.clone(),
+                reason: NativeColorUnavailableReason::MissingResolver,
+                detail: "Original native Color model is not available".into(),
+            }),
+        })
+    } else {
+        None
+    };
+    Ok(match native {
+        Some(NativeColorModelCapability::Unavailable(reason)) => {
+            if !matches!(&source.address.representation, DynamicFamilyRepresentation::DirectColor { source } if source == &reason.source)
+            {
+                return Err(IntentError(
+                    "native capability refers to a different original source".into(),
+                ));
+            }
+            (None, Some(reason))
+        }
+        capability => {
+            let model = match capability {
+                Some(NativeColorModelCapability::Available(model)) => Some(model),
+                _ => None,
+            };
+            context.native_model = model.clone();
+            (
+                Some(CompiledDynamicValueAddress::new(
+                    source.address.clone(),
+                    model,
+                )?),
+                None,
+            )
+        }
+    })
+}
+
+/// Every target of a source whose native Color model is unavailable keeps its held value.
+fn push_unavailable_native(
+    result: &mut CompiledDynamicPresetSources,
+    source_id: uuid::Uuid,
+    targets: &[FixtureId],
+    unavailable_native: Option<NativeColorModelUnavailable>,
+) {
+    result
+        .unavailable
+        .extend(targets.iter().map(|target| (source_id, *target)));
+    let reason = unavailable_native.expect("uncompiled Direct source has a typed capability gap");
+    result
+        .issues
+        .extend(targets.iter().map(|target| DynamicPresetSourceIssue {
+            source_id,
+            target: *target,
+            reason: DynamicPresetSourceIssueReason::NativeUnavailable(reason.clone()),
+        }));
 }
 
 fn candidates<'a>(

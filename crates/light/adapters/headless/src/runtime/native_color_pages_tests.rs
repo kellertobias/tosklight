@@ -4,10 +4,10 @@
 //! slots; its own UUIDs).
 use super::*;
 use crate::runtime::output_scheduler::physical_adapters::color::profiles::patched;
-use crate::runtime::output_scheduler::physical_adapters::color::tests::{intent, program};
-use crate::runtime::output_scheduler::physical_adapters::color::tests_direct::{
+use crate::runtime::output_scheduler::physical_adapters::color::tests::direct::{
     catalogue, identity, path_channels, rgbw_widths,
 };
+use crate::runtime::output_scheduler::physical_adapters::color::tests::{intent, program};
 use axum::{
     Router,
     body::Body,

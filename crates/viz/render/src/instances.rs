@@ -14,7 +14,10 @@ use viz_scene::{
 mod effects;
 mod fixture_appearance;
 mod floor_grid;
+mod frame_style;
 mod optical_wheels;
+
+pub use frame_style::{FrameStyle, MediaAppearance};
 
 pub const MAX_OPTICAL_WHEELS: usize = 8;
 
@@ -330,100 +333,6 @@ const REFERENCE_HALF_ANGLE: f32 = 0.349;
 /// How much of the true spread relation to apply. `1.0` is literal inverse solid angle, which puts
 /// several hundred to one between a beam light and a flood — true, and unwatchable on one screen.
 const SPREAD_COMPRESSION: f32 = 0.55;
-
-/// How one frame should be drawn.
-#[derive(Clone, Debug)]
-pub struct FrameStyle {
-    pub quality: viz_scene::RenderQuality,
-    pub draw_beams: bool,
-    pub draw_aim_lines: bool,
-    /// Draw the scene as an outline plan instead of a shaded picture.
-    pub plot: bool,
-    /// Screen-plane axes used to billboard plot symbols so they read from any plan direction.
-    pub plot_right: Vec3,
-    pub plot_up: Vec3,
-    pub projection_view: viz_scene::ProjectionView,
-    /// World size one plot symbol should occupy, chosen so a symbol keeps a constant on-screen
-    /// size however far the plan is zoomed out.
-    pub symbol_metres: f32,
-    /// Ink colour for a fixture that makes light.
-    pub ink: Vec3,
-    /// Ink colour for scenery and for a fixture that makes no light.
-    pub faint_ink: Vec3,
-    /// The one colour every beam is drawn in on a plan.
-    pub beam_ink: Vec3,
-    /// Ink for a fixture symbol or outline. Quieter than [`Self::ink`], which is for the things a
-    /// plan is read *for*: a rig has far more lanterns on it than anything else, and drawn at full
-    /// strength they are what the eye lands on instead of the light.
-    pub symbol_ink: Vec3,
-    /// Ink for a fixture the operator has selected — the one thing allowed to stand out.
-    pub selected_ink: Vec3,
-    /// Ink for the members of a whole selected Venue group, apart from one element on its own.
-    pub group_selected_ink: Vec3,
-    /// Draw each fixture's own model, rather than a box standing where it is.
-    pub fixture_models: bool,
-    /// Draw the emitting faces that belong to a simulated-light picture.
-    pub emitter_apertures: bool,
-    /// Draw retained scenery as shaded surfaces instead of quiet outlines.
-    pub scenery_surfaces: bool,
-    /// Draw an aim guideline for every directional emitter, lit or not.
-    pub aim_guides: bool,
-    /// Lay the reference grid on the ground plane.
-    pub floor_grid: bool,
-    /// Which scenery this view draws at all.
-    pub scenery: fn(viz_scene::SceneryKind) -> bool,
-    /// Renderer-local fraction of every authored crowd to draw.
-    pub crowd_amount: f32,
-    /// Per-frame crowd budget selected from quality and the renderer's adaptive hardware ladder.
-    pub crowd_person_budget: usize,
-    /// Per-frame Effect-particle budget selected from quality and the same adaptive hardware
-    /// ladder as the expensive Ultra rendering features.
-    pub effect_particle_budget: usize,
-    /// Live/fallback media is a standalone capability. Helpers and embedded Stage panes draw the
-    /// same authored geometry with neutral faces and open no media transport.
-    pub media_content: bool,
-    /// Current decoded appearance by Media Surface identity. This is volatile renderer state,
-    /// never authored show intent.
-    pub media_appearance: std::collections::BTreeMap<viz_scene::uuid::Uuid, MediaAppearance>,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct MediaAppearance {
-    pub average: Vec3,
-    pub flicker: f32,
-}
-
-impl Default for FrameStyle {
-    fn default() -> Self {
-        Self {
-            quality: viz_scene::RenderQuality::High,
-            draw_beams: true,
-            draw_aim_lines: false,
-            plot: false,
-            plot_right: Vec3::X,
-            plot_up: Vec3::Y,
-            projection_view: viz_scene::ProjectionView::Top,
-            symbol_metres: 0.3,
-            beam_ink: Vec3::new(1.0, 0.82, 0.25),
-            ink: Vec3::splat(0.85),
-            faint_ink: Vec3::splat(0.35),
-            symbol_ink: Vec3::splat(0.42),
-            selected_ink: Vec3::new(0.25, 0.6, 1.0),
-            group_selected_ink: Vec3::new(0.74, 0.47, 1.0),
-            fixture_models: true,
-            emitter_apertures: true,
-            scenery_surfaces: true,
-            aim_guides: false,
-            floor_grid: true,
-            scenery: |_| true,
-            crowd_amount: 1.0,
-            crowd_person_budget: 384,
-            effect_particle_budget: 2_048,
-            media_content: true,
-            media_appearance: std::collections::BTreeMap::new(),
-        }
-    }
-}
 
 /// Build every instance array for one frame.
 pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameInstances {
@@ -1144,125 +1053,13 @@ fn beam_length(origin: Vec3, direction: Vec3) -> f32 {
     to_floor.clamp(0.25, BEAM_THROW_METRES)
 }
 
-fn push_aim_line(
-    frame: &mut FrameInstances,
-    origin: Vec3,
-    pose: EmitterPose,
-    intensity: f32,
-    colour: Vec3,
-) {
-    let end =
-        origin + pose.direction * beam_length(origin, pose.direction).min(BEAM_THROW_METRES * 0.55);
-    /*
-     * How bright the line is drawn, from the level the fixture is at.
-     *
-     * Curved rather than proportional, and with almost no floor. Nothing in this view is
-     * tonemapped, so a line drawn at its literal level reads far brighter than the level is: half
-     * and full looked nearly the same, and a lamp at one percent looked like a lamp that was on.
-     * The curve puts the visible difference where an operator is working — half against full is a
-     * real step now — and lets one percent be the barely-there line it should be.
-     */
-    let level = intensity.clamp(0.0, 1.0).powf(1.9).max(0.02);
-    let near = colour.extend(level);
-    let far = colour.extend(0.0);
-    frame.lines.push(LineVertex {
-        position: origin.to_array(),
-        _pad: 0.0,
-        colour: near.to_array(),
-    });
-    frame.lines.push(LineVertex {
-        position: end.to_array(),
-        _pad: 0.0,
-        colour: far.to_array(),
-    });
-}
-
-/// The twelve edges of a unit cube carried through `transform`.
-///
-/// What an outline view is made of. A rig drawn as outlines stays readable however many fixtures
-/// are in it, because an outline hides nothing behind it: two heads at the same depth are both
-/// still visible, which is exactly what a solid box in an unlit room cannot manage.
-pub(crate) fn push_box_outline(
-    frame: &mut FrameInstances,
-    transform: Mat4,
-    ink: Vec3,
-    opacity: f32,
-) {
-    const CORNERS: [Vec3; 8] = [
-        Vec3::new(-0.5, -0.5, -0.5),
-        Vec3::new(0.5, -0.5, -0.5),
-        Vec3::new(0.5, -0.5, 0.5),
-        Vec3::new(-0.5, -0.5, 0.5),
-        Vec3::new(-0.5, 0.5, -0.5),
-        Vec3::new(0.5, 0.5, -0.5),
-        Vec3::new(0.5, 0.5, 0.5),
-        Vec3::new(-0.5, 0.5, 0.5),
-    ];
-    const EDGES: [(usize, usize); 12] = [
-        (0, 1),
-        (1, 2),
-        (2, 3),
-        (3, 0),
-        (4, 5),
-        (5, 6),
-        (6, 7),
-        (7, 4),
-        (0, 4),
-        (1, 5),
-        (2, 6),
-        (3, 7),
-    ];
-    let colour = ink.extend(opacity);
-    let world: Vec<Vec3> = CORNERS
-        .iter()
-        .map(|corner| transform.transform_point3(*corner))
-        .collect();
-    for (from, to) in EDGES {
-        frame.line(world[from], world[to], colour, colour);
-    }
-}
-
-/// The dotted line showing where an emitter is aimed, lit or not.
-///
-/// Dotted rather than solid, and drawn in the faint ink, so it never reads as light: a solid line
-/// down the aim of every dark lamp in a rig is a picture of a hundred beams that are not on. It is
-/// dashed by emitting the dashes as separate segments, which is what a line list can express — a
-/// stipple pattern would be a whole pipeline for one kind of line.
-fn push_aim_guide(frame: &mut FrameInstances, origin: Vec3, pose: EmitterPose, ink: Vec3) {
-    /// Length of one dash and of the gap after it, in metres.
-    const DASH: f32 = 0.22;
-    const GAP: f32 = 0.28;
-    /// Most dashes worth drawing down one guide, so a long throw cannot flood the line buffer.
-    const MAX_DASHES: usize = 48;
-
-    let reach = beam_length(origin, pose.direction).min(BEAM_THROW_METRES * 0.55);
-    if reach <= DASH {
-        return;
-    }
-    let colour = (ink * 1.3).extend(0.85);
-    // Fading out along the throw keeps the far end of a long guide from cluttering the picture,
-    // and reads the way an aim does: certain at the lamp, less so where it lands.
-    let mut travelled = 0.0;
-    let mut drawn = 0;
-    while travelled < reach && drawn < MAX_DASHES {
-        let start = travelled;
-        let end = (travelled + DASH).min(reach);
-        let fade = |along: f32| colour * Vec3::ONE.extend(1.0 - (along / reach) * 0.75);
-        frame.line(
-            origin + pose.direction * start,
-            origin + pose.direction * end,
-            fade(start),
-            fade(end),
-        );
-        travelled = end + GAP;
-        drawn += 1;
-    }
-}
-
 mod crowd;
 mod group_selection;
 pub(crate) use group_selection::{grouped_selection, selection_ink};
 mod laser;
+mod line_guides;
+pub(crate) use line_guides::push_box_outline;
+use line_guides::{push_aim_guide, push_aim_line};
 mod plot;
 mod scenery;
 

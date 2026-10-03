@@ -116,7 +116,49 @@ pub(super) fn apply_command_preset(
     )? {
         return Ok(());
     }
-    let has_position_intent = preset
+    let has_position_intent = preset_has_position_intent(&preset);
+    if (preset.family == light_programmer::PresetFamily::Position || has_position_intent)
+        && state.output.supported_programming_contract()
+            >= light_core::programming::PROGRAMMING_CONTRACT_VERSION
+    {
+        return apply_position_preset(
+            state,
+            session,
+            id,
+            selected,
+            &preset,
+            &groups,
+            programmer_fade_millis,
+        );
+    }
+    apply_selected_fixture_values(
+        state,
+        session,
+        selected,
+        &preset,
+        &groups,
+        &live_group_targets,
+        programmer_fade_millis,
+    );
+    apply_live_group_values(
+        state,
+        session,
+        &preset,
+        live_group_targets,
+        programmer_fade_millis,
+    );
+    state.programming.set_modes(
+        session.id,
+        None,
+        None,
+        None,
+        Some(Some(format!("preset:{id}"))),
+    );
+    Ok(())
+}
+
+fn preset_has_position_intent(preset: &light_programmer::Preset) -> bool {
+    preset
         .values
         .values()
         .chain(preset.group_values.values())
@@ -124,49 +166,67 @@ pub(super) fn apply_command_preset(
         .flat_map(|values| values.values())
         .any(|value| {
             value.programming_owner() == Some(light_core::programming::ProgrammingOwner::Position)
-        });
-    if (preset.family == light_programmer::PresetFamily::Position || has_position_intent)
-        && state.output.supported_programming_contract()
-            >= light_core::programming::PROGRAMMING_CONTRACT_VERSION
-    {
-        let mut selection = state
-            .programming
-            .selection(session.id)
-            .ok_or("programmer does not exist")?;
-        selection.selected = selected.to_vec();
-        let snapshot = state.output.snapshot();
-        let positions = snapshot
-            .dynamic_stage_positions
-            .iter()
-            .map(|(id, point)| {
-                (
-                    *id,
-                    light_dynamics::Position3d {
-                        x: f64::from(point.x),
-                        y: f64::from(point.y),
-                        z: f64::from(point.z),
-                    },
-                )
-            })
-            .collect();
-        let mutations = light_application::plan_preset_selection_values(
-            &selection,
-            &preset,
-            &groups,
-            &positions,
-            programmer_fade_millis,
-        )
-        .map_err(|error| error.message)?;
-        if mutations.is_empty() {
-            return Ok(());
-        }
-        return super::programmer_aim_command::apply_position_mutations(
-            state,
-            session,
-            &mutations,
-            Some(format!("preset:{id}")),
-        );
+        })
+}
+
+/// Applies a Position (or position-owning) preset through the semantic selection planner.
+fn apply_position_preset(
+    state: &AppState,
+    session: &Session,
+    id: &str,
+    selected: &[light_core::FixtureId],
+    preset: &light_programmer::Preset,
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    programmer_fade_millis: u64,
+) -> Result<(), String> {
+    let mut selection = state
+        .programming
+        .selection(session.id)
+        .ok_or("programmer does not exist")?;
+    selection.selected = selected.to_vec();
+    let snapshot = state.output.snapshot();
+    let positions = snapshot
+        .dynamic_stage_positions
+        .iter()
+        .map(|(id, point)| {
+            (
+                *id,
+                light_dynamics::Position3d {
+                    x: f64::from(point.x),
+                    y: f64::from(point.y),
+                    z: f64::from(point.z),
+                },
+            )
+        })
+        .collect();
+    let mutations = light_application::plan_preset_selection_values(
+        &selection,
+        preset,
+        groups,
+        &positions,
+        programmer_fade_millis,
+    )
+    .map_err(|error| error.message)?;
+    if mutations.is_empty() {
+        return Ok(());
     }
+    super::programmer_aim_command::apply_position_mutations(
+        state,
+        session,
+        &mutations,
+        Some(format!("preset:{id}")),
+    )
+}
+
+fn apply_selected_fixture_values(
+    state: &AppState,
+    session: &Session,
+    selected: &[light_core::FixtureId],
+    preset: &light_programmer::Preset,
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    live_group_targets: &[String],
+    programmer_fade_millis: u64,
+) {
     for fixture in selected {
         // A universal colour reaches every selected fixture; the preset's own per-fixture and
         // Group values follow and win.
@@ -199,7 +259,7 @@ pub(super) fn apply_command_preset(
             .iter()
             .filter(|(group_id, _)| !live_group_targets.contains(group_id))
         {
-            if light_programmer::resolve_group(group_id, &groups)
+            if light_programmer::resolve_group(group_id, groups)
                 .is_ok_and(|members| members.contains(fixture))
             {
                 for (attribute, value) in attributes {
@@ -215,6 +275,15 @@ pub(super) fn apply_command_preset(
             }
         }
     }
+}
+
+fn apply_live_group_values(
+    state: &AppState,
+    session: &Session,
+    preset: &light_programmer::Preset,
+    live_group_targets: Vec<String>,
+    programmer_fade_millis: u64,
+) {
     for group_id in live_group_targets {
         for (attribute, value) in &preset.universal_values {
             state.programming.set_group_faded_with_timing(
@@ -240,14 +309,6 @@ pub(super) fn apply_command_preset(
             );
         }
     }
-    state.programming.set_modes(
-        session.id,
-        None,
-        None,
-        None,
-        Some(Some(format!("preset:{id}"))),
-    );
-    Ok(())
 }
 
 pub(super) fn command_preset_address(

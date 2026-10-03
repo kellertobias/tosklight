@@ -6,8 +6,8 @@
 //!   finalizer, and ONE ordinary `PhysicalPreloadLanes` pair through the real retained paired
 //!   evaluator and Preload finalizer.
 use super::super::color::profiles::{cmy_wheel, patched, rgb};
+use super::super::color::tests::direct::{catalogue, direct};
 use super::super::color::tests::{intent, magenta, program};
-use super::super::color::tests_direct::{catalogue, direct};
 use super::super::media_color::tests::{media_fixture, shipped_media_server};
 use super::*;
 use crate::runtime::dynamic_snapshot_publication::{

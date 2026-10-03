@@ -794,6 +794,8 @@ fn queue_snapshot_epoch_and_size_validation_precede_processing() {
 }
 
 #[test]
+// The reversed range is the invalid bound under test.
+#[allow(clippy::reversed_empty_ranges)]
 fn immutable_control_ranges_keep_exact_cursors_and_reject_invalid_bounds() {
     let mut rig = Rig::new();
     let from = rig.live.control_cursor().unwrap();

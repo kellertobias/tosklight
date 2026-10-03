@@ -232,6 +232,26 @@ fn compile_rows(
             )?;
         }
     }
+    compile_cue_rows(
+        inputs,
+        origins,
+        native_models,
+        scratch,
+        &mut captured_addresses,
+        now,
+    )
+}
+
+/// Compiles each fixed Cue row after checking its capture agrees with its source key and is
+/// the only row at its captured address.
+fn compile_cue_rows(
+    inputs: &CapturedFixedMaskRows<'_>,
+    origins: Option<&DynamicSourceOrigins>,
+    native_models: Option<&dyn DynamicNativeModelResolver>,
+    scratch: &mut FixedMaskCompilationScratch,
+    captured_addresses: &mut HashSet<FixedCaptureAddress>,
+    now: u64,
+) -> Result<(), IntentError> {
     for (row_index, row) in inputs.cue_values.iter().enumerate() {
         let Some(mask) = captured_programming_fixed_mask(&row.attribute, &row.value)? else {
             continue;

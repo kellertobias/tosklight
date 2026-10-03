@@ -120,71 +120,10 @@ impl ProgrammingComponent {
         }
     }
     pub fn descriptor(self) -> ComponentDescriptor {
-        use ColorComponent as C;
         use ComponentRole as R;
         use ComponentUnit as U;
         let (role, unit, domain, step, fine_step, interpolation) = match self {
-            Self::Color(C::Red | C::Green | C::Blue | C::Amber) => (
-                R::ColorRecipe,
-                U::Percent,
-                Some(ScalarDomain::UNIT),
-                0.01,
-                0.001,
-                ScalarInterpolation::Linear,
-            ),
-            Self::Color(C::Hue) => (
-                R::ColorCoordinate,
-                U::Degrees,
-                Some(ScalarDomain::DEGREES),
-                1.0,
-                0.1,
-                ScalarInterpolation::ShortestArc,
-            ),
-            Self::Color(C::Saturation) => (
-                R::ColorCoordinate,
-                U::Percent,
-                Some(ScalarDomain::UNIT),
-                0.01,
-                0.001,
-                ScalarInterpolation::Linear,
-            ),
-            Self::Color(C::WhiteBlend | C::Uv) => (
-                R::ColorOrthogonal,
-                U::Percent,
-                Some(ScalarDomain::UNIT),
-                0.01,
-                0.001,
-                ScalarInterpolation::Linear,
-            ),
-            Self::Color(C::Temperature) => (
-                R::ColorOrthogonal,
-                U::Kelvin,
-                Some(ScalarDomain::KELVIN),
-                100.0,
-                10.0,
-                ScalarInterpolation::Reciprocal,
-            ),
-            Self::Color(C::Duv) => (
-                R::ColorOrthogonal,
-                U::Duv,
-                Some(ScalarDomain::DUV),
-                0.001,
-                0.0001,
-                ScalarInterpolation::Linear,
-            ),
-            Self::Color(C::RelativeOutput) => (
-                R::ColorOrthogonal,
-                U::Factor,
-                Some(ScalarDomain::Bounded {
-                    bounds: AttributeBounds {
-                        min: 0.0,
-                        max: f32::MAX,
-                    },
-                }),
-                0.01,
-                0.001,
-                ScalarInterpolation::Linear,
-            ),
+            Self::Color(component) => color_scalar_shape(component),
             Self::Pan | Self::Tilt => (
                 R::Angle,
                 U::Degrees,
@@ -269,6 +208,85 @@ impl ProgrammingComponent {
             align: domain.is_some(),
             dynamics: domain.is_some(),
         }
+    }
+}
+
+/// Role, unit, domain, coarse/fine step and interpolation of one scalar component.
+type ScalarShape = (
+    ComponentRole,
+    ComponentUnit,
+    Option<ScalarDomain>,
+    f32,
+    f32,
+    ScalarInterpolation,
+);
+
+fn color_scalar_shape(component: ColorComponent) -> ScalarShape {
+    use ColorComponent as C;
+    use ComponentRole as R;
+    use ComponentUnit as U;
+    match component {
+        C::Red | C::Green | C::Blue | C::Amber => (
+            R::ColorRecipe,
+            U::Percent,
+            Some(ScalarDomain::UNIT),
+            0.01,
+            0.001,
+            ScalarInterpolation::Linear,
+        ),
+        C::Hue => (
+            R::ColorCoordinate,
+            U::Degrees,
+            Some(ScalarDomain::DEGREES),
+            1.0,
+            0.1,
+            ScalarInterpolation::ShortestArc,
+        ),
+        C::Saturation => (
+            R::ColorCoordinate,
+            U::Percent,
+            Some(ScalarDomain::UNIT),
+            0.01,
+            0.001,
+            ScalarInterpolation::Linear,
+        ),
+        C::WhiteBlend | C::Uv => (
+            R::ColorOrthogonal,
+            U::Percent,
+            Some(ScalarDomain::UNIT),
+            0.01,
+            0.001,
+            ScalarInterpolation::Linear,
+        ),
+        C::Temperature => (
+            R::ColorOrthogonal,
+            U::Kelvin,
+            Some(ScalarDomain::KELVIN),
+            100.0,
+            10.0,
+            ScalarInterpolation::Reciprocal,
+        ),
+        C::Duv => (
+            R::ColorOrthogonal,
+            U::Duv,
+            Some(ScalarDomain::DUV),
+            0.001,
+            0.0001,
+            ScalarInterpolation::Linear,
+        ),
+        C::RelativeOutput => (
+            R::ColorOrthogonal,
+            U::Factor,
+            Some(ScalarDomain::Bounded {
+                bounds: AttributeBounds {
+                    min: 0.0,
+                    max: f32::MAX,
+                },
+            }),
+            0.01,
+            0.001,
+            ScalarInterpolation::Linear,
+        ),
     }
 }
 

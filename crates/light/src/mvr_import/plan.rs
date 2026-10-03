@@ -79,6 +79,67 @@ impl ImportChanges {
         (universe, address)
     }
 
+    /// Puts one imported fixture and its MVR association, replacing its occupied patch rows.
+    fn record_fixture(
+        &mut self,
+        source: &MvrFixture,
+        fixture_id: light_core::FixtureId,
+        projection: PlannedFixture,
+        occupied: Vec<OccupiedPatch>,
+    ) {
+        self.transaction.put(
+            "patched_fixture",
+            fixture_id.0.to_string(),
+            projection.record.clone(),
+        );
+        self.transaction.put(
+            "mvr_fixture",
+            source.uuid.to_string(),
+            serde_json::json!({
+                "fixture_id": fixture_id.0.to_string(),
+                "gdtf_spec": source.gdtf_spec,
+                "gdtf_mode": source.gdtf_mode,
+            }),
+        );
+        self.fixtures.push(projection);
+        self.occupied
+            .retain(|row| row.3 != fixture_id.0.to_string());
+        self.occupied.extend(occupied);
+    }
+
+    fn put_retained_archives(
+        &mut self,
+        document: &PortableShowDocument,
+        retained_sources: &super::RetainedMvrSources,
+    ) -> Result<(), ActionError> {
+        for (id, archive) in retained_sources.archives() {
+            if document
+                .object(super::MVR_SOURCE_ARCHIVE_KIND, id)
+                .is_some_and(|object| object.body() != archive)
+            {
+                return Err(invalid("retained MVR source archive hash conflicts"));
+            }
+            self.transaction
+                .put(super::MVR_SOURCE_ARCHIVE_KIND, id, archive.clone());
+        }
+        Ok(())
+    }
+
+    fn put_profile_revisions(
+        &mut self,
+        profiles: &[crate::PatchProfileRevisionProjection],
+    ) -> Result<(), ActionError> {
+        for profile in profiles {
+            let retained =
+                light_show::FixtureProfileRevision::from_profile(profile.profile_snapshot.clone())
+                    .map_err(invalid)?;
+            self.transaction
+                .put_fixture_profile_revision(retained)
+                .map_err(invalid)?;
+        }
+        Ok(())
+    }
+
     fn remove_conflicting_fixture(&mut self, id: &str) {
         self.transaction.delete("patched_fixture", id);
         self.occupied.retain(|item| item.3 != id);
@@ -186,50 +247,14 @@ fn plan_document(
             layers.layer_for(source.layer.as_deref()),
             &existing,
             embedded,
-            matches!(
-                command_resolutions.get(&source.uuid),
-                Some(MvrImportResolution::ImportUnpatched)
-            ) || ((source.universe.zip(source.address).is_some()
-                || matches!(
-                    command_resolutions.get(&source.uuid),
-                    Some(MvrImportResolution::Address { .. })
-                ))
-                && address.0.zip(address.1).is_none()),
+            imports_unpatched(source, command_resolutions.get(&source.uuid), address),
         );
         let occupied = fixture_occupied_patches(&patched, &fixture_id.0.to_string());
         let projection = project_fixture(patched, &mut projection_cache)?;
-        changes.transaction.put(
-            "patched_fixture",
-            fixture_id.0.to_string(),
-            projection.record.clone(),
-        );
-        changes.transaction.put(
-            "mvr_fixture",
-            source.uuid.to_string(),
-            serde_json::json!({
-                "fixture_id": fixture_id.0.to_string(),
-                "gdtf_spec": source.gdtf_spec,
-                "gdtf_mode": source.gdtf_mode,
-            }),
-        );
-        changes.fixtures.push(projection);
-        changes
-            .occupied
-            .retain(|row| row.3 != fixture_id.0.to_string());
-        changes.occupied.extend(occupied);
+        changes.record_fixture(source, fixture_id, projection, occupied);
         imported += 1;
     }
-    for (id, archive) in retained_sources.archives() {
-        if document
-            .object(super::MVR_SOURCE_ARCHIVE_KIND, id)
-            .is_some_and(|object| object.body() != archive)
-        {
-            return Err(invalid("retained MVR source archive hash conflicts"));
-        }
-        changes
-            .transaction
-            .put(super::MVR_SOURCE_ARCHIVE_KIND, id, archive.clone());
-    }
+    changes.put_retained_archives(document, &retained_sources)?;
     // Only layers an imported fixture landed on are created, in the same change as the fixtures.
     for (id, body) in layers.created() {
         changes
@@ -246,15 +271,7 @@ fn plan_document(
         );
     }
     let profiles = profile_projections(&changes.fixtures)?;
-    for profile in &profiles {
-        let retained =
-            light_show::FixtureProfileRevision::from_profile(profile.profile_snapshot.clone())
-                .map_err(invalid)?;
-        changes
-            .transaction
-            .put_fixture_profile_revision(retained)
-            .map_err(invalid)?;
-    }
+    changes.put_profile_revisions(&profiles)?;
     Ok(PlannedMvrImport {
         transaction: changes.transaction,
         state: PreparedMvrImportState {
@@ -269,6 +286,18 @@ fn plan_document(
             },
         },
     })
+}
+
+/// Whether a fixture imports unpatched: on request, or when its requested address was dropped.
+fn imports_unpatched(
+    source: &MvrFixture,
+    resolution: Option<&MvrImportResolution>,
+    address: (Option<u16>, Option<u16>),
+) -> bool {
+    matches!(resolution, Some(MvrImportResolution::ImportUnpatched))
+        || ((source.universe.zip(source.address).is_some()
+            || matches!(resolution, Some(MvrImportResolution::Address { .. })))
+            && address.0.zip(address.1).is_none())
 }
 
 pub fn resolve_mvr_definition(

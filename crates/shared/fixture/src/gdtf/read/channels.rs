@@ -25,21 +25,7 @@ pub(super) fn mode(
             )));
         }
     }
-    let mut mode = FixtureMode {
-        id,
-        name: name.to_owned(),
-        notes: String::new(),
-        splits: Vec::new(),
-        heads: Vec::new(),
-        channels: Vec::new(),
-        color_systems: Vec::new(),
-        color_physical: None,
-        position_physical: None,
-        control_actions: Vec::new(),
-        geometry: Default::default(),
-        emitter_heads: Vec::new(),
-        motion_attributes: Vec::new(),
-    };
+    let mut mode = empty_mode(id, name);
     let source = node
         .child("DMXChannels")
         .ok_or_else(|| invalid(format!("mode {name:?} has no DMXChannels")))?;
@@ -63,26 +49,7 @@ pub(super) fn mode(
                 "mode {name:?}: duplicate channel reference {channel_name}"
             )));
         }
-        let split = channel.attr("DMXBreak").unwrap_or("1").parse::<u16>().map_err(|_| invalid(format!("channel {channel_name}: DMXBreak must be an explicit positive break; geometry-reference overrides are unsupported")))?;
-        if split == 0 {
-            return Err(invalid("DMXBreak must be positive"));
-        }
-        let offsets = channel
-            .required("Offset")?
-            .split(',')
-            .map(|offset| {
-                offset
-                    .trim()
-                    .parse::<u16>()
-                    .ok()
-                    .filter(|slot| (1..=512).contains(slot))
-                    .ok_or_else(|| {
-                        invalid(format!(
-                            "channel {channel_name}: offsets must be slots 1–512"
-                        ))
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let (split, offsets) = channel_placement(channel, &channel_name)?;
         let resolution = dmx::resolution(offsets.len())?;
         for slot in &offsets {
             if !used.insert((split, *slot)) {
@@ -120,30 +87,7 @@ pub(super) fn mode(
             None | Some("None") => default,
             Some(value) => dmx::value(value, resolution)?,
         };
-        let snap = match logical.attr("Snap").unwrap_or("No") {
-            "Yes" | "On" => true,
-            "No" | "Off" => false,
-            value => {
-                return Err(invalid(format!(
-                    "channel {channel_name}: invalid Snap {value:?}"
-                )));
-            }
-        };
-        let master = logical.attr("Master").unwrap_or("None");
-        if !matches!(master, "None" | "Grand" | "Group") {
-            return Err(invalid(format!(
-                "channel {channel_name}: invalid Master {master:?}"
-            )));
-        }
-        if master != "None" {
-            diagnostic(
-                diagnostics,
-                &channel_name,
-                format!(
-                    "GDTF Master={master} enables the corresponding desk master only; sequence-master policy must be configured separately."
-                ),
-            );
-        }
+        let (snap, master) = logical_snap_and_master(logical, &channel_name, diagnostics)?;
         if canonical.0.starts_with("gdtf.") {
             diagnostic(
                 diagnostics,
@@ -175,19 +119,99 @@ pub(super) fn mode(
             reacts_to_sequence_master: false,
             reacts_to_group_master: master == "Group",
             reacts_to_grand_master: master == "Grand",
-            behavior: if attribute_name == "NoFeature"
-                && logical
-                    .children_named("ChannelFunction")
-                    .all(|function| function.attr("Attribute") == Some("NoFeature"))
-            {
-                ChannelBehavior::Static
-            } else {
-                ChannelBehavior::Controlled
-            },
+            behavior: channel_behavior(attribute_name, logical),
             functions,
         };
         placed.insert((split, offsets[0]), parsed);
     }
+    let slots = SourceSlots {
+        placed,
+        used,
+        footprints,
+    };
+    finish_slot_allocation(&mut mode, name, slots, diagnostics)?;
+    Ok(mode)
+}
+
+/// Read the DMX break and the significance-ordered slot offsets of one source channel.
+fn channel_placement(channel: &Node, channel_name: &str) -> Result<(u16, Vec<u16>), ProfileError> {
+    let split = channel.attr("DMXBreak").unwrap_or("1").parse::<u16>().map_err(|_| invalid(format!("channel {channel_name}: DMXBreak must be an explicit positive break; geometry-reference overrides are unsupported")))?;
+    if split == 0 {
+        return Err(invalid("DMXBreak must be positive"));
+    }
+    let offsets = channel
+        .required("Offset")?
+        .split(',')
+        .map(|offset| {
+            offset
+                .trim()
+                .parse::<u16>()
+                .ok()
+                .filter(|slot| (1..=512).contains(slot))
+                .ok_or_else(|| {
+                    invalid(format!(
+                        "channel {channel_name}: offsets must be slots 1–512"
+                    ))
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((split, offsets))
+}
+
+/// Read the LogicalChannel Snap flag and Master binding, reporting the desk-master scope.
+fn logical_snap_and_master<'a>(
+    logical: &'a Node,
+    channel_name: &str,
+    diagnostics: &mut Vec<GdtfImportDiagnostic>,
+) -> Result<(bool, &'a str), ProfileError> {
+    let snap = match logical.attr("Snap").unwrap_or("No") {
+        "Yes" | "On" => true,
+        "No" | "Off" => false,
+        value => {
+            return Err(invalid(format!(
+                "channel {channel_name}: invalid Snap {value:?}"
+            )));
+        }
+    };
+    let master = logical.attr("Master").unwrap_or("None");
+    if !matches!(master, "None" | "Grand" | "Group") {
+        return Err(invalid(format!(
+            "channel {channel_name}: invalid Master {master:?}"
+        )));
+    }
+    if master != "None" {
+        diagnostic(
+            diagnostics,
+            channel_name,
+            format!(
+                "GDTF Master={master} enables the corresponding desk master only; sequence-master policy must be configured separately."
+            ),
+        );
+    }
+    Ok((snap, master))
+}
+
+/// Source slot bookkeeping collected while reading a mode's DMXChannels.
+struct SourceSlots {
+    placed: BTreeMap<(u16, u16), FixtureChannel>,
+    used: HashSet<(u16, u16)>,
+    footprints: BTreeMap<u16, u16>,
+}
+
+/// Fill sparse source offsets with static gap rows, derive splits and verify that canonical
+/// row-order allocation reproduces every declared source offset.
+fn finish_slot_allocation(
+    mode: &mut FixtureMode,
+    name: &str,
+    slots: SourceSlots,
+    diagnostics: &mut Vec<GdtfImportDiagnostic>,
+) -> Result<(), ProfileError> {
+    let SourceSlots {
+        mut placed,
+        used,
+        footprints,
+    } = slots;
+    let id = mode.id;
     if mode.heads.is_empty() {
         return Err(invalid(format!(
             "mode {name:?} has no supported physical channels"
@@ -213,7 +237,7 @@ pub(super) fn mode(
         .map(|((_, slot), channel)| (channel.id, *slot))
         .collect::<BTreeMap<_, _>>();
     mode.channels = placed.into_values().collect();
-    bind_native_hue_saturation(&mut mode, diagnostics)?;
+    bind_native_hue_saturation(mode, diagnostics)?;
     let actual = mode.primary_slots()?;
     if expected
         .iter()
@@ -228,7 +252,38 @@ pub(super) fn mode(
         format!("DMXMode.{name}"),
         "Geometry names identify source channel groups only; shared-head dependencies require physical geometry configuration.",
     );
-    Ok(mode)
+    Ok(())
+}
+
+fn empty_mode(id: Uuid, name: &str) -> FixtureMode {
+    FixtureMode {
+        id,
+        name: name.to_owned(),
+        notes: String::new(),
+        splits: Vec::new(),
+        heads: Vec::new(),
+        channels: Vec::new(),
+        color_systems: Vec::new(),
+        color_physical: None,
+        position_physical: None,
+        control_actions: Vec::new(),
+        geometry: Default::default(),
+        emitter_heads: Vec::new(),
+        motion_attributes: Vec::new(),
+    }
+}
+
+/// A channel whose every function is NoFeature is static; everything else is controlled.
+fn channel_behavior(attribute_name: &str, logical: &Node) -> ChannelBehavior {
+    if attribute_name == "NoFeature"
+        && logical
+            .children_named("ChannelFunction")
+            .all(|function| function.attr("Attribute") == Some("NoFeature"))
+    {
+        ChannelBehavior::Static
+    } else {
+        ChannelBehavior::Controlled
+    }
 }
 
 fn gap(mode_id: Uuid, head_id: Uuid, split: u16, slot: u16) -> FixtureChannel {

@@ -10,7 +10,7 @@
 use super::*;
 use crate::runtime::command_http::ToIntentWire;
 use crate::runtime::output_scheduler::physical_adapters::color::profiles::{patched, rgbw};
-use crate::runtime::output_scheduler::physical_adapters::color::tests_direct::direct;
+use crate::runtime::output_scheduler::physical_adapters::color::tests::direct::direct;
 use light_core::{AttributeKey, AttributeValue};
 
 const PLAYBACK: u16 = 27;

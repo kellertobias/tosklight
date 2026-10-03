@@ -49,6 +49,22 @@ pub(super) fn advance(
         &mut PreparedPositionStageMatcher::disabled(),
     )
 }
+
+/// The whole source being advanced, with the stage uses its graph routes carry.
+struct WholeSource<'a> {
+    index: usize,
+    uses: &'a Vec<PreparedPositionStageUse>,
+    expression: &'a Arc<CompiledProgrammingFamilyExpression>,
+    rank: FamilySampleRank,
+    activation_mix: f32,
+}
+
+/// Expression evaluation either produced ordinary progress or stopped at a selected operand.
+enum GraphEvaluation {
+    Progress(crate::FamilyEvaluationProgress),
+    OperandReady(AttributeValue),
+}
+
 pub(super) fn advance_with_graph(
     index: usize,
     mut inputs: Inputs,
@@ -66,168 +82,20 @@ pub(super) fn advance_with_graph(
     else {
         unreachable!("whole expression task")
     };
-    struct Observer<'a> {
-        trace: &'a mut FamilyTraceArena,
-        nodes: &'a mut Vec<Option<FamilyTraceNodeId>>,
-        rank: FamilySampleRank,
-        underlay: Option<FamilyTraceNodeId>,
-    }
-    impl FamilyExpressionObserver for Observer<'_> {
-        fn evaluated(
-            &mut self,
-            node: usize,
-            step: FamilyExpressionStep<'_>,
-            _: &AttributeValue,
-        ) -> Result<(), TransitionError> {
-            if self.nodes.len() <= node {
-                self.nodes.resize(node + 1, None);
-            }
-            let source = |role, occurrence| FamilyTraceSource {
-                rank: self.rank,
-                footprint: FamilyTraceFootprint::Whole,
-                role,
-                occurrence,
-            };
-            let id = match step {
-                FamilyExpressionStep::Underlay => self.underlay.ok_or(
-                    TransitionError::Requires(TransitionRequirement::MaterializedEndpoints),
-                )?,
-                FamilyExpressionStep::Authored {
-                    occurrence,
-                    dependency_occurrence,
-                    ..
-                } => {
-                    let authored = self
-                        .trace
-                        .source(source(FamilyTraceRole::Authored, occurrence));
-                    if let Some(dependency) = dependency_occurrence {
-                        let source = source(
-                            FamilyTraceRole::CalculationDependency,
-                            dependency.occurrence,
-                        );
-                        let dependency = self.trace.current_source(source, dependency);
-                        self.trace.bundle(vec![authored, dependency])
-                    } else {
-                        authored
-                    }
-                }
-                FamilyExpressionStep::Baseline { occurrence, .. } => self
-                    .trace
-                    .source(source(FamilyTraceRole::CalculationDependency, occurrence)),
-                FamilyExpressionStep::Scale {
-                    value,
-                    baseline_occurrence,
-                    trace,
-                    ..
-                } => {
-                    let child = self.nodes[value].expect("compiled Scale child");
-                    let baseline = self.trace.source(source(
-                        FamilyTraceRole::CalculationDependency,
-                        baseline_occurrence,
-                    ));
-                    self.trace.mapped_blend(baseline, child, trace.cloned())
-                }
-                FamilyExpressionStep::Transition {
-                    from, to, trace, ..
-                } => self.trace.mapped_blend(
-                    self.nodes[from].expect("compiled outgoing child"),
-                    self.nodes[to].expect("compiled incoming child"),
-                    trace.cloned(),
-                ),
-            };
-            self.nodes[node] = Some(id);
-            Ok(())
-        }
-    }
-    let underlay = inputs.underlay.as_ref();
-    let evaluated = {
-        let mut observer = scratch.trace_enabled.then(|| Observer {
-            trace: &mut scratch.trace,
-            nodes: &mut inputs.observer_nodes,
-            rank,
-            underlay: underlay.and_then(|value| value.trace),
-        });
-        let graph_enabled = matcher.graph_is_enabled();
-        let reached_enabled = matcher.graph_reached_is_enabled();
-        let PreparedPositionStageMatcher {
-            graph_callback,
-            graph_reached_callback,
-            graph_plan_callback,
-            stop_callback,
-            ..
-        } = matcher;
-        let route = |node, kind| PreparedPositionGraphRoute {
-            uses: uses.clone(),
-            trigger_origins: scratch
-                .source_origins
-                .get(index)
-                .cloned()
-                .unwrap_or_default(),
-            expression: PreparedPositionGraphExpression::Whole(expression.clone()),
-            node,
-            kind,
-        };
-        let mut reached = |node, kind| {
-            graph_reached_callback
-                .as_deref_mut()
-                .expect("enabled reached callback")(&route(node, kind))
-        };
-        let reached: Option<&mut GraphOperationReachedCallback<'_>> = if reached_enabled {
-            Some(&mut reached)
-        } else {
-            None
-        };
-        if graph_enabled {
-            let mut selector = |node, kind| {
-                graph_callback
-                    .as_deref_mut()
-                    .expect("enabled graph callback")(&route(node, kind))
-            };
-            let progress = if let Some(callback) = graph_plan_callback.as_deref_mut() {
-                let mut plan = |node, kind| callback(&route(node, kind));
-                inputs.evaluation.advance_with_graph_plan_and_reached(
-                    frame,
-                    observer
-                        .as_mut()
-                        .map(|value| value as &mut dyn FamilyExpressionObserver),
-                    &mut plan,
-                    reached,
-                )?
-            } else {
-                inputs.evaluation.advance_with_graph_operand_and_reached(
-                    frame,
-                    observer
-                        .as_mut()
-                        .map(|value| value as &mut dyn FamilyExpressionObserver),
-                    &mut selector,
-                    reached,
-                )?
-            };
-            match progress {
-                GraphOperationProgress::Ordinary(progress) => progress,
-                GraphOperationProgress::OperandReady(value) => {
-                    if let Some(callback) = stop_callback.as_deref_mut() {
-                        callback(
-                            inputs
-                                .evaluation
-                                .graph_selected_depth()
-                                .expect("selected graph depth"),
-                        );
-                    }
-                    scratch
-                        .tasks
-                        .push(BaseTask::EvaluateWhole { index, inputs });
-                    return Ok(AdvanceProgress::OperandReady(value));
-                }
-            }
-        } else {
-            inputs.evaluation.advance_with_reached(
-                frame,
-                observer
-                    .as_mut()
-                    .map(|value| value as &mut dyn FamilyExpressionObserver),
-                reached,
-            )?
+    let source = WholeSource {
+        index,
+        uses: &uses,
+        expression: &expression,
+        rank,
+        activation_mix,
+    };
+    let evaluated = match evaluate(&source, &mut inputs, frame, scratch, matcher)? {
+        GraphEvaluation::Progress(progress) => progress,
+        GraphEvaluation::OperandReady(value) => {
+            scratch
+                .tasks
+                .push(BaseTask::EvaluateWhole { index, inputs });
+            return Ok(AdvanceProgress::OperandReady(value));
         }
     };
     let target = match evaluated {
@@ -236,31 +104,7 @@ pub(super) fn advance_with_graph(
             return Err(IntentError("inactive whole expression entered composition".into()).into());
         }
         crate::FamilyEvaluationProgress::NeedsMaterialization(request) => {
-            let kind = match &request.operation {
-                crate::FamilyMaterializationOperation::Transition {
-                    reason: crate::DynamicTransitionReason::Required { .. },
-                    ..
-                } => Some(GraphOperationKind::Required),
-                crate::FamilyMaterializationOperation::Transition {
-                    reason: crate::DynamicTransitionReason::Resume { .. },
-                    ..
-                } => Some(GraphOperationKind::Resume),
-                crate::FamilyMaterializationOperation::Scale { .. } => {
-                    Some(GraphOperationKind::Size)
-                }
-                _ => None,
-            };
-            let graph_route = kind.map(|kind| PreparedPositionGraphRoute {
-                uses: uses.clone(),
-                trigger_origins: scratch
-                    .source_origins
-                    .get(index)
-                    .cloned()
-                    .unwrap_or_default(),
-                expression: PreparedPositionGraphExpression::Whole(expression.clone()),
-                node: request.node,
-                kind,
-            });
+            let graph_route = materialization_route(&source, &request, scratch);
             scratch
                 .tasks
                 .push(BaseTask::EvaluateWhole { index, inputs });
@@ -273,37 +117,302 @@ pub(super) fn advance_with_graph(
         inputs.observer_nodes[expression.trace_root_node()].expect("evaluated whole root")
     });
     if expression.owner() == ProgrammingOwner::Position {
-        if inputs.completion.is_none() {
-            inputs.completion = Some(position_completion::PositionSourceCompletion::new(
-                TracedValue {
-                    value: target,
-                    trace: expression_trace,
-                },
-                rank,
-                activation_mix,
-                inputs.underlay.clone(),
-                position_completion::PositionCompletionKind::Whole,
-            )?);
+        return complete_position(
+            &source,
+            inputs,
+            target,
+            expression_trace,
+            context,
+            frame,
+            scratch,
+        );
+    }
+    complete_sample(
+        &source,
+        inputs.underlay.as_ref(),
+        target,
+        expression_trace,
+        context,
+        frame,
+        scratch,
+    )
+}
+
+/// Record each evaluated expression node in the provenance arena.
+struct Observer<'a> {
+    trace: &'a mut FamilyTraceArena,
+    nodes: &'a mut Vec<Option<FamilyTraceNodeId>>,
+    rank: FamilySampleRank,
+    underlay: Option<FamilyTraceNodeId>,
+}
+
+impl FamilyExpressionObserver for Observer<'_> {
+    fn evaluated(
+        &mut self,
+        node: usize,
+        step: FamilyExpressionStep<'_>,
+        _: &AttributeValue,
+    ) -> Result<(), TransitionError> {
+        if self.nodes.len() <= node {
+            self.nodes.resize(node + 1, None);
         }
-        match inputs
-            .completion
-            .as_mut()
-            .expect("Position completion")
-            .advance(context, frame, &mut scratch.trace, scratch.trace_enabled)?
-        {
-            position_completion::CompletionProgress::Complete(value) => {
-                return Ok(AdvanceProgress::Complete(completed_position_sample(
-                    index, value, scratch,
-                )?));
+        let source = |role, occurrence| FamilyTraceSource {
+            rank: self.rank,
+            footprint: FamilyTraceFootprint::Whole,
+            role,
+            occurrence,
+        };
+        let id = match step {
+            FamilyExpressionStep::Underlay => self.underlay.ok_or(TransitionError::Requires(
+                TransitionRequirement::MaterializedEndpoints,
+            ))?,
+            FamilyExpressionStep::Authored {
+                occurrence,
+                dependency_occurrence,
+                ..
+            } => {
+                let authored = self
+                    .trace
+                    .source(source(FamilyTraceRole::Authored, occurrence));
+                if let Some(dependency) = dependency_occurrence {
+                    let source = source(
+                        FamilyTraceRole::CalculationDependency,
+                        dependency.occurrence,
+                    );
+                    let dependency = self.trace.current_source(source, dependency);
+                    self.trace.bundle(vec![authored, dependency])
+                } else {
+                    authored
+                }
             }
-            position_completion::CompletionProgress::Needs(request) => {
-                scratch
-                    .tasks
-                    .push(BaseTask::EvaluateWhole { index, inputs });
-                return Ok(AdvanceProgress::NeedsMaterialization(request.into()));
+            FamilyExpressionStep::Baseline { occurrence, .. } => self
+                .trace
+                .source(source(FamilyTraceRole::CalculationDependency, occurrence)),
+            FamilyExpressionStep::Scale {
+                value,
+                baseline_occurrence,
+                trace,
+                ..
+            } => {
+                let child = self.nodes[value].expect("compiled Scale child");
+                let baseline = self.trace.source(source(
+                    FamilyTraceRole::CalculationDependency,
+                    baseline_occurrence,
+                ));
+                self.trace.mapped_blend(baseline, child, trace.cloned())
             }
+            FamilyExpressionStep::Transition {
+                from, to, trace, ..
+            } => self.trace.mapped_blend(
+                self.nodes[from].expect("compiled outgoing child"),
+                self.nodes[to].expect("compiled incoming child"),
+                trace.cloned(),
+            ),
+        };
+        self.nodes[node] = Some(id);
+        Ok(())
+    }
+}
+
+/// Advance the expression continuation, routing graph operations through the stage matcher.
+fn evaluate(
+    source: &WholeSource<'_>,
+    inputs: &mut Inputs,
+    frame: &dyn WholeFamilyExpressionFrameResolver,
+    scratch: &mut RetainedFamilyCompositionScratch,
+    matcher: &mut PreparedPositionStageMatcher<'_>,
+) -> Result<GraphEvaluation, TransitionError> {
+    let WholeSource {
+        index,
+        uses,
+        expression,
+        rank,
+        ..
+    } = *source;
+    let underlay = inputs.underlay.as_ref();
+    let mut observer = scratch.trace_enabled.then(|| Observer {
+        trace: &mut scratch.trace,
+        nodes: &mut inputs.observer_nodes,
+        rank,
+        underlay: underlay.and_then(|value| value.trace),
+    });
+    let graph_enabled = matcher.graph_is_enabled();
+    let reached_enabled = matcher.graph_reached_is_enabled();
+    let PreparedPositionStageMatcher {
+        graph_callback,
+        graph_reached_callback,
+        graph_plan_callback,
+        stop_callback,
+        ..
+    } = matcher;
+    let route = |node, kind| PreparedPositionGraphRoute {
+        uses: uses.clone(),
+        trigger_origins: scratch
+            .source_origins
+            .get(index)
+            .cloned()
+            .unwrap_or_default(),
+        expression: PreparedPositionGraphExpression::Whole(expression.clone()),
+        node,
+        kind,
+    };
+    let mut reached = |node, kind| {
+        graph_reached_callback
+            .as_deref_mut()
+            .expect("enabled reached callback")(&route(node, kind))
+    };
+    let reached: Option<&mut GraphOperationReachedCallback<'_>> = if reached_enabled {
+        Some(&mut reached)
+    } else {
+        None
+    };
+    let evaluated = if graph_enabled {
+        let mut selector = |node, kind| {
+            graph_callback
+                .as_deref_mut()
+                .expect("enabled graph callback")(&route(node, kind))
+        };
+        let progress = if let Some(callback) = graph_plan_callback.as_deref_mut() {
+            let mut plan = |node, kind| callback(&route(node, kind));
+            inputs.evaluation.advance_with_graph_plan_and_reached(
+                frame,
+                observer
+                    .as_mut()
+                    .map(|value| value as &mut dyn FamilyExpressionObserver),
+                &mut plan,
+                reached,
+            )?
+        } else {
+            inputs.evaluation.advance_with_graph_operand_and_reached(
+                frame,
+                observer
+                    .as_mut()
+                    .map(|value| value as &mut dyn FamilyExpressionObserver),
+                &mut selector,
+                reached,
+            )?
+        };
+        match progress {
+            GraphOperationProgress::Ordinary(progress) => progress,
+            GraphOperationProgress::OperandReady(value) => {
+                if let Some(callback) = stop_callback.as_deref_mut() {
+                    callback(
+                        inputs
+                            .evaluation
+                            .graph_selected_depth()
+                            .expect("selected graph depth"),
+                    );
+                }
+                return Ok(GraphEvaluation::OperandReady(value));
+            }
+        }
+    } else {
+        inputs.evaluation.advance_with_reached(
+            frame,
+            observer
+                .as_mut()
+                .map(|value| value as &mut dyn FamilyExpressionObserver),
+            reached,
+        )?
+    };
+    Ok(GraphEvaluation::Progress(evaluated))
+}
+
+/// Route a suspended Required, Resume or Size operation back to its prepared stage.
+fn materialization_route(
+    source: &WholeSource<'_>,
+    request: &crate::FamilyMaterializationRequest,
+    scratch: &RetainedFamilyCompositionScratch,
+) -> Option<PreparedPositionGraphRoute> {
+    let WholeSource {
+        index,
+        uses,
+        expression,
+        ..
+    } = *source;
+    let kind = match &request.operation {
+        crate::FamilyMaterializationOperation::Transition {
+            reason: crate::DynamicTransitionReason::Required { .. },
+            ..
+        } => Some(GraphOperationKind::Required),
+        crate::FamilyMaterializationOperation::Transition {
+            reason: crate::DynamicTransitionReason::Resume { .. },
+            ..
+        } => Some(GraphOperationKind::Resume),
+        crate::FamilyMaterializationOperation::Scale { .. } => Some(GraphOperationKind::Size),
+        _ => None,
+    };
+    kind.map(|kind| PreparedPositionGraphRoute {
+        uses: uses.clone(),
+        trigger_origins: scratch
+            .source_origins
+            .get(index)
+            .cloned()
+            .unwrap_or_default(),
+        expression: PreparedPositionGraphExpression::Whole(expression.clone()),
+        node: request.node,
+        kind,
+    })
+}
+
+/// A Position whole source completes through its retained Position completion.
+fn complete_position(
+    source: &WholeSource<'_>,
+    mut inputs: Inputs,
+    target: AttributeValue,
+    expression_trace: Option<FamilyTraceNodeId>,
+    context: &FamilyCompositionContext<'_>,
+    frame: &dyn WholeFamilyExpressionFrameResolver,
+    scratch: &mut RetainedFamilyCompositionScratch,
+) -> Result<AdvanceProgress, TransitionError> {
+    let index = source.index;
+    if inputs.completion.is_none() {
+        inputs.completion = Some(position_completion::PositionSourceCompletion::new(
+            TracedValue {
+                value: target,
+                trace: expression_trace,
+            },
+            source.rank,
+            source.activation_mix,
+            inputs.underlay.clone(),
+            position_completion::PositionCompletionKind::Whole,
+        )?);
+    }
+    match inputs
+        .completion
+        .as_mut()
+        .expect("Position completion")
+        .advance(context, frame, &mut scratch.trace, scratch.trace_enabled)?
+    {
+        position_completion::CompletionProgress::Complete(value) => Ok(AdvanceProgress::Complete(
+            completed_position_sample(index, value, scratch)?,
+        )),
+        position_completion::CompletionProgress::Needs(request) => {
+            scratch
+                .tasks
+                .push(BaseTask::EvaluateWhole { index, inputs });
+            Ok(AdvanceProgress::NeedsMaterialization(request.into()))
         }
     }
+}
+
+/// Apply endpoint output and activation to an evaluated non-Position target.
+fn complete_sample(
+    source: &WholeSource<'_>,
+    underlay: Option<&TracedValue>,
+    target: AttributeValue,
+    expression_trace: Option<FamilyTraceNodeId>,
+    context: &FamilyCompositionContext<'_>,
+    frame: &dyn WholeFamilyExpressionFrameResolver,
+    scratch: &mut RetainedFamilyCompositionScratch,
+) -> Result<AdvanceProgress, TransitionError> {
+    let WholeSource {
+        index,
+        expression,
+        rank,
+        activation_mix,
+        ..
+    } = *source;
     let (target, expression_trace) = endpoint_output::whole(
         rank,
         expression.owner(),

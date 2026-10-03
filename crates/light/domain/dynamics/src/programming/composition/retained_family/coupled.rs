@@ -6,6 +6,9 @@ use crate::{
     CoupledEvaluationStep, CoupledExpressionContext, CoupledExpressionFootprint, CoupledLeafRole,
 };
 
+mod advance;
+use advance::CoupledAdvance;
+
 #[derive(Default)]
 pub(super) struct BaseInputs {
     pub underlay: Option<TracedValue>,
@@ -483,638 +486,71 @@ pub(super) fn advance_with_stage(
     else {
         unreachable!("coupled source task")
     };
-    if matcher.graph_is_enabled() && expression.owner() == ProgrammingOwner::Position {
-        if inputs.evaluation.is_none() {
-            inputs.evaluation = Some(expression.begin_position_evaluation()?);
-        }
-        let route = |node, kind| PreparedPositionGraphRoute {
-            uses: uses.clone(),
-            trigger_origins: scratch
-                .source_origins
-                .get(index)
-                .cloned()
-                .unwrap_or_default(),
-            expression: PreparedPositionGraphExpression::Coupled(expression.clone()),
-            node,
-            kind,
-        };
-        if let Some(callback) = matcher.graph_plan_callback.as_deref_mut() {
-            let mut plan = |node, kind| callback(&route(node, kind));
-            inputs
-                .evaluation
-                .as_mut()
-                .expect("Position graph operand")
-                .configure_graph_plan(&mut plan)?;
-        } else {
-            let mut selector = |node, kind| matcher.match_graph(&route(node, kind));
-            inputs
-                .evaluation
-                .as_mut()
-                .expect("Position graph operand")
-                .configure_graph_operand(&mut selector)?;
-        }
+    let task = CoupledAdvance {
+        index,
+        cursor,
+        expression,
+        rank,
+        activation_mix,
+        uses,
+    };
+    if matcher.graph_is_enabled() && task.expression.owner() == ProgrammingOwner::Position {
+        task.configure_graph(&mut inputs, scratch, matcher)?;
     }
     let selected_graph = inputs
         .evaluation
         .as_ref()
         .is_some_and(|evaluation| evaluation.graph_operand_selected());
     if step == 0 {
-        if (if selected_graph {
-            inputs
-                .evaluation
-                .as_ref()
-                .unwrap()
-                .graph_operand_needs_underlay()
-        } else {
-            expression.needs_base_underlay()
-        }) || (!selected_graph && activation_mix < 1.0)
-            || expression
-                .base_endpoints()
-                .iter()
-                .enumerate()
-                .any(|(endpoint_index, endpoint)| {
-                    endpoint.cohort_sources().is_some()
-                        && inputs.evaluation.as_ref().map_or(true, |evaluation| {
-                            evaluation.graph_operand_endpoint_needed(endpoint_index)
-                        })
-                })
-        {
-            scratch.tasks.push(BaseTask::CollectCoupled {
-                index,
-                cursor,
-                step,
-                inputs,
-                uses: uses.clone(),
-            });
-            let mut underlay_uses = uses.clone();
-            underlay_uses.push(PreparedPositionStageUse::UnderlayFor {
-                consumer_origins: scratch
-                    .source_origins
-                    .get(index)
-                    .cloned()
-                    .unwrap_or_default(),
-            });
-            scratch.tasks.push(BaseTask::Compose {
-                end: cursor,
-                uses: underlay_uses,
-            });
-            return Ok(AdvanceProgress::Scheduled);
+        if task.needs_underlay(&inputs, selected_graph) {
+            return Ok(task.schedule_underlay(step, inputs, scratch));
         }
         step = 1;
     }
-    while let Some(endpoint) = expression.base_endpoints().get(step - 1) {
-        if matcher.graph_is_enabled()
-            && !inputs
-                .evaluation
-                .as_ref()
-                .unwrap()
-                .graph_operand_endpoint_needed(step - 1)
-        {
-            inputs.values.push(None);
-            step += 1;
-            continue;
-        }
-        if let Some(sources) = endpoint.cohort_sources() {
-            // The child's prepared sources, lower prefix, trace and heap tasks survive
-            // suspension. Its endpoint's original Arc remains in the parent's expression.
-            if inputs.source_cohort.is_none() {
-                let underlay = inputs
-                    .underlay
-                    .as_ref()
-                    .expect("source cohort lower prefix");
-                let mut candidates = std::mem::take(&mut scratch.source_cohort_candidates);
-                candidates.clear();
-                let prepared = sources.iter().try_for_each(|source| {
-                    let candidate = match source {
-                        CoupledCohortEndpoint::Materialized(component) => {
-                            FamilyCompositionSample::Known(verified_component(
-                                component, rank, 1.0,
-                            )?)
-                        }
-                        CoupledCohortEndpoint::WholeExpression {
-                            lane_id,
-                            expression,
-                        } => FamilyCompositionSample::WholeExpression {
-                            expression: expression.clone(),
-                            rank: rank.with_dynamic_lane(*lane_id)?,
-                            activation_mix: 1.0,
-                        },
-                    };
-                    candidates.push(candidate);
-                    Ok::<(), TransitionError>(())
-                });
-                if let Err(error) = prepared {
-                    scratch.source_cohort_candidates = candidates;
-                    return Err(error);
-                }
-                let mut nested = scratch.source_cohort_scratch.take().unwrap_or_default();
-                let prepared = prepare_family_inputs_with_origins(
-                    ProgrammingOwner::Position,
-                    &underlay.value,
-                    candidates
-                        .drain(..)
-                        .enumerate()
-                        .map(|(member, sample)| (sample, vec![member])),
-                    &endpoint_output::with_control(context, None),
-                    &mut nested,
-                    scratch.trace_enabled,
-                );
-                scratch.source_cohort_candidates = candidates;
-                let base_trace = match prepared {
-                    Ok(value) => value,
-                    Err(error) => {
-                        scratch.source_cohort_scratch = Some(nested);
-                        return Err(error);
-                    }
-                };
-                // SourceCohort endpoints consist only of ordinary materialized/whole sources,
-                // never FixAT masks or Color orthogonals; base composition is the full pass.
-                let ordered = std::mem::take(&mut nested.ordered);
-                let mut child_uses = uses.clone();
-                child_uses.push(PreparedPositionStageUse::SourceCohort {
-                    consumer_origins: scratch
-                        .source_origins
-                        .get(index)
-                        .cloned()
-                        .unwrap_or_default(),
-                    expression: expression.clone(),
-                    endpoint_nodes: expression
-                        .base_endpoint_nodes(step - 1)
-                        .unwrap_or_default()
-                        .to_vec(),
-                });
-                let evaluation = base_evaluation::BaseEvaluation::begin_with_route(
-                    &underlay.value,
-                    base_trace,
-                    &ordered,
-                    &underlay.value,
-                    &mut nested,
-                    child_uses,
-                );
-                nested.ordered = ordered;
-                inputs.source_cohort = Some(Box::new(SourceCohortEvaluation {
-                    evaluation,
-                    scratch: nested,
-                }));
-            }
-            let mut child = inputs.source_cohort.take().expect("retained source cohort");
-            match child.evaluation.advance_with_stage(
-                &endpoint_output::with_control(context, None),
-                frame,
-                &mut child.scratch,
-                matcher,
-            ) {
-                Ok(base_evaluation::BaseEvaluationProgress::OperandReady(value)) => {
-                    inputs.source_cohort = Some(child);
-                    scratch.tasks.push(BaseTask::Coupled {
-                        index,
-                        cursor,
-                        step,
-                        inputs,
-                        uses: uses.clone(),
-                    });
-                    return Ok(AdvanceProgress::OperandReady(value));
-                }
-                Ok(base_evaluation::BaseEvaluationProgress::Pending) => {
-                    inputs.source_cohort = Some(child);
-                    scratch.tasks.push(BaseTask::Coupled {
-                        index,
-                        cursor,
-                        step,
-                        inputs,
-                        uses: uses.clone(),
-                    });
-                    return Ok(AdvanceProgress::Scheduled);
-                }
-                Ok(base_evaluation::BaseEvaluationProgress::NeedsMaterialization {
-                    source_index,
-                    request,
-                }) => {
-                    let source_rank = request.source_rank(source_index, &child.scratch);
-                    let request = base_evaluation::BaseMaterializationRequest {
-                        node: request.node,
-                        source_origins: scratch
-                            .source_origins
-                            .get(index)
-                            .cloned()
-                            .unwrap_or_default(),
-                        stage_route: request.stage_route.clone(),
-                        graph_route: request.graph_route.clone(),
-                        requirement: request.requirement,
-                        operation: base_evaluation::BaseMaterializationOperation::SourceCohort {
-                            endpoint_index: step - 1,
-                            child_source_index: source_index,
-                            source_rank,
-                            request: Box::new(request),
-                        },
-                    };
-                    inputs.source_cohort = Some(child);
-                    scratch.tasks.push(BaseTask::Coupled {
-                        index,
-                        cursor,
-                        step,
-                        inputs,
-                        uses: uses.clone(),
-                    });
-                    return Ok(AdvanceProgress::NeedsMaterialization(request));
-                }
-                Ok(base_evaluation::BaseEvaluationProgress::Complete(resolved)) => {
-                    if let Some(callback) = matcher.cohort_callback.as_deref_mut() {
-                        if let Some(depth) = callback(
-                            &uses,
-                            scratch
-                                .source_origins
-                                .get(index)
-                                .map(Vec::as_slice)
-                                .unwrap_or_default(),
-                            &expression,
-                            expression.base_endpoint_nodes(step - 1).unwrap_or_default(),
-                        )? {
-                            let value = resolved.value.clone();
-                            inputs.source_cohort = Some(child);
-                            scratch.tasks.push(BaseTask::Coupled {
-                                index,
-                                cursor,
-                                step,
-                                inputs,
-                                uses: uses.clone(),
-                            });
-                            matcher.completed_stop(depth);
-                            return Ok(AdvanceProgress::OperandReady(value));
-                        }
-                    }
-                    let underlay = inputs
-                        .underlay
-                        .as_ref()
-                        .expect("source cohort lower prefix");
-                    let trace = match (resolved.trace, underlay.trace) {
-                        (Some(root), Some(base)) => Some(scratch.trace.append_graph_rebased(
-                            &child.scratch.trace,
-                            root,
-                            base,
-                        )),
-                        _ => None,
-                    };
-                    child.evaluation.recycle(&mut child.scratch);
-                    scratch.source_cohort_scratch = Some(child.scratch);
-                    inputs.values.push(Some(TracedValue {
-                        value: resolved.value,
-                        trace,
-                    }));
-                    step += 1;
-                    continue;
-                }
-                Err(error) => {
-                    child.evaluation.recycle(&mut child.scratch);
-                    scratch.source_cohort_scratch = Some(child.scratch);
-                    return Err(error);
-                }
-            }
-        }
-        if let Some(components) = endpoint.cohort() {
-            let candidates = components
-                .iter()
-                .map(|component| verified_component(component, rank, 1.0))
-                .collect::<Result<Vec<_>, _>>()?;
-            scratch.tasks.push(BaseTask::CollectCoupled {
-                index,
-                cursor,
-                step,
-                inputs,
-                uses: uses.clone(),
-            });
-            let origins = vec![
-                scratch
-                    .source_origins
-                    .get(index)
-                    .cloned()
-                    .unwrap_or_default();
-                candidates.len()
-            ];
-            let mut endpoint_uses = uses.clone();
-            endpoint_uses.push(PreparedPositionStageUse::UnsupportedCoupledEndpoint);
-            scratch.tasks.push(BaseTask::Cohort {
-                end: cursor,
-                candidates,
-                origins,
-                uses: endpoint_uses,
-            });
-            return Ok(AdvanceProgress::Scheduled);
-        }
-        let (address, source_value) = endpoint.materialized().ok_or(TransitionError::Requires(
-            TransitionRequirement::CompatibleOwners,
-        ))?;
-        if let DynamicValue::Family(value) = source_value {
-            let trace = scratch.trace_enabled.then(|| {
-                scratch.trace.source(FamilyTraceSource {
-                    rank,
-                    footprint: FamilyTraceFootprint::Whole,
-                    role: FamilyTraceRole::Authored,
-                    occurrence: None,
-                })
-            });
-            inputs.values.push(Some(TracedValue {
-                value: value.clone(),
-                trace,
-            }));
-            step += 1;
-            continue;
-        }
-        let candidate = verified_endpoint(address.clone(), source_value.clone(), rank, 1.0)?;
-        scratch.tasks.push(BaseTask::CollectCoupled {
-            index,
-            cursor,
+    while let Some(endpoint) = task.expression.base_endpoints().get(step - 1) {
+        if let Some(progress) = task.advance_endpoint(
+            endpoint,
             step,
-            inputs,
-            uses: uses.clone(),
-        });
-        let mut endpoint_uses = uses.clone();
-        endpoint_uses.push(PreparedPositionStageUse::UnsupportedCoupledEndpoint);
-        scratch.tasks.push(BaseTask::Cohort {
-            end: cursor,
-            candidates: vec![candidate],
-            origins: vec![
-                scratch
-                    .source_origins
-                    .get(index)
-                    .cloned()
-                    .unwrap_or_default(),
-            ],
-            uses: endpoint_uses,
-        });
-        return Ok(AdvanceProgress::Scheduled);
+            &mut inputs,
+            context,
+            frame,
+            scratch,
+            matcher,
+        )? {
+            return Ok(progress);
+        }
+        step += 1;
     }
 
-    // Completed Position nodes and observer bindings survive a materialization request.
-    // Color keeps its established ordinary evaluator; it has its own family continuation.
-    let mut evaluation = inputs.evaluation.take();
-    let mut observer_nodes = std::mem::take(&mut inputs.observer_nodes);
-    let evaluated = {
-        let endpoints = Endpoints {
-            expression: &expression,
-            inputs: &inputs,
-        };
-        let mut observer = scratch.trace_enabled.then(|| Observer {
-            trace: &mut scratch.trace,
-            nodes: &mut observer_nodes,
-            rank,
-            inputs: &inputs,
-            expression: &expression,
-        });
-        if expression.owner() == ProgrammingOwner::Position {
-            if evaluation.is_none() {
-                evaluation = Some(expression.begin_position_evaluation()?);
-            }
-            let evaluation = evaluation.as_mut().expect("Position evaluation");
-            let observer = observer
-                .as_mut()
-                .map(|value| value as &mut dyn CoupledEvaluationObserver);
-            let reached_enabled = matcher.graph_reached_is_enabled();
-            let graph_enabled = matcher.graph_is_enabled();
-            let mut reached = |node, kind| {
-                matcher
-                    .graph_reached_callback
-                    .as_deref_mut()
-                    .expect("enabled reached callback")(
-                    &PreparedPositionGraphRoute {
-                        uses: uses.clone(),
-                        trigger_origins: scratch
-                            .source_origins
-                            .get(index)
-                            .cloned()
-                            .unwrap_or_default(),
-                        expression: PreparedPositionGraphExpression::Coupled(expression.clone()),
-                        node,
-                        kind,
-                    },
-                )
-            };
-            let reached: Option<&mut GraphOperationReachedCallback<'_>> = if reached_enabled {
-                Some(&mut reached)
-            } else {
-                None
-            };
-            let progress = if graph_enabled {
-                evaluation.advance_graph_operand_with_reached(&endpoints, frame, observer, reached)
-            } else {
-                evaluation
-                    .advance_with_reached(&endpoints, frame, observer, reached)
-                    .map(GraphOperationProgress::Ordinary)
-            };
-            progress.map(|progress| match progress {
-                GraphOperationProgress::OperandReady(value) => {
-                    matcher.completed_stop(
-                        evaluation
-                            .graph_selected_depth()
-                            .expect("selected graph depth"),
-                    );
-                    GraphOperationProgress::OperandReady(value)
-                }
-                GraphOperationProgress::Ordinary(crate::PositionEvaluationProgress::Complete(
-                    value,
-                )) => GraphOperationProgress::Ordinary(Ok(value)),
-                GraphOperationProgress::Ordinary(
-                    crate::PositionEvaluationProgress::NeedsMaterialization(request),
-                ) => GraphOperationProgress::Ordinary(Err(request)),
-            })
-        } else {
-            expression
-                .evaluate_base_observed(
-                    &endpoints,
-                    frame,
-                    observer
-                        .as_mut()
-                        .map(|value| value as &mut dyn CoupledEvaluationObserver),
-                )
-                .and_then(|value| {
-                    value.ok_or_else(|| {
-                        IntentError("inactive coupled base entered composition".into()).into()
-                    })
-                })
-                .map(|value| GraphOperationProgress::Ordinary(Ok(value)))
-        }
-    };
-    inputs.evaluation = evaluation;
-    inputs.observer_nodes = observer_nodes;
-    let target = match evaluated? {
+    let target = match task.evaluate_base(&mut inputs, frame, scratch, matcher)? {
         GraphOperationProgress::OperandReady(value) => {
             scratch.tasks.push(BaseTask::Coupled {
                 index,
                 cursor,
                 step,
                 inputs,
-                uses,
+                uses: task.uses,
             });
             return Ok(AdvanceProgress::OperandReady(value));
         }
         GraphOperationProgress::Ordinary(Ok(value)) => value,
         GraphOperationProgress::Ordinary(Err(request)) => {
-            scratch.tasks.push(BaseTask::Coupled {
-                index,
-                cursor,
-                step,
-                inputs,
-                uses: uses.clone(),
-            });
-            let kind = match &request.operation {
-                crate::PositionMaterializationOperation::Transition {
-                    reason: crate::DynamicTransitionReason::Required { .. },
-                    ..
-                } => Some(GraphOperationKind::Required),
-                crate::PositionMaterializationOperation::Transition {
-                    reason: crate::DynamicTransitionReason::Resume { .. },
-                    ..
-                } => Some(GraphOperationKind::Resume),
-                crate::PositionMaterializationOperation::Scale { .. } => {
-                    Some(GraphOperationKind::Size)
-                }
-                _ => None,
-            };
-            let graph_route = kind.map(|kind| PreparedPositionGraphRoute {
-                uses: uses.clone(),
-                trigger_origins: scratch
-                    .source_origins
-                    .get(index)
-                    .cloned()
-                    .unwrap_or_default(),
-                expression: PreparedPositionGraphExpression::Coupled(expression.clone()),
-                node: request.node,
-                kind,
-            });
-            let mut request: base_evaluation::BaseMaterializationRequest = request.into();
-            request.graph_route = graph_route;
-            return Ok(AdvanceProgress::NeedsMaterialization(request));
+            return Ok(task.request_materialization(request, step, inputs, scratch));
         }
     };
     let expression_trace = scratch.trace_enabled.then(|| {
-        inputs.observer_nodes[expression.trace_root_node()].expect("evaluated coupled root")
+        inputs.observer_nodes[task.expression.trace_root_node()].expect("evaluated coupled root")
     });
-    if expression.owner() == ProgrammingOwner::Position {
-        if inputs.completion.is_none() {
-            inputs.completion = Some(position_completion::PositionSourceCompletion::new(
-                TracedValue {
-                    value: target,
-                    trace: expression_trace,
-                },
-                rank,
-                activation_mix,
-                inputs.underlay.clone(),
-                position_completion::PositionCompletionKind::Coupled,
-            )?);
-        }
-        match inputs
-            .completion
-            .as_mut()
-            .expect("Position completion")
-            .advance(context, frame, &mut scratch.trace, scratch.trace_enabled)?
-        {
-            position_completion::CompletionProgress::Complete(value) => {
-                return Ok(AdvanceProgress::Complete(completed_position_sample(
-                    index, value, scratch,
-                )?));
-            }
-            position_completion::CompletionProgress::Needs(request) => {
-                scratch.tasks.push(BaseTask::Coupled {
-                    index,
-                    cursor,
-                    step,
-                    inputs,
-                    uses: uses.clone(),
-                });
-                return Ok(AdvanceProgress::NeedsMaterialization(request.into()));
-            }
-        }
-    }
-    let (target, expression_trace) = endpoint_output::whole(
-        rank,
-        expression.owner(),
-        target,
-        expression_trace,
-        context,
-        frame,
-        &|source| expression.resolve_original_native_model(source),
-        scratch.trace_enabled.then_some(&mut scratch.trace),
-    )?;
-    let controlled = matches!(
-        endpoint_output::control(rank, context),
-        FamilyEndpointOutputControl::CrossfadeCurrent { .. }
-    );
-    let (value, activation_transfer) = if activation_mix == 1.0 {
-        (target, None)
-    } else {
-        let from = &inputs
-            .underlay
-            .as_ref()
-            .expect("coupled activation prefix")
-            .value;
-        if controlled {
-            endpoint_output::transition(
-                expression.owner(),
-                from,
-                &target,
-                activation_mix,
-                context,
-                frame,
-                &|source| expression.resolve_original_native_model(source),
-                scratch.trace_enabled,
-            )?
-        } else {
-            (
-                expression.transition(from, &target, activation_mix, frame)?,
-                None,
-            )
-        }
-    };
-    let trace_node = if activation_mix == 1.0 {
-        expression_trace
-    } else {
-        expression_trace.map(|incoming| {
-            let prior = inputs
-                .underlay
-                .as_ref()
-                .and_then(|value| value.trace)
-                .expect("traced activation prefix");
-            if controlled {
-                scratch
-                    .trace
-                    .mapped_blend(prior, incoming, activation_transfer)
-            } else {
-                scratch
-                    .trace
-                    .write(prior, incoming, FamilyTraceFootprint::Whole, true)
-            }
-        })
-    };
-    let trace_node = trace_node.map(|appearance| {
-        endpoint_output::control_trace(
-            rank,
-            FamilyTraceFootprint::Whole,
-            appearance,
-            inputs
-                .underlay
-                .as_ref()
-                .and_then(|value| value.trace)
-                .filter(|_| activation_mix < 1.0),
+    if task.expression.owner() == ProgrammingOwner::Position {
+        return task.complete_position(
+            target,
+            expression_trace,
+            step,
+            inputs,
             context,
-            &mut scratch.trace,
-        )
-    });
-    let address = DynamicValueAddress::whole_family(expression.owner(), &value)?;
-    let model = match &address.representation {
-        DynamicFamilyRepresentation::DirectColor { source } => Some(
-            endpoint_output::resolve_native_model(source, context, &|source| {
-                expression.resolve_original_native_model(source)
-            })?,
-        ),
-        _ => None,
-    };
-    let mut sample = verified_endpoint(
-        Arc::new(CompiledDynamicValueAddress::new(address, model)?),
-        DynamicValue::Family(value),
-        rank,
-        1.0,
-    )?;
-    sample.trace_node = trace_node;
-    scratch.resolved[index] = Some(sample.clone());
-    Ok(AdvanceProgress::Complete(sample))
+            frame,
+            scratch,
+        );
+    }
+    task.complete_whole(target, expression_trace, &inputs, context, frame, scratch)
 }

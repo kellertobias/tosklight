@@ -113,84 +113,96 @@ pub fn compile_programming_ranks(
                 }))
             })
             .collect(),
-        AttributeValue::ColorProgram(program) => match program.as_ref() {
-            ColorProgram::Semantic { intent } => {
-                // Set saturation before hue so an achromatic starting RGB can acquire the
-                // requested hue when both curves are present. RGB/HS conflicts were validated.
-                let mut spreads = intent.spreads.iter().collect::<Vec<_>>();
-                spreads.sort_by_key(|spread| u8::from(spread.component == ColorComponent::Hue));
-                let curves = spreads
-                    .iter()
-                    .map(|spread| {
-                        ScalarIntent::Spread(spread.points.clone()).resolve_selected(
-                            rank_count,
-                            ranks,
-                            spread.component == ColorComponent::Hue,
-                        )
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let mut seed = intent.clone();
-                seed.spreads.clear();
-                let seed =
-                    AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic { intent: seed }));
-                (0..ranks.len())
-                    .map(|rank| {
-                        let edits = spreads
-                            .iter()
-                            .zip(&curves)
-                            .map(|(spread, values)| ComponentEdit::Scalar {
-                                component: ProgrammingComponent::Color(spread.component),
-                                operation: ScalarEdit::Set(ScalarIntent::Value(values[rank])),
-                            })
-                            .collect::<Vec<_>>();
-                        edit_family(&seed, &edits, context)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?
-            }
-            ColorProgram::Direct { recipe, portable } => {
-                let model = context.native_model.ok_or_else(|| {
-                    IntentError("native spread requires its verified source model".into())
-                })?;
-                require(
-                    model.source() == &recipe.source,
-                    "native spread source identity changed",
-                )?;
-                for spread in &recipe.spreads {
-                    let descriptor = model.descriptor(spread.binding).ok_or_else(|| {
-                        IntentError("native spread binding is absent from source".into())
-                    })?;
-                    spread.validate(descriptor)?;
-                }
-                let curves = recipe
-                    .spreads
-                    .iter()
-                    .map(|spread| spread.resolve_selected(rank_count, ranks))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let mut seed = recipe.clone();
-                seed.spreads.clear();
-                let seed = AttributeValue::ColorProgram(Arc::new(ColorProgram::Direct {
-                    recipe: seed,
-                    portable: portable.clone(),
-                }));
-                (0..ranks.len())
-                    .map(|rank| {
-                        let edits = recipe
-                            .spreads
-                            .iter()
-                            .zip(&curves)
-                            .map(|(spread, values)| ComponentEdit::Native {
-                                binding: spread.binding,
-                                operation: NativeColorEdit::Set(values[rank]),
-                            })
-                            .collect::<Vec<_>>();
-                        edit_family(&seed, &edits, context)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?
-            }
-        },
+        AttributeValue::ColorProgram(program) => {
+            color_program_ranks(program.as_ref(), rank_count, ranks, context)?
+        }
         _ => unreachable!("spread_control_points is exhaustive"),
     };
     Ok(RankedProgrammingValue::Ranks(resolved))
+}
+
+/// Materialize the selected ranks of one spread ColorProgram through the family editor.
+fn color_program_ranks(
+    program: &ColorProgram,
+    rank_count: usize,
+    ranks: &[usize],
+    context: &FamilyEditContext<'_>,
+) -> Result<Vec<AttributeValue>, IntentError> {
+    Ok(match program {
+        ColorProgram::Semantic { intent } => {
+            // Set saturation before hue so an achromatic starting RGB can acquire the
+            // requested hue when both curves are present. RGB/HS conflicts were validated.
+            let mut spreads = intent.spreads.iter().collect::<Vec<_>>();
+            spreads.sort_by_key(|spread| u8::from(spread.component == ColorComponent::Hue));
+            let curves = spreads
+                .iter()
+                .map(|spread| {
+                    ScalarIntent::Spread(spread.points.clone()).resolve_selected(
+                        rank_count,
+                        ranks,
+                        spread.component == ColorComponent::Hue,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut seed = intent.clone();
+            seed.spreads.clear();
+            let seed =
+                AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic { intent: seed }));
+            (0..ranks.len())
+                .map(|rank| {
+                    let edits = spreads
+                        .iter()
+                        .zip(&curves)
+                        .map(|(spread, values)| ComponentEdit::Scalar {
+                            component: ProgrammingComponent::Color(spread.component),
+                            operation: ScalarEdit::Set(ScalarIntent::Value(values[rank])),
+                        })
+                        .collect::<Vec<_>>();
+                    edit_family(&seed, &edits, context)
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        }
+        ColorProgram::Direct { recipe, portable } => {
+            let model = context.native_model.ok_or_else(|| {
+                IntentError("native spread requires its verified source model".into())
+            })?;
+            require(
+                model.source() == &recipe.source,
+                "native spread source identity changed",
+            )?;
+            for spread in &recipe.spreads {
+                let descriptor = model.descriptor(spread.binding).ok_or_else(|| {
+                    IntentError("native spread binding is absent from source".into())
+                })?;
+                spread.validate(descriptor)?;
+            }
+            let curves = recipe
+                .spreads
+                .iter()
+                .map(|spread| spread.resolve_selected(rank_count, ranks))
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut seed = recipe.clone();
+            seed.spreads.clear();
+            let seed = AttributeValue::ColorProgram(Arc::new(ColorProgram::Direct {
+                recipe: seed,
+                portable: portable.clone(),
+            }));
+            (0..ranks.len())
+                .map(|rank| {
+                    let edits = recipe
+                        .spreads
+                        .iter()
+                        .zip(&curves)
+                        .map(|(spread, values)| ComponentEdit::Native {
+                            binding: spread.binding,
+                            operation: NativeColorEdit::Set(values[rank]),
+                        })
+                        .collect::<Vec<_>>();
+                    edit_family(&seed, &edits, context)
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        }
+    })
 }
 
 fn resolve_legacy_selected(points: &[f32], count: usize, ranks: &[usize]) -> Vec<f32> {

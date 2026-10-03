@@ -229,9 +229,6 @@ impl BaseEvaluation {
         scratch: &mut RetainedFamilyCompositionScratch,
         matcher: &mut PreparedPositionStageMatcher<'_>,
     ) -> Result<BaseEvaluationProgress, TransitionError> {
-        let base = &self.base;
-        let base_trace = self.base_trace;
-        let ordered = &self.ordered;
         let Some(task) = scratch.tasks.pop() else {
             let value = self
                 .last
@@ -242,432 +239,61 @@ impl BaseEvaluation {
             return Ok(BaseEvaluationProgress::Complete(value));
         };
         match task {
-            BaseTask::EvaluatePositionSegment {
-                mut evaluation,
-                batch,
-            } => {
-                match evaluation.advance(
-                    context,
-                    frame,
-                    &mut scratch.components,
-                    &mut scratch.trace,
-                )? {
-                    position_segment::PositionSegmentProgress::OperandReady(value) => {
-                        scratch
-                            .tasks
-                            .push(BaseTask::EvaluatePositionSegment { evaluation, batch });
-                        return Ok(BaseEvaluationProgress::OperandReady(value));
-                    }
-                    position_segment::PositionSegmentProgress::Complete(value) => {
-                        scratch.batches.push(batch);
-                        self.last = Some(BaseResult::Value(value));
-                    }
-                    position_segment::PositionSegmentProgress::NeedsMaterialization(inner) => {
-                        let request = BaseMaterializationRequest {
-                            node: inner.node,
-                            source_origins: batch
-                                .origins
-                                .get(inner.sample_index)
-                                .cloned()
-                                .ok_or_else(|| {
-                                    IntentError("Position segment source origin is absent".into())
-                                })?,
-                            graph_route: None,
-                            stage_route: Some(segment_route(
-                                &batch,
-                                inner.sample_index,
-                                match &inner.operation {
-                                    PositionSegmentOperation::Adoption { address, .. } => {
-                                        PreparedPositionStageKind::Adoption {
-                                            component: address.component,
-                                        }
-                                    }
-                                    PositionSegmentOperation::Transition { .. } => {
-                                        PreparedPositionStageKind::WholeSegmentTransition
-                                    }
-                                },
-                            )?),
-                            requirement: inner.requirement,
-                            operation: BaseMaterializationOperation::Segment(inner),
-                        };
-                        scratch
-                            .tasks
-                            .push(BaseTask::EvaluatePositionSegment { evaluation, batch });
-                        self.materialization = Some((usize::MAX, request.clone()));
-                        return Ok(BaseEvaluationProgress::NeedsMaterialization {
-                            source_index: usize::MAX,
-                            request,
-                        });
-                    }
-                }
+            BaseTask::EvaluatePositionSegment { evaluation, batch } => {
+                return self.advance_position_segment(evaluation, batch, context, frame, scratch);
             }
-
-            BaseTask::CompleteKnownPosition {
-                index,
-                mut completion,
-            } => {
-                let context = if matches!(&scratch.sources[index], FamilyCompositionSample::Known(sample) if sample.fix_at || sample.endpoint_output_exempt)
-                {
-                    endpoint_output::with_control(context, None)
-                } else {
-                    endpoint_output::with_control(context, context.endpoint_output)
-                };
-                match completion.advance(
-                    &context,
-                    frame,
-                    &mut scratch.trace,
-                    scratch.trace_enabled,
-                )? {
-                    position_completion::CompletionProgress::Complete(value) => {
-                        self.last = Some(BaseResult::Sample(completed_position_sample(
-                            index, value, scratch,
-                        )?))
-                    }
-                    position_completion::CompletionProgress::Needs(request) => {
-                        let mut request: BaseMaterializationRequest = request.into();
-                        request.source_origins = scratch
-                            .source_origins
-                            .get(index)
-                            .cloned()
-                            .unwrap_or_default();
-                        scratch
-                            .tasks
-                            .push(BaseTask::CompleteKnownPosition { index, completion });
-                        if let Some(progress) =
-                            self.envelope(index, &mut request, scratch, matcher)?
-                        {
-                            return Ok(progress);
-                        }
-                        self.materialization = Some((index, request.clone()));
-                        return Ok(BaseEvaluationProgress::NeedsMaterialization {
-                            source_index: index,
-                            request,
-                        });
-                    }
-                }
+            BaseTask::CompleteKnownPosition { index, completion } => {
+                return self
+                    .advance_known_position(index, completion, context, frame, scratch, matcher);
             }
-
             BaseTask::EvaluateWhole { index, inputs } => {
-                let uses = self
-                    .envelope_uses
-                    .iter()
-                    .find(|(source, _)| *source == index)
-                    .map(|(_, uses)| uses.clone())
-                    .unwrap_or_default();
-                match whole::advance_with_graph(
-                    index, inputs, uses, context, frame, scratch, matcher,
-                )? {
-                    // Required/Size and Resume operands share this opaque lexical stop.
-                    // The enclosing driver decides which goal finished; no parent is accepted.
-                    whole::AdvanceProgress::OperandReady(value) => {
-                        return Ok(BaseEvaluationProgress::OperandReady(value));
-                    }
-                    whole::AdvanceProgress::Complete(sample) => {
-                        self.last = Some(BaseResult::Sample(sample))
-                    }
-                    whole::AdvanceProgress::NeedsMaterialization(request) => {
-                        let mut request: BaseMaterializationRequest = request.into();
-                        request.source_origins = scratch
-                            .source_origins
-                            .get(index)
-                            .cloned()
-                            .unwrap_or_default();
-                        if let Some(progress) =
-                            self.envelope(index, &mut request, scratch, matcher)?
-                        {
-                            return Ok(progress);
-                        }
-                        self.materialization = Some((index, request.clone()));
-                        return Ok(BaseEvaluationProgress::NeedsMaterialization {
-                            source_index: index,
-                            request,
-                        });
-                    }
-                }
+                return self
+                    .advance_evaluate_whole(index, inputs, context, frame, scratch, matcher);
             }
-
             BaseTask::Coupled {
                 index,
                 cursor,
                 step,
                 inputs,
                 uses,
-            } => match coupled::advance_with_stage(
-                index, cursor, step, inputs, uses, context, frame, scratch, matcher,
-            )? {
-                coupled::AdvanceProgress::Scheduled => {}
-                coupled::AdvanceProgress::OperandReady(value) => {
-                    return Ok(BaseEvaluationProgress::OperandReady(value));
-                }
-                coupled::AdvanceProgress::Complete(sample) => {
-                    self.last = Some(BaseResult::Sample(sample))
-                }
-                coupled::AdvanceProgress::NeedsMaterialization(request) => {
-                    let mut request: BaseMaterializationRequest = request.into();
-                    request.source_origins = scratch
-                        .source_origins
-                        .get(index)
-                        .cloned()
-                        .unwrap_or_default();
-                    if let Some(progress) = self.envelope(index, &mut request, scratch, matcher)? {
-                        return Ok(progress);
-                    }
-                    self.materialization = Some((index, request.clone()));
-                    return Ok(BaseEvaluationProgress::NeedsMaterialization {
-                        source_index: index,
-                        request,
-                    });
-                }
-            },
+            } => {
+                return self.advance_coupled(
+                    index, cursor, step, inputs, uses, context, frame, scratch, matcher,
+                );
+            }
             BaseTask::CollectCoupled {
                 index,
                 cursor,
                 step,
-                mut inputs,
+                inputs,
                 uses,
-            } => {
-                let value = self
-                    .last
-                    .take()
-                    .expect("completed coupled endpoint cohort")
-                    .value();
-                if step == 0 {
-                    inputs.underlay = Some(value);
-                } else {
-                    inputs.values.push(Some(value));
-                }
-                scratch.tasks.push(BaseTask::Coupled {
-                    index,
-                    cursor,
-                    step: step + 1,
-                    inputs,
-                    uses,
-                });
-            }
+            } => self.collect_coupled(index, cursor, step, inputs, uses, scratch),
             BaseTask::Cohort {
                 end,
                 candidates,
                 origins,
                 uses,
-            } => {
-                let mut batch = scratch.batches.pop().unwrap_or_default();
-                batch.samples.clear();
-                batch.origins.clear();
-                batch.uses = uses;
-                ensure(
-                    candidates.len() == origins.len(),
-                    "Position cohort batch origins differ from source membership",
-                )?;
-                let mut paired = candidates.into_iter().zip(origins).collect::<Vec<_>>();
-                paired.sort_unstable_by_key(|(sample, _)| sample.order_key());
-                paired.reverse();
-                for (mut sample, origins) in paired {
-                    sample.endpoint_output_exempt = true;
-                    batch.samples.push(sample);
-                    batch.origins.push(origins);
-                }
-                // Source and origin sidecars share the exact rank ordering above.
-                let winner = batch
-                    .samples
-                    .first()
-                    .expect("nonempty coupled endpoint cohort")
-                    .clone();
-                if batch.samples.iter().any(covers_lower) {
-                    self.finish_or_schedule_batch(context, batch, scratch, matcher)?;
-                } else {
-                    scratch.tasks.push(BaseTask::Scan {
-                        winner,
-                        cursor: end,
-                        batch,
-                    });
-                }
-            }
-            BaseTask::Compose { end, uses } => {
-                if let Some(cursor) = ordered[..end]
-                    .iter()
-                    .rposition(|&index| !scratch.sources[index].is_orthogonal())
-                {
-                    scratch.tasks.push(BaseTask::Winner {
-                        cursor,
-                        uses: uses.clone(),
-                    });
-                    scratch.tasks.push(BaseTask::Resolve { cursor, uses });
-                } else {
-                    self.last = Some(BaseResult::Value(TracedValue {
-                        value: base.clone(),
-                        trace: base_trace,
-                    }));
-                }
-            }
+            } => self.schedule_cohort(end, candidates, origins, uses, context, scratch, matcher)?,
+            BaseTask::Compose { end, uses } => self.compose_prefix(end, uses, scratch),
             BaseTask::Resolve { cursor, uses } => {
-                let index = ordered[cursor];
-                if let Some(value) = &scratch.resolved[index] {
-                    self.last = Some(BaseResult::Sample(value.clone()));
-                    return Ok(BaseEvaluationProgress::Pending);
-                }
-                match &scratch.sources[index] {
-                    FamilyCompositionSample::CoupledExpression { .. } => {
-                        scratch.tasks.push(BaseTask::Coupled {
-                            index,
-                            cursor,
-                            step: 0,
-                            inputs: coupled::BaseInputs::default(),
-                            uses,
-                        });
-                    }
-                    FamilyCompositionSample::Known(sample)
-                        if sample.address.address().component.is_none()
-                            && sample.activation_mix < 1.0 =>
-                    {
-                        let underlay = underlay_route(&uses, index, scratch);
-                        self.record_envelope_uses(index, uses);
-                        scratch.tasks.push(BaseTask::Whole { index });
-                        scratch.tasks.push(BaseTask::Compose {
-                            end: cursor,
-                            uses: underlay,
-                        });
-                    }
-                    FamilyCompositionSample::Known(sample)
-                        if sample.address.address().component.is_none()
-                            && matches!(sample.endpoint_control(context), FamilyEndpointOutputControl::CrossfadeCurrent { mix } if mix < 1.0) =>
-                    {
-                        if sample.address.address().owner() == ProgrammingOwner::Position {
-                            self.record_envelope_uses(index, uses);
-                            let completion = begin_known_position_completion(index, None, scratch)?;
-                            scratch
-                                .tasks
-                                .push(BaseTask::CompleteKnownPosition { index, completion });
-                        } else {
-                            self.last = Some(BaseResult::Sample(resolve_whole(
-                                index, None, context, frame, scratch,
-                            )?));
-                        }
-                    }
-                    FamilyCompositionSample::Known(sample) => {
-                        self.last = Some(BaseResult::Sample(sample.clone()))
-                    }
-                    FamilyCompositionSample::WholeExpression {
-                        expression,
-                        activation_mix,
-                        ..
-                    } if expression.needs_underlay() || *activation_mix < 1.0 => {
-                        let underlay = underlay_route(&uses, index, scratch);
-                        self.record_envelope_uses(index, uses);
-                        scratch.tasks.push(BaseTask::Whole { index });
-                        scratch.tasks.push(BaseTask::Compose {
-                            end: cursor,
-                            uses: underlay,
-                        });
-                    }
-                    FamilyCompositionSample::WholeExpression { .. } => {
-                        self.record_envelope_uses(index, uses);
-                        let inputs = whole::begin(index, None, scratch)?;
-                        scratch
-                            .tasks
-                            .push(BaseTask::EvaluateWhole { index, inputs });
-                    }
-                }
+                self.resolve_source(cursor, uses, context, frame, scratch)?
             }
             BaseTask::Whole { index } => {
-                let underlay = self.last.take().expect("completed lower prefix").value();
-                if matches!(
-                    scratch.sources[index],
-                    FamilyCompositionSample::WholeExpression { .. }
-                ) {
-                    let inputs = whole::begin(index, Some(underlay), scratch)?;
-                    scratch
-                        .tasks
-                        .push(BaseTask::EvaluateWhole { index, inputs });
-                } else if matches!(&scratch.sources[index], FamilyCompositionSample::Known(sample) if sample.address.address().owner() == ProgrammingOwner::Position)
-                {
-                    let completion =
-                        begin_known_position_completion(index, Some(underlay), scratch)?;
-                    scratch
-                        .tasks
-                        .push(BaseTask::CompleteKnownPosition { index, completion });
-                } else {
-                    self.last = Some(BaseResult::Sample(resolve_whole(
-                        index,
-                        Some(&underlay),
-                        context,
-                        frame,
-                        scratch,
-                    )?));
-                }
+                self.resolve_over_underlay(index, context, frame, scratch)?
             }
             BaseTask::Winner { cursor, uses } => {
-                let winner = self.last.take().expect("resolved winner").sample();
-                let mut batch = scratch.batches.pop().unwrap_or_default();
-                batch.samples.clear();
-                batch.uses = uses;
-                batch.samples.push(winner.clone());
-                batch.origins.clear();
-                batch.origins.push(
-                    scratch
-                        .source_origins
-                        .get(ordered[cursor])
-                        .cloned()
-                        .unwrap_or_default(),
-                );
-                if covers_lower(&winner) {
-                    self.finish_or_schedule_batch(context, batch, scratch, matcher)?;
-                } else {
-                    scratch.tasks.push(BaseTask::Scan {
-                        winner,
-                        cursor,
-                        batch,
-                    });
-                }
+                self.start_winner_batch(cursor, uses, context, scratch, matcher)?
             }
             BaseTask::Scan {
                 winner,
                 cursor,
                 batch,
-            } => {
-                let candidate = (0..cursor).rev().find(|&cursor| {
-                    let source = &scratch.sources[ordered[cursor]];
-                    !source.is_orthogonal() && could_match(source, &winner, context)
-                });
-                if let Some(cursor) = candidate {
-                    let uses = batch.uses.clone();
-                    scratch.tasks.push(BaseTask::Candidate {
-                        winner,
-                        cursor,
-                        batch,
-                    });
-                    scratch.tasks.push(BaseTask::Resolve { cursor, uses });
-                } else {
-                    self.finish_or_schedule_batch(context, batch, scratch, matcher)?;
-                }
-            }
+            } => self.scan_for_candidate(winner, cursor, batch, context, scratch, matcher)?,
             BaseTask::Candidate {
                 winner,
                 cursor,
-                mut batch,
-            } => {
-                let sample = self.last.take().expect("resolved candidate").sample();
-                let mut covered = false;
-                if compatible(&sample, &winner) {
-                    covered = covers_lower(&sample);
-                    batch.samples.push(sample);
-                    batch.origins.push(
-                        scratch
-                            .source_origins
-                            .get(ordered[cursor])
-                            .cloned()
-                            .unwrap_or_default(),
-                    );
-                }
-                if covered {
-                    self.finish_or_schedule_batch(context, batch, scratch, matcher)?;
-                } else {
-                    scratch.tasks.push(BaseTask::Scan {
-                        winner,
-                        cursor,
-                        batch,
-                    });
-                }
-            }
+                batch,
+            } => self.accept_candidate(winner, cursor, batch, context, scratch, matcher)?,
         }
         Ok(BaseEvaluationProgress::Pending)
     }
@@ -982,6 +608,8 @@ impl BaseEvaluation {
     }
 }
 
+mod composition_steps;
+mod source_steps;
 #[cfg(test)]
 mod tests;
 

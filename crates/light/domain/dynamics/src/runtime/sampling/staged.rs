@@ -9,6 +9,10 @@ use crate::{
 use light_core::programming::{ProgrammingOwner, TransitionError};
 use std::{cell::Cell, collections::HashSet};
 
+mod emit;
+mod pin;
+mod resolve;
+
 type SampleKey = (Uuid, FixtureId, Uuid);
 type RandomKey = (Uuid, Uuid, FixtureId);
 
@@ -320,6 +324,19 @@ pub(super) fn pin_samples(
     let mut controller_count = 0;
     let retain_held = holding || frame.synchronized_resume_mix.is_some_and(|mix| mix < 1.0);
     let random_envelopes = &mut buffers.random_envelopes;
+    let pinning = pin::LanePinning {
+        instance_id,
+        cycle_duration_millis,
+        output_interval_millis,
+        sources,
+        authored_sources,
+        evaluator: &evaluator,
+        frame: &frame,
+        addresses: &addresses,
+        random_phases: &random_phases,
+        holding,
+        retain_held,
+    };
     for (controller_index, controller) in frame.controllers.iter().enumerate() {
         if controller.size == 0.0 {
             continue;
@@ -353,223 +370,17 @@ pub(super) fn pin_samples(
             cycle_duration_millis,
         ));
         work.activation_mix = activation_mix;
-        let preserve_angle_targets = frame.synchronized_resume_mix.map(|_| {
-            let mut held_by_target =
-                HashMap::<FixtureId, Vec<(Uuid, &DynamicSampleExpression)>>::new();
-            for (key, expression) in &instance.synchronized_hold_values {
-                if key.0 == controller.id && instance.synchronized_hold_angle_sources.contains(key)
-                {
-                    held_by_target
-                        .entry(key.1)
-                        .or_default()
-                        .push((key.2, expression));
-                }
-            }
-            frame
-                .targets
-                .iter()
-                .copied()
-                .filter(|target| {
-                    !same_angle_sources(
-                        instance,
-                        &frame.definition,
-                        controller.id,
-                        *target,
-                        held_by_target.get(target).map_or(&[], Vec::as_slice),
-                    )
-                })
-                .collect::<HashSet<_>>()
-        });
-        for (target_index, target) in frame.targets.iter().copied().enumerate() {
-            let preserve_angle_branches = preserve_angle_targets
-                .as_ref()
-                .is_some_and(|targets| targets.contains(&target));
-            for (lane_index, lane) in frame.definition.lanes.iter().enumerate() {
-                if !instance.lane_is_active(controller.id, target, lane.id) {
-                    continue;
-                }
-                let key = (controller.id, target, lane.id);
-                if instance.unavailable_samples.contains_key(&key)
-                    && (holding || frame.synchronized_resume_mix.is_some_and(|mix| mix < 1.0))
-                {
-                    continue;
-                }
-                let cached_address = addresses
-                    .get(target_index * frame.definition.lanes.len() + lane_index)
-                    .copied()
-                    .flatten();
-                if holding && let Some(held) = instance.synchronized_hold_values.get(&key) {
-                    work.lanes.push(PinnedLane {
-                        target,
-                        lane_index,
-                        address: expression_address(held, lane, cached_address),
-                        preserve_angle_branches,
-                        fresh: false,
-                        value: PinnedValue::Ready(held.clone()),
-                    });
-                    if retain_held {
-                        work.ready_keys.insert(key);
-                    }
-                    continue;
-                }
-                if holding && instance.synchronized_hold_captured {
-                    continue;
-                }
-                if instance
-                    .programming_lanes
-                    .get(&lane.id)
-                    .is_some_and(|lane| lane.unavailable_native_source().is_some())
-                {
-                    continue;
-                }
-                let phase = random_phases
-                    .get(&lane.id)
-                    .and_then(|phases| phases.get(&target))
-                    .or_else(|| instance.phase_by_lane_target.get(&(lane.id, target)))
-                    .copied()
-                    .unwrap_or(0.0)
-                    + controller.phase_offset_degrees;
-                // Only a reached eligible live lane requests a decision. Shared group/target
-                // lanes and controllers receive that same cached envelope in both stages.
-                let random = lane.random_group_id.and_then(|group_id| {
-                    let key = (instance_id, group_id, target);
-                    if let Some(value) = random_envelopes.get(&key) {
-                        return Some(*value);
-                    }
-                    let group = frame
-                        .definition
-                        .random_groups
-                        .iter()
-                        .find(|group| group.id == group_id)?;
-                    if let Some(undo) = undo.as_deref_mut() {
-                        undo.random(instance, (group_id, target));
-                    }
-                    let envelope = random_envelope(
-                        instance
-                            .random_streams
-                            .entry((group_id, target))
-                            .or_default(),
-                        group,
-                        instance_id,
-                        target,
-                        frame.elapsed,
-                        random_group_speed_factor(&frame.definition, group_id),
-                        output_interval_millis,
-                    );
-                    random_envelopes.insert(key, envelope);
-                    Some(envelope)
-                });
-                let authored_occurrence = authored_sources.authored_occurrence(
-                    instance_id,
-                    controller.id,
-                    target,
-                    lane.id,
-                );
-                let mut expression = if let Some(address) = angle_current_address(lane) {
-                    DynamicSampleExpression::AngleCurrent {
-                        address: Arc::new(address.clone()),
-                    }
-                } else if instance.programming_lanes.get(&lane.id).is_some() {
-                    work.typed_indices.push(work.lanes.len());
-                    work.lanes.push(PinnedLane {
-                        target,
-                        lane_index,
-                        address: cached_address,
-                        preserve_angle_branches,
-                        fresh: true,
-                        value: PinnedValue::Typed {
-                            phase,
-                            random_envelope: random,
-                            authored_occurrence,
-                        },
-                    });
-                    continue;
-                } else {
-                    let observed = ObservedScalarSources {
-                        inner: sources,
-                        used_current: std::cell::Cell::new(false),
-                    };
-                    let Some(value) = evaluator.sample_lane(
-                        lane,
-                        DynamicEvaluationContext {
-                            instance_id,
-                            target,
-                            elapsed_millis: frame.elapsed,
-                            cycle_duration_millis,
-                            phase_degrees: phase,
-                            output_interval_millis,
-                            random_envelope: random,
-                            sources: &observed,
-                        },
-                    ) else {
-                        continue;
-                    };
-                    let value = if controller.size == 1.0 {
-                        value
-                    } else {
-                        observed
-                            .current(target, &lane.output_owner())
-                            .map_or(value, |base| base + (value - base) * controller.size)
-                    };
-                    DynamicSampleExpression::LegacyScalar {
-                        attribute: lane.output_owner(),
-                        value,
-                        occurrence: None,
-                        dependency_occurrence: observed.used_current.get().then(|| {
-                            crate::DynamicSourceDependency::unknown(
-                                observed.current_occurrence(target, &lane.output_owner()),
-                            )
-                        }),
-                    }
-                };
-                expression.bind_fresh_authored_occurrence(authored_occurrence);
-                if let Some(expression) = held_or_live_value(
-                    instance,
-                    key,
-                    expression,
-                    frame.synchronized_resume_mix,
-                    preserve_angle_branches,
-                ) {
-                    let address = expression_address(&expression, lane, cached_address);
-                    work.lanes.push(PinnedLane {
-                        target,
-                        lane_index,
-                        address,
-                        preserve_angle_branches,
-                        fresh: true,
-                        value: PinnedValue::Ready(expression),
-                    });
-                }
-                if retain_held {
-                    work.ready_keys.insert(key);
-                }
-            }
-        }
+        let preserve_angle_targets = pin::preserve_angle_targets(instance, &frame, controller);
+        pinning.pin_controller_lanes(
+            instance,
+            work,
+            controller,
+            preserve_angle_targets.as_ref(),
+            random_envelopes,
+            undo.as_deref_mut(),
+        );
         if retain_held {
-            for (key, held) in &instance.synchronized_hold_values {
-                if key.0 != controller.id
-                    || instance.unavailable_samples.contains_key(key)
-                    || work.ready_keys.contains(key)
-                {
-                    continue;
-                }
-                let expression = if holding {
-                    held.clone()
-                } else {
-                    DynamicSampleExpression::Transition {
-                        from: Some(Arc::new(held.clone())),
-                        to: None,
-                        progress: frame.synchronized_resume_mix.unwrap_or(0.0),
-                        reason: crate::DynamicTransitionReason::Resume {
-                            occurrence_id: instance
-                                .synchronized_resume_transition
-                                .expect("resume transition")
-                                .occurrence_id,
-                        },
-                    }
-                };
-                work.retained.push((*key, expression));
-            }
+            pin::retain_held_samples(instance, &frame, controller, holding, work);
         }
     }
     controllers.truncate(controller_count);
@@ -618,189 +429,12 @@ fn append_scalar_samples(plan: &PinnedInstance, samples: &mut Vec<DynamicRuntime
     }
 }
 
-fn resolve_deferred(
-    instance: &mut DynamicInstance,
-    plan: &mut PinnedInstance,
-    sources: &dyn DynamicValueSourceResolver,
-    mut requirements: Option<&mut Vec<DynamicFamilyPreparationRequirement>>,
-) -> Result<(), DynamicRuntimeError> {
-    for work in &mut plan.controllers {
-        let controller = &plan.frame.controllers[work.controller_index];
-        let mut position_required = HashSet::new();
-        for index in &work.typed_indices {
-            let pinned = &mut work.lanes[*index];
-            let PinnedValue::Typed {
-                phase,
-                random_envelope,
-                authored_occurrence,
-            } = pinned.value
-            else {
-                continue;
-            };
-            let lane = &plan.frame.definition.lanes[pinned.lane_index];
-            let key = (controller.id, pinned.target, lane.id);
-            let checked = CheckedCurrentSources::new(sources);
-            let input = if requirements.is_some() {
-                &checked as &dyn DynamicValueSourceResolver
-            } else {
-                sources
-            };
-            let compiled = instance
-                .programming_lanes
-                .get_mut(&lane.id)
-                .expect("pinned compiled lane");
-            let operation = work
-                .emission
-                .as_ref()
-                .map(|emission| crate::DynamicOperationContext {
-                    emission,
-                    target: pinned.target,
-                    lane_id: lane.id,
-                });
-            let context = ProgrammingEvaluationContext {
-                instance_id: plan.instance_id,
-                controller_id: controller.id,
-                authored_occurrence,
-                target: pinned.target,
-                elapsed_millis: plan.frame.elapsed,
-                cycle_duration_millis: plan.cycle_duration_millis,
-                phase_degrees: phase,
-                random_envelope,
-                sources: input,
-            };
-            let result = compiled
-                .pin_angle_numeric_with_operations(&context, controller.size, operation)
-                .and_then(|numeric| match numeric {
-                    crate::AngleNumericSample::Program(program) => {
-                        Ok(Some(DynamicSampleExpression::AngleNumeric { program }))
-                    }
-                    crate::AngleNumericSample::Absent => Ok(None),
-                    crate::AngleNumericSample::NotApplicable => compiled
-                        .sample_with_operations(context, operation)
-                        .and_then(|value| {
-                            value
-                                .map(|value| {
-                                    compiled
-                                        .apply_controller_size_with_operations(
-                                            value,
-                                            controller.size,
-                                            pinned.target,
-                                            input,
-                                            operation,
-                                        )
-                                        .map_err(TransitionError::from)
-                                })
-                                .transpose()
-                        }),
-                });
-            let result = match (result, checked.take_error()) {
-                (Err(error @ TransitionError::Invalid(_)), _)
-                | (_, Some(error @ TransitionError::Invalid(_))) => Err(error),
-                (_, Some(error)) => Err(error),
-                (result, None) => result,
-            };
-            match result {
-                Ok(Some(mut expression)) => {
-                    expression.bind_fresh_authored_occurrence(authored_occurrence);
-                    pinned.value = held_or_live_value(
-                        instance,
-                        key,
-                        expression,
-                        plan.frame.synchronized_resume_mix,
-                        pinned.preserve_angle_branches,
-                    )
-                    .map_or(PinnedValue::Absent, PinnedValue::Ready);
-                }
-                Ok(None) => pinned.value = PinnedValue::Absent,
-                Err(TransitionError::Requires(reason)) if requirements.is_some() => {
-                    let crate::DynamicLaneBody::Programming(body) = &lane.body else {
-                        unreachable!("typed work");
-                    };
-                    let owner = body.address.owner();
-                    requirements.as_deref_mut().unwrap().push(
-                        DynamicFamilyPreparationRequirement {
-                            target: pinned.target,
-                            owner,
-                            rank: FamilySampleRank {
-                                priority: controller.priority,
-                                changed_at_millis: controller.activated_at_millis,
-                                changed_at_submillis_nanos: 0,
-                                stable_order: controller.id.as_u128(),
-                                identity: crate::FamilySampleIdentity::Dynamic {
-                                    instance_id: plan.instance_id,
-                                    controller_id: controller.id,
-                                    lane_id: lane.id,
-                                },
-                            },
-                            reason: DynamicFamilyPreparationRequirementReason::Transition(reason),
-                        },
-                    );
-                    if owner == ProgrammingOwner::Position {
-                        position_required.insert(pinned.target);
-                    }
-                    work.required_keys.insert(key);
-                    pinned.value = PinnedValue::Required;
-                }
-                Err(error) => return Err(DynamicRuntimeError::InvalidSample(error.to_string())),
-            }
-        }
-        if work.required_keys.is_empty() {
-            continue;
-        }
-        // Retain both sides of a correlated Position history. Independent owners and legacy
-        // output still use this frame's prepared expressions; only retained records are held.
-        for pinned in &work.lanes {
-            let lane = &plan.frame.definition.lanes[pinned.lane_index];
-            let key = (controller.id, pinned.target, lane.id);
-            if position_required.contains(&pinned.target) {
-                let mut position = lane.output_owner() == ProgrammingOwner::Position.key();
-                if let PinnedValue::Ready(expression) = &pinned.value {
-                    position |= expression.contains_angles();
-                    expression
-                        .visit_programming_values(&mut |address, _| {
-                            position |= address.owner() == ProgrammingOwner::Position;
-                            Ok(())
-                        })
-                        .map_err(|error| DynamicRuntimeError::InvalidSample(error.to_string()))?;
-                }
-                if position {
-                    work.required_keys.insert(key);
-                }
-            }
-        }
-        // A partner can already have been deleted from the definition. Its retained branch
-        // still belongs to this unresolved cohort and must survive a completed Resume.
-        if !position_required.is_empty() {
-            for (key, held) in &instance.synchronized_hold_values {
-                if key.0 != controller.id || !position_required.contains(&key.1) {
-                    continue;
-                }
-                let mut position = held.contains_angles();
-                held.visit_programming_values(&mut |address, _| {
-                    position |= address.owner() == ProgrammingOwner::Position;
-                    Ok(())
-                })
-                .map_err(|error| DynamicRuntimeError::InvalidSample(error.to_string()))?;
-                if position {
-                    work.required_keys.insert(*key);
-                }
-            }
-        }
-        for key in &work.required_keys {
-            if let Some(previous) = instance.last_sample_values.get(key) {
-                work.required_last.push((*key, previous.clone()));
-            }
-        }
-    }
-    Ok(())
-}
-
 pub(super) fn complete_samples(
     instance: &mut DynamicInstance,
     plan: &mut PinnedInstance,
     sources: &dyn DynamicValueSourceResolver,
     samples: &mut Vec<DynamicRuntimeSample>,
-    mut requirements: Option<&mut Vec<DynamicFamilyPreparationRequirement>>,
+    requirements: Option<&mut Vec<DynamicFamilyPreparationRequirement>>,
     mut undo: Option<&mut transaction::OutputFrameUndo>,
 ) -> Result<(), DynamicRuntimeError> {
     let sources = super::super::preset_values::RetainedPresetSources {
@@ -808,7 +442,7 @@ pub(super) fn complete_samples(
         instance_id: plan.instance_id,
         values: Arc::clone(&instance.preset_values.by_binding),
     };
-    resolve_deferred(instance, plan, &sources, requirements.as_deref_mut())?;
+    resolve::resolve_deferred(instance, plan, &sources, requirements)?;
     let mut unavailable_last = if instance.unavailable_samples.is_empty() {
         Vec::new()
     } else {
@@ -829,129 +463,18 @@ pub(super) fn complete_samples(
     instance.last_sample_values.extend(unavailable_last);
     for work in &mut plan.controllers {
         let controller = &plan.frame.controllers[work.controller_index];
-        let track_emitted = !work.retained.is_empty();
-        work.emitted_keys.clear();
-        for pinned in &work.lanes {
-            let lane = &plan.frame.definition.lanes[pinned.lane_index];
-            let key = (controller.id, pinned.target, lane.id);
-            let expression = match &pinned.value {
-                PinnedValue::Ready(expression) => expression.clone(),
-                PinnedValue::Absent | PinnedValue::Required => continue,
-                PinnedValue::Typed { .. } => {
-                    unreachable!("all numeric work resolved before emission")
-                }
-            };
-            if pinned.fresh && !work.required_keys.contains(&key) {
-                if plan.holding && !instance.synchronized_hold_values.contains_key(&key) {
-                    if let Some(undo) = undo.as_deref_mut() {
-                        undo.held(instance);
-                    }
-                    if expression.contains_angles() {
-                        instance.synchronized_hold_angle_sources.insert(key);
-                    }
-                    instance
-                        .synchronized_hold_values
-                        .insert(key, expression.clone());
-                }
-                if instance.unavailable_samples.contains_key(&key) {
-                    if let Some(undo) = undo.as_deref_mut() {
-                        undo.unavailable(instance, key);
-                    }
-                    instance.unavailable_samples.remove(&key);
-                }
-            }
-            let address = expression_address(&expression, lane, pinned.address);
-            if work.required_keys.contains(&key) {
-                append_sample(
-                    controller,
-                    plan.instance_id,
-                    pinned.target,
-                    lane.id,
-                    expression,
-                    work.activation_mix,
-                    address,
-                    samples,
-                )?;
-            } else {
-                emit_sample(
-                    instance,
-                    controller,
-                    plan.instance_id,
-                    pinned.target,
-                    lane.id,
-                    expression,
-                    work.activation_mix,
-                    address,
-                    samples,
-                )?;
-            }
-            if track_emitted {
-                work.emitted_keys.insert(key);
-            }
-        }
-        for (key, expression) in &work.retained {
-            if !work.emitted_keys.contains(key) {
-                if work.required_keys.contains(key) {
-                    append_sample(
-                        controller,
-                        plan.instance_id,
-                        key.1,
-                        key.2,
-                        expression.clone(),
-                        work.activation_mix,
-                        None,
-                        samples,
-                    )?;
-                } else {
-                    emit_sample(
-                        instance,
-                        controller,
-                        plan.instance_id,
-                        key.1,
-                        key.2,
-                        expression.clone(),
-                        work.activation_mix,
-                        None,
-                        samples,
-                    )?;
-                }
-            }
-        }
+        emit::emit_controller_samples(
+            instance,
+            controller,
+            plan.instance_id,
+            plan.holding,
+            &plan.frame.definition,
+            work,
+            samples,
+            undo.as_deref_mut(),
+        )?;
     }
-    if plan.holding {
-        instance.synchronized_hold_captured = true;
-    }
-    if plan
-        .frame
-        .synchronized_resume_mix
-        .is_some_and(|mix| mix >= 1.0)
-        && let Some(undo) = undo.as_deref_mut()
-    {
-        undo.held(instance);
-    }
-    if plan
-        .frame
-        .synchronized_resume_mix
-        .is_some_and(|mix| mix >= 1.0)
-        && plan
-            .controllers
-            .iter()
-            .any(|work| !work.required_keys.is_empty())
-    {
-        // Preserve the exact unresolved branch and clock through retry/restore. Valid lanes
-        // retire their old holds now and continue sampling at the already-completed progress.
-        let keep = |key: &SampleKey| {
-            instance.unavailable_samples.contains_key(key)
-                || plan
-                    .controllers
-                    .iter()
-                    .any(|work| work.required_keys.contains(key))
-        };
-        instance.synchronized_hold_values.retain(|key, _| keep(key));
-        instance.synchronized_hold_angle_sources.retain(keep);
-    } else {
-        finish_synchronized_resume(instance, plan.frame.synchronized_resume_mix);
-    }
+    emit::finish_synchronized_holds(instance, plan, undo);
     Ok(())
 }
 

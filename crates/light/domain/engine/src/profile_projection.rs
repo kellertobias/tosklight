@@ -15,6 +15,10 @@ use light_output::DmxFrame;
 use light_programmer::{HighlightOutputLayer, HighlightOutputRole};
 use std::collections::{HashMap, HashSet};
 
+mod head_overlay;
+
+use head_overlay::{HeadOverlayState, channel_matches_attribute, seed_native_candidate};
+
 // @tour fixture-semantics:30 Resolve semantic values for every logical head
 // Rendering binds the compiled mode plan, resolves each included logical head, and produces
 // channel values plus visualization output without consulting the fixture library.
@@ -219,40 +223,23 @@ pub(crate) fn resolve_profile_head(
     active_attributes: Option<&mut [Option<AttributeKey>]>,
 ) -> Result<ResolvedProfileHeadOutput, EngineError> {
     let owner = head.owner;
-    // Nothing frozen, nothing highlighted and nothing flashing is the ordinary state of a desk, so
-    // each of these asks whether there is anything to look up before hashing this head's identity.
-    let full_freeze = !fixture.freeze.targets.is_empty()
-        && fixture
-            .freeze
-            .targets
-            .get(&owner)
-            .is_some_and(|target| target.full);
-    let options = if full_freeze {
-        RenderOptions {
-            grand_master: 1.0,
-            blackout: false,
-            control_loss_progress: None,
-            ..options
-        }
-    } else {
-        options
-    };
-    let layer = (!full_freeze)
-        .then(|| resolved_highlight_layer(fixture.fixture_id, owner, highlight_layers))
-        .flatten();
-    let output_highlighted = layer.is_some() && !(fixture.definition.hazardous && options.blackout);
-    let selected_look = layer
-        .as_ref()
-        .map(|layer| look_for_role(layer.role, highlight_look));
-    let legacy_raw_highlight = output_highlighted
-        && selected_look
-            .as_ref()
-            .is_some_and(|look| look.compatibility != HighlightLookCompatibility::Semantic);
-    let group_scale = if full_freeze || output_highlighted || !fixture.group_masters_enabled {
-        1.0
-    } else {
-        group_masters.scale(owner, group_master_flashes)
-    };
+    let HeadOverlayState {
+        options,
+        output_highlighted,
+        selected_look,
+        legacy_raw_highlight,
+        group_scale,
+        ..
+    } = HeadOverlayState::resolve(
+        fixture,
+        owner,
+        false,
+        options,
+        group_masters,
+        group_master_flashes,
+        highlight_layers,
+        highlight_look,
+    );
     // Colour, level and the level's master together: three questions every head asks, answered
     // from its row in one go rather than by matching names against its whole attribute list.
     let common = values.common(owner);
@@ -260,15 +247,16 @@ pub(crate) fn resolve_profile_head(
         AttributeValue::ColorXyz(color) => Some(*color),
         _ => None,
     });
-    if native_channels.is_none_or(|native| {
-        head.channel_indices
-            .iter()
-            .all(|&index| native[index].is_none())
-    }) && frozen_channels.is_none_or(|frozen| {
-        head.channel_indices
-            .iter()
-            .all(|&index| frozen[index].is_none())
-    }) && options.control_loss_progress.is_none()
+    let no_position_inputs = |inputs: Option<&[Option<_>]>| {
+        inputs.is_none_or(|inputs| {
+            head.channel_indices
+                .iter()
+                .all(|&index| inputs[index].is_none())
+        })
+    };
+    if no_position_inputs(native_channels)
+        && no_position_inputs(frozen_channels)
+        && options.control_loss_progress.is_none()
         && !(fixture.definition.hazardous && options.blackout)
         && borrowed_requested_color.is_none()
         && !axis_inversion.any()
@@ -502,50 +490,23 @@ fn prepare_head_inputs(
     )>,
 ) -> Result<ProfileHeadInputs, EngineError> {
     let owner = head.owner;
-    // Nothing frozen, nothing highlighted and nothing flashing is the ordinary state of a desk, so
-    // each of these asks whether there is anything to look up before hashing this head's identity.
-    let full_freeze = native.is_some_and(|(_, value)| value.full_freeze)
-        || !fixture.freeze.targets.is_empty()
-            && fixture
-                .freeze
-                .targets
-                .get(&owner)
-                .is_some_and(|target| target.full);
-    let options = if full_freeze {
-        RenderOptions {
-            grand_master: 1.0,
-            blackout: false,
-            control_loss_progress: None,
-            ..options
-        }
-    } else {
-        options
-    };
-    let layer = (!full_freeze)
-        .then(|| resolved_highlight_layer(fixture.fixture_id, owner, highlight_layers))
-        .flatten();
-    let output_highlighted = layer.is_some() && !(fixture.definition.hazardous && options.blackout);
-    let selected_look = layer
-        .as_ref()
-        .map(|layer| look_for_role(layer.role, highlight_look));
-    let legacy_raw_highlight = output_highlighted
-        && selected_look
-            .as_ref()
-            .is_some_and(|look| look.compatibility != HighlightLookCompatibility::Semantic);
-    let group_scale = if full_freeze || output_highlighted || !fixture.group_masters_enabled {
-        1.0
-    } else {
-        group_masters.scale(owner, group_master_flashes)
-    };
-    let matches_channel = |channel: &FixtureChannel, attribute: &AttributeKey| {
-        *attribute == channel.attribute
-            || *attribute == channel.fixture_attribute
-            || *attribute == FixtureMode::control_action_attribute(channel.id)
-            || channel
-                .functions
-                .iter()
-                .any(|function| function.attribute == *attribute)
-    };
+    let HeadOverlayState {
+        options,
+        layer,
+        output_highlighted,
+        selected_look,
+        legacy_raw_highlight,
+        group_scale,
+    } = HeadOverlayState::resolve(
+        fixture,
+        owner,
+        native.is_some_and(|(_, value)| value.full_freeze),
+        options,
+        group_masters,
+        group_master_flashes,
+        highlight_layers,
+        highlight_look,
+    );
     // An explicit scalar Freeze channel uses the already Freeze-overridden ordinary input.
     // This avoids a new canonical candidate defeating a held fixture-facing alias.
     let native = native.filter(|(index, input)| {
@@ -556,7 +517,7 @@ fn prepare_head_inputs(
             !frozen
                 .values
                 .keys()
-                .any(|attribute| matches_channel(&mode.channels[*index], attribute))
+                .any(|attribute| channel_matches_attribute(&mode.channels[*index], attribute))
         })
     });
     let mut inputs = ProfileHeadInputs {
@@ -583,51 +544,12 @@ fn prepare_head_inputs(
         held_native: native.is_some_and(|(_, input)| input.frozen),
         sequence_masters: values.sequence_masters(owner),
     };
-    let mut derived_attributes = Vec::new();
-    if let Some((index, native)) = native {
-        let channel = &mode.channels[index];
-        inputs.values.remove(&channel.attribute);
-        inputs
-            .values
-            .insert(channel.attribute.clone(), native.value.clone());
-        derived_attributes.push(channel.attribute.clone());
-        let safe_keys: Vec<_> = fixture
-            .definition
-            .safe_values
-            .keys()
-            .filter(|attribute| matches_channel(channel, attribute))
-            .collect();
-        let loss_progress = options.control_loss_progress.and_then(|progress| {
-            match fixture.definition.effective_signal_loss_policy() {
-                SignalLossPolicy::HoldLast => None,
-                SignalLossPolicy::ImmediateSafe => Some(1.0),
-                SignalLossPolicy::FadeToSafe { .. } => Some(progress.clamp(0.0, 1.0)),
-            }
-        });
-        let replacing = (fixture.definition.hazardous && options.blackout && !safe_keys.is_empty())
-            || loss_progress.is_some_and(|progress| {
-                safe_keys.iter().any(|attribute| {
-                    progress >= 1.0 || mode.head_attribute_is_snap(inputs.head_id, attribute)
-                })
-            });
-        if replacing {
-            // A safety alias/function must become a real candidate, without the old native
-            // canonical candidate defeating it. Other safe candidates keep normal priorities.
-            inputs.values.remove(&channel.attribute);
-            derived_attributes.clear();
-        } else if loss_progress.is_some() {
-            // Existing Raw->safe fading holds until completion. Seed every applicable safety
-            // alias from the same exact raw base so an absent alias cannot start a new fade.
-            for attribute in safe_keys {
-                inputs
-                    .values
-                    .insert(attribute.clone(), native.value.clone());
-                if !derived_attributes.contains(attribute) {
-                    derived_attributes.push(attribute.clone());
-                }
-            }
+    let derived_attributes = match native {
+        Some((index, native)) => {
+            seed_native_candidate(fixture, mode, options, &mut inputs, index, native)
         }
-    }
+        None => Vec::new(),
+    };
     apply_control_loss(fixture, mode, options, &mut inputs);
     apply_hazardous_blackout(fixture, options, &mut inputs.values);
     apply_axis_inversion(axis_inversion, head, &mut inputs.values);
@@ -643,7 +565,7 @@ fn prepare_head_inputs(
         if let Some((index, _)) = native
             && written
                 .iter()
-                .any(|attribute| matches_channel(&mode.channels[index], attribute))
+                .any(|attribute| channel_matches_attribute(&mode.channels[index], attribute))
         {
             for attribute in derived_attributes {
                 if !written.contains(&attribute) {

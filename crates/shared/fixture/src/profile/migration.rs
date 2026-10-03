@@ -231,45 +231,7 @@ impl FixtureMode {
                 });
             }
         }
-        let color_systems = definition
-            .color_calibration
-            .as_ref()
-            .map(|calibration| {
-                heads
-                    .iter()
-                    .filter_map(|head| {
-                        let emitters = calibration
-                            .emitters
-                            .iter()
-                            .filter_map(|emitter| {
-                                let attribute = AttributeKey(
-                                    format!("color.emitter.{}", emitter.name.to_lowercase()).into(),
-                                );
-                                channels
-                                    .iter()
-                                    .find(|channel| {
-                                        channel.head_id == head.id && channel.attribute == attribute
-                                    })
-                                    .map(|channel| EmitterBinding {
-                                        channel_id: channel.id,
-                                        name: emitter.name.clone(),
-                                        xyz: emitter.xyz,
-                                        maximum_level: emitter.limit,
-                                        response_curve: 1.0,
-                                        visible: legacy_emitter_is_visible(&emitter.name),
-                                    })
-                            })
-                            .collect::<Vec<_>>();
-                        (!emitters.is_empty()).then_some(HeadColorSystem {
-                            calibration: Default::default(),
-                            head_id: head.id,
-                            correction_matrix: calibration.correction_matrix,
-                            system: ColorSystem::Additive { emitters },
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        let color_systems = legacy_color_systems(definition, &heads, &channels);
         let geometry_head_ids = heads.iter().map(|head| head.id).collect::<Vec<_>>();
         let mut mode = Self {
             id: mode_id,
@@ -292,6 +254,53 @@ impl FixtureMode {
         mode.apply_derived_highlight_defaults()?;
         Ok(mode)
     }
+}
+
+/// Bind each head's calibrated legacy emitters to the migrated channels of that head.
+fn legacy_color_systems(
+    definition: &FixtureDefinition,
+    heads: &[FixtureHead],
+    channels: &[FixtureChannel],
+) -> Vec<HeadColorSystem> {
+    definition
+        .color_calibration
+        .as_ref()
+        .map(|calibration| {
+            heads
+                .iter()
+                .filter_map(|head| {
+                    let emitters = calibration
+                        .emitters
+                        .iter()
+                        .filter_map(|emitter| {
+                            let attribute = AttributeKey(
+                                format!("color.emitter.{}", emitter.name.to_lowercase()).into(),
+                            );
+                            channels
+                                .iter()
+                                .find(|channel| {
+                                    channel.head_id == head.id && channel.attribute == attribute
+                                })
+                                .map(|channel| EmitterBinding {
+                                    channel_id: channel.id,
+                                    name: emitter.name.clone(),
+                                    xyz: emitter.xyz,
+                                    maximum_level: emitter.limit,
+                                    response_curve: 1.0,
+                                    visible: legacy_emitter_is_visible(&emitter.name),
+                                })
+                        })
+                        .collect::<Vec<_>>();
+                    (!emitters.is_empty()).then_some(HeadColorSystem {
+                        calibration: Default::default(),
+                        head_id: head.id,
+                        correction_matrix: calibration.correction_matrix,
+                        system: ColorSystem::Additive { emitters },
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
 }
 
 fn legacy_resolution(components: usize) -> Result<ChannelResolution, ProfileError> {

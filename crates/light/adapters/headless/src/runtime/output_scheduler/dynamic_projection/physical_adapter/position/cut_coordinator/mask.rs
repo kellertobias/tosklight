@@ -101,80 +101,14 @@ fn run(
     work: &mut Vec<Work>,
 ) -> Result<Option<Vec<OwnedHybridProjection<PhysicalHeadResult<PositionAdapter>>>>, TransitionError>
 {
-    for (peer_index, peer) in peers.iter().enumerate() {
-        for instance in 0..peer.descriptor.instances.len() {
-            let bound = bound(observer, frame, peer, instance);
-            let adoption = |original: &AttributeValue, address: &DynamicValueAddress| {
-                bound.adopt(original, address)
-            };
-            let evaluation = batch.begin_branch(
-                &peer.captured,
-                &peer.captured.registry().branch(),
-                peer.descriptor.instances[instance].destination,
-                &adoption,
-            )?;
-            work.push(Work {
-                peer: peer_index,
-                instance,
-                evaluation: Some(evaluation),
-                request: None,
-            });
-            let item = work.last_mut().unwrap();
-            item.request =
-                match batch.advance(item.evaluation.as_mut().unwrap(), &bound, &adoption)? {
-                    PositionCompositionProgress::Complete(_) => None,
-                    PositionCompositionProgress::NeedsMaterialization(request) => Some(request),
-                };
-            if peer_index != initiator && item.request.is_some() {
-                return Ok(None);
-            }
-        }
+    if !begin_work(observer, frame, batch, peers, initiator, work)? {
+        return Ok(None);
     }
     let mut previous_stage = None;
     // One mask can suspend once for adoption and once for its transition. Any later
     // source/materialization needs its own proven environment and stays passive.
     for _ in 0..2 {
-        let mut locators = Vec::new();
-        let mut first = None;
-        let mut progress = None;
-        for item in work.iter().filter(|item| item.peer == initiator) {
-            let Some(request) = &item.request else {
-                return Ok(None);
-            };
-            let stage = match &request.operation {
-                PositionCompositionOperation::MaskAdoption { address, .. } => {
-                    if address.representation != light_dynamics::DynamicFamilyRepresentation::Angles
-                    {
-                        return Ok(None); // No unique inverse Angle -> Target distance exists.
-                    }
-                    PositionMaskStage::Adoption
-                }
-                PositionCompositionOperation::MaskTransition { progress: mix, .. } => {
-                    if progress.is_some_and(|p| p != *mix) {
-                        return Ok(None);
-                    }
-                    progress = Some(*mix);
-                    PositionMaskStage::Transition
-                }
-                _ => return Ok(None),
-            };
-            let Some(locator) = item
-                .evaluation
-                .as_ref()
-                .unwrap()
-                .pending_mask_locator(request.request_id)?
-            else {
-                return Ok(None);
-            };
-            if locator.stage() != stage
-                || first.as_ref().is_some_and(|original| original != &locator)
-            {
-                return Ok(None);
-            }
-            first = Some(locator.clone());
-            locators.push((item.instance, locator));
-        }
-        let Some(locator) = first else {
+        let Some((locators, locator, progress)) = initiator_locators(work, initiator)? else {
             return Ok(None);
         };
         if previous_stage == Some(locator.stage())
@@ -264,6 +198,106 @@ fn run(
         }
     }
     Ok(None)
+}
+
+/// Begins one branch per peer copy and advances each to its first suspension. `false` when a
+/// non-initiating peer suspends: this coordinator resolves only the initiator's mask.
+fn begin_work(
+    observer: &PositionFrameObserver<'_>,
+    frame: HybridFrameContext<'_>,
+    batch: &mut Batch<'_>,
+    peers: &[Peer],
+    initiator: usize,
+    work: &mut Vec<Work>,
+) -> Result<bool, TransitionError> {
+    for (peer_index, peer) in peers.iter().enumerate() {
+        for instance in 0..peer.descriptor.instances.len() {
+            let bound = bound(observer, frame, peer, instance);
+            let adoption = |original: &AttributeValue, address: &DynamicValueAddress| {
+                bound.adopt(original, address)
+            };
+            let evaluation = batch.begin_branch(
+                &peer.captured,
+                &peer.captured.registry().branch(),
+                peer.descriptor.instances[instance].destination,
+                &adoption,
+            )?;
+            work.push(Work {
+                peer: peer_index,
+                instance,
+                evaluation: Some(evaluation),
+                request: None,
+            });
+            let item = work.last_mut().unwrap();
+            item.request =
+                match batch.advance(item.evaluation.as_mut().unwrap(), &bound, &adoption)? {
+                    PositionCompositionProgress::Complete(_) => None,
+                    PositionCompositionProgress::NeedsMaterialization(request) => Some(request),
+                };
+            if peer_index != initiator && item.request.is_some() {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
+/// The initiator's pending mask locators for one stage, with the original mask they all name and
+/// the shared transition progress. `None` when any initiator copy is not suspended at one shared,
+/// invertible mask stage.
+#[allow(clippy::type_complexity)]
+fn initiator_locators(
+    work: &[Work],
+    initiator: usize,
+) -> Result<
+    Option<(
+        Vec<(usize, PositionMaskLocator)>,
+        PositionMaskLocator,
+        Option<f32>,
+    )>,
+    TransitionError,
+> {
+    let mut locators = Vec::new();
+    let mut first = None;
+    let mut progress = None;
+    for item in work.iter().filter(|item| item.peer == initiator) {
+        let Some(request) = &item.request else {
+            return Ok(None);
+        };
+        let stage = match &request.operation {
+            PositionCompositionOperation::MaskAdoption { address, .. } => {
+                if address.representation != light_dynamics::DynamicFamilyRepresentation::Angles {
+                    return Ok(None); // No unique inverse Angle -> Target distance exists.
+                }
+                PositionMaskStage::Adoption
+            }
+            PositionCompositionOperation::MaskTransition { progress: mix, .. } => {
+                if progress.is_some_and(|p| p != *mix) {
+                    return Ok(None);
+                }
+                progress = Some(*mix);
+                PositionMaskStage::Transition
+            }
+            _ => return Ok(None),
+        };
+        let Some(locator) = item
+            .evaluation
+            .as_ref()
+            .unwrap()
+            .pending_mask_locator(request.request_id)?
+        else {
+            return Ok(None);
+        };
+        if locator.stage() != stage || first.as_ref().is_some_and(|original| original != &locator) {
+            return Ok(None);
+        }
+        first = Some(locator.clone());
+        locators.push((item.instance, locator));
+    }
+    let Some(locator) = first else {
+        return Ok(None);
+    };
+    Ok(Some((locators, locator, progress)))
 }
 
 fn replay(

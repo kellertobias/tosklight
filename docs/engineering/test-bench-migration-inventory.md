@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **281 root cases across 108 files**.
+Default catalog: **282 root cases across 108 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -93,6 +93,7 @@ Default catalog: **281 root cases across 108 files**.
 | 117-position-operator-controls.spec.ts | POSITION-CONTROLS-003 @ui › hardware encode/N edits Pan in degrees and the first X offset activates Target atomically | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 117-position-operator-controls.spec.ts | POSITION-CONTROLS-007 @ui › from scratch, the first typed Pan and the dialog adopt the displayed output instead of a silent no change | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 117-position-operator-controls.spec.ts | POSITION-CONTROLS-008 @ui › fixtures without Position physical data are quietly Unsupported and send nothing | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
+| 117-position-operator-controls.spec.ts | POSITION-CONTROLS-009 @ui › Position preset tiles count the fixtures whose requested Position is the preset | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 118-focus-zoom-operator-controls.spec.ts | FOCUS-ZOOM-001 @ui › the Special Dialog opens directly as a modal and closing it sends nothing | docs/testing/35-focus-zoom-operator-controls.md | @ui | focus-zoom-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 118-focus-zoom-operator-controls.spec.ts | FOCUS-ZOOM-007 @ui › an unknown Zoom convention stays quiet in the dialog while Focus still works | docs/testing/35-focus-zoom-operator-controls.md | @ui | focus-zoom-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 118-focus-zoom-operator-controls.spec.ts | FOCUS-ZOOM-009 @ui › Focus, Zoom page order; hardware encode/N moves Focus 1% and never sends an unknown-convention Zoom | docs/testing/35-focus-zoom-operator-controls.md | @ui | focus-zoom-operator-controls | standard failure evidence | parallel | pending-semantic-migration |

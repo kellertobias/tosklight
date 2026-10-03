@@ -54,6 +54,15 @@ impl FixtureProfile {
             validate_positive("light source width", Some(source.width_millimetres))?;
             validate_positive("light source height", Some(source.height_millimetres))?;
         }
+        self.validate_effect_and_physics()?;
+        self.validate_wheel_slots()?;
+        self.validate_geometry()?;
+        self.validate_scenery()?;
+        let mode_ids = self.validate_modes()?;
+        self.validate_crowd(&mode_ids)?;
+        Ok(())
+    }
+    fn validate_effect_and_physics(&self) -> Result<(), ProfileError> {
         if let Some(effect) = &self.effect {
             if !self.fixture_type.eq_ignore_ascii_case("effect") {
                 return Err(ProfileError::Invalid(
@@ -104,6 +113,9 @@ impl FixtureProfile {
                 ));
             }
         }
+        Ok(())
+    }
+    fn validate_wheel_slots(&self) -> Result<(), ProfileError> {
         // A wheel is read by slot, so two slots with the same number is an authoring mistake that
         // would otherwise silently drop one of them.
         let mut gobo_slots = HashSet::new();
@@ -145,9 +157,9 @@ impl FixtureProfile {
                 )));
             }
         }
-        self.validate_geometry()?;
-        self.validate_scenery()?;
-        let mode_ids = self.validate_modes()?;
+        Ok(())
+    }
+    fn validate_crowd(&self, mode_ids: &HashSet<Uuid>) -> Result<(), ProfileError> {
         if let Some(crowd) = &self.crowd {
             if self.patch_policy != PatchPolicy::VisualOnly {
                 return Err(ProfileError::Invalid(
@@ -177,7 +189,7 @@ impl FixtureProfile {
                     ));
                 }
             }
-            if bindings != mode_ids {
+            if bindings != *mode_ids {
                 return Err(ProfileError::Invalid(
                     "every crowd fixture mode needs a posture and density".into(),
                 ));
@@ -374,32 +386,7 @@ impl FixtureMode {
 
     fn validate_for_patch_policy(&self, patch_policy: PatchPolicy) -> Result<(), ProfileError> {
         validate_mode_shape(self)?;
-        let split_map = self
-            .splits
-            .iter()
-            .map(|split| (split.number, split.footprint))
-            .collect::<BTreeMap<_, _>>();
-        let invalid_split = self.splits.iter().any(|split| {
-            split.number == 0
-                || match patch_policy {
-                    PatchPolicy::Dmx => !(1..=512).contains(&split.footprint),
-                    PatchPolicy::VisualOnly | PatchPolicy::Internal => split.footprint != 0,
-                }
-        });
-        if split_map.len() != self.splits.len() || invalid_split {
-            return Err(ProfileError::Invalid(
-                match patch_policy {
-                    PatchPolicy::Dmx => "split numbers must be unique and footprints must be 1-512",
-                    PatchPolicy::VisualOnly => {
-                        "visual-only split numbers must be unique and footprints must be zero"
-                    }
-                    PatchPolicy::Internal => {
-                        "internal split numbers must be unique and footprints must be zero"
-                    }
-                }
-                .into(),
-            ));
-        }
+        let split_map = self.validate_splits(patch_policy)?;
         if patch_policy == PatchPolicy::VisualOnly
             && (!self.channels.is_empty()
                 || !self.color_systems.is_empty()
@@ -439,6 +426,66 @@ impl FixtureMode {
             }
             channel.validate()?;
         }
+        self.validate_canonical_collisions()?;
+        if patch_policy == PatchPolicy::Dmx {
+            self.primary_slots()?;
+        } else if patch_policy == PatchPolicy::Internal
+            && self
+                .channels
+                .iter()
+                .any(|channel| !channel.secondary_slots.is_empty())
+        {
+            return Err(ProfileError::Invalid(
+                "internal channels cannot define DMX component slots".into(),
+            ));
+        }
+        for head in &self.heads {
+            if !head_ids.contains(&head.id) {
+                return Err(ProfileError::Invalid("invalid head".into()));
+            }
+        }
+        self.validate_control_actions()?;
+        self.validate_color_systems(&head_ids, &channel_ids)?;
+        self.validate_color_physical()?;
+        self.validate_geometry(&head_ids)?;
+        Ok(())
+    }
+
+    fn validate_splits(
+        &self,
+        patch_policy: PatchPolicy,
+    ) -> Result<BTreeMap<u16, u16>, ProfileError> {
+        let split_map = self
+            .splits
+            .iter()
+            .map(|split| (split.number, split.footprint))
+            .collect::<BTreeMap<_, _>>();
+        let invalid_split = self.splits.iter().any(|split| {
+            split.number == 0
+                || match patch_policy {
+                    PatchPolicy::Dmx => !(1..=512).contains(&split.footprint),
+                    PatchPolicy::VisualOnly | PatchPolicy::Internal => split.footprint != 0,
+                }
+        });
+        if split_map.len() != self.splits.len() || invalid_split {
+            return Err(ProfileError::Invalid(
+                match patch_policy {
+                    PatchPolicy::Dmx => "split numbers must be unique and footprints must be 1-512",
+                    PatchPolicy::VisualOnly => {
+                        "visual-only split numbers must be unique and footprints must be zero"
+                    }
+                    PatchPolicy::Internal => {
+                        "internal split numbers must be unique and footprints must be zero"
+                    }
+                }
+                .into(),
+            ));
+        }
+        Ok(split_map)
+    }
+
+    /// A non-identity canonical rename must not fold two channels of one head onto one attribute.
+    fn validate_canonical_collisions(&self) -> Result<(), ProfileError> {
         for channel in &self.channels {
             let Some((canonical, transform)) =
                 light_core::canonical_attribute_migration(&channel.fixture_attribute)
@@ -462,23 +509,10 @@ impl FixtureMode {
                 )));
             }
         }
-        if patch_policy == PatchPolicy::Dmx {
-            self.primary_slots()?;
-        } else if patch_policy == PatchPolicy::Internal
-            && self
-                .channels
-                .iter()
-                .any(|channel| !channel.secondary_slots.is_empty())
-        {
-            return Err(ProfileError::Invalid(
-                "internal channels cannot define DMX component slots".into(),
-            ));
-        }
-        for head in &self.heads {
-            if !head_ids.contains(&head.id) {
-                return Err(ProfileError::Invalid("invalid head".into()));
-            }
-        }
+        Ok(())
+    }
+
+    fn validate_control_actions(&self) -> Result<(), ProfileError> {
         let action_ids = self
             .control_actions
             .iter()
@@ -530,9 +564,6 @@ impl FixtureMode {
                 }
             }
         }
-        self.validate_color_systems(&head_ids, &channel_ids)?;
-        self.validate_color_physical()?;
-        self.validate_geometry(&head_ids)?;
         Ok(())
     }
 

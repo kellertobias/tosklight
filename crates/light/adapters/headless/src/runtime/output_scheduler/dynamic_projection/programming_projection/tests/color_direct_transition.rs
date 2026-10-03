@@ -3,8 +3,8 @@
 //! engine finalizer, with the generation's retained original catalogue as the model resolver.
 use super::super::super::physical_adapter::color::DirectReplayOutcome;
 use super::super::super::physical_adapter::color::profiles::{patched, rgbwauv, xyz};
+use super::super::super::physical_adapter::color::tests::direct::{catalogue, direct};
 use super::super::super::physical_adapter::color::tests::intent;
-use super::super::super::physical_adapter::color::tests_direct::{catalogue, direct};
 use super::super::super::physical_adapter::*;
 use super::super::hybrid::*;
 use super::*;

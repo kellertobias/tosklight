@@ -279,97 +279,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             show_id: runtime.active_show.current().map(|show| show.id.0),
         };
         let completed = ordered_output_operation(&runtime.playback, || {
-            let dynamic_started = Instant::now();
-            let Some(prepared) = runtime.engine.try_prepare_output_frame(options) else {
-                return PlaybackOperation::new(Err(EngineError::StalePreparedFrame));
-            };
-            let prepared =
-                crate::runtime::dynamic_snapshot_publication::RetainedFrameCapture::select(
-                    prepared,
-                    &runtime.dynamic_snapshot,
-                    dynamic_started,
-                );
-            let timecode_audio = timecode_audio_contributions(
-                &runtime.timecodes,
-                prepared.snapshot().fixtures.as_ref(),
-                prepared.sampled_at(),
-            );
-            let baseline_samples = if timecode_audio.is_empty() {
-                Vec::new()
-            } else {
-                vec![timecode_audio]
-            };
-            let mut events = Vec::new();
-            let completed = dynamic_output_frame(
-                &runtime.engine,
-                &prepared,
-                prepared.retained(),
-                &baseline_samples,
-                &runtime.dynamics,
-                &runtime.dynamic_snapshot,
-                &runtime.dynamic_source_origins,
-                &runtime.speed_groups,
-                &runtime.rate,
-                &runtime.programmer_reconciliation_cache,
-                &runtime.family_adapters,
-                |source| {
-                    let dynamic = dynamic_started.elapsed();
-                    let engine_started = Instant::now();
-                    let operation = source.playback_operation(
-                        &runtime.engine,
-                        &runtime.active_show,
-                        &runtime.playback,
-                        &prepared,
-                        Some(&runtime.persistence),
-                    );
-                    // These transitions already happened during capture, including when
-                    // final render rejects a stale continuity token.
-                    events.extend(operation.events);
-                    operation
-                        .output
-                        .map(|rendered| (rendered, dynamic, engine_started.elapsed()))
-                },
-            );
-            if completed.is_err() {
-                events.extend(captured_playback_events(
-                    &runtime.engine,
-                    &runtime.active_show,
-                    &runtime.playback,
-                    &prepared,
-                    None,
-                    Some(&runtime.persistence),
-                ));
-            }
-            dispatch_automatic_cue_actions(
-                &prepared,
-                &runtime.engine,
-                &runtime.timecodes,
-                runtime.active_show.current().as_ref(),
-            );
-            let result = completed.map(|completed| {
-                runtime.dynamic_auto_offs.lock().extend(completed.auto_offs);
-                events.extend(completed.events);
-                let dynamics = Arc::new(FrameDynamicSources {
-                    sample_boundary: completed.sample_boundary,
-                    runtime: completed.runtime,
-                    samples: completed.samples,
-                    origins: completed.origins,
-                    programmer_values: Arc::clone(prepared.dynamic_programmer_values()),
-                    cue_values: prepared.cue_dynamic_values().into(),
-                    ordinary: completed.ordinary,
-                });
-                let (rendered, dynamic, engine) = completed.output;
-                (
-                    RenderedSemanticFrame {
-                        rendered,
-                        options,
-                        dynamics: Some(dynamics),
-                    },
-                    dynamic,
-                    engine,
-                )
-            });
-            PlaybackOperation::with_events(result, events)
+            render_ordered_output_frame(&runtime, options)
         });
         let (rendered, dynamic, engine) = match completed {
             Ok(completed) => completed,
@@ -422,6 +332,104 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         runtime.action_timing.complete_output_render(action_timing);
     }
     result
+}
+
+/// The ordered part of one output tick: captures the prepared frame, projects Dynamics into it
+/// and renders it, returning the rendered frame with its Dynamic and engine phase durations.
+fn render_ordered_output_frame(
+    runtime: &Runtime,
+    options: RenderOptions,
+) -> PlaybackOperation<Result<(RenderedSemanticFrame, Duration, Duration), EngineError>> {
+    let dynamic_started = Instant::now();
+    let Some(prepared) = runtime.engine.try_prepare_output_frame(options) else {
+        return PlaybackOperation::new(Err(EngineError::StalePreparedFrame));
+    };
+    let prepared = crate::runtime::dynamic_snapshot_publication::RetainedFrameCapture::select(
+        prepared,
+        &runtime.dynamic_snapshot,
+        dynamic_started,
+    );
+    let timecode_audio = timecode_audio_contributions(
+        &runtime.timecodes,
+        prepared.snapshot().fixtures.as_ref(),
+        prepared.sampled_at(),
+    );
+    let baseline_samples = if timecode_audio.is_empty() {
+        Vec::new()
+    } else {
+        vec![timecode_audio]
+    };
+    let mut events = Vec::new();
+    let completed = dynamic_output_frame(
+        &runtime.engine,
+        &prepared,
+        prepared.retained(),
+        &baseline_samples,
+        &runtime.dynamics,
+        &runtime.dynamic_snapshot,
+        &runtime.dynamic_source_origins,
+        &runtime.speed_groups,
+        &runtime.rate,
+        &runtime.programmer_reconciliation_cache,
+        &runtime.family_adapters,
+        |source| {
+            let dynamic = dynamic_started.elapsed();
+            let engine_started = Instant::now();
+            let operation = source.playback_operation(
+                &runtime.engine,
+                &runtime.active_show,
+                &runtime.playback,
+                &prepared,
+                Some(&runtime.persistence),
+            );
+            // These transitions already happened during capture, including when
+            // final render rejects a stale continuity token.
+            events.extend(operation.events);
+            operation
+                .output
+                .map(|rendered| (rendered, dynamic, engine_started.elapsed()))
+        },
+    );
+    if completed.is_err() {
+        events.extend(captured_playback_events(
+            &runtime.engine,
+            &runtime.active_show,
+            &runtime.playback,
+            &prepared,
+            None,
+            Some(&runtime.persistence),
+        ));
+    }
+    dispatch_automatic_cue_actions(
+        &prepared,
+        &runtime.engine,
+        &runtime.timecodes,
+        runtime.active_show.current().as_ref(),
+    );
+    let result = completed.map(|completed| {
+        runtime.dynamic_auto_offs.lock().extend(completed.auto_offs);
+        events.extend(completed.events);
+        let dynamics = Arc::new(FrameDynamicSources {
+            sample_boundary: completed.sample_boundary,
+            runtime: completed.runtime,
+            samples: completed.samples,
+            origins: completed.origins,
+            programmer_values: Arc::clone(prepared.dynamic_programmer_values()),
+            cue_values: prepared.cue_dynamic_values().into(),
+            ordinary: completed.ordinary,
+        });
+        let (rendered, dynamic, engine) = completed.output;
+        (
+            RenderedSemanticFrame {
+                rendered,
+                options,
+                dynamics: Some(dynamics),
+            },
+            dynamic,
+            engine,
+        )
+    });
+    PlaybackOperation::with_events(result, events)
 }
 
 /// A player patched from the TL-367 profile revision carries the canonical Media attributes.

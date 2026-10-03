@@ -383,6 +383,58 @@ impl CompiledPositionFitting {
             previous,
             mount,
         };
+        self.check_fit_layout(input, workspace, output)?;
+        // All mutable buffers are private and created together by this model.
+        workspace.raw.copy_from_slice(current_raw);
+        workspace.evaluations = 0;
+        self.forward
+            .decode_commands(current_raw, &mut workspace.commands)
+            .unwrap();
+        for (i, value) in workspace.axes.iter_mut().enumerate() {
+            *value = if self.forward.inputs_available(i, available) {
+                workspace.commands[i].absolute_degrees().or_else(|| {
+                    workspace.commands[i]
+                        .velocity
+                        .is_none()
+                        .then_some(previous[i])
+                        .flatten()
+                })
+            } else {
+                None
+            };
+        }
+        for (index, out) in output.iter_mut().enumerate() {
+            out.requested = requests[index];
+            out.status = PositionFitStatus::NotRequested;
+            out.achieved = None;
+            out.pose = None;
+            out.angular_error_degrees = None;
+            out.clipped = false;
+            out.search_limited = false;
+            out.writes = [None; 2];
+            if let Some(request) = requests[index] {
+                self.fit_lens(index, request, context, workspace, out);
+            }
+        }
+        self.withhold_ownership_conflicts(current_raw, workspace, output);
+        self.report_achieved(context, workspace, output);
+        Ok(())
+    }
+    /// Reject mismatched buffers, out-of-range native values and non-rigid mounts before any
+    /// workspace or output mutation.
+    fn check_fit_layout(
+        &self,
+        input: PositionFitInput<'_>,
+        workspace: &PositionFitWorkspace,
+        output: &[PositionFitResult],
+    ) -> Result<(), PositionFitInputError> {
+        let PositionFitInput {
+            current_raw,
+            available,
+            requests,
+            previous,
+            mount,
+        } = input;
         use PositionFitInputError as E;
         if current_raw.len() != self.channels.len() || available.len() != self.channels.len() {
             return Err(E::ChannelLayout);
@@ -430,38 +482,15 @@ impl CompiledPositionFitting {
         if workspace.model != self.forward.pose_graph().id() {
             return Err(E::WorkspaceLayout);
         }
-        // All mutable buffers are private and created together by this model.
-        workspace.raw.copy_from_slice(current_raw);
-        workspace.evaluations = 0;
-        self.forward
-            .decode_commands(current_raw, &mut workspace.commands)
-            .unwrap();
-        for (i, value) in workspace.axes.iter_mut().enumerate() {
-            *value = if self.forward.inputs_available(i, available) {
-                workspace.commands[i].absolute_degrees().or_else(|| {
-                    workspace.commands[i]
-                        .velocity
-                        .is_none()
-                        .then_some(previous[i])
-                        .flatten()
-                })
-            } else {
-                None
-            };
-        }
-        for (index, out) in output.iter_mut().enumerate() {
-            out.requested = requests[index];
-            out.status = PositionFitStatus::NotRequested;
-            out.achieved = None;
-            out.pose = None;
-            out.angular_error_degrees = None;
-            out.clipped = false;
-            out.search_limited = false;
-            out.writes = [None; 2];
-            if let Some(request) = requests[index] {
-                self.fit_lens(index, request, context, workspace, out);
-            }
-        }
+        Ok(())
+    }
+    /// Claim every fitted write and passive hold, then withhold whole conflicting cohorts.
+    fn withhold_ownership_conflicts(
+        &self,
+        current_raw: &[u32],
+        workspace: &mut PositionFitWorkspace,
+        output: &mut [PositionFitResult],
+    ) {
         workspace.claims.fill(Claim::default());
         for out in output
             .iter()
@@ -515,6 +544,17 @@ impl CompiledPositionFitting {
                 break;
             }
         }
+    }
+    /// Apply the surviving writes and report the achieved joints and pose of every emitter.
+    fn report_achieved(
+        &self,
+        context: FitContext<'_>,
+        workspace: &mut PositionFitWorkspace,
+        output: &mut [PositionFitResult],
+    ) {
+        let FitContext {
+            available, mount, ..
+        } = context;
         for out in output
             .iter()
             .filter(|o| o.status == PositionFitStatus::Fitted)
@@ -569,7 +609,6 @@ impl CompiledPositionFitting {
                 out.angular_error_degrees = pose.world.and_then(|p| ray_error(p, target));
             }
         }
-        Ok(())
     }
     fn fit_lens(
         &self,

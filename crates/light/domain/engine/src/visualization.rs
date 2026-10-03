@@ -332,14 +332,7 @@ impl Engine {
             ));
         }
         let snapshot = generation.snapshot();
-        let mut effective_preview = previewed.clone();
-        for fixture in snapshot.fixtures.iter() {
-            for (owner, frozen) in &fixture.freeze.targets {
-                for key in frozen.values.keys() {
-                    effective_preview.remove(&(*owner, key.clone()));
-                }
-            }
-        }
+        let effective_preview = unfrozen_preview(snapshot, previewed);
         let previewed = &effective_preview;
         let mut resolved = self.resolved_attributes_at(&generation, self.clock.now(), &[]);
         // A dense resolution intentionally leaves the named map empty. Read the actual frame
@@ -396,14 +389,7 @@ impl Engine {
         let points = points.unwrap_or_else(|| {
             std::sync::Arc::new(generation.point_projection().resolve(named_values))
         });
-        let mut effective_preview = previewed.clone();
-        for fixture in snapshot.fixtures.iter() {
-            for (owner, frozen) in &fixture.freeze.targets {
-                for key in frozen.values.keys() {
-                    effective_preview.remove(&(*owner, key.clone()));
-                }
-            }
-        }
+        let effective_preview = unfrozen_preview(snapshot, previewed);
         let previewed = &effective_preview;
         let profile_values = crate::ProfileValueIndex::new(
             named_values,
@@ -433,15 +419,9 @@ impl Engine {
         let mut physical = generation.physical_projection().take_frame();
         physical.bind_generation(generation.identity());
         for fixture in snapshot.fixtures.iter() {
-            let Some(profile) = fixture.definition.profile_snapshot.as_deref() else {
+            let Some((profile, mode)) = profile_fixture_mode(fixture)? else {
                 continue;
             };
-            let mode_id = fixture.definition.mode_id.ok_or_else(|| {
-                EngineError::Invalid("schema-v2 fixture is missing its mode identity".into())
-            })?;
-            let mode = profile
-                .mode(mode_id)
-                .ok_or_else(|| EngineError::Invalid("schema-v2 fixture mode is missing".into()))?;
             let projection = generation
                 .profile_projection(fixture.fixture_id)
                 .ok_or_else(|| {
@@ -458,14 +438,7 @@ impl Engine {
                 &group_master_flashes,
                 &highlight_layers,
                 &highlight_look,
-                if profile.patch_policy == light_fixture::PatchPolicy::Dmx {
-                    AxisInversion {
-                        pan: fixture.invert_pan,
-                        tilt: fixture.invert_tilt,
-                    }
-                } else {
-                    AxisInversion::default()
-                },
+                patched_axis_inversion(profile, fixture.invert_pan, fixture.invert_tilt),
                 fixture.fixture_id.0,
                 position_native.instance(fixture.fixture_id, fixture.fixture_id.0),
                 &mut output,
@@ -485,18 +458,7 @@ impl Engine {
                 &output.channels,
                 &mut physical,
             )?;
-            for output in &output.heads {
-                projected.insert(
-                    (output.owner, AttributeKey::intensity()),
-                    AttributeValue::Normalized(output.intensity),
-                );
-                if let Some(color) = output.color {
-                    projected.insert(
-                        (output.owner, AttributeKey("color".into())),
-                        AttributeValue::ColorXyz(color),
-                    );
-                }
-            }
+            project_head_levels(&mut projected, &output);
             for (index, copy) in fixture.multipatch.iter().enumerate() {
                 resolve_profile_fixture(
                     fixture,
@@ -509,14 +471,7 @@ impl Engine {
                     &group_master_flashes,
                     &highlight_layers,
                     &highlight_look,
-                    if profile.patch_policy == light_fixture::PatchPolicy::Dmx {
-                        AxisInversion {
-                            pan: copy.invert_pan,
-                            tilt: copy.invert_tilt,
-                        }
-                    } else {
-                        AxisInversion::default()
-                    },
+                    patched_axis_inversion(profile, copy.invert_pan, copy.invert_tilt),
                     copy.id,
                     position_native.instance(fixture.fixture_id, copy.id),
                     &mut output,
@@ -535,5 +490,72 @@ impl Engine {
             physical: std::sync::Arc::new(physical),
             points,
         })
+    }
+}
+
+/// The preview with every value a Freeze holds removed: a frozen value is not previewed.
+fn unfrozen_preview(
+    snapshot: &crate::EngineSnapshot,
+    previewed: &std::collections::HashSet<(light_core::FixtureId, AttributeKey)>,
+) -> std::collections::HashSet<(light_core::FixtureId, AttributeKey)> {
+    let mut effective_preview = previewed.clone();
+    for fixture in snapshot.fixtures.iter() {
+        for (owner, frozen) in &fixture.freeze.targets {
+            for key in frozen.values.keys() {
+                effective_preview.remove(&(*owner, key.clone()));
+            }
+        }
+    }
+    effective_preview
+}
+
+/// The profile and mode of a schema-v2 fixture, or `None` for a fixture without a profile.
+fn profile_fixture_mode(
+    fixture: &light_fixture::PatchedFixture,
+) -> Result<Option<(&light_fixture::FixtureProfile, &light_fixture::FixtureMode)>, EngineError> {
+    let Some(profile) = fixture.definition.profile_snapshot.as_deref() else {
+        return Ok(None);
+    };
+    let mode_id = fixture.definition.mode_id.ok_or_else(|| {
+        EngineError::Invalid("schema-v2 fixture is missing its mode identity".into())
+    })?;
+    let mode = profile
+        .mode(mode_id)
+        .ok_or_else(|| EngineError::Invalid("schema-v2 fixture mode is missing".into()))?;
+    Ok(Some((profile, mode)))
+}
+
+/// Pan/Tilt inversion applies to the DMX wire of a DMX-patched profile only.
+fn patched_axis_inversion(
+    profile: &light_fixture::FixtureProfile,
+    invert_pan: bool,
+    invert_tilt: bool,
+) -> AxisInversion {
+    if profile.patch_policy == light_fixture::PatchPolicy::Dmx {
+        AxisInversion {
+            pan: invert_pan,
+            tilt: invert_tilt,
+        }
+    } else {
+        AxisInversion::default()
+    }
+}
+
+/// Records each resolved head's intensity and colour as projected visualization values.
+fn project_head_levels(
+    projected: &mut crate::ResolvedValues,
+    output: &crate::ResolvedProfileFixtureOutput,
+) {
+    for output in &output.heads {
+        projected.insert(
+            (output.owner, AttributeKey::intensity()),
+            AttributeValue::Normalized(output.intensity),
+        );
+        if let Some(color) = output.color {
+            projected.insert(
+                (output.owner, AttributeKey("color".into())),
+                AttributeValue::ColorXyz(color),
+            );
+        }
     }
 }

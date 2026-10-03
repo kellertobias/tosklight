@@ -66,24 +66,6 @@ mod transition;
 pub(in crate::runtime) mod profiles;
 #[cfg(test)]
 pub(in crate::runtime) mod tests;
-#[cfg(test)]
-mod tests_actual_quality;
-#[cfg(test)]
-mod tests_adoption;
-#[cfg(test)]
-mod tests_derived;
-#[cfg(test)]
-mod tests_destinations;
-#[cfg(test)]
-pub(in crate::runtime) mod tests_direct;
-#[cfg(test)]
-mod tests_fitting_bench;
-#[cfg(test)]
-mod tests_lifecycle;
-#[cfg(test)]
-mod tests_reference;
-#[cfg(test)]
-mod tests_review;
 
 /// One Color head on one physical destination (root instance or multipatch copy).
 pub(in crate::runtime) struct ColorHeadDescriptor {

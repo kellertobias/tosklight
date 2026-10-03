@@ -82,50 +82,15 @@ impl PlaybackEngine {
         let cue_list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
         let compiled = &self.compiled_cue_lists[&id];
         let playback = match self.active.entry(key) {
-            std::collections::hash_map::Entry::Vacant(entry) => entry.insert(ActivePlayback {
-                playback_number: None,
-                playback_identity: None,
-                activation: None,
+            std::collections::hash_map::Entry::Vacant(entry) => entry.insert(first_go_playback(
+                id,
+                now,
                 transition_ordinal,
-                cue_list_id: id,
-                cue_index: 0,
-                previous_index: None,
-                paused: false,
-                activated_at: now,
-                paused_at: None,
-                completed_trigger_cue_id: None,
-                master: 1.0,
-                fader_position: 1.0,
-                fader_pickup_required: false,
-                fader_pickup_target: None,
-                flash: false,
-                master_transition: None,
-                temporary: false,
-                enabled: true,
-                fader_zero_auto_off_armed: false,
-                flash_restore_off: false,
-                transition_timing_bypassed: false,
-                discrete_cue_actions_suppressed: false,
-                transition_fade_fallback_millis: None,
-                external_completion_millis: 0,
-                manual_xfade_position: 0.0,
-                manual_xfade_direction: ManualXFadeDirection::TowardsHigh,
-                manual_xfade_from_index: None,
-                manual_xfade_to_index: None,
-                manual_xfade_progress: 0.0,
-                tracking_wrap: false,
-                current_cue_id: Some(cue_list.cues[0].id),
-                current_cue_number: Some(cue_list.cues[0].number.clone()),
-                deleted_cue_hold: None,
-                deleted_cue_transition_source: None,
-                source_history: source_ordinal.map(|ordinal| {
-                    PlaybackSourceHistory::next(
-                        None, now, ordinal, compiled, 0, false, source, false,
-                    )
-                }),
-                loaded_cue_id: None,
-                loaded_cue_number: None,
-            }),
+                cue_list,
+                compiled,
+                source_ordinal,
+                source,
+            )),
             std::collections::hash_map::Entry::Occupied(entry) => {
                 let playback = entry.into_mut();
                 if let Some(loaded) = playback.loaded_cue_id.take() {
@@ -597,5 +562,59 @@ impl PlaybackEngine {
                 PlaybackRuntimeEffect::None
             }),
         ))
+    }
+}
+
+/// The playback a first Go starts on the Cuelist's first cue.
+fn first_go_playback(
+    id: CueListId,
+    now: DateTime<Utc>,
+    transition_ordinal: u64,
+    cue_list: &CueList,
+    compiled: &Arc<CompiledCueList>,
+    source_ordinal: Option<u64>,
+    source: SequenceMasterSource,
+) -> ActivePlayback {
+    ActivePlayback {
+        playback_number: None,
+        playback_identity: None,
+        activation: None,
+        transition_ordinal,
+        cue_list_id: id,
+        cue_index: 0,
+        previous_index: None,
+        paused: false,
+        activated_at: now,
+        paused_at: None,
+        completed_trigger_cue_id: None,
+        master: 1.0,
+        fader_position: 1.0,
+        fader_pickup_required: false,
+        fader_pickup_target: None,
+        flash: false,
+        master_transition: None,
+        temporary: false,
+        enabled: true,
+        fader_zero_auto_off_armed: false,
+        flash_restore_off: false,
+        transition_timing_bypassed: false,
+        discrete_cue_actions_suppressed: false,
+        transition_fade_fallback_millis: None,
+        external_completion_millis: 0,
+        manual_xfade_position: 0.0,
+        manual_xfade_direction: ManualXFadeDirection::TowardsHigh,
+        manual_xfade_from_index: None,
+        manual_xfade_to_index: None,
+        manual_xfade_progress: 0.0,
+        tracking_wrap: false,
+        current_cue_id: Some(cue_list.cues[0].id),
+        current_cue_number: Some(cue_list.cues[0].number.clone()),
+        deleted_cue_hold: None,
+        deleted_cue_transition_source: None,
+        source_history: source_ordinal.map(|ordinal| {
+            PlaybackSourceHistory::next(None, now, ordinal, compiled, 0, false, source, false)
+        }),
+        loaded_cue_id: None,
+        loaded_cue_number: None,
     }
 }

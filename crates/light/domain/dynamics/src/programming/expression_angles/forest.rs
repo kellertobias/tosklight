@@ -43,6 +43,60 @@ pub fn bundle_position_component_forest(
             remainder: Vec::new(),
         });
     };
+    ensure_one_position_controller(samples, first)?;
+    let expressions = samples
+        .iter()
+        .map(|sample| Arc::new(sample.expression.clone()))
+        .collect::<Vec<_>>();
+    let tape = Arc::new(RetainedExpressionTape::from_roots(&expressions)?);
+    let metadata = position_metadata(&tape);
+    let roots = tape
+        .roots
+        .iter()
+        .zip(samples)
+        .map(|(root, sample)| (sample.lane_id, *root))
+        .collect::<Roots>();
+    let (forest, results) = build_forest(&roots, &tape, &metadata, first.target, sources)?;
+    let position = if let Some(root) = results[&roots] {
+        let lane_id = roots
+            .iter()
+            .filter(|(_, id)| metadata[id.0 as usize].contains)
+            .map(|(lane, _)| *lane)
+            .max()
+            .expect("Position source");
+        Some(FamilyCompositionSample::CoupledExpression {
+            expression: Arc::new(CompiledCoupledExpression::from_position_forest(
+                Arc::from(samples),
+                &forest,
+                root,
+            )?),
+            rank: FamilySampleRank {
+                priority: first.priority,
+                changed_at_millis: first.activated_at_millis,
+                changed_at_submillis_nanos: 0,
+                stable_order: first.controller_id.as_u128(),
+                identity: crate::FamilySampleIdentity::Dynamic {
+                    instance_id: first.instance_id,
+                    controller_id: first.controller_id,
+                    lane_id,
+                },
+            },
+            activation_mix: first.activation_mix,
+        })
+    } else {
+        None
+    };
+    let remainder = remainder_samples(samples, &roots, &tape, &metadata)?;
+    Ok(PositionComponentForestBundle {
+        position,
+        remainder,
+    })
+}
+
+fn ensure_one_position_controller(
+    samples: &[DynamicRuntimeSample],
+    first: &DynamicRuntimeSample,
+) -> Result<(), TransitionError> {
     let mut lanes = HashSet::new();
     for sample in samples {
         ensure(
@@ -59,23 +113,31 @@ pub fn bundle_position_component_forest(
             "duplicate Dynamic source lane",
         )?;
     }
-    let expressions = samples
-        .iter()
-        .map(|sample| Arc::new(sample.expression.clone()))
-        .collect::<Vec<_>>();
-    let tape = Arc::new(RetainedExpressionTape::from_roots(&expressions)?);
-    let metadata = position_metadata(&tape);
-    let roots = tape
-        .roots
-        .iter()
-        .zip(samples)
-        .map(|(root, sample)| (sample.lane_id, *root))
-        .collect::<Roots>();
+    Ok(())
+}
+
+type ForestResults = HashMap<Roots, Option<usize>>;
+
+/// Walk correlated root sets depth-first, splitting shared Resume occurrences into one
+/// transition history and resolving every other set as a single branch.
+fn build_forest(
+    roots: &Roots,
+    tape: &Arc<RetainedExpressionTape>,
+    metadata: &[PositionMetadata],
+    target: FixtureId,
+    sources: &dyn DynamicValueSourceResolver,
+) -> Result<(Vec<PositionForestNode>, ForestResults), TransitionError> {
     let mut forest = Vec::new();
-    let mut results = HashMap::<Roots, Option<usize>>::new();
+    let mut results = ForestResults::new();
     let mut tasks = vec![Task::Visit(roots.clone())];
     let mut current = [None, None, None];
     let mut captured_current = None;
+    let mut reads = CurrentReads {
+        target,
+        sources,
+        current: &mut current,
+        captured_current: &mut captured_current,
+    };
     while let Some(task) = tasks.pop() {
         match task {
             Task::Alias { roots, child } => {
@@ -123,15 +185,7 @@ pub fn bundle_position_component_forest(
                         }
                     });
                 let Some((occurrence, progress)) = resume else {
-                    let branch = branch(
-                        &roots,
-                        &tape,
-                        &metadata,
-                        first.target,
-                        sources,
-                        &mut current,
-                        &mut captured_current,
-                    )?;
+                    let branch = branch(&roots, tape, metadata, &mut reads)?;
                     let root = branch.map(|branch| {
                         let id = forest.len();
                         forest.push(branch);
@@ -140,39 +194,7 @@ pub fn bundle_position_component_forest(
                     results.insert(roots, root);
                     continue;
                 };
-                let mut from = Vec::new();
-                let mut to = Vec::new();
-                for &(lane, root) in &roots {
-                    if let Node::Transition {
-                        from: old,
-                        to: new,
-                        progress: other,
-                        reason: DynamicTransitionReason::Resume { occurrence_id },
-                    } = &tape.nodes[root.0 as usize]
-                        && *occurrence_id == occurrence
-                    {
-                        ensure(
-                            *other == progress,
-                            "one resume occurrence has different progress",
-                        )?;
-                        from.extend(old.map(|id| (lane, id)));
-                        to.extend(new.map(|id| (lane, id)));
-                    } else {
-                        ensure(
-                            !metadata[root.0 as usize].contains
-                                || !matches!(
-                                    &tape.nodes[root.0 as usize],
-                                    Node::Transition {
-                                        reason: DynamicTransitionReason::Resume { .. },
-                                        ..
-                                    }
-                                ),
-                            "Position resume sources have different outer occurrences",
-                        )?;
-                        from.push((lane, root));
-                        to.push((lane, root));
-                    }
-                }
+                let (from, to) = split_resume(&roots, tape, metadata, occurrence, progress)?;
                 if progress == 0.0 || progress == 1.0 {
                     let child = if progress == 0.0 { from } else { to };
                     tasks.push(Task::Alias {
@@ -196,37 +218,63 @@ pub fn bundle_position_component_forest(
             }
         }
     }
-    let position = if let Some(root) = results[&roots] {
-        let lane_id = roots
-            .iter()
-            .filter(|(_, id)| metadata[id.0 as usize].contains)
-            .map(|(lane, _)| *lane)
-            .max()
-            .expect("Position source");
-        Some(FamilyCompositionSample::CoupledExpression {
-            expression: Arc::new(CompiledCoupledExpression::from_position_forest(
-                Arc::from(samples),
-                &forest,
-                root,
-            )?),
-            rank: FamilySampleRank {
-                priority: first.priority,
-                changed_at_millis: first.activated_at_millis,
-                changed_at_submillis_nanos: 0,
-                stable_order: first.controller_id.as_u128(),
-                identity: crate::FamilySampleIdentity::Dynamic {
-                    instance_id: first.instance_id,
-                    controller_id: first.controller_id,
-                    lane_id,
-                },
-            },
-            activation_mix: first.activation_mix,
-        })
-    } else {
-        None
-    };
+    Ok((forest, results))
+}
+
+/// Split each lane at the shared Resume occurrence; lanes without it continue unchanged on
+/// both sides of the transition.
+fn split_resume(
+    roots: &Roots,
+    tape: &RetainedExpressionTape,
+    metadata: &[PositionMetadata],
+    occurrence: Uuid,
+    progress: f32,
+) -> Result<(Roots, Roots), TransitionError> {
+    let mut from = Vec::new();
+    let mut to = Vec::new();
+    for &(lane, root) in roots {
+        if let Node::Transition {
+            from: old,
+            to: new,
+            progress: other,
+            reason: DynamicTransitionReason::Resume { occurrence_id },
+        } = &tape.nodes[root.0 as usize]
+            && *occurrence_id == occurrence
+        {
+            ensure(
+                *other == progress,
+                "one resume occurrence has different progress",
+            )?;
+            from.extend(old.map(|id| (lane, id)));
+            to.extend(new.map(|id| (lane, id)));
+        } else {
+            ensure(
+                !metadata[root.0 as usize].contains
+                    || !matches!(
+                        &tape.nodes[root.0 as usize],
+                        Node::Transition {
+                            reason: DynamicTransitionReason::Resume { .. },
+                            ..
+                        }
+                    ),
+                "Position resume sources have different outer occurrences",
+            )?;
+            from.push((lane, root));
+            to.push((lane, root));
+        }
+    }
+    Ok((from, to))
+}
+
+/// Keep every non-Position part of the original lanes as retained runtime samples.
+fn remainder_samples(
+    samples: &[DynamicRuntimeSample],
+    roots: &Roots,
+    tape: &Arc<RetainedExpressionTape>,
+    metadata: &[PositionMetadata],
+) -> Result<Vec<DynamicRuntimeSample>, TransitionError> {
     let mut remainder_tape = tape.as_ref().clone();
-    let non_position = non_position_roots(&mut remainder_tape, &metadata)?;
+    let non_position = non_position_roots(&mut remainder_tape, metadata)?;
     let remaining = roots
         .iter()
         .enumerate()
@@ -248,10 +296,7 @@ pub fn bundle_position_component_forest(
             sample
         })
         .collect();
-    Ok(PositionComponentForestBundle {
-        position,
-        remainder,
-    })
+    Ok(remainder)
 }
 
 fn endpoint(
@@ -277,169 +322,29 @@ fn endpoint(
     })
 }
 
+/// Fixture-scoped Current reads shared by every branch of one forest, so each original Current
+/// is read at most once per bundle.
+struct CurrentReads<'a> {
+    target: FixtureId,
+    sources: &'a dyn DynamicValueSourceResolver,
+    current: &'a mut [Option<Option<DynamicValue>>; 3],
+    captured_current: &'a mut Option<Option<Arc<CapturedPositionCurrent>>>,
+}
+
 fn branch(
     roots: &Roots,
     tape: &Arc<RetainedExpressionTape>,
     metadata: &[PositionMetadata],
-    target: FixtureId,
-    sources: &dyn DynamicValueSourceResolver,
-    current: &mut [Option<Option<DynamicValue>>; 3],
-    captured_current: &mut Option<Option<Arc<CapturedPositionCurrent>>>,
+    reads: &mut CurrentReads<'_>,
 ) -> Result<Option<PositionForestNode>, TransitionError> {
-    let mut axes = [None, None];
-    let mut pair_axes = [None, None];
-    let mut seen = [false, false];
-    let mut axis_sources = Vec::new();
-    let mut targets = Vec::new();
-    let mut whole = Vec::new();
-    let mut whole_seen = 0usize;
-    let mut only_target_wholes = true;
+    let mut leaves = BranchLeaves::new();
     for &(lane_id, root) in roots
         .iter()
         .filter(|(_, id)| metadata[id.0 as usize].contains)
     {
         match &tape.nodes[root.0 as usize] {
-            Node::AngleNumeric { program } => {
-                let address = &program.address;
-                let axis = axis(address)?;
-                ensure(
-                    !std::mem::replace(&mut seen[axis], true),
-                    "duplicate axis in one Angle branch",
-                )?;
-                let original = capture_current(target, address, sources, captured_current)?.ok_or(
-                    TransitionError::Requires(TransitionRequirement::LiveJointAngles),
-                )?;
-                pair_axes[axis] = Some(PositionAngleAxis::Numeric {
-                    lane_id,
-                    address: Arc::new(CompiledDynamicValueAddress::new(address.clone(), None)?),
-                    program: program.clone(),
-                    original,
-                });
-            }
-            Node::AngleCurrent { address } => {
-                let original = capture_current(target, address, sources, captured_current)?;
-                let target_current = original.as_ref().is_some_and(|original| {
-                    matches!(&original.value, AttributeValue::Position(position)
-                        if matches!(position.as_ref(), PositionIntent::Target { .. }))
-                });
-                if address.component.is_none() {
-                    whole_seen += 1;
-                    only_target_wholes = false;
-                    if target_current {
-                        let original = original.unwrap();
-                        let axes = [ProgrammingComponent::Pan, ProgrammingComponent::Tilt].map(
-                            |component| {
-                                let mut address = address.clone();
-                                address.component = Some(component);
-                                Ok(PositionAngleAxis::Current {
-                                    lane_id,
-                                    address: Arc::new(CompiledDynamicValueAddress::new(
-                                        address, None,
-                                    )?),
-                                    original: original.clone(),
-                                })
-                            },
-                        );
-                        let [pan, tilt]: [Result<PositionAngleAxis, IntentError>; 2] = axes;
-                        whole.push(PositionForestNode::AnglePair(Arc::new(
-                            PositionAnglePairEndpoint {
-                                axes: [pan?, tilt?],
-                            },
-                        )));
-                    } else {
-                        let value = if let Some(original) = &original {
-                            Some(DynamicValue::Family(original.value.clone()))
-                        } else {
-                            // Scalar-only callers keep their pre-existing compatible path.
-                            current[2]
-                                .get_or_insert_with(|| sources.current(target, address))
-                                .clone()
-                        };
-                        if let Some(value) = value {
-                            let dependency = original.as_ref().map_or_else(
-                                || sources.current_dependency(target, address),
-                                |original| {
-                                    crate::DynamicSourceDependency::compatible(
-                                        original.occurrence,
-                                        address,
-                                    )
-                                },
-                            );
-                            let source = endpoint(
-                                lane_id,
-                                address.clone(),
-                                value.clone(),
-                                CoupledLeafRole::Current,
-                                None,
-                                Some(dependency),
-                            )?;
-                            whole.push(PositionForestNode::Whole {
-                                expression: Arc::new(Expression::Programming {
-                                    address: Arc::new(address.clone()),
-                                    value,
-                                    occurrence: None,
-                                    dependency_occurrence: source.dependency_occurrence.clone(),
-                                }),
-                                lane_id,
-                                sources: Arc::from([source]),
-                            });
-                        }
-                    }
-                } else {
-                    let axis = axis(address)?;
-                    ensure(
-                        !std::mem::replace(&mut seen[axis], true),
-                        "duplicate axis in one Angle branch",
-                    )?;
-                    if target_current {
-                        pair_axes[axis] = Some(PositionAngleAxis::Current {
-                            lane_id,
-                            address: Arc::new(CompiledDynamicValueAddress::new(
-                                address.clone(),
-                                None,
-                            )?),
-                            original: original.unwrap(),
-                        });
-                    } else {
-                        let value = if let Some(original) = &original {
-                            crate::extract_compatible_dynamic_value(
-                                &original.value,
-                                address,
-                                &FamilyEditContext::default(),
-                            )?
-                        } else {
-                            current[axis]
-                                .get_or_insert_with(|| sources.current(target, address))
-                                .clone()
-                        };
-                        if let Some(value) = value {
-                            let dependency = original.as_ref().map_or_else(
-                                || sources.current_dependency(target, address),
-                                |original| {
-                                    crate::DynamicSourceDependency::compatible(
-                                        original.occurrence,
-                                        address,
-                                    )
-                                },
-                            );
-                            let source = endpoint(
-                                lane_id,
-                                address.clone(),
-                                value,
-                                CoupledLeafRole::Current,
-                                None,
-                                Some(dependency),
-                            )?;
-                            let DynamicValue::Scalar(value) = &source.value else {
-                                unreachable!("verified axis")
-                            };
-                            axes[axis] = Some(*value);
-                            pair_axes[axis] = Some(PositionAngleAxis::Materialized(source.clone()));
-                            axis_sources.push(source);
-                        }
-                    }
-                }
-            }
+            Node::AngleNumeric { program } => leaves.angle_numeric(lane_id, program, reads)?,
+            Node::AngleCurrent { address } => leaves.angle_current(lane_id, address, reads)?,
             Node::Programming {
                 address,
                 value,
@@ -451,148 +356,374 @@ fn branch(
                     DynamicFamilyRepresentation::Target { reference: Some(_) }
                 ) =>
             {
-                let source = endpoint(
-                    lane_id,
-                    address.clone(),
-                    value.clone(),
-                    CoupledLeafRole::Authored,
-                    *occurrence,
-                    dependency_occurrence.clone(),
-                )?;
-                if matches!(
-                    address.representation,
-                    DynamicFamilyRepresentation::Target { .. }
-                ) {
-                    targets.push(source);
-                } else {
-                    let axis = axis(address)?;
-                    ensure(
-                        !std::mem::replace(&mut seen[axis], true),
-                        "duplicate axis in one Angle branch",
-                    )?;
-                    let DynamicValue::Scalar(value) = value else {
-                        unreachable!("verified axis")
-                    };
-                    axes[axis] = Some(*value);
-                    pair_axes[axis] = Some(PositionAngleAxis::Materialized(source.clone()));
-                    axis_sources.push(source);
-                }
+                leaves.authored(lane_id, address, value, occurrence, dependency_occurrence)?
             }
-            _ => {
-                ensure(
-                    metadata[root.0 as usize].complete,
-                    "Position branch contains an unresolved component expression",
-                )?;
-                whole_seen += 1;
-                tape.visit_reachable(&[root], |_, node| {
-                    match node {
-                        Node::Programming { address, .. } | Node::Scale { address, .. } => {
-                            only_target_wholes &= matches!(
-                                address.representation,
-                                DynamicFamilyRepresentation::Target { .. }
-                            );
-                        }
-                        Node::AngleCurrent { .. }
-                        | Node::AngleNumeric { .. }
-                        | Node::LegacyScalar { .. } => only_target_wholes = false,
-                        Node::Transition { .. } => {}
-                    }
-                    Ok(())
-                })?;
-                whole.push(PositionForestNode::Whole {
-                    expression: Arc::new(Expression::Retained {
-                        tape: tape.clone(),
-                        root,
+            _ => leaves.opaque_whole(lane_id, root, tape, metadata)?,
+        }
+    }
+    leaves.finish()
+}
+
+/// The leaves of one correlated branch, accumulated in lane order.
+struct BranchLeaves {
+    axes: [Option<f32>; 2],
+    pair_axes: [Option<PositionAngleAxis>; 2],
+    seen: [bool; 2],
+    axis_sources: Vec<CoupledComponentEndpoint>,
+    targets: Vec<CoupledComponentEndpoint>,
+    whole: Vec<PositionForestNode>,
+    whole_seen: usize,
+    only_target_wholes: bool,
+}
+
+impl BranchLeaves {
+    fn new() -> Self {
+        Self {
+            axes: [None, None],
+            pair_axes: [None, None],
+            seen: [false, false],
+            axis_sources: Vec::new(),
+            targets: Vec::new(),
+            whole: Vec::new(),
+            whole_seen: 0usize,
+            only_target_wholes: true,
+        }
+    }
+
+    fn claim_axis(&mut self, address: &DynamicValueAddress) -> Result<usize, TransitionError> {
+        let axis = axis(address)?;
+        ensure(
+            !std::mem::replace(&mut self.seen[axis], true),
+            "duplicate axis in one Angle branch",
+        )?;
+        Ok(axis)
+    }
+
+    fn angle_numeric(
+        &mut self,
+        lane_id: Uuid,
+        program: &Arc<crate::AngleNumericProgram>,
+        reads: &mut CurrentReads<'_>,
+    ) -> Result<(), TransitionError> {
+        let address = &program.address;
+        let axis = self.claim_axis(address)?;
+        let original =
+            capture_current(reads.target, address, reads.sources, reads.captured_current)?.ok_or(
+                TransitionError::Requires(TransitionRequirement::LiveJointAngles),
+            )?;
+        self.pair_axes[axis] = Some(PositionAngleAxis::Numeric {
+            lane_id,
+            address: Arc::new(CompiledDynamicValueAddress::new(address.clone(), None)?),
+            program: program.clone(),
+            original,
+        });
+        Ok(())
+    }
+
+    fn angle_current(
+        &mut self,
+        lane_id: Uuid,
+        address: &DynamicValueAddress,
+        reads: &mut CurrentReads<'_>,
+    ) -> Result<(), TransitionError> {
+        let original =
+            capture_current(reads.target, address, reads.sources, reads.captured_current)?;
+        let target_current = original.as_ref().is_some_and(|original| {
+            matches!(&original.value, AttributeValue::Position(position)
+                if matches!(position.as_ref(), PositionIntent::Target { .. }))
+        });
+        if address.component.is_none() {
+            self.whole_current(lane_id, address, original, target_current, reads)
+        } else {
+            self.axis_current(lane_id, address, original, target_current, reads)
+        }
+    }
+
+    fn whole_current(
+        &mut self,
+        lane_id: Uuid,
+        address: &DynamicValueAddress,
+        original: Option<Arc<CapturedPositionCurrent>>,
+        target_current: bool,
+        reads: &mut CurrentReads<'_>,
+    ) -> Result<(), TransitionError> {
+        let (target, sources) = (reads.target, reads.sources);
+        self.whole_seen += 1;
+        self.only_target_wholes = false;
+        if target_current {
+            let original = original.unwrap();
+            let axes = [ProgrammingComponent::Pan, ProgrammingComponent::Tilt].map(|component| {
+                let mut address = address.clone();
+                address.component = Some(component);
+                Ok(PositionAngleAxis::Current {
+                    lane_id,
+                    address: Arc::new(CompiledDynamicValueAddress::new(address, None)?),
+                    original: original.clone(),
+                })
+            });
+            let [pan, tilt]: [Result<PositionAngleAxis, IntentError>; 2] = axes;
+            self.whole.push(PositionForestNode::AnglePair(Arc::new(
+                PositionAnglePairEndpoint {
+                    axes: [pan?, tilt?],
+                },
+            )));
+        } else {
+            let value = if let Some(original) = &original {
+                Some(DynamicValue::Family(original.value.clone()))
+            } else {
+                // Scalar-only callers keep their pre-existing compatible path.
+                reads.current[2]
+                    .get_or_insert_with(|| sources.current(target, address))
+                    .clone()
+            };
+            if let Some(value) = value {
+                let source = current_endpoint(lane_id, address, value.clone(), &original, reads)?;
+                self.whole.push(PositionForestNode::Whole {
+                    expression: Arc::new(Expression::Programming {
+                        address: Arc::new(address.clone()),
+                        value,
+                        occurrence: None,
+                        dependency_occurrence: source.dependency_occurrence.clone(),
                     }),
                     lane_id,
-                    sources: Arc::from([]),
+                    sources: Arc::from([source]),
                 });
             }
         }
+        Ok(())
     }
-    ensure(
-        whole_seen == 0 || seen == [false, false],
-        "Angle components and whole Position cannot coexist in one branch",
-    )?;
-    ensure(
-        targets.is_empty() || seen == [false, false],
-        "Angle and Target components cannot coexist in one branch",
-    )?;
-    if whole_seen != 0 {
-        if whole_seen == 1 && targets.is_empty() {
-            return Ok(whole.pop());
-        }
-        ensure(
-            only_target_wholes,
-            "complete Angles cannot coexist with other Position sources",
-        )?;
-        let mut cohort = targets
-            .into_iter()
-            .map(CoupledCohortEndpoint::Materialized)
-            .collect::<Vec<_>>();
-        for source in whole {
-            let PositionForestNode::Whole {
-                expression,
+
+    fn axis_current(
+        &mut self,
+        lane_id: Uuid,
+        address: &DynamicValueAddress,
+        original: Option<Arc<CapturedPositionCurrent>>,
+        target_current: bool,
+        reads: &mut CurrentReads<'_>,
+    ) -> Result<(), TransitionError> {
+        let (target, sources) = (reads.target, reads.sources);
+        let axis = self.claim_axis(address)?;
+        if target_current {
+            self.pair_axes[axis] = Some(PositionAngleAxis::Current {
                 lane_id,
-                ..
-            } = source
-            else {
-                unreachable!("whole source")
-            };
-            cohort.push(CoupledCohortEndpoint::WholeExpression {
-                lane_id,
-                expression: Arc::new(CompiledProgrammingFamilyExpression::new(
-                    expression,
-                    ProgrammingOwner::Position,
-                    None,
-                    None,
-                )?),
+                address: Arc::new(CompiledDynamicValueAddress::new(address.clone(), None)?),
+                original: original.unwrap(),
             });
+        } else {
+            let value = if let Some(original) = &original {
+                crate::extract_compatible_dynamic_value(
+                    &original.value,
+                    address,
+                    &FamilyEditContext::default(),
+                )?
+            } else {
+                reads.current[axis]
+                    .get_or_insert_with(|| sources.current(target, address))
+                    .clone()
+            };
+            if let Some(value) = value {
+                let source = current_endpoint(lane_id, address, value, &original, reads)?;
+                let DynamicValue::Scalar(value) = &source.value else {
+                    unreachable!("verified axis")
+                };
+                self.axes[axis] = Some(*value);
+                self.pair_axes[axis] = Some(PositionAngleAxis::Materialized(source.clone()));
+                self.axis_sources.push(source);
+            }
         }
-        cohort.sort_unstable_by_key(CoupledCohortEndpoint::lane_id);
-        return Ok(Some(PositionForestNode::SourceCohort(cohort.into())));
+        Ok(())
     }
-    if !targets.is_empty() {
-        targets.sort_unstable_by_key(|source| source.lane_id);
-        return Ok(Some(PositionForestNode::Cohort(targets.into())));
+
+    fn authored(
+        &mut self,
+        lane_id: Uuid,
+        address: &DynamicValueAddress,
+        value: &DynamicValue,
+        occurrence: &Option<DynamicSourceOccurrenceId>,
+        dependency_occurrence: &Option<crate::DynamicSourceDependency>,
+    ) -> Result<(), TransitionError> {
+        let source = endpoint(
+            lane_id,
+            address.clone(),
+            value.clone(),
+            CoupledLeafRole::Authored,
+            *occurrence,
+            dependency_occurrence.clone(),
+        )?;
+        if matches!(
+            address.representation,
+            DynamicFamilyRepresentation::Target { .. }
+        ) {
+            self.targets.push(source);
+        } else {
+            let axis = self.claim_axis(address)?;
+            let DynamicValue::Scalar(value) = value else {
+                unreachable!("verified axis")
+            };
+            self.axes[axis] = Some(*value);
+            self.pair_axes[axis] = Some(PositionAngleAxis::Materialized(source.clone()));
+            self.axis_sources.push(source);
+        }
+        Ok(())
     }
-    if pair_axes.iter().any(|axis| {
-        matches!(
-            axis,
-            Some(PositionAngleAxis::Current { .. } | PositionAngleAxis::Numeric { .. })
-        )
-    }) {
-        return Ok(match pair_axes {
-            [Some(pan), Some(tilt)] => Some(PositionForestNode::AnglePair(Arc::new(
-                PositionAnglePairEndpoint { axes: [pan, tilt] },
-            ))),
-            _ => None,
-        });
-    }
-    Ok(if let [Some(pan), Some(tilt)] = axes {
-        let lane_id = axis_sources
-            .iter()
-            .map(|source| source.lane_id)
-            .max()
-            .expect("complete pair");
-        Some(PositionForestNode::Whole {
-            expression: Arc::new(Expression::Programming {
-                address: Arc::new(DynamicValueAddress {
-                    representation: DynamicFamilyRepresentation::Angles,
-                    component: None,
-                }),
-                value: DynamicValue::Family(AttributeValue::Position(Arc::new(
-                    PositionIntent::angles(pan, tilt),
-                ))),
-                occurrence: None,
-                dependency_occurrence: None,
+
+    fn opaque_whole(
+        &mut self,
+        lane_id: Uuid,
+        root: RetainedNodeId,
+        tape: &Arc<RetainedExpressionTape>,
+        metadata: &[PositionMetadata],
+    ) -> Result<(), TransitionError> {
+        ensure(
+            metadata[root.0 as usize].complete,
+            "Position branch contains an unresolved component expression",
+        )?;
+        self.whole_seen += 1;
+        let only_target_wholes = &mut self.only_target_wholes;
+        tape.visit_reachable(&[root], |_, node| {
+            match node {
+                Node::Programming { address, .. } | Node::Scale { address, .. } => {
+                    *only_target_wholes &= matches!(
+                        address.representation,
+                        DynamicFamilyRepresentation::Target { .. }
+                    );
+                }
+                Node::AngleCurrent { .. }
+                | Node::AngleNumeric { .. }
+                | Node::LegacyScalar { .. } => *only_target_wholes = false,
+                Node::Transition { .. } => {}
+            }
+            Ok(())
+        })?;
+        self.whole.push(PositionForestNode::Whole {
+            expression: Arc::new(Expression::Retained {
+                tape: tape.clone(),
+                root,
             }),
             lane_id,
-            sources: axis_sources.into(),
+            sources: Arc::from([]),
+        });
+        Ok(())
+    }
+
+    fn finish(self) -> Result<Option<PositionForestNode>, TransitionError> {
+        let Self {
+            axes,
+            pair_axes,
+            seen,
+            axis_sources,
+            mut targets,
+            mut whole,
+            whole_seen,
+            only_target_wholes,
+        } = self;
+        ensure(
+            whole_seen == 0 || seen == [false, false],
+            "Angle components and whole Position cannot coexist in one branch",
+        )?;
+        ensure(
+            targets.is_empty() || seen == [false, false],
+            "Angle and Target components cannot coexist in one branch",
+        )?;
+        if whole_seen != 0 {
+            if whole_seen == 1 && targets.is_empty() {
+                return Ok(whole.pop());
+            }
+            ensure(
+                only_target_wholes,
+                "complete Angles cannot coexist with other Position sources",
+            )?;
+            let mut cohort = targets
+                .into_iter()
+                .map(CoupledCohortEndpoint::Materialized)
+                .collect::<Vec<_>>();
+            for source in whole {
+                let PositionForestNode::Whole {
+                    expression,
+                    lane_id,
+                    ..
+                } = source
+                else {
+                    unreachable!("whole source")
+                };
+                cohort.push(CoupledCohortEndpoint::WholeExpression {
+                    lane_id,
+                    expression: Arc::new(CompiledProgrammingFamilyExpression::new(
+                        expression,
+                        ProgrammingOwner::Position,
+                        None,
+                        None,
+                    )?),
+                });
+            }
+            cohort.sort_unstable_by_key(CoupledCohortEndpoint::lane_id);
+            return Ok(Some(PositionForestNode::SourceCohort(cohort.into())));
+        }
+        if !targets.is_empty() {
+            targets.sort_unstable_by_key(|source| source.lane_id);
+            return Ok(Some(PositionForestNode::Cohort(targets.into())));
+        }
+        if pair_axes.iter().any(|axis| {
+            matches!(
+                axis,
+                Some(PositionAngleAxis::Current { .. } | PositionAngleAxis::Numeric { .. })
+            )
+        }) {
+            return Ok(match pair_axes {
+                [Some(pan), Some(tilt)] => Some(PositionForestNode::AnglePair(Arc::new(
+                    PositionAnglePairEndpoint { axes: [pan, tilt] },
+                ))),
+                _ => None,
+            });
+        }
+        Ok(if let [Some(pan), Some(tilt)] = axes {
+            let lane_id = axis_sources
+                .iter()
+                .map(|source| source.lane_id)
+                .max()
+                .expect("complete pair");
+            Some(PositionForestNode::Whole {
+                expression: Arc::new(Expression::Programming {
+                    address: Arc::new(DynamicValueAddress {
+                        representation: DynamicFamilyRepresentation::Angles,
+                        component: None,
+                    }),
+                    value: DynamicValue::Family(AttributeValue::Position(Arc::new(
+                        PositionIntent::angles(pan, tilt),
+                    ))),
+                    occurrence: None,
+                    dependency_occurrence: None,
+                }),
+                lane_id,
+                sources: axis_sources.into(),
+            })
+        } else {
+            None
         })
-    } else {
-        None
-    })
+    }
+}
+
+/// A Current leaf endpoint carrying its explicit original occurrence, or the resolver's
+/// compatible dependency for scalar-only callers.
+fn current_endpoint(
+    lane_id: Uuid,
+    address: &DynamicValueAddress,
+    value: DynamicValue,
+    original: &Option<Arc<CapturedPositionCurrent>>,
+    reads: &CurrentReads<'_>,
+) -> Result<CoupledComponentEndpoint, TransitionError> {
+    let dependency = original.as_ref().map_or_else(
+        || reads.sources.current_dependency(reads.target, address),
+        |original| crate::DynamicSourceDependency::compatible(original.occurrence, address),
+    );
+    endpoint(
+        lane_id,
+        address.clone(),
+        value,
+        CoupledLeafRole::Current,
+        None,
+        Some(dependency),
+    )
 }
 
 /// Read an explicitly supplied original Position Current, never a Size baseline or an adopted

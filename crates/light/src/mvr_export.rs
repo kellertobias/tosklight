@@ -352,24 +352,8 @@ pub fn build_mvr_document<S: GdtfSource>(
         {
             source_archives.use_standard_member(reference, &exported.spec, &mut document);
         }
-        let (spec, mode) = match &types[&key] {
-            Some(exported) => {
-                if exported.generated.is_some() {
-                    summary.generated_profiles += 1;
-                } else {
-                    summary.embedded_profiles += 1;
-                }
-                (exported.spec.clone(), exported.mode(definition))
-            }
-            None => {
-                summary.missing_profiles.push(format!(
-                    "{} · {}",
-                    definition.manufacturer,
-                    profile_name(definition)
-                ));
-                (preferred, definition.mode.clone())
-            }
-        };
+        let (spec, mode) =
+            exported_spec_and_mode(types[&key].as_ref(), definition, preferred, &mut summary);
         let uuid = by_fixture
             .get(id.as_str())
             .and_then(|uuid| Uuid::parse_str(uuid).ok())
@@ -401,16 +385,61 @@ pub fn build_mvr_document<S: GdtfSource>(
             class: None,
         });
     }
-    let metadata = ToskLightMvrFixtureMetadata {
-        version: 1,
-        fixtures: tosklight_fixtures,
-        gdtf_sources: source_archives.descriptors,
-    };
+    embed_tosklight_metadata(
+        &mut document,
+        ToskLightMvrFixtureMetadata {
+            version: 1,
+            fixtures: tosklight_fixtures,
+            gdtf_sources: source_archives.descriptors,
+        },
+    );
+    add_profile_warnings(&mut summary);
+    summary.fixtures = document.fixtures.len();
+    summary.scenery = document.geometry.len();
+    Ok((document, summary))
+}
+
+/// The GDTF spec and mode a fixture references, counting how its profile was exported.
+fn exported_spec_and_mode(
+    exported: Option<&ExportedType>,
+    definition: &FixtureDefinition,
+    preferred: String,
+    summary: &mut MvrExportSummary,
+) -> (String, String) {
+    match exported {
+        Some(exported) => {
+            if exported.generated.is_some() {
+                summary.generated_profiles += 1;
+            } else {
+                summary.embedded_profiles += 1;
+            }
+            (exported.spec.clone(), exported.mode(definition))
+        }
+        None => {
+            summary.missing_profiles.push(format!(
+                "{} · {}",
+                definition.manufacturer,
+                profile_name(definition)
+            ));
+            (preferred, definition.mode.clone())
+        }
+    }
+}
+
+/// Stores ToskLight's own fixture metadata beside the standard MVR content.
+fn embed_tosklight_metadata(
+    document: &mut light_mvr::MvrDocument,
+    metadata: ToskLightMvrFixtureMetadata,
+) {
     if let Ok(data) = serde_json::to_vec(&metadata) {
         document
             .files
             .insert(TOSKLIGHT_MVR_FIXTURE_METADATA_PATH.into(), data);
     }
+}
+
+/// Explains generated and missing GDTF profiles to the operator.
+fn add_profile_warnings(summary: &mut MvrExportSummary) {
     if summary.generated_profiles > 0 {
         summary.warnings.push(
             "ToskLight generated GDTF files from the current fixture profiles with their modes, \
@@ -426,9 +455,6 @@ pub fn build_mvr_document<S: GdtfSource>(
                 .to_owned(),
         );
     }
-    summary.fixtures = document.fixtures.len();
-    summary.scenery = document.geometry.len();
-    Ok((document, summary))
 }
 
 fn profile_name(definition: &FixtureDefinition) -> &str {

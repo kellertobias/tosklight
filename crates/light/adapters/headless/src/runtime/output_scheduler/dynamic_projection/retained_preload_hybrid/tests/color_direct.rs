@@ -10,7 +10,7 @@ use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::colo
     patched, rgbal, rgbwauv, xyz,
 };
 use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::color::tests::intent;
-use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::color::tests_direct::{
+use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::color::tests::direct::{
     catalogue, direct,
 };
 use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::color::{

@@ -6,10 +6,10 @@ use crate::runtime::dynamic_source_origins::{DynamicSourceOrigins, SharedDynamic
 
 mod family_frame;
 #[cfg(test)]
+pub(in crate::runtime) use family_frame::lamp_quality;
+#[cfg(test)]
 pub(in crate::runtime) use family_frame::legacy;
 pub(in crate::runtime) use family_frame::{LiveFamilyAdapters, OutputRenderSource};
-#[cfg(test)]
-pub(in crate::runtime) use family_frame::lamp_quality;
 
 pub(in crate::runtime) struct CommittedDynamicOutput<T> {
     pub output: T,

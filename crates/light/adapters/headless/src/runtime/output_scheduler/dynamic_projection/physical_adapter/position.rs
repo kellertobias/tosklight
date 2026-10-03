@@ -18,10 +18,13 @@ mod current_cohort;
 mod cut_coordinator;
 mod destination;
 mod fit_cache;
+mod frame_observer;
 pub(in crate::runtime) mod native_rows;
 #[cfg(test)]
 pub(in crate::runtime) mod tests;
 mod tracking;
+use frame_observer::PendingPosition;
+pub(in crate::runtime) use frame_observer::{PositionFrameObserver, PositionPreloadObserver};
 
 pub(in crate::runtime) struct PositionDescriptor {
     pub root: FixtureId,
@@ -343,18 +346,7 @@ impl PositionAdapter {
         let Some(first) = requests.first() else {
             return Ok(Vec::new());
         };
-        for r in requests {
-            if r.frame.token != first.frame.token
-                || r.owner != ProgrammingOwner::Position
-                || !r.frame.token.matches_geometry(r.frame.geometry)
-                || !r.frame.token.matches_static_frame(r.frame.scalar)
-                || !std::ptr::eq(r.frame.scalar, first.frame.scalar)
-                || !std::ptr::eq(r.frame.geometry, first.frame.geometry)
-            {
-                return Err(invalid("Position cohort uses foreign frame or owner"));
-            }
-            intent(r.value)?.validate()?;
-        }
+        validate_cohort(requests, first)?;
         let mut results: Vec<PhysicalResolution<Self>> = requests
             .iter()
             .map(|r| PhysicalResolution {
@@ -365,16 +357,7 @@ impl PositionAdapter {
                 continuity: PositionContinuity::default(),
             })
             .collect();
-        let mut groups: Vec<(FixtureId, Vec<(usize, &PhysicalRequest<'_, Self>)>)> = Vec::new();
-        let mut root_indices = FxHashMap::default();
-        for (index, r) in requests.iter().enumerate() {
-            let group = *root_indices.entry(r.descriptor.root).or_insert_with(|| {
-                groups.push((r.descriptor.root, Vec::new()));
-                groups.len() - 1
-            });
-            groups[group].1.push((index, r));
-        }
-        for (root, mut group) in groups {
+        for (root, mut group) in cohort_groups(requests) {
             group.sort_by_key(|(_, request)| request.target.0);
             let cohort_owners = group
                 .iter()
@@ -382,100 +365,13 @@ impl PositionAdapter {
                 .collect::<Vec<_>>();
             let mut native = CapturedNativeRaw::default();
             for instance in &group[0].1.descriptor.instances {
-                first
-                    .frame
-                    .native_position_raw_into(root, instance.destination.0, &mut native)?;
-                if native.token() != Some(first.frame.token)
-                    || native.destination() != Some(root)
-                    || native.instance_id() != Some(instance.destination.0)
-                {
-                    return Err(invalid(
-                        "Position native capture does not match cohort instance",
-                    ));
-                }
+                capture_instance_native(first, root, instance, &mut native)?;
                 let mut scratch = instance.scratch.lock();
                 scratch.raw.copy_from_slice(native.raw());
                 scratch.previous.fill(None);
                 scratch.requests.fill(None);
                 let protected = protected_roots.contains(&root);
-                let mut compatible_previous = Vec::new();
-                for (_, r) in &group {
-                    if let Some(previous) = r.previous.and_then(|p| {
-                        p.instances.iter().find(|p| {
-                            p.destination == instance.destination
-                                && p.compatibility == instance.compatibility
-                        })
-                    }) {
-                        // A scene/native edit wins over previous fitted output. Reuse branch
-                        // anchors and writes only while the complete captured footprint agrees.
-                        let compatible =
-                            previous.controls.iter().all(|&(index, id, baseline, raw)| {
-                                instance
-                                    .model
-                                    .axes()
-                                    .iter()
-                                    .flat_map(|a| a.controls.iter())
-                                    .any(|c| {
-                                        c.channel_index == index
-                                            && c.channel_id == id
-                                            && raw <= c.raw_max
-                                    })
-                                    && native.raw().get(index as usize) == Some(&baseline)
-                            });
-                        if compatible {
-                            compatible_previous.push(previous);
-                        }
-                    }
-                }
-                // Keep an accepted hold only when it covers every mechanical control
-                // and comes from one complete accepted fit. Otherwise use the complete
-                // captured baseline; never seed only a surviving peer's old controls.
-                let complete_previous = protected
-                    && instance
-                        .model
-                        .axes()
-                        .iter()
-                        .filter(|axis| axis.role.is_some())
-                        .flat_map(|axis| axis.controls.iter())
-                        .all(|control| {
-                            compatible_previous.iter().any(|previous| {
-                                previous.controls.iter().any(|&(index, id, _, _)| {
-                                    index == control.channel_index && id == control.channel_id
-                                })
-                            })
-                        })
-                    && (compatible_previous.len() == 1
-                        || compatible_previous
-                            .first()
-                            .and_then(|previous| previous.fit_memo.as_ref())
-                            .is_some_and(|memo| {
-                                compatible_previous.iter().all(|previous| {
-                                    previous
-                                        .fit_memo
-                                        .as_ref()
-                                        .is_some_and(|other| Arc::ptr_eq(memo, other))
-                                })
-                            }));
-                let mut seeded = FxHashMap::default();
-                for previous in compatible_previous
-                    .iter()
-                    .filter(|_| !protected || complete_previous)
-                {
-                    for (id, value) in &previous.joints {
-                        if let Some(axis) = instance.model.axes().iter().find(|a| a.node_id == *id)
-                        {
-                            scratch.previous[axis.command_index] = *value;
-                        }
-                    }
-                    for &(index, _id, _baseline, raw) in &previous.controls {
-                        if seeded.insert(index, raw).is_some_and(|old| old != raw) {
-                            return Err(invalid(
-                                "accepted Position continuity disagrees on shared control",
-                            ));
-                        }
-                        scratch.raw[index as usize] = raw;
-                    }
-                }
+                seed_accepted_continuity(instance, &group, &native, protected, &mut scratch)?;
                 let mount = first
                     .frame
                     .geometry
@@ -487,30 +383,7 @@ impl PositionAdapter {
                     .is_none_or(|id| first.frame.geometry.point(FixtureId(id)).is_some());
                 let missing_mount = mount.is_none() || !reference_known;
                 if !protected {
-                    for (_, r) in &group {
-                        let program = programs
-                            .iter()
-                            .find(|(target, _)| *target == r.target)
-                            .map(|(_, program)| program);
-                        let value = match program {
-                            Some(destinations) => {
-                                &destinations
-                                    .iter()
-                                    .find(|d| d.destination == instance.destination)
-                                    .ok_or_else(|| {
-                                        invalid("Position program omitted a physical copy")
-                                    })?
-                                    .value
-                            }
-                            None => r.value,
-                        };
-                        let desired = request(intent(value)?, r.frame, !missing_mount)?;
-                        for &index in r.descriptor.emitters.iter() {
-                            if scratch.requests[index].replace(desired).is_some() {
-                                return Err(invalid("Position emitter has two requested owners"));
-                            }
-                        }
-                    }
+                    request_cohort_goals(&group, programs, instance, missing_mount, &mut scratch)?;
                 }
                 let PositionScratch {
                     workspace,
@@ -547,61 +420,8 @@ impl PositionAdapter {
                 };
                 // A memo has authority only through every peer's accepted lane continuity.
                 // Equal independently constructed cache values cannot certify one cohort.
-                let accepted_memo = group[0]
-                    .1
-                    .previous
-                    .and_then(|continuity| {
-                        continuity
-                            .instances
-                            .iter()
-                            .find(|prior| {
-                                prior.destination == instance.destination
-                                    && prior.compatibility == instance.compatibility
-                            })
-                            .and_then(|prior| prior.fit_memo.as_ref())
-                            .cloned()
-                    })
-                    .filter(|memo| {
-                        group.iter().all(|(_, request)| {
-                            request
-                                .previous
-                                .and_then(|continuity| {
-                                    continuity
-                                        .instances
-                                        .iter()
-                                        .find(|prior| {
-                                            prior.destination == instance.destination
-                                                && prior.compatibility == instance.compatibility
-                                        })
-                                        .and_then(|prior| prior.fit_memo.as_ref())
-                                })
-                                .is_some_and(|other| Arc::ptr_eq(memo, other))
-                        })
-                    })
-                    .filter(|memo| memo.matches(&fit_input));
-                let reused = accepted_memo.is_some();
-                let memo = if let Some(memo) = accepted_memo {
-                    Some(memo)
-                } else {
-                    instance
-                        .model
-                        .fit(fit_input.fit, workspace, output)
-                        .map_err(|e| {
-                            invalid(format!("Position fitting capture rejected: {e:?}"))
-                        })?;
-                    fit_cache::PositionFitMemo::new(
-                        &fit_input,
-                        output,
-                        workspace.proposed_raw(),
-                        workspace.achieved_axes(),
-                    )
-                    .map(Arc::new)
-                };
-                let evaluations = if reused {
-                    0
-                } else {
-                    workspace.candidate_evaluations()
-                };
+                let (memo, reused, evaluations) =
+                    fit_or_reuse(&group, instance, &fit_input, workspace, output)?;
                 let solved_output = memo
                     .as_ref()
                     .map_or_else(|| output.as_slice(), |memo| memo.output());
@@ -616,78 +436,373 @@ impl PositionAdapter {
                 counters.fit_cache_hits += u64::from(reused);
                 counters.candidate_evaluations += evaluations as u64;
                 self.counters.set(counters);
-                for (result_index, r) in &group {
-                    let resolved = &mut results[*result_index];
-                    resolved.quality.candidate_evaluations += evaluations;
-                    resolved.quality.reused_fits += usize::from(reused);
-                    resolved.quality.geometry_dirty |= geometry_dirty;
-                    for &index in r.descriptor.emitters.iter() {
-                        let mut value = solved_output[index].clone();
-                        if missing_mount {
-                            value.pose = None;
-                        }
-                        resolved.quality.held |=
-                            protected || value.status != PositionFitStatus::Fitted;
-                        resolved.achieved.outcomes.push(PositionOutcome {
-                            destination: instance.destination,
-                            result: value,
-                            missing_mount,
-                            input_requirement: protected,
-                        });
-                    }
-                    let mut controls = Vec::new();
-                    for slot in r
-                        .descriptor
-                        .footprint
-                        .iter()
-                        .filter(|s| s.destination == instance.destination)
-                    {
-                        let metadata = instance
-                            .model
-                            .axes()
-                            .iter()
-                            .filter(|a| a.role.is_some())
-                            .flat_map(|a| a.controls.iter())
-                            .find(|c| c.channel_index == slot.channel_index)
-                            .unwrap();
-                        let write = solved_output
-                            .iter()
-                            .flat_map(|o| o.writes.iter().flatten())
-                            .find(|w| w.channel_index == slot.channel_index);
-                        let raw = proposed_raw[slot.channel_index as usize];
-                        resolved.writes.push(NativeControlWrite {
-                            slot: *slot,
-                            channel_id: metadata.channel_id,
-                            function_id: write.map(|w| w.function_id),
-                            raw,
-                            parked: write.is_none(),
-                        });
-                        controls.push((
-                            slot.channel_index,
-                            metadata.channel_id,
-                            native.raw()[slot.channel_index as usize],
-                            raw,
-                        ));
-                    }
-                    resolved
-                        .continuity
-                        .instances
-                        .push(PositionInstanceContinuity {
-                            destination: instance.destination,
-                            compatibility: instance.compatibility,
-                            joints: instance
-                                .model
-                                .axes()
-                                .iter()
-                                .map(|a| (a.node_id, achieved_axes[a.command_index]))
-                                .collect(),
-                            controls,
-                            fit_memo: memo.clone(),
-                        });
-                }
+                publish_fitted_instance(
+                    &mut results,
+                    &group,
+                    &FittedInstance {
+                        instance,
+                        native_raw: native.raw(),
+                        solved_output,
+                        proposed_raw,
+                        achieved_axes,
+                        memo: &memo,
+                        evaluations,
+                        reused,
+                        geometry_dirty,
+                        missing_mount,
+                        protected,
+                    },
+                );
             }
         }
         Ok(results)
+    }
+}
+/// Requests grouped by physical root, in first-seen root order, each with its result index.
+#[allow(clippy::type_complexity)]
+fn cohort_groups<'r, 'a>(
+    requests: &'r [PhysicalRequest<'a, PositionAdapter>],
+) -> Vec<(
+    FixtureId,
+    Vec<(usize, &'r PhysicalRequest<'a, PositionAdapter>)>,
+)> {
+    let mut groups: Vec<(
+        FixtureId,
+        Vec<(usize, &PhysicalRequest<'_, PositionAdapter>)>,
+    )> = Vec::new();
+    let mut root_indices = FxHashMap::default();
+    for (index, r) in requests.iter().enumerate() {
+        let group = *root_indices.entry(r.descriptor.root).or_insert_with(|| {
+            groups.push((r.descriptor.root, Vec::new()));
+            groups.len() - 1
+        });
+        groups[group].1.push((index, r));
+    }
+    groups
+}
+
+/// Captures one instance's native raw values from the cohort frame and checks their provenance.
+fn capture_instance_native(
+    first: &PhysicalRequest<'_, PositionAdapter>,
+    root: FixtureId,
+    instance: &PositionInstance,
+    native: &mut CapturedNativeRaw,
+) -> Result<(), TransitionError> {
+    first
+        .frame
+        .native_position_raw_into(root, instance.destination.0, native)?;
+    if native.token() != Some(first.frame.token)
+        || native.destination() != Some(root)
+        || native.instance_id() != Some(instance.destination.0)
+    {
+        return Err(invalid(
+            "Position native capture does not match cohort instance",
+        ));
+    }
+    Ok(())
+}
+
+/// Reuses the cohort's accepted fit memo, or fits this instance afresh and memoizes the fit.
+/// Returns the memo, whether it was reused, and the fit's candidate evaluations.
+fn fit_or_reuse(
+    group: &[(usize, &PhysicalRequest<'_, PositionAdapter>)],
+    instance: &PositionInstance,
+    fit_input: &fit_cache::PositionFitMemoInput<'_>,
+    workspace: &mut PositionFitWorkspace,
+    output: &mut [PositionFitResult],
+) -> Result<(Option<Arc<fit_cache::PositionFitMemo>>, bool, usize), TransitionError> {
+    let accepted_memo = accepted_fit_memo(group, instance, fit_input);
+    let reused = accepted_memo.is_some();
+    let memo = if let Some(memo) = accepted_memo {
+        Some(memo)
+    } else {
+        instance
+            .model
+            .fit(fit_input.fit, workspace, output)
+            .map_err(|e| invalid(format!("Position fitting capture rejected: {e:?}")))?;
+        fit_cache::PositionFitMemo::new(
+            fit_input,
+            output,
+            workspace.proposed_raw(),
+            workspace.achieved_axes(),
+        )
+        .map(Arc::new)
+    };
+    let evaluations = if reused {
+        0
+    } else {
+        workspace.candidate_evaluations()
+    };
+    Ok((memo, reused, evaluations))
+}
+
+/// Every request in one Position cohort shares one captured frame token, geometry and static
+/// scalar frame, and carries a valid Position intent.
+fn validate_cohort(
+    requests: &[PhysicalRequest<'_, PositionAdapter>],
+    first: &PhysicalRequest<'_, PositionAdapter>,
+) -> Result<(), TransitionError> {
+    for r in requests {
+        if r.frame.token != first.frame.token
+            || r.owner != ProgrammingOwner::Position
+            || !r.frame.token.matches_geometry(r.frame.geometry)
+            || !r.frame.token.matches_static_frame(r.frame.scalar)
+            || !std::ptr::eq(r.frame.scalar, first.frame.scalar)
+            || !std::ptr::eq(r.frame.geometry, first.frame.geometry)
+        {
+            return Err(invalid("Position cohort uses foreign frame or owner"));
+        }
+        intent(r.value)?.validate()?;
+    }
+    Ok(())
+}
+
+/// Seeds one instance's fit scratch with the accepted continuity its cohort may reuse.
+fn seed_accepted_continuity(
+    instance: &PositionInstance,
+    group: &[(usize, &PhysicalRequest<'_, PositionAdapter>)],
+    native: &CapturedNativeRaw,
+    protected: bool,
+    scratch: &mut PositionScratch,
+) -> Result<(), TransitionError> {
+    let mut compatible_previous = Vec::new();
+    for (_, r) in group {
+        if let Some(previous) = r.previous.and_then(|p| {
+            p.instances.iter().find(|p| {
+                p.destination == instance.destination && p.compatibility == instance.compatibility
+            })
+        }) {
+            // A scene/native edit wins over previous fitted output. Reuse branch
+            // anchors and writes only while the complete captured footprint agrees.
+            let compatible = previous.controls.iter().all(|&(index, id, baseline, raw)| {
+                instance
+                    .model
+                    .axes()
+                    .iter()
+                    .flat_map(|a| a.controls.iter())
+                    .any(|c| c.channel_index == index && c.channel_id == id && raw <= c.raw_max)
+                    && native.raw().get(index as usize) == Some(&baseline)
+            });
+            if compatible {
+                compatible_previous.push(previous);
+            }
+        }
+    }
+    // Keep an accepted hold only when it covers every mechanical control
+    // and comes from one complete accepted fit. Otherwise use the complete
+    // captured baseline; never seed only a surviving peer's old controls.
+    let complete_previous = protected
+        && instance
+            .model
+            .axes()
+            .iter()
+            .filter(|axis| axis.role.is_some())
+            .flat_map(|axis| axis.controls.iter())
+            .all(|control| {
+                compatible_previous.iter().any(|previous| {
+                    previous.controls.iter().any(|&(index, id, _, _)| {
+                        index == control.channel_index && id == control.channel_id
+                    })
+                })
+            })
+        && (compatible_previous.len() == 1
+            || compatible_previous
+                .first()
+                .and_then(|previous| previous.fit_memo.as_ref())
+                .is_some_and(|memo| {
+                    compatible_previous.iter().all(|previous| {
+                        previous
+                            .fit_memo
+                            .as_ref()
+                            .is_some_and(|other| Arc::ptr_eq(memo, other))
+                    })
+                }));
+    let mut seeded = FxHashMap::default();
+    for previous in compatible_previous
+        .iter()
+        .filter(|_| !protected || complete_previous)
+    {
+        for (id, value) in &previous.joints {
+            if let Some(axis) = instance.model.axes().iter().find(|a| a.node_id == *id) {
+                scratch.previous[axis.command_index] = *value;
+            }
+        }
+        for &(index, _id, _baseline, raw) in &previous.controls {
+            if seeded.insert(index, raw).is_some_and(|old| old != raw) {
+                return Err(invalid(
+                    "accepted Position continuity disagrees on shared control",
+                ));
+            }
+            scratch.raw[index as usize] = raw;
+        }
+    }
+    Ok(())
+}
+
+/// Writes each cohort request's goal (or its program's copy for this instance) to its emitters.
+fn request_cohort_goals(
+    group: &[(usize, &PhysicalRequest<'_, PositionAdapter>)],
+    programs: &[(FixtureId, &[PositionProgramDestination])],
+    instance: &PositionInstance,
+    missing_mount: bool,
+    scratch: &mut PositionScratch,
+) -> Result<(), TransitionError> {
+    for (_, r) in group {
+        let program = programs
+            .iter()
+            .find(|(target, _)| *target == r.target)
+            .map(|(_, program)| program);
+        let value = match program {
+            Some(destinations) => {
+                &destinations
+                    .iter()
+                    .find(|d| d.destination == instance.destination)
+                    .ok_or_else(|| invalid("Position program omitted a physical copy"))?
+                    .value
+            }
+            None => r.value,
+        };
+        let desired = request(intent(value)?, r.frame, !missing_mount)?;
+        for &index in r.descriptor.emitters.iter() {
+            if scratch.requests[index].replace(desired).is_some() {
+                return Err(invalid("Position emitter has two requested owners"));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A memo has authority only through every peer's accepted lane continuity.
+fn accepted_fit_memo(
+    group: &[(usize, &PhysicalRequest<'_, PositionAdapter>)],
+    instance: &PositionInstance,
+    fit_input: &fit_cache::PositionFitMemoInput<'_>,
+) -> Option<Arc<fit_cache::PositionFitMemo>> {
+    group[0]
+        .1
+        .previous
+        .and_then(|continuity| {
+            continuity
+                .instances
+                .iter()
+                .find(|prior| {
+                    prior.destination == instance.destination
+                        && prior.compatibility == instance.compatibility
+                })
+                .and_then(|prior| prior.fit_memo.as_ref())
+                .cloned()
+        })
+        .filter(|memo| {
+            group.iter().all(|(_, request)| {
+                request
+                    .previous
+                    .and_then(|continuity| {
+                        continuity
+                            .instances
+                            .iter()
+                            .find(|prior| {
+                                prior.destination == instance.destination
+                                    && prior.compatibility == instance.compatibility
+                            })
+                            .and_then(|prior| prior.fit_memo.as_ref())
+                    })
+                    .is_some_and(|other| Arc::ptr_eq(memo, other))
+            })
+        })
+        .filter(|memo| memo.matches(fit_input))
+}
+
+/// One instance's fitted output, shared by every peer request in its cohort.
+struct FittedInstance<'a> {
+    instance: &'a PositionInstance,
+    native_raw: &'a [u32],
+    solved_output: &'a [PositionFitResult],
+    proposed_raw: &'a [u32],
+    achieved_axes: &'a [Option<f64>],
+    memo: &'a Option<Arc<fit_cache::PositionFitMemo>>,
+    evaluations: usize,
+    reused: bool,
+    geometry_dirty: bool,
+    missing_mount: bool,
+    protected: bool,
+}
+
+/// Records one fitted instance's outcomes, writes and continuity on each peer's resolution.
+fn publish_fitted_instance(
+    results: &mut [PhysicalResolution<PositionAdapter>],
+    group: &[(usize, &PhysicalRequest<'_, PositionAdapter>)],
+    fitted: &FittedInstance<'_>,
+) {
+    for (result_index, r) in group {
+        let resolved = &mut results[*result_index];
+        resolved.quality.candidate_evaluations += fitted.evaluations;
+        resolved.quality.reused_fits += usize::from(fitted.reused);
+        resolved.quality.geometry_dirty |= fitted.geometry_dirty;
+        for &index in r.descriptor.emitters.iter() {
+            let mut value = fitted.solved_output[index].clone();
+            if fitted.missing_mount {
+                value.pose = None;
+            }
+            resolved.quality.held |= fitted.protected || value.status != PositionFitStatus::Fitted;
+            resolved.achieved.outcomes.push(PositionOutcome {
+                destination: fitted.instance.destination,
+                result: value,
+                missing_mount: fitted.missing_mount,
+                input_requirement: fitted.protected,
+            });
+        }
+        let mut controls = Vec::new();
+        for slot in r
+            .descriptor
+            .footprint
+            .iter()
+            .filter(|s| s.destination == fitted.instance.destination)
+        {
+            let metadata = fitted
+                .instance
+                .model
+                .axes()
+                .iter()
+                .filter(|a| a.role.is_some())
+                .flat_map(|a| a.controls.iter())
+                .find(|c| c.channel_index == slot.channel_index)
+                .unwrap();
+            let write = fitted
+                .solved_output
+                .iter()
+                .flat_map(|o| o.writes.iter().flatten())
+                .find(|w| w.channel_index == slot.channel_index);
+            let raw = fitted.proposed_raw[slot.channel_index as usize];
+            resolved.writes.push(NativeControlWrite {
+                slot: *slot,
+                channel_id: metadata.channel_id,
+                function_id: write.map(|w| w.function_id),
+                raw,
+                parked: write.is_none(),
+            });
+            controls.push((
+                slot.channel_index,
+                metadata.channel_id,
+                fitted.native_raw[slot.channel_index as usize],
+                raw,
+            ));
+        }
+        resolved
+            .continuity
+            .instances
+            .push(PositionInstanceContinuity {
+                destination: fitted.instance.destination,
+                compatibility: fitted.instance.compatibility,
+                joints: fitted
+                    .instance
+                    .model
+                    .axes()
+                    .iter()
+                    .map(|a| (a.node_id, fitted.achieved_axes[a.command_index]))
+                    .collect(),
+                controls,
+                fit_memo: fitted.memo.clone(),
+            });
     }
 }
 impl PhysicalFamilyAdapter for PositionAdapter {
@@ -893,556 +1008,3 @@ impl PhysicalFamilyAdapter for PositionAdapter {
 use super::super::programming_projection::hybrid::{
     HybridCapturedPositionProgram, HybridFrameObserver, OwnedHybridProjection,
 };
-struct PendingPosition {
-    target: FixtureId,
-    descriptor: Arc<PositionDescriptor>,
-    previous: Option<PositionContinuity>,
-    program: Option<Arc<PositionProgram>>,
-    destinations: Vec<PositionProgramDestination>,
-}
-struct CapturedPositionPeer {
-    target: FixtureId,
-    requested: Arc<PositionProgram>,
-    captured: Arc<HybridCapturedPositionProgram>,
-    has_requirements: bool,
-}
-/// Short-lived observer for one complete Live or retained branch. It owns evidence only;
-/// no borrowed trace or application state survives an observation callback.
-pub(in crate::runtime) struct PositionFrameObserver<'a> {
-    lane: &'a PhysicalAdapterLane<PositionAdapter>,
-    pending: Vec<PendingPosition>,
-    current: current_cohort::CapturedCurrentCohorts,
-    programs: Vec<CapturedPositionPeer>,
-    active_programs: Arc<[FixtureId]>,
-    /// Physical ownership in this observer's capture, including roots without DMX heads.
-    roots: BTreeMap<Uuid, usize>,
-}
-impl<'a> PositionFrameObserver<'a> {
-    pub fn new(lane: &'a PhysicalAdapterLane<PositionAdapter>) -> Self {
-        Self {
-            lane,
-            pending: Vec::new(),
-            current: Default::default(),
-            programs: Vec::new(),
-            active_programs: Default::default(),
-            roots: Default::default(),
-        }
-    }
-}
-impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameObserver<'_> {
-    fn project_native(
-        &mut self,
-        capture: &light_engine::PreparedOutputFrame,
-        frame_token: &CapturedFrameToken,
-        token: &mut light_engine::PreparedStaticFamilyFrame,
-        sidecars: &[PhysicalHeadResult<PositionAdapter>],
-    ) -> Result<(), TransitionError> {
-        native_rows::project_position_native_rows(capture, frame_token, token, sidecars.iter())
-    }
-
-    fn begin_frame(&mut self, _token: &CapturedFrameToken) -> Result<(), TransitionError> {
-        self.pending.clear();
-        self.current.clear();
-        self.programs.clear();
-        self.active_programs = Default::default();
-        Ok(())
-    }
-
-    fn prepare_current(
-        &mut self,
-        frame: HybridFrameContext<'_>,
-        baseline: &light_engine::PreparedStaticFamilyFrame,
-        protected: &[FixtureId],
-    ) -> Result<(), TransitionError> {
-        self.current.capture(self.lane, frame, baseline, protected)
-    }
-
-    fn static_program_targets(
-        &mut self,
-        frame: HybridFrameContext<'_>,
-        baseline: &light_engine::PreparedStaticFamilyFrame,
-    ) -> Result<Vec<(FixtureId, ProgrammingOwner)>, TransitionError> {
-        if !frame.token.matches_static_frame(baseline) {
-            return Err(invalid("Position static registry belongs to another frame"));
-        }
-        let mut targets = Vec::new();
-        for fixture in frame.capture.snapshot().fixtures.iter() {
-            for target in std::iter::once(fixture.fixture_id)
-                .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
-            {
-                if !matches!(
-                    baseline.value(target, &ProgrammingOwner::Position.key()),
-                    Some(AttributeValue::Position(_))
-                ) {
-                    continue;
-                }
-                match self
-                    .lane
-                    .descriptor(frame, target, ProgrammingOwner::Position)
-                {
-                    Ok(_) => {
-                        if !targets.contains(&(target, ProgrammingOwner::Position)) {
-                            targets.push((target, ProgrammingOwner::Position));
-                        }
-                    }
-                    Err(TransitionError::Requires(_)) => {} // No owned compiled emitter: preserve ordinary baseline output.
-                    Err(error) => return Err(error),
-                }
-            }
-        }
-        Ok(targets)
-    }
-    fn prepare_programs(
-        &mut self,
-        frame: HybridFrameContext<'_>,
-        programs: &[super::super::programming_projection::hybrid::HybridFamilyProgram<'_>],
-    ) -> Result<(), TransitionError> {
-        self.programs.clear();
-        let mut active_programs = Vec::new();
-        for p in programs
-            .iter()
-            .filter(|p| p.owner == ProgrammingOwner::Position)
-        {
-            if p.frame.token != frame.token
-                || self
-                    .programs
-                    .iter()
-                    .any(|program| program.target == p.target)
-            {
-                return Err(invalid(
-                    "Position registry contains a foreign or duplicate program",
-                ));
-            }
-            if !p.samples.is_empty() || p.has_requirements {
-                active_programs.push(p.target);
-            }
-            self.programs.push(CapturedPositionPeer {
-                target: p.target,
-                requested: Arc::new(PositionProgram {
-                    base: p.base.clone(),
-                    samples: p.samples.to_vec().into(),
-                }),
-                has_requirements: p.has_requirements,
-                captured: Arc::new(HybridCapturedPositionProgram::new(
-                    frame.token,
-                    p.target,
-                    p.base,
-                    p.samples,
-                )?),
-            });
-        }
-        self.active_programs = active_programs.into();
-        let snapshot = frame.capture.snapshot();
-        self.roots.clear();
-        for (index, fixture) in snapshot.fixtures.iter().enumerate() {
-            self.roots.insert(fixture.fixture_id.0, index);
-            for head in &fixture.logical_heads {
-                self.roots.insert(head.fixture_id.0, index);
-            }
-        }
-        let mut owners = Vec::with_capacity(self.programs.len());
-        for program in &self.programs {
-            let census = program.captured.registry().point_dependencies();
-            // Root/copy mounting identity is independent of logical emitter ownership.
-            // Keep requirements-only targets and missing Point references in the census.
-            let Some(fixture) = self
-                .roots
-                .get(&program.target.0)
-                .and_then(|index| snapshot.fixtures.get(*index))
-            else {
-                continue;
-            };
-            let destinations = std::iter::once(fixture.fixture_id)
-                .chain(fixture.multipatch.iter().map(|copy| FixtureId(copy.id)))
-                .collect::<Vec<_>>();
-            owners.push(tracking::TrackingOwner {
-                target: program.target,
-                root: fixture.fixture_id,
-                mount_references: destinations
-                    .iter()
-                    .map(|id| (*id, fixture.position_master.map(FixtureId)))
-                    .collect(),
-                destinations,
-                points: census.point_ids().iter().copied().map(FixtureId).collect(),
-                incomplete: census.incomplete(),
-            });
-        }
-        self.lane
-            .adapter()
-            .tracking
-            .borrow_mut()
-            .prepare(frame, &owners)?;
-        Ok(())
-    }
-
-    fn compose_position_batch(
-        &mut self,
-        frame: HybridFrameContext<'_>,
-        composer: &mut dyn super::super::programming_projection::hybrid::HybridPositionBatchComposer<PhysicalHeadResult<PositionAdapter>>,
-    ) -> Result<
-        Option<
-            super::super::programming_projection::hybrid::HybridPositionBatchResult<
-                PhysicalHeadResult<PositionAdapter>,
-            >,
-        >,
-        TransitionError,
-    > {
-        cut_coordinator::compose(self, frame, composer)
-    }
-
-    fn compose_program(
-        &mut self,
-        p: super::super::programming_projection::hybrid::HybridFamilyProgram<'_>,
-        composer: &mut dyn super::super::programming_projection::hybrid::HybridProgramComposer<
-            PhysicalHeadResult<PositionAdapter>,
-        >,
-    ) -> Result<Option<OwnedHybridProjection<PhysicalHeadResult<PositionAdapter>>>, TransitionError>
-    {
-        if p.owner != ProgrammingOwner::Position {
-            return Ok(None);
-        }
-        let (program, captured) = self
-            .programs
-            .iter()
-            .find(|program| program.target == p.target)
-            .map(|program| {
-                (
-                    Arc::clone(&program.requested),
-                    Arc::clone(&program.captured),
-                )
-            })
-            .ok_or_else(|| invalid("Position program was not collected before composition"))?;
-        let descriptor = self.lane.descriptor(p.frame, p.target, p.owner)?;
-        let previous = self.lane.continuity(p.target, p.owner);
-        let mut destinations = Vec::with_capacity(descriptor.instances.len());
-        let mut representative = None;
-        let current = self.current.clone();
-        let active_programs = Arc::clone(&self.active_programs);
-        for instance in &descriptor.instances {
-            let bound = destination::PositionDestinationFrame {
-                adapter: self.lane.adapter(),
-                frame: p.frame,
-                descriptor: &descriptor,
-                target: p.target,
-                instance,
-                previous: previous.as_ref(),
-                current: &current,
-                active_programs: &active_programs,
-            };
-            let adoption = |original: &AttributeValue, address: &DynamicValueAddress| {
-                bound.adopt(original, address)
-            };
-            let pending_start = self.pending.len();
-            let mut evaluation =
-                composer.begin_position(&captured, instance.destination, &adoption)?;
-            let result = match composer.advance_position(&mut evaluation, &bound, &adoption) {
-                Ok(light_dynamics::PositionCompositionProgress::Complete(_)) => composer
-                    .observe_position(&mut evaluation, &mut |observation| {
-                        self.observe(observation)
-                    }),
-                Ok(light_dynamics::PositionCompositionProgress::NeedsMaterialization(request)) => {
-                    // The owned request retains its exact original registry node. Complete
-                    // changing-peer environments must be established by the batch coordinator;
-                    // this bridge never replaces a missing peer with its static underlay.
-                    Err(TransitionError::Requires(request.requirement))
-                }
-                Err(error) => Err(error),
-            };
-            composer.recycle_position(evaluation);
-            self.pending.truncate(pending_start);
-            let row = result?;
-            destinations.push(PositionProgramDestination {
-                destination: instance.destination,
-                value: row.value.clone(),
-                provenance: row.sidecar.provenance.clone(),
-            });
-            if representative.is_none() {
-                representative = Some(row);
-            }
-        }
-        let mut row = representative
-            .ok_or_else(|| invalid("Position program has no physical destinations"))?;
-        let program = if p.samples.is_empty() {
-            None
-        } else {
-            Some(program)
-        };
-        if let Some(program) = &program {
-            row.sidecar.requested = PositionRequest::Program(Arc::clone(program));
-        }
-        self.pending.push(PendingPosition {
-            target: p.target,
-            descriptor,
-            previous,
-            program,
-            destinations,
-        });
-        Ok(Some(row))
-    }
-
-    fn observe(
-        &mut self,
-        o: HybridFamilyObservation<'_>,
-    ) -> Result<
-        (
-            FamilyProjectionMetadata,
-            PhysicalHeadResult<PositionAdapter>,
-        ),
-        TransitionError,
-    > {
-        let descriptor = self.lane.descriptor(o.frame, o.target, o.owner)?;
-        let requested = intent(o.value)?.clone();
-        let fields = self.lane.adapter().consumed_fields(o.owner, o.value)?;
-        let mut sources = DynamicFamilySourceProjection::default();
-        o.project_fields(&fields, &mut sources)?;
-        let provenance = PhysicalProvenance {
-            controls: o.controls_for_fields(&fields),
-            fields,
-            sources,
-        };
-        let metadata = self
-            .lane
-            .adapter()
-            .projection_metadata(o.owner, &provenance);
-        self.pending.push(PendingPosition {
-            target: o.target,
-            descriptor,
-            previous: self.lane.continuity(o.target, o.owner),
-            program: None,
-            destinations: Vec::new(),
-        });
-        Ok((
-            metadata.clone(),
-            PhysicalHeadResult {
-                token: o.frame.token.clone(),
-                target: o.target,
-                owner: o.owner,
-                value: o.value.clone(),
-                writes: Vec::new(),
-                requested: PositionRequest::Intent(requested),
-                achieved: AchievedPosition::default(),
-                quality: PositionQuality::default(),
-                provenance,
-                metadata,
-            },
-        ))
-    }
-    fn finish(
-        &mut self,
-        frame: HybridFrameContext<'_>,
-        rows: &mut Vec<OwnedHybridProjection<PhysicalHeadResult<PositionAdapter>>>,
-        requirements: &[HybridFamilyRequirement],
-    ) -> Result<(), TransitionError> {
-        let requests = rows
-            .iter()
-            .map(|row| {
-                let pending = self
-                    .pending
-                    .iter()
-                    .find(|p| p.target == row.target)
-                    .ok_or_else(|| invalid("missing Position cohort member"))?;
-                Ok(PhysicalRequest {
-                    frame,
-                    target: row.target,
-                    owner: row.owner,
-                    descriptor: pending.descriptor.as_ref(),
-                    value: &row.value,
-                    previous: pending.previous.as_ref(),
-                })
-            })
-            .collect::<Result<Vec<_>, TransitionError>>()?;
-        let snapshot = frame.capture.snapshot();
-        let protected: Vec<_> = requirements
-            .iter()
-            .filter(|r| r.owner == ProgrammingOwner::Position)
-            .filter_map(|r| {
-                self.roots
-                    .get(&r.target.0)
-                    .and_then(|index| snapshot.fixtures.get(*index))
-                    .map(|fixture| fixture.fixture_id)
-            })
-            .collect();
-        let programs = self
-            .pending
-            .iter()
-            .filter_map(|p| {
-                p.program
-                    .as_ref()
-                    .map(|_| (p.target, p.destinations.as_slice()))
-            })
-            .collect::<Vec<_>>();
-        let resolved = self
-            .lane
-            .adapter()
-            .resolve_cohort_programs(&requests, &protected, &programs)?;
-        drop(requests);
-        for (row, mut resolution) in rows.iter_mut().zip(resolved) {
-            let pending = self
-                .pending
-                .iter()
-                .find(|p| p.target == row.target)
-                .unwrap();
-            if let Some(program) = &pending.program {
-                resolution.requested = PositionRequest::Program(Arc::clone(program));
-            }
-            resolution.achieved.destinations = pending.destinations.clone();
-            validate_complete_writes(&pending.descriptor.footprint, &resolution.writes)?;
-            // Unresolved mechanical input protects every peer of this root. A parked
-            // peer is diagnostic output, not a newly accepted fitted pose.
-            let stage = if resolution
-                .achieved
-                .outcomes
-                .iter()
-                .any(|outcome| outcome.input_requirement)
-            {
-                PhysicalAdapterLane::stage_held_resolution
-            } else {
-                PhysicalAdapterLane::stage_resolution
-            };
-            let (metadata, sidecar) = stage(
-                self.lane,
-                frame.token,
-                row.target,
-                row.owner,
-                row.value.clone(),
-                row.sidecar.provenance.clone(),
-                row.metadata.clone(),
-                resolution,
-            )?;
-            row.metadata = metadata;
-            row.sidecar = sidecar;
-        }
-        self.pending.clear();
-        self.current.clear();
-        Ok(())
-    }
-}
-
-/// The existing retained evaluator supplies two isolated branch observers. No Live cache,
-/// held value or accepted continuity enters either retained branch.
-pub(in crate::runtime) struct PositionPreloadObserver<'a> {
-    before: PositionFrameObserver<'a>,
-    after: PositionFrameObserver<'a>,
-}
-impl<'a> PositionPreloadObserver<'a> {
-    pub fn new(lanes: &'a PhysicalPreloadLanes<PositionAdapter>) -> Self {
-        Self {
-            before: PositionFrameObserver::new(
-                lanes.lane(light_engine::PreloadBranch::BeforeRelease),
-            ),
-            after: PositionFrameObserver::new(
-                lanes.lane(light_engine::PreloadBranch::AfterRelease),
-            ),
-        }
-    }
-    fn observer(&mut self, branch: light_engine::PreloadBranch) -> &mut PositionFrameObserver<'a> {
-        match branch {
-            light_engine::PreloadBranch::BeforeRelease => &mut self.before,
-            light_engine::PreloadBranch::AfterRelease => &mut self.after,
-        }
-    }
-}
-impl
-    super::super::retained_preload_hybrid::RetainedHybridFrameObserver<
-        PhysicalHeadResult<PositionAdapter>,
-    > for PositionPreloadObserver<'_>
-{
-    fn project_native(
-        &mut self,
-        branch: light_engine::PreloadBranch,
-        capture: &light_engine::PreparedOutputFrame,
-        frame_token: &CapturedFrameToken,
-        token: &mut light_engine::PreparedStaticFamilyFrame,
-        sidecars: &[PhysicalHeadResult<PositionAdapter>],
-    ) -> Result<(), TransitionError> {
-        self.observer(branch)
-            .project_native(capture, frame_token, token, sidecars)
-    }
-
-    fn begin_frame(
-        &mut self,
-        branch: light_engine::PreloadBranch,
-        token: &CapturedFrameToken,
-    ) -> Result<(), TransitionError> {
-        self.observer(branch).begin_frame(token)
-    }
-    fn prepare_current(
-        &mut self,
-        branch: light_engine::PreloadBranch,
-        frame: HybridFrameContext<'_>,
-        baseline: &light_engine::PreparedStaticFamilyFrame,
-        protected: &[FixtureId],
-    ) -> Result<(), TransitionError> {
-        self.observer(branch)
-            .prepare_current(frame, baseline, protected)
-    }
-    fn static_program_targets(
-        &mut self,
-        branch: light_engine::PreloadBranch,
-        frame: HybridFrameContext<'_>,
-        baseline: &light_engine::PreparedStaticFamilyFrame,
-    ) -> Result<Vec<(FixtureId, ProgrammingOwner)>, TransitionError> {
-        self.observer(branch)
-            .static_program_targets(frame, baseline)
-    }
-    fn prepare_programs(
-        &mut self,
-        branch: light_engine::PreloadBranch,
-        frame: HybridFrameContext<'_>,
-        programs: &[super::super::programming_projection::hybrid::HybridFamilyProgram<'_>],
-    ) -> Result<(), TransitionError> {
-        self.observer(branch).prepare_programs(frame, programs)
-    }
-
-    fn compose_position_batch(
-        &mut self,
-        branch: light_engine::PreloadBranch,
-        frame: HybridFrameContext<'_>,
-        composer: &mut dyn super::super::programming_projection::hybrid::HybridPositionBatchComposer<PhysicalHeadResult<PositionAdapter>>,
-    ) -> Result<
-        Option<
-            super::super::programming_projection::hybrid::HybridPositionBatchResult<
-                PhysicalHeadResult<PositionAdapter>,
-            >,
-        >,
-        TransitionError,
-    > {
-        self.observer(branch)
-            .compose_position_batch(frame, composer)
-    }
-
-    fn compose_program(
-        &mut self,
-        branch: light_engine::PreloadBranch,
-        program: super::super::programming_projection::hybrid::HybridFamilyProgram<'_>,
-        composer: &mut dyn super::super::programming_projection::hybrid::HybridProgramComposer<
-            PhysicalHeadResult<PositionAdapter>,
-        >,
-    ) -> Result<Option<OwnedHybridProjection<PhysicalHeadResult<PositionAdapter>>>, TransitionError>
-    {
-        self.observer(branch).compose_program(program, composer)
-    }
-
-    fn observe(
-        &mut self,
-        branch: light_engine::PreloadBranch,
-        observation: HybridFamilyObservation<'_>,
-    ) -> Result<
-        (
-            FamilyProjectionMetadata,
-            PhysicalHeadResult<PositionAdapter>,
-        ),
-        TransitionError,
-    > {
-        self.observer(branch).observe(observation)
-    }
-    fn finish(
-        &mut self,
-        branch: light_engine::PreloadBranch,
-        frame: HybridFrameContext<'_>,
-        rows: &mut Vec<OwnedHybridProjection<PhysicalHeadResult<PositionAdapter>>>,
-        requirements: &[HybridFamilyRequirement],
-    ) -> Result<(), TransitionError> {
-        self.observer(branch).finish(frame, rows, requirements)
-    }
-}

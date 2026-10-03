@@ -39,23 +39,7 @@ impl Application {
     ) {
         session.pump(now);
         self.adopt_connected_renderer_settings(session);
-        if let Some(workers) = self.media_workers.as_mut() {
-            workers.reconcile(&session.scene);
-            if let Some(renderer) = self.renderer.as_mut() {
-                for frame in workers.drain() {
-                    match renderer.update_media_frame(&frame) {
-                        Ok(true) => self.media_revision = self.media_revision.wrapping_add(1),
-                        Ok(false) => {}
-                        Err(error) => {
-                            self.lasting_failure = Some(format!("media texture: {error}"));
-                        }
-                    }
-                }
-            }
-            self.media_notice = workers.offline_notice();
-        } else {
-            self.media_notice = None;
-        }
+        self.pump_media(session);
         let preserve_external_override =
             is_external_camera_target(self.options.embed, session.source_view.mode)
                 && self.external_camera.local_override();
@@ -69,26 +53,7 @@ impl Application {
             self.options.zoom,
             preserve_external_override,
         );
-        let external_camera_target =
-            is_external_camera_target(self.options.embed, session.source_view.mode);
-        if external_camera_target {
-            let incoming = session
-                .values
-                .external_camera
-                .as_ref()
-                .map(|camera| (camera.as_camera(), camera.stale || !camera.patched));
-            if let Some(camera) = self.external_camera.observe(incoming) {
-                self.camera.adopt(&camera);
-            }
-            if self.external_camera.has_pose() {
-                self.camera_is_local = true;
-            }
-        }
-        let camera_control = if external_camera_target {
-            self.external_camera.status()
-        } else {
-            ui::DmxCameraControlStatus::None
-        };
+        let camera_control = self.follow_external_camera(session);
         let mut view = session.effective_view(&self.preferences);
         if self.camera_is_local {
             view.camera = self.camera.camera(&view.camera, view.mode);
@@ -137,23 +102,7 @@ impl Application {
             view.physics_reset_generation,
         );
         let physics_fault = self.physics.fault(&values);
-        let notice = self
-            .snapshots
-            .notice()
-            .map(|(message, failure)| (message.to_owned(), failure))
-            .or_else(|| {
-                self.lasting_failure
-                    .as_ref()
-                    .map(|failure| (failure.clone(), true))
-            })
-            .or_else(|| {
-                self.media_notice
-                    .as_ref()
-                    .map(|notice| (notice.clone(), false))
-            })
-            .or_else(|| laser_fault.map(|fault| (fault, true)))
-            .or_else(|| effect_fault.map(|fault| (fault, true)))
-            .or_else(|| physics_fault.map(|fault| (fault, true)));
+        let notice = self.frame_notice(laser_fault, effect_fault, physics_fault);
 
         let result = self.render_frame(
             session,
@@ -202,6 +151,76 @@ impl Application {
             scene_ready: !session.scene.emitters.is_empty(),
         };
         self.record_benchmark_frame(&measured, delta, now, event_loop);
+    }
+
+    /// Hand the session's media surfaces to the decode workers and upload what they finished.
+    fn pump_media(&mut self, session: &Session) {
+        if let Some(workers) = self.media_workers.as_mut() {
+            workers.reconcile(&session.scene);
+            if let Some(renderer) = self.renderer.as_mut() {
+                for frame in workers.drain() {
+                    match renderer.update_media_frame(&frame) {
+                        Ok(true) => self.media_revision = self.media_revision.wrapping_add(1),
+                        Ok(false) => {}
+                        Err(error) => {
+                            self.lasting_failure = Some(format!("media texture: {error}"));
+                        }
+                    }
+                }
+            }
+            self.media_notice = workers.offline_notice();
+        } else {
+            self.media_notice = None;
+        }
+    }
+
+    /// Follow the DMX-driven camera when this window is its target, and report its control state.
+    fn follow_external_camera(&mut self, session: &Session) -> ui::DmxCameraControlStatus {
+        let external_camera_target =
+            is_external_camera_target(self.options.embed, session.source_view.mode);
+        if external_camera_target {
+            let incoming = session
+                .values
+                .external_camera
+                .as_ref()
+                .map(|camera| (camera.as_camera(), camera.stale || !camera.patched));
+            if let Some(camera) = self.external_camera.observe(incoming) {
+                self.camera.adopt(&camera);
+            }
+            if self.external_camera.has_pose() {
+                self.camera_is_local = true;
+            }
+        }
+        if external_camera_target {
+            self.external_camera.status()
+        } else {
+            ui::DmxCameraControlStatus::None
+        }
+    }
+
+    /// The one notice the overlay shows this frame, most important first.
+    fn frame_notice(
+        &self,
+        laser_fault: Option<String>,
+        effect_fault: Option<String>,
+        physics_fault: Option<String>,
+    ) -> Option<(String, bool)> {
+        self.snapshots
+            .notice()
+            .map(|(message, failure)| (message.to_owned(), failure))
+            .or_else(|| {
+                self.lasting_failure
+                    .as_ref()
+                    .map(|failure| (failure.clone(), true))
+            })
+            .or_else(|| {
+                self.media_notice
+                    .as_ref()
+                    .map(|notice| (notice.clone(), false))
+            })
+            .or_else(|| laser_fault.map(|fault| (fault, true)))
+            .or_else(|| effect_fault.map(|fault| (fault, true)))
+            .or_else(|| physics_fault.map(|fault| (fault, true)))
     }
 
     #[allow(clippy::too_many_arguments)]

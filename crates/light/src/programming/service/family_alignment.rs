@@ -101,132 +101,19 @@ impl ProgrammingService {
             })
             .transpose()?;
         let initial = if state.family_binding.is_none() {
-            if intent.group_id.is_some()
-                && matches!(
-                    component,
-                    ProgrammingComponent::Pan | ProgrammingComponent::Tilt
-                )
-                && !family_values::position_missing_seed_available(
-                    intent,
-                    environment,
-                    active,
-                    groups,
-                )
-            {
-                return Ok(Some((Vec::new(), held_initial_plan(state))));
-            }
-            let selected = state.fixtures.iter().copied().collect::<HashSet<_>>();
-            let sequential_ranks = intent.group_id.as_ref().map(|id| {
-                environment.group_members[id]
-                    .iter()
-                    .enumerate()
-                    .map(|(rank, id)| (*id, rank))
-                    .collect::<HashMap<_, _>>()
-            });
-            let group_seed = intent
-                .group_id
-                .as_ref()
-                .map(|id| {
-                    family_values::adopt_group_family(
-                        intent,
-                        edits,
-                        environment,
-                        active,
-                        groups,
-                        id,
-                    )
-                })
-                .transpose()?;
-            let fixtures = match intent.group_id.as_ref() {
-                Some(id) => environment.group_members[id]
-                    .iter()
-                    .copied()
-                    .filter(|id| selected.contains(id))
-                    .collect::<Vec<_>>(),
-                None => initial_fixture_members(&state, intent, environment, active),
-            };
-            if fixtures.is_empty() {
-                return Ok(None);
-            }
-            let rank_count = intent
-                .group_id
-                .as_ref()
-                .map(|id| {
-                    environment
-                        .group_rank_counts
-                        .get(id)
-                        .copied()
-                        .unwrap_or(environment.group_members[id].len())
-                })
-                .unwrap_or(fixtures.len());
-            let mut bases = Vec::with_capacity(fixtures.len());
-            for (ordinal, id) in fixtures.iter().enumerate() {
-                let context = captured_context(environment, *id, intent.group_id.as_deref());
-                let rank = if let Some(group) = &intent.group_id {
-                    // A missing map is allowed only for legacy/test sequential membership.
-                    // A partial supplied map is invalid; it must never collapse equal ranks.
-                    match environment.group_ranks.get(group) {
-                        Some(ranks) => *ranks.get(id).ok_or_else(|| {
-                            invalid("Group Align member is missing its authoritative rank")
-                        })?,
-                        None if rank_count == environment.group_members[group].len() => {
-                            sequential_ranks.as_ref().expect("Group ranks")[id]
-                        }
-                        None => {
-                            return Err(invalid(
-                                "spatial Group Align requires authoritative member ranks",
-                            ));
-                        }
-                    }
-                } else {
-                    ordinal
-                };
-                let address = (*id, intent.attribute.clone());
-                let seed = group_seed
-                    .as_ref()
-                    .map(|seed| seed.for_member(*id))
-                    .or_else(|| active.get(&address))
-                    .or_else(|| environment.current_values.get(&address))
-                    .or_else(|| environment.default_values.get(&address));
-                if seed.is_none()
-                    && matches!(
-                        component,
-                        ProgrammingComponent::Pan | ProgrammingComponent::Tilt
-                    )
-                    && context.position_adoption_attempted
-                    && context.solved_angles.is_none()
-                {
-                    return Ok(Some((Vec::new(), held_initial_plan(state))));
-                }
-                let seed = seed.ok_or_else(|| {
-                    invalid("Align requires a complete current or default family")
-                })?;
-                let value = materialize(seed, rank_count, rank, &context)?;
-                bases.push(ProgrammerFamilyAlignmentBase {
-                    fixture_id: *id,
-                    rank,
-                    value,
-                    context,
-                });
-            }
-            if matches!(
+            match initial_family_alignment(
+                &state,
+                intent,
+                edits,
                 component,
-                ProgrammingComponent::Pan | ProgrammingComponent::Tilt
-            ) && bases.iter().any(|base| {
-                matches!(&base.value, AttributeValue::Position(position)
-                        if matches!(position.as_ref(), PositionIntent::Target { .. }))
-                    && base.context.solved_angles.is_none()
-            }) {
-                // Returning None would fall through to an ordinary edit of the addressed
-                // subset. An empty unchanged plan holds the complete Align operation without
-                // establishing a binding, moving its input, or creating an Undo checkpoint.
-                return Ok(Some((Vec::new(), held_initial_plan(state))));
+                environment,
+                active,
+                groups,
+            )? {
+                InitialAlignment::Held => return Ok(Some((Vec::new(), held_initial_plan(state)))),
+                InitialAlignment::Empty => return Ok(None),
+                InitialAlignment::Ready(initial) => Some(initial),
             }
-            Some(ProgrammerFamilyAlignmentInitial {
-                rank_count,
-                bases,
-                group_seed,
-            })
         } else {
             None
         };
@@ -350,6 +237,152 @@ impl ProgrammingService {
         self.programmers
             .reanchor_family_alignment(session, mode, bases)
             .map_err(alignment_error)
+    }
+}
+
+/// How a first Align step starts: held unchanged, not an Align at all, or from its bases.
+enum InitialAlignment {
+    Held,
+    Empty,
+    Ready(ProgrammerFamilyAlignmentInitial),
+}
+
+/// The complete anchors a first Align step captures from its members' current values.
+fn initial_family_alignment(
+    state: &light_programmer::ProgrammerAlignmentState,
+    intent: &ProgrammingValueIntent,
+    edits: &[ComponentEdit],
+    component: ProgrammingComponent,
+    environment: &ProgrammingValuesEnvironment,
+    active: &FixtureValues,
+    groups: &GroupValues,
+) -> Result<InitialAlignment, ActionError> {
+    if intent.group_id.is_some()
+        && matches!(
+            component,
+            ProgrammingComponent::Pan | ProgrammingComponent::Tilt
+        )
+        && !family_values::position_missing_seed_available(intent, environment, active, groups)
+    {
+        return Ok(InitialAlignment::Held);
+    }
+    let selected = state.fixtures.iter().copied().collect::<HashSet<_>>();
+    let sequential_ranks = intent.group_id.as_ref().map(|id| {
+        environment.group_members[id]
+            .iter()
+            .enumerate()
+            .map(|(rank, id)| (*id, rank))
+            .collect::<HashMap<_, _>>()
+    });
+    let group_seed = intent
+        .group_id
+        .as_ref()
+        .map(|id| family_values::adopt_group_family(intent, edits, environment, active, groups, id))
+        .transpose()?;
+    let fixtures = match intent.group_id.as_ref() {
+        Some(id) => environment.group_members[id]
+            .iter()
+            .copied()
+            .filter(|id| selected.contains(id))
+            .collect::<Vec<_>>(),
+        None => initial_fixture_members(state, intent, environment, active),
+    };
+    if fixtures.is_empty() {
+        return Ok(InitialAlignment::Empty);
+    }
+    let rank_count = intent
+        .group_id
+        .as_ref()
+        .map(|id| {
+            environment
+                .group_rank_counts
+                .get(id)
+                .copied()
+                .unwrap_or(environment.group_members[id].len())
+        })
+        .unwrap_or(fixtures.len());
+    let mut bases = Vec::with_capacity(fixtures.len());
+    for (ordinal, id) in fixtures.iter().enumerate() {
+        let context = captured_context(environment, *id, intent.group_id.as_deref());
+        let rank = alignment_rank(
+            environment,
+            intent.group_id.as_ref(),
+            *id,
+            ordinal,
+            rank_count,
+            sequential_ranks.as_ref(),
+        )?;
+        let address = (*id, intent.attribute.clone());
+        let seed = group_seed
+            .as_ref()
+            .map(|seed| seed.for_member(*id))
+            .or_else(|| active.get(&address))
+            .or_else(|| environment.current_values.get(&address))
+            .or_else(|| environment.default_values.get(&address));
+        if seed.is_none()
+            && matches!(
+                component,
+                ProgrammingComponent::Pan | ProgrammingComponent::Tilt
+            )
+            && context.position_adoption_attempted
+            && context.solved_angles.is_none()
+        {
+            return Ok(InitialAlignment::Held);
+        }
+        let seed =
+            seed.ok_or_else(|| invalid("Align requires a complete current or default family"))?;
+        let value = materialize(seed, rank_count, rank, &context)?;
+        bases.push(ProgrammerFamilyAlignmentBase {
+            fixture_id: *id,
+            rank,
+            value,
+            context,
+        });
+    }
+    if matches!(
+        component,
+        ProgrammingComponent::Pan | ProgrammingComponent::Tilt
+    ) && bases.iter().any(|base| {
+        matches!(&base.value, AttributeValue::Position(position)
+                if matches!(position.as_ref(), PositionIntent::Target { .. }))
+            && base.context.solved_angles.is_none()
+    }) {
+        // Returning None would fall through to an ordinary edit of the addressed
+        // subset. An empty unchanged plan holds the complete Align operation without
+        // establishing a binding, moving its input, or creating an Undo checkpoint.
+        return Ok(InitialAlignment::Held);
+    }
+    Ok(InitialAlignment::Ready(ProgrammerFamilyAlignmentInitial {
+        rank_count,
+        bases,
+        group_seed,
+    }))
+}
+
+/// A member's rank: its authoritative Group rank, its sequential Group position, or its order.
+fn alignment_rank(
+    environment: &ProgrammingValuesEnvironment,
+    group: Option<&String>,
+    id: FixtureId,
+    ordinal: usize,
+    rank_count: usize,
+    sequential_ranks: Option<&HashMap<FixtureId, usize>>,
+) -> Result<usize, ActionError> {
+    let Some(group) = group else {
+        return Ok(ordinal);
+    };
+    // A missing map is allowed only for legacy/test sequential membership.
+    // A partial supplied map is invalid; it must never collapse equal ranks.
+    match environment.group_ranks.get(group) {
+        Some(ranks) => Ok(*ranks
+            .get(&id)
+            .ok_or_else(|| invalid("Group Align member is missing its authoritative rank"))?),
+        None if rank_count == environment.group_members[group].len() => {
+            Ok(sequential_ranks.expect("Group ranks")[&id])
+        }
+        None => Err(invalid(
+            "spatial Group Align requires authoritative member ranks",
+        )),
     }
 }
 

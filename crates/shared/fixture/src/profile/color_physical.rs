@@ -187,6 +187,68 @@ pub fn native_color_function_allowed(channel: &FixtureChannel, function: &Channe
                 && function.attribute.0.as_ref() != "fixture.control"))
 }
 
+/// Validate a path's fixed or additive optical source and its emitter bindings.
+fn validate_optical_source<'a, F>(
+    source: &OpticalSource,
+    identities: &mut HashSet<Uuid>,
+    check_binding: &mut F,
+) -> Result<(), ProfileError>
+where
+    F: FnMut(NativeColorBinding) -> Result<&'a ChannelFunction, ProfileError>,
+{
+    match source {
+        OpticalSource::Unknown => {}
+        OpticalSource::Fixed {
+            xyz,
+            spectrum,
+            provenance,
+        } => {
+            if xyz.is_some_and(|v| !finite_xyz(v))
+                || (!spectrum.is_empty() && !spectrum_valid(spectrum, false))
+                || !provenance_valid(provenance)
+            {
+                return Err(invalid(
+                    "fixed optical source data or provenance is invalid",
+                ));
+            }
+        }
+        OpticalSource::Additive { emitters } => {
+            if emitters.is_empty() {
+                return Err(invalid("additive optical source needs emitters"));
+            }
+            for emitter in emitters {
+                let function = check_binding(emitter.binding)?;
+                if !matches!(
+                    function.behavior,
+                    ChannelFunctionBehavior::Continuous { .. }
+                ) || function.dmx_from >= function.dmx_to
+                {
+                    return Err(invalid(
+                        "optical emitter must reference a continuous native function",
+                    ));
+                }
+                if emitter.id.is_nil()
+                    || !identities.insert(emitter.id)
+                    || emitter.name.trim().is_empty()
+                    || !emitter.maximum_level.is_finite()
+                    || emitter.maximum_level <= 0.0
+                    || emitter.maximum_level > 1.0
+                    || !emitter.response_exponent.is_finite()
+                    || emitter.response_exponent <= 0.0
+                    || emitter.xyz.is_some_and(|v| !finite_xyz(v))
+                    || (!emitter.spectrum.is_empty() && !spectrum_valid(&emitter.spectrum, false))
+                    || !provenance_valid(&emitter.provenance)
+                {
+                    return Err(invalid(
+                        "optical emitter identity, data or provenance is invalid",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 impl FixtureMode {
     pub fn validate_color_physical(&self) -> Result<(), ProfileError> {
         let Some(model) = &self.color_physical else {
@@ -210,85 +272,7 @@ impl FixtureMode {
                     "physical color paths need unique identities and existing distinct heads",
                 ));
             }
-            let mut controls = HashSet::new();
-            for id in &path.controls {
-                let channel = self.channels.iter().find(|c| c.id == *id).ok_or_else(|| {
-                    invalid("physical color control references a missing channel")
-                })?;
-                let shared = self
-                    .heads
-                    .iter()
-                    .any(|h| h.id == channel.head_id && h.master_shared);
-                if !controls.insert(*id) || (channel.head_id != path.head_id && !shared) {
-                    return Err(invalid(
-                        "physical color controls must be distinct and belong to this or the shared head",
-                    ));
-                }
-                if channel.functions.is_empty() {
-                    return Err(invalid("native color controls require explicit functions"));
-                }
-            }
-            // Extra emitters added outside the legacy system list still belong to Color.
-            // Shared-head controls require explicit path dependencies: they need not affect
-            // every child optical path (for example plate RGB versus white strobe segments).
-            if self.channels.iter().any(|channel| {
-                channel.head_id == path.head_id
-                    && (is_color_attribute(&channel.fixture_attribute.0)
-                        || is_color_attribute(&channel.attribute.0)
-                        || channel
-                            .functions
-                            .iter()
-                            .any(|f| is_color_attribute(&f.attribute.0)))
-                    && !controls.contains(&channel.id)
-            }) {
-                return Err(invalid(
-                    "physical path omits a declared native Color channel",
-                ));
-            }
-            // A new model cannot silently omit already-declared Color ownership.
-            for system in self
-                .color_systems
-                .iter()
-                .filter(|s| s.head_id == path.head_id)
-            {
-                let ids: Vec<Uuid> = match &system.system {
-                    ColorSystem::Additive { emitters } => {
-                        emitters.iter().map(|e| e.channel_id).collect()
-                    }
-                    ColorSystem::Subtractive {
-                        cyan_channel_id,
-                        magenta_channel_id,
-                        yellow_channel_id,
-                        ..
-                    } => vec![*cyan_channel_id, *magenta_channel_id, *yellow_channel_id],
-                    ColorSystem::HueSaturation {
-                        hue_channel_id,
-                        saturation_channel_id,
-                        intensity_channel_id,
-                    } => [
-                        Some(*hue_channel_id),
-                        Some(*saturation_channel_id),
-                        // An HSI engine driven by the fixture's Intensity channel does not make
-                        // that channel Color-owned: brightness stays Intensity's.
-                        intensity_channel_id.filter(|id| {
-                            self.channels.iter().any(|c| {
-                                c.id == *id
-                                    && (is_color_attribute(&c.fixture_attribute.0)
-                                        || is_color_attribute(&c.attribute.0))
-                            })
-                        }),
-                    ]
-                    .into_iter()
-                    .flatten()
-                    .collect(),
-                    ColorSystem::DiscreteWheel { channel_id, .. } => vec![*channel_id],
-                };
-                if ids.iter().any(|id| !controls.contains(id)) {
-                    return Err(invalid(
-                        "physical path omits an existing color system control",
-                    ));
-                }
-            }
+            let controls = self.color_path_controls(path)?;
             let mut modeled = HashSet::new();
             let mut check_binding = |binding: NativeColorBinding| {
                 if !controls.contains(&binding.channel_id)
@@ -317,57 +301,7 @@ impl FixtureMode {
                 }
                 Ok(function)
             };
-            match &path.source {
-                OpticalSource::Unknown => {}
-                OpticalSource::Fixed {
-                    xyz,
-                    spectrum,
-                    provenance,
-                } => {
-                    if xyz.is_some_and(|v| !finite_xyz(v))
-                        || (!spectrum.is_empty() && !spectrum_valid(spectrum, false))
-                        || !provenance_valid(provenance)
-                    {
-                        return Err(invalid(
-                            "fixed optical source data or provenance is invalid",
-                        ));
-                    }
-                }
-                OpticalSource::Additive { emitters } => {
-                    if emitters.is_empty() {
-                        return Err(invalid("additive optical source needs emitters"));
-                    }
-                    for emitter in emitters {
-                        let function = check_binding(emitter.binding)?;
-                        if !matches!(
-                            function.behavior,
-                            ChannelFunctionBehavior::Continuous { .. }
-                        ) || function.dmx_from >= function.dmx_to
-                        {
-                            return Err(invalid(
-                                "optical emitter must reference a continuous native function",
-                            ));
-                        }
-                        if emitter.id.is_nil()
-                            || !identities.insert(emitter.id)
-                            || emitter.name.trim().is_empty()
-                            || !emitter.maximum_level.is_finite()
-                            || emitter.maximum_level <= 0.0
-                            || emitter.maximum_level > 1.0
-                            || !emitter.response_exponent.is_finite()
-                            || emitter.response_exponent <= 0.0
-                            || emitter.xyz.is_some_and(|v| !finite_xyz(v))
-                            || (!emitter.spectrum.is_empty()
-                                && !spectrum_valid(&emitter.spectrum, false))
-                            || !provenance_valid(&emitter.provenance)
-                        {
-                            return Err(invalid(
-                                "optical emitter identity, data or provenance is invalid",
-                            ));
-                        }
-                    }
-                }
-            }
+            validate_optical_source(&path.source, &mut identities, &mut check_binding)?;
             for filter in &path.filters {
                 let function = check_binding(filter.binding)?;
                 if matches!(function.behavior, ChannelFunctionBehavior::Control { .. }) {
@@ -408,6 +342,92 @@ impl FixtureMode {
             }
         }
         Ok(())
+    }
+
+    /// Collect a path's native controls and prove it owns every declared Color channel and
+    /// existing color-system control of its head.
+    fn color_path_controls(&self, path: &HeadOpticalPath) -> Result<HashSet<Uuid>, ProfileError> {
+        let mut controls = HashSet::new();
+        for id in &path.controls {
+            let channel =
+                self.channels.iter().find(|c| c.id == *id).ok_or_else(|| {
+                    invalid("physical color control references a missing channel")
+                })?;
+            let shared = self
+                .heads
+                .iter()
+                .any(|h| h.id == channel.head_id && h.master_shared);
+            if !controls.insert(*id) || (channel.head_id != path.head_id && !shared) {
+                return Err(invalid(
+                    "physical color controls must be distinct and belong to this or the shared head",
+                ));
+            }
+            if channel.functions.is_empty() {
+                return Err(invalid("native color controls require explicit functions"));
+            }
+        }
+        // Extra emitters added outside the legacy system list still belong to Color.
+        // Shared-head controls require explicit path dependencies: they need not affect
+        // every child optical path (for example plate RGB versus white strobe segments).
+        if self.channels.iter().any(|channel| {
+            channel.head_id == path.head_id
+                && (is_color_attribute(&channel.fixture_attribute.0)
+                    || is_color_attribute(&channel.attribute.0)
+                    || channel
+                        .functions
+                        .iter()
+                        .any(|f| is_color_attribute(&f.attribute.0)))
+                && !controls.contains(&channel.id)
+        }) {
+            return Err(invalid(
+                "physical path omits a declared native Color channel",
+            ));
+        }
+        // A new model cannot silently omit already-declared Color ownership.
+        for system in self
+            .color_systems
+            .iter()
+            .filter(|s| s.head_id == path.head_id)
+        {
+            let ids: Vec<Uuid> = match &system.system {
+                ColorSystem::Additive { emitters } => {
+                    emitters.iter().map(|e| e.channel_id).collect()
+                }
+                ColorSystem::Subtractive {
+                    cyan_channel_id,
+                    magenta_channel_id,
+                    yellow_channel_id,
+                    ..
+                } => vec![*cyan_channel_id, *magenta_channel_id, *yellow_channel_id],
+                ColorSystem::HueSaturation {
+                    hue_channel_id,
+                    saturation_channel_id,
+                    intensity_channel_id,
+                } => [
+                    Some(*hue_channel_id),
+                    Some(*saturation_channel_id),
+                    // An HSI engine driven by the fixture's Intensity channel does not make
+                    // that channel Color-owned: brightness stays Intensity's.
+                    intensity_channel_id.filter(|id| {
+                        self.channels.iter().any(|c| {
+                            c.id == *id
+                                && (is_color_attribute(&c.fixture_attribute.0)
+                                    || is_color_attribute(&c.attribute.0))
+                        })
+                    }),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+                ColorSystem::DiscreteWheel { channel_id, .. } => vec![*channel_id],
+            };
+            if ids.iter().any(|id| !controls.contains(id)) {
+                return Err(invalid(
+                    "physical path omits an existing color system control",
+                ));
+            }
+        }
+        Ok(controls)
     }
 
     pub fn validate_native_color_recipe(

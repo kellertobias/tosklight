@@ -5,8 +5,8 @@
 //! engine finalizer; completion restores the exact requested Direct recipe (fallback replay).
 use super::super::super::physical_adapter::color::DirectReplayOutcome;
 use super::super::super::physical_adapter::color::profiles::{rgbal, rgbw, rgbwauv};
+use super::super::super::physical_adapter::color::tests::direct::{catalogue, direct};
 use super::super::super::physical_adapter::color::tests::intent;
-use super::super::super::physical_adapter::color::tests_direct::{catalogue, direct};
 use super::super::super::physical_adapter::*;
 use super::color_direct_transition::{Rig, is_semantic, semantic_value, uv_amount};
 use super::*;
@@ -155,7 +155,7 @@ fn missing_original_model_uses_the_valid_recorded_estimate() {
     let mut rig = Rig::new(|_, _| from.clone(), &[&b]);
     assert!(
         rig.catalogue
-            .resolve(&super::super::super::physical_adapter::color::tests_direct::identity(&a))
+            .resolve(&super::super::super::physical_adapter::color::tests::direct::identity(&a))
             .is_err(),
         "A is absent from the generation"
     );
