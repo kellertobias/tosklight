@@ -4,6 +4,11 @@ use crate::light_benchmark::{
         BenchmarkScenario, FixtureInventoryEntry, GROUP_ID, SLOTS_PER_UNIVERSE,
         ScenarioFixtureInventory,
     },
+    semantic_programming::{
+        SemanticBuild, intensity_starts, live_bench, set_semantic_bases, start_dynamics,
+    },
+    semantic_runner::{LiveScenario, LiveWorkloadDescription},
+    semantic_workload::OMITTED,
 };
 use chrono::{TimeZone, Utc};
 use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, SessionId};
@@ -52,12 +57,16 @@ struct DemoLayout {
 }
 
 impl FixtureTemplate {
-    pub(super) fn load(
+    /// `semantic` applies the runtime profile compatibility the real patch compiler applies, so
+    /// derived Color and Position models exist exactly as on a desk. The legacy workloads keep
+    /// the raw resolved definition they were baselined with.
+    pub(super) fn load_with(
         package_dir: &Path,
         manufacturer: &'static str,
         name: &'static str,
         mode: &'static str,
         package: &'static str,
+        semantic: bool,
     ) -> Result<Self, String> {
         let path = package_dir.join(package);
         let bytes = fs::read(&path)
@@ -75,6 +84,9 @@ impl FixtureTemplate {
         profile.photograph_asset = None;
         profile.stage_icon_asset = None;
         profile.model_asset = None;
+        if semantic {
+            light_fixture::apply_runtime_profile_compatibility(&mut profile);
+        }
         let mode_id = profile
             .modes
             .iter()
@@ -108,49 +120,58 @@ impl FixtureTemplate {
     }
 }
 
-pub(super) fn load_templates(package_dir: &Path) -> Result<DemoTemplates, String> {
+pub(super) fn load_templates_with(
+    package_dir: &Path,
+    semantic: bool,
+) -> Result<DemoTemplates, String> {
     Ok(DemoTemplates {
-        sunstrip: Arc::new(FixtureTemplate::load(
+        sunstrip: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "Showtec",
             "Sunstrip LED RGB 42206",
             "30 Channel",
             "showtec--sunstrip-led-rgb-42206.toskfixture",
+            semantic,
         )?),
-        ledwash: Arc::new(FixtureTemplate::load(
+        ledwash: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "ROBE",
             "Robin 600X LEDWash",
             "Mode 1",
             "robe--robin-600x-ledwash.toskfixture",
+            semantic,
         )?),
-        dls: Arc::new(FixtureTemplate::load(
+        dls: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "ROBE",
             "Robin DLS Profile",
             "Mode 1",
             "robe--robin-dls-profile.toskfixture",
+            semantic,
         )?),
-        ledbeam: Arc::new(FixtureTemplate::load(
+        ledbeam: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "ROBE",
             "Robin LEDBeam 150",
             "Mode 1 – Standard 16-bit",
             "robe--robin-ledbeam-150.toskfixture",
+            semantic,
         )?),
-        rgb_three: Arc::new(FixtureTemplate::load(
+        rgb_three: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "Generic",
             "RGB LED",
             "RGB virtual dimmer",
             "generic--rgb-led.toskfixture",
+            semantic,
         )?),
-        rgb_four: Arc::new(FixtureTemplate::load(
+        rgb_four: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "Generic",
             "RGB LED",
             "RGBD 8-bit dimmer last",
             "generic--rgb-led.toskfixture",
+            semantic,
         )?),
     })
 }
@@ -160,13 +181,14 @@ pub fn build(
     protocol: ProtocolSelection,
     loopback_destination: Option<SocketAddr>,
     package_dir: &Path,
+    semantic: Option<SemanticBuild>,
 ) -> Result<BenchmarkScenario, String> {
     if config.universes != UNIVERSES as u16 {
         return Err(
             "the sustained benchmark show requires the 32-universe hard-floor profile".into(),
         );
     }
-    let layout = prepare_layout(package_dir)?;
+    let layout = prepare_layout(package_dir, semantic.is_some())?;
 
     let logical_start = benchmark_start();
     let clock = Arc::new(ManualClock::new(logical_start));
@@ -178,6 +200,14 @@ pub fn build(
         .iter()
         .map(|fixture| fixture.fixture_id)
         .collect::<Vec<_>>();
+    let programmable = fixtures
+        .iter()
+        .flat_map(|fixture| {
+            std::iter::once(fixture.fixture_id)
+                .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
+        })
+        .collect::<Vec<_>>();
+    let starts = semantic.map(|_| intensity_starts(&fixture_ids));
     let groups = demo_groups(&fixture_ids);
     let group_ids = groups
         .iter()
@@ -186,10 +216,16 @@ pub fn build(
     let (cue_list, playback) = demo_playback_for_groups(&group_ids);
     let output_routes = routes(config.universes, protocol, loopback_destination);
     let packet_count = output_routes.len();
-    let engine = Engine::new(programmers.clone());
+    let engine = Arc::new(Engine::new(programmers.clone()));
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: fixtures.into(),
+            dynamics: starts
+                .iter()
+                .flatten()
+                .map(|start| start.definition.clone())
+                .collect::<Vec<_>>()
+                .into(),
             cue_lists: vec![cue_list].into(),
             playbacks: vec![playback].into(),
             routes: output_routes.into(),
@@ -218,6 +254,37 @@ pub fn build(
                 )
             }),
     );
+    let live = match (semantic, starts) {
+        (Some(options), Some(starts)) => {
+            set_semantic_bases(&programmers, session, &programmable)?;
+            start_dynamics(&programmers, session, &starts)?;
+            let description = LiveWorkloadDescription {
+                kind: "sustained_show_live_transaction",
+                typed_lane_attributes: vec!["intensity".into()],
+                semantic_base_targets: programmable.len(),
+                started_dynamics: starts.len(),
+                animated_targets: fixture_ids.len(),
+                manifest_sha256: None,
+                workload_id: None,
+                expected_dirty_targets: None,
+                expected_moving_points: None,
+                harness_rig_height_mm: None,
+                omitted_from_live_transaction: OMITTED,
+            };
+            let bench = live_bench(
+                Arc::clone(&engine),
+                starts.into_iter().map(|start| start.definition),
+                options.rate_hz,
+                options.publish,
+            )?;
+            Some(LiveScenario {
+                bench,
+                tracking: None,
+                description,
+            })
+        }
+        _ => None,
+    };
 
     Ok(BenchmarkScenario {
         engine,
@@ -244,15 +311,15 @@ pub fn build(
         dynamic_attribute: AttributeKey::intensity(),
         dynamic_overlaps_static_or_programmer: true,
         programmer_assignment_fraction: "1/4 of physical fixtures",
-        dynamic: Some(super::scenario::BenchmarkDynamic::intensity(
-            &fixture_ids,
-            logical_start,
-        )),
+        dynamic: live
+            .is_none()
+            .then(|| super::scenario::BenchmarkDynamic::intensity(&fixture_ids, logical_start)),
+        live,
     })
 }
 
-fn prepare_layout(package_dir: &Path) -> Result<DemoLayout, String> {
-    let templates = load_templates(package_dir)?;
+fn prepare_layout(package_dir: &Path, semantic: bool) -> Result<DemoLayout, String> {
+    let templates = load_templates_with(package_dir, semantic)?;
     let mut universes = (0..UNIVERSES)
         .map(|_| Vec::<Arc<FixtureTemplate>>::new())
         .collect::<Vec<_>>();
@@ -414,22 +481,42 @@ pub(super) fn patched_fixture(
             )),
         })
         .collect();
+    let mut fixture = patched_definition(
+        fixture_id,
+        Some(fixture_number),
+        format!("{} {}", template.name, fixture_number),
+        template.definition.as_ref().clone(),
+    );
+    fixture.universe = Some(universe);
+    fixture.address = Some(address);
+    fixture.split_patches = vec![SplitPatch {
+        split: 1,
+        universe: Some(universe),
+        address: Some(address),
+    }];
+    fixture.logical_heads = logical_heads;
+    fixture
+}
+
+/// An unpatched fixture of `definition` at the stage origin, with every option at its default.
+pub(super) fn patched_definition(
+    fixture_id: FixtureId,
+    fixture_number: Option<u32>,
+    name: String,
+    definition: FixtureDefinition,
+) -> PatchedFixture {
     PatchedFixture {
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id,
-        fixture_number: Some(fixture_number),
+        fixture_number,
         virtual_fixture_number: None,
-        name: format!("{} {}", template.name, fixture_number),
-        definition: template.definition.as_ref().clone(),
-        universe: Some(universe),
-        address: Some(address),
-        split_patches: vec![SplitPatch {
-            split: 1,
-            universe: Some(universe),
-            address: Some(address),
-        }],
+        name,
+        definition,
+        universe: None,
+        address: None,
+        split_patches: vec![],
         layer_id: "default".into(),
         note: None,
         position_master: None,
@@ -437,7 +524,7 @@ pub(super) fn patched_fixture(
         internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
-        logical_heads,
+        logical_heads: vec![],
         multipatch: vec![],
         group_masters_enabled: true,
         grand_master_enabled: true,
@@ -612,6 +699,7 @@ mod tests {
             ProtocolSelection::ArtNet,
             None,
             &package_dir,
+            None,
         )
         .unwrap();
 

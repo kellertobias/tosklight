@@ -29,7 +29,9 @@ use full_control::persistent_fat_values;
 pub(in crate::runtime) use full_control::{
     DynamicPlaybackControl, fully_controlled_dynamic_playbacks,
 };
-pub(in crate::runtime) use output_transaction::{LiveFamilyAdapters, dynamic_output_frame};
+pub(in crate::runtime) use output_transaction::{
+    LiveFamilyAdapters, OutputRenderSource, dynamic_output_frame,
+};
 pub(in crate::runtime) use transition_events::dynamic_transition_events;
 
 type DynamicProgrammerValues = Vec<(Uuid, i16, light_dynamics::DynamicAddressValue)>;

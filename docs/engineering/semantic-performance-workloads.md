@@ -20,6 +20,8 @@ Dynamics use pool numbers from 9501, clear of the capacity rig's 9001–9020.
 | `tools/semantic-performance-workload.mjs` | Workload builder, manifest, deterministic tracking inputs, CLI |
 | `tools/semantic-performance-report.mjs` | Build/binary/host identity, evidence model, claims |
 | `tools/semantic-source-manifest.mjs` | Sorted path/content-hash manifest of implementation sources (TL-604) |
+| `tools/run-semantic-output-benchmark.mjs` | TL-596 paired runner: identified builds, alternated rounds, measured reports and the explicit gate table |
+| `apps/light-headless/src/bin/light_benchmark/semantic_*.rs` | TL-596 semantic scenarios of `light-benchmark` through the production Live transaction |
 | `tests/bench/performance/semanticPerformanceWorkload.ts` | Read-only bridge: builds the workload from the desk's actual `/api/v2/patch` snapshot |
 | `tools/semantic-performance-*.test.mjs` | Contract and smoke tests (run by `npm run test:architecture`) |
 
@@ -219,6 +221,81 @@ Tests:
 node --test tools/semantic-performance-workload.test.mjs tools/semantic-performance-report.test.mjs
 npm run test:architecture   # includes the same tests
 ```
+
+## Measured runs through the Live transaction (TL-596)
+
+`light-benchmark` renders semantic scenarios through `light_headless_runtime::output_benchmark::
+LiveOutputBench`, a narrow released-benchmark seam over the same `dynamic_output_frame` boundary
+as the scheduler's `render_tick`. Production's opt-in engages the all-family adapters (Position,
+Color/UV, Focus/Zoom). Programmer `DynamicOn` values start the Dynamics exactly as
+`DynamicsService::start` expands them. The committed frame is published into a
+`VisualizationFrameHub`. The seam leaves out the ordered Playback unit of work, timecode and
+internal audio, Hold and raw overrides, and network or USB send; the runner encodes routes as it
+does for the legacy path. Every report names these omissions.
+
+Scenarios:
+
+- `--semantic` with `--headless-stress-fixtures 2000|4000` or `--sustained-show`: the
+  established capacity workloads with the same fixtures, Dynamic count and lane count, but with
+  typed lanes. The stress tiers run Intensity plus recipe red/green/blue plus Angle Pan/Tilt. The
+  sustained show runs its Intensity Dynamics through the Dynamics runtime. Every animated
+  target gets a static semantic Colour and Angle base, and fixture profiles get the runtime
+  compatibility the patch compiler applies.
+- `--semantic-workload DIR`: the TL-564 workload from its input directory, which holds the
+  manifest, the workload, the tracking streams and the `patch.json` the synthetic rig was
+  built from. The patch carries no addresses or locations. The harness packs universes, keeps
+  Points unpatched at their tracked centre and puts the fixture grid at `--rig-height-mm`
+  (default 9 m, above the Point volume).
+  - `--tracking-hz N --tracking-scenario static-points|small-subset|all-points-move` injects
+    the stream's newest due sample with `Engine::set_tracking_frame` at each output tick,
+    outside the timed pipeline. This is the PSN receiver's boundary, not a PSN socket.
+  - `--static-bases-only` starts none of the Dynamics, so unchanged targets must reuse their
+    solves.
+  - `--readout-consumers N --slow-consumer-ms M` adds threads that read every published frame,
+    its physical sidecars and its accepted Colour results.
+  - `--no-publish` skips publication.
+
+Each semantic scenario report carries a `semantic` section with the following:
+
+- Phase distributions: `prepared_capture`, `dynamics_and_family_transaction` and
+  `publication`. `RenderTotal` alone excludes capture and is never quoted on its own.
+- Per-frame deltas of the Live lanes' counters: Position fits, memo hits and candidate
+  evaluations; Colour resolves and fits; optics resolves.
+- The tracking census accepted with each frame.
+- Descriptor and fitter compiles and generation changes inside the measured window.
+- Tracking-to-output latency.
+- The consumer read counts.
+
+A value the run could not observe is `null`, never 0.
+
+Build both binaries with their own target directories and an empty frontend directory for a
+pre-semantic snapshot. Capture the source manifest when you build, then run the paired runner:
+
+```sh
+node --input-type=module -e "import fs from 'node:fs'; import { collectSourceManifest } from './tools/semantic-source-manifest.mjs'; fs.writeFileSync(process.argv[1], JSON.stringify(collectSourceManifest({ root: process.cwd() })));" \
+  "$(npm run --silent artifact-path -- tmp)/candidate-source-manifest.json"
+CARGO_TARGET_DIR=$PWD/.artifacts/build/cargo cargo build --release --locked --no-default-features \
+  -p light-headless --bin light-benchmark
+node tools/run-semantic-output-benchmark.mjs --rounds 3 \
+  --candidate-binary .artifacts/build/cargo/release/light-benchmark \
+  --candidate-source-manifest "$(npm run --silent artifact-path -- tmp)/candidate-source-manifest.json" \
+  --baseline-root <pre-semantic snapshot> --baseline-binary <snapshot>/.artifacts/build/cargo/release/light-benchmark \
+  --baseline-source-manifest <snapshot manifest>
+```
+
+The runner alternates three suites round by round on one host:
+
+- `legacy`: baseline against candidate on the established gates.
+- `capacity`: typed lanes against the candidate's own scalar control.
+- `workload`: the TL-564 matrix of output rate × tracking rate × dirty scenario, the
+  static-bases memo gates, consumers and publication off.
+
+It writes raw runs and `summary.json` with the gate table to
+`.artifacts/performance/semantic-output/<timestamp>/`. It also writes one measured
+`createSemanticPerformanceReport` per workload run next to the workload inputs. `--suites`,
+`--output-hz`, `--tracking-hz`, `--seconds` and `--out` narrow a run. The gate table uses only
+thresholds that already exist (`evaluateGates`), and `acceptance.granted` stays false. Results
+and the failed gates are in `engine-render-performance-series.md`.
 
 ## Current library limits
 

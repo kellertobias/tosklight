@@ -52,6 +52,10 @@ pub(super) use dynamic_projection::physical_adapter::{
     position::{PositionAdapter, tests as position_test_support},
 };
 mod dynamic_reconciliation;
+mod live_output_bench;
+pub use live_output_bench::{
+    LiveOutputBench, LiveOutputFrame, LiveOutputWork, ReadoutConsumerReport, ReadoutConsumers,
+};
 mod restored_dynamic_candidate;
 pub(in crate::runtime) use restored_dynamic_candidate::{
     RestoredDynamicCandidate, prepare_restored_dynamic_candidate,

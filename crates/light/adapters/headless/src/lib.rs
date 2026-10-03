@@ -8,6 +8,14 @@ mod tolerant_json;
 
 pub use runtime::run;
 
+/// TL-596: narrow released-benchmark seam over the production Live output transaction
+/// (`dynamic_output_frame` with the all-family adapters), for `light-benchmark` only.
+pub mod output_benchmark {
+    pub use crate::runtime::{
+        LiveOutputBench, LiveOutputFrame, LiveOutputWork, ReadoutConsumerReport, ReadoutConsumers,
+    };
+}
+
 /// Narrow released-benchmark seam using the same Patch DTO conversion as the HTTP adapter.
 pub fn benchmark_patch_application_command(
     show_id: light_core::ShowId,

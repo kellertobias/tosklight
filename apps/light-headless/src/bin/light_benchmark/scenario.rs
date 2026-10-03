@@ -56,7 +56,7 @@ pub struct ScenarioFixtureInventory {
 }
 
 pub struct BenchmarkScenario {
-    pub engine: Engine,
+    pub engine: Arc<Engine>,
     pub clock: Arc<ManualClock>,
     pub logical_start: chrono::DateTime<Utc>,
     pub universes: u16,
@@ -79,6 +79,8 @@ pub struct BenchmarkScenario {
     pub(super) dynamic_overlaps_static_or_programmer: bool,
     pub(super) programmer_assignment_fraction: &'static str,
     pub(super) dynamic: Option<BenchmarkDynamic>,
+    /// TL-596: semantic scenarios render through the production Live transaction instead.
+    pub live: Option<crate::light_benchmark::semantic_runner::LiveScenario>,
 }
 
 impl BenchmarkScenario {
@@ -149,7 +151,7 @@ impl BenchmarkScenario {
         let dynamic =
             BenchmarkDynamic::for_attribute(&fixture_ids, dynamic_attribute.clone(), logical_start);
         Ok(Self {
-            engine,
+            engine: Arc::new(engine),
             clock,
             logical_start,
             universes: config.universes,
@@ -188,6 +190,7 @@ impl BenchmarkScenario {
             dynamic_overlaps_static_or_programmer: false,
             programmer_assignment_fraction: "1/4 of mapped slots",
             dynamic: Some(dynamic),
+            live: None,
         })
     }
 
@@ -481,61 +484,9 @@ impl BenchmarkDynamic {
         started_at: chrono::DateTime<Utc>,
         instance_count: usize,
     ) -> Result<Self, String> {
-        if instance_count == 0 || targets.len() < instance_count {
-            return Err(
-                "production Dynamics require one nonempty target partition per instance".into(),
-            );
-        }
-        let base = benchmark_dynamic_definition(targets, AttributeKey::intensity());
-        let variants = {
-            let [pwm, middle, random] = benchmark_dynamic_variants(&base);
-            [base, pwm, middle, random]
-        };
-        let attributes = [
-            AttributeKey::intensity(),
-            AttributeKey("color.red".into()),
-            AttributeKey("color.green".into()),
-            AttributeKey("color.blue".into()),
-            AttributeKey("pan".into()),
-            AttributeKey("tilt".into()),
-        ];
-        let definitions = (0..instance_count)
-            .map(|index| {
-                let mut definition = variants[index % variants.len()].clone();
-                definition.id = fixed_uuid(0x5b, index as u64 + 1);
-                definition.pool_number = index as u16 + 1;
-                definition.name = format!("Headless production Dynamic {}", index + 1);
-                let partition = targets
-                    .iter()
-                    .enumerate()
-                    .filter(|(target_index, _)| target_index % instance_count == index)
-                    .map(|(_, target)| *target)
-                    .collect::<Vec<_>>();
-                definition.target_binding =
-                    DynamicTargetBinding::FrozenTargets { targets: partition };
-                let seed = definition.lanes[0].clone();
-                definition.lanes = attributes
-                    .iter()
-                    .enumerate()
-                    .map(|(lane_index, attribute)| {
-                        let mut lane = seed.clone();
-                        lane.id = fixed_uuid(0x5c + index as u64, lane_index as u64 + 1);
-                        let body = lane.legacy_mut().expect("legacy benchmark fixture");
-                        body.attribute = attribute.clone();
-                        for point in &mut body.keyframes.points {
-                            if let ScalarSource::Preset {
-                                attribute: source_attribute,
-                                ..
-                            } = &mut point.source
-                            {
-                                *source_attribute = attribute.clone();
-                            }
-                        }
-                        lane
-                    })
-                    .collect();
-                definition
-            })
+        let definitions = production_definitions(targets, instance_count)?
+            .into_iter()
+            .map(|(definition, _)| definition)
             .collect();
         let count = targets.len() as f32;
         Ok(Self {
@@ -652,6 +603,80 @@ impl BenchmarkDynamic {
         }
         ContributionBatch::new(samples)
     }
+}
+
+/// The headless-stress Dynamics: `instance_count` partitions of `targets`, cycling the four
+/// legacy variants, each with the six lanes Intensity, `color.red/green/blue`, `pan` and `tilt`.
+/// Returns each definition with its target partition.
+pub(super) fn production_definitions(
+    targets: &[FixtureId],
+    instance_count: usize,
+) -> Result<Vec<(DynamicDefinition, Vec<FixtureId>)>, String> {
+    if instance_count == 0 || targets.len() < instance_count {
+        return Err(
+            "production Dynamics require one nonempty target partition per instance".into(),
+        );
+    }
+    let base = benchmark_dynamic_definition(targets, AttributeKey::intensity());
+    let variants = {
+        let [pwm, middle, random] = benchmark_dynamic_variants(&base);
+        [base, pwm, middle, random]
+    };
+    let attributes = [
+        AttributeKey::intensity(),
+        AttributeKey("color.red".into()),
+        AttributeKey("color.green".into()),
+        AttributeKey("color.blue".into()),
+        AttributeKey("pan".into()),
+        AttributeKey("tilt".into()),
+    ];
+    Ok((0..instance_count)
+        .map(|index| {
+            let mut definition = variants[index % variants.len()].clone();
+            definition.id = fixed_uuid(0x5b, index as u64 + 1);
+            definition.pool_number = index as u16 + 1;
+            definition.name = format!("Headless production Dynamic {}", index + 1);
+            let partition = targets
+                .iter()
+                .enumerate()
+                .filter(|(target_index, _)| target_index % instance_count == index)
+                .map(|(_, target)| *target)
+                .collect::<Vec<_>>();
+            definition.target_binding = DynamicTargetBinding::FrozenTargets {
+                targets: partition.clone(),
+            };
+            let seed = definition.lanes[0].clone();
+            definition.lanes = attributes
+                .iter()
+                .enumerate()
+                .map(|(lane_index, attribute)| {
+                    let mut lane = seed.clone();
+                    lane.id = fixed_uuid(0x5c + index as u64, lane_index as u64 + 1);
+                    let body = lane.legacy_mut().expect("legacy benchmark fixture");
+                    body.attribute = attribute.clone();
+                    for point in &mut body.keyframes.points {
+                        if let ScalarSource::Preset {
+                            attribute: source_attribute,
+                            ..
+                        } = &mut point.source
+                        {
+                            *source_attribute = attribute.clone();
+                        }
+                    }
+                    lane
+                })
+                .collect();
+            (definition, partition)
+        })
+        .collect())
+}
+
+/// The sustained-show Intensity Dynamic and its three variants, as `BenchmarkDynamic::intensity`
+/// samples them.
+pub(super) fn intensity_definitions(targets: &[FixtureId]) -> [DynamicDefinition; 4] {
+    let definition = benchmark_dynamic_definition(targets, AttributeKey::intensity());
+    let [pwm, middle, random] = benchmark_dynamic_variants(&definition);
+    [definition, pwm, middle, random]
 }
 
 fn benchmark_dynamic_definition(

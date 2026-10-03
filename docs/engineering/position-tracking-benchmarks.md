@@ -23,6 +23,10 @@ operator readout, physical lamp or frame-rate acceptance. TL-596 keeps the follo
 The TL-564 workload builders, the TL-604 source fingerprinting and the existing performance
 gates are reused or left unchanged. None of them are duplicated.
 
+TL-596 measured those gates through the production Live transaction. The results, including
+the exact dirty sets and memo reuse under real tracking streams, are in
+`engine-render-performance-series.md` ("Semantic output, October 2026").
+
 ## Files
 
 | File | Role |

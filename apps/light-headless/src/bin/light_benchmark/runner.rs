@@ -1,3 +1,4 @@
+use crate::light_benchmark::semantic_runner::LiveRecorder;
 use crate::light_benchmark::{
     arguments::{Arguments, Expectation, ProfileConfig, Transport},
     loopback::LoopbackDelivery,
@@ -10,6 +11,7 @@ use crate::light_benchmark::{
     statistics::distribution,
 };
 use chrono::Duration as ChronoDuration;
+use light_headless_runtime::output_benchmark::LiveOutputWork;
 use light_output::{DmxFrame, EncodedPacket, Protocol, encode_routes};
 use std::{
     collections::HashMap,
@@ -26,6 +28,8 @@ const REPORTING_TARGET_HZ: u16 = 44;
 pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
     let profiles = if arguments.headless_stress_fixtures.is_some() {
         vec![crate::light_benchmark::arguments::BenchmarkProfile::HeadlessStress]
+    } else if arguments.semantic.workload_dir.is_some() {
+        vec![crate::light_benchmark::arguments::BenchmarkProfile::SemanticWorkload]
     } else {
         arguments.profiles.clone()
     };
@@ -41,7 +45,12 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         if let Some(fixtures_per_universe) = arguments.fixtures_per_universe {
             config.fixtures_per_universe = fixtures_per_universe;
         }
-        if let Some(fixture_count) = arguments.headless_stress_fixtures {
+        if let Some(directory) = arguments.semantic.workload_dir.as_deref() {
+            eprintln!(
+                "benchmarking semantic workload {directory} at {} Hz",
+                config.rate_hz
+            );
+        } else if let Some(fixture_count) = arguments.headless_stress_fixtures {
             eprintln!(
                 "benchmarking headless stress: {fixture_count} mixed shipped-mode fixtures at {} Hz",
                 config.rate_hz
@@ -119,26 +128,48 @@ fn run_scenario(
     required_minimum_hz: u16,
 ) -> Result<ScenarioReport, String> {
     let (loopback, scenario) = prepare_scenario(arguments, config)?;
+    let consumers = scenario
+        .live
+        .as_ref()
+        .filter(|_| arguments.semantic.readout_consumers > 0)
+        .map(|live| {
+            live.bench.spawn_readout_consumers(
+                arguments.semantic.readout_consumers,
+                Duration::from_millis(arguments.semantic.slow_consumer_millis),
+            )
+        });
     // Zeroed here and read straight after, so one scenario's phase costs are not the running total
     // of every scenario and diagnostic before it.
     let timed = execute_timed_run(arguments, config, &scenario, loopback.as_ref())?;
+    let consumer_report = consumers.map(|consumers| consumers.finish());
     let render_phase_microseconds = light_engine::render_phases_enabled().then(|| {
         light_engine::accumulated_microseconds()
             .into_iter()
             .collect()
     });
-    let state = timed.state;
+    let mut state = timed.state;
+    let semantic = scenario.live.as_ref().map(|live| {
+        std::mem::take(&mut state.live).report(
+            live,
+            consumer_report,
+            arguments.semantic.slow_consumer_millis,
+        )
+    });
     let warmup_ticks = timed.warmup_ticks;
     let warmup_elapsed = timed.warmup_elapsed;
     let expected_ticks = timed.expected_ticks;
     let elapsed = timed.elapsed;
     let measurement_resources = timed.measurement_resources;
-    let sampled_contributions = crate::light_benchmark::sampled::measure(
-        &scenario,
-        warmup_ticks + expected_ticks,
-        config.rate_hz,
-        u64::from(config.rate_hz) * SAMPLED_DIAGNOSTIC_SECONDS,
-    )?;
+    let sampled_contributions = if scenario.live.is_some() {
+        crate::light_benchmark::sampled::not_run_for_semantic()
+    } else {
+        crate::light_benchmark::sampled::measure(
+            &scenario,
+            warmup_ticks + expected_ticks,
+            config.rate_hz,
+            u64::from(config.rate_hz) * SAMPLED_DIAGNOSTIC_SECONDS,
+        )?
+    };
     let loopback_summary = loopback.map(LoopbackDelivery::finish);
     let achieved = state.completed_ticks as f64 / elapsed.as_secs_f64();
     let frame_rate = frame_rate_report(
@@ -224,6 +255,7 @@ fn run_scenario(
         },
         sampled_contributions,
         loopback: loopback_summary,
+        semantic,
     })
 }
 
@@ -250,9 +282,10 @@ fn execute_timed_run(
         run_tick(
             scenario,
             loopback,
-            &mut state.sequences,
+            &mut state,
             warmup_ticks,
             config.rate_hz,
+            false,
         )?;
         warmup_ticks += 1;
     }
@@ -288,9 +321,10 @@ fn execute_timed_run(
         let sample = run_tick(
             scenario,
             loopback,
-            &mut state.sequences,
+            &mut state,
             warmup_ticks + tick,
             config.rate_hz,
+            true,
         )?;
         previous_pipeline_completion = sample.pipeline_completed_at;
         if sample.pipeline_completed_at > deadline {
@@ -332,6 +366,7 @@ fn prepare_scenario(
             arguments.protocol,
             destination,
             std::path::Path::new(package_dir),
+            semantic_build(arguments, config),
         )?
     } else if arguments.sustained_show {
         let package_dir = arguments
@@ -343,11 +378,43 @@ fn prepare_scenario(
             arguments.protocol,
             destination,
             std::path::Path::new(package_dir),
+            semantic_build(arguments, config),
+        )?
+    } else if let Some(directory) = arguments.semantic.workload_dir.as_deref() {
+        let package_dir = arguments
+            .fixture_package_dir
+            .as_deref()
+            .ok_or_else(|| "--semantic-workload requires --fixture-package-dir".to_owned())?;
+        crate::light_benchmark::semantic_workload::build(
+            &crate::light_benchmark::semantic_workload::WorkloadOptions {
+                directory: std::path::Path::new(directory),
+                package_dir: std::path::Path::new(package_dir),
+                tracking_hz: arguments.semantic.tracking_hz,
+                tracking_scenario: arguments.semantic.tracking_scenario.key(),
+                rate_hz: config.rate_hz,
+                publish: arguments.semantic.publish,
+                static_bases_only: arguments.semantic.static_bases_only,
+                rig_height_mm: arguments.semantic.rig_height_mm,
+            },
+            arguments.protocol,
+            destination,
         )?
     } else {
         BenchmarkScenario::build(config, arguments.protocol, destination)?
     };
     Ok((loopback, scenario))
+}
+
+fn semantic_build(
+    arguments: &Arguments,
+    config: ProfileConfig,
+) -> Option<crate::light_benchmark::semantic_programming::SemanticBuild> {
+    arguments.semantic.typed_lanes.then_some(
+        crate::light_benchmark::semantic_programming::SemanticBuild {
+            rate_hz: config.rate_hz,
+            publish: arguments.semantic.publish,
+        },
+    )
 }
 
 #[derive(Default)]
@@ -367,6 +434,8 @@ struct TickState {
     checksum: u64,
     full_universe_assertions: u64,
     completed_ticks_by_second: Vec<u64>,
+    live: LiveRecorder,
+    live_work: LiveOutputWork,
 }
 
 impl TickState {
@@ -410,31 +479,57 @@ struct TickSample {
 fn run_tick(
     scenario: &BenchmarkScenario,
     loopback: Option<&LoopbackDelivery>,
-    sequences: &mut HashMap<(Protocol, u16), u8>,
+    state: &mut TickState,
     logical_tick: u64,
     rate_hz: u16,
+    measured: bool,
 ) -> Result<TickSample, String> {
     let logical_nanos = logical_tick.saturating_mul(1_000_000_000) / u64::from(rate_hz);
     let logical_time = scenario.logical_start
         + ChronoDuration::nanoseconds(i64::try_from(logical_nanos).unwrap_or(i64::MAX));
     scenario.clock.set(logical_time);
+    // A receiver publishes outside the output thread; the newest due sample is installed here,
+    // before the timed pipeline starts.
+    let tracking_age = scenario.live.as_ref().and_then(|live| {
+        live.tracking
+            .as_ref()
+            .map(|feed| feed.inject(&scenario.engine, logical_nanos / 1_000))
+    });
     let total_started = Instant::now();
     let render_started = Instant::now();
-    let dynamic = scenario.dynamic_batch(logical_time);
-    let rendered = match dynamic.as_ref() {
-        Some(dynamic) => scenario
-            .engine
-            .render_with_contribution_batches(Default::default(), std::slice::from_ref(dynamic)),
-        None => scenario.engine.render(Default::default()),
-    }
-    .map_err(|error| format!("render benchmark frame: {error}"))?;
+    let live_frame = scenario
+        .live
+        .as_ref()
+        .map(|live| live.bench.render(Default::default(), &[]))
+        .transpose()
+        .map_err(|error| format!("render semantic benchmark frame: {error}"))?;
+    let legacy_frame = if live_frame.is_none() {
+        let dynamic = scenario.dynamic_batch(logical_time);
+        Some(
+            match dynamic.as_ref() {
+                Some(dynamic) => scenario.engine.render_with_contribution_batches(
+                    Default::default(),
+                    std::slice::from_ref(dynamic),
+                ),
+                None => scenario.engine.render(Default::default()),
+            }
+            .map_err(|error| format!("render benchmark frame: {error}"))?,
+        )
+    } else {
+        None
+    };
+    let rendered = live_frame
+        .as_ref()
+        .map(|frame| &frame.rendered)
+        .or(legacy_frame.as_ref())
+        .ok_or("no frame was rendered")?;
     let render = render_started.elapsed();
     let encode_started = Instant::now();
     let packets = encode_routes(
         &rendered.routes,
         &rendered.universes,
         &rendered.patched_slots,
-        sequences,
+        &mut state.sequences,
         CID,
         SOURCE_NAME,
         100,
@@ -459,6 +554,14 @@ fn run_tick(
     )?;
     let checksum = checksum(&rendered.universes, &packets);
     black_box(checksum);
+    if let Some(frame) = &live_frame {
+        if measured {
+            state
+                .live
+                .record(frame, state.live_work, tracking_age, total);
+        }
+        state.live_work = frame.work;
+    }
     let validation = validation_started.elapsed();
     Ok(TickSample {
         total,

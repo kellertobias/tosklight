@@ -9,6 +9,10 @@ mod report;
 mod runner;
 mod sampled;
 mod scenario;
+mod semantic_arguments;
+mod semantic_programming;
+mod semantic_runner;
+mod semantic_workload;
 mod statistics;
 mod sustained_show;
 

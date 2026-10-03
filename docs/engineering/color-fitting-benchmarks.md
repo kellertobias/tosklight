@@ -23,7 +23,9 @@ The output is a synthetic, sequential fit workload. It is not any of the followi
 - frame-rate acceptance.
 
 TL-596 keeps the end-to-end output deadlines, paired builds, dirty-work gates and fixed
-full-rig gates. The benchmark sets no thresholds.
+full-rig gates. The benchmark sets no thresholds. TL-596's results are in
+`engine-render-performance-series.md` ("Semantic output, October 2026"). Measured there, an
+unchanged Colour target is fitted again on every frame.
 
 ## Files
 

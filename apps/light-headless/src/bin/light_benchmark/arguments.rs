@@ -17,6 +17,8 @@ pub enum BenchmarkProfile {
     #[serde(rename = "low_power_8")]
     LowPower8,
     HeadlessStress,
+    /// TL-596: a TL-564 semantic workload through the production Live transaction.
+    SemanticWorkload,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -69,6 +71,7 @@ pub struct Arguments {
     pub sustained_show: bool,
     pub headless_stress_fixtures: Option<usize>,
     pub fixture_package_dir: Option<String>,
+    pub semantic: super::semantic_arguments::SemanticArguments,
 }
 
 pub enum ParseOutcome {
@@ -126,7 +129,7 @@ impl BenchmarkProfile {
                 rate_hz: 40,
                 fixtures_per_universe: 1,
             },
-            Self::HeadlessStress => ProfileConfig {
+            Self::HeadlessStress | Self::SemanticWorkload => ProfileConfig {
                 profile: self,
                 expectation: Expectation::InformationalCapacity,
                 universes: 1,
@@ -164,6 +167,7 @@ impl Default for Arguments {
             sustained_show: false,
             headless_stress_fixtures: None,
             fixture_package_dir: None,
+            semantic: Default::default(),
         }
     }
 }
@@ -254,6 +258,7 @@ impl Arguments {
                     parsed.fixture_package_dir = Some(path);
                 }
                 "--help" | "-h" => return Ok(ParseOutcome::Help),
+                _ if parsed.semantic.parse_option(&argument, &mut arguments)? => {}
                 _ => return Err(format!("unknown argument: {argument}")),
             }
         }
@@ -268,10 +273,17 @@ impl Arguments {
                     .into(),
             );
         }
+        parsed
+            .semantic
+            .validate(parsed.sustained_show || parsed.headless_stress_fixtures.is_some())?;
         Ok(ParseOutcome::Run(parsed))
     }
 
-    pub const fn help() -> &'static str {
+    pub fn help() -> String {
+        Self::established_help().to_owned() + super::semantic_arguments::SemanticArguments::HELP
+    }
+
+    const fn established_help() -> &'static str {
         "Usage: light-benchmark [OPTIONS]\n\
          \n\
          Release-only render-through-protocol-encoding benchmark. JSON is written to stdout.\n\
