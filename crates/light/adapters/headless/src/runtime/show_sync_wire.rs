@@ -164,7 +164,8 @@ pub(super) fn patch_fixture_document(
     fixture: &application::PatchFixtureProjection,
 ) -> Result<serde_json::Value, String> {
     let projection = super::show_patch_wire::wire_fixture(fixture);
-    serde_json::to_value(patch_input(projection)).map_err(|error| error.to_string())
+    serde_json::to_value(light_patch_wire::patch_input(projection))
+        .map_err(|error| error.to_string())
 }
 
 pub(super) fn patch_fixture_candidate(
@@ -173,61 +174,4 @@ pub(super) fn patch_fixture_candidate(
     let input: patch_wire::PatchFixtureInput = serde_json::from_value(document)
         .map_err(|error| format!("patched fixture document is invalid: {error}"))?;
     super::show_patch_wire::application_fixture(input)
-}
-
-fn patch_input(projection: patch_wire::PatchFixtureProjection) -> patch_wire::PatchFixtureInput {
-    patch_wire::PatchFixtureInput {
-        fixture_id: projection.fixture_id,
-        fixture_number: projection.fixture_number,
-        virtual_fixture_number: projection.virtual_fixture_number,
-        name: projection.name,
-        profile_id: projection.profile_id,
-        profile_revision: projection.profile_revision,
-        mode_id: projection.mode_id,
-        split_patches: projection.split_patches,
-        layer_id: projection.layer_id,
-        direct_control: projection.direct_control,
-        internal_bindings: projection.internal_bindings,
-        location: projection.location,
-        scenery_size_metres: projection.scenery_size_metres,
-        scenery_options: projection.scenery_options,
-        model_scale: projection.model_scale,
-        rotation: projection.rotation,
-        note: projection.note,
-        position_master: projection.position_master,
-        multipatch: projection
-            .multipatch
-            .into_iter()
-            .map(|copy| patch_wire::PatchMultiPatchInput {
-                id: copy.id,
-                name: copy.name,
-                split_patches: copy.split_patches,
-                location: copy.location,
-                scenery_size_metres: copy.scenery_size_metres,
-                rotation: copy.rotation,
-                invert_pan: copy.invert_pan,
-                invert_tilt: copy.invert_tilt,
-                bracket_angle: copy.bracket_angle,
-                shaper_angle: copy.shaper_angle,
-                installed_appearance: copy.installed_appearance,
-            })
-            .collect(),
-        group_masters_enabled: projection.group_masters_enabled,
-        grand_master_enabled: projection.grand_master_enabled,
-        invert_pan: projection.invert_pan,
-        invert_tilt: projection.invert_tilt,
-        bracket_angle: projection.bracket_angle,
-        shaper_angle: projection.shaper_angle,
-        installed_appearance: projection.installed_appearance,
-        move_in_black_enabled: projection.move_in_black_enabled,
-        move_in_black_delay_millis: projection.move_in_black_delay_millis,
-        highlight_overrides: projection
-            .highlight_overrides
-            .into_iter()
-            .map(|value| patch_wire::PatchHighlightOverrideInput {
-                channel_id: value.channel_id,
-                raw_value: value.raw_value,
-            })
-            .collect(),
-    }
 }

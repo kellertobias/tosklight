@@ -33,7 +33,8 @@ pub use portable::{
     strip_zero_u64_echo,
 };
 pub use show_store::{
-    AtomicObjectDelete, AtomicObjectWrite, ShowStore, initialise_show, validate_show_file,
+    AtomicObjectDelete, AtomicObjectWrite, ObjectStamp, ShowStore, initialise_show,
+    validate_show_file,
 };
 
 pub(crate) use connection::set_schema_version;

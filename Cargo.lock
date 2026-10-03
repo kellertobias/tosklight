@@ -3662,6 +3662,7 @@ dependencies = [
  "light-media",
  "light-mvr",
  "light-output",
+ "light-patch-wire",
  "light-playback",
  "light-programmer",
  "light-psn-wire",
@@ -3725,6 +3726,18 @@ dependencies = [
  "socket2 0.6.5",
  "tokio",
  "tokio-util",
+]
+
+[[package]]
+name = "light-patch-wire"
+version = "0.1.0"
+dependencies = [
+ "light-application",
+ "light-core",
+ "light-fixture",
+ "light-wire",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -8281,6 +8294,7 @@ dependencies = [
  "viz-planning",
  "viz-project",
  "viz-scene",
+ "viz-sync",
  "zip",
 ]
 
@@ -8431,6 +8445,29 @@ dependencies = [
  "pollster",
  "viz-helper",
  "wgpu",
+]
+
+[[package]]
+name = "viz-sync"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "futures-util",
+ "light-application",
+ "light-core",
+ "light-fixture",
+ "light-patch-wire",
+ "light-show",
+ "light-wire",
+ "parking_lot",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite 0.28.0",
+ "uuid",
+ "viz-document",
 ]
 
 [[package]]
