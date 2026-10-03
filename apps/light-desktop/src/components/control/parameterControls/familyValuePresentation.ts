@@ -1,21 +1,23 @@
 import type {
 	ProgrammingAttributeValue,
 	ProgrammingColorComponent,
+	ProgrammingComponent,
+	ProgrammingComponentDescriptor,
+	ProgrammingScalarIntent,
+	ProgrammingTargetReference,
+} from "../../../api/familyEncoderModels";
+import type {
 	ProgrammingColorIntent,
 	ProgrammingColorProgram,
 	ProgrammingColorXyz,
-	ProgrammingComponent,
-	ProgrammingComponentDescriptor,
 	ProgrammingNativeColorIdentity,
 	ProgrammingNativeColorRecipe,
 	ProgrammingOpeningConvention,
 	ProgrammingPhysicalDataQuality,
 	ProgrammingPortableColorEstimate,
 	ProgrammingPositionIntent,
-	ProgrammingScalarIntent,
-	ProgrammingTargetReference,
 	ProgrammingZoomIntent,
-} from "../../../api/generated/light-wire";
+} from "../../../api/programmingIntentModels";
 
 /**
  * Operator readouts of *requested* Position, Color, Focus and Zoom family values.

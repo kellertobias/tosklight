@@ -18,7 +18,7 @@ import type {
 	FixtureGdtfImportPreview,
 	FixtureImportRequirement,
 } from "../../../api/client/fixtures";
-import type { FixtureDefinition, FixtureProfile } from "../../../api/types";
+import type { FixtureDefinition } from "../../../api/types";
 import { useAttributeConfigurationActions } from "../../../features/attributeConfiguration/AttributeConfigurationActions";
 import { useAttributeRegistry } from "../../../features/deskSnapshot/DeskSnapshotState";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
@@ -721,181 +721,165 @@ function CustomAttributeImportFields({
 }
 
 export function FixtureImportDialogs({
-	pendingGdtf,
-	busy,
-	error,
 	modal,
-	close,
-	confirmGdtfMappings,
-	confirmPackageMappings,
-	importGdtfFile,
-	importPackage,
-	mappingCandidates,
-	mappings,
-	requirements,
-	setMapping,
-	activationGroupOptions,
-	beginCustomAttribute,
-	cancelCustomAttribute,
-	createCustomAttribute,
-	customAttributeDraft,
-	editCustomAttribute,
-	placementOptions,
+	...props
 }: FixtureImportDialogsProps) {
 	return (
 		<>
-			{modal === "gdtf" && (
-				<ModalRegistration onClose={close}>
-					<div className="stacked-modal-layer">
-						<section className="nested-modal gdtf-import-modal">
-							<ModalTitleBar
-								title="Import GDTF"
-								closeLabel="Close Import GDTF"
-								onClose={close}
-							/>
-							<p>
-								Select a GDTF archive. Every DMX mode will be imported into the
-								desk-wide fixture library.
-							</p>
-							{error && <p role="alert">{error}</p>}
-							{!pendingGdtf ? (
-								<RootConfinedFilePickerButton
-									variant="primary"
-									disabled={busy}
-									label={busy ? "Reading GDTF…" : "Choose GDTF file"}
-									allowedExtensions={["gdtf"]}
-									onFiles={(files) => importGdtfFile(files[0])}
-								/>
-							) : (
-								<>
-									<p>
-										{pendingGdtf.profile.manufacturer}{" "}
-										{pendingGdtf.profile.name} ·{" "}
-										{pendingGdtf.profile.modes.length}{" "}
-										{pendingGdtf.profile.modes.length === 1 ? "mode" : "modes"}
-									</p>
-									{pendingGdtf.expectedRevision > 0 && (
-										<p>
-											Creates a new library revision. Patched fixtures keep
-											their current revision.
-										</p>
-									)}
-									{pendingGdtf.diagnostics.length > 0 && (
-										<div className="gdtf-import-diagnostics" role="status">
-											<p>Import limitations</p>
-											<ul>
-												{pendingGdtf.diagnostics.map((item, index) => (
-													<li key={`${item.node}:${index}`}>
-														<strong>{item.node}</strong>: {item.message}
-													</li>
-												))}
-											</ul>
-										</div>
-									)}
-									{requirements.length > 0 && (
-										<p>
-											Map each stable GDTF source attribute to an existing
-											canonical or custom attribute. These choices are
-											remembered for later GDTF imports on this desk.
-										</p>
-									)}
-									<AttributeMappingFields
-										requirements={requirements}
-										mappingCandidates={mappingCandidates}
-										mappings={mappings}
-										setMapping={setMapping}
-										activationGroupOptions={activationGroupOptions}
-										beginCustomAttribute={beginCustomAttribute}
-										cancelCustomAttribute={cancelCustomAttribute}
-										createCustomAttribute={createCustomAttribute}
-										customAttributeDraft={customAttributeDraft}
-										editCustomAttribute={editCustomAttribute}
-										placementOptions={placementOptions}
-										busy={busy}
-									/>
-									<Button
-										variant="primary"
-										disabled={
-											busy ||
-											requirements.some(
-												(requirement) => !mappings[requirement.attribute],
-											)
-										}
-										onClick={() => void confirmGdtfMappings()}
-									>
-										{busy
-											? "Importing…"
-											: requirements.length
-												? "Import and remember mappings"
-												: "Import fixture"}
-									</Button>
-								</>
-							)}
-						</section>
-					</div>
-				</ModalRegistration>
-			)}
-			{modal === "package" && (
-				<ModalRegistration onClose={close}>
-					<div className="stacked-modal-layer">
-						<section className="nested-modal fixture-package-import-modal">
-							<ModalTitleBar
-								title="Import fixture"
-								closeLabel="Close Import fixture"
-								onClose={close}
-							/>
-							<p>
-								Select a transferable .toskfixture package. Its modes,
-								photograph, stage icon, and 3D model travel together.
-							</p>
-							{error && <p role="alert">{error}</p>}
-							{requirements.length === 0 ? (
-								<RootConfinedFilePickerButton
-									variant="primary"
-									disabled={busy}
-									label={busy ? "Importing…" : "Choose fixture package"}
-									allowedExtensions={["toskfixture"]}
-									onFiles={(files) => importPackage(files[0])}
-								/>
-							) : (
-								<>
-									<p>
-										Map each package attribute to a compatible configured
-										descriptor, or create and place a custom attribute here.
-									</p>
-									<AttributeMappingFields
-										requirements={requirements}
-										mappingCandidates={mappingCandidates}
-										mappings={mappings}
-										setMapping={setMapping}
-										activationGroupOptions={activationGroupOptions}
-										beginCustomAttribute={beginCustomAttribute}
-										cancelCustomAttribute={cancelCustomAttribute}
-										createCustomAttribute={createCustomAttribute}
-										customAttributeDraft={customAttributeDraft}
-										editCustomAttribute={editCustomAttribute}
-										placementOptions={placementOptions}
-										busy={busy}
-									/>
-									<Button
-										variant="primary"
-										disabled={
-											busy ||
-											requirements.some(
-												(requirement) => !mappings[requirement.attribute],
-											)
-										}
-										onClick={() => void confirmPackageMappings()}
-									>
-										{busy ? "Importing…" : "Import with mappings"}
-									</Button>
-								</>
-							)}
-						</section>
-					</div>
-				</ModalRegistration>
-			)}
+			{modal === "gdtf" && <GdtfImportDialog {...props} />}
+			{modal === "package" && <PackageImportDialog {...props} />}
 		</>
+	);
+}
+
+type FixtureImportDialogProps = Omit<FixtureImportDialogsProps, "modal">;
+
+function GdtfImportDialog(props: FixtureImportDialogProps) {
+	const {
+		pendingGdtf,
+		busy,
+		error,
+		close,
+		confirmGdtfMappings,
+		importGdtfFile,
+		mappings,
+		requirements,
+	} = props;
+	return (
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer">
+				<section className="nested-modal gdtf-import-modal">
+					<ModalTitleBar
+						title="Import GDTF"
+						closeLabel="Close Import GDTF"
+						onClose={close}
+					/>
+					<p>
+						Select a GDTF archive. Every DMX mode will be imported into the
+						desk-wide fixture library.
+					</p>
+					{error && <p role="alert">{error}</p>}
+					{!pendingGdtf ? (
+						<RootConfinedFilePickerButton
+							variant="primary"
+							disabled={busy}
+							label={busy ? "Reading GDTF…" : "Choose GDTF file"}
+							allowedExtensions={["gdtf"]}
+							onFiles={(files) => importGdtfFile(files[0])}
+						/>
+					) : (
+						<>
+							<p>
+								{pendingGdtf.profile.manufacturer} {pendingGdtf.profile.name} ·{" "}
+								{pendingGdtf.profile.modes.length}{" "}
+								{pendingGdtf.profile.modes.length === 1 ? "mode" : "modes"}
+							</p>
+							{pendingGdtf.expectedRevision > 0 && (
+								<p>
+									Creates a new library revision. Patched fixtures keep their
+									current revision.
+								</p>
+							)}
+							{pendingGdtf.diagnostics.length > 0 && (
+								<div className="gdtf-import-diagnostics" role="status">
+									<p>Import limitations</p>
+									<ul>
+										{pendingGdtf.diagnostics.map((item, index) => (
+											<li key={`${item.node}:${index}`}>
+												<strong>{item.node}</strong>: {item.message}
+											</li>
+										))}
+									</ul>
+								</div>
+							)}
+							{requirements.length > 0 && (
+								<p>
+									Map each stable GDTF source attribute to an existing canonical
+									or custom attribute. These choices are remembered for later
+									GDTF imports on this desk.
+								</p>
+							)}
+							<AttributeMappingFields {...props} />
+							<Button
+								variant="primary"
+								disabled={
+									busy ||
+									requirements.some(
+										(requirement) => !mappings[requirement.attribute],
+									)
+								}
+								onClick={() => void confirmGdtfMappings()}
+							>
+								{busy
+									? "Importing…"
+									: requirements.length
+										? "Import and remember mappings"
+										: "Import fixture"}
+							</Button>
+						</>
+					)}
+				</section>
+			</div>
+		</ModalRegistration>
+	);
+}
+
+function PackageImportDialog(props: FixtureImportDialogProps) {
+	const {
+		busy,
+		error,
+		close,
+		confirmPackageMappings,
+		importPackage,
+		mappings,
+		requirements,
+	} = props;
+	return (
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer">
+				<section className="nested-modal fixture-package-import-modal">
+					<ModalTitleBar
+						title="Import fixture"
+						closeLabel="Close Import fixture"
+						onClose={close}
+					/>
+					<p>
+						Select a transferable .toskfixture package. Its modes, photograph,
+						stage icon, and 3D model travel together.
+					</p>
+					{error && <p role="alert">{error}</p>}
+					{requirements.length === 0 ? (
+						<RootConfinedFilePickerButton
+							variant="primary"
+							disabled={busy}
+							label={busy ? "Importing…" : "Choose fixture package"}
+							allowedExtensions={["toskfixture"]}
+							onFiles={(files) => importPackage(files[0])}
+						/>
+					) : (
+						<>
+							<p>
+								Map each package attribute to a compatible configured
+								descriptor, or create and place a custom attribute here.
+							</p>
+							<AttributeMappingFields {...props} />
+							<Button
+								variant="primary"
+								disabled={
+									busy ||
+									requirements.some(
+										(requirement) => !mappings[requirement.attribute],
+									)
+								}
+								onClick={() => void confirmPackageMappings()}
+							>
+								{busy ? "Importing…" : "Import with mappings"}
+							</Button>
+						</>
+					)}
+				</section>
+			</div>
+		</ModalRegistration>
 	);
 }
 

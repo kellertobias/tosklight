@@ -9,7 +9,7 @@ import type {
 	DynamicReferenceProjection,
 	ProgrammingDynamicSemanticValue,
 } from "../../api/types";
-import type { ProgrammingComponent } from "../../api/generated/light-wire";
+import type { ProgrammingComponent } from "../../api/familyEncoderModels";
 import type { ProgrammerValueIntentOperation } from "../../api/programmingComponentEditWire";
 import type { AttributeValue } from "../../api/types/playback";
 

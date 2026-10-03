@@ -66,21 +66,25 @@ export function ColorCalibrationDialog() {
 	);
 }
 
-export function ColorCalibrationEditor({
-	identity,
-	initial,
-	mode,
-	identities,
-	onClose,
-	onSave,
-}: {
+interface ColorCalibrationEditorProps {
 	identity: string;
 	initial: InstalledColorCalibration | null;
 	mode: FixtureMode | null;
 	identities: readonly NativeColorIdentity[];
 	onClose(): void;
 	onSave(value: InstalledColorCalibration | null): Promise<boolean>;
-}) {
+}
+
+/** Draft, validity and save lifecycle of one lamp's Color calibration editor. */
+function useColorCalibrationDraft({
+	initial,
+	identities,
+	onClose,
+	onSave,
+}: Pick<
+	ColorCalibrationEditorProps,
+	"initial" | "identities" | "onClose" | "onSave"
+>) {
 	const [draft, setDraft] = useState<InstalledColorCalibration | null>(() =>
 		initial ? structuredClone(initial) : null,
 	);
@@ -130,6 +134,42 @@ export function ColorCalibrationEditor({
 			setBusy(false);
 		}
 	};
+	return {
+		draft,
+		setDraft,
+		busy,
+		saveError,
+		setSaveError,
+		stale,
+		error,
+		changed,
+		close,
+		updatePath,
+		save,
+	};
+}
+
+export function ColorCalibrationEditor({
+	identity,
+	initial,
+	mode,
+	identities,
+	onClose,
+	onSave,
+}: ColorCalibrationEditorProps) {
+	const {
+		draft,
+		setDraft,
+		busy,
+		saveError,
+		setSaveError,
+		stale,
+		error,
+		changed,
+		close,
+		updatePath,
+		save,
+	} = useColorCalibrationDraft({ initial, identities, onClose, onSave });
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
@@ -181,41 +221,14 @@ export function ColorCalibrationEditor({
 									setDraft({ ...draft, revision: Number(event.target.value) });
 							}}
 						/>
-						{mode?.color_physical?.paths.map((path) => {
-							const source = identities.find((id) => id.path_id === path.id);
-							if (!source)
-								return (
-									<p key={path.id}>
-										Current source identity is unavailable for this optical
-										path.
-									</p>
-								);
-							const value = draft?.paths.find(
-								(p) => p.source_identity.path_id === path.id,
-							) ?? { source_identity: source, emitters: [], measurements: [] };
-							return (
-								<ColorPathEditor
-									key={path.id}
-									mode={mode}
-									path={path}
-									value={value}
-									onChange={updatePath}
-								/>
-							);
-						})}
+						<ColorCalibrationPaths
+							mode={mode}
+							identities={identities}
+							draft={draft}
+							onChange={updatePath}
+						/>
 					</fieldset>
-					{stale && (
-						<details>
-							<summary>Retained calibration source</summary>
-							{draft?.paths.map((p) => (
-								<p key={p.source_identity.path_id}>
-									Profile {p.source_identity.profile_id}, revision{" "}
-									{p.source_identity.profile_revision}; {p.emitters.length} gain
-									corrections and {p.measurements.length} observations.
-								</p>
-							))}
-						</details>
-					)}
+					{stale && <RetainedCalibrationSource draft={draft} />}
 					<Button
 						disabled={busy || draft === null}
 						onClick={() => {
@@ -234,6 +247,64 @@ export function ColorCalibrationEditor({
 				</section>
 			</div>
 		</ModalRegistration>
+	);
+}
+
+/** One editor per authored optical path, seeded from the current source identity. */
+function ColorCalibrationPaths({
+	mode,
+	identities,
+	draft,
+	onChange,
+}: {
+	mode: FixtureMode | null;
+	identities: readonly NativeColorIdentity[];
+	draft: InstalledColorCalibration | null;
+	onChange(value: InstalledColorPathCalibration): void;
+}) {
+	return (
+		<>
+			{mode?.color_physical?.paths.map((path) => {
+				const source = identities.find((id) => id.path_id === path.id);
+				if (!source)
+					return (
+						<p key={path.id}>
+							Current source identity is unavailable for this optical path.
+						</p>
+					);
+				const value = draft?.paths.find(
+					(p) => p.source_identity.path_id === path.id,
+				) ?? { source_identity: source, emitters: [], measurements: [] };
+				return (
+					<ColorPathEditor
+						key={path.id}
+						mode={mode}
+						path={path}
+						value={value}
+						onChange={onChange}
+					/>
+				);
+			})}
+		</>
+	);
+}
+
+function RetainedCalibrationSource({
+	draft,
+}: {
+	draft: InstalledColorCalibration | null;
+}) {
+	return (
+		<details>
+			<summary>Retained calibration source</summary>
+			{draft?.paths.map((p) => (
+				<p key={p.source_identity.path_id}>
+					Profile {p.source_identity.profile_id}, revision{" "}
+					{p.source_identity.profile_revision}; {p.emitters.length} gain
+					corrections and {p.measurements.length} observations.
+				</p>
+			))}
+		</details>
 	);
 }
 
@@ -285,23 +356,15 @@ function Evidence({
 	);
 }
 
-function ColorPathEditor({
-	mode,
-	path,
-	value,
-	onChange,
-}: {
-	mode: FixtureMode;
-	path: HeadOpticalPath;
-	value: InstalledColorPathCalibration;
-	onChange(value: InstalledColorPathCalibration): void;
-}) {
-	const head = mode.heads.find((h) => h.id === path.head_id)?.name ?? "Head";
-	const emitters = path.source.type === "additive" ? path.source.emitters : [];
-	const nextEmitter = emitters.find(
-		(e) => !value.emitters.some((c) => c.emitter_id === e.id),
-	);
-	const recipeTemplate = path.controls.flatMap((id) => {
+type NativeRecipe =
+	InstalledColorPathCalibration["measurements"][number]["recipe"];
+
+/** The editing template for a new observation: each control's default native value. */
+function nativeRecipeTemplate(
+	mode: FixtureMode,
+	path: HeadOpticalPath,
+): NativeRecipe {
+	return path.controls.flatMap((id) => {
 		const channel = mode.channels.find((c) => c.id === id);
 		const functions =
 			channel?.functions.filter((f) =>
@@ -328,51 +391,37 @@ function ColorPathEditor({
 				]
 			: [];
 	});
+}
+
+function ColorPathEditor({
+	mode,
+	path,
+	value,
+	onChange,
+}: {
+	mode: FixtureMode;
+	path: HeadOpticalPath;
+	value: InstalledColorPathCalibration;
+	onChange(value: InstalledColorPathCalibration): void;
+}) {
+	const head = mode.heads.find((h) => h.id === path.head_id)?.name ?? "Head";
+	const emitters = path.source.type === "additive" ? path.source.emitters : [];
+	const nextEmitter = emitters.find(
+		(e) => !value.emitters.some((c) => c.emitter_id === e.id),
+	);
+	const recipeTemplate = nativeRecipeTemplate(mode, path);
 	return (
 		<fieldset>
 			<legend>{head}</legend>
-			{value.emitters.map((gain, index) => {
-				const emitter = emitters.find((e) => e.id === gain.emitter_id);
-				const label = `${head} ${emitter?.name ?? "Unknown emitter"}`;
-				const set = (change: Partial<typeof gain>) =>
-					onChange({
-						...value,
-						emitters: value.emitters.map((g, i) =>
-							i === index ? { ...g, ...change } : g,
-						),
-					});
-				return (
-					<div key={gain.emitter_id}>
-						<NumberField
-							label={`${label} output gain`}
-							allowDecimal
-							step={0.01}
-							min={0}
-							value={gain.output_gain}
-							onChange={(event) =>
-								set({ output_gain: Number(event.target.value) })
-							}
-						/>
-						<Evidence
-							label={label}
-							value={gain.provenance}
-							onChange={(provenance) => set({ provenance })}
-						/>
-						<Button
-							onClick={() =>
-								onChange({
-									...value,
-									emitters: value.emitters.filter(
-										(g) => g.emitter_id !== gain.emitter_id,
-									),
-								})
-							}
-						>
-							Remove {label} gain
-						</Button>
-					</div>
-				);
-			})}
+			{value.emitters.map((gain, index) => (
+				<EmitterGainEditor
+					key={gain.emitter_id}
+					label={`${head} ${emitters.find((e) => e.id === gain.emitter_id)?.name ?? "Unknown emitter"}`}
+					value={value}
+					index={index}
+					onChange={onChange}
+				/>
+			))}
 			{!!emitters.length && (
 				<Button
 					disabled={!nextEmitter}
@@ -398,113 +447,16 @@ function ColorPathEditor({
 				1.0 keeps the profile output; 0.0 records no output. Gains scale XYZ and
 				spectra together, and leave unknown emitter color unknown.
 			</p>
-			{value.measurements.map((measurement, index) => {
-				const label = `${head} observation ${index + 1}`;
-				const set = (change: Partial<typeof measurement>) =>
-					onChange({
-						...value,
-						measurements: value.measurements.map((m, i) =>
-							i === index ? { ...m, ...change } : m,
-						),
-					});
-				return (
-					<fieldset key={index}>
-						<legend>{label}</legend>
-						<FormLayout columns={3} minColumnWidth={100}>
-							{(["x", "y", "z"] as const).map((axis) => (
-								<NumberField
-									key={axis}
-									label={`${label} ${axis.toUpperCase()}`}
-									allowDecimal
-									min={0}
-									step={0.001}
-									value={measurement.xyz[axis]}
-									onChange={(event) =>
-										set({
-											xyz: {
-												...measurement.xyz,
-												[axis]: Number(event.target.value),
-											},
-										})
-									}
-								/>
-							))}
-						</FormLayout>
-						<Evidence
-							label={label}
-							value={measurement.provenance}
-							onChange={(provenance) => set({ provenance })}
-						/>
-						<details>
-							<summary>{label} complete native recipe</summary>
-							<p className="field-hint">
-								Enter the exact native values used for this observation,
-								including parked wheels. Defaults are an editing template;
-								nothing is sent to a lamp.
-							</p>
-							{measurement.recipe.map((native, channelIndex) => {
-								const channel = mode.channels.find(
-									(c) => c.id === native.channel_id,
-								);
-								if (!channel)
-									return <p key={native.channel_id}>Missing native control</p>;
-								const functions = channel.functions.filter((f) =>
-									nativeColorFunctionAllowed(channel, f),
-								);
-								const fn = functions.find((f) => f.id === native.function_id);
-								const setNative = (change: Partial<typeof native>) =>
-									set({
-										recipe: measurement.recipe.map((v, i) =>
-											i === channelIndex ? { ...v, ...change } : v,
-										),
-									});
-								return (
-									<FormLayout key={channel.id} columns={2} minColumnWidth={160}>
-										<SelectField
-											label={`${label} ${channel.fixture_attribute} function`}
-											ariaLabel={`${label} ${channel.fixture_attribute} function`}
-											value={native.function_id}
-											options={functions.map((f) => ({
-												value: f.id,
-												label: `${f.name} · ${f.dmx_from}–${f.dmx_to}`,
-											}))}
-											onChange={(id) => {
-												const selected = functions.find((f) => f.id === id);
-												if (selected)
-													setNative({
-														function_id: id,
-														raw: selected.dmx_from,
-													});
-											}}
-										/>
-										<NumberField
-											label={`${label} ${channel.fixture_attribute} raw`}
-											min={fn?.dmx_from ?? 0}
-											max={fn?.dmx_to ?? 0xffff_ffff}
-											value={native.raw}
-											onChange={(event) =>
-												setNative({ raw: Number(event.target.value) })
-											}
-										/>
-									</FormLayout>
-								);
-							})}
-						</details>
-						<Button
-							onClick={() =>
-								onChange({
-									...value,
-									measurements: value.measurements.filter(
-										(_, i) => i !== index,
-									),
-								})
-							}
-						>
-							Remove {label}
-						</Button>
-					</fieldset>
-				);
-			})}
+			{value.measurements.map((_, index) => (
+				<ObservationEditor
+					key={index}
+					label={`${head} observation ${index + 1}`}
+					mode={mode}
+					value={value}
+					index={index}
+					onChange={onChange}
+				/>
+			))}
 			<Button
 				disabled={recipeTemplate.length !== path.controls.length}
 				onClick={() =>
@@ -524,5 +476,184 @@ function ColorPathEditor({
 				Add {head} whole-path observation
 			</Button>
 		</fieldset>
+	);
+}
+
+interface PathEntryEditorProps {
+	label: string;
+	value: InstalledColorPathCalibration;
+	index: number;
+	onChange(value: InstalledColorPathCalibration): void;
+}
+
+function EmitterGainEditor({
+	label,
+	value,
+	index,
+	onChange,
+}: PathEntryEditorProps) {
+	const gain = value.emitters[index];
+	const set = (change: Partial<typeof gain>) =>
+		onChange({
+			...value,
+			emitters: value.emitters.map((g, i) =>
+				i === index ? { ...g, ...change } : g,
+			),
+		});
+	return (
+		<div>
+			<NumberField
+				label={`${label} output gain`}
+				allowDecimal
+				step={0.01}
+				min={0}
+				value={gain.output_gain}
+				onChange={(event) => set({ output_gain: Number(event.target.value) })}
+			/>
+			<Evidence
+				label={label}
+				value={gain.provenance}
+				onChange={(provenance) => set({ provenance })}
+			/>
+			<Button
+				onClick={() =>
+					onChange({
+						...value,
+						emitters: value.emitters.filter(
+							(g) => g.emitter_id !== gain.emitter_id,
+						),
+					})
+				}
+			>
+				Remove {label} gain
+			</Button>
+		</div>
+	);
+}
+
+function ObservationEditor({
+	label,
+	mode,
+	value,
+	index,
+	onChange,
+}: PathEntryEditorProps & { mode: FixtureMode }) {
+	const measurement = value.measurements[index];
+	const set = (change: Partial<typeof measurement>) =>
+		onChange({
+			...value,
+			measurements: value.measurements.map((m, i) =>
+				i === index ? { ...m, ...change } : m,
+			),
+		});
+	return (
+		<fieldset>
+			<legend>{label}</legend>
+			<FormLayout columns={3} minColumnWidth={100}>
+				{(["x", "y", "z"] as const).map((axis) => (
+					<NumberField
+						key={axis}
+						label={`${label} ${axis.toUpperCase()}`}
+						allowDecimal
+						min={0}
+						step={0.001}
+						value={measurement.xyz[axis]}
+						onChange={(event) =>
+							set({
+								xyz: {
+									...measurement.xyz,
+									[axis]: Number(event.target.value),
+								},
+							})
+						}
+					/>
+				))}
+			</FormLayout>
+			<Evidence
+				label={label}
+				value={measurement.provenance}
+				onChange={(provenance) => set({ provenance })}
+			/>
+			<details>
+				<summary>{label} complete native recipe</summary>
+				<p className="field-hint">
+					Enter the exact native values used for this observation, including
+					parked wheels. Defaults are an editing template; nothing is sent to a
+					lamp.
+				</p>
+				{measurement.recipe.map((native, channelIndex) => (
+					<NativeRecipeField
+						key={native.channel_id}
+						label={label}
+						mode={mode}
+						recipe={measurement.recipe}
+						index={channelIndex}
+						onChange={(recipe) => set({ recipe })}
+					/>
+				))}
+			</details>
+			<Button
+				onClick={() =>
+					onChange({
+						...value,
+						measurements: value.measurements.filter((_, i) => i !== index),
+					})
+				}
+			>
+				Remove {label}
+			</Button>
+		</fieldset>
+	);
+}
+
+function NativeRecipeField({
+	label,
+	mode,
+	recipe,
+	index,
+	onChange,
+}: {
+	label: string;
+	mode: FixtureMode;
+	recipe: NativeRecipe;
+	index: number;
+	onChange(recipe: NativeRecipe): void;
+}) {
+	const native = recipe[index];
+	const channel = mode.channels.find((c) => c.id === native.channel_id);
+	if (!channel) return <p>Missing native control</p>;
+	const functions = channel.functions.filter((f) =>
+		nativeColorFunctionAllowed(channel, f),
+	);
+	const fn = functions.find((f) => f.id === native.function_id);
+	const setNative = (change: Partial<typeof native>) =>
+		onChange(recipe.map((v, i) => (i === index ? { ...v, ...change } : v)));
+	return (
+		<FormLayout columns={2} minColumnWidth={160}>
+			<SelectField
+				label={`${label} ${channel.fixture_attribute} function`}
+				ariaLabel={`${label} ${channel.fixture_attribute} function`}
+				value={native.function_id}
+				options={functions.map((f) => ({
+					value: f.id,
+					label: `${f.name} · ${f.dmx_from}–${f.dmx_to}`,
+				}))}
+				onChange={(id) => {
+					const selected = functions.find((f) => f.id === id);
+					if (selected)
+						setNative({
+							function_id: id,
+							raw: selected.dmx_from,
+						});
+				}}
+			/>
+			<NumberField
+				label={`${label} ${channel.fixture_attribute} raw`}
+				min={fn?.dmx_from ?? 0}
+				max={fn?.dmx_to ?? 0xffff_ffff}
+				value={native.raw}
+				onChange={(event) => setNative({ raw: Number(event.target.value) })}
+			/>
+		</FormLayout>
 	);
 }

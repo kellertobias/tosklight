@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ProgrammingComponentEdit } from "../../api/generated/light-wire";
+import type { ProgrammingComponentEdit } from "../../api/familyEncoderModels";
 import type { ProgrammerPreloadValuesActions } from "../programmerPreloadValues/contracts";
 import type { ProgrammerPreloadValuesWriter } from "../programmerPreloadValues/writer";
 import type { ProgrammerValuesActions } from "./contracts";

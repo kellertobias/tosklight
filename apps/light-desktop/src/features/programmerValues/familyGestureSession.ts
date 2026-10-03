@@ -1,4 +1,4 @@
-import type { ProgrammingComponentEdit } from "../../api/generated/light-wire";
+import type { ProgrammingComponentEdit } from "../../api/familyEncoderModels";
 import {
 	encodeProgrammingComponentEdits,
 	type ProgrammingComponentEditsOperation,

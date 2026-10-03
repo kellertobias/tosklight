@@ -1,7 +1,4 @@
-import type {
-	OutputReadoutSnapshot,
-	VisualizationLane,
-} from "../../api/generated/light-wire";
+import type { OutputReadoutSnapshot, VisualizationLane } from "../../api/familyEncoderModels";
 import { WireValidationError } from "../../api/wireValidation";
 
 /**

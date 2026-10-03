@@ -1,11 +1,13 @@
 import type {
 	ProgrammingColorComponent,
-	ProgrammingColorXyz,
 	ProgrammingComponentEdit,
+	ProgrammingScalarEdit,
+} from "../../api/familyEncoderModels";
+import type {
+	ProgrammingColorXyz,
 	ProgrammingNativeColorBinding,
 	ProgrammingNativeColorEdit,
-	ProgrammingScalarEdit,
-} from "../../api/generated/light-wire";
+} from "../../api/programmingIntentModels";
 import {
 	FamilyGestureEditRefusedError,
 	type FamilyGestureFamily,

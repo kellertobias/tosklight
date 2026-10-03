@@ -101,7 +101,8 @@ export type FixturePatchSetupProps = {
 	csvImportRequest?: number;
 };
 
-function usePatchUiState(csvImportRequest = 0) {
+/** Layer, browser, import and library-filter choices of the Fixtures screen. */
+function usePatchBrowseState(csvImportRequest: number) {
 	const [activeLayer, setActiveLayer] = useState("all");
 	const [selectedFixture, setSelectedFixture] = useState<string | null>(null);
 	const [browserOpen, setBrowserOpen] = useState(false);
@@ -119,6 +120,40 @@ function usePatchUiState(csvImportRequest = 0) {
 	const [manufacturer, setManufacturer] = useState("");
 	const [familyKey, setFamilyKey] = useState("");
 	const [definitionKey, setDefinitionKey] = useState("");
+	return {
+		activeLayer,
+		setActiveLayer,
+		selectedFixture,
+		setSelectedFixture,
+		browserOpen,
+		setBrowserOpen,
+		csvImportOpen,
+		setCsvImportOpen,
+		placementOpen,
+		setPlacementOpen,
+		placementAddressOpen,
+		setPlacementAddressOpen,
+		layerModal,
+		setLayerModal,
+		layerName,
+		setLayerName,
+		query,
+		setQuery,
+		sort,
+		setSort,
+		typeFilter,
+		setTypeFilter,
+		manufacturer,
+		setManufacturer,
+		familyKey,
+		setFamilyKey,
+		definitionKey,
+		setDefinitionKey,
+	};
+}
+
+/** The placement draft and its confirmation state. */
+function usePatchPlacementState() {
 	const [draft, setDraft] = useState({
 		name: "Fixture 1",
 		fixtureNumber: "1",
@@ -136,6 +171,30 @@ function usePatchUiState(csvImportRequest = 0) {
 	const [placementBaseline, setPlacementBaseline] =
 		useState<PlacementBaseline | null>(null);
 	const [placementCloseConfirm, setPlacementCloseConfirm] = useState(false);
+	return {
+		draft,
+		setDraft,
+		splitDrafts,
+		setSplitDrafts,
+		batchPatches,
+		setBatchPatches,
+		placementOverrides,
+		setPlacementOverrides,
+		placementEmpty,
+		setPlacementEmpty,
+		status,
+		setStatus,
+		busy,
+		setBusy,
+		placementBaseline,
+		setPlacementBaseline,
+		placementCloseConfirm,
+		setPlacementCloseConfirm,
+	};
+}
+
+/** Inline edits, calibration/appearance targets, physical selection and deletion. */
+function usePatchEditState() {
 	const [edit, setEdit] = useState<EditKind>(null);
 	const [editText, setEditText] = useState("");
 	const [editSplitDrafts, setEditSplitDrafts] = useState<
@@ -168,52 +227,6 @@ function usePatchUiState(csvImportRequest = 0) {
 	const selectionAnchor = useRef<string | null>(null);
 	const physicalSelectionAnchor = useRef<string | null>(null);
 	return {
-		activeLayer,
-		setActiveLayer,
-		selectedFixture,
-		setSelectedFixture,
-		browserOpen,
-		setBrowserOpen,
-		csvImportOpen,
-		setCsvImportOpen,
-		placementOpen,
-		setPlacementOpen,
-		placementAddressOpen,
-		setPlacementAddressOpen,
-		layerModal,
-		setLayerModal,
-		layerName,
-		setLayerName,
-		query,
-		setQuery,
-		sort,
-		setSort,
-		typeFilter,
-		setTypeFilter,
-		manufacturer,
-		setManufacturer,
-		familyKey,
-		setFamilyKey,
-		definitionKey,
-		setDefinitionKey,
-		draft,
-		setDraft,
-		splitDrafts,
-		setSplitDrafts,
-		batchPatches,
-		setBatchPatches,
-		placementOverrides,
-		setPlacementOverrides,
-		placementEmpty,
-		setPlacementEmpty,
-		status,
-		setStatus,
-		busy,
-		setBusy,
-		placementBaseline,
-		setPlacementBaseline,
-		placementCloseConfirm,
-		setPlacementCloseConfirm,
 		edit,
 		setEdit,
 		editText,
@@ -232,10 +245,10 @@ function usePatchUiState(csvImportRequest = 0) {
 		setBlockedBy,
 		multipatchEdit,
 		setMultipatchEdit,
-		colorCalibrationEdit,
-		setColorCalibrationEdit,
 		positionCalibrationEdit,
 		setPositionCalibrationEdit,
+		colorCalibrationEdit,
+		setColorCalibrationEdit,
 		appearanceEdit,
 		setAppearanceEdit,
 		physicalSelectionFixture,
@@ -252,6 +265,14 @@ function usePatchUiState(csvImportRequest = 0) {
 		setEditingSplit,
 		selectionAnchor,
 		physicalSelectionAnchor,
+	};
+}
+
+function usePatchUiState(csvImportRequest = 0) {
+	return {
+		...usePatchBrowseState(csvImportRequest),
+		...usePatchPlacementState(),
+		...usePatchEditState(),
 	};
 }
 

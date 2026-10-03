@@ -11,6 +11,7 @@ export type FamilyEncoderPagesSnapshot = import("./generated/light-wire").Family
 export type FamilyEncoderSlot = import("./generated/light-wire").FamilyEncoderSlot;
 export type OutputOwnerReadout = import("./generated/light-wire").OutputOwnerReadout;
 export type OutputReadoutSnapshot = import("./generated/light-wire").OutputReadoutSnapshot;
+export type VisualizationLane = import("./generated/light-wire").VisualizationLane;
 export type ProgrammingAttributeValue = import("./generated/light-wire").ProgrammingAttributeValue;
 export type ProgrammingColorComponent = import("./generated/light-wire").ProgrammingColorComponent;
 export type ProgrammingComponent = import("./generated/light-wire").ProgrammingComponent;

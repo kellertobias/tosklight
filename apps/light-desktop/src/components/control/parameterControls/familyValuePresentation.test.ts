@@ -3,8 +3,8 @@ import type {
 	ProgrammingAttributeValue,
 	ProgrammingComponent,
 	ProgrammingComponentDescriptor,
-	ProgrammingPositionIntent,
-} from "../../../api/generated/light-wire";
+} from "../../../api/familyEncoderModels";
+import type { ProgrammingPositionIntent } from "../../../api/programmingIntentModels";
 import { decodeAttributeValue } from "../../../api/programmerValuesWireProjection";
 import { decodeColorProgram, decodePositionIntent, decodeZoomIntent } from "../../../api/programmingIntentWire";
 import {

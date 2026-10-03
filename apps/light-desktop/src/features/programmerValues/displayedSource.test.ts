@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { OutputReadoutSnapshot } from "../../api/generated/light-wire";
+import type { OutputReadoutSnapshot } from "../../api/familyEncoderModels";
 import {
 	decodeProgrammerPreloadValuesActionOutcome,
 	encodeProgrammerPreloadValuesActionRequest,

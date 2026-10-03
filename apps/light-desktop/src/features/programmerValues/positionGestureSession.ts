@@ -2,7 +2,7 @@ import type {
 	ProgrammingComponentEdit,
 	ProgrammingScalarEdit,
 	ProgrammingTargetReference,
-} from "../../api/generated/light-wire";
+} from "../../api/familyEncoderModels";
 import {
 	attachGestureWindowGuards,
 	FamilyGestureEditRefusedError,

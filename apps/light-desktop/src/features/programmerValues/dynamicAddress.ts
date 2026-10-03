@@ -1,4 +1,4 @@
-import type { ProgrammingComponent } from "../../api/generated/light-wire";
+import type { ProgrammingComponent } from "../../api/familyEncoderModels";
 import type { ProgrammerDynamicValue, ProgrammerDynamicValueAddress } from "./contracts";
 
 /** Keep snapshot identity and delta removal identity identical. Whole-family controls use
