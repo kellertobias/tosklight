@@ -91,6 +91,8 @@ async fn editor_catalog_lists_only_its_advertised_open_document() {
         role: Role::Editor,
         name: "Architect".into(),
         show: Some("Tour".into()),
+        desk_id: None,
+        show_id: None,
         addresses: vec!["127.0.0.1:1".into()],
         instance: "editor-instance".into(),
     };
@@ -276,6 +278,8 @@ fn network_save_requires_a_current_discovered_control_desk() {
             role: Role::Editor,
             name: "Architect".into(),
             show: None,
+            desk_id: None,
+            show_id: None,
             addresses: vec!["127.0.0.1:1".into()],
             instance: "editor".into(),
         }))
@@ -291,6 +295,8 @@ fn network_sources_exclude_this_desk_but_keep_other_desks_and_local_architect() 
         role,
         name: "Same name".into(),
         show: Some("Tour".into()),
+        desk_id: None,
+        show_id: None,
         addresses: vec![address.into()],
         instance: instance.into(),
     };

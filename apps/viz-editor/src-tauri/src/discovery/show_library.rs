@@ -1,14 +1,7 @@
 //! Browse desk libraries and save documents to their originating library entry.
 
 use super::*;
-
-#[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct DeskSource {
-    pub base: String,
-    pub name: String,
-    pub show_id: String,
-    pub revision: u64,
-}
+use crate::sync::SyncBinding;
 
 #[derive(Serialize, Deserialize)]
 pub struct DeskShow {
@@ -106,7 +99,7 @@ pub async fn load_desk_show(
     name: String,
     show_id: String,
 ) -> Answer<DocumentSummary> {
-    uuid::Uuid::parse_str(&show_id).map_err(|e| e.to_string())?;
+    let show_uuid = uuid::Uuid::parse_str(&show_id).map_err(|e| e.to_string())?;
     let base = desk_base(&address)?;
     let client = discovery_client(std::time::Duration::from_secs(60))?;
     let (headers, bytes) =
@@ -130,14 +123,10 @@ pub async fn load_desk_show(
     std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
     let path = unique_path(&directory, &sanitised(&show_name));
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    let desk_identity = desk_identity(&client, &base).await;
     let summary = session.open_from_desk(
         &path,
-        DeskSource {
-            base,
-            name,
-            show_id,
-            revision: 0,
-        },
+        SyncBinding::new(desk_identity, show_uuid, base, name, 0),
     )?;
     discovery.announce_document(Some(summary.name.clone()));
     crate::session::announce_document_change(&app, &window)?;
@@ -177,19 +166,36 @@ pub async fn load_from_desk(
     load_desk_show(app, window, discovery, session, base, desk.name, show_id).await
 }
 
+/// The desk installation's identity, from its readiness. A desk that predates identities, or one
+/// that does not answer, leaves the binding to adopt the identity on its first confirmed contact.
+async fn desk_identity(client: &reqwest::Client, base: &str) -> Option<uuid::Uuid> {
+    let readiness: serde_json::Value = client
+        .get(format!("{base}/api/v2/readiness"))
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    readiness["desk_identity"]
+        .as_str()
+        .and_then(|value| uuid::Uuid::parse_str(value).ok())
+}
+
 #[tauri::command]
 pub fn source_desk(session: tauri::State<'_, Session>) -> Option<String> {
     session
-        .desk_source
+        .binding
         .lock()
         .as_ref()
-        .map(|source| source.name.clone())
+        .map(|binding| binding.desk_name.clone())
 }
 
 #[derive(Clone)]
 pub(crate) struct PendingDeskSave {
     generation: u64,
-    source: DeskSource,
+    base: String,
+    source: SyncBinding,
     token: String,
     session_id: String,
     request: serde_json::Value,
@@ -200,7 +206,7 @@ async fn close_edit_session(client: &reqwest::Client, pending: &PendingDeskSave)
     let _ = client
         .delete(format!(
             "{}/api/v2/sessions/{}",
-            pending.source.base, pending.session_id
+            pending.base, pending.session_id
         ))
         .bearer_auth(&pending.token)
         .send()
@@ -216,13 +222,17 @@ async fn save_to_desk(session: &Session) -> Answer<String> {
     use base64::Engine;
     let _save = session.desk_save_gate.lock().await;
     let (source, generation, bytes, local_revision) = session.desk_save_snapshot()?;
+    let base = source
+        .base_url()
+        .ok_or("This show's desk binding names no address")?
+        .to_owned();
     let client = discovery_client(std::time::Duration::from_secs(60))?;
     let previous = session.pending_desk_save.lock().clone();
     let pending = if let Some(pending) = previous {
         pending
     } else {
         let credentials: serde_json::Value = client
-            .post(format!("{}/api/v2/sessions", source.base))
+            .post(format!("{base}/api/v2/sessions"))
             .json(&serde_json::json!({"role":"operator"}))
             .send()
             .await
@@ -235,6 +245,7 @@ async fn save_to_desk(session: &Session) -> Answer<String> {
         let pending = PendingDeskSave {
             generation,
             local_revision,
+            base: base.clone(),
             source: source.clone(),
             token: credentials["token"]
                 .as_str()
@@ -245,7 +256,7 @@ async fn save_to_desk(session: &Session) -> Answer<String> {
                 .ok_or("Desk returned no session identity")?
                 .into(),
             request: serde_json::json!({"request_id":uuid::Uuid::new_v4().to_string(),"action":{
-                "type":"update_document","destination_show_id":source.show_id,"expected_revision":source.revision,
+                "type":"update_document","destination_show_id":source.show_id,"expected_revision":source.acknowledged_show_revision,
                 "data_base64":base64::engine::general_purpose::STANDARD.encode(bytes)
             }}),
         };
@@ -253,7 +264,7 @@ async fn save_to_desk(session: &Session) -> Answer<String> {
         pending
     };
     let response = client
-        .post(format!("{}/api/v2/shows", pending.source.base))
+        .post(format!("{}/api/v2/shows", pending.base))
         .bearer_auth(&pending.token)
         .json(&pending.request)
         .send()
@@ -282,17 +293,17 @@ async fn save_to_desk(session: &Session) -> Answer<String> {
     if pending.generation != generation {
         Ok(format!(
             "Confirmed the previous save to {}; the current document has not been saved to its desk",
-            pending.source.name
+            pending.source.desk_name
         ))
     } else if session.with(|document| document.portable_revision().map_err(|e| e.to_string()))?
         != pending.local_revision
     {
         Ok(format!(
             "Saved the earlier snapshot to {}; press Save again to send newer local edits",
-            pending.source.name
+            pending.source.desk_name
         ))
     } else {
-        Ok(format!("Saved to {}", pending.source.name))
+        Ok(format!("Saved to {}", pending.source.desk_name))
     }
 }
 

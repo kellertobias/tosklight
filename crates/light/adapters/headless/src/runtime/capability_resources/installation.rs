@@ -31,6 +31,11 @@ impl InstallationResource {
         self.desk_token = Some(token.into());
     }
 
+    /// This installation's stable identity, as readiness and discovery publish it.
+    pub(in crate::runtime) fn desk_identity(&self) -> Result<uuid::Uuid, light_show::StoreError> {
+        self.desk.lock().desk_identity()
+    }
+
     pub(in crate::runtime) fn show_library(
         &self,
     ) -> Result<Vec<ShowEntry>, light_show::StoreError> {

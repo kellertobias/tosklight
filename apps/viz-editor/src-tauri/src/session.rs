@@ -33,7 +33,9 @@ pub struct Session {
     document_generation: std::sync::atomic::AtomicU64,
     library_path: Mutex<Option<PathBuf>>,
     recent: Mutex<Option<RecentShow>>,
-    pub(crate) desk_source: Mutex<Option<crate::discovery::DeskSource>>,
+    /// The desk show the open document is bound to, if it came from one.
+    pub(crate) binding: Mutex<Option<crate::sync::SyncBinding>>,
+    bindings: Mutex<Option<crate::sync::SyncBindingStore>>,
 }
 
 /// What the window title bar and the file menu need to know.
@@ -128,25 +130,30 @@ impl Session {
         *self.recent.lock() = Some(recent);
     }
 
+    /// Where this installation keeps the bindings of documents opened from a desk.
+    pub fn set_binding_store(&self, store: crate::sync::SyncBindingStore) {
+        *self.bindings.lock() = Some(store);
+    }
+
     pub(crate) fn open_from_desk(
         &self,
         path: &Path,
-        mut source: crate::discovery::DeskSource,
+        mut binding: crate::sync::SyncBinding,
     ) -> Answer<DocumentSummary> {
         let _lifecycle = self.document_lifecycle.lock();
         let summary = self.open_path_locked(path, None)?;
-        source.revision =
+        binding.acknowledged_show_revision =
             self.with(|document| document.portable_revision().map_err(|e| e.to_string()))?;
-        self.set_desk_source(Some(source))?;
+        self.set_binding(Some(binding))?;
         Ok(summary)
     }
 
     pub(crate) fn desk_save_snapshot(
         &self,
-    ) -> Answer<(crate::discovery::DeskSource, u64, Vec<u8>, u64)> {
+    ) -> Answer<(crate::sync::SyncBinding, u64, Vec<u8>, u64)> {
         let _lifecycle = self.document_lifecycle.lock();
         let source = self
-            .desk_source
+            .binding
             .lock()
             .clone()
             .ok_or("This show was not opened from a desk")?;
@@ -154,7 +161,7 @@ impl Session {
             .document_generation
             .load(std::sync::atomic::Ordering::Relaxed);
         let (bytes, local_revision) = self.with(|document| {
-            if document.show_id().0.to_string() != source.show_id {
+            if document.show_id().0 != source.show_id {
                 return Err("The open show does not match its source desk".into());
             }
             let staged = document
@@ -181,32 +188,31 @@ impl Session {
         {
             return Ok(());
         }
-        if let Some(source) = self.desk_source.lock().as_mut() {
-            source.revision = revision;
+        let updated = {
+            let mut binding = self.binding.lock();
+            let Some(binding) = binding.as_mut() else {
+                return Ok(());
+            };
+            binding.acknowledged_show_revision = revision;
+            binding.clone()
+        };
+        match self.bindings.lock().as_ref() {
+            Some(store) => store.update(&updated),
+            None => Ok(()),
         }
-        self.persist_desk_source()
     }
 
-    pub(crate) fn set_desk_source(
-        &self,
-        source: Option<crate::discovery::DeskSource>,
-    ) -> Answer<()> {
-        *self.desk_source.lock() = source;
-        self.persist_desk_source()
-    }
-
-    pub(crate) fn persist_desk_source(&self) -> Answer<()> {
-        let source = self.desk_source.lock().clone();
-        if let Some(source) = source {
-            let path =
-                self.with(|document| Ok(document.path().with_extension("show.desk-source.json")))?;
-            std::fs::write(
-                path,
-                serde_json::to_vec(&source).map_err(|e| e.to_string())?,
-            )
-            .map_err(|e| e.to_string())?;
+    /// Binds the open document to a desk show, or unbinds it, in memory and in the store.
+    pub(crate) fn set_binding(&self, binding: Option<crate::sync::SyncBinding>) -> Answer<()> {
+        *self.binding.lock() = binding.clone();
+        let path = self.with(|document| Ok(document.path().to_path_buf()))?;
+        let Some(store) = self.bindings.lock().clone() else {
+            return Ok(());
+        };
+        match binding {
+            Some(binding) => store.bind(&path, &binding),
+            None => store.unbind(&path),
         }
-        Ok(())
     }
 
     pub fn recent_paths(&self) -> Vec<String> {
@@ -275,13 +281,21 @@ impl Session {
         self.source.open(document);
         self.document_generation
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        *self.desk_source.lock() = std::fs::read(path.with_extension("show.desk-source.json"))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+        *self.binding.lock() = self.stored_binding(path);
         if let Some(recent) = self.recent.lock().as_ref() {
             recent.remember(path);
         }
         Ok(summary)
+    }
+
+    /// The stored binding of `path`. A damaged binding leaves the document standalone and says
+    /// so, rather than refusing to open the operator's file.
+    fn stored_binding(&self, path: &Path) -> Option<crate::sync::SyncBinding> {
+        let store = self.bindings.lock().clone()?;
+        store.for_document(path).unwrap_or_else(|error| {
+            eprintln!("{} opens unbound: {error}", path.display());
+            None
+        })
     }
 
     pub(crate) fn with<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {

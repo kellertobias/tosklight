@@ -39,8 +39,13 @@ pub(super) async fn readiness(
     if !recovery_mode && let Some(show) = active_show.as_ref() {
         validate_show_file(&show.path).map_err(|error| ApiError::unavailable(error.to_string()))?;
     }
+    let desk_identity = state
+        .installation
+        .desk_identity()
+        .map_err(|error| ApiError::unavailable(error.to_string()))?;
     Ok(Json(wire::RuntimeReadinessSnapshot {
         status: "ready".into(),
+        desk_identity,
         active_show: active_show.as_ref().map(|show| show.id.0),
         active_show_last_loaded_at: active_show
             .as_ref()

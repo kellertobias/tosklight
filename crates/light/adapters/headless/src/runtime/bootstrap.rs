@@ -569,7 +569,13 @@ fn start_discovery(startup: &StartupState) -> discovery_http::DiscoveryResource 
             .persistent
             .active_show
             .as_ref()
-            .map(|entry| entry.name.clone()),
+            .map(discovery_http::ShowAnnouncement::of),
+        startup
+            .persistent
+            .desk
+            .desk_identity()
+            .ok()
+            .map(|identity| identity.to_string()),
     )
 }
 

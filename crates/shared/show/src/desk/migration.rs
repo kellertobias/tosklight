@@ -116,6 +116,7 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
         "is_base_show",
         "is_base_show INTEGER NOT NULL DEFAULT 0 CHECK(is_base_show IN(0,1))",
     )?;
+    seed_desk_identity(&tx)?;
     set_schema_version(&tx, DESK_SCHEMA_VERSION)?;
     tx.commit()?;
     drop_desk_osc_alias(conn)?;
@@ -144,6 +145,23 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     collapse_desk_locks(conn)?;
     collapse_control_desks(conn)?;
     drop_desk_users(conn)?;
+    Ok(())
+}
+
+/// Gives this installation the stable identity a bound Architect recognises it by.
+///
+/// Seeded once, on the first open of a desk database that has none, and never replaced: the
+/// value is what lets an Architect tell "the same desk on a new address" from "a different desk
+/// holding a show with the same name". An existing installation receives its identity on the
+/// first start after upgrading, exactly as a new one does.
+fn seed_desk_identity(tx: &Transaction<'_>) -> Result<(), StoreError> {
+    tx.execute(
+        "INSERT OR IGNORE INTO settings(key,value) VALUES(?1,?2)",
+        [
+            super::settings::DESK_IDENTITY_KEY.to_owned(),
+            uuid::Uuid::new_v4().to_string(),
+        ],
+    )?;
     Ok(())
 }
 

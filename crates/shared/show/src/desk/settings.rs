@@ -4,6 +4,9 @@ use light_core::ShowId;
 use rusqlite::{OptionalExtension, params};
 use uuid::Uuid;
 
+/// Settings key holding the installation identity an Architect binding names.
+pub(super) const DESK_IDENTITY_KEY: &str = "desk_identity";
+
 impl DeskStore {
     pub fn set_setting(&self, key: &str, value: &str) -> Result<(), StoreError> {
         self.conn.execute("INSERT INTO settings(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", params![key, value])?;
@@ -37,6 +40,14 @@ impl DeskStore {
         self.conn
             .execute("DELETE FROM settings WHERE key=?1", [key])?;
         Ok(())
+    }
+
+    /// This installation's stable identity, seeded by the desk migration.
+    pub fn desk_identity(&self) -> Result<Uuid, StoreError> {
+        let value = self
+            .setting(DESK_IDENTITY_KEY)?
+            .ok_or_else(|| StoreError::Invalid("desk identity has not been seeded".into()))?;
+        Ok(Uuid::parse_str(&value)?)
     }
 
     pub fn set_active_show(&self, id: Option<ShowId>) -> Result<(), StoreError> {

@@ -24,6 +24,7 @@ mod recent;
 mod session;
 #[cfg(test)]
 mod session_source_tests;
+mod sync;
 mod underlay;
 mod venue_groups;
 mod venue_models;
@@ -265,6 +266,7 @@ fn setup_editor(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> 
     let library = prepare_fixture_library(source, &app_data).map_err(std::io::Error::other)?;
     let session = app.state::<session::Session>();
     session.set_library_path(library);
+    session.set_binding_store(sync::SyncBindingStore::at(app_data.join("show-sync")));
     if let Ok(config) = app.path().app_config_dir() {
         let legacy = config
             .parent()

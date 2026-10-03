@@ -71,12 +71,7 @@ async fn a_lost_save_response_retries_the_same_session_request_and_snapshot() {
     std::fs::create_dir_all(&directory).unwrap();
     let path = directory.join("source.show");
     let document = viz_document::PlanningDocument::create(&path, "Source").unwrap();
-    let source = DeskSource {
-        base,
-        name: "Desk".into(),
-        show_id: document.show_id().0.to_string(),
-        revision: 0,
-    };
+    let source = SyncBinding::new(None, document.show_id().0, base, "Desk".into(), 0);
     drop(document);
     let session = Session::default();
     session.open_from_desk(&path, source).unwrap();
@@ -94,7 +89,15 @@ async fn a_lost_save_response_retries_the_same_session_request_and_snapshot() {
         save_to_desk(&session).await.unwrap(),
         "Saved the earlier snapshot to Desk; press Save again to send newer local edits"
     );
-    assert_eq!(session.desk_source.lock().as_ref().unwrap().revision, 42);
+    assert_eq!(
+        session
+            .binding
+            .lock()
+            .as_ref()
+            .unwrap()
+            .acknowledged_show_revision,
+        42
+    );
     assert!(session.pending_desk_save.lock().is_none());
     server.await.unwrap();
     drop(session);

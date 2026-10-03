@@ -227,6 +227,9 @@ pub struct RuntimeBootstrapSnapshot {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeReadinessSnapshot {
     pub status: String,
+    /// Stable identity of this desk installation. An Architect binds a show to it, so a desk that
+    /// moved address is still recognised and a different desk is never mistaken for it.
+    pub desk_identity: Uuid,
     pub active_show: Option<Uuid>,
     pub active_show_last_loaded_at: Option<String>,
     pub active_show_error: Option<String>,
