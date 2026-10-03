@@ -6,6 +6,7 @@ import type {
 	LiveActionFrame,
 	RuntimeDiagnosticsSnapshot,
 	RuntimePerformanceDiagnosticsSnapshot,
+	RuntimeReadinessSnapshot,
 } from "../generated/light-wire";
 import type {
 	BootstrapSnapshot,
@@ -115,6 +116,16 @@ export class LightClientRuntime {
 			"/api/v2/diagnostics/performance",
 		);
 		return snapshot.output as OutputHealth;
+	}
+
+	/** Whether an Architect is following the active show on the sync feed. */
+	async architectSyncActive(): Promise<boolean> {
+		const readiness = await this.request<RuntimeReadinessSnapshot>(
+			"/api/v2/readiness",
+			{},
+			false,
+		);
+		return readiness.architect_sync_active === true;
 	}
 
 	/** Authenticated, current runtime diagnostics for operator-facing desk health. */

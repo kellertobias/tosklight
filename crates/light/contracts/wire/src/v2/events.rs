@@ -270,6 +270,10 @@ pub enum EventPayload {
     VisualizerConnectionChanged {
         change: VisualizerConnectionNotification,
     },
+    /// An Architect started or stopped following the active show on the sync feed.
+    ArchitectSyncChanged {
+        change: ArchitectSyncNotification,
+    },
     OperatorNotification {
         notification: OperatorNotification,
     },
@@ -320,6 +324,12 @@ pub struct HardwareConnectionNotification {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct VisualizerConnectionNotification {
     pub connected: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ArchitectSyncNotification {
+    /// At least one Architect is subscribed to the sync feed.
+    pub active: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

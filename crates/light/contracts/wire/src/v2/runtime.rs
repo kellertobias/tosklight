@@ -236,6 +236,9 @@ pub struct RuntimeReadinessSnapshot {
     pub recovery_mode: bool,
     #[ts(type = "number")]
     pub snapshot_revision: u64,
+    /// At least one Architect is following the active show on the sync feed. The desk shows it,
+    /// and `architect_sync_changed` events keep it current.
+    pub architect_sync_active: bool,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]

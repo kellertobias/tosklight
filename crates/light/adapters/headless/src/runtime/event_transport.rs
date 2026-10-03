@@ -67,6 +67,12 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
         ClientMessage::Action(_) => Err("the first event message must subscribe".into()),
         ClientMessage::Invalid { error, .. } => Err(error),
     };
+    // An Architect follows the show on the opt-in sync feed; the desk shows that it does.
+    let architect = matches!(
+        &request,
+        Ok(wire::EventClientMessage::Subscribe { filter, .. })
+            if filter.topics.contains(&wire::EventTopic::ShowSync)
+    );
     let mut stream = match EventStream::subscribe(&state.events, &session, request) {
         Ok(stream) => stream,
         Err(error) => {
@@ -82,11 +88,30 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
         state.sessions.set_visualizer_connected(session.id, true);
         publish_visualizer_connection(&state);
     }
+    if architect {
+        publish_architect_sync(&state);
+    }
     event_loop(&mut socket, &mut stream, &state, &session).await;
+    drop(stream);
     if visualizer {
         state.sessions.set_visualizer_connected(session.id, false);
         publish_visualizer_connection(&state);
     }
+    if architect {
+        publish_architect_sync(&state);
+    }
+}
+
+fn publish_architect_sync(state: &AppState) {
+    state
+        .events
+        .publish(light_application::EventDraft::architect_sync_changed(
+            light_application::ArchitectSyncNotification {
+                active: state
+                    .events
+                    .has_subscriber_for(light_application::EventTopic::ShowSync),
+            },
+        ));
 }
 
 fn publish_visualizer_connection(state: &AppState) {

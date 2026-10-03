@@ -53,6 +53,9 @@ pub(super) async fn readiness(
         active_show_error,
         recovery_mode,
         snapshot_revision: state.output.snapshot().revision,
+        architect_sync_active: state
+            .events
+            .has_subscriber_for(light_application::EventTopic::ShowSync),
     }))
 }
 pub(super) async fn diagnostics(

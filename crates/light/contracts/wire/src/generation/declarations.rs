@@ -926,6 +926,7 @@ fn event_payload(config: &Config) -> Vec<String> {
         NotificationRevision::decl(config),
         HardwareConnectionNotification::decl(config),
         VisualizerConnectionNotification::decl(config),
+        ArchitectSyncNotification::decl(config),
         HighlightChange::decl(config),
         ScreenNotificationKind::decl(config),
         ScreenNotification::decl(config),

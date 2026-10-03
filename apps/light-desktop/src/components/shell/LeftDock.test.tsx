@@ -123,3 +123,36 @@ describe("LeftDock Shift Built-ins", () => {
 		]);
 	});
 });
+
+describe("LeftDock Architect sync indicator", () => {
+	it("shows an Architect following the show, and follows it leaving", async () => {
+		const { VisualizerViewProvider } = await import(
+			"../../features/visualizerView/VisualizerViewContext"
+		);
+		const { act } = await import("@testing-library/react");
+		let announce: (active: boolean) => void = () => undefined;
+		const actions = {
+			snapshot: vi.fn(),
+			update: vi.fn(),
+			onConnectionChanged: vi.fn(() => () => undefined),
+			architectSync: vi.fn(() => Promise.resolve(true)),
+			onArchitectSyncChanged: vi.fn((listener: (active: boolean) => void) => {
+				announce = listener;
+				return () => undefined;
+			}),
+		};
+		render(
+			<AppProvider>
+				<VisualizerViewProvider actions={actions}>
+					<LeftDock presentation={{ clock: <span>Clock</span>, showIdentity: "Tour" }} />
+				</VisualizerViewProvider>
+			</AppProvider>,
+		);
+		expect(await screen.findByText("⇄ Architect")).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: /An Architect is synchronized with this show/u }),
+		).toBeInTheDocument();
+		act(() => announce(false));
+		expect(screen.queryByText("⇄ Architect")).not.toBeInTheDocument();
+	});
+});

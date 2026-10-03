@@ -84,6 +84,18 @@
     }
   ],
   "$defs": {
+    "ArchitectSyncNotification": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "description": "At least one Architect is subscribed to the sync feed.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "active"
+      ]
+    },
     "CommandChoiceOption": {
       "type": "object",
       "properties": {
@@ -2658,6 +2670,23 @@
             "type": {
               "type": "string",
               "const": "visualizer_connection_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "description": "An Architect started or stopped following the active show on the sync feed.",
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/ArchitectSyncNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "architect_sync_changed"
             }
           },
           "required": [

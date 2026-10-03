@@ -160,6 +160,7 @@ pub enum DeskEvent {
     ScreensChanged(ScreenNotification),
     HardwareConnectionChanged(HardwareConnectionNotification),
     VisualizerConnectionChanged(VisualizerConnectionNotification),
+    ArchitectSyncChanged(ArchitectSyncNotification),
     MacroExecutionChanged(crate::CommandMacroExecutionSnapshot),
     TimecodeRuntimeChanged(crate::timeline::TimecodeRuntimeChange),
 }
@@ -243,6 +244,12 @@ pub struct HardwareConnectionNotification {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct VisualizerConnectionNotification {
     pub connected: bool,
+}
+
+/// Whether an Architect is following the desk's show on the sync feed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArchitectSyncNotification {
+    pub active: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -573,6 +580,14 @@ impl EventDraft {
             EventCapability::Desk,
             "visualizer-connections",
             ApplicationEvent::Desk(DeskEvent::VisualizerConnectionChanged(change)),
+        )
+    }
+
+    pub fn architect_sync_changed(change: ArchitectSyncNotification) -> Self {
+        Self::runtime_projection(
+            EventCapability::Desk,
+            "architect-sync",
+            ApplicationEvent::Desk(DeskEvent::ArchitectSyncChanged(change)),
         )
     }
 
