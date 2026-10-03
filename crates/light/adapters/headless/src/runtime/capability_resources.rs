@@ -333,6 +333,38 @@ impl HighlightResource {
     }
 }
 
+/// Owns a dedicated runtime worker thread. Keeping the join handle in the capability resource
+/// boundary makes the thread's shutdown an explicit part of its owner's lifecycle: the owner
+/// signals the worker to stop, then joins it (dropping joins as well).
+pub(in crate::runtime) struct OwnedWorkerThread {
+    worker: Option<std::thread::JoinHandle<()>>,
+}
+
+impl OwnedWorkerThread {
+    pub(in crate::runtime) fn spawn(
+        name: &str,
+        run: impl FnOnce() + Send + 'static,
+    ) -> std::io::Result<Self> {
+        let worker = std::thread::Builder::new().name(name.into()).spawn(run)?;
+        Ok(Self {
+            worker: Some(worker),
+        })
+    }
+
+    /// Waits for the worker to return. Call after signalling it to stop; idempotent.
+    pub(in crate::runtime) fn join(&mut self) {
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+}
+
+impl Drop for OwnedWorkerThread {
+    fn drop(&mut self) {
+        self.join();
+    }
+}
+
 /// Owns the native Timecode audio worker lifecycle and its request channel.
 ///
 /// The CPAL stream must remain on its creating thread on CoreAudio. Keeping the join handle in a

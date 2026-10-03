@@ -17,7 +17,8 @@ use crate::runtime::preload::retained_history::{
     PendingEpisodeKey, PendingHistoryGap, PendingHistoryLimits, PendingHistoryPosition,
     PendingHistorySeed,
 };
-use light_core::{FixtureId, ProgrammerId, SessionId, ShowId};
+use light_application::programming::PreloadPreviewDemand;
+use light_core::{FixtureId, ProgrammerId, ShowId};
 use light_engine::{CapturedFrameLane, PreloadBranch};
 use std::num::NonZeroUsize;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -156,23 +157,11 @@ impl Worker {
         if !family_adapters_gated(&sources.engine, true) {
             return Desired::Off;
         }
-        let programmers = &sources.programmers;
-        let desk = SessionId(Uuid::nil());
-        let Some(programmer) = programmers.programmer_id() else {
-            return Desired::Off;
+        let programmer = match (sources.preload)() {
+            PreloadPreviewDemand::Off => return Desired::Off,
+            PreloadPreviewDemand::Queue => return Desired::Queue,
+            PreloadPreviewDemand::Engaged(programmer) => programmer,
         };
-        let armed = programmers
-            .capture_mode(desk)
-            .is_some_and(|mode| mode.blind);
-        if !armed && programmers.has_active_preload(desk) != Some(true) {
-            return Desired::Off;
-        }
-        if programmers
-            .preload_playback_actions(desk)
-            .is_some_and(|queue| !queue.is_empty())
-        {
-            return Desired::Queue;
-        }
         match (sources.show)() {
             Some(show) => Desired::On { programmer, show },
             None => Desired::Waiting("no active show".into()),

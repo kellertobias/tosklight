@@ -4,10 +4,12 @@ mod conversion;
 mod fix_at;
 mod helpers;
 mod legacy_addresses;
+mod programmer_checkpoint;
 pub use helpers::{
     ProgrammerDynamicController, effective_programmer_dynamic_controllers,
     resolve_programmer_dynamic_controller,
 };
+pub use programmer_checkpoint::normalize_programmer_dynamic_checkpoint;
 #[cfg(test)]
 mod controller_tests;
 mod preset_sources;

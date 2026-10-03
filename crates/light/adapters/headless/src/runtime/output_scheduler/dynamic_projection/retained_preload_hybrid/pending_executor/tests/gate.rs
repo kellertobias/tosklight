@@ -4,6 +4,7 @@
 use super::*;
 use crate::runtime::tests::{test_state, test_state_with_family_adapters};
 use light_core::SessionId;
+use light_programmer::ProgrammerRegistry;
 
 #[test]
 fn with_the_gate_off_nothing_starts_and_every_hook_is_inert() {

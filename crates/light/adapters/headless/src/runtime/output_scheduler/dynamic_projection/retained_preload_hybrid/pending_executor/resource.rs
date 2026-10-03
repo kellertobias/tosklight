@@ -12,6 +12,7 @@ use super::{
 };
 use crate::runtime::AppState;
 use crate::runtime::position_readout::PendingPositionReadoutSource;
+use light_application::programming::preload_preview_demand;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -45,7 +46,10 @@ impl PendingEpisodeResource {
             dynamics: handles.dynamics,
             publication: handles.publication,
             origins: handles.origins,
-            programmers: state.programming.programmers(),
+            preload: {
+                let programmers = state.programming.programmers();
+                Arc::new(move || preload_preview_demand(&programmers))
+            },
             show: Arc::new(move || active.current().map(|show| show.id)),
         };
         match PendingEpisodeExecutor::spawn(sources) {

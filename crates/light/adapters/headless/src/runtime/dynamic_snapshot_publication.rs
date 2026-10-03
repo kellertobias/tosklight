@@ -13,6 +13,13 @@ pub(in crate::runtime) use cold_history::{
     RetainedInputBorrow, RetainedInputCapture,
 };
 
+/// Proof that the caller is the one publisher installing an Engine snapshot and its Dynamic
+/// registry. Dropping it admits the next publisher.
+#[must_use = "dropping the installation admits the next publisher immediately"]
+pub(super) struct DynamicInstallation<'a> {
+    _serialized: MutexGuard<'a, ()>,
+}
+
 pub(super) struct DynamicSnapshotPublication {
     installation: Mutex<()>,
     installed: arc_swap::ArcSwap<EngineSnapshot>,
@@ -33,8 +40,10 @@ impl DynamicSnapshotPublication {
 
     /// Serialize publishers from before the Engine swap through the Dynamic registry swap.
     /// Take this before either engine/playback or Dynamics guards; never from the output loop.
-    pub(super) fn begin_install(&self) -> MutexGuard<'_, ()> {
-        self.installation.lock()
+    pub(super) fn begin_install(&self) -> DynamicInstallation<'_> {
+        DynamicInstallation {
+            _serialized: self.installation.lock(),
+        }
     }
 
     /// Call while holding the Dynamics lock, after installing the matching prepared registry.

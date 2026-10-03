@@ -57,7 +57,12 @@ impl Bench {
             dynamics: Arc::clone(&dynamics),
             publication: Arc::clone(&publication),
             origins: Default::default(),
-            programmers: rig.programmers.clone(),
+            preload: {
+                let programmers = rig.programmers.clone();
+                Arc::new(move || {
+                    light_application::programming::preload_preview_demand(&programmers)
+                })
+            },
             show: Arc::new(move || Some(show)),
         })
         .unwrap();

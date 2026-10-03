@@ -91,11 +91,14 @@ function isBoundedLocalTaskOwner(file) {
 	// - the released benchmark owns and joins its receiver thread within one benchmark run;
 	// - the test-bench scheduler runs inline inside one bounded HTTP request and returns only
 	//   after its local cancellation token has stopped the scheduler;
-	// - each visualization transport owns and joins its capacity-one socket writer.
+	// - each visualization transport owns and joins its capacity-one socket writer;
+	// - each show activation awaits its owned worker inside one admitted request, so a dropped
+	//   request can cancel admission but never the activation's commit tail.
 	return (
 		file === "apps/light-headless/src/bin/light_benchmark/loopback.rs" ||
 		file === `${RUNTIME_ROOT}/test_bench.rs` ||
-		file === `${RUNTIME_ROOT}/visualization_transport.rs`
+		file === `${RUNTIME_ROOT}/visualization_transport.rs` ||
+		file === `${RUNTIME_ROOT}/show_activation.rs`
 	);
 }
 

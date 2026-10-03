@@ -1,4 +1,5 @@
 use super::*;
+pub(super) use light_application::dynamics::normalize_programmer_dynamic_checkpoint;
 
 pub(super) fn persist_programmer(state: &AppState, session: &Session) -> Result<(), ApiError> {
     let programmer = state
@@ -24,21 +25,6 @@ pub(super) fn active_playbacks_setting(show_id: light_core::ShowId) -> String {
 
 pub(super) fn output_runtime_setting(show_id: light_core::ShowId) -> String {
     format!("output_runtime:{}", show_id.0)
-}
-
-pub(super) fn normalize_programmer_dynamic_checkpoint(
-    programmers: &light_programmer::ProgrammerRegistry,
-    snapshot: &mut light_dynamics::DynamicRuntimeSnapshot,
-) -> Result<usize, light_dynamics::DynamicRuntimeError> {
-    let mut links = Vec::new();
-    if let Some((programmer, _, normal, active)) = programmers.retained_dynamic_source() {
-        for row in normal.iter().chain(active.iter()) {
-            if let Some(link) = row.value.track_key().instance_link {
-                links.push((light_core::ProgrammerId(programmer), link));
-            }
-        }
-    }
-    light_dynamics::normalize_legacy_programmer_controller_ids(snapshot, &links)
 }
 
 pub(super) fn load_output_runtime_for_show(

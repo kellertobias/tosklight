@@ -16,6 +16,7 @@ mod operation;
 mod ports;
 mod preload_lifecycle;
 mod preload_playback_queue_projection;
+mod preload_preview_demand;
 mod preload_values_action;
 mod preload_values_projection;
 mod preset_active_show;
@@ -108,6 +109,7 @@ pub use preload_playback_queue_projection::{
     ProgrammingPreloadPlaybackQueueItem, ProgrammingPreloadPlaybackQueueProjection,
     ProgrammingPreloadPlaybackQueueSnapshot, ProgrammingPreloadPlaybackSurface,
 };
+pub use preload_preview_demand::{PreloadPreviewDemand, preload_preview_demand};
 pub use preload_values_action::{
     ProgrammingPreloadValueMutation, ProgrammingPreloadValueTiming,
     ProgrammingPreloadValuesCommand, ProgrammingPreloadValuesOutcome,

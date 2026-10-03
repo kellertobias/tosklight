@@ -6,7 +6,7 @@
 //!
 //! - [`PendingEpisodeSources`]: the desk `Arc<Engine>`, the Live `DynamicRuntime` mutex, the
 //!   Live `DynamicSnapshotPublication` (retained inputs and cold generations), the Live source
-//!   catalogue, the Programmer registry and the active show identity.
+//!   catalogue, the Programmer's Preload preview demand and the active show identity.
 //! - Commands over an `mpsc` channel: `Wake` (output tick or retained input capture),
 //!   lifecycle triggers and `Shutdown`. The channel is also the wake signal; without a command
 //!   the worker polls at the retained-input sample interval.
@@ -38,19 +38,20 @@
 //! never sets the opt-in, so production stays on the legacy path.
 #![cfg_attr(not(test), allow(dead_code))]
 
+use crate::runtime::capability_resources::OwnedWorkerThread;
 use crate::runtime::dynamic_snapshot_publication::DynamicSnapshotPublication;
 use crate::runtime::dynamic_source_origins::SharedDynamicSourceOrigins;
 use crate::runtime::output_scheduler::dynamic_projection::pending_publication::{
     PendingAttemptTicket, PendingEpisodeIdentity, PendingNativeReadout, PendingPublicationGate,
 };
+use light_application::programming::PreloadPreviewDemand;
 use light_core::programming::{PROGRAMMING_CONTRACT_VERSION, ProgrammingOwner};
 use light_core::{AttributeValue, FixtureId, ShowId};
 use light_dynamics::DynamicRuntime;
 use light_engine::Engine;
-use light_programmer::ProgrammerRegistry;
 use parking_lot::{Condvar, Mutex};
 use std::sync::{Arc, mpsc};
-use std::thread::{JoinHandle, ThreadId};
+use std::thread::ThreadId;
 
 mod provider;
 mod resource;
@@ -76,7 +77,8 @@ pub(in crate::runtime) struct PendingEpisodeSources {
     pub dynamics: Arc<Mutex<DynamicRuntime>>,
     pub publication: Arc<DynamicSnapshotPublication>,
     pub origins: SharedDynamicSourceOrigins,
-    pub programmers: ProgrammerRegistry,
+    /// The retained Programmer's Preload demand, read on every lifecycle step.
+    pub preload: Arc<dyn Fn() -> PreloadPreviewDemand + Send + Sync>,
     /// The actual active show. None keeps Pending waiting.
     pub show: Arc<dyn Fn() -> Option<ShowId> + Send + Sync>,
 }
@@ -159,7 +161,7 @@ impl Shared {
 pub(in crate::runtime) struct PendingEpisodeExecutor {
     commands: mpsc::Sender<Command>,
     shared: Arc<Shared>,
-    worker: Option<JoinHandle<()>>,
+    worker: OwnedWorkerThread,
 }
 
 impl PendingEpisodeExecutor {
@@ -175,13 +177,11 @@ impl PendingEpisodeExecutor {
         });
         let (commands, receiver) = mpsc::channel();
         let worker = worker::Worker::new(sources, Arc::clone(&shared), receiver);
-        let worker = std::thread::Builder::new()
-            .name("tosklight-pending-episode".into())
-            .spawn(move || worker.run())?;
+        let worker = OwnedWorkerThread::spawn("tosklight-pending-episode", move || worker.run())?;
         Ok(Self {
             commands,
             shared,
-            worker: Some(worker),
+            worker,
         })
     }
 
@@ -273,8 +273,6 @@ impl PendingEpisodeExecutor {
 impl Drop for PendingEpisodeExecutor {
     fn drop(&mut self) {
         let _ = self.commands.send(Command::Shutdown);
-        if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
-        }
+        self.worker.join();
     }
 }
