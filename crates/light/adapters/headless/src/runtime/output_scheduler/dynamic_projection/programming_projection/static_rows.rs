@@ -29,7 +29,21 @@ pub(super) struct StaticFamilyRow {
     pub(super) value: AttributeValue,
     pub(super) trace: FamilyTraceArena,
     pub(super) projection: RefCell<Option<KeptProjection>>,
+    /// The observer's pure derivations of `value` and `trace` (TL-639 round 4).
+    pub(super) observed: RefCell<KeptObservation>,
     cohort: u64,
+}
+
+/// Answers an observer derives from a kept row alone, kept with the row: the fields its value
+/// consumes are a function of (owner, value), and the control sources of a field scope a function
+/// of (owner, trace, scope). A recomposed row starts with none.
+#[derive(Default)]
+pub(in crate::runtime::output_scheduler::dynamic_projection) struct KeptObservation {
+    pub consumed: Option<ProgrammingFieldScope>,
+    pub controls: Option<(
+        ProgrammingFieldScope,
+        Option<Vec<light_dynamics::FamilyControlContribution>>,
+    )>,
 }
 
 /// One kept answer of `CapturedFamilyObservation::project_fields`.
@@ -67,6 +81,7 @@ impl StaticFamilyRows {
                     value,
                     trace: scratch.family_trace().clone(),
                     projection: RefCell::new(None),
+                    observed: RefCell::default(),
                     cohort,
                 },
             );

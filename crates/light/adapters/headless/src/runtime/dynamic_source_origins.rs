@@ -8,7 +8,7 @@ use light_core::{
 use light_dynamics::DynamicSourceOccurrenceId;
 use light_playback::{PlaybackIdentity, SequenceMasterSource, TemporaryPlaybackKind};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use uuid::Uuid;
 
@@ -593,7 +593,9 @@ pub(in crate::runtime) type SharedDynamicSourceOrigins =
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct DynamicSourceOrigins {
-    records: Arc<BTreeMap<DynamicSourceOccurrenceId, Arc<DynamicSourceRecord>>>,
+    /// Fx-hashed (TL-639 round 4): every family projection and static binding looks a record
+    /// up per target and frame. Iteration order is never observable: `snapshot` sorts.
+    records: Arc<SourceRecords>,
     /// Fx-hashed (TL-639): every captured assignment looks itself up once per frame. Iteration
     /// order is never observable.
     bindings: Arc<rustc_hash::FxHashMap<DynamicSourceBinding, DynamicSourceOccurrenceId>>,
@@ -605,9 +607,10 @@ pub(super) struct DynamicSourceOrigins {
 /// See [`DynamicSourceOrigins::records_identity`]. The `Weak` keeps the allocation reserved,
 /// so a later catalogue can never reuse its address.
 #[derive(Debug)]
-pub(in crate::runtime) struct RecordsIdentity(
-    Weak<BTreeMap<DynamicSourceOccurrenceId, Arc<DynamicSourceRecord>>>,
-);
+pub(in crate::runtime) struct RecordsIdentity(Weak<SourceRecords>);
+
+/// The immutable record catalogue, by occurrence.
+type SourceRecords = rustc_hash::FxHashMap<DynamicSourceOccurrenceId, Arc<DynamicSourceRecord>>;
 
 #[derive(Clone, Debug)]
 struct CachedStaticEvidence {
@@ -867,13 +870,16 @@ impl DynamicSourceOrigins {
         // Every active binding has a distinct occurrence, so this is a stable total ordering
         // without inventing missing Dynamic scope for static-family dependencies.
         bindings.sort_by_key(|row| row.occurrence_id);
+        let mut records = self
+            .records
+            .values()
+            .map(|record| record.as_ref().clone())
+            .collect::<Vec<_>>();
+        // Occurrence order, as the ordered catalogue this replaced iterated.
+        records.sort_by_key(|record| record.occurrence_id);
         DynamicSourceOriginsSnapshot {
             version: SNAPSHOT_VERSION,
-            records: self
-                .records
-                .values()
-                .map(|record| record.as_ref().clone())
-                .collect(),
+            records,
             bindings,
         }
     }
@@ -887,7 +893,7 @@ impl DynamicSourceOrigins {
         if snapshot.version != SNAPSHOT_VERSION {
             return Err(invalid("unsupported snapshot version"));
         }
-        let mut records = BTreeMap::new();
+        let mut records = SourceRecords::default();
         for mut record in snapshot.records {
             DynamicSourceOccurrenceId::new(record.occurrence_id.get())?;
             validate_binding(record.binding)?;

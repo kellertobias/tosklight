@@ -55,7 +55,9 @@ pub(crate) struct NativePositionInstance {
 }
 #[derive(Clone, Debug, Default)]
 pub(crate) struct NativePositionProjection {
-    pub(crate) instances: FxHashMap<Uuid, NativePositionInstance>,
+    /// Shared by clones (TL-639 round 4): an unchanged collection is installed again by
+    /// reference (`FamilyNativeMemo`). Only a fresh candidate is ever written.
+    pub(crate) instances: std::sync::Arc<FxHashMap<Uuid, NativePositionInstance>>,
 }
 impl NativePositionProjection {
     pub(crate) fn instance(

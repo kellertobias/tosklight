@@ -848,6 +848,9 @@ fn resolve_channels(
         .inputs
         .sequence_masters
         .get(&AttributeKey::intensity());
+    // TL-639 round 4: the overlay state a fitted native channel renders under depends only on
+    // its full-Freeze flag, so it is resolved at most once per flag and head.
+    let mut overlays: [Option<HeadOverlayState>; 2] = [None, None];
     for channel_index in context.head.channel_indices.iter() {
         let channel = &context.mode.channels[*channel_index];
         let native_inputs;
@@ -859,35 +862,41 @@ fn resolve_channels(
                     .native_channels
                     .and_then(|channels| channels[*channel_index].as_ref())
             });
-        let inputs = if let Some(native) = native {
-            native_inputs = prepare_head_inputs(
-                context.fixture,
-                context.mode,
-                context.head,
-                context.source_values,
-                context.options,
-                context.group_masters,
-                context.group_master_flashes,
-                context.highlight_layers,
-                context.highlight_look,
-                context.axis_inversion,
-                Some((*channel_index, native)),
-            )?;
-            &native_inputs
-        } else {
-            context.inputs
+        let inputs = match native {
+            Some(native) => {
+                match NativeChannelInputs::plain(&context, &mut overlays, *channel_index, native) {
+                    Some(plain) => ChannelInputs::Native(plain),
+                    None => {
+                        native_inputs = prepare_head_inputs(
+                            context.fixture,
+                            context.mode,
+                            context.head,
+                            context.source_values,
+                            context.options,
+                            context.group_masters,
+                            context.group_master_flashes,
+                            context.highlight_layers,
+                            context.highlight_look,
+                            context.axis_inversion,
+                            Some((*channel_index, native)),
+                        )?;
+                        ChannelInputs::Head(&native_inputs)
+                    }
+                }
+            }
+            None => ChannelInputs::Head(context.inputs),
         };
         let resolved = context.resolution.resolve_channel_with(
             *channel_index,
-            |_, attribute| inputs.values.get(attribute),
-            inputs.legacy_raw_highlight,
+            |_, attribute| inputs.value(attribute),
+            inputs.legacy_raw_highlight(),
             context
                 .fixture
                 .highlight_overrides
                 .get(&channel.id)
                 .copied(),
             |active| {
-                if inputs.held_native {
+                if inputs.held_native() {
                     // Captured words already include masters. Do not scale fine bytes twice;
                     // control-loss/blackout/Highlight still act before this ordinary resolver.
                     return ChannelScales {
@@ -898,8 +907,12 @@ fn resolve_channels(
                     };
                 }
                 let active = active.map(|active| active.key);
-                let sequence_master =
-                    sequence_master_scale(channel, active, inputs, intensity_master);
+                let sequence_master = sequence_master_scale(
+                    channel,
+                    active,
+                    |attribute| inputs.sequence_master(attribute),
+                    intensity_master,
+                );
                 // An intensity channel is the virtual intensity's source, not a reader of it.
                 let channel_intensity = (!active.is_some_and(AttributeKey::is_intensity))
                     .then_some(context.virtual_intensity);
@@ -940,18 +953,128 @@ fn resolve_channels(
 fn sequence_master_scale(
     channel: &FixtureChannel,
     active: Option<&AttributeKey>,
-    inputs: &ProfileHeadInputs<'_, '_>,
+    masters: impl Fn(&AttributeKey) -> Option<ApplicableSequenceMaster>,
     intensity: Option<ApplicableSequenceMaster>,
 ) -> f32 {
     active
         .filter(|attribute| !attribute.is_intensity())
-        .and_then(|attribute| inputs.sequence_masters.get(attribute))
+        .and_then(masters)
         .filter(|master| {
             !channel.reacts_to_virtual_intensity
                 || intensity.is_none_or(|intensity| intensity.source != master.source)
         })
         .map(|master| master.scale)
         .unwrap_or(1.0)
+}
+
+/// What one channel resolves from: its head's inputs, or a fitted native channel's own inputs.
+enum ChannelInputs<'i, 'a> {
+    Head(&'i ProfileHeadInputs<'a, 'a>),
+    Native(NativeChannelInputs<'a>),
+}
+
+impl ChannelInputs<'_, '_> {
+    fn value(&self, attribute: &AttributeKey) -> Option<&AttributeValue> {
+        match self {
+            Self::Head(inputs) => inputs.values.get(attribute),
+            Self::Native(native) => native.value(attribute),
+        }
+    }
+
+    fn legacy_raw_highlight(&self) -> bool {
+        match self {
+            Self::Head(inputs) => inputs.legacy_raw_highlight,
+            Self::Native(native) => native.legacy_raw_highlight,
+        }
+    }
+
+    fn held_native(&self) -> bool {
+        match self {
+            Self::Head(inputs) => inputs.held_native,
+            Self::Native(native) => native.held,
+        }
+    }
+
+    fn sequence_master(&self, attribute: &AttributeKey) -> Option<ApplicableSequenceMaster> {
+        match self {
+            Self::Head(inputs) => inputs.sequence_masters.get(attribute),
+            Self::Native(native) => native.masters.get(attribute),
+        }
+    }
+}
+
+/// The inputs `prepare_head_inputs` builds for a fitted native channel when no control loss,
+/// hazardous Blackout, Highlight look or axis inversion acts on the head, and the channel's
+/// candidate survives the scalar Freeze check (TL-639 round 4). Such a channel reads exactly its
+/// own native value under its attribute and the head's Intensity, and nothing else; it is
+/// answered here without building the per-channel input set.
+struct NativeChannelInputs<'a> {
+    attribute: &'a AttributeKey,
+    value: &'a AttributeValue,
+    intensity: Option<&'a AttributeValue>,
+    held: bool,
+    legacy_raw_highlight: bool,
+    masters: HeadMasterView<'a, 'a>,
+}
+
+impl<'a> NativeChannelInputs<'a> {
+    fn plain(
+        context: &ChannelResolutionContext<'a>,
+        overlays: &mut [Option<HeadOverlayState>; 2],
+        index: usize,
+        native: &'a crate::native_position_projection::NativePositionInput,
+    ) -> Option<Self> {
+        let owner = context.head.owner;
+        let overlay = overlays[usize::from(native.full_freeze)].get_or_insert_with(|| {
+            HeadOverlayState::resolve(
+                context.fixture,
+                owner,
+                native.full_freeze,
+                context.options,
+                context.group_masters,
+                context.group_master_flashes,
+                context.highlight_layers,
+                context.highlight_look,
+            )
+        });
+        let channel = &context.mode.channels[index];
+        let candidate_kept = native.frozen
+            || context
+                .fixture
+                .freeze
+                .targets
+                .get(&owner)
+                .is_none_or(|frozen| {
+                    !frozen
+                        .values
+                        .keys()
+                        .any(|attribute| channel_matches_attribute(channel, attribute))
+                });
+        let plain = candidate_kept
+            && overlay.options.control_loss_progress.is_none()
+            && !(context.fixture.definition.hazardous && overlay.options.blackout)
+            && overlay.selected_look.is_none()
+            && !context.axis_inversion.any();
+        let values = context.source_values;
+        plain.then(|| Self {
+            attribute: &channel.attribute,
+            value: &native.value,
+            intensity: values.common(owner).intensity,
+            held: native.frozen,
+            legacy_raw_highlight: overlay.legacy_raw_highlight,
+            masters: HeadMasterView::over(values, owner),
+        })
+    }
+
+    fn value(&self, attribute: &AttributeKey) -> Option<&AttributeValue> {
+        if attribute == self.attribute {
+            Some(self.value)
+        } else if *attribute.0 == *"intensity" {
+            self.intensity
+        } else {
+            None
+        }
+    }
 }
 
 fn grand_master(fixture: &PatchedFixture, options: RenderOptions) -> f32 {

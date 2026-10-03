@@ -64,6 +64,7 @@ struct CompiledSample {
 #[derive(Default)]
 pub struct DynamicFamilyPreparationScratch {
     order: Vec<usize>,
+    sort_keys: Vec<((Uuid, Uuid, Uuid), Uuid, usize)>,
     controller: Vec<DynamicRuntimeSample>,
     position: Vec<DynamicRuntimeSample>,
     families: Vec<DynamicFamilySampleGroup>,
@@ -83,6 +84,7 @@ impl DynamicFamilyPreparationScratch {
         self.controller.clear();
         self.position.clear();
         self.order.clear();
+        self.sort_keys.clear();
     }
 
     fn clear_output(&mut self) {
@@ -509,13 +511,23 @@ fn prepare(
     previous: &mut HashMap<CacheKey, CompiledSample>,
     scratch: &mut DynamicFamilyPreparationScratch,
 ) -> Result<(), TransitionError> {
-    scratch.order.clear();
-    scratch.order.extend(0..samples.len());
     let key =
         |sample: &DynamicRuntimeSample| (sample.instance_id, sample.controller_id, sample.target.0);
+    // TL-639 round 4: sorted by keys gathered once rather than read through the samples on every
+    // comparison. The index breaks ties; equal keys only occur for a duplicate lane, which the
+    // loop below rejects whatever their order.
+    scratch.sort_keys.clear();
+    scratch.sort_keys.extend(
+        samples
+            .iter()
+            .enumerate()
+            .map(|(index, sample)| (key(sample), sample.lane_id, index)),
+    );
+    scratch.sort_keys.sort_unstable();
+    scratch.order.clear();
     scratch
         .order
-        .sort_unstable_by_key(|&index| (key(&samples[index]), samples[index].lane_id));
+        .extend(scratch.sort_keys.iter().map(|(_, _, index)| *index));
     let mut start = 0;
     while start < scratch.order.len() {
         let first = &samples[scratch.order[start]];
@@ -944,10 +956,15 @@ fn components_compatible(expression: &DynamicSampleExpression) -> Result<bool, I
 /// Preserve one root per owner plus legacy, replacing other-owner branches with absence.
 /// This is a flat projection of the original history, never a numerical blend or borrowed value.
 /// TL-639: an unwrapped Programming or legacy scalar leaf, whose only node is itself.
+/// A single node without children (TL-639 round 4 adds the Angle leaves): it has no exact branch
+/// to prune.
 fn is_plain_leaf(expression: &DynamicSampleExpression) -> bool {
     matches!(
         expression,
-        DynamicSampleExpression::Programming { .. } | DynamicSampleExpression::LegacyScalar { .. }
+        DynamicSampleExpression::Programming { .. }
+            | DynamicSampleExpression::LegacyScalar { .. }
+            | DynamicSampleExpression::AngleNumeric { .. }
+            | DynamicSampleExpression::AngleCurrent { .. }
     )
 }
 
@@ -961,6 +978,10 @@ fn split_owners(
             return Ok(vec![(Some(owner), expression)]);
         }
         DynamicSampleExpression::LegacyScalar { .. } => return Ok(vec![(None, expression)]),
+        DynamicSampleExpression::AngleNumeric { .. }
+        | DynamicSampleExpression::AngleCurrent { .. } => {
+            return Ok(vec![(Some(ProgrammingOwner::Position), expression)]);
+        }
         _ => {}
     }
     let mut owners = Vec::new();

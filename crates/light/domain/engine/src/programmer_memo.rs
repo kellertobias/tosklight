@@ -24,9 +24,13 @@ use std::sync::{
 };
 
 /// Retained Programmer transitions of one output lane, with the identity of their content.
+///
+/// The map is shared between clones and copied on the first change (TL-639 round 4): the output
+/// continuity is cloned for every capture and both static resolutions of a frame, and without a
+/// fade nothing changes it.
 #[derive(Clone, Default)]
 pub(crate) struct ProgrammerTransitions {
-    map: FxHashMap<ProgrammerTransitionKey, ProgrammerTransition>,
+    map: Arc<FxHashMap<ProgrammerTransitionKey, ProgrammerTransition>>,
     /// A fresh process-unique number after every change; clones keep it. The empty default is
     /// version 0 in every lane, which is exact because every empty history is equal.
     version: u64,
@@ -48,12 +52,15 @@ impl ProgrammerTransitions {
     }
 
     pub(crate) fn insert(&mut self, key: ProgrammerTransitionKey, value: ProgrammerTransition) {
-        self.map.insert(key, value);
+        Arc::make_mut(&mut self.map).insert(key, value);
         self.changed();
     }
 
     pub(crate) fn remove(&mut self, key: &ProgrammerTransitionKey) -> Option<ProgrammerTransition> {
-        let removed = self.map.remove(key);
+        if !self.map.contains_key(key) {
+            return None;
+        }
+        let removed = Arc::make_mut(&mut self.map).remove(key);
         if removed.is_some() {
             self.changed();
         }
@@ -66,23 +73,32 @@ impl ProgrammerTransitions {
         key: ProgrammerTransitionKey,
     ) -> std::collections::hash_map::Entry<'_, ProgrammerTransitionKey, ProgrammerTransition> {
         self.changed();
-        self.map.entry(key)
+        Arc::make_mut(&mut self.map).entry(key)
     }
 
+    /// Keeps the transitions `keep` accepts; copies a shared map only when one is removed.
     pub(crate) fn retain(
         &mut self,
-        keep: impl FnMut(&ProgrammerTransitionKey, &mut ProgrammerTransition) -> bool,
+        mut keep: impl FnMut(&ProgrammerTransitionKey, &ProgrammerTransition) -> bool,
     ) {
-        let before = self.map.len();
-        self.map.retain(keep);
-        if self.map.len() != before {
+        if self
+            .map
+            .iter()
+            .all(|(key, transition)| keep(key, transition))
+        {
+            return;
+        }
+        let map = Arc::make_mut(&mut self.map);
+        let before = map.len();
+        map.retain(|key, transition| keep(key, transition));
+        if map.len() != before {
             self.changed();
         }
     }
 
     pub(crate) fn clear(&mut self) {
         if !self.map.is_empty() {
-            self.map.clear();
+            self.map = Arc::default();
             self.changed();
         }
     }
@@ -239,6 +255,31 @@ impl ProgrammerContributionMemo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// TL-639 round 4: clones share the history until one of them changes it; an unchanged
+    /// retain or an absent removal neither copies it nor counts as a change.
+    #[test]
+    fn transition_clones_share_the_history_until_one_changes() {
+        let mut history = ProgrammerTransitions::default();
+        let copy = history.clone();
+        assert!(Arc::ptr_eq(&history.map, &copy.map));
+        history.retain(|_, _| true);
+        let absent = ProgrammerTransitionKey {
+            programmer_id: light_core::ProgrammerId::new(),
+            source: crate::programmer_fade::ProgrammerTransitionSource::Programmer,
+            fixture_id: light_core::FixtureId::new(),
+            attribute: light_core::AttributeKey::intensity(),
+        };
+        assert!(history.remove(&absent).is_none());
+        assert!(Arc::ptr_eq(&history.map, &copy.map));
+        assert_eq!(history.version(), copy.version());
+        history.clear();
+        assert_eq!(
+            history.version(),
+            copy.version(),
+            "an empty history stays unchanged"
+        );
+    }
 
     #[test]
     fn kept_winners_belong_to_one_evaluation_and_removed_set() {

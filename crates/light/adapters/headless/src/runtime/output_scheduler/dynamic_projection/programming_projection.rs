@@ -130,6 +130,16 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
 
     /// Read the original logical-owner family once in this captured frame/branch, including
     /// absence. Address-specific adoption and physical-copy fitting stay separate.
+    /// Whether [`Self::captured_family_base`] has a value, capturing it exactly as that does,
+    /// without copying it out (TL-639 round 4).
+    fn has_captured_family_base(&self, target: FixtureId, owner: ProgrammingOwner) -> bool {
+        self.captured_families
+            .borrow_mut()
+            .entry((target, owner))
+            .or_insert_with(|| self.static_sources.value(target, &owner.key()).cloned())
+            .is_some()
+    }
+
     fn captured_family_base(
         &self,
         target: FixtureId,
@@ -215,8 +225,9 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
         let binding = DynamicSourceBinding::StaticBaseline { target, owner };
         let key = owner.key();
         let evidence = self
-            .captured_family_base(target, owner)
-            .and_then(|_| self.static_sources.family_evidence(target, &key));
+            .has_captured_family_base(target, owner)
+            .then(|| self.static_sources.family_evidence(target, &key))
+            .flatten();
         let Some(evidence) = evidence.filter(|evidence| !evidence.entries().is_empty()) else {
             origins.borrow_mut().unbind(&binding);
             return Ok(None);
@@ -420,6 +431,7 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
             trace: scratch.family_trace(),
             sources: self,
             kept: None,
+            kept_observation: None,
         })?;
         self.check()?;
         Ok(output)
@@ -461,6 +473,7 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
             trace: &row.trace,
             sources: self,
             kept: Some(&row.projection),
+            kept_observation: Some(&row.observed),
         })?;
         self.check()?;
         Ok(output)
@@ -477,6 +490,8 @@ struct CapturedFamilyObservation<'a, 'sources, S> {
     sources: &'a CapturedProgrammingSources<'sources, S>,
     /// The kept projection of a static-only row, answered again while its inputs are equal.
     kept: Option<&'a RefCell<Option<KeptProjection>>>,
+    /// The kept row's observer derivations (`static_rows::KeptObservation`).
+    kept_observation: Option<&'a RefCell<static_rows::KeptObservation>>,
 }
 
 impl<S: DynamicTickSource> CapturedFamilyObservation<'_, '_, S> {

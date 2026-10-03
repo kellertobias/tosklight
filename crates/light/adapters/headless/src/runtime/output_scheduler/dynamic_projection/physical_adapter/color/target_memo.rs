@@ -23,6 +23,12 @@ pub(super) struct ColorTargetMemo {
 
 struct KeptResolve {
     previous: Option<ColorContinuity>,
+    /// Whether every head's fitter accepted the complete native vector the result was kept
+    /// from. A capture resolves every non-static channel through `scale_channel_raw`, which
+    /// never exceeds the channel's maximum, and every static channel to its fixed default, so
+    /// the answer is the same for every capture of this destination while this descriptor
+    /// (one runtime generation) lives (TL-639 round 4).
+    accepted: bool,
     /// Native raw value of every key channel, in `ColorDescriptor::key_channels` order.
     key: Vec<u32>,
     resolved: HeadsResolution,
@@ -70,6 +76,10 @@ impl ColorTargetMemo {
                 }
                 Some(KeptResolve {
                     previous: previous.cloned(),
+                    accepted: descriptor
+                        .heads
+                        .iter()
+                        .all(|head| head.fitting.accepts_raw(raw)),
                     key,
                     resolved,
                 })
@@ -85,6 +95,25 @@ impl ColorTargetMemo {
                 kept,
             },
         }
+    }
+
+    /// Whether [`Self::replay_key`] can answer for this intent and continuity.
+    pub(super) fn may_replay_key(
+        &self,
+        intent: &ColorIntent,
+        previous: Option<&ColorContinuity>,
+    ) -> bool {
+        self.kept.as_ref().is_some_and(|kept| {
+            kept.accepted && self.intent == *intent && kept.previous.as_ref() == previous
+        })
+    }
+
+    /// [`Self::replay`] from the key channels' raw values alone (`key`, in
+    /// `ColorDescriptor::key_channels` order), after [`Self::may_replay_key`]: the whole-vector
+    /// check is the kept `accepted` answer (see `KeptResolve::accepted`).
+    pub(super) fn replay_key(&self, key: &[u32]) -> Option<HeadsResolution> {
+        let kept = self.kept.as_ref()?;
+        (kept.accepted && kept.key == key).then(|| kept.resolved.clone())
     }
 
     /// The kept result when every head would replay its memo (see the module comment).

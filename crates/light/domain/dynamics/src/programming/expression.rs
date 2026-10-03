@@ -92,6 +92,46 @@ pub(crate) use view::{ExpressionNode, ExpressionNodeRef};
 
 impl PartialEq for DynamicSampleExpression {
     fn eq(&self, other: &Self) -> bool {
+        // TL-639 round 4: two plain leaves compare as the walk below compares their nodes,
+        // without its work list and visited set. Wrapped, retained and composite expressions
+        // take the walk.
+        match (self, other) {
+            (
+                Self::Programming {
+                    address: a,
+                    value: x,
+                    occurrence: p,
+                    dependency_occurrence: d,
+                },
+                Self::Programming {
+                    address: b,
+                    value: y,
+                    occurrence: q,
+                    dependency_occurrence: e,
+                },
+            ) => return a == b && x == y && p == q && d == e,
+            (
+                Self::LegacyScalar {
+                    attribute: a,
+                    value: x,
+                    occurrence: p,
+                    dependency_occurrence: d,
+                },
+                Self::LegacyScalar {
+                    attribute: b,
+                    value: y,
+                    occurrence: q,
+                    dependency_occurrence: e,
+                },
+            ) => return a == b && x == y && p == q && d == e,
+            (Self::AngleCurrent { address: a }, Self::AngleCurrent { address: b }) => {
+                return a == b;
+            }
+            (Self::AngleNumeric { program: a }, Self::AngleNumeric { program: b }) => {
+                return a == b;
+            }
+            _ => {}
+        }
         let mut pending = vec![(ExpressionNodeRef::new(self), ExpressionNodeRef::new(other))];
         let mut visited = std::collections::HashSet::new();
         while let Some((left, right)) = pending.pop() {
@@ -250,6 +290,8 @@ impl DynamicSampleExpression {
                 return address.representation == DynamicFamilyRepresentation::Angles;
             }
             Self::LegacyScalar { .. } => return false,
+            // TL-639 round 4: the Angle leaves are their own only node too.
+            Self::AngleNumeric { .. } | Self::AngleCurrent { .. } => return true,
             _ => {}
         }
         ExpressionNodeRef::new(self)

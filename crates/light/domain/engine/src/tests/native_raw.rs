@@ -133,3 +133,36 @@ fn native_raw_rejects_foreign_tokens_captures_and_unknown_targets() {
     // Reading is side-effect free: the same capture still renders.
     engine.render_static_family_frame(&capture, frame).unwrap();
 }
+
+/// TL-639 round 4: a channel subset reads exactly the complete capture's values, in the order
+/// asked, for every subset; a channel outside the mode is rejected.
+#[test]
+fn a_channel_subset_reads_exactly_the_complete_capture() {
+    let (engine, id, _) = engine(true);
+    let capture = engine.prepare_output_frame(Default::default());
+    let token = capture.frame_token();
+    let frame = engine.prepare_static_family_frame(&capture, &[]);
+    let complete = frame.native_raw(&capture, &token, id).unwrap();
+    let complete = complete.raw();
+    let mut out = vec![99];
+    for mask in 0u32..(1 << complete.len()) {
+        let channels = (0..complete.len())
+            .filter(|channel| mask & (1 << channel) != 0)
+            .collect::<Vec<_>>();
+        let destination = frame
+            .native_raw_channels_into(&capture, &token, id, &channels, &mut out)
+            .unwrap();
+        assert_eq!(destination, id);
+        let expected = channels
+            .iter()
+            .map(|&channel| complete[channel])
+            .collect::<Vec<_>>();
+        assert_eq!(out, expected, "subset {channels:?}");
+    }
+    assert!(
+        frame
+            .native_raw_channels_into(&capture, &token, id, &[complete.len()], &mut out)
+            .is_err()
+    );
+    assert!(out.is_empty(), "a rejected read leaves nothing behind");
+}

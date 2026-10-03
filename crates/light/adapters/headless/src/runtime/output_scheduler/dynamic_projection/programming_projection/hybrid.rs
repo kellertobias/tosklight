@@ -84,6 +84,18 @@ impl HybridFrameContext<'_> {
             .native_raw_into(self.capture, self.token, target, out)
             .map_err(|error| IntentError(error.to_string()).into())
     }
+    /// Only `channels` (sorted) of [`Self::native_raw_into`]'s vector, in `channels` order; returns
+    /// the root destination (TL-639 round 4).
+    pub fn native_raw_channels_into(
+        &self,
+        target: FixtureId,
+        channels: &[usize],
+        out: &mut Vec<u32>,
+    ) -> Result<FixtureId, TransitionError> {
+        self.scalar
+            .native_raw_channels_into(self.capture, self.token, target, channels, out)
+            .map_err(|error| IntentError(error.to_string()).into())
+    }
     /// Position baseline including the selected physical installation's axis inversion.
     pub fn native_position_raw_into(
         &self,
@@ -256,6 +268,8 @@ pub(in crate::runtime) struct HybridFamilyObservation<'a> {
     pub frame: HybridFrameContext<'a>,
     project: &'a ProjectFields<'a>,
     controls: &'a ControlFields<'a>,
+    /// Derivations kept with a static-only row (`static_rows::KeptObservation`).
+    kept: Option<&'a RefCell<super::static_rows::KeptObservation>>,
 }
 
 /// An owned composition result waiting for the complete physical cohort. Trace callbacks
@@ -440,11 +454,23 @@ impl<S: DynamicTickSource, T> HybridProgramComposer<T>
                     observation.project_fields(fields, projection)
                 };
             let controls = |fields: &ProgrammingFieldScope| {
-                fields.validate(group.owner).ok()?;
-                observation
-                    .trace
-                    .root()
-                    .and_then(|root| observation.trace.control_sources_for_fields(root, fields))
+                let kept = observation.kept_observation;
+                if let Some(kept) = kept
+                    && let Some((scope, controls)) = &kept.borrow().controls
+                    && scope == fields
+                {
+                    return controls.clone();
+                }
+                let controls = fields.validate(group.owner).ok().and_then(|()| {
+                    observation
+                        .trace
+                        .root()
+                        .and_then(|root| observation.trace.control_sources_for_fields(root, fields))
+                });
+                if let Some(kept) = kept {
+                    kept.borrow_mut().controls = Some((fields.clone(), controls.clone()));
+                }
+                controls
             };
             let (metadata, sidecar) = observe(HybridFamilyObservation {
                 target: group.target,
@@ -454,6 +480,7 @@ impl<S: DynamicTickSource, T> HybridProgramComposer<T>
                 frame: self.frame,
                 project: &project,
                 controls: &controls,
+                kept: observation.kept_observation,
             })?;
             Ok(OwnedHybridProjection {
                 target: group.target,
@@ -590,6 +617,23 @@ impl HybridFamilyObservation<'_> {
         projection: &mut DynamicFamilySourceProjection,
     ) -> Result<(), TransitionError> {
         (self.project)(fields, projection)
+    }
+
+    /// The fields `value` consumes, `compute`d once per kept static-only row: they depend on the
+    /// owner and the value alone (TL-639 round 4).
+    pub fn consumed_fields(
+        &self,
+        compute: impl FnOnce() -> Result<ProgrammingFieldScope, TransitionError>,
+    ) -> Result<ProgrammingFieldScope, TransitionError> {
+        let Some(kept) = self.kept else {
+            return compute();
+        };
+        if let Some(fields) = &kept.borrow().consumed {
+            return Ok(fields.clone());
+        }
+        let fields = compute()?;
+        kept.borrow_mut().consumed = Some(fields.clone());
+        Ok(fields)
     }
 
     /// Control coverage is independent of authored appearance. Current partners and a master

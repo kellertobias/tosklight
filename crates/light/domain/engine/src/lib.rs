@@ -26,7 +26,7 @@ pub use native_position_projection::PositionNativeWrite;
 mod native_family_footprint;
 mod native_family_projection;
 mod optics_readout;
-pub use native_family_projection::FamilyNativeWrite;
+pub use native_family_projection::{FamilyNativeMemo, FamilyNativeWrite};
 mod native_raw;
 pub use native_raw::{CapturedNativeRaw, ProfileHeadDestination, profile_head_destinations};
 mod mount_projection;

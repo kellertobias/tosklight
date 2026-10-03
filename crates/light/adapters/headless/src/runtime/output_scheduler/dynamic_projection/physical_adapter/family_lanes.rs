@@ -162,6 +162,12 @@ pub(in crate::runtime) struct FamilyLanes {
     position: PhysicalAdapterLane<PositionAdapter>,
     color: PhysicalAdapterLane<RoutingColorAdapter>,
     optics: OpticsLanes,
+    /// The native write list being built and the last installation, kept so an unchanged
+    /// collection installs again by reference (TL-639 round 4).
+    native: std::cell::RefCell<(
+        Vec<light_engine::FamilyNativeWrite>,
+        light_engine::FamilyNativeMemo,
+    )>,
 }
 
 fn lane<A: PhysicalFamilyAdapter>(adapter: A, kind: PhysicalLaneKind) -> PhysicalAdapterLane<A> {
@@ -180,6 +186,7 @@ impl FamilyLanes {
                 PhysicalLaneKind::Live => OpticsLanes::live(),
                 PhysicalLaneKind::Preload(branch) => OpticsLanes::preload(branch),
             },
+            native: Default::default(),
         }
     }
 

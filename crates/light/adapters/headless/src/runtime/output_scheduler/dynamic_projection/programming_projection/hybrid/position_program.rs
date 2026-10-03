@@ -486,6 +486,7 @@ pub(super) fn observe<S: DynamicTickSource, T>(
         trace: evaluation.continuation.family_trace(),
         sources: composer.typed,
         kept: None,
+        kept_observation: None,
     };
     let project = |fields: &ProgrammingFieldScope,
                    projection: &mut DynamicFamilySourceProjection| {
@@ -506,6 +507,7 @@ pub(super) fn observe<S: DynamicTickSource, T>(
         frame: composer.frame,
         project: &project,
         controls: &controls,
+        kept: None,
     });
     composer.typed.check()?;
     let (metadata, sidecar) = output?;

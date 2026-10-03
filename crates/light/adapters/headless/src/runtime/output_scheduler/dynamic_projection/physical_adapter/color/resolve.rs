@@ -416,6 +416,28 @@ impl ColorAdapter {
             target,
             ..
         } = &mut *scratch;
+        // TL-639 round 4: an unchanged target replays from its key channels alone; any error or
+        // other destination falls through to the complete capture, which reports it.
+        if let Some(intent) = intent
+            && let Some(memo) = target
+                .as_ref()
+                .filter(|memo| memo.may_replay_key(intent, request.previous))
+            && request
+                .frame
+                .native_raw_channels_into(request.target, descriptor.key_channels(), current)
+                .is_ok_and(|destination| destination == descriptor.root)
+            && let Some(replayed) = memo.replay_key(current)
+        {
+            self.count(|c| {
+                c.result_reuses += replayed.outcomes.len() as u64;
+                c.resolves += 1;
+            });
+            #[cfg(test)]
+            {
+                scratch.target_replays += 1;
+            }
+            return Ok(replayed);
+        }
         request.frame.native_raw_into(request.target, native)?;
         if native.destination() != Some(descriptor.root)
             || native.token() != Some(request.frame.token)

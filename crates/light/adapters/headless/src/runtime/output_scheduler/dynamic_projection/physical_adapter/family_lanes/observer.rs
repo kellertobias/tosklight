@@ -39,7 +39,13 @@ impl HybridFrameObserver<FamilySidecar> for FamilyFrameObserver<'_> {
         token: &mut light_engine::PreparedStaticFamilyFrame,
         sidecars: &[FamilySidecar],
     ) -> Result<(), TransitionError> {
-        project_family_native_rows(capture, frame_token, token, sidecars)
+        project_family_native_rows(
+            capture,
+            frame_token,
+            token,
+            sidecars,
+            &mut self.lanes.native.borrow_mut(),
+        )
     }
 
     fn begin_frame(&mut self, token: &CapturedFrameToken) -> Result<(), TransitionError> {

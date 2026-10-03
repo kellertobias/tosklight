@@ -70,6 +70,8 @@ struct LaneState<A: PhysicalFamilyAdapter> {
     shared_slots: FxHashMap<NativeControlSlot, u32>,
     /// Number of accepted frames; stamps the committed entries each accept keeps.
     accepts: u64,
+    /// The last accepted frame's staging storage, emptied, for the next frame (TL-639 round 4).
+    spare: Option<Staged<A::Continuity>>,
 }
 
 /// One lane of one family adapter. Interior mutability lets the same lane serve as the hybrid
@@ -112,6 +114,7 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
                 released: Vec::new(),
                 shared_slots: FxHashMap::default(),
                 accepts: 0,
+                spare: None,
             }),
         }
     }
@@ -163,12 +166,18 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
             }
         }
         self.adapter.begin_lane_frame(token)?;
-        state.staged = Some(Staged {
-            token: token.clone(),
-            entries: Vec::new(),
-            writes: Vec::new(),
-            held: FxHashSet::default(),
-            observed: FxHashSet::default(),
+        state.staged = Some(match state.spare.take() {
+            Some(mut spare) => {
+                spare.token = token.clone();
+                spare
+            }
+            None => Staged {
+                token: token.clone(),
+                entries: Vec::new(),
+                writes: Vec::new(),
+                held: FxHashSet::default(),
+                observed: FxHashSet::default(),
+            },
         });
         Ok(())
     }
@@ -240,7 +249,8 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
         if !frame.token.matches_geometry(frame.geometry) {
             return invalid("physical adapter geometry belongs to another frame");
         }
-        let fields = self.adapter.consumed_fields(owner, observation.value)?;
+        let fields = observation
+            .consumed_fields(|| self.adapter.consumed_fields(owner, observation.value))?;
         let mut sources = DynamicFamilySourceProjection::default();
         observation.project_fields(&fields, &mut sources)?;
         let controls = observation.controls_for_fields(&fields);
@@ -425,12 +435,12 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
         if !Self::staged_token_matches(&state, token) {
             return false;
         }
-        let staged = state.staged.take().expect("matched staged frame");
+        let mut staged = state.staged.take().expect("matched staged frame");
         // TL-639 round 2: updated in place. Produced entries replace theirs, held owners keep
         // theirs, and every entry neither touched is released with its last provenance.
         state.accepts += 1;
         let stamp = state.accepts;
-        for (key, continuity, provenance) in staged.entries {
+        for (key, continuity, provenance) in staged.entries.drain(..) {
             state.committed.insert(
                 key,
                 Committed {
@@ -441,7 +451,7 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
                 },
             );
         }
-        for key in staged.held {
+        for key in staged.held.drain() {
             if let Some(entry) = state.committed.get_mut(&key) {
                 entry.stamp = stamp;
             }
@@ -460,7 +470,10 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
                 last_provenance: entry.provenance,
             },
         ));
-        state.last_accepted = Some(staged.token);
+        staged.writes.clear();
+        staged.observed.clear();
+        state.last_accepted = Some(staged.token.clone());
+        state.spare = Some(staged);
         self.adapter.accept_lane_frame(token);
         true
     }

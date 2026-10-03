@@ -155,6 +155,12 @@ impl PreparedStaticFamilyFrame {
 
     /// Queue a complete materialized family. At most one result may address each target/owner;
     /// compose all its writers first. A missing static base stays an upstream frame requirement.
+    /// Room for `additional` more [`Self::project_family`] rows (TL-639 round 4). Projections
+    /// are applied per row, so their storage order is not observable.
+    pub fn reserve_family_projections(&mut self, additional: usize) {
+        self.projections.reserve(additional);
+    }
+
     pub fn project_family(
         &mut self,
         target: FixtureId,

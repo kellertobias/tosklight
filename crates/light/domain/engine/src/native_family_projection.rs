@@ -38,6 +38,30 @@ pub struct FamilyNativeWrite {
     pub raw: u32,
 }
 
+/// The last native family collection one lane installed (TL-639 round 4).
+///
+/// Everything [`PreparedStaticFamilyFrame::project_family_native`] validates and installs is a
+/// function of the runtime generation and the writes, except that every addressed owner must
+/// carry a captured semantic value on the frame's token. So equal writes under the same
+/// generation install the kept collection again once each owner's semantic value is checked on
+/// this token, in the same order and with the same error as a full installation.
+#[derive(Default)]
+pub struct FamilyNativeMemo {
+    generation: Option<u64>,
+    writes: Vec<FamilyNativeWrite>,
+    projection: NativePositionProjection,
+    #[cfg(test)]
+    kept: u64,
+}
+
+#[cfg(test)]
+impl FamilyNativeMemo {
+    /// Installations answered from the memo.
+    pub(crate) fn kept_installations(&self) -> u64 {
+        self.kept
+    }
+}
+
 /// The validated destination of one write.
 struct Destination {
     root: FixtureId,
@@ -132,6 +156,49 @@ impl PreparedStaticFamilyFrame {
         Ok(())
     }
 
+    /// [`Self::project_family_native`] for a lane that keeps its last installation in `memo`.
+    /// `writes` is taken over by the memo after a new installation and holds the memo's previous
+    /// list, both to be refilled by the caller.
+    pub fn project_family_native_kept(
+        &mut self,
+        capture: &PreparedOutputFrame,
+        token: &CapturedFrameToken,
+        writes: &mut Vec<FamilyNativeWrite>,
+        memo: &mut FamilyNativeMemo,
+    ) -> Result<(), EngineError> {
+        let generation = capture.generation.identity();
+        let kept = memo.generation == Some(generation)
+            && !writes.is_empty()
+            && memo.writes == *writes
+            && Arc::ptr_eq(&self.capture_identity, &capture.identity)
+            && token.matches_static_frame(self)
+            && token.generation() == capture.generation()
+            && self.position_native.instances.is_empty();
+        if !kept {
+            self.project_family_native(capture, token, writes)?;
+            if !writes.is_empty() {
+                memo.generation = Some(generation);
+                std::mem::swap(&mut memo.writes, writes);
+                memo.projection = self.position_native.clone();
+            }
+            return Ok(());
+        }
+        let mut run = None;
+        for write in writes.iter() {
+            let key = (write.target, write.owner, write.instance_id);
+            if run != Some(key) {
+                run = Some(key);
+                self.validate_semantic_owner(write)?;
+            }
+        }
+        self.position_native = memo.projection.clone();
+        #[cfg(test)]
+        {
+            memo.kept += 1;
+        }
+        Ok(())
+    }
+
     /// Validate what one write's owner and instance determine: destination, semantic owner,
     /// instance, mode and footprint. Returns the destination, mode and footprint.
     fn validate_family_owner<'g>(
@@ -156,7 +223,8 @@ impl PreparedStaticFamilyFrame {
                 "native {name} instance does not belong to target"
             )));
         }
-        let mode = crate::fixture::profile_mode(fixture)
+        let mode = generation
+            .fixture_mode(fixture_index)
             .ok_or_else(|| invalid(format!("native {name} has no profile mode")))?;
         let footprint = generation
             .family_footprint(
@@ -262,8 +330,7 @@ fn install(
     destination: &Destination,
 ) -> Result<(), EngineError> {
     let index = write.channel_index as usize;
-    let row = candidate
-        .instances
+    let row = Arc::make_mut(&mut candidate.instances)
         .entry(write.instance_id)
         .or_insert_with(|| NativePositionInstance {
             root: destination.root,
@@ -307,7 +374,8 @@ fn verify_complete(
     let generation = &capture.generation;
     for (&(target, owner), &(root, fixture_index)) in targets {
         let fixture = &generation.snapshot().fixtures[fixture_index];
-        let mode = crate::fixture::profile_mode(fixture)
+        let mode = generation
+            .fixture_mode(fixture_index)
             .ok_or_else(|| invalid("native family has no profile mode"))?;
         for instance in std::iter::once(root.0).chain(fixture.multipatch.iter().map(|c| c.id)) {
             let expected = generation

@@ -531,3 +531,54 @@ fn interleaved_owner_runs_install_exactly_like_grouped_writes() {
     incomplete.remove(missing);
     assert!(render(&incomplete).is_err());
 }
+
+/// TL-639 round 4: a lane's kept installation of unchanged writes renders the full installation's
+/// bytes, and any changed write installs anew.
+#[test]
+fn a_kept_native_installation_is_the_full_installation() {
+    let rig = Rig::new(false);
+    let writes = rig.all();
+    let mut memo = crate::FamilyNativeMemo::default();
+    let mut install = |writes: &[FamilyNativeWrite], kept: bool| {
+        let (capture, mut frame) = rig.frame(Default::default());
+        let token = capture.frame_token();
+        if kept {
+            let mut list = writes.to_vec();
+            frame
+                .project_family_native_kept(&capture, &token, &mut list, &mut memo)
+                .unwrap();
+        } else {
+            frame
+                .project_family_native(&capture, &token, writes)
+                .unwrap();
+        }
+        let output = rig
+            .engine
+            .render_static_family_frame(&capture, frame)
+            .unwrap();
+        (output.universes.clone(), memo.kept_installations())
+    };
+    let (full, _) = install(&writes, false);
+    let (first, kept) = install(&writes, true);
+    assert_eq!(
+        (first == full, kept),
+        (true, 0),
+        "the first installation is full"
+    );
+    let (again, kept) = install(&writes, true);
+    assert_eq!(
+        (again == full, kept),
+        (true, 1),
+        "unchanged writes are kept"
+    );
+    let mut changed = writes.clone();
+    changed[0].raw = u32::from(changed[0].raw == 0);
+    let (fresh_full, _) = install(&changed, false);
+    let (fresh_kept, kept) = install(&changed, true);
+    assert_eq!(
+        (fresh_kept == fresh_full, kept),
+        (true, 1),
+        "a change installs anew"
+    );
+    assert_ne!(fresh_kept, full);
+}

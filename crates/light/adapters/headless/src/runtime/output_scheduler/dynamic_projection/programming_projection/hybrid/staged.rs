@@ -380,7 +380,9 @@ fn compose_family_cohort<T, S: DynamicTickSource, R: HybridFrameResolver>(
     // quadratic in its static-only targets (thousands at full-rig size).
     let static_only = static_only.into_iter().collect::<StaticOnlyTargets>();
     let static_only = &static_only;
-    let (mut requirements, mut projections) = (Vec::new(), Vec::new());
+    // Sized once (TL-639 round 4): a cohort projects at most one row per group, and growing a
+    // list of thousands of rows by doubling allocated and copied it about a dozen times.
+    let (mut requirements, mut projections) = (Vec::new(), Vec::with_capacity(groups.len()));
     let protected_current = protected_current_targets(view, groups);
     observer
         .prepare_current(view.frame, view.static_token, &protected_current)
@@ -685,6 +687,7 @@ fn project_family_rows<T>(
     projections: Vec<OwnedHybridProjection<T>>,
 ) -> Result<Vec<T>, DynamicRuntimeError> {
     let mut sidecars = Vec::with_capacity(projections.len());
+    token.reserve_family_projections(projections.len());
     for OwnedHybridProjection {
         target,
         owner,

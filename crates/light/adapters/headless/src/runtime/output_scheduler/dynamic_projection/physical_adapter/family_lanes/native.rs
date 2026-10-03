@@ -25,6 +25,10 @@ pub(super) fn project_family_native_rows(
     frame_token: &CapturedFrameToken,
     token: &mut light_engine::PreparedStaticFamilyFrame,
     rows: &[FamilySidecar],
+    (writes, memo): &mut (
+        Vec<light_engine::FamilyNativeWrite>,
+        light_engine::FamilyNativeMemo,
+    ),
 ) -> Result<(), TransitionError> {
     if rows
         .iter()
@@ -34,24 +38,24 @@ pub(super) fn project_family_native_rows(
             "native family sidecar belongs to another frame or family",
         ));
     }
-    let writes: Vec<_> = rows
-        .iter()
-        .flat_map(|row| {
-            row.writes()
-                .iter()
-                .map(move |write| light_engine::FamilyNativeWrite {
-                    owner: row.owner(),
-                    target: row.target(),
-                    instance_id: write.slot.destination.0,
-                    channel_index: write.slot.channel_index,
-                    channel_id: write.channel_id,
-                    function_id: write.function_id,
-                    split: write.slot.split,
-                    raw: write.raw,
-                })
-        })
-        .collect();
-    token
-        .project_family_native(capture, frame_token, &writes)
-        .map_err(|error| invalid(&error.to_string()))
+    writes.clear();
+    writes.extend(rows.iter().flat_map(|row| {
+        row.writes()
+            .iter()
+            .map(move |write| light_engine::FamilyNativeWrite {
+                owner: row.owner(),
+                target: row.target(),
+                instance_id: write.slot.destination.0,
+                channel_index: write.slot.channel_index,
+                channel_id: write.channel_id,
+                function_id: write.function_id,
+                split: write.slot.split,
+                raw: write.raw,
+            })
+    }));
+    let result = token
+        .project_family_native_kept(capture, frame_token, writes, memo)
+        .map_err(|error| invalid(&error.to_string()));
+    writes.clear();
+    result
 }

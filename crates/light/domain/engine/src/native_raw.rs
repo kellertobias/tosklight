@@ -165,6 +165,83 @@ impl PreparedStaticFamilyFrame {
         self.capture_native_raw_into(capture, token, target, Some(instance_id), out)
     }
 
+    /// The pre-master native raw values of only `channels` (sorted mode channel indices) of the
+    /// fixture that owns `target`, in `channels` order, each exactly as the complete capture of
+    /// [`Self::native_raw_into`] holds it (TL-639 round 4). A channel no head resolves reads 0, as
+    /// in the complete vector. Returns the root destination. Validation is the complete capture's;
+    /// on error `out` is empty.
+    pub fn native_raw_channels_into(
+        &self,
+        capture: &PreparedOutputFrame,
+        token: &CapturedFrameToken,
+        target: FixtureId,
+        channels: &[usize],
+        out: &mut Vec<u32>,
+    ) -> Result<FixtureId, EngineError> {
+        out.clear();
+        let invalid = |message: &str| EngineError::Invalid(message.into());
+        if !Arc::ptr_eq(&self.capture_identity, &capture.identity) {
+            return Err(EngineError::StalePreparedFrame);
+        }
+        if !token.matches_static_frame(self) || token.generation() != capture.generation() {
+            return Err(invalid(
+                "native raw values requested with another frame token",
+            ));
+        }
+        debug_assert!(channels.windows(2).all(|pair| pair[0] < pair[1]));
+        let generation = &capture.generation;
+        let (destination, fixture_index) = generation
+            .profile_owner(target)
+            .ok_or_else(|| invalid("native raw target has no profile destination"))?;
+        let mode = generation
+            .fixture_mode(fixture_index)
+            .ok_or_else(|| invalid("native raw destination has no profile mode"))?;
+        if channels
+            .last()
+            .is_some_and(|&last| last >= mode.channels.len())
+        {
+            return Err(invalid(
+                "native raw channel is outside the destination mode",
+            ));
+        }
+        let projection = generation
+            .profile_projection(destination)
+            .ok_or_else(|| invalid("native raw destination projection plan is missing"))?;
+        let resolution = projection
+            .resolution()
+            .bind(mode)
+            .map_err(|error| EngineError::Invalid(error.to_string()))?;
+        let frame = self
+            .resolved
+            .frame
+            .as_ref()
+            .ok_or_else(|| invalid("prepared static resolution has no dense frame"))?;
+        let values = ProfileValueIndex::Dense {
+            frame,
+            channels: generation.channel_slots(),
+        };
+        out.resize(channels.len(), 0);
+        // The family-agnostic capture applies no installation inversion (`instance_id` None).
+        for head in projection.heads() {
+            let read = values.head_read(head.owner);
+            for &channel_index in head.channel_indices.iter() {
+                let Ok(position) = channels.binary_search(&channel_index) else {
+                    continue;
+                };
+                out[position] = resolution
+                    .resolve_channel_with(
+                        channel_index,
+                        |which, attribute| values.value_at(read, channel_index, which, attribute),
+                        false,
+                        None,
+                        |_| ChannelScales::default(),
+                    )
+                    .raw;
+            }
+        }
+        Ok(destination)
+    }
+
     fn capture_native_raw_into(
         &self,
         capture: &PreparedOutputFrame,
@@ -226,14 +303,20 @@ impl PreparedStaticFamilyFrame {
         };
         // The mode, projection and resolution binding below are generation constants: a
         // cached vector of this token proves they succeeded for this destination before.
-        let key = (destination, instance_id);
+        // Without inversion an instance's vector is the family-agnostic one, computed by the same
+        // reads below, so both share one entry (TL-639 round 4).
+        let key = (
+            destination,
+            instance_id.filter(|_| inversion.pan || inversion.tilt),
+        );
         if self.native_raw.copy_into(&key, &mut out.raw) {
             out.token = Some(token.clone());
             out.destination = Some(destination);
             out.instance_id = instance_id;
             return Ok(());
         }
-        let mode = crate::fixture::profile_mode(fixture)
+        let mode = generation
+            .fixture_mode(fixture_index)
             .ok_or_else(|| invalid("native raw destination has no profile mode"))?;
         let projection = generation
             .profile_projection(destination)

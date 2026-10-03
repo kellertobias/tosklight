@@ -54,6 +54,9 @@ pub(crate) struct RuntimeGeneration {
     /// Declared default poses, decoded lazily against exactly this generation's projections. The
     /// Playback engine starts a Position that fades in from nothing here (TL-552).
     declared_positions: Arc<crate::position_adoption::DeclaredPositions>,
+    /// Each fixture's position in its profile's modes, found on first use (TL-639 round 4).
+    /// `crate::fixture::profile_mode` searches the modes by id on every call.
+    mode_indices: Arc<std::sync::OnceLock<Box<[Option<u32>]>>>,
 }
 
 /// Where a replacement generation's Group Master levels come from.
@@ -136,6 +139,7 @@ impl RuntimeGeneration {
             point_projection,
             mount_projection,
             declared_positions,
+            mode_indices: Arc::default(),
         }
     }
 
@@ -260,6 +264,7 @@ impl RuntimeGeneration {
             point_projection,
             mount_projection,
             declared_positions,
+            mode_indices: Arc::default(),
         }
     }
 
@@ -294,6 +299,8 @@ impl RuntimeGeneration {
                 point_projection: Arc::clone(&current.point_projection),
                 mount_projection: Arc::clone(&current.mount_projection),
                 declared_positions: Arc::clone(&current.declared_positions),
+                // Same snapshot, same modes.
+                mode_indices: Arc::clone(&current.mode_indices),
             }),
             GroupMasterGenerationUpdate::Changed,
         )
@@ -316,6 +323,34 @@ impl RuntimeGeneration {
 
     pub(crate) fn snapshot(&self) -> &EngineSnapshot {
         &self.snapshot
+    }
+
+    /// `crate::fixture::profile_mode` of the snapshot's fixture at `fixture_index`, without
+    /// searching the profile's modes again (TL-639 round 4).
+    pub(crate) fn fixture_mode(&self, fixture_index: usize) -> Option<&light_fixture::FixtureMode> {
+        let indices = self.mode_indices.get_or_init(|| {
+            self.snapshot
+                .fixtures
+                .iter()
+                .map(|fixture| {
+                    let mode = crate::fixture::profile_mode(fixture)?;
+                    let profile = fixture.definition.profile_snapshot.as_deref()?;
+                    let index = profile
+                        .modes
+                        .iter()
+                        .position(|candidate| std::ptr::eq(candidate, mode))?;
+                    u32::try_from(index).ok()
+                })
+                .collect()
+        });
+        let fixture = self.snapshot.fixtures.get(fixture_index)?;
+        let index = (*indices.get(fixture_index)?)?;
+        fixture
+            .definition
+            .profile_snapshot
+            .as_deref()?
+            .modes
+            .get(index as usize)
     }
 
     pub(crate) fn snapshot_arc(&self) -> Arc<EngineSnapshot> {

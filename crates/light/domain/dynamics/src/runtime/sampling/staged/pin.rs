@@ -17,6 +17,13 @@ pub(super) struct LanePinning<'a> {
     pub(super) retain_held: bool,
 }
 
+/// What pinning reads of one lane, the same for every target of a controller.
+pub(super) struct LaneFacts<'a> {
+    unavailable_native: bool,
+    typed: bool,
+    random_phases: Option<&'a HashMap<FixtureId, f32>>,
+}
+
 /// Targets whose held Angle sources differ from the live definition during a synchronized
 /// Resume; their old and live branches must stay zipped instead of being folded.
 pub(super) fn preserve_angle_targets(
@@ -97,16 +104,45 @@ impl LanePinning<'_> {
         mut undo: Option<&mut transaction::OutputFrameUndo>,
     ) {
         let frame = self.frame;
+        let lanes = &frame.definition.lanes;
+        // TL-639 round 4: what depends only on the controller or the lane is read once per
+        // controller, not once per target and lane. Pinning never changes these maps.
+        let facts = lanes
+            .iter()
+            .map(|lane| {
+                let compiled = instance.programming_lanes.get(&lane.id);
+                LaneFacts {
+                    unavailable_native: compiled
+                        .is_some_and(|lane| lane.unavailable_native_source().is_some()),
+                    typed: compiled.is_some(),
+                    random_phases: self.random_phases.get(&lane.id),
+                }
+            })
+            .collect::<Vec<_>>();
+        let selection = instance.lane_selections.get(&controller.id);
+        let active = selection.map(|selection| {
+            frame
+                .targets
+                .iter()
+                .flat_map(|target| lanes.iter().map(|lane| selection.allows(*target, lane.id)))
+                .collect::<Vec<_>>()
+        });
         for (target_index, target) in frame.targets.iter().copied().enumerate() {
             let preserve_angle_branches =
                 preserve_angle_targets.is_some_and(|targets| targets.contains(&target));
-            for (lane_index, lane) in frame.definition.lanes.iter().enumerate() {
+            for (lane_index, lane) in lanes.iter().enumerate() {
+                if active
+                    .as_ref()
+                    .is_some_and(|active| !active[target_index * lanes.len() + lane_index])
+                {
+                    continue;
+                }
                 self.pin_lane(
                     instance,
                     work,
                     controller,
                     (target_index, target),
-                    (lane_index, lane),
+                    (lane_index, lane, &facts[lane_index]),
                     preserve_angle_branches,
                     random_envelopes,
                     undo.as_deref_mut(),
@@ -122,7 +158,7 @@ impl LanePinning<'_> {
         work: &mut PinnedController,
         controller: &DynamicController,
         (target_index, target): (usize, FixtureId),
-        (lane_index, lane): (usize, &crate::DynamicLane),
+        (lane_index, lane, facts): (usize, &crate::DynamicLane, &LaneFacts<'_>),
         preserve_angle_branches: bool,
         random_envelopes: &mut rustc_hash::FxHashMap<RandomKey, f32>,
         undo: Option<&mut transaction::OutputFrameUndo>,
@@ -130,9 +166,6 @@ impl LanePinning<'_> {
         let frame = self.frame;
         let holding = self.holding;
         let retain_held = self.retain_held;
-        if !instance.lane_is_active(controller.id, target, lane.id) {
-            return;
-        }
         let key = (controller.id, target, lane.id);
         if instance.unavailable_samples.contains_key(&key)
             && (holding || frame.synchronized_resume_mix.is_some_and(|mix| mix < 1.0))
@@ -161,16 +194,11 @@ impl LanePinning<'_> {
         if holding && instance.synchronized_hold_captured {
             return;
         }
-        if instance
-            .programming_lanes
-            .get(&lane.id)
-            .is_some_and(|lane| lane.unavailable_native_source().is_some())
-        {
+        if facts.unavailable_native {
             return;
         }
-        let phase = self
+        let phase = facts
             .random_phases
-            .get(&lane.id)
             .and_then(|phases| phases.get(&target))
             .or_else(|| instance.phase_by_lane_target.get(&(lane.id, target)))
             .copied()
@@ -187,7 +215,7 @@ impl LanePinning<'_> {
             DynamicSampleExpression::AngleCurrent {
                 address: Arc::new(address.clone()),
             }
-        } else if instance.programming_lanes.contains_key(&lane.id) {
+        } else if facts.typed {
             work.typed_indices.push(work.lanes.len());
             work.lanes.push(PinnedLane {
                 target,

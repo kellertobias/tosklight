@@ -122,8 +122,10 @@ impl DynamicLaneSelection {
 #[derive(Clone)]
 pub(super) struct CompiledLaneSelection {
     authored: DynamicLaneSelection,
-    uniform: HashSet<Uuid>,
-    targets: HashMap<FixtureId, HashSet<Uuid>>,
+    /// Fx-hashed (TL-639 round 4): pinning asks once per target and lane each frame. Only
+    /// membership is read; `authored` keeps the order.
+    uniform: rustc_hash::FxHashSet<Uuid>,
+    targets: rustc_hash::FxHashMap<FixtureId, rustc_hash::FxHashSet<Uuid>>,
 }
 
 impl CompiledLaneSelection {
@@ -132,7 +134,7 @@ impl CompiledLaneSelection {
         definition: &DynamicDefinition,
     ) -> Result<Self, DynamicRuntimeError> {
         let lanes = |ids: &[Uuid]| {
-            let unique = ids.iter().copied().collect::<HashSet<_>>();
+            let unique = ids.iter().copied().collect::<rustc_hash::FxHashSet<_>>();
             if unique.len() != ids.len() || ids.iter().any(Uuid::is_nil) {
                 Err(DynamicRuntimeError::InvalidSnapshot(
                     "lane selection contains invalid or duplicate lane IDs".into(),
@@ -141,8 +143,8 @@ impl CompiledLaneSelection {
                 Ok(unique)
             }
         };
-        let mut uniform = HashSet::new();
-        let mut targets = HashMap::new();
+        let mut uniform = rustc_hash::FxHashSet::default();
+        let mut targets = rustc_hash::FxHashMap::default();
         // Validate before closure; normalization must not hide malformed duplicate IDs.
         match &authored {
             DynamicLaneSelection::All => {}
