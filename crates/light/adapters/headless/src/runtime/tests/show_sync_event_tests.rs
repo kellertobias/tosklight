@@ -319,7 +319,7 @@ async fn without_an_opted_in_subscription_the_desk_stream_is_unchanged() {
 }
 
 #[tokio::test]
-async fn the_file_manager_replacing_or_deleting_the_active_show_announces_a_gap_at_once() {
+async fn the_file_manager_refuses_to_replace_move_rename_or_delete_the_active_show() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let _feed = subscribe_sync_feed(&state);
@@ -337,43 +337,98 @@ async fn the_file_manager_replacing_or_deleting_the_active_show_announces_a_gap_
             .body(Body::from(body.to_string()))
             .unwrap()
     };
-
-    // Replace: copy a same-named file from a sub-folder over the active show.
     let staged = path.parent().unwrap().join("replacement");
     std::fs::create_dir_all(&staged).unwrap();
     ShowStore::open(&path)
         .unwrap()
         .backup_to(staged.join(&name))
         .unwrap();
+    std::fs::write(path.parent().unwrap().join("notes.txt"), b"notes").unwrap();
+    let before = std::fs::read(&path).unwrap();
     let cursor = sync_cursor(&state);
-    let replaced = app
-        .clone()
-        .oneshot(operate(
+    for (request, body) in [
+        (
             "fm-replace",
             serde_json::json!({"operation": "copy", "sources": [format!("replacement/{name}")],
                 "destination": null, "conflict": "replace"}),
-        ))
-        .await
-        .unwrap();
-    assert_eq!(replaced.status(), StatusCode::OK);
+        ),
+        (
+            "fm-delete",
+            serde_json::json!({"operation": "delete", "sources": [name.clone()]}),
+        ),
+        (
+            "fm-move",
+            serde_json::json!({"operation": "move", "sources": [name.clone()],
+                "destination": "replacement", "conflict": "replace"}),
+        ),
+        (
+            "fm-rename",
+            serde_json::json!({"operation": "rename", "sources": [name.clone()],
+                "name": "Elsewhere.show"}),
+        ),
+        (
+            "fm-rename-over",
+            serde_json::json!({"operation": "rename", "sources": ["notes.txt"],
+                "name": name.clone()}),
+        ),
+    ] {
+        let refused = app.clone().oneshot(operate(request, body)).await.unwrap();
+        assert_eq!(refused.status(), StatusCode::CONFLICT, "{request}");
+        let body = axum::body::to_bytes(refused.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(
+            String::from_utf8_lossy(&body).contains("Open another show first"),
+            "{request} says what to do instead"
+        );
+    }
     assert_eq!(
-        gaps(&sync_events(&state, cursor)),
-        vec![ShowSyncGapReason::ShowReplaced]
+        std::fs::read(&path).unwrap(),
+        before,
+        "the running show's file is untouched"
+    );
+    assert_eq!(state.active_show.current().unwrap().path, entry.path);
+    assert!(
+        sync_events(&state, cursor).is_empty(),
+        "nothing changed, so nothing is announced"
     );
 
-    let cursor = sync_cursor(&state);
-    let deleted = app
+    // Every other file under the shows root is still the operator's to manage.
+    let other = app
         .clone()
         .oneshot(operate(
-            "fm-delete",
-            serde_json::json!({"operation": "delete", "sources": [name]}),
+            "fm-other",
+            serde_json::json!({"operation": "delete", "sources": [format!("replacement/{name}")]}),
         ))
         .await
         .unwrap();
-    assert_eq!(deleted.status(), StatusCode::OK);
-    assert_eq!(
-        gaps(&sync_events(&state, cursor)),
-        vec![ShowSyncGapReason::ShowReplaced]
-    );
+    assert_eq!(other.status(), StatusCode::OK);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn readiness_says_whether_an_architect_follows_the_show() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let readiness = || async {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v2/readiness")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()["architect_sync_active"].clone()
+    };
+    assert_eq!(readiness().await, serde_json::json!(false));
+    let feed = subscribe_sync_feed(&state);
+    assert_eq!(readiness().await, serde_json::json!(true));
+    drop(feed);
+    assert_eq!(readiness().await, serde_json::json!(false));
     let _ = std::fs::remove_dir_all(data_dir);
 }

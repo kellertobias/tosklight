@@ -1,3 +1,4 @@
+mod active_show;
 mod execute;
 
 use std::{collections::HashSet, fs, path::PathBuf};
@@ -82,10 +83,11 @@ pub(super) async fn operate(
     validate_sources(&input.sources)?;
     let _apply_to_all = input.apply_to_all;
     let context = OperationContext::new(&state, root_id, &input)?;
+    active_show::reject_active_show_changes(&state, &context, &input)?;
     let active_show = super::super::show_sync_feed::active_show_file(&state);
     let output = execute_operation(&context, &input);
-    // The shows root is an ordinary file root here, so an operation can replace or delete the
-    // active show's file; a bound Architect must hear about it at once.
+    // Belt and braces: the guard above refuses every operation that names the running show's
+    // file, but if the file changes anyway a bound Architect must hear about it at once.
     super::super::show_sync_feed::announce_if_active_show_file_changed(&state, active_show);
     let output = output?;
     emit_completion(&state, input.operation, &output.items);
