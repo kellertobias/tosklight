@@ -12,6 +12,16 @@ use light_engine::{Engine, RenderOptions};
 use light_fixture::FixtureProfile;
 use light_programmer::ProgrammerRegistry;
 
+mod actual_quality;
+mod adoption;
+mod derived;
+mod destinations;
+pub(in crate::runtime) mod direct;
+mod fitting_bench;
+mod lifecycle;
+mod reference;
+mod review;
+
 pub(in crate::runtime) fn intent(rgb: [f32; 3], amber: f32) -> ColorIntent {
     let recipe = VirtualColorRecipe {
         version: 1,

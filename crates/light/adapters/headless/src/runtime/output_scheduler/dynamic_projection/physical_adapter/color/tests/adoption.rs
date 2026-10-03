@@ -1,11 +1,11 @@
 //! TL-559 native descriptors, reference head, page overflow (AC7) and representation
 //! adoption (AC4): only a real native edit turns Semantic into Direct, from the published
 //! premaster writes of one frame; the first semantic edit adopts a Direct value once.
-use super::native::*;
-use super::profiles::*;
-use super::tests::{intent, program, uv_only_black};
-use super::tests_direct::{DirectRig, direct, direct_program, identity, path_channels};
-use super::*;
+use super::super::native::*;
+use super::super::profiles::*;
+use super::super::tests::{intent, program, uv_only_black};
+use super::super::*;
+use super::direct::{DirectRig, direct, direct_program, identity, path_channels};
 use light_core::programming::{
     ColorComponent, ComponentEdit, NativeColorEdit, ProgrammingComponent, ScalarEdit,
     VirtualColorAuthoringV1,
@@ -49,7 +49,7 @@ fn recipe(value: &AttributeValue) -> &NativeColorRecipe {
     }
 }
 
-fn published(resolved: &super::tests_direct::Resolved, value: &AttributeValue) -> Vec<u32> {
+fn published(resolved: &super::direct::Resolved, value: &AttributeValue) -> Vec<u32> {
     let _ = value;
     resolved.result.writes.iter().map(|w| w.raw).collect()
 }

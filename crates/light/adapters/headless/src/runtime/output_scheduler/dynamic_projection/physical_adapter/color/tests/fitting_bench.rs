@@ -15,10 +15,10 @@
 //! and asserts no timing. This is a synthetic, sequential one-fixture-per-capture fit workload:
 //! it is not a simultaneous output frame, a render deadline, a physical colour match, native
 //! Stage evidence or TL-596 acceptance. The production programming contract is not touched.
-use super::profiles::*;
-use super::tests::{intent, magenta, program, warm_white};
-use super::tests_direct::{DirectRig, Resolved};
-use super::*;
+use super::super::profiles::*;
+use super::super::tests::{intent, magenta, program, warm_white};
+use super::super::*;
+use super::direct::{DirectRig, Resolved};
 use light_core::NativeColorValue;
 use light_core::programming::{ColorWheelConstraint, UvIntent};
 use light_engine::{CapturedFrameToken, RenderOptions};

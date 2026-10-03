@@ -1,14 +1,14 @@
 //! TL-559 round-3 review regressions: exact native replay does not claim a chromaticity match,
 //! native-edit adoption validates its publication on both branches, and a held visible
 //! solution reports UV appearance and shared-control conflicts from the final written values.
-use super::native::{PublishedColorHead, adopt_native_edit};
-use super::profiles::*;
-use super::tests::{intent, program};
-use super::tests_destinations::two_heads;
-use super::tests_direct::{
+use super::super::native::{PublishedColorHead, adopt_native_edit};
+use super::super::profiles::*;
+use super::super::tests::{intent, program};
+use super::super::*;
+use super::destinations::two_heads;
+use super::direct::{
     DirectRig, direct, direct_program, path_channels, rgbw_widths, unknown_white_uv,
 };
-use super::*;
 use light_core::NativeColorBinding;
 use light_core::programming::{ComponentEdit, NativeColorEdit};
 use light_fixture::{FixtureProfile, OpticalEmitterBand, OpticalSource};
@@ -364,7 +364,7 @@ fn exact_replay_outcome_is_native_identity_only() {
 /// The comparison itself, including inputs no compiled profile produces.
 #[test]
 fn measured_source_comparison_classifies_black_dim_zero_y_and_unknown() {
-    use super::direct::measure_against_source as measure;
+    use super::super::direct::measure_against_source as measure;
     let scale = |v: Xyz, k: f32| xyz(v.x * k, v.y * k, v.z * k);
     let black = xyz(0., 0., 0.);
     // Dim red vs dim blue: out of gamut, finite diagnostics.

@@ -1,9 +1,9 @@
 //! TL-559 Direct replay through the Color adapter on real captured frames: exact native replay
 //! (AC1), identity-only compatibility and fallback fitting (AC2/AC3), per-tick forward
 //! evaluation of changing recipes (AC5) and partial visible/UV knowledge (AC8/AC9).
-use super::profiles::*;
-use super::tests::{intent, program};
-use super::*;
+use super::super::profiles::*;
+use super::super::tests::{intent, program};
+use super::super::*;
 use light_core::programming::{
     DirectIncompatibility, NativeColorObservation, NativeColorRecipe, NativeColorSpread,
     PortableUv, PortableVisibleColor,

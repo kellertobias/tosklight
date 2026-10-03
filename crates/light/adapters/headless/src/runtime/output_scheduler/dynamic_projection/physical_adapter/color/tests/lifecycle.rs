@@ -7,9 +7,9 @@
 //! the Color adapter on real captured frames. The stored Cue list body, its Cue count and the
 //! requested intent never change; only destination fitting does, and every destination Color
 //! channel is written or parked.
-use super::profiles::*;
-use super::tests::{magenta, program, warm_white};
-use super::*;
+use super::super::profiles::*;
+use super::super::tests::{magenta, program, warm_white};
+use super::super::*;
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, ActiveShowPorts,
     ActiveShowService, ActiveShowUnitOfWork, BackupIdentity, CueNumber, EventBus,
@@ -599,7 +599,7 @@ fn recorded_semantic_cues_survive_save_reload_fixture_replacement_and_new_live_g
 /// keeps the tint; the layer dimmer (Intensity) is never a Color write.
 #[test]
 fn media_layer_cues_carry_semantic_intent_through_record_rerecord_and_reload() {
-    use super::super::media_color::tests::{media_fixture, shipped_media_server};
+    use super::super::super::media_color::tests::{media_fixture, shipped_media_server};
     let show = Show::new();
     let (root, layer, other) = (FixtureId::new(), FixtureId::new(), FixtureId::new());
     show.patch(&media_fixture(
@@ -608,9 +608,9 @@ fn media_layer_cues_carry_semantic_intent_through_record_rerecord_and_reload() {
         &[layer, other],
     ));
     let color = ProgrammingOwner::Color.key();
-    let mut red = super::tests::intent([1., 0., 0.], 0.);
+    let mut red = super::super::tests::intent([1., 0., 0.], 0.);
     red.white_blend = 1.;
-    let mut amber = super::tests::intent([1., 0.735, 0.], 0.);
+    let mut amber = super::super::tests::intent([1., 0.735, 0.], 0.);
     amber.white_blend = 0.25;
     let output = Output::new();
     let media = MediaColorAdapter::default();
@@ -655,7 +655,7 @@ fn uv_only_black_and_wheel_constraints_persist_and_degrade_passively_on_replacem
     show.patch(&fixture(&wheel_profile, wheel, 2, 40));
     let mode = &wheel_profile.modes[0];
     let channel = &mode.channels[1];
-    let mut pinned = super::tests::intent([0., 0., 1.], 0.);
+    let mut pinned = super::super::tests::intent([0., 0., 1.], 0.);
     pinned.wheel_constraints = vec![ColorWheelConstraint {
         source: wheel_profile
             .native_color_identity(mode.id, mode.heads[0].id)
@@ -666,7 +666,7 @@ fn uv_only_black_and_wheel_constraints_persist_and_degrade_passively_on_replacem
             raw: 20,
         },
     }];
-    let uv_black = super::tests::uv_only_black();
+    let uv_black = super::super::tests::uv_only_black();
     let color = ProgrammingOwner::Color.key();
     show.programmers
         .set(show.session, uv, color.clone(), program(&uv_black));
@@ -750,7 +750,7 @@ fn uv_only_black_and_wheel_constraints_persist_and_degrade_passively_on_replacem
 /// same list keeps its ordinary portability.
 #[test]
 fn recorded_direct_cues_keep_tagged_identity_through_reload_replacement_group_and_rerecord() {
-    use super::tests_direct::{direct, identity};
+    use super::direct::{direct, identity};
     let show = Show::new();
     let (a, b) = (FixtureId::new(), FixtureId::new());
     let source = rgbw();
@@ -789,7 +789,7 @@ fn recorded_direct_cues_keep_tagged_identity_through_reload_replacement_group_an
     assert_eq!(stored("2", "changes")["kind"], "semantic");
     assert_eq!(
         serde_json::from_value::<ColorProgram>(stored("0", "changes")).unwrap(),
-        **super::tests_direct::direct_program(&orange),
+        **super::direct::direct_program(&orange),
         "exact recipe, pinned identity and estimate are stored"
     );
 

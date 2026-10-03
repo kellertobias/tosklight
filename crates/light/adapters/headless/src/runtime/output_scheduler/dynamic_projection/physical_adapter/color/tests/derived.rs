@@ -2,9 +2,9 @@
 //! driven through the derived nominal/uncalibrated model (runtime profile projection), resolved by
 //! the unchanged adapter against a real captured frame, encoded to DMX and re-simulated, and
 //! reported with honest provenance (Uncalibrated, Wheel-limited, Exact only when measured).
-use super::super::super::output_transaction::lamp_quality;
-use super::tests::{Rig, intent};
-use super::*;
+use super::super::super::super::output_transaction::lamp_quality;
+use super::super::tests::{Rig, intent};
+use super::super::*;
 use light_core::{AttributeKey, ColorResolutionQuality};
 use light_fixture::{
     ChannelFunction, ChannelFunctionBehavior, ColorCalibrationStatus, ColorSystem,

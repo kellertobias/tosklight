@@ -1,9 +1,9 @@
 //! TL-557 closure of the TL-592 passive paths: a root fixture owning several Color heads is
 //! fitted per head, and every multipatch copy is fitted with its own installed calibration.
 //! Descriptors, native raw seeding and continuity are keyed per destination and head.
-use super::profiles::*;
-use super::tests::{intent, magenta, program, warm_white};
-use super::*;
+use super::super::profiles::*;
+use super::super::tests::{intent, magenta, program, warm_white};
+use super::super::*;
 use light_core::{ManualClock, SessionId};
 use light_dynamics::DynamicRuntime;
 use light_engine::{Engine, RenderOptions};
@@ -462,7 +462,7 @@ fn two_heads_sharing_white() -> FixtureProfile {
 }
 
 fn white_xyz() -> Xyz {
-    super::profiles::white()
+    super::super::profiles::white()
 }
 
 #[test]

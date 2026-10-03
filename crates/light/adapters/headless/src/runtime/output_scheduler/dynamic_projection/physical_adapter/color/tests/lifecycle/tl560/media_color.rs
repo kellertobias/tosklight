@@ -19,14 +19,14 @@ use light_programmer::PresetFamily;
 fn red() -> ColorIntent {
     ColorIntent {
         white_blend: 1.,
-        ..super::super::super::tests::intent([1., 0., 0.], 0.)
+        ..super::super::super::super::tests::intent([1., 0., 0.], 0.)
     }
 }
 
 fn amber() -> ColorIntent {
     ColorIntent {
         white_blend: 0.25,
-        ..super::super::super::tests::intent([1., 0.735, 0.], 0.)
+        ..super::super::super::super::tests::intent([1., 0.735, 0.], 0.)
     }
 }
 

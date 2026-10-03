@@ -1,8 +1,8 @@
 //! Actual quality must follow the written shared control, while fitting match figures keep
 //! describing the unshared proposal. Cross-target arbitration remains a TL-548 adoption gate.
-use super::profiles::*;
-use super::tests::{intent, program};
-use super::*;
+use super::super::profiles::*;
+use super::super::tests::{intent, program};
+use super::super::*;
 use light_core::{ManualClock, SessionId};
 use light_dynamics::DynamicRuntime;
 use light_engine::{Engine, RenderOptions};

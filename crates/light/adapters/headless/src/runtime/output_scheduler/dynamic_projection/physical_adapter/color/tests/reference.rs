@@ -1,10 +1,10 @@
 //! TL-557 AC4 executable reference cases on real captured frames: white temperature and tint,
 //! dim recipes and black, and constrained wheels. White Blend 0/50/100 and UV black/dim live
 //! in `tests.rs`; Dynamics arbitration in `programming_projection/tests/color_arbitration.rs`.
-use super::profiles::*;
-use super::tests::intent;
-use super::tests_destinations::Rig;
-use super::*;
+use super::super::profiles::*;
+use super::super::tests::intent;
+use super::super::*;
+use super::destinations::Rig;
 use light_core::NativeColorValue;
 use light_core::programming::{ColorWheelConstraint, WhiteTarget};
 use light_fixture::forward::{ColorConstraintStatus, white_target_xyz};

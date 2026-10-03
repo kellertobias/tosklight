@@ -136,7 +136,7 @@ async fn preload_go_commits_target_direct_uv_and_zoom_unchanged_into_live_and_th
     );
     let mut mover = fixture(&shipped("cameo--auro-spot-z300"), m, 1, 1);
     mover.location.z = 6000;
-    let aim = super::super::super::super::position::tests::point(
+    let aim = super::super::super::super::super::position::tests::point(
         p,
         FixtureLocation {
             x: 0,
@@ -153,7 +153,7 @@ async fn preload_go_commits_target_direct_uv_and_zoom_unchanged_into_live_and_th
     show.group(&[w]);
     let catalogue = Arc::clone(&show.compile().native_color_sources);
     let direct_value =
-        super::super::super::tests_direct::direct(&catalogue, &rgbw_profile, &[65535, 90, 0, 0]);
+        super::super::super::direct::direct(&catalogue, &rgbw_profile, &[65535, 90, 0, 0]);
     let rig = Rig {
         mover,
         uv,

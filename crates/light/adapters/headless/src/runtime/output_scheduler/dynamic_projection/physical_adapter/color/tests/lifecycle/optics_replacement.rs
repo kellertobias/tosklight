@@ -17,9 +17,9 @@
 //! This is synthetic adapter/fitter evidence. It claims no live cutover, no production producer
 //! and no physical calibration; production `SUPPORTED_PROGRAMMING_CONTRACT` stays 0 (the engine
 //! here opts in explicitly, as the parent harness does).
-use super::super::super::optics::profiles::{spot_b, wash_a};
-use super::super::super::optics::tests::{field, focus};
-use super::super::super::optics::{
+use super::super::super::super::optics::profiles::{spot_b, wash_a};
+use super::super::super::super::optics::tests::{field, focus};
+use super::super::super::super::optics::{
     OpticsAdapter, OpticsContinuity, OpticsDescriptor, OpticsRequested,
 };
 use super::*;

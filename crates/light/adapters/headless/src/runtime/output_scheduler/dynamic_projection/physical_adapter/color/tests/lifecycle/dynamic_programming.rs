@@ -54,18 +54,18 @@ const SCHEDULE: [i64; 5] = [0, 250, 250, 250, 250];
 fn endpoint_a() -> ColorIntent {
     ColorIntent {
         uv: UvIntent { amount: 0.4 },
-        ..super::super::tests::magenta()
+        ..super::super::super::tests::magenta()
     }
 }
 
 /// Endpoint B: the TL-557 warm white (White Blend 0.85, 3200 K, Duv 0.0035) without UV.
 fn endpoint_b() -> ColorIntent {
-    super::super::tests::warm_white()
+    super::super::super::tests::warm_white()
 }
 
 /// The Cue's static base: blue, no White Blend, no UV. It must never leak into a sample.
 fn base() -> ColorIntent {
-    super::super::tests::intent([0., 0., 1.], 0.)
+    super::super::super::tests::intent([0., 0., 1.], 0.)
 }
 
 /// One whole Semantic Color lane, keyframed A (0) → B (0.5) → A, looping over 1 s. Members of
