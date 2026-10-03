@@ -152,9 +152,9 @@ fn final_native_predictions_distinguish_copy_calibration_and_unknown_uv() {
     );
     assert_eq!(physical[0].native_raw, physical[1].native_raw);
     assert_eq!(physical[0].native_raw, physical[2].native_raw);
-    let a = &physical[0].colors[0];
-    let b = &physical[1].colors[0];
-    let c = &physical[2].colors[0];
+    let a = &physical[0].colors()[0];
+    let b = &physical[1].colors()[0];
+    let c = &physical[2].colors()[0];
     assert!((a.known_xyz.x - b.known_xyz.x * 2.).abs() < 1e-7);
     assert!((c.known_xyz.x - a.known_xyz.x * 2.).abs() < 1e-7);
     assert!(!a.visible_complete);
@@ -190,7 +190,7 @@ fn unpatched_uv_only_copies_retain_native_activity_without_visible_white() {
     assert!(output.universes.is_empty());
     for instance in &output.physical.instances {
         assert!(instance.complete);
-        let color = &instance.colors[0];
+        let color = &instance.colors()[0];
         assert_eq!(
             color.known_xyz,
             Xyz {
@@ -209,10 +209,12 @@ fn frame_loans_reuse_nested_uv_and_native_buffers_without_mutating_held_results(
     let id = fixture.fixture_id;
     let (engine, session) = engine_with(fixture);
     let first = engine.render(RenderOptions::default()).unwrap();
-    let original = first.physical.instances[0].colors[0].clone();
+    let original = first.physical.instances[0].colors()[0].clone();
     let second = engine.render(RenderOptions::default()).unwrap();
     let raw = second.physical.instances[0].native_raw.as_ptr();
-    let uv = second.physical.instances[0].colors[0].uv_emitters.as_ptr();
+    let uv = second.physical.instances[0].colors()[0]
+        .uv_emitters
+        .as_ptr();
     drop(second);
     engine.programmers.set(
         session,
@@ -224,12 +226,14 @@ fn frame_loans_reuse_nested_uv_and_native_buffers_without_mutating_held_results(
         let result = engine.render(RenderOptions::default()).unwrap();
         assert_eq!(result.physical.instances[0].native_raw.as_ptr(), raw);
         assert_eq!(
-            result.physical.instances[0].colors[0].uv_emitters.as_ptr(),
+            result.physical.instances[0].colors()[0]
+                .uv_emitters
+                .as_ptr(),
             uv
         );
-        assert!(result.physical.instances[0].colors[0].visible_complete);
+        assert!(result.physical.instances[0].colors()[0].visible_complete);
     }
-    assert_eq!(first.physical.instances[0].colors[0], original);
+    assert_eq!(first.physical.instances[0].colors()[0], original);
 }
 
 #[test]
@@ -257,7 +261,7 @@ fn preload_projection_matches_live_native_state_for_every_physical_copy() {
     {
         assert_eq!(a.instance_id, b.instance_id);
         assert_eq!(a.native_raw, b.native_raw);
-        assert_eq!(a.colors, b.colors);
+        assert_eq!(a.colors(), b.colors());
     }
 }
 #[test]
@@ -303,7 +307,7 @@ fn color_path_sees_shared_channels_even_when_shared_head_resolves_last() {
         AttributeValue::Normalized(0.2),
     );
     let result = engine.render(RenderOptions::default()).unwrap();
-    let head = &result.physical.instances[0].colors[0];
+    let head = &result.physical.instances[0].colors()[0];
     assert_eq!(head.head_id, child);
     assert_eq!(head.uv_drive_max, 1.);
     assert!(head.known_xyz.y > 0.);
@@ -354,7 +358,7 @@ fn encoded_noncontiguous_fine_bytes_reproduce_the_same_native_color_prediction()
         let mut decoded = actual.native_raw.to_vec();
         decoded[1] = raw;
         forward.evaluate(&decoded, &mut out).unwrap();
-        assert_eq!(out, actual.colors);
+        assert_eq!(out, actual.colors());
     }
 }
 #[test]
@@ -398,7 +402,7 @@ fn non_dmx_profile_receives_physical_prediction() {
             .physical
             .instances
             .iter()
-            .all(|i| i.complete && i.colors[0].known_xyz.y == 0.3)
+            .all(|i| i.complete && i.colors()[0].known_xyz.y == 0.3)
     );
 }
 
@@ -454,9 +458,9 @@ fn portable_compaction_keeps_full_authoring_calibration_identity() {
     let a = original.render(RenderOptions::default()).unwrap();
     let b = reloaded.render(RenderOptions::default()).unwrap();
     for (a, b) in a.physical.instances.iter().zip(&b.physical.instances) {
-        assert_eq!(a.colors, b.colors);
+        assert_eq!(a.colors(), b.colors());
         assert_eq!(
-            b.colors[0].flags.0 & 64,
+            b.colors()[0].flags.0 & 64,
             0,
             "valid calibration is not stale"
         );
@@ -521,10 +525,10 @@ fn preload_forward_prediction_honors_captured_color_freeze() {
         preload.physical.instances[0].native_raw
     );
     assert_eq!(
-        live.physical.instances[0].colors,
-        preload.physical.instances[0].colors
+        live.physical.instances[0].colors(),
+        preload.physical.instances[0].colors()
     );
-    assert_eq!(preload.physical.instances[0].colors[0].uv_drive_max, 0.);
+    assert_eq!(preload.physical.instances[0].colors()[0].uv_drive_max, 0.);
 }
 
 /// TL-553: a pooled instance whose final native values are unchanged keeps its forward results
@@ -546,10 +550,10 @@ fn unchanged_native_values_reuse_forward_results_identical_to_a_fresh_evaluation
         index.evaluate(id, 0, &raw, &mut frame).unwrap();
         let output = &frame.instances[0];
         (
-            output.colors.clone(),
-            output.axes.clone(),
-            output.lenses.clone(),
-            output.optics.clone(),
+            output.colors().to_vec(),
+            output.axes().to_vec(),
+            output.lenses().to_vec(),
+            output.optics().to_vec(),
         )
     };
     let mut held = Vec::new();
@@ -566,10 +570,10 @@ fn unchanged_native_values_reuse_forward_results_identical_to_a_fresh_evaluation
         let instance = &result.physical.instances[0];
         assert!(instance.complete, "step {step}");
         let observed = (
-            instance.colors.clone(),
-            instance.axes.clone(),
-            instance.lenses.clone(),
-            instance.optics.clone(),
+            instance.colors().to_vec(),
+            instance.axes().to_vec(),
+            instance.lenses().to_vec(),
+            instance.optics().to_vec(),
         );
         assert_eq!(observed, fresh(instance), "step {step}");
         // Holding some frames makes the pool hand out different loans with older values.
@@ -592,9 +596,9 @@ fn a_rejected_physical_layout_never_reuses_stale_forward_results() {
     let channels = frame.instances[0].native_raw.len() as u32;
     let raw = |level: u32| (0..channels).map(|i| (i, level)).collect::<Vec<_>>();
     index.evaluate(id, 0, &raw(255), &mut frame).unwrap();
-    let bright = frame.instances[0].colors.clone();
+    let bright = frame.instances[0].colors().to_vec();
     index.evaluate(id, 0, &raw(0), &mut frame).unwrap();
-    let dark = frame.instances[0].colors.clone();
+    let dark = frame.instances[0].colors().to_vec();
     assert_ne!(bright, dark);
     // A duplicate channel is rejected after the earlier channels were already stored.
     let mut invalid = raw(255);
@@ -603,5 +607,159 @@ fn a_rejected_physical_layout_never_reuses_stale_forward_results() {
     assert!(!frame.instances[0].complete);
     index.evaluate(id, 0, &raw(255), &mut frame).unwrap();
     assert!(frame.instances[0].complete);
-    assert_eq!(frame.instances[0].colors, bright);
+    assert_eq!(frame.instances[0].colors(), bright);
+}
+
+/// TL-639: the output path only captures native values; forward models run on first read, on
+/// whichever thread reads, and give exactly the results of an evaluation of those values.
+#[test]
+fn forward_results_are_evaluated_on_first_read_and_equal_a_fresh_evaluation() {
+    let fixture = physical_fixture();
+    let id = fixture.fixture_id;
+    let (engine, session) = engine_with(fixture);
+    let generation = engine.generation.load_full();
+    let index =
+        crate::physical_projection::PhysicalProjectionIndex::compile(&generation.snapshot_arc());
+    for step in 0..6 {
+        engine.programmers.set(
+            session,
+            id,
+            AttributeKey("color.blue".into()),
+            AttributeValue::Normalized(step as f32 / 6.),
+        );
+        let result = std::sync::Arc::new(engine.render(RenderOptions::default()).unwrap());
+        let instance = &result.physical.instances[0];
+        assert!(instance.complete, "step {step}");
+        assert!(
+            !instance.forward_evaluated(),
+            "the render evaluated no forward model"
+        );
+        let reader = std::sync::Arc::clone(&result);
+        let observed = std::thread::spawn(move || {
+            let instance = &reader.physical.instances[0];
+            (
+                instance.colors().to_vec(),
+                instance.axes().to_vec(),
+                instance.lenses().to_vec(),
+                instance.optics().to_vec(),
+            )
+        })
+        .join()
+        .unwrap();
+        assert!(instance.forward_evaluated());
+        let mut frame = index.take_frame();
+        let raw = (0u32..)
+            .zip(instance.native_raw.iter().copied())
+            .collect::<Vec<_>>();
+        index.evaluate(id, 0, &raw, &mut frame).unwrap();
+        let fresh = &frame.instances[0];
+        assert_eq!(
+            observed,
+            (
+                fresh.colors().to_vec(),
+                fresh.axes().to_vec(),
+                fresh.lenses().to_vec(),
+                fresh.optics().to_vec(),
+            ),
+            "step {step}"
+        );
+    }
+}
+
+/// TL-639: changed native values discard the held results even when nobody read them, and an
+/// unread frame that is recycled with changed values never shows a stale result.
+#[test]
+fn changed_native_values_are_never_read_through_stale_forward_results() {
+    let fixture = physical_fixture();
+    let id = fixture.fixture_id;
+    let (engine, session) = engine_with(fixture);
+    let read = |level: f32| {
+        engine.programmers.set(
+            session,
+            id,
+            AttributeKey("color.red".into()),
+            AttributeValue::Normalized(level),
+        );
+        let result = engine.render(RenderOptions::default()).unwrap();
+        result.physical.instances[0].colors()[0].clone()
+    };
+    let bright = read(1.);
+    let dark = read(0.);
+    assert_ne!(bright, dark);
+    // Rendered but unread, then recycled with the earlier values.
+    engine.programmers.set(
+        session,
+        id,
+        AttributeKey("color.red".into()),
+        AttributeValue::Normalized(0.5),
+    );
+    drop(engine.render(RenderOptions::default()).unwrap());
+    assert_eq!(read(1.), bright);
+    assert_eq!(read(0.), dark);
+}
+
+/// TL-639: instances of one profile snapshot and mode with identical installation inputs share
+/// one compiled forward model; a different calibration or a separate snapshot compiles its own.
+#[test]
+fn identical_installations_share_compiled_forward_models() {
+    let first = physical_fixture();
+    let mut second = first.clone();
+    second.fixture_id = FixtureId::new();
+    let mut calibrated = first.clone();
+    calibrated.fixture_id = FixtureId::new();
+    calibrated.color_calibration = Some(gain(&first, 0.4));
+    let mut separate = first.clone();
+    separate.fixture_id = FixtureId::new();
+    separate.definition.profile_snapshot = Some(std::sync::Arc::new(
+        first
+            .definition
+            .profile_snapshot
+            .as_deref()
+            .unwrap()
+            .clone(),
+    ));
+    let snapshot = EngineSnapshot {
+        fixtures: vec![
+            first.clone(),
+            second.clone(),
+            calibrated.clone(),
+            separate.clone(),
+        ]
+        .into(),
+        revision: 1,
+        ..Default::default()
+    };
+    let index = crate::physical_projection::PhysicalProjectionIndex::compile(&snapshot);
+    let model = |fixture: &PatchedFixture| {
+        index
+            .color_forward(fixture.fixture_id, fixture.fixture_id.0)
+            .unwrap() as *const _
+    };
+    assert_eq!(model(&first), model(&second));
+    assert_ne!(model(&first), model(&calibrated));
+    assert_ne!(model(&first), model(&separate));
+    // A shared model evaluates exactly like the model compiled for that fixture alone.
+    let alone = crate::physical_projection::PhysicalProjectionIndex::compile(&EngineSnapshot {
+        fixtures: vec![second.clone()].into(),
+        revision: 1,
+        ..Default::default()
+    });
+    let mut shared_frame = index.take_frame();
+    let mut alone_frame = alone.take_frame();
+    let channels = shared_frame.instances[1].native_raw.len() as u32;
+    let raw = (0..channels).map(|i| (i, 40 + i * 7)).collect::<Vec<_>>();
+    index
+        .evaluate(second.fixture_id, 0, &raw, &mut shared_frame)
+        .unwrap();
+    alone
+        .evaluate(second.fixture_id, 0, &raw, &mut alone_frame)
+        .unwrap();
+    assert_eq!(
+        shared_frame.instances[1].colors(),
+        alone_frame.instances[0].colors()
+    );
+    assert_eq!(
+        shared_frame.instances[1].optics(),
+        alone_frame.instances[0].optics()
+    );
 }

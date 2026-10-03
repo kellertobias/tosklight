@@ -204,7 +204,7 @@ impl Desk {
                     ] {
                         assert_eq!(
                             instance
-                                .axes
+                                .axes()
                                 .iter()
                                 .find(|axis| axis.role == Some(role))
                                 .unwrap()
@@ -214,7 +214,7 @@ impl Desk {
                         );
                     }
                     let local = instance
-                        .lenses
+                        .lenses()
                         .iter()
                         .find(|lens| lens.emitter_id == outcome.result.emitter_id)
                         .unwrap()

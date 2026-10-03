@@ -185,9 +185,9 @@ fn independent_changing_masks_replay_original_prefixes_and_fit_every_calibrated_
                 );
                 assert!((achieved[axis] - expected[axis]).abs() < 0.07);
             }
-            assert!((physical.axes[0].absolute_degrees().unwrap() - achieved[0]).abs() < 0.04);
+            assert!((physical.axes()[0].absolute_degrees().unwrap() - achieved[0]).abs() < 0.04);
             assert!(
-                (physical.axes[index + 1].absolute_degrees().unwrap() - achieved[1]).abs() < 0.04
+                (physical.axes()[index + 1].absolute_degrees().unwrap() - achieved[1]).abs() < 0.04
             );
             let continuity = desk
                 .lane

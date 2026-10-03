@@ -372,7 +372,7 @@ impl DeskEffects {
 
 fn caller_mvr_profile() -> FixtureProfile {
     let (fixture, _, _) = schema_v2_direct_fixture();
-    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
     profile.manufacturer = "Caller MVR".into();
     profile.name = "Caller source fixture".into();
     let mode = &mut profile.modes[0];

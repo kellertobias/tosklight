@@ -9,7 +9,13 @@ fn semantic_highlight_applies_only_authored_identification_attributes() {
         ("shutter", true, false, false, false, false),
         ("gobo", true, false, false, false, false),
     ]);
-    let mode = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0];
+    let mode = &mut fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .modes[0];
     mode.channels[0].default_raw = 9;
     mode.channels[0].highlight_raw = 255;
     mode.channels[1].default_raw = 7;
@@ -59,7 +65,14 @@ fn semantic_highlight_applies_only_authored_identification_attributes() {
 fn semantic_highlight_does_not_guess_an_unauthored_shutter_open_value() {
     let (mut fixture, fixture_id) =
         schema_v2_fixture(&[("shutter", true, false, false, false, false)]);
-    let channel = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0];
+    let channel = &mut fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .modes[0]
+        .channels[0];
     channel.default_raw = 31;
     channel.highlight_raw = 255;
     let engine = Engine::new(ProgrammerRegistry::default());
@@ -86,7 +99,14 @@ fn semantic_highlight_does_not_guess_an_unauthored_shutter_open_value() {
 fn unsupported_semantic_highlight_color_leaves_the_fixture_value_unchanged() {
     let (mut fixture, fixture_id) =
         schema_v2_fixture(&[("color.wheel.1", true, false, false, false, false)]);
-    let channel = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0];
+    let channel = &mut fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .modes[0]
+        .channels[0];
     channel.default_raw = 57;
     channel.highlight_raw = 255;
     let engine = Engine::new(ProgrammerRegistry::default());
@@ -275,7 +295,13 @@ fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
 fn fixture_without_intensity_uses_its_configured_non_intensity_highlight_look() {
     let (mut fixture, fixture_id) =
         schema_v2_fixture(&[("shutter", false, false, false, false, false)]);
-    let mode = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0];
+    let mode = &mut fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .modes[0];
     mode.channels[0].default_raw = 17;
     mode.channels[0].highlight_raw = 211;
     let engine = Engine::new(ProgrammerRegistry::default());
@@ -428,7 +454,15 @@ fn hazardous_blackout_safe_raw_value_wins_over_non_intensity_highlight() {
     let (mut fixture, fixture_id) =
         schema_v2_fixture(&[("control.reset", false, false, false, false, false)]);
     fixture.definition.hazardous = true;
-    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0].invert = true;
+    fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .modes[0]
+        .channels[0]
+        .invert = true;
     fixture.definition.safe_values.insert(
         AttributeKey("control.reset".into()),
         AttributeValue::RawDmxExact(37),
@@ -467,7 +501,13 @@ fn high_low_and_explicit_attribute_suppression_are_temporary_and_exact() {
         ("intensity", false, false, false, false, false),
         ("shutter", true, false, false, false, false),
     ]);
-    let mode = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0];
+    let mode = &mut fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .modes[0];
     mode.channels[0].default_raw = 64;
     mode.channels[1].default_raw = 7;
     mode.channels[1].functions = vec![ChannelFunction {

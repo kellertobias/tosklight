@@ -261,7 +261,7 @@ fn verify_retained_native(accepted: &PendingHybridResult<Sidecar>) {
             (PositionAxisRole::Tilt, achieved[1]),
         ] {
             let axis = instance
-                .axes
+                .axes()
                 .iter()
                 .find(|axis| axis.role == Some(role))
                 .unwrap();

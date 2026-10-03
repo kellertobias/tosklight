@@ -161,7 +161,7 @@ pub struct FixtureDefinition {
     #[serde(default)]
     pub mode_id: Option<Uuid>,
     #[serde(default)]
-    pub profile_snapshot: Option<Box<FixtureProfile>>,
+    pub profile_snapshot: Option<std::sync::Arc<FixtureProfile>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

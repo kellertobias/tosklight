@@ -400,9 +400,9 @@ impl EnvelopeDesk {
                     .find(|instance| instance.instance_id == outcome.destination.0)
                     .unwrap();
                 let pair = outcome.result.achieved.unwrap();
-                assert!((physical.axes[0].absolute_degrees().unwrap() - pair[0]).abs() < 0.04);
+                assert!((physical.axes()[0].absolute_degrees().unwrap() - pair[0]).abs() < 0.04);
                 assert!(
-                    (physical.axes[index + 1].absolute_degrees().unwrap() - pair[1]).abs() < 0.04
+                    (physical.axes()[index + 1].absolute_degrees().unwrap() - pair[1]).abs() < 0.04
                 );
                 if index == 1 {
                     assert!((pair[1] - (f64::from(self.shared.angles[1][1]) + 8.)).abs() < 0.05);

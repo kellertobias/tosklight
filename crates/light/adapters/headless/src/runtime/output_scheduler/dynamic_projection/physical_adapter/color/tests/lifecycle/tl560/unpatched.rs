@@ -41,7 +41,7 @@ fn axes(frame: &DeskFrame, id: FixtureId) -> [f64; 2] {
     use light_fixture::PositionAxisRole;
     [PositionAxisRole::Pan, PositionAxisRole::Tilt].map(|role| {
         instance(frame, id)
-            .axes
+            .axes()
             .iter()
             .find(|axis| axis.role == Some(role))
             .and_then(|axis| axis.absolute_degrees())
@@ -134,8 +134,8 @@ async fn unpatched_members_keep_semantic_programming_and_visibility_and_only_los
         "no unpatched byte lands at its former or any other address"
     );
     assert_eq!(
-        instance(&frame, u).colors[0].known_xyz,
-        instance(&frame, a).colors[0].known_xyz,
+        instance(&frame, u).colors()[0].known_xyz,
+        instance(&frame, a).colors()[0].known_xyz,
         "the unpatched member is predicted for Stage exactly like its patched twin"
     );
     assert_eq!(
@@ -152,8 +152,8 @@ async fn unpatched_members_keep_semantic_programming_and_visibility_and_only_los
     );
     let frame = desk.frame();
     assert_ne!(
-        instance(&frame, u).colors[0].known_xyz,
-        instance(&frame, a).colors[0].known_xyz,
+        instance(&frame, u).colors()[0].known_xyz,
+        instance(&frame, a).colors()[0].known_xyz,
         "the unpatched fixture's own Cue value is applied"
     );
 

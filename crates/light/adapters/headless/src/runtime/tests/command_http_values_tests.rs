@@ -1138,7 +1138,7 @@ async fn indexed_preset_uses_each_embedded_profile_raw_value_immediately() {
     second.fixture_id = light_core::FixtureId::new();
     second.fixture_number = Some(2);
     second.address = Some(3);
-    let second_profile = second.definition.profile_snapshot.as_mut().unwrap();
+    let second_profile = second.definition.profile_snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap();
     let light_fixture::ChannelFunctionBehavior::Indexed { raw_value, .. } =
         &mut second_profile.modes[0].channels[0].functions[0].behavior
     else {

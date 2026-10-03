@@ -110,7 +110,7 @@ fn native_freeze_replays_exact_root_copy_words_and_resumes_after_removal() {
             .physical
             .instances
             .iter()
-            .map(|i| i.axes.clone())
+            .map(|i| i.axes().to_vec())
             .collect::<Vec<_>>();
         capture_hold(&engine, &mut fixture, false);
         set(&programmers, session, root, "pan", 1.);
@@ -127,7 +127,7 @@ fn native_freeze_replays_exact_root_copy_words_and_resumes_after_removal() {
                 .physical
                 .instances
                 .iter()
-                .map(|i| i.axes.clone())
+                .map(|i| i.axes().to_vec())
                 .collect::<Vec<_>>(),
             axes
         );
@@ -291,8 +291,8 @@ fn native_freeze_keeps_motor_pose_while_tracked_mount_moves() {
         .iter()
         .find(|i| i.instance_id == root.0)
         .unwrap()
-        .lenses
-        .clone();
+        .lenses()
+        .to_vec();
     set(&programmers, session, root, "pan", 1.);
     track(0.6);
     let moved = engine.render(Default::default()).unwrap();
@@ -305,7 +305,7 @@ fn native_freeze_keeps_motor_pose_while_tracked_mount_moves() {
             .iter()
             .find(|i| i.instance_id == root.0)
             .unwrap()
-            .lenses,
+            .lenses(),
         local
     );
     let old_mount = before.mounts.mount(root.0).unwrap();

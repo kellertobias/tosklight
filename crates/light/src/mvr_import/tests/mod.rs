@@ -663,7 +663,8 @@ fn native_secondary_output_survives_ordinary_import_and_explicit_unpatch_frees_i
 #[test]
 fn large_import_plan_shares_one_profile_projection_and_stores_lean_records() {
     let rig = Rig::new();
-    let mut profile = *fixture_definition(1).profile_snapshot.unwrap();
+    let mut profile =
+        std::sync::Arc::unwrap_or_clone(fixture_definition(1).profile_snapshot.unwrap());
     let archive = light_fixture::gdtf::profile::package_profile(&profile).unwrap();
     profile.source_gdtf =
         Some(light_fixture::ProfileGdtfSource::associate(&profile, &archive).unwrap());

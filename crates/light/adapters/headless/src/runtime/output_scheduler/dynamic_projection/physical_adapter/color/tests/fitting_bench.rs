@@ -370,6 +370,7 @@ fn delta(after: ColorAdapterCounters, before: ColorAdapterCounters) -> ColorAdap
         fixed_offset_solves,
         level_solves,
         forward_evaluations,
+        fitting_shared,
     )
 }
 

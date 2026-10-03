@@ -258,7 +258,7 @@ fn dmx_lookup_resolves_footprints_splits_multipatches_and_all_logical_heads() {
     let mut fixture = schema_v2_direct_fixture().0;
     fixture.universe = None;
     fixture.address = None;
-    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].splits = vec![
+    fixture.definition.profile_snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().modes[0].splits = vec![
         light_fixture::FixtureSplit { number: 1, footprint: 4 },
         light_fixture::FixtureSplit { number: 2, footprint: 2 },
     ];
@@ -313,10 +313,10 @@ fn dmx_lookup_ignores_unpatched_visual_only_and_internal_fixtures() {
     unpatched.address = None;
     let mut visual = schema_v2_direct_fixture().0;
     visual.fixture_id = light_core::FixtureId::new();
-    visual.definition.profile_snapshot.as_mut().unwrap().patch_policy = light_fixture::PatchPolicy::VisualOnly;
+    visual.definition.profile_snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().patch_policy = light_fixture::PatchPolicy::VisualOnly;
     let mut internal = schema_v2_direct_fixture().0;
     internal.fixture_id = light_core::FixtureId::new();
-    internal.definition.profile_snapshot.as_mut().unwrap().patch_policy = light_fixture::PatchPolicy::Internal;
+    internal.definition.profile_snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().patch_policy = light_fixture::PatchPolicy::Internal;
 
     assert!(
         resolve_dmx_fixture_selection(&[unpatched, visual, internal], 1, 1)
@@ -383,6 +383,7 @@ fn fixture_thru_excludes_stage_only_and_internal_objects_but_keeps_unpatched_dmx
         .definition
         .profile_snapshot
         .as_mut()
+        .map(std::sync::Arc::make_mut)
         .unwrap()
         .patch_policy = light_fixture::PatchPolicy::VisualOnly;
 
@@ -393,6 +394,7 @@ fn fixture_thru_excludes_stage_only_and_internal_objects_but_keeps_unpatched_dmx
         .definition
         .profile_snapshot
         .as_mut()
+        .map(std::sync::Arc::make_mut)
         .unwrap()
         .patch_policy = light_fixture::PatchPolicy::Internal;
 

@@ -192,8 +192,10 @@ fn actual_size_uses_each_displaced_calibrated_copy_endpoint_before_native_finali
                 .iter()
                 .find(|instance| instance.instance_id == destination.0)
                 .unwrap();
-            assert!((physical.axes[0].absolute_degrees().unwrap() - pair[0]).abs() < 0.03);
-            assert!((physical.axes[index + 1].absolute_degrees().unwrap() - pair[1]).abs() < 0.03);
+            assert!((physical.axes()[0].absolute_degrees().unwrap() - pair[0]).abs() < 0.03);
+            assert!(
+                (physical.axes()[index + 1].absolute_degrees().unwrap() - pair[1]).abs() < 0.03
+            );
             for write in row
                 .writes
                 .iter()

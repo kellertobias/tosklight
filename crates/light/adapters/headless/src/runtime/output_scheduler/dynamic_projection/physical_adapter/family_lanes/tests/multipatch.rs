@@ -76,8 +76,8 @@ fn a_multipatched_focus_zoom_fixture_writes_root_and_copy_through_each_instance_
             );
             // The engine evaluates each instance through its own compiled optics model.
             let achieved = match owner {
-                ProgrammingOwner::Focus => output.optics[0].focus.map(|f| f.percent / 100.),
-                _ => output.optics[0].zoom.map(|z| z.degrees),
+                ProgrammingOwner::Focus => output.optics()[0].focus.map(|f| f.percent / 100.),
+                _ => output.optics()[0].zoom.map(|z| z.degrees),
             };
             assert_eq!(
                 achieved, row.achieved,

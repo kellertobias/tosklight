@@ -308,6 +308,8 @@ pub(in crate::runtime) struct ColorAdapterCounters {
     pub fixed_offset_solves: u64,
     pub level_solves: u64,
     pub forward_evaluations: u64,
+    /// Fitter lookups served by another instance's identical compile (TL-639).
+    pub fitting_shared: u64,
 }
 
 type FittingCache = (
@@ -315,9 +317,22 @@ type FittingCache = (
     FxHashMap<(FixtureId, Uuid), Option<Arc<CompiledColorFitting>>>,
 );
 
+/// Every compile input of a fitter besides the profile snapshot and mode (TL-639).
+#[derive(PartialEq)]
+struct FittingInputs {
+    calibration: Option<light_fixture::InstalledColorCalibration>,
+    appearance: light_fixture::InstalledFixtureAppearance,
+    context: Option<light_fixture::SharedByIdentity<light_fixture::ColorCalibrationContext>>,
+}
+
+/// A compiled fitter, or a failed compile (counted again for every instance that uses it).
+type InternedFitting = Result<Option<Arc<CompiledColorFitting>>, ()>;
+
 #[derive(Default)]
 pub(in crate::runtime) struct ColorAdapter {
     fittings: RefCell<Option<FittingCache>>,
+    /// Fitters shared by instances with identical compile inputs, across fixture lists.
+    interned: RefCell<light_fixture::CompiledModelInterner<FittingInputs, InternedFitting>>,
     counters: Cell<ColorAdapterCounters>,
 }
 
@@ -397,6 +412,7 @@ impl ColorAdapter {
             .is_some_and(|(fixtures, _)| Arc::ptr_eq(fixtures, &snapshot.fixtures))
         {
             *cache = Some((Arc::clone(&snapshot.fixtures), FxHashMap::default()));
+            self.interned.borrow_mut().retain_live();
         }
         let entries = &mut cache.as_mut().expect("cache installed").1;
         let key = (
@@ -407,14 +423,40 @@ impl ColorAdapter {
             self.count(|c| c.fitting_cache_hits += 1);
             return hit.clone();
         }
-        let compiled = match compile_fitting(fixture, copy) {
-            Ok(compiled) => compiled.map(Arc::new),
-            Err(_) => {
-                self.count(|c| c.fitting_failures += 1);
-                None
+        let compile = || compile_fitting(fixture, copy).map(|compiled| compiled.map(Arc::new));
+        let (interned, compiled_now) = match (
+            fixture.definition.profile_snapshot.as_ref(),
+            fixture.definition.mode_id,
+        ) {
+            (Some(profile), Some(mode)) => {
+                let (calibration, appearance) = match copy {
+                    Some(copy) => (&copy.color_calibration, &copy.installed_appearance),
+                    None => (&fixture.color_calibration, &fixture.installed_appearance),
+                };
+                let inputs = FittingInputs {
+                    calibration: calibration.clone(),
+                    appearance: appearance.clone(),
+                    context: fixture
+                        .definition
+                        .runtime_color_context
+                        .clone()
+                        .map(light_fixture::SharedByIdentity),
+                };
+                self.interned
+                    .borrow_mut()
+                    .get_or_compile(profile, mode, inputs, || compile().map_err(|_| ()))
             }
+            _ => (compile().map_err(|_| ()), true),
         };
-        self.count(|c| c.fitting_compiles += 1);
+        if compiled_now {
+            self.count(|c| c.fitting_compiles += 1);
+        } else {
+            self.count(|c| c.fitting_shared += 1);
+        }
+        let compiled = interned.unwrap_or_else(|()| {
+            self.count(|c| c.fitting_failures += 1);
+            None
+        });
         entries.insert(key, compiled.clone());
         compiled
     }

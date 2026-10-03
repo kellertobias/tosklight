@@ -262,6 +262,7 @@ fn explicit_installed_sources_require_an_explicit_or_embedded_profile_cct() {
         .definition
         .profile_snapshot
         .as_mut()
+        .map(std::sync::Arc::make_mut)
         .unwrap()
         .optics
         .color_temperature_kelvin = Some(6_500.0);
@@ -271,6 +272,7 @@ fn explicit_installed_sources_require_an_explicit_or_embedded_profile_cct() {
         .definition
         .profile_snapshot
         .as_mut()
+        .map(std::sync::Arc::make_mut)
         .unwrap()
         .optics
         .color_temperature_kelvin = None;
@@ -332,7 +334,8 @@ fn multipatch_identities_are_unique_across_all_stable_entities() {
 
 fn fixture_with_two_child_heads() -> PatchedFixture {
     let mut fixture = schema_v2_two_split_fixture();
-    let mut profile = fixture.definition.profile_snapshot.take().unwrap();
+    let mut profile =
+        std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.take().unwrap());
     profile.modes[0].heads.push(FixtureHead {
         id: Uuid::new_v4(),
         name: "Third".into(),

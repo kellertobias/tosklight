@@ -209,8 +209,8 @@ impl AcceptedColorFrames {
         results: Vec<FamilySidecar>,
         held: Vec<FixtureId>,
     ) {
-        let heads = results.iter().flat_map(rows).collect();
-        let outputs = results
+        let mut heads = results.iter().flat_map(rows).collect::<Vec<_>>();
+        let mut outputs = results
             .into_iter()
             .filter_map(|sidecar| match sidecar {
                 FamilySidecar::Color(color)
@@ -225,7 +225,11 @@ impl AcceptedColorFrames {
                 }
                 _ => None,
             })
-            .collect();
+            .collect::<Vec<_>>();
+        // TL-639: the outputs are collected in place into the sidecars' larger allocation, and
+        // the heads grow by doubling. A retained frame keeps only what it holds.
+        heads.shrink_to_fit();
+        outputs.shrink_to_fit();
         let frame = Arc::new(AcceptedColorFrame {
             generation: token.generation(),
             sampled_at: token.sampled_at(),

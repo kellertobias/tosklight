@@ -50,7 +50,7 @@ impl Engine {
             }
             for emitter in emitters {
                 let mut lenses = instance
-                    .lenses
+                    .lenses()
                     .iter()
                     .filter(|lens| lens.emitter_id == emitter.emitter_id);
                 let lens = lenses.next()?;
@@ -62,7 +62,7 @@ impl Engine {
                     return None;
                 }
                 for (axis, node) in emitter.commands? {
-                    let command = instance.axes.get(axis)?;
+                    let command = instance.axes().get(axis)?;
                     if command.node_id != node || command.absolute_degrees().is_none() {
                         return None;
                     }

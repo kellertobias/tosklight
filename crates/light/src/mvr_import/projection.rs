@@ -17,10 +17,16 @@ pub(super) fn project_fixture(
         .definition
         .profile_snapshot
         .as_mut()
+        .map(std::sync::Arc::make_mut)
         .and_then(|profile| profile.source_gdtf.take());
     migrate_patched_fixture_to_v2(&mut fixture).map_err(invalid)?;
     let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).map_err(invalid)?;
-    if let Some(profile) = fixture.definition.profile_snapshot.as_mut() {
+    if let Some(profile) = fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+    {
         profile.source_gdtf = source;
     }
     let profile = record

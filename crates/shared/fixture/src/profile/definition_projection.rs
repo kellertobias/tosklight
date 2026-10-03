@@ -153,7 +153,7 @@ fn build_definition(
         safe_values: BTreeMap::new(),
         profile_id: Some(profile.id),
         mode_id: Some(mode.id),
-        profile_snapshot: Some(Box::new(snapshot)),
+        profile_snapshot: Some(std::sync::Arc::new(snapshot)),
     }
 }
 

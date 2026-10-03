@@ -4,7 +4,7 @@ use light_mvr::{MvrDocument, MvrFixture};
 
 fn pan_profile() -> FixtureProfile {
     let (fixture, _, _) = schema_v2_direct_fixture();
-    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
     profile.manufacturer = "MVR Precision".into();
     profile.name = "Source fixture".into();
     let mode = &mut profile.modes[0];

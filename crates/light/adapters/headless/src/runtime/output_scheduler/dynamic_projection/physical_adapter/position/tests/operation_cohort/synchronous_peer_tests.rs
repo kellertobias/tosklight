@@ -144,8 +144,10 @@ fn verify_mixed(
                 .find(|instance| instance.instance_id == destination.0)
                 .unwrap();
             assert!(physical.complete);
-            assert!((physical.axes[0].absolute_degrees().unwrap() - pair[0]).abs() < 0.03);
-            assert!((physical.axes[index + 1].absolute_degrees().unwrap() - pair[1]).abs() < 0.03);
+            assert!((physical.axes()[0].absolute_degrees().unwrap() - pair[0]).abs() < 0.03);
+            assert!(
+                (physical.axes()[index + 1].absolute_degrees().unwrap() - pair[1]).abs() < 0.03
+            );
             for write in row
                 .writes
                 .iter()

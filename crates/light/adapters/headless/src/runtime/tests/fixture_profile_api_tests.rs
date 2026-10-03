@@ -4,7 +4,7 @@ async fn fixture_profile_api_rejects_invalid_discrete_wheel_before_storing_revis
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let (fixture, _, channel_ids) = schema_v2_direct_fixture();
-    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
     let profile_id = profile.id;
     let head_id = profile.modes[0].heads[0].id;
     profile.modes[0].color_systems = vec![light_fixture::HeadColorSystem {
@@ -276,7 +276,7 @@ async fn fixture_import_requires_explicit_mapping_for_retired_placeholder_attrib
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let (fixture, _, _) = schema_v2_direct_fixture();
-    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
     let retired = light_core::AttributeKey("beam".into());
     profile.modes[0].channels[0].fixture_attribute = retired.clone();
     profile.modes[0].channels[0].attribute = retired.clone();
@@ -319,7 +319,7 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let (fixture, _, _) = schema_v2_direct_fixture();
-    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
     let unknown = light_core::AttributeKey("vendor.test.feature".into());
     profile.modes[0].channels[0].fixture_attribute = unknown.clone();
     profile.modes[0].channels[0].attribute = unknown.clone();
@@ -542,7 +542,7 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
     }
 
     let (mut multi_split, _, _) = schema_v2_direct_fixture();
-    let mut profile = *multi_split.definition.profile_snapshot.take().unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(multi_split.definition.profile_snapshot.take().unwrap());
     let mode_id = profile.modes[0].id;
     profile.modes[0].splits.push(light_fixture::FixtureSplit {
         number: 2,
@@ -843,7 +843,7 @@ async fn canonical_gdtf_preview_and_import_preserve_precision_and_retry_identity
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let (fixture, _, _) = schema_v2_direct_fixture();
-    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
     // A single well-defined continuous channel, with the fine byte separated by a spare slot.
     let mode = &mut profile.modes[0];
     mode.color_systems.clear();

@@ -25,7 +25,7 @@ const GROUP: &str = "tl560-mvr-front";
 
 fn pan_profile(range: f32) -> FixtureProfile {
     let (fixture, _, _) = schema_v2_direct_fixture();
-    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
     profile.manufacturer = "TL-560 MVR".into();
     profile.name = "Re-imported mover".into();
     let mode = &mut profile.modes[0];

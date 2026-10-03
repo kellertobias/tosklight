@@ -818,7 +818,7 @@ async fn defect_d1_inverted_copy_motor_alias_wire_word_is_mirrored() {
             .iter()
             .find(|output| output.instance_id == instance)
             .unwrap()
-            .axes
+            .axes()
             .iter()
             .map(|axis| axis.absolute_degrees().map(|degrees| degrees.round()))
             .collect::<Vec<_>>()

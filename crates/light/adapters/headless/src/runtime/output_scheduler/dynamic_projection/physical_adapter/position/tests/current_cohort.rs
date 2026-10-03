@@ -1021,7 +1021,7 @@ fn actual_live_independent_shared_target_envelopes_match_cartesian_endpoint_coho
                     (actual[axis] - expected).abs() < 0.07,
                     "owner {index} destination {destination:?} own activation exactly once: {actual:?} vs {a:?}->{b:?} at {mix}"
                 );
-                let command = physical.axes[if axis == 0 { 0 } else { index + 1 }]
+                let command = physical.axes()[if axis == 0 { 0 } else { index + 1 }]
                     .absolute_degrees()
                     .unwrap();
                 assert!(

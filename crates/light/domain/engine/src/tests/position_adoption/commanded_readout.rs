@@ -81,8 +81,8 @@ fn commanded_readout_keeps_each_emitter_and_divergent_mounted_copy_separate() {
         assert_eq!([readout.pan_degrees, readout.tilt_degrees], expected);
     }
     assert_ne!(
-        rendered.physical.instances[0].lenses[0].world,
-        rendered.physical.instances[1].lenses[0].world,
+        rendered.physical.instances[0].lenses()[0].world,
+        rendered.physical.instances[1].lenses()[0].world,
         "actual different mount/calibration output"
     );
     assert_eq!(

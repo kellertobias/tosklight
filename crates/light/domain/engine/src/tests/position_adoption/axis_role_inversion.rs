@@ -62,7 +62,7 @@ fn axes(rendered: &crate::RenderResult, instance: Uuid) -> Vec<Option<f64>> {
         .iter()
         .find(|output| output.instance_id == instance)
         .unwrap()
-        .axes
+        .axes()
         .iter()
         .map(|axis| axis.absolute_degrees().map(|degrees| degrees.round()))
         .collect()

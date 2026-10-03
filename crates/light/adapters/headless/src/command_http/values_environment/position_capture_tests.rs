@@ -546,7 +546,7 @@ async fn divergent_copies_do_not_silently_adopt_the_root_or_fold_turns() {
         .iter()
         .map(|instance| {
             instance
-                .axes
+                .axes()
                 .iter()
                 .find(|axis| axis.role == Some(PositionAxisRole::Pan))
                 .unwrap()

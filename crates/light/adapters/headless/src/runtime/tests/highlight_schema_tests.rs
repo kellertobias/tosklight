@@ -196,7 +196,7 @@ fn highlight_multi_head_fixture() -> (light_fixture::PatchedFixture, [light_core
     let (mut fixture, _, _) = schema_v2_direct_fixture();
     fixture.fixture_number = Some(1);
     fixture.name = "Two-cell Highlight fixture".into();
-    let mut profile = *fixture.definition.profile_snapshot.take().unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.take().unwrap());
     let mode_id = profile.modes[0].id;
     profile.modes[0].heads.extend([
         light_fixture::FixtureHead {
@@ -356,6 +356,7 @@ fn schema_v2_direct_actions_are_channel_atomic_and_presets_are_opt_in_semantic_v
         .definition
         .profile_snapshot
         .as_mut()
+        .map(std::sync::Arc::make_mut)
         .unwrap()
         .modes[0]
         .control_actions[0];

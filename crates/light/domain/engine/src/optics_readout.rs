@@ -54,7 +54,7 @@ impl Engine {
                         if crate::fixture::profile_head_owner(fixture, head_index, head) != owner {
                             continue;
                         }
-                        let Some(result) = instance.optics.iter().find(|r| r.head_id == head.id)
+                        let Some(result) = instance.optics().iter().find(|r| r.head_id == head.id)
                         else {
                             continue;
                         };

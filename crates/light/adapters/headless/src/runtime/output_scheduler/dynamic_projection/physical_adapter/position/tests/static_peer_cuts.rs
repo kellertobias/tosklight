@@ -282,7 +282,7 @@ impl StaticPeerDesk {
                         (achieved[axis] - expected).abs() < 0.07,
                         "owner {index} copy {destination:?}: {achieved:?} vs {a:?}->{b:?}"
                     );
-                    let command = physical.axes[if axis == 0 { 0 } else { index + 1 }]
+                    let command = physical.axes()[if axis == 0 { 0 } else { index + 1 }]
                         .absolute_degrees()
                         .unwrap();
                     assert!(

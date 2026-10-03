@@ -3,6 +3,7 @@
 
 pub mod body_catalogue;
 mod color_calibration;
+mod compiled_interner;
 mod definition;
 mod definition_model;
 mod encoding;
@@ -22,6 +23,7 @@ mod profile;
 mod scenery_options;
 
 pub use color_calibration::*;
+pub use compiled_interner::{CompiledModelInterner, SharedByIdentity};
 pub use definition::*;
 pub use definition_model::*;
 pub use encoding::*;

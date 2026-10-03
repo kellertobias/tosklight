@@ -211,7 +211,7 @@ fn adoption_withholds_divergent_copy_even_when_optical_angles_are_equivalent() {
         .iter()
         .map(|instance| {
             instance
-                .axes
+                .axes()
                 .iter()
                 .find(|axis| axis.role == Some(PositionAxisRole::Pan))
                 .unwrap()

@@ -117,8 +117,9 @@ impl<R: FixtureProfileRevisionResolver> PatchedFixtureCompiler<R> {
     ) -> Result<PatchedFixture, PortablePatchError> {
         let mut fixture = self.compile(record)?;
         if let Some(reference) = record.profile_reference()? {
-            fixture.definition.profile_snapshot =
-                Some(Box::new(self.profile(reference)?.definition.clone()));
+            fixture.definition.profile_snapshot = Some(std::sync::Arc::new(
+                self.profile(reference)?.definition.clone(),
+            ));
         }
         Ok(fixture)
     }
@@ -145,7 +146,12 @@ impl<R: FixtureProfileRevisionResolver> PatchedFixtureCompiler<R> {
                     .cloned();
             }
             // Same derived Color model as a referenced revision (the record bytes are unchanged).
-            if let Some(profile) = fixture.definition.profile_snapshot.as_deref_mut() {
+            if let Some(profile) = fixture
+                .definition
+                .profile_snapshot
+                .as_mut()
+                .map(std::sync::Arc::make_mut)
+            {
                 crate::apply_derived_color_physical(profile);
                 crate::apply_derived_position_physical(profile);
             }

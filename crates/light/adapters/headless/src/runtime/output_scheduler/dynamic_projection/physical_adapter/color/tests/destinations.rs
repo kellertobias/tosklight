@@ -586,3 +586,64 @@ fn shared_color_controls_across_validated_logical_targets_hold_passively() {
         );
     }
 }
+
+/// TL-639: instances whose fitter inputs are identical share one compiled fitter, across
+/// fixtures and multipatch copies; any differing input compiles its own.
+#[test]
+fn identical_fitting_inputs_share_one_fitter_across_fixtures_and_copies() {
+    let profile = rgb();
+    let first = patched(&profile, FixtureId::new(), 1);
+    // A second fixture of the same patched definition shares the profile snapshot.
+    let mut second = first.clone();
+    second.fixture_id = FixtureId::new();
+    second.address = Some(40);
+    second.multipatch = vec![light_fixture::MultiPatchInstance {
+        id: Uuid::new_v4(),
+        universe: Some(1),
+        address: Some(80),
+        ..Default::default()
+    }];
+    // Another calibration, and an equal profile that is a separate snapshot, compile again.
+    let mut calibrated = first.clone();
+    calibrated.fixture_id = FixtureId::new();
+    calibrated.address = Some(120);
+    calibrated.color_calibration = Some(gain(&profile, 0, 0.5));
+    let mut separate = patched(&profile, FixtureId::new(), 160);
+    separate.definition.profile_snapshot = Some(Arc::new(profile.clone()));
+    let snapshot = light_engine::EngineSnapshot {
+        fixtures: vec![
+            first.clone(),
+            second.clone(),
+            calibrated.clone(),
+            separate.clone(),
+        ]
+        .into(),
+        revision: 1,
+        ..Default::default()
+    };
+    let adapter = ColorAdapter::default();
+    let fitting = |target| {
+        adapter
+            .compile(&snapshot, target)
+            .unwrap()
+            .expect("physical Color destinations")
+            .heads
+            .iter()
+            .map(|head| Arc::clone(&head.fitting))
+            .collect::<Vec<_>>()
+    };
+    let [first, second, calibrated, separate] = [
+        first.fixture_id,
+        second.fixture_id,
+        calibrated.fixture_id,
+        separate.fixture_id,
+    ]
+    .map(fitting);
+    assert_eq!(second.len(), 2, "root and copy");
+    assert!(Arc::ptr_eq(&first[0], &second[0]));
+    assert!(Arc::ptr_eq(&first[0], &second[1]));
+    assert!(!Arc::ptr_eq(&first[0], &calibrated[0]));
+    assert!(!Arc::ptr_eq(&first[0], &separate[0]));
+    let counters = adapter.counters();
+    assert_eq!((counters.fitting_compiles, counters.fitting_shared), (3, 2));
+}

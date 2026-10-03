@@ -111,7 +111,8 @@ pub fn tosklight_mvr_fixture_metadata(
                     .fixture
                     .definition
                     .profile_snapshot
-                    .as_mut()?
+                    .as_mut()
+                    .map(std::sync::Arc::make_mut)?
                     .source_gdtf = Some(source);
             }
             Some((

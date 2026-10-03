@@ -96,7 +96,7 @@ fn assert_output(
         assert!(instances[0].complete);
         assert_eq!(instances[0].native_raw.as_ref(), &[0, 65535]);
         assert_eq!(
-            instances[0].lenses.len(),
+            instances[0].lenses().len(),
             1,
             "ownership must not duplicate physical emitters"
         );

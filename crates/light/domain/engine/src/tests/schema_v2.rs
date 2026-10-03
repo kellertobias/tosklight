@@ -271,7 +271,15 @@ fn patch_and_profile_axis_inversion_compose_exactly_once() {
     let (mut fixture, fixture_id) =
         schema_v2_fixture(&[("pan", false, false, false, false, false)]);
     fixture.invert_pan = true;
-    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0].invert = true;
+    fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .modes[0]
+        .channels[0]
+        .invert = true;
     fixture.multipatch = vec![MultiPatchInstance {
         scenery_size_metres: None,
         id: uuid::Uuid::new_v4(),
@@ -326,7 +334,13 @@ fn patch_axis_inversion_preserves_exact_msb_first_encoding_at_every_resolution()
         let (mut fixture, fixture_id) =
             schema_v2_fixture(&[("pan", false, false, false, false, false)]);
         fixture.invert_pan = true;
-        let mode = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0];
+        let mode = &mut fixture
+            .definition
+            .profile_snapshot
+            .as_mut()
+            .map(std::sync::Arc::make_mut)
+            .unwrap()
+            .modes[0];
         mode.splits[0].footprint = resolution.bytes() as u16;
         let channel = &mut mode.channels[0];
         channel.resolution = resolution;
@@ -788,7 +802,15 @@ fn inverted_intensity_masters_and_blackout_move_to_physical_off() {
     programmers.start(session);
     let (mut fixture, fixture_id) =
         schema_v2_fixture(&[("intensity", false, false, false, false, true)]);
-    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0].invert = true;
+    fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .modes[0]
+        .channels[0]
+        .invert = true;
     programmers.set(
         session,
         fixture_id,

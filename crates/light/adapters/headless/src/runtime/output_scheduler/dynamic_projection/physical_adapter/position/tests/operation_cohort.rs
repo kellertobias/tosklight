@@ -403,9 +403,11 @@ impl OperationDesk {
                     .find(|instance| instance.instance_id == destination.0)
                     .unwrap();
                 assert!(physical.complete);
-                assert!((physical.axes[0].absolute_degrees().unwrap() - expected[0]).abs() < 0.06);
                 assert!(
-                    (physical.axes[index + 1].absolute_degrees().unwrap() - expected[1]).abs()
+                    (physical.axes()[0].absolute_degrees().unwrap() - expected[0]).abs() < 0.06
+                );
+                assert!(
+                    (physical.axes()[index + 1].absolute_degrees().unwrap() - expected[1]).abs()
                         < 0.06
                 );
                 for write in row

@@ -990,7 +990,8 @@ fn preset_move_commits_destination_and_source_delete_atomically() {
 fn generated_presets_share_one_show_commit_backup_and_runtime_install() {
     let mut fixture = schema_v2_direct_fixture().0;
     let mode_id = fixture.definition.mode_id.unwrap();
-    let mut profile = fixture.definition.profile_snapshot.take().unwrap();
+    let mut profile =
+        std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.take().unwrap());
     let channel = &mut profile.modes[0].channels[0];
     channel.functions.push(light_fixture::ChannelFunction {
         id: Uuid::new_v4(),

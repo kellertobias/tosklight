@@ -359,8 +359,8 @@ fn live_bridge_independent_shared_target_envelopes_preserve_unchanged_pose_and_a
         assert_eq!(
             pair,
             [
-                physical.axes[0].absolute_degrees().unwrap(),
-                physical.axes[index + 1].absolute_degrees().unwrap()
+                physical.axes()[0].absolute_degrees().unwrap(),
+                physical.axes()[index + 1].absolute_degrees().unwrap()
             ]
         );
         for axis in 0..2 {

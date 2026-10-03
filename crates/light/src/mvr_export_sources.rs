@@ -53,7 +53,11 @@ impl SourceArchiveWriter {
         document: &mut light_mvr::MvrDocument,
         warnings: &mut Vec<String>,
     ) -> Option<String> {
-        let profile = fixture.definition.profile_snapshot.as_mut()?;
+        let profile = fixture
+            .definition
+            .profile_snapshot
+            .as_mut()
+            .map(std::sync::Arc::make_mut)?;
         let source = profile.source_gdtf.as_ref()?;
         if let Some((_, reference)) = self.validated.iter().find(|(existing, _)| {
             existing.version == source.version

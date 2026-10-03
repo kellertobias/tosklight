@@ -331,7 +331,7 @@ impl Engine {
             for emitter in emitters {
                 let commands = emitter.commands?;
                 let mut lenses = instance
-                    .lenses
+                    .lenses()
                     .iter()
                     .filter(|lens| lens.emitter_id == emitter.emitter_id);
                 let lens = lenses.next()?;
@@ -348,7 +348,7 @@ impl Engine {
                     .zip([PositionAxisRole::Pan, PositionAxisRole::Tilt])
                     .enumerate()
                 {
-                    let command = instance.axes.get(index)?;
+                    let command = instance.axes().get(index)?;
                     if command.node_id != node_id || command.role != Some(role) {
                         return None;
                     }
