@@ -491,14 +491,15 @@ async fn project_subscribed_lanes(
                             key,
                             &projection_source,
                             |refresh_dynamic_stack| {
-                                lane_snapshot(
-                                    &projection_state,
-                                    &projection_session,
-                                    lane,
-                                    &projection_source,
-                                    refresh_dynamic_stack,
-                                    key.complete_values(),
-                                )
+                                claimed_lane_snapshot(key, refresh_dynamic_stack, |refresh| {
+                                    lane_snapshot(
+                                        &projection_state,
+                                        &projection_session,
+                                        lane,
+                                        &projection_source,
+                                        refresh,
+                                    )
+                                })
                             },
                         )
                     })
@@ -924,7 +925,6 @@ fn lane_snapshot(
     lane: VisualizationLane,
     source: &super::visualization_frame::PublishedVisualizationFrame,
     include_dynamic_stack: bool,
-    complete_values: bool,
 ) -> Result<VisualizationLaneSnapshot, ApiError> {
     let preload = lane == VisualizationLane::Preload;
     // TL-594: gated Preload content and its message stamp come from ONE publication read.
@@ -954,17 +954,29 @@ fn lane_snapshot(
         snapshot.grand_master = source.options.grand_master;
         snapshot.blackout = source.options.blackout;
     }
-    trim_lane_snapshot(&mut snapshot, include_dynamic_stack, complete_values);
+    Ok(snapshot)
+}
+
+/// One lane publication for one claim. `refresh_dynamic_stack` only decides whether this frame
+/// re-evaluates the Dynamic stack (the projection reuses the previous stack otherwise); what the
+/// client receives is decided by its claim alone, so values never come and go with the refresh
+/// cadence.
+fn claimed_lane_snapshot(
+    claim: super::visualization_frame::VisualizationProjectionKey,
+    refresh_dynamic_stack: bool,
+    build: impl FnOnce(bool) -> Result<VisualizationLaneSnapshot, ApiError>,
+) -> Result<VisualizationLaneSnapshot, ApiError> {
+    let mut snapshot = build(refresh_dynamic_stack)?;
+    trim_lane_snapshot(&mut snapshot, claim);
     Ok(snapshot)
 }
 
 /// What one lane publication carries for its claim.
 fn trim_lane_snapshot(
     snapshot: &mut VisualizationLaneSnapshot,
-    include_dynamic_stack: bool,
-    complete_values: bool,
+    claim: super::visualization_frame::VisualizationProjectionKey,
 ) {
-    if include_dynamic_stack {
+    if claim.includes_dynamic_stack() {
         // Fixture Sheet consumes Dynamic identity and state; live sampled and
         // resolved values belong to the DMX/output view. Do not make every
         // Stage publication carry ordinary static entries or duplicate values.
@@ -976,18 +988,17 @@ fn trim_lane_snapshot(
             entry.resolved_value = None;
             entry.activation_mix = None;
         }
-    } else {
-        // A Preset pool compares every stored attribute, including the semantic Position owner
-        // and Beam attributes; the Stage draws only these.
-        if !complete_values {
-            snapshot
-                .values
-                .retain(|entry| stage_visualization_attribute(&entry.attribute));
-        }
+    }
+    // A Preset pool compares every stored attribute, including the semantic Position owner and
+    // Beam attributes; the Stage draws only these. A Dynamic-stack claim alone does not widen it.
+    if !claim.complete_values() {
         snapshot
-            .profile_output_values
+            .values
             .retain(|entry| stage_visualization_attribute(&entry.attribute));
     }
+    snapshot
+        .profile_output_values
+        .retain(|entry| stage_visualization_attribute(&entry.attribute));
 }
 
 fn stage_visualization_attribute(attribute: &str) -> bool {

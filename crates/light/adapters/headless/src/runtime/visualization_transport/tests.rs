@@ -305,16 +305,108 @@ fn only_a_complete_values_claim_carries_attributes_the_stage_does_not_draw() {
 
     // The Stage claim: the semantic Position owner and Beam attributes are not drawn.
     let mut stage = snapshot();
-    trim_lane_snapshot(&mut stage, false, false);
+    trim_lane_snapshot(&mut stage, claim(false, false));
     assert_eq!(attributes(&stage.values), ["intensity", "color", "zoom"]);
 
     // A Preset pool compares every stored attribute against the effective values.
     let mut complete = snapshot();
-    trim_lane_snapshot(&mut complete, false, true);
+    trim_lane_snapshot(&mut complete, claim(false, true));
     assert_eq!(
         attributes(&complete.values),
         ["intensity", "color", "position", "zoom", "prism"]
     );
     // Profile output stays the Stage's own projection either way.
     assert_eq!(attributes(&complete.profile_output_values), ["pan"]);
+}
+
+fn claim(
+    include_dynamic_stack: bool,
+    complete_values: bool,
+) -> super::super::visualization_frame::VisualizationProjectionKey {
+    super::super::visualization_frame::VisualizationProjectionKey::Normal {
+        include_dynamic_stack,
+        complete_values,
+    }
+}
+
+/// What the lane content builder yields: every resolved attribute, and the Dynamic stack only on
+/// the frames that re-evaluate it.
+fn untrimmed_lane(dynamic_stack: bool) -> VisualizationLaneSnapshot {
+    let fixture_id = uuid::Uuid::nil();
+    let value = |attribute: &str| light_wire::v2::visualization::VisualizationValue {
+        fixture_id,
+        attribute: attribute.into(),
+        value: light_wire::v2::preload_values::ProgrammingPreloadAttributeValue::Normalized(0.5),
+    };
+    let entry = serde_json::from_value(serde_json::json!({
+        "fixture_id": fixture_id, "attribute": "intensity", "entry_type": "dynamic",
+        "priority": 0, "changed_at_millis": 1, "source": "Dynamic", "dynamic_id": null,
+        "pool_number": 1, "name": "Pulse", "runtime_instance_id": null, "controller_id": null,
+        "lane_id": null, "size": 1.0, "activation_mix": 1.0, "paused": false, "hidden": false,
+        "pending": false, "winning": true, "value": null, "resolved_value": null
+    }))
+    .unwrap();
+    VisualizationLaneSnapshot {
+        scope: VisualizationScope { show_id: None },
+        revision: 1,
+        generated_at: String::new(),
+        grand_master: 1.,
+        blackout: false,
+        preload: false,
+        values: ["intensity", "position", "prism"].map(value).to_vec(),
+        dynamic_stack: if dynamic_stack {
+            vec![entry]
+        } else {
+            Vec::new()
+        },
+        profile_output_values: ["pan", "prism"].map(value).to_vec(),
+    }
+}
+
+#[test]
+fn a_dynamic_stack_claim_receives_the_same_values_on_refresh_and_reuse_frames() {
+    for (complete, expected) in [
+        (false, &["intensity"][..]),
+        (true, &["intensity", "position", "prism"][..]),
+    ] {
+        let hub = super::super::visualization_frame::VisualizationFrameHub::default();
+        let key = claim(true, complete);
+        let project = |sequence: u64| {
+            hub.projection(key, &source(sequence), |refresh| {
+                claimed_lane_snapshot(key, refresh, |refresh| Ok(untrimmed_lane(refresh)))
+            })
+            .unwrap()
+        };
+        let frames = [
+            project(1), // refreshes the Dynamic stack
+            project(2), // reuses it: built without a stack
+            {
+                std::thread::sleep(Duration::from_millis(260));
+                project(3) // refreshes again
+            },
+        ];
+        for (index, frame) in frames.iter().enumerate() {
+            let attributes = frame
+                .snapshot
+                .values
+                .iter()
+                .map(|value| value.attribute.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(attributes, expected, "frame {index}, complete {complete}");
+            assert_eq!(frame.snapshot.dynamic_stack.len(), 1, "frame {index}");
+            let profile = frame.snapshot.profile_output_values.iter();
+            assert_eq!(
+                profile
+                    .map(|value| value.attribute.as_str())
+                    .collect::<Vec<_>>(),
+                ["pan"]
+            );
+        }
+        // No delta removes and re-adds values at the refresh cadence.
+        for frame in &frames[1..] {
+            assert!(frame.delta.values.is_empty(), "complete {complete}");
+            assert!(frame.delta.removed_values.is_empty(), "complete {complete}");
+            assert!(frame.delta.removed_profile_output_values.is_empty());
+        }
+    }
 }
