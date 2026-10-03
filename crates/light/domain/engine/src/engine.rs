@@ -35,6 +35,8 @@ pub struct Engine {
     /// Where each Programmer's stored values live in the current frame, remembered against the
     /// registry's shared value vectors so an unchanged Programmer costs no lookup by name.
     pub(crate) programmer_addresses: Mutex<crate::programmer_resolution::ProgrammerAddressMemo>,
+    /// TL-639: unchanged Programmer evaluations reused across static resolutions and frames.
+    pub(crate) programmer_memo: Mutex<crate::programmer_memo::ProgrammerContributionMemo>,
     pub(crate) programmer_releases: Mutex<crate::programmer_release::ProgrammerReleaseMemo>,
     pub(crate) preload_sources: Mutex<crate::preload_sources::PreloadSourceMemo>,
     pub(crate) group_master_flashes: RwLock<HashMap<String, f32>>,
@@ -145,6 +147,7 @@ impl Engine {
             output_continuity: Mutex::new(OutputContinuityState::default()),
             dynamic_programmer_cache: Mutex::new(DynamicProgrammerCache::default()),
             programmer_addresses: Mutex::new(Default::default()),
+            programmer_memo: Mutex::new(Default::default()),
             group_master_flashes: RwLock::new(HashMap::new()),
             group_master_transitions: Mutex::new(HashMap::new()),
             group_colors: RwLock::new(HashMap::new()),

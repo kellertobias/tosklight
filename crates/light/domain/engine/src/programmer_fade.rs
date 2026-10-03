@@ -1,5 +1,5 @@
 use light_core::{AttributeKey, AttributeValue, FixtureId, ProgrammerId, TimedValue};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 type Evidence = Option<Arc<crate::ContributionFamilyEvidence>>;
 pub(crate) type ProgrammerSample = (TimedValue, Evidence);
@@ -171,7 +171,7 @@ pub(crate) fn programmer_transition_key(
 }
 
 pub(crate) fn track_immediate_programmer_value(
-    transitions: &mut HashMap<ProgrammerTransitionKey, ProgrammerTransition>,
+    transitions: &mut crate::programmer_memo::ProgrammerTransitions,
     key: ProgrammerTransitionKey,
     value: &TimedValue,
 ) -> Evidence {
@@ -192,7 +192,7 @@ pub(crate) fn track_immediate_programmer_value(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn faded_programmer_value(
-    transitions: &mut HashMap<ProgrammerTransitionKey, ProgrammerTransition>,
+    transitions: &mut crate::programmer_memo::ProgrammerTransitions,
     default_fade_millis: u64,
     mut value: TimedValue,
     now: chrono::DateTime<chrono::Utc>,

@@ -508,6 +508,7 @@ mod spread_recall;
 mod move_in_black;
 
 mod programmer_fades;
+mod programmer_memo;
 
 mod schema_v2;
 

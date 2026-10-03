@@ -73,6 +73,7 @@ mod profile_projection;
 mod profile_projection_plan;
 mod profile_value_index;
 mod programmer_fade;
+mod programmer_memo;
 mod programmer_release;
 mod programmer_resolution;
 mod render;
@@ -154,9 +155,7 @@ pub(crate) use profile_projection::{
 };
 pub(crate) use profile_projection_plan::{FixtureProjectionPlan, ProfileProjectionIndex};
 pub(crate) use profile_value_index::ProfileValueIndex;
-pub(crate) use programmer_fade::{
-    ProgrammerTransition, ProgrammerTransitionKey, ProgrammerTransitionSource,
-};
+pub(crate) use programmer_fade::{ProgrammerTransitionKey, ProgrammerTransitionSource};
 pub(crate) use render_phases::{RenderPhase, timed};
 pub(crate) use runtime_generation::{
     GroupMasterGenerationUpdate, GroupMasterIndex, GroupMasterLevels, RuntimeGeneration,

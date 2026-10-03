@@ -1,6 +1,4 @@
-use crate::{
-    Engine, MoveInBlackKey, MoveInBlackRuntime, ProgrammerTransition, ProgrammerTransitionKey,
-};
+use crate::{Engine, MoveInBlackKey, MoveInBlackRuntime};
 use std::collections::HashMap;
 
 /// Mutable history belonging to one output lane. A speculative baseline or Preload lane can
@@ -11,7 +9,9 @@ use std::collections::HashMap;
 #[derive(Clone, Default)]
 pub struct OutputContinuityState {
     revision: u64,
-    pub(crate) programmer_transitions: HashMap<ProgrammerTransitionKey, ProgrammerTransition>,
+    /// Content-versioned (TL-639), so an unchanged history lets the Programmer memo reuse an
+    /// evaluation. Never iterated in an order-dependent way.
+    pub(crate) programmer_transitions: crate::programmer_memo::ProgrammerTransitions,
     pub(crate) move_in_black: HashMap<MoveInBlackKey, MoveInBlackRuntime>,
     pub(crate) mounts: crate::mount_projection::MountTransformWorkspace,
 }

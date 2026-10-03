@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 
 /// A stored value on its way to the frame, with where the frame keeps it when that is known.
-type Addressed = (
+pub(crate) type Addressed = (
     TimedValue,
     Option<FrameAddress>,
     Option<Arc<crate::contribution_batch::ContributionOrigin>>,
@@ -193,16 +193,14 @@ struct ProgrammerValueResolver<'a, 'continuity> {
     addresser: &'a crate::FrameAddresser,
     now: DateTime<Utc>,
     underlay: Option<&'a ResolvedContributionIndex<'a>>,
-    sampled: &'a [ContributionBatch],
     programmer_id: ProgrammerId,
     priority: i16,
     has_replacements: bool,
     trace_sources: bool,
     default_fade_millis: u64,
     group_colors: &'a HashMap<String, crate::engine::GroupColorContribution>,
-    transitions:
-        &'continuity mut HashMap<crate::ProgrammerTransitionKey, crate::ProgrammerTransition>,
-    active_transition_keys: HashSet<crate::ProgrammerTransitionKey>,
+    transitions: &'continuity mut crate::programmer_memo::ProgrammerTransitions,
+    active_transition_keys: rustc_hash::FxHashSet<crate::ProgrammerTransitionKey>,
 }
 
 pub(crate) fn programmers_need_underlay(programmers: &[ProgrammerOutputState]) -> bool {
@@ -244,6 +242,90 @@ impl Engine {
         addresses: &parking_lot::Mutex<ProgrammerAddressMemo>,
     ) -> Vec<EngineContribution> {
         let has_replacements = sampled.iter().any(ContributionBatch::has_replacements);
+        // TL-639: without a fade the evaluation before the replacement filter depends only on
+        // the captured vectors, the generation, these flags and the transition history.
+        let flags = (trace_sources, has_replacements);
+        let memoizable = !programmers_need_underlay(&programmers);
+        let transitions = continuity.programmer_transitions.version();
+        let kept = memoizable
+            .then(|| {
+                self.programmer_memo.lock().find(
+                    &programmers,
+                    generation.identity(),
+                    flags,
+                    transitions,
+                )
+            })
+            .flatten();
+        let resolved = match kept {
+            Some(resolved) => resolved,
+            None => {
+                let kept_states = memoizable.then(|| programmers.clone());
+                let resolved = Arc::new(self.resolve_programmers(
+                    programmers,
+                    generation,
+                    now,
+                    underlay,
+                    has_replacements,
+                    trace_sources,
+                    continuity,
+                    default_fade_millis,
+                    group_colors,
+                    addresses,
+                ));
+                if let Some(states) = kept_states
+                    && continuity.programmer_transitions.version() == transitions
+                {
+                    self.programmer_memo.lock().keep(
+                        states,
+                        generation.identity(),
+                        flags,
+                        transitions,
+                        Arc::clone(&resolved),
+                    );
+                }
+                resolved
+            }
+        };
+        resolved
+            .iter()
+            .flat_map(|values| {
+                programmer_winners(
+                    values
+                        .iter()
+                        .filter(|((value, ..), replacement)| {
+                            !replacement
+                                .as_ref()
+                                .is_some_and(|source| replaces_source(sampled, source, value))
+                        })
+                        .map(|(addressed, _)| addressed.clone())
+                        .collect(),
+                )
+            })
+            .map(|(value, address, origin, evidence)| {
+                EngineContribution::unscaled(value)
+                    .at(address)
+                    .with_origin(origin)
+                    .with_family_evidence(evidence)
+            })
+            .collect()
+    }
+
+    /// Every Programmer's values in order, before the sampled-replacement filter.
+    #[allow(clippy::too_many_arguments)]
+    fn resolve_programmers(
+        &self,
+        programmers: Vec<ProgrammerOutputState>,
+        generation: &RuntimeGeneration,
+        now: DateTime<Utc>,
+        underlay: Option<&ResolvedContributionIndex<'_>>,
+        has_replacements: bool,
+        trace_sources: bool,
+        continuity: &mut OutputContinuityState,
+        default_fade_millis: u64,
+        group_colors: &HashMap<String, crate::engine::GroupColorContribution>,
+        addresses: &parking_lot::Mutex<ProgrammerAddressMemo>,
+    ) -> Vec<crate::programmer_memo::ResolvedProgrammerValues> {
         let active_programmers = programmers
             .iter()
             .map(|programmer| programmer.id)
@@ -255,14 +337,13 @@ impl Engine {
         let addresser = crate::FrameAddresser::new(Arc::clone(generation.slots()));
         programmers
             .into_iter()
-            .flat_map(|programmer| {
+            .map(|programmer| {
                 self.resolve_programmer(
                     programmer,
                     generation,
                     &addresser,
                     now,
                     underlay,
-                    sampled,
                     has_replacements,
                     trace_sources,
                     &mut continuity.programmer_transitions,
@@ -270,12 +351,6 @@ impl Engine {
                     group_colors,
                     addresses,
                 )
-            })
-            .map(|(value, address, origin, evidence)| {
-                EngineContribution::unscaled(value)
-                    .at(address)
-                    .with_origin(origin)
-                    .with_family_evidence(evidence)
             })
             .collect()
     }
@@ -288,14 +363,13 @@ impl Engine {
         addresser: &crate::FrameAddresser,
         now: DateTime<Utc>,
         underlay: Option<&ResolvedContributionIndex<'_>>,
-        sampled: &[ContributionBatch],
         has_replacements: bool,
         trace_sources: bool,
-        transitions: &mut HashMap<crate::ProgrammerTransitionKey, crate::ProgrammerTransition>,
+        transitions: &mut crate::programmer_memo::ProgrammerTransitions,
         default_fade_millis: u64,
         group_colors: &HashMap<String, crate::engine::GroupColorContribution>,
         addresses: &parking_lot::Mutex<ProgrammerAddressMemo>,
-    ) -> Vec<Addressed> {
+    ) -> crate::programmer_memo::ResolvedProgrammerValues {
         let ProgrammerOutputState {
             id,
             priority,
@@ -312,7 +386,6 @@ impl Engine {
             addresser,
             now,
             underlay,
-            sampled,
             programmer_id: id,
             priority,
             has_replacements,
@@ -320,7 +393,7 @@ impl Engine {
             default_fade_millis,
             group_colors,
             transitions,
-            active_transition_keys: HashSet::new(),
+            active_transition_keys: Default::default(),
         };
         let (live_addresses, preload_addresses) = {
             let mut memo = addresses.lock();
@@ -348,7 +421,7 @@ impl Engine {
         resolver
             .transitions
             .retain(|key, _| key.programmer_id != id || active_transition_keys.contains(key));
-        programmer_winners(contributions)
+        contributions
     }
 }
 
@@ -416,7 +489,7 @@ impl ProgrammerValueResolver<'_, '_> {
         values: &[TimedValue],
         addresses: &[Option<FrameAddress>],
         source: ProgrammerValueSource<'_>,
-    ) -> Vec<Addressed> {
+    ) -> crate::programmer_memo::ResolvedProgrammerValues {
         let context = self.source_context(source);
         // A remembered slice answers for its vector, absent addresses included; only a lane
         // nobody remembers asks the generation.
@@ -444,7 +517,10 @@ impl ProgrammerValueResolver<'_, '_> {
                                 )
                             });
                         let evidence = self.trace_sources.then_some(evidence).flatten();
-                        (value, address, origin, evidence)
+                        (
+                            (value, address, origin, evidence),
+                            context.replacement.clone(),
+                        )
                     })
             })
             .collect()
@@ -454,7 +530,7 @@ impl ProgrammerValueResolver<'_, '_> {
         &mut self,
         group_values: &Arc<GroupValues>,
         preload_values: &Arc<GroupValues>,
-    ) -> Vec<Addressed> {
+    ) -> crate::programmer_memo::ResolvedProgrammerValues {
         let mut resolved = Vec::new();
         for (lane, source) in [
             (ValueLane::Live, group_values),
@@ -497,7 +573,10 @@ impl ProgrammerValueResolver<'_, '_> {
                             )
                         });
                     let evidence = self.trace_sources.then_some(evidence).flatten();
-                    resolved.push((value, entry.address, origin, evidence));
+                    resolved.push((
+                        (value, entry.address, origin, evidence),
+                        context.replacement.clone(),
+                    ));
                 }
             }
         }
@@ -533,11 +612,8 @@ impl ProgrammerValueResolver<'_, '_> {
             );
             (value, evidence)
         };
-        let replaced = source
-            .replacement
-            .as_ref()
-            .is_some_and(|source| replaces_source(self.sampled, source, &value));
-        (!replaced).then_some((value, evidence))
+        // The sampled-replacement filter runs on the collected values (TL-639).
+        Some((value, evidence))
     }
 }
 
