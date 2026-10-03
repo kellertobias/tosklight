@@ -77,7 +77,8 @@ fn bind_projected_sources(
     resolve: impl Fn(usize) -> Result<DynamicSourceOrigin, IntentError>,
     owns: impl Fn(&DynamicSourceOrigin) -> bool,
 ) -> Result<(), IntentError> {
-    let mut active = HashSet::with_capacity(assignments.len());
+    let mut active =
+        rustc_hash::FxHashSet::with_capacity_and_hasher(assignments.len(), Default::default());
     for row in assignments {
         let binding = DynamicSourceBinding::Authored {
             instance_id: row.instance_id,
@@ -88,7 +89,7 @@ fn bind_projected_sources(
         origins.bind(binding, resolve(row.captured_index)?)?;
         active.insert(binding);
     }
-    origins.retain_bindings(|record| {
+    origins.retain_authored_bindings(|record| {
         !owns(&record.origin)
             || active.contains(&record.binding)
             || binding_is_releasing(record.binding, runtime)
@@ -116,7 +117,8 @@ fn bind_programmer_sources(
     inputs: &CapturedDynamicInputs<'_>,
     assignments: &[super::super::dynamic_reconciliation::ReconciledSourceAssignment],
 ) -> Result<(), IntentError> {
-    let mut active = HashSet::with_capacity(assignments.len());
+    let mut active =
+        rustc_hash::FxHashSet::with_capacity_and_hasher(assignments.len(), Default::default());
     for assignment in assignments {
         let binding = DynamicSourceBinding::Authored {
             instance_id: assignment.instance_id,
@@ -175,7 +177,7 @@ fn bind_programmer_sources(
     }
     // Drop obsolete live lookups, retaining immutable records referenced by held leaves.
     // Cold checkpoint pruning can reclaim records once neither binding nor history uses them.
-    origins.retain_bindings(|record| {
+    origins.retain_authored_bindings(|record| {
         !matches!(record.origin, DynamicSourceOrigin::Programmer { .. })
             || active.contains(&record.binding)
             || binding_is_releasing(record.binding, runtime)
@@ -218,7 +220,7 @@ pub(super) fn retire_removed_controllers(
                 .map(move |controller| (instance.id, controller.id))
         })
         .collect::<HashSet<_>>();
-    origins.retain_bindings(|record| match record.binding {
+    origins.retain_bindings_by_key(|binding, _| match *binding {
         DynamicSourceBinding::Authored {
             instance_id,
             controller_id,

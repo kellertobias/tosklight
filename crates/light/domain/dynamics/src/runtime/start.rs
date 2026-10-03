@@ -50,7 +50,8 @@ impl DynamicRuntime {
             return Ok(instance_id);
         }
 
-        let instance_id = resolved_id.unwrap_or_else(Uuid::new_v4);
+        let instance_id =
+            resolved_id.unwrap_or_else(|| self.new_instance_id(request.definition_id));
         let phase_by_lane_target = project_instance_phases(
             &definition,
             &request.target_scope.ordered_targets,

@@ -196,10 +196,8 @@ fn semantic_reconstruction_remaps_xyz_and_keeps_allocation_and_wheels_outgoing()
         .sample_trace(ProgrammingOwner::Color, 0.75)
         .unwrap();
     assert!(Arc::ptr_eq(&trace.from.remap, &repeated.from.remap));
-    assert!(std::ptr::eq(
-        trace.from.identity.fields(),
-        repeated.from.identity.fields()
-    ));
+    // Unit scopes are bit sets since TL-639: a repeated trace holds no field allocation at all.
+    assert_eq!(trace.from.identity, repeated.from.identity);
     assert_eq!(
         trace,
         interpolate_programming_trace(ProgrammingOwner::Color, &from, &to, 0.5).unwrap()

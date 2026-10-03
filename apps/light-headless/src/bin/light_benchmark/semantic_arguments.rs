@@ -40,6 +40,9 @@ pub struct SemanticArguments {
     pub static_bases_only: bool,
     /// `--rig-height-mm N`: height of the TL-564 workload's fixture grid.
     pub rig_height_mm: i32,
+    /// `--digest-ticks N` (TL-639): print per-tick output digests of N unpaced logical ticks
+    /// instead of the timed report, to compare two builds frame by frame.
+    pub digest_ticks: Option<u64>,
 }
 
 impl Default for SemanticArguments {
@@ -54,6 +57,7 @@ impl Default for SemanticArguments {
             publish: true,
             static_bases_only: false,
             rig_height_mm: 9_000,
+            digest_ticks: None,
         }
     }
 }
@@ -105,6 +109,9 @@ impl SemanticArguments {
             "--rig-height-mm" => {
                 self.rig_height_mm = bounded(&value()?, 0, 30_000, "rig height mm")? as i32
             }
+            "--digest-ticks" => {
+                self.digest_ticks = Some(bounded(&value()?, 1, 100_000, "digest ticks")?)
+            }
             _ => return Ok(false),
         }
         Ok(true)
@@ -150,7 +157,8 @@ impl SemanticArguments {
   --slow-consumer-ms N         How long each consumer holds a frame (0-1000)\n\
   --no-publish                 Skip the visualization publication step\n\
   --static-bases-only          Start none of the workload's Dynamics (memo-reuse gates)\n\
-  --rig-height-mm N            Height of the workload's fixture grid (default 9000)\n";
+  --rig-height-mm N            Height of the workload's fixture grid (default 9000)\n\
+  --digest-ticks N             Print per-tick output digests of N unpaced ticks (build equivalence)\n";
 }
 
 fn bounded(value: &str, min: u64, max: u64, label: &str) -> Result<u64, String> {
@@ -209,5 +217,16 @@ mod tests {
                 .is_err()
         );
         assert!(parse(&["--no-publish"]).unwrap().validate(true).is_err());
+    }
+
+    #[test]
+    fn digest_ticks_are_bounded_and_off_by_default() {
+        assert_eq!(parse(&[]).unwrap().digest_ticks, None);
+        assert_eq!(
+            parse(&["--digest-ticks", "40"]).unwrap().digest_ticks,
+            Some(40)
+        );
+        assert!(parse(&["--digest-ticks", "0"]).is_err());
+        assert!(parse(&["--digest-ticks", "100001"]).is_err());
     }
 }

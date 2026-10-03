@@ -213,6 +213,11 @@ pub(super) fn start_dynamics(
     Ok(())
 }
 
+/// TL-639: set by `--digest-ticks` before any scenario is built, so instance identities (and
+/// with them Random lanes and equal-priority order) repeat between processes.
+pub(super) static DERIVED_INSTANCE_IDS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// The production Live transaction over `engine`, with every definition installed.
 pub(super) fn live_bench(
     engine: Arc<Engine>,
@@ -222,6 +227,9 @@ pub(super) fn live_bench(
 ) -> Result<LiveOutputBench, String> {
     let mut runtime =
         DynamicRuntime::with_programming_contract_support(PROGRAMMING_CONTRACT_VERSION);
+    if DERIVED_INSTANCE_IDS.load(std::sync::atomic::Ordering::Relaxed) {
+        runtime.derive_instance_ids_from(Uuid::from_u128(0x7106_3900));
+    }
     runtime
         .install_definitions(definitions)
         .map_err(|error| format!("install benchmark Dynamics: {error}"))?;

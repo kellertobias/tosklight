@@ -46,7 +46,8 @@ impl DynamicSamplingScratch {
 #[derive(Default)]
 pub(in crate::runtime) struct SamplingWorkBuffers {
     controllers: HashMap<Uuid, Vec<PinnedController>>,
-    random_envelopes: HashMap<RandomKey, f32>,
+    /// Fx-hashed (TL-639): per-frame lookups only, never iterated.
+    random_envelopes: rustc_hash::FxHashMap<RandomKey, f32>,
 }
 
 impl SamplingWorkBuffers {
@@ -165,11 +166,15 @@ impl DynamicRuntime {
         self.begin_sample_boundary();
         scratch.clear();
         self.remove_completed_releases(now_millis);
-        let instances = self
+        let mut instances = self
             .instances
             .iter()
             .map(|(id, instance)| (*id, instance.definition.speed.clone()))
             .collect::<Vec<_>>();
+        if self.derives_instance_ids() {
+            // TL-639: reproducible runs also fix the otherwise hash-ordered sample order.
+            instances.sort_unstable_by_key(|(id, _)| *id);
+        }
         for (instance_id, speed) in instances {
             let instance = self
                 .instances
@@ -258,9 +263,10 @@ struct PinnedController {
     lanes: Vec<PinnedLane>,
     typed_indices: Vec<usize>,
     retained: Vec<(SampleKey, DynamicSampleExpression)>,
-    ready_keys: HashSet<SampleKey>,
-    emitted_keys: HashSet<SampleKey>,
-    required_keys: HashSet<SampleKey>,
+    // Fx-hashed (TL-639): membership only, never iterated.
+    ready_keys: rustc_hash::FxHashSet<SampleKey>,
+    emitted_keys: rustc_hash::FxHashSet<SampleKey>,
+    required_keys: rustc_hash::FxHashSet<SampleKey>,
     required_last: Vec<(SampleKey, DynamicSampleExpression)>,
 }
 

@@ -481,6 +481,28 @@ impl RetainedExpressionTape {
         Ok(tape)
     }
 
+    /// TL-639: `Some` validation of a plain (unwrapped) Programming or legacy scalar leaf. A
+    /// single leaf imports into a one-node current-version tape with no operation table, so its
+    /// validation is exactly the node's own checks; this runs them without building the tape.
+    /// `None` for every other expression, which validates through `from_roots`.
+    pub(crate) fn validate_plain_leaf(
+        expression: &DynamicSampleExpression,
+    ) -> Option<Result<(), IntentError>> {
+        if !matches!(
+            expression,
+            DynamicSampleExpression::Programming { .. }
+                | DynamicSampleExpression::LegacyScalar { .. }
+        ) {
+            return None;
+        }
+        Some(
+            ExpressionNodeRef::new(expression)
+                .node()
+                .and_then(|view| RetainedExpressionNode::from_view(view, &FxHashMap::default()))
+                .and_then(|node| node_summary(&node, &[]).map(|_| ())),
+        )
+    }
+
     pub fn node(&self, id: RetainedNodeId) -> Option<&RetainedExpressionNode> {
         self.nodes.get(id.0 as usize)
     }

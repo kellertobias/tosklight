@@ -2,6 +2,7 @@ use super::*;
 mod deferred_angle_pair;
 mod leaf_provenance;
 mod passive_requirements;
+mod plain_leaves;
 mod position_forest;
 use crate::DynamicSampleExpression as E;
 use light_core::{AttributeKey, AttributeValue, NativeColorBinding, NativeColorIdentity};

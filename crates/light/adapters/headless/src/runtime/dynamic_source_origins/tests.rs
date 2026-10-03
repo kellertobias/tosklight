@@ -918,3 +918,81 @@ fn singleton_metadata_matches_do_not_warm_an_evidence_identity_cache() {
     );
     assert!(origins.static_evidence.is_empty());
 }
+
+/// TL-639: the key-only and authored-only retains remove exactly what the record predicate
+/// removes, without looking up records they do not need.
+#[test]
+fn key_and_authored_retains_equal_the_record_retain() {
+    let static_key = DynamicSourceBinding::StaticBaseline {
+        target: FixtureId::new(),
+        owner: ProgrammingOwner::Color,
+    };
+    let mut catalogue = DynamicSourceOrigins::default();
+    let static_id = catalogue
+        .bind(
+            static_key,
+            DynamicSourceOrigin::StaticBaseline {
+                sources: vec![DynamicStaticSourceEntry {
+                    source: DynamicStaticSource::Playback {
+                        source: source(false),
+                    },
+                    changed_at: DateTime::from_timestamp(3, 4).unwrap(),
+                    programmer_order: 0,
+                    transition_ordinal: Some(12),
+                    authored_cue_id: None,
+                    footprint: DynamicStaticFootprint::Whole,
+                    role: DynamicStaticRole::CalculationDependency,
+                    effective_fields: None,
+                }],
+            },
+        )
+        .unwrap();
+    let authored = [programmer(), cue(false), programmer()]
+        .into_iter()
+        .map(|origin| {
+            let key = binding(&origin);
+            catalogue.bind(key, origin).unwrap();
+            key
+        })
+        .collect::<Vec<_>>();
+    let compare = |by_record: &dyn Fn(&DynamicSourceRecord) -> bool,
+                   other: &dyn Fn(&mut DynamicSourceOrigins) -> usize| {
+        let (mut left, mut right) = (catalogue.clone(), catalogue.clone());
+        let removed = left.retain_bindings(by_record);
+        assert_eq!(other(&mut right), removed);
+        assert_eq!(left.snapshot(), right.snapshot());
+        removed
+    };
+    // Key-only: keep authored, keep the static binding only for its current occurrence.
+    for current in [Some(static_id), None] {
+        let removed = compare(
+            &|record| match record.binding {
+                DynamicSourceBinding::StaticBaseline { .. } => {
+                    current == Some(record.occurrence_id)
+                }
+                _ => true,
+            },
+            &|origins| {
+                origins.retain_bindings_by_key(|binding, id| match binding {
+                    DynamicSourceBinding::StaticBaseline { .. } => current == Some(id),
+                    _ => true,
+                })
+            },
+        );
+        assert_eq!(removed, usize::from(current.is_none()));
+    }
+    // Authored-only: drop Programmer bindings except the first; Cue and static bindings stay.
+    let removed = compare(
+        &|record| {
+            !matches!(record.origin, DynamicSourceOrigin::Programmer { .. })
+                || record.binding == authored[0]
+        },
+        &|origins| {
+            origins.retain_authored_bindings(|record| {
+                !matches!(record.origin, DynamicSourceOrigin::Programmer { .. })
+                    || record.binding == authored[0]
+            })
+        },
+    );
+    assert_eq!(removed, 1);
+}

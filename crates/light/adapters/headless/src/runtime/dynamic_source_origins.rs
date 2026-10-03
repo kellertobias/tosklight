@@ -594,10 +594,12 @@ pub(in crate::runtime) type SharedDynamicSourceOrigins =
 #[derive(Clone, Debug, Default)]
 pub(super) struct DynamicSourceOrigins {
     records: Arc<BTreeMap<DynamicSourceOccurrenceId, Arc<DynamicSourceRecord>>>,
-    bindings: Arc<HashMap<DynamicSourceBinding, DynamicSourceOccurrenceId>>,
+    /// Fx-hashed (TL-639): every captured assignment looks itself up once per frame. Iteration
+    /// order is never observable.
+    bindings: Arc<rustc_hash::FxHashMap<DynamicSourceBinding, DynamicSourceOccurrenceId>>,
     /// Runtime-only validation cache. Weak identity keeps neither the captured source frame nor
     /// its historical evidence alive; at most one entry belongs to each active static binding.
-    static_evidence: Arc<HashMap<DynamicSourceBinding, CachedStaticEvidence>>,
+    static_evidence: Arc<rustc_hash::FxHashMap<DynamicSourceBinding, CachedStaticEvidence>>,
 }
 
 #[derive(Clone, Debug)]
@@ -741,16 +743,60 @@ impl DynamicSourceOrigins {
                 (!predicate(record)).then_some(*binding)
             })
             .collect::<Vec<_>>();
+        self.remove_bindings(&removed);
+        removed.len()
+    }
+
+    /// [`Self::retain_bindings`] for a predicate that decides from the binding and its
+    /// occurrence alone (TL-639): no record is looked up for any binding.
+    pub fn retain_bindings_by_key(
+        &mut self,
+        mut keep: impl FnMut(&DynamicSourceBinding, DynamicSourceOccurrenceId) -> bool,
+    ) -> usize {
+        let removed = self
+            .bindings
+            .iter()
+            .filter_map(|(binding, occurrence_id)| {
+                (!keep(binding, *occurrence_id)).then_some(*binding)
+            })
+            .collect::<Vec<_>>();
+        self.remove_bindings(&removed);
+        removed.len()
+    }
+
+    /// [`Self::retain_bindings`] over authored bindings only; static-baseline and fixed
+    /// bindings are kept without a record lookup (TL-639). Their records can only carry
+    /// static-baseline and fixed origins (`DynamicSourceOrigin::validate`).
+    pub fn retain_authored_bindings(
+        &mut self,
+        mut keep: impl FnMut(&DynamicSourceRecord) -> bool,
+    ) -> usize {
+        let removed = self
+            .bindings
+            .iter()
+            .filter(|(binding, _)| matches!(binding, DynamicSourceBinding::Authored { .. }))
+            .filter_map(|(binding, occurrence_id)| {
+                let record = self
+                    .records
+                    .get(occurrence_id)
+                    .expect("active Dynamic binding has an immutable source record");
+                (!keep(record)).then_some(*binding)
+            })
+            .collect::<Vec<_>>();
+        self.remove_bindings(&removed);
+        removed.len()
+    }
+
+    fn remove_bindings(&mut self, removed: &[DynamicSourceBinding]) {
         if !removed.is_empty() {
             let bindings = Arc::make_mut(&mut self.bindings);
-            for binding in &removed {
+            for binding in removed {
                 bindings.remove(binding);
             }
-            for binding in &removed {
+            for binding in removed {
                 self.forget_static_evidence(binding);
             }
         }
-        removed.len()
     }
 
     /// Only explicit cold cleanup may retire history. Validate every reachable expression ID
@@ -837,7 +883,7 @@ impl DynamicSourceOrigins {
                 return Err(invalid("duplicate source occurrence ID"));
             }
         }
-        let mut bindings = HashMap::new();
+        let mut bindings = rustc_hash::FxHashMap::default();
         for row in snapshot.bindings {
             validate_binding(row.binding)?;
             let record = records

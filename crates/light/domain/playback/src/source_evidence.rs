@@ -84,7 +84,7 @@ impl PlaybackFamilyEvidence {
             {
                 return Err(IntentError("invalid retained Playback occurrence".into()));
             }
-            if let Some(field) = entry.effective_fields.fields().first() {
+            if let Some(field) = entry.effective_fields.fields().next() {
                 let entry_owner = field.owner();
                 if owner.is_some_and(|owner| owner != entry_owner)
                     || matches!(entry.footprint, PlaybackFamilyFootprint::Component(component) if component.owner() != entry_owner)

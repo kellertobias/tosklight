@@ -340,6 +340,9 @@ pub struct DynamicRuntime {
     control_recording: Option<DynamicControlJournal>,
     output_frame_undo: Option<transaction::OutputFrameUndo>,
     sampling_buffers: sampling::SamplingWorkBuffers,
+    /// TL-639: `Some` only after `derive_instance_ids_from`; new instances then take name-based
+    /// identities from their definition instead of random ones.
+    derived_instance_ids: Option<(Uuid, HashMap<Uuid, u64>)>,
 }
 
 impl Default for DynamicRuntime {
@@ -475,6 +478,7 @@ impl DynamicRuntime {
             output_frame_undo: None,
             control_recording: None,
             sampling_buffers: Default::default(),
+            derived_instance_ids: None,
         }
     }
 
@@ -523,6 +527,34 @@ impl DynamicRuntime {
             control_recording: None,
             output_frame_undo: None,
             sampling_buffers: Default::default(),
+            derived_instance_ids: None,
+        }
+    }
+
+    /// TL-639: reproducible runs. Instances started without an authoritative identity take a
+    /// name-based identity from their definition and how often it started, instead of a random
+    /// v4 identity, so Random lanes repeat exactly between processes. (Controller identities can
+    /// still be random, for example a Programmer's.) Benchmarks comparing two builds use this;
+    /// the desk never does.
+    pub fn derive_instance_ids_from(&mut self, namespace: Uuid) {
+        self.derived_instance_ids = Some((namespace, HashMap::new()));
+    }
+
+    pub(crate) fn derives_instance_ids(&self) -> bool {
+        self.derived_instance_ids.is_some()
+    }
+
+    fn new_instance_id(&mut self, definition: Uuid) -> Uuid {
+        match &mut self.derived_instance_ids {
+            Some((namespace, starts)) => {
+                let ordinal = starts.entry(definition).or_default();
+                *ordinal += 1;
+                let mut name = [0; 24];
+                name[..16].copy_from_slice(definition.as_bytes());
+                name[16..].copy_from_slice(&ordinal.to_le_bytes());
+                Uuid::new_v5(namespace, &name)
+            }
+            None => Uuid::new_v4(),
         }
     }
 

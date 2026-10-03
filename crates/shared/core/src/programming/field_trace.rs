@@ -54,16 +54,13 @@ impl ProgrammingTraceField {
     }
 }
 
-/// Canonical immutable set. The wheel aggregate subsumes individual wheel queries; it does not
-/// claim that an empty constraint collection contains a physical wheel.
-#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-pub struct ProgrammingFieldScope(Arc<[ProgrammingTraceField]>);
+mod scope;
+pub use scope::{Fields as ProgrammingFields, ProgrammingFieldScope};
 
 impl<'de> Deserialize<'de> for ProgrammingFieldScope {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let scope = Self::new(Vec::<ProgrammingTraceField>::deserialize(deserializer)?);
-        if scope.fields().iter().any(|field| {
+        if scope.fields().any(|field| {
             matches!(field,
             ProgrammingTraceField::NativeColorChannel(id) if id.is_nil())
         }) {
@@ -76,96 +73,13 @@ impl<'de> Deserialize<'de> for ProgrammingFieldScope {
 }
 
 impl ProgrammingFieldScope {
-    pub fn new(fields: impl IntoIterator<Item = ProgrammingTraceField>) -> Self {
-        let mut fields: Vec<_> = fields.into_iter().collect();
-        fields.sort_unstable();
-        fields.dedup();
-        if fields.contains(&ProgrammingTraceField::ColorWheels) {
-            fields.retain(|field| !matches!(field, ProgrammingTraceField::ColorWheel(_)));
-        }
-        Self(fields.into())
-    }
-
-    pub fn empty() -> Self {
-        Self::default()
-    }
-
-    pub fn fields(&self) -> &[ProgrammingTraceField] {
-        &self.0
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    pub fn contains(&self, field: ProgrammingTraceField) -> bool {
-        self.0.binary_search(&field).is_ok()
-            || (matches!(field, ProgrammingTraceField::ColorWheel(_))
-                && self
-                    .0
-                    .binary_search(&ProgrammingTraceField::ColorWheels)
-                    .is_ok())
-    }
-
-    fn overlaps(&self, field: ProgrammingTraceField) -> bool {
-        self.contains(field)
-            || (field == ProgrammingTraceField::ColorWheels
-                && self
-                    .0
-                    .iter()
-                    .any(|field| matches!(field, ProgrammingTraceField::ColorWheel(_))))
-    }
-
-    pub fn union(&self, other: &Self) -> Self {
-        if self == other || other.is_empty() {
-            return self.clone();
-        }
-        if self.is_empty() {
-            return other.clone();
-        }
-        Self::new(self.0.iter().chain(other.0.iter()).copied())
-    }
-
-    pub fn intersection(&self, other: &Self) -> Self {
-        if self == other {
-            return self.clone();
-        }
-        Self::new(
-            self.0
-                .iter()
-                .chain(other.0.iter())
-                .copied()
-                .filter(|field| self.contains(*field) && other.contains(*field)),
-        )
-    }
-
-    /// A wildcard minus individual wheels cannot be represented by this finite positive set.
-    /// Callers must keep that query unknown, or request individual wheel fields instead.
-    pub fn difference(&self, other: &Self) -> Result<Self, IntentError> {
-        require(
-            !(self.contains(ProgrammingTraceField::ColorWheels)
-                && !other.contains(ProgrammingTraceField::ColorWheels)
-                && other
-                    .fields()
-                    .iter()
-                    .any(|field| matches!(field, ProgrammingTraceField::ColorWheel(_)))),
-            "wheel aggregate minus individual wheels is not an exact field scope",
-        )?;
-        Ok(Self::new(
-            self.0
-                .iter()
-                .copied()
-                .filter(|field| !other.contains(*field)),
-        ))
-    }
-
     pub fn validate(&self, owner: ProgrammingOwner) -> Result<(), IntentError> {
         require(
-            self.0.iter().all(|field| field.owner() == owner),
+            self.owned_by(owner),
             "trace field belongs to a different programming owner",
         )?;
         require(
-            self.0.iter().all(|field| {
+            self.parameterized().iter().all(|field| {
                 !matches!(field,
             ProgrammingTraceField::NativeColorChannel(id) if id.is_nil())
             }),
@@ -177,33 +91,33 @@ impl ProgrammingFieldScope {
         use ColorComponent as C;
         use ProgrammingComponent as P;
         use ProgrammingTraceField as F;
-        Self::new(match component {
-            P::Color(C::Red) => vec![F::ColorXyz, F::ColorRecipeRed],
-            P::Color(C::Green) => vec![F::ColorXyz, F::ColorRecipeGreen],
-            P::Color(C::Blue) => vec![F::ColorXyz, F::ColorRecipeBlue],
-            P::Color(C::Amber) => vec![F::ColorXyz, F::ColorRecipeAmber],
-            P::Color(C::Hue | C::Saturation) => vec![
+        match component {
+            P::Color(C::Red) => Self::from_bits(&[F::ColorXyz, F::ColorRecipeRed]),
+            P::Color(C::Green) => Self::from_bits(&[F::ColorXyz, F::ColorRecipeGreen]),
+            P::Color(C::Blue) => Self::from_bits(&[F::ColorXyz, F::ColorRecipeBlue]),
+            P::Color(C::Amber) => Self::from_bits(&[F::ColorXyz, F::ColorRecipeAmber]),
+            P::Color(C::Hue | C::Saturation) => Self::from_bits(&[
                 F::ColorXyz,
                 F::ColorRecipeRed,
                 F::ColorRecipeGreen,
                 F::ColorRecipeBlue,
-            ],
-            P::Color(C::WhiteBlend) => vec![F::WhiteBlend],
-            P::Color(C::Temperature) => vec![F::Temperature],
-            P::Color(C::Duv) => vec![F::Duv],
-            P::Color(C::Uv) => vec![F::Uv],
-            P::Color(C::RelativeOutput) => vec![F::RelativeOutput],
-            P::ColorWheel(wheel) => vec![F::ColorWheel(wheel)],
-            P::NativeColor(binding) => vec![F::NativeColorChannel(binding.channel_id)],
-            P::Pan => vec![F::Pan],
-            P::Tilt => vec![F::Tilt],
-            P::TargetReference => vec![F::TargetReference],
-            P::TargetX => vec![F::TargetX],
-            P::TargetY => vec![F::TargetY],
-            P::TargetZ => vec![F::TargetZ],
-            P::Focus => vec![F::Focus],
-            P::Zoom => vec![F::Zoom],
-        })
+            ]),
+            P::Color(C::WhiteBlend) => Self::from_bits(&[F::WhiteBlend]),
+            P::Color(C::Temperature) => Self::from_bits(&[F::Temperature]),
+            P::Color(C::Duv) => Self::from_bits(&[F::Duv]),
+            P::Color(C::Uv) => Self::from_bits(&[F::Uv]),
+            P::Color(C::RelativeOutput) => Self::from_bits(&[F::RelativeOutput]),
+            P::ColorWheel(wheel) => Self::new([F::ColorWheel(wheel)]),
+            P::NativeColor(binding) => Self::new([F::NativeColorChannel(binding.channel_id)]),
+            P::Pan => Self::from_bits(&[F::Pan]),
+            P::Tilt => Self::from_bits(&[F::Tilt]),
+            P::TargetReference => Self::from_bits(&[F::TargetReference]),
+            P::TargetX => Self::from_bits(&[F::TargetX]),
+            P::TargetY => Self::from_bits(&[F::TargetY]),
+            P::TargetZ => Self::from_bits(&[F::TargetZ]),
+            P::Focus => Self::from_bits(&[F::Focus]),
+            P::Zoom => Self::from_bits(&[F::Zoom]),
+        }
     }
 
     /// Materialize Whole against the actual endpoint representation. This is not a union of
@@ -215,10 +129,10 @@ impl ProgrammingFieldScope {
             value.spread_control_points() == 0,
             "trace scope requires materialized programming values",
         )?;
-        let fields = match (owner, value) {
+        Ok(match (owner, value) {
             (ProgrammingOwner::Color, AttributeValue::ColorProgram(program)) => {
                 match program.as_ref() {
-                    ColorProgram::Semantic { .. } => vec![
+                    ColorProgram::Semantic { .. } => Self::from_bits(&[
                         F::ColorXyz,
                         F::ColorRecipeRed,
                         F::ColorRecipeGreen,
@@ -231,7 +145,7 @@ impl ProgrammingFieldScope {
                         F::RelativeOutput,
                         F::Allocation,
                         F::ColorWheels,
-                    ],
+                    ]),
                     ColorProgram::Direct { recipe, .. } => {
                         let mut fields = vec![F::NativeColorIdentity, F::NativePrediction];
                         fields.extend(
@@ -240,7 +154,7 @@ impl ProgrammingFieldScope {
                                 .iter()
                                 .map(|channel| F::NativeColorChannel(channel.channel_id)),
                         );
-                        fields
+                        Self::new(fields)
                     }
                 }
             }
@@ -249,13 +163,13 @@ impl ProgrammingFieldScope {
                     valid_xyz(*xyz),
                     "Color trace coordinates must be finite and nonnegative",
                 )?;
-                vec![F::ColorXyz]
+                Self::from_bits(&[F::ColorXyz])
             }
             (ProgrammingOwner::Position, AttributeValue::Position(position)) => {
                 match position.as_ref() {
-                    PositionIntent::Angles { .. } => vec![F::Pan, F::Tilt],
+                    PositionIntent::Angles { .. } => Self::from_bits(&[F::Pan, F::Tilt]),
                     PositionIntent::Target { .. } => {
-                        vec![F::TargetReference, F::TargetX, F::TargetY, F::TargetZ]
+                        Self::from_bits(&[F::TargetReference, F::TargetX, F::TargetY, F::TargetZ])
                     }
                 }
             }
@@ -264,16 +178,17 @@ impl ProgrammingFieldScope {
                     ScalarDomain::UNIT.contains(*value),
                     "Focus trace value is outside 0-1",
                 )?;
-                vec![F::Focus]
+                Self::from_bits(&[F::Focus])
             }
-            (ProgrammingOwner::Zoom, AttributeValue::Zoom(_)) => vec![F::Zoom, F::ZoomConvention],
+            (ProgrammingOwner::Zoom, AttributeValue::Zoom(_)) => {
+                Self::from_bits(&[F::Zoom, F::ZoomConvention])
+            }
             _ => {
                 return Err(IntentError(
                     "value has no materialized trace fields for this owner".into(),
                 ));
             }
-        };
-        Ok(Self::new(fields))
+        })
     }
 }
 
@@ -523,8 +438,6 @@ fn color_program_trace(
                     transfer.remap = transfer
                         .identity
                         .fields()
-                        .iter()
-                        .copied()
                         .map(|field| (field, F::NativePrediction))
                         .collect();
                 }

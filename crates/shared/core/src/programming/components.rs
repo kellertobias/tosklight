@@ -19,8 +19,25 @@ impl ProgrammingOwner {
             Self::Zoom => "zoom",
         }
     }
+    /// The owner's family attribute, shared rather than allocated (TL-639: asked for every
+    /// animated target several times per frame).
     pub fn key(self) -> AttributeKey {
-        AttributeKey(self.id().into())
+        static KEYS: std::sync::LazyLock<[AttributeKey; 4]> = std::sync::LazyLock::new(|| {
+            [
+                ProgrammingOwner::Color,
+                ProgrammingOwner::Position,
+                ProgrammingOwner::Focus,
+                ProgrammingOwner::Zoom,
+            ]
+            .map(|owner| AttributeKey(owner.id().into()))
+        });
+        KEYS[match self {
+            Self::Color => 0,
+            Self::Position => 1,
+            Self::Focus => 2,
+            Self::Zoom => 3,
+        }]
+        .clone()
     }
 }
 

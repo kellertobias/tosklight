@@ -538,7 +538,13 @@ fn prepare(
             )?;
             sample.expression.validate()?;
             last_lane = Some(sample.lane_id);
-            if let Some(expression) = prune_exact_branches(Arc::new(sample.expression.clone()))? {
+            if is_plain_leaf(&sample.expression) {
+                // TL-639: a plain leaf has no exact branch to prune.
+                has_angles |= sample.expression.contains_angles();
+                scratch.controller.push(sample.clone());
+            } else if let Some(expression) =
+                prune_exact_branches(Arc::new(sample.expression.clone()))?
+            {
                 let mut sample = sample.clone();
                 sample.expression = expression.as_ref().clone();
                 has_angles |= sample.expression.contains_angles();
@@ -696,6 +702,17 @@ struct Shape {
 
 fn classify(expression: &DynamicSampleExpression) -> Result<Shape, TransitionError> {
     let mut shape = Shape::default();
+    if let DynamicSampleExpression::Programming { address, value, .. } = expression {
+        // TL-639: the leaf's own node is the whole postorder.
+        shape.native = matches!(
+            address.representation,
+            DynamicFamilyRepresentation::DirectColor { .. }
+        ) || matches!(value, DynamicValue::Family(light_core::AttributeValue::ColorProgram(program))
+                if matches!(program.as_ref(), ColorProgram::Direct { .. }));
+        shape.components = address.component.is_some();
+        shape.whole = address.component.is_none();
+        return Ok(shape);
+    }
     // Classification sees original typed leaves, including inactive branches. The chosen
     // compiler performs its own exact-endpoint pruning; errors are never caught and retried.
     for node in ExpressionNodeRef::new(expression).postorder(false)? {
@@ -926,9 +943,26 @@ fn components_compatible(expression: &DynamicSampleExpression) -> Result<bool, I
 
 /// Preserve one root per owner plus legacy, replacing other-owner branches with absence.
 /// This is a flat projection of the original history, never a numerical blend or borrowed value.
+/// TL-639: an unwrapped Programming or legacy scalar leaf, whose only node is itself.
+fn is_plain_leaf(expression: &DynamicSampleExpression) -> bool {
+    matches!(
+        expression,
+        DynamicSampleExpression::Programming { .. } | DynamicSampleExpression::LegacyScalar { .. }
+    )
+}
+
 fn split_owners(
     expression: Arc<DynamicSampleExpression>,
 ) -> Result<Vec<(Option<ProgrammingOwner>, Arc<DynamicSampleExpression>)>, TransitionError> {
+    // A plain leaf has exactly one owner (legacy: none), so it is its own projection.
+    match expression.as_ref() {
+        DynamicSampleExpression::Programming { address, .. } => {
+            let owner = address.owner();
+            return Ok(vec![(Some(owner), expression)]);
+        }
+        DynamicSampleExpression::LegacyScalar { .. } => return Ok(vec![(None, expression)]),
+        _ => {}
+    }
     let mut owners = Vec::new();
     for node in ExpressionNodeRef::new(&expression).postorder(false)? {
         let owner = match node.node()? {

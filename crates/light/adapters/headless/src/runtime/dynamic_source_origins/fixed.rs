@@ -255,7 +255,8 @@ impl DynamicSourceOrigins {
                 },
             ));
         }
-        let mut active = HashSet::with_capacity(planned.len());
+        let mut active =
+            rustc_hash::FxHashSet::with_capacity_and_hasher(planned.len(), Default::default());
         for (binding, origin) in &planned {
             validate_binding(*binding)?;
             origin.validate(*binding)?;
@@ -270,9 +271,8 @@ impl DynamicSourceOrigins {
                 occurrence_id: self.bind(binding, origin)?,
             });
         }
-        self.retain_bindings(|record| {
-            !matches!(record.binding, DynamicSourceBinding::Fixed { .. })
-                || active.contains(&record.binding)
+        self.retain_bindings_by_key(|binding, _| {
+            !matches!(binding, DynamicSourceBinding::Fixed { .. }) || active.contains(binding)
         });
         Ok(captured)
     }

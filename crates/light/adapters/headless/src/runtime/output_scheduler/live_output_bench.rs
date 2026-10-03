@@ -216,6 +216,33 @@ impl LiveOutputBench {
         })
     }
 
+    /// TL-639: what readers see of `rendered`, per programming target: the accepted Color
+    /// heads, outputs and held targets of that exact frame. The benchmark's `--digest-ticks`
+    /// mode hashes it to compare two builds frame by frame. Frame tokens are process-local and
+    /// left out.
+    pub fn readout_digest(&self, rendered: &RenderResult) -> Vec<(FixtureId, String)> {
+        let Some(frame) = self
+            .family
+            .accepted_color(rendered.generation, rendered.sampled_at)
+        else {
+            return Vec::new();
+        };
+        let mut rows = frame
+            .heads
+            .iter()
+            .map(|head| (head.target, format!("head {head:?}")))
+            .chain(frame.outputs.iter().map(|output| {
+                (
+                    output.target,
+                    format!("output {:?} {:?}", output.value, output.writes),
+                )
+            }))
+            .chain(frame.held.iter().map(|target| (*target, "held".to_owned())))
+            .collect::<Vec<_>>();
+        rows.sort_by(|left, right| (left.0.0, &left.1).cmp(&(right.0.0, &right.1)));
+        rows
+    }
+
     /// Start `count` readout consumers of the published frames on their own threads, the way
     /// Stage and the Color readout read them: the newest frame, its physical sidecars and the
     /// accepted Color results of that exact frame. `hold` keeps each frame for that long before

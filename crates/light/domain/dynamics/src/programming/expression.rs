@@ -237,10 +237,21 @@ impl DynamicSampleExpression {
 
     /// Cold validation is iterative for both historical trees and flat retained roots.
     pub fn validate(&self) -> Result<(), IntentError> {
+        if let Some(result) = RetainedExpressionTape::validate_plain_leaf(self) {
+            return result;
+        }
         RetainedExpressionTape::from_roots(&[Arc::new(self.clone())]).map(|_| ())
     }
 
     pub fn contains_angles(&self) -> bool {
+        // TL-639: a plain leaf is its own only node.
+        match self {
+            Self::Programming { address, .. } => {
+                return address.representation == DynamicFamilyRepresentation::Angles;
+            }
+            Self::LegacyScalar { .. } => return false,
+            _ => {}
+        }
         ExpressionNodeRef::new(self)
             .postorder(false)
             .is_ok_and(|nodes| {

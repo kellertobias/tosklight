@@ -142,7 +142,11 @@ fn recipe_and_hsv_writes_keep_original_baseline_input_fields_and_relationships()
     }
 
     let partial = color_sample(Some(ColorComponent::Hue), DynamicValue::Scalar(0.5), 1, 0.5);
-    let result = query(&compose(&[partial.into()]), rgb.fields()).unwrap();
+    let result = query(
+        &compose(&[partial.into()]),
+        &rgb.fields().collect::<Vec<_>>(),
+    )
+    .unwrap();
     assert_eq!(result.base_fields, rgb);
     assert_eq!(
         result.base_dependency_fields, rgb,

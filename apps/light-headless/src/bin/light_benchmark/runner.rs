@@ -20,12 +20,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-const CID: [u8; 16] = [0x42; 16];
-const SOURCE_NAME: &str = "ToskLight output benchmark";
+pub(super) const CID: [u8; 16] = [0x42; 16];
+pub(super) const SOURCE_NAME: &str = "ToskLight output benchmark";
 const SAMPLED_DIAGNOSTIC_SECONDS: u64 = 1;
 const REPORTING_TARGET_HZ: u16 = 44;
 
-pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
+/// The profiles a run measures, with the rate, universe and fixture overrides applied.
+pub(super) fn profile_configs(arguments: &Arguments) -> Vec<ProfileConfig> {
     let profiles = if arguments.headless_stress_fixtures.is_some() {
         vec![crate::light_benchmark::arguments::BenchmarkProfile::HeadlessStress]
     } else if arguments.semantic.workload_dir.is_some() {
@@ -33,18 +34,29 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
     } else {
         arguments.profiles.clone()
     };
-    let mut scenarios = Vec::with_capacity(profiles.len());
-    for profile in profiles {
-        let mut config = profile.config();
-        if let Some(rate_hz) = arguments.rate_hz {
-            config.rate_hz = rate_hz;
-        }
-        if let Some(universes) = arguments.universes {
-            config.universes = universes;
-        }
-        if let Some(fixtures_per_universe) = arguments.fixtures_per_universe {
-            config.fixtures_per_universe = fixtures_per_universe;
-        }
+    profiles
+        .into_iter()
+        .map(|profile| {
+            let mut config = profile.config();
+            if let Some(rate_hz) = arguments.rate_hz {
+                config.rate_hz = rate_hz;
+            }
+            if let Some(universes) = arguments.universes {
+                config.universes = universes;
+            }
+            if let Some(fixtures_per_universe) = arguments.fixtures_per_universe {
+                config.fixtures_per_universe = fixtures_per_universe;
+            }
+            config
+        })
+        .collect()
+}
+
+pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
+    let configs = profile_configs(arguments);
+    let mut scenarios = Vec::with_capacity(configs.len());
+    for config in configs {
+        let profile = config.profile;
         if let Some(directory) = arguments.semantic.workload_dir.as_deref() {
             eprintln!(
                 "benchmarking semantic workload {directory} at {} Hz",
@@ -344,7 +356,7 @@ fn execute_timed_run(
     })
 }
 
-fn prepare_scenario(
+pub(super) fn prepare_scenario(
     arguments: &Arguments,
     config: ProfileConfig,
 ) -> Result<(Option<LoopbackDelivery>, BenchmarkScenario), String> {
@@ -612,7 +624,7 @@ fn validate_full_output(
     Ok(())
 }
 
-fn checksum(frames: &HashMap<u16, DmxFrame>, packets: &[EncodedPacket]) -> u64 {
+pub(super) fn checksum(frames: &HashMap<u16, DmxFrame>, packets: &[EncodedPacket]) -> u64 {
     let mut checksum = 0xcbf2_9ce4_8422_2325_u64;
     let mut universes = frames.keys().copied().collect::<Vec<_>>();
     universes.sort_unstable();
@@ -626,7 +638,7 @@ fn checksum(frames: &HashMap<u16, DmxFrame>, packets: &[EncodedPacket]) -> u64 {
     checksum
 }
 
-fn fnv1a(mut checksum: u64, bytes: &[u8]) -> u64 {
+pub(super) fn fnv1a(mut checksum: u64, bytes: &[u8]) -> u64 {
     for byte in bytes {
         checksum ^= u64::from(*byte);
         checksum = checksum.wrapping_mul(0x0000_0100_0000_01b3);

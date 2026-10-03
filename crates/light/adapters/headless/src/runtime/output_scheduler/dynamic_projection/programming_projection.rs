@@ -234,13 +234,13 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
             let used = self.current_occurrences.borrow();
             origins
                 .borrow_mut()
-                .retain_bindings(|record| match record.binding {
+                .retain_bindings_by_key(|binding, occurrence_id| match *binding {
                     DynamicSourceBinding::Authored { .. } | DynamicSourceBinding::Fixed { .. } => {
                         true
                     }
                     DynamicSourceBinding::StaticBaseline { target, owner } => used
                         .get(&(target, owner))
-                        .is_some_and(|id| *id == Some(record.occurrence_id)),
+                        .is_some_and(|id| *id == Some(occurrence_id)),
                 });
         }
         Ok(())

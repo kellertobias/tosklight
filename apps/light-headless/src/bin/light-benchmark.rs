@@ -20,6 +20,13 @@ fn main() {
         );
     }
 
+    if let Some(ticks) = arguments.semantic.digest_ticks {
+        let digest = light_benchmark::digest(&arguments, ticks).unwrap_or_else(|error| {
+            exit_with_error(&error, 1);
+        });
+        println!("{digest}");
+        return;
+    }
     let report = light_benchmark::run(&arguments).unwrap_or_else(|error| {
         exit_with_error(&error, 1);
     });

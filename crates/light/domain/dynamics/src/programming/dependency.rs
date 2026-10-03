@@ -117,8 +117,7 @@ impl DynamicSourceDependency {
                 identity: ProgrammingFieldScope::empty(),
                 remap: read
                     .fields()
-                    .iter()
-                    .flat_map(|input| written.fields().iter().map(move |output| (*input, *output)))
+                    .flat_map(|input| written.fields().map(move |output| (input, output)))
                     .collect(),
             },
         )

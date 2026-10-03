@@ -307,3 +307,44 @@ fn failed_replayed_new_start_releases_its_identity_for_an_exact_retry() {
     );
     assert_eq!(runtime.instance_count(), 1);
 }
+
+/// TL-639: derived instance identities repeat between runtimes whatever order the starts come
+/// in, so Random lanes sample identically; the default stays a random identity.
+#[test]
+fn derived_instance_ids_repeat_between_runtimes_and_reproduce_random_lanes() {
+    let definition = random_definition();
+    let target = FixtureId::new();
+    let request = |controller_id| {
+        start_request(
+            definition.id,
+            controller(controller_id, 1, false),
+            target,
+            100,
+            false,
+        )
+    };
+    let mut first = installed(&definition);
+    let mut second = installed(&definition);
+    for runtime in [&mut first, &mut second] {
+        runtime.derive_instance_ids_from(Uuid::from_u128(7));
+    }
+    let first_ids = [1001, 1002].map(|controller| first.start(request(controller)).unwrap());
+    let second_ids = [1001, 1002].map(|controller| second.start(request(controller)).unwrap());
+    assert_eq!(first_ids, second_ids);
+    for at in [150, 400, 1000] {
+        assert_eq!(
+            first
+                .sample(first_ids[0], at, 1000, 10, &Sources { current: 0. })
+                .unwrap(),
+            second
+                .sample(second_ids[0], at, 1000, 10, &Sources { current: 0. })
+                .unwrap()
+        );
+    }
+    let mut random = installed(&definition);
+    let mut other = installed(&definition);
+    assert_ne!(
+        random.start(request(1001)).unwrap(),
+        other.start(request(1001)).unwrap()
+    );
+}
