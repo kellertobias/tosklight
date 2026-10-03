@@ -964,6 +964,8 @@ Smaller items seen: the static-evidence binding looks its record up in a `BTreeM
 per target and frame (4.8 % hard floor); `ProgrammingFieldScope::for_value` validates the whole
 Colour intent for every field-scope query (3.7 %).
 
+Round 4 (next section) built D and E in part and the frame-level replays; A, B and C remain.
+
 ### Measurement identities
 
 - Baseline: `f67c84e48`, binary `8a95e4a0…`.
@@ -976,3 +978,177 @@ Colour intent for every field-scope query (3.7 %).
   (`legacy/`, `semantic/`, `before-after-typed/`, `repeat-125/`); output-class runs
   `.artifacts/tmp/tl639r3/qos-{1,2}/`. Digest runs `.artifacts/tmp/tl639r3/{d,l}-*.json` and
   summaries `digest-*.txt`, compared by `.artifacts/tmp/tl639r3/cmp.py`.
+
+## Semantic output, round 4: kept installations, shared captures, pooled frames (TL-639)
+
+Round 4 was asked for the design-level change rounds 1-3 avoided: per-target compiled plans with
+exact lineage (A), component edits planned over a static base (B), the second static resolution
+derived as a delta (C), static Colour rows without a full native capture (D), and a flat final
+render (E), with pooled buffers so steady-state frames allocate almost nothing. The design was
+written first (TL-639 handoff, round 4). What was built is part of D and E, the pooling, and a
+set of exact frame-level replays that each prove equality from unchanged inputs; A, B and C
+were not built (reasons below). Every step was byte-identical to `71a68e1d1` on all 12 digest
+workloads. The typed deadlines are still missed: the hard floor p50 fell 23 % (18.5 → 14.3 ms)
+and stress 2,000 9 % (70.4 → 63.8 ms).
+
+### Gates
+
+Runner, thresholds and references as in round 3; candidate binary `ba02fa6e…`. Legacy: five
+alternated rounds against `f67c84e48`; typed tiers three rounds; TL-564 one run per
+configuration. Host: quiet (the idle desk on port 5000 was stopped; no other build or desk).
+Pipeline ms, medians.
+
+| Gate (existing threshold) | Round 3 | Round 4 |
+| --- | --- | --- |
+| Paired p99 regression ≤ max(1 ms, 5 %), stress 2,000 / 60 Hz | pass, +0.53 | **pass**: 5.49 → 5.72 (+0.23) |
+| Paired p99 regression, stress 4,000 / 60 Hz | pass, +0.65 | **pass**: 11.67 → 11.52 (-0.16) |
+| Paired p99 regression, hard floor 4,148 / 125 Hz | pass, -0.58 | **pass**: 4.55 → 3.74 (-0.81); 125 Hz held 5 of 5 |
+| Typed stress 2,000 / 60 Hz: rate held, 0 misses | fail, p99 91.38, 13.8 Hz | **fail**: p50 63.80, p99 69.57, 15.7 Hz |
+| Typed stress 4,000 / 60 Hz | fail, p99 177.76, 6.5 Hz | **fail**: p50 135.79, p99 140.93, 7.5 Hz |
+| Typed hard floor 4,148 / 125 Hz | fail, p99 23.56, 52.5 Hz | **fail**: p50 14.28, p99 17.26, 68.8 Hz (about 414 misses per round) |
+| TL-564 mix, 27 configurations: rate held, 0 misses | 24 pass | 25 pass (see below) |
+| No generation change or compile from motion | pass | pass |
+| Static bases: 0 Position fits, dependents 6 / 24, unchanged Colour skips solves | pass | pass |
+| Readout consumers do not multiply physical solves | pass | pass |
+
+Resident memory, typed: 369 MB (stress 2,000), 682 MB (stress 4,000), 272 MB (hard floor).
+
+The two TL-564 failures are static-points at 125 Hz output with 30 and 120 Hz tracking: 3 and 1
+frames over the period (12.96 and 9.67 ms) in runs whose p99 is 3.7 ms. They are the isolated
+late frames of rounds 2 and 3 (different configurations fail in every campaign). In ten
+alternated 125 Hz all-points-move repeats (`repeat-125/`), `71a68e1d1` had late frames in 3 of 20
+runs (3 frames) and this build in 1 of 20 (2 consecutive frames, transaction 8.9 and 12.2 ms);
+the pipeline p99 medians are 3.75 and 3.67 ms.
+
+Typed tiers, `71a68e1d1` (rebuilt) alternated with this build, three rounds
+(`before-after-typed/`):
+
+| Profile | `71a68e1d1` p50 / p99 | Round 4 p50 / p99 | Rate | RSS |
+| ---: | ---: | ---: | ---: | ---: |
+| Typed stress 2,000, 60 Hz | 70.41 / 79.00 | 63.77 / 70.70 | 14.1 → 15.6 Hz | 373 → 369 MB |
+| Typed stress 4,000, 60 Hz | 150.41 / 157.03 | 136.77 / 145.06 | 6.6 → 7.3 Hz | 686 → 681 MB |
+| Typed hard floor, 125 Hz | 18.54 / 21.67 | 14.30 / 16.78 | 53.0 → 68.7 Hz | 280 → 270 MB |
+
+The p50 falls 9 % (stress 2,000 and 4,000) and 23 % (hard floor). By p99 the typed tiers are
+4.2× (stress 2,000), 8.4× (stress 4,000) and 2.2× (hard floor) from their budgets.
+
+### Allocation per frame
+
+Measured with a counting global allocator wrapped around the unchanged benchmark modules
+(`.artifacts/tmp/tl639r4/alloc-count/`, its own workspace; the benchmark binary forbids
+`unsafe`), as the difference between a 2 s and a 5 s run divided by the extra frames:
+
+| Workload | `71a68e1d1` | Round 4 |
+| --- | ---: | ---: |
+| Typed hard floor | 71,673 objects, 49.9 MB | 54,497 objects, 24.5 MB |
+| Typed stress 2,000 | 605,566 objects, 143.0 MB | 535,783 objects, 122.5 MB |
+| Legacy hard floor | 99 objects, 10.4 MB | 98 objects, 9.6 MB |
+| Legacy stress 2,000 | 2,624 objects, 23.1 MB | 2,623 objects, 22.2 MB |
+
+The bytes fell by half on the hard floor: the Programmer transition history (3.2 MB) was copied
+three times per frame, and the lane staging, the native write list and the cohort's projection
+list were regrown from empty every frame. The count fell 24 %. The remaining allocations are the
+per-target structures the typed path builds and drops every frame (A and B); stress 2,000 still
+allocates about 270 objects per target per frame.
+
+### What changed
+
+- **Kept native family installation** (`native_family_projection.rs`, `FamilyNativeMemo`). What
+  `project_family_native` validates and installs depends on the runtime generation and the
+  write list, except that every addressed owner needs a captured semantic value on the frame's
+  token. A lane keeps its last installation; equal writes under the same generation re-check
+  each owner's semantic value on the new token (same order, same error) and install the kept
+  collection by reference (`NativePositionProjection.instances` is shared). Test:
+  `a_kept_native_installation_is_the_full_installation`.
+- **Static Colour rows replay from their key channels** (`native_raw_channels_into`,
+  `ColorTargetMemo::replay_key`). The whole-target replay needed the full native vector only
+  for the fitters' whole-vector range check. A capture resolves every non-static channel through
+  `scale_channel_raw`, which never exceeds the channel maximum, and every static channel to its
+  fixed default, so that check has one answer per destination and generation; it is kept with
+  the memo. An unchanged target now resolves only the channels its fits read. Test:
+  `a_channel_subset_reads_exactly_the_complete_capture`.
+- **One capture per destination without inversion** (`native_raw.rs`). The Position capture of
+  a root or copy without installation inversion reads exactly what the family-agnostic capture
+  reads; both share one cache entry instead of resolving the fixture twice.
+- **Kept observation derivations** (`static_rows::KeptObservation`). The consumed fields of a
+  kept static row (a function of owner and value) and the control sources of a field scope (a
+  function of the kept trace) are kept with the row.
+- **Fitted native channels on a plain input path** (`profile_projection.rs`,
+  `NativeChannelInputs`). Without control loss, hazardous Blackout, Highlight look or axis
+  inversion, and when the scalar Freeze check keeps its candidate, a fitted native channel reads
+  exactly its own value and the head's Intensity. It is answered without building the
+  per-channel input set; the overlay state is resolved once per head and Freeze flag.
+- **Shared Programmer transition history** (`programmer_memo.rs`). The history is copied on the
+  first change, not on every capture and static resolution; an unchanged `retain` or an absent
+  removal changes neither the map nor its version. Test:
+  `transition_clones_share_the_history_until_one_changes`.
+- **Pooled frame storage.** The physical lane reuses its staging lists, the family lanes their
+  native write list; the cohort's projection list and the token's projection map are sized once.
+- **Lookups.** The source record catalogue is Fx-hashed (`snapshot` sorts by occurrence);
+  canonical attribute names answer their id by allocation identity before hashing (test:
+  `shared_canonical_names_answer_with_the_number_of_their_name`); each fixture's profile mode is
+  found once per generation (`RuntimeGeneration::fixture_mode`); lane selections are
+  Fx-hashed and read once per controller and lane instead of per target and lane; the sample
+  sort gathers its keys once; a captured family base is checked for presence without copying
+  it out; plain expression leaves (including Angle leaves) compare, prune, split and report
+  Angles without walking or allocating.
+- Built, measured, reverted: comparing the Colour target memo's intent by program allocation
+  before value (no measurable difference).
+
+### Not built
+
+- **A, per-target compiled plans.** The Position forest (8.5 % of stress 2,000), the observer's
+  program preparation and composition (9 %) and the cohort finish (5 %) rebuild their structures
+  from fresh samples every frame. A plan needs a structural shape key over the sample tapes, a
+  slot map from every tape leaf to its compiled node and lineage entry, and an instantiate
+  path for `CompiledCoupledExpression` and `PositionForestLineage` whose result is provably equal
+  to a fresh build, including the tape validation and operation-origin table the bundle performs
+  today. The validation alone is not a pure function of the leaf values (operation origins move
+  into the tape's object table), so a rebound plan cannot skip it without a separate proof. This
+  is the largest remaining item and was not started.
+- **B, component edits over a static base** (9.6 %). `BaseEvaluation` moves large task structs
+  and rebuilds segments and trace arenas; only `compose_segment` (4 %) is the edit itself. Not
+  built for the same reason as A: the trace arena is read by the source projection.
+- **C, second static resolution as a delta** (5.4 % hard floor). Its offers equal the first
+  resolution's only when no sampled batch replaces a source and the Programmer contributions are
+  the same kept winners; then a copy of the first resolver after its Playback and Programmer
+  offers would serve. That copy clones the whole dense frame (every slot, about 1.7 MB on the hard
+  floor), which costs about what the re-offer does. Not built.
+- **Animated Colour targets** still capture every channel (2.8 % stress): the fitters need only
+  the key channels, but the Position fit of the same destination shares the full capture, so a
+  key-channel capture for Colour alone saves nothing until Position reads a subset too.
+
+### Where the time goes now
+
+CPU samples of the final binary, share of the frame:
+
+- **Typed stress 2,000 (about 64 ms).** Family composition and observation 44 %: the animated
+  Colour rows' composition 9.6 % (`BaseEvaluation`; the edit itself 4 %) and observation 16 % (the
+  Colour fit 5.1 %, the full native capture 2.8 %, source projection about 4 %); the Position
+  observer's program composition 5.6 % and preparation 3.7 %; input assembly 4.4 % (freeing the
+  previous frame's samples). Typed preparation 21.5 % (Position forest 8.5 %, owner samples 5.1 %,
+  expression validation 3.3 %). Deferred sampling 7.8 %, cohort finish 4.8 %, final render
+  7.6 %, pinning 2.1 %. Allocation, freeing and copying are about 28 % of the samples. The
+  physical math (Colour and Position fits) is about 6 %: an ideal single-threaded pipeline that
+  kept only it and the render would still need the compiled plans (A, B) to approach 16.7 ms.
+- **Typed hard floor (about 14.3 ms).** Static Colour rows 24 % (key-channel capture 5.6 %,
+  source binding and projection 4.9 %, the replayed result's copy and staging about 4 %), final
+  render 19 % (plus lane acceptance 2.5 %), the two static resolutions 10 %, the Intensity
+  Dynamics' pinning, completion and preparation 8.6 %, static target discovery 4.2 %, accepted
+  Colour record 3.3 %, row projection 2.8 %, the static-baseline guard 2.3 %. The legacy hard
+  floor renders the same rig in 3.7 ms; the typed overhead left is the per-row work on unchanged
+  static rows and the second resolution.
+
+### Measurement identities
+
+- Baseline: `f67c84e48`, binary `8a95e4a0…`.
+- Before and digest reference: `71a68e1d1` built in `.artifacts/tmp/tl639/base`, binary
+  `36e0e4b1…` (`.artifacts/tmp/tl639r4/bin/lb-base`).
+- Candidate: `71a68e1d1` plus the round-4 working tree, binary `ba02fa6e…`
+  (`.artifacts/tmp/tl639r4/bin/lb-final`), `--release --locked --no-default-features`; source
+  manifest `.artifacts/tmp/tl639r4/identity/final-source-manifest.json`.
+- Evidence: `.artifacts/performance/semantic-output/tl639r4-final-20261003T182820Z/`
+  (`legacy/`, `semantic/`, `before-after-typed/`, `repeat-125/`).
+  Digest runs `.artifacts/tmp/tl639r4/{d,l}-*.json` and summaries `digest-*.txt` (one per step,
+  `s1`-`s15` and `final`), compared by `.artifacts/tmp/tl639r4/cmp.py`; profiles
+  `p-final-{hf,s2000}.txt`; allocation counts `allocs.sh`/`allocs-base.sh`.
