@@ -60,6 +60,7 @@ mod direct;
 pub(in crate::runtime) mod native;
 pub(in crate::runtime) mod native_seed;
 mod resolve;
+mod target_memo;
 mod transition;
 
 #[cfg(test)]
@@ -109,6 +110,8 @@ pub(in crate::runtime) struct ColorDescriptor {
     pub heads: Box<[ColorHeadDescriptor]>,
     /// Every written slot of every head, exactly once, in head order.
     pub footprint: Box<[NativeControlSlot]>,
+    /// Every raw channel a head reads or writes, sorted (`target_memo`).
+    key_channels: std::sync::OnceLock<Box<[usize]>>,
     scratch: Mutex<ColorScratch>,
 }
 
@@ -118,6 +121,11 @@ struct ColorScratch {
     /// Last forward evaluation of a Direct recipe by its original model, keyed by the exact
     /// immutable program and model objects (weak: never keeps a retired value alive).
     direct: Option<direct::DirectEstimateCache>,
+    /// The last semantic resolve of the whole target (TL-639 round 3).
+    target: Option<target_memo::ColorTargetMemo>,
+    /// Whole-target replays, for tests only (the adapter counters count head replays).
+    #[cfg(test)]
+    target_replays: u64,
 }
 
 impl ColorDescriptor {
@@ -603,10 +611,14 @@ impl PhysicalFamilyAdapter for ColorAdapter {
             root: fixture.fixture_id,
             heads: heads.into_boxed_slice(),
             footprint: footprint.into_boxed_slice(),
+            key_channels: std::sync::OnceLock::new(),
             scratch: Mutex::new(ColorScratch {
                 native: CapturedNativeRaw::default(),
                 current: Vec::new(),
                 direct: None,
+                target: None,
+                #[cfg(test)]
+                target_replays: 0,
             }),
         }))
     }

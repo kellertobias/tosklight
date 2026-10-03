@@ -3,6 +3,7 @@
 
 use super::super::super::family_inputs::CapturedFamilyInput;
 use super::super::super::fixed_masks::PreparedFixedMask;
+use super::super::static_rows::StaticFamilyRows;
 use super::*;
 
 /// Branch constructors provide both scalar Current and static tokens from the same immutable
@@ -43,6 +44,7 @@ pub(super) fn prepare_hybrid_frame<T>(
         position_batch_scratch,
         legacy_owners,
         native_current,
+        static_rows,
     } = scratch;
     native_current.borrow_mut().begin_frame();
     let result = sample_captured_dynamic_inputs_with_context(
@@ -122,6 +124,7 @@ pub(super) fn prepare_hybrid_frame<T>(
                         observer,
                         composition,
                         position_batch_scratch,
+                        static_rows,
                     )?;
                     let samples = completed.samples().to_vec();
                     finish_cohort(observer, frame, typed, &mut projections, &requirements)?;
@@ -366,6 +369,7 @@ fn compose_family_cohort<T, S: DynamicTickSource, R: HybridFrameResolver>(
     observer: &mut impl HybridFrameObserver<T>,
     composition: &mut RetainedFamilyCompositionScratch,
     position_batch_scratch: &mut Vec<RetainedFamilyCompositionScratch>,
+    static_rows: &mut StaticFamilyRows,
 ) -> Result<(Vec<HybridFamilyRequirement>, Vec<OwnedHybridProjection<T>>), DynamicRuntimeError> {
     let static_targets = observer
         .static_program_targets(view.frame, view.static_token)
@@ -418,11 +422,12 @@ fn compose_family_cohort<T, S: DynamicTickSource, R: HybridFrameResolver>(
             static_only,
             &handled_position,
             observer,
-            composition,
+            (composition, static_rows),
             &mut projections,
             &mut requirements,
         )?;
     }
+    static_rows.finish_cohort();
     requirements.extend(view.typed.requirements().into_iter().map(|required| {
         HybridFamilyRequirement {
             target: required.target,
@@ -566,7 +571,7 @@ fn compose_owner_group<T, S: DynamicTickSource, R: HybridFrameResolver>(
     static_only: &StaticOnlyTargets,
     handled_position: &FxHashSet<FixtureId>,
     observer: &mut impl HybridFrameObserver<T>,
-    composition: &mut RetainedFamilyCompositionScratch,
+    (composition, static_rows): (&mut RetainedFamilyCompositionScratch, &mut StaticFamilyRows),
     projections: &mut Vec<OwnedHybridProjection<T>>,
     requirements: &mut Vec<HybridFamilyRequirement>,
 ) -> Result<(), DynamicRuntimeError> {
@@ -613,6 +618,10 @@ fn compose_owner_group<T, S: DynamicTickSource, R: HybridFrameResolver>(
         frame: view.frame,
         target: group.target,
     };
+    // A static-only row keeps its composition while its base is equal (`static_rows`). Position
+    // is excluded: its base composition can adopt through the frame's geometry.
+    let keeps_row =
+        static_only && group.samples.is_empty() && group.owner != ProgrammingOwner::Position;
     let mut composer = CapturedHybridProgramComposer {
         typed: view.typed,
         group,
@@ -620,6 +629,7 @@ fn compose_owner_group<T, S: DynamicTickSource, R: HybridFrameResolver>(
         baseline: view.static_token,
         control: view.control,
         scratch: composition,
+        static_rows: keeps_row.then_some(static_rows),
     };
     let base = view.static_sources.value(group.target, &group.owner.key());
     let deferred = match base {

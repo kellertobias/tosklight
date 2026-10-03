@@ -602,6 +602,13 @@ pub(super) struct DynamicSourceOrigins {
     static_evidence: Arc<rustc_hash::FxHashMap<DynamicSourceBinding, CachedStaticEvidence>>,
 }
 
+/// See [`DynamicSourceOrigins::records_identity`]. The `Weak` keeps the allocation reserved,
+/// so a later catalogue can never reuse its address.
+#[derive(Debug)]
+pub(in crate::runtime) struct RecordsIdentity(
+    Weak<BTreeMap<DynamicSourceOccurrenceId, Arc<DynamicSourceRecord>>>,
+);
+
 #[derive(Clone, Debug)]
 struct CachedStaticEvidence {
     occurrence_id: DynamicSourceOccurrenceId,
@@ -711,6 +718,17 @@ impl DynamicSourceOrigins {
 
     pub fn get(&self, id: DynamicSourceOccurrenceId) -> Option<&Arc<DynamicSourceRecord>> {
         self.records.get(&id)
+    }
+
+    /// Identity of the record catalogue. Records are immutable and only a write replaces the
+    /// catalogue; while a `Weak` is held, a write moves it to a new allocation (TL-639).
+    pub fn records_identity(&self) -> RecordsIdentity {
+        RecordsIdentity(Arc::downgrade(&self.records))
+    }
+
+    /// Whether no record was added, removed or restored since `identity` was taken.
+    pub fn has_records_identity(&self, identity: &RecordsIdentity) -> bool {
+        std::ptr::eq(identity.0.as_ptr(), Arc::as_ptr(&self.records))
     }
 
     pub fn binding(&self, binding: &DynamicSourceBinding) -> Option<DynamicSourceOccurrenceId> {

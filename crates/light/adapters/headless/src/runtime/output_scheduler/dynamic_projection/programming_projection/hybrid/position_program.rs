@@ -485,6 +485,7 @@ pub(super) fn observe<S: DynamicTickSource, T>(
         value,
         trace: evaluation.continuation.family_trace(),
         sources: composer.typed,
+        kept: None,
     };
     let project = |fields: &ProgrammingFieldScope,
                    projection: &mut DynamicFamilySourceProjection| {

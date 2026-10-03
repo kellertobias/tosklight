@@ -187,6 +187,7 @@ fn with_composer<R>(
         baseline: &scalar,
         control: &control,
         scratch: &mut scratch,
+        static_rows: None,
     };
     let program = HybridCapturedPositionProgram::new(&token, target, &base, samples).unwrap();
     action(&mut composer, &program, &engine)

@@ -26,6 +26,7 @@ use super::super::{
     scalar_projection::{HybridScalarProjectionScratch, project_hybrid_scalar_samples},
 };
 use super::current_native::CurrentNativeVerificationCache;
+use super::static_rows::StaticFamilyRows;
 use super::*;
 use light_core::programming::{
     ProgrammingFieldScope, ProgrammingTransitionTrace, independent_programming_component,
@@ -352,6 +353,8 @@ struct CapturedHybridProgramComposer<'a, 'sources, S> {
     control:
         &'a dyn Fn(light_dynamics::FamilySampleRank) -> light_dynamics::FamilyEndpointOutputControl,
     scratch: &'a mut RetainedFamilyCompositionScratch,
+    /// Kept static-only rows; Some only for a group without samples (see `static_rows`).
+    static_rows: Option<&'a mut StaticFamilyRows>,
 }
 impl<S: DynamicTickSource, T> HybridProgramComposer<T>
     for CapturedHybridProgramComposer<'_, '_, S>
@@ -431,42 +434,52 @@ impl<S: DynamicTickSource, T> HybridProgramComposer<T>
             }),
             ..Default::default()
         };
-        self.typed.compose_family(
-            group,
-            &context,
-            frame_resolver,
-            self.scratch,
-            |observation| {
-                let project =
-                    |fields: &ProgrammingFieldScope,
-                     projection: &mut DynamicFamilySourceProjection| {
-                        observation.project_fields(fields, projection)
-                    };
-                let controls = |fields: &ProgrammingFieldScope| {
-                    fields.validate(group.owner).ok()?;
-                    observation
-                        .trace
-                        .root()
-                        .and_then(|root| observation.trace.control_sources_for_fields(root, fields))
+        let observe_row = |observation: CapturedFamilyObservation<'_, '_, S>| {
+            let project =
+                |fields: &ProgrammingFieldScope, projection: &mut DynamicFamilySourceProjection| {
+                    observation.project_fields(fields, projection)
                 };
-                let (metadata, sidecar) = observe(HybridFamilyObservation {
-                    target: group.target,
-                    owner: group.owner,
-                    value: observation.value(),
-                    static_baseline: self.baseline,
-                    frame: self.frame,
-                    project: &project,
-                    controls: &controls,
-                })?;
-                Ok(OwnedHybridProjection {
-                    target: group.target,
-                    owner: group.owner,
-                    value: observation.value().clone(),
-                    metadata,
-                    sidecar,
-                })
-            },
-        )
+            let controls = |fields: &ProgrammingFieldScope| {
+                fields.validate(group.owner).ok()?;
+                observation
+                    .trace
+                    .root()
+                    .and_then(|root| observation.trace.control_sources_for_fields(root, fields))
+            };
+            let (metadata, sidecar) = observe(HybridFamilyObservation {
+                target: group.target,
+                owner: group.owner,
+                value: observation.value(),
+                static_baseline: self.baseline,
+                frame: self.frame,
+                project: &project,
+                controls: &controls,
+            })?;
+            Ok(OwnedHybridProjection {
+                target: group.target,
+                owner: group.owner,
+                value: observation.value().clone(),
+                metadata,
+                sidecar,
+            })
+        };
+        match self.static_rows.as_deref_mut() {
+            Some(rows) => self.typed.compose_static_family(
+                group,
+                &context,
+                frame_resolver,
+                self.scratch,
+                rows,
+                observe_row,
+            ),
+            None => self.typed.compose_family(
+                group,
+                &context,
+                frame_resolver,
+                self.scratch,
+                observe_row,
+            ),
+        }
     }
 }
 
@@ -636,6 +649,7 @@ pub(in crate::runtime::output_scheduler::dynamic_projection) struct HybridFrameS
     position_batch_scratch: Vec<RetainedFamilyCompositionScratch>,
     legacy_owners: FxHashSet<(FixtureId, ProgrammingOwner)>,
     native_current: RefCell<CurrentNativeVerificationCache>,
+    static_rows: StaticFamilyRows,
 }
 
 fn invalid(error: impl std::fmt::Display) -> DynamicRuntimeError {

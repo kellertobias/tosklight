@@ -11,6 +11,7 @@ pub(super) struct HeadResolution {
 }
 
 /// Every destination head's writes, outcomes and continuity for one target and frame.
+#[derive(Clone)]
 pub(super) struct HeadsResolution {
     pub writes: Vec<NativeControlWrite>,
     pub outcomes: Vec<ColorHeadOutcome>,
@@ -365,9 +366,13 @@ impl ColorAdapter {
             return self.resolve_direct(&request, program);
         }
         let intent = semantic_intent(request.value)?;
-        let resolved = self.resolve_each_head(&request, |adapter, head, current, writes| {
-            adapter.resolve_head(head, intent, request.previous, current, writes)
-        })?;
+        let resolved = self.resolve_each_head_kept(
+            &request,
+            Some(intent),
+            |adapter, head, current, writes| {
+                adapter.resolve_head(head, intent, request.previous, current, writes)
+            },
+        )?;
         Ok(Self::publish(
             resolved,
             ColorRequest::Semantic(intent.clone()),
@@ -380,6 +385,22 @@ impl ColorAdapter {
     pub(super) fn resolve_each_head(
         &self,
         request: &PhysicalRequest<'_, Self>,
+        per_head: impl FnMut(
+            &Self,
+            &ColorHeadDescriptor,
+            &mut [u32],
+            &mut Vec<NativeControlWrite>,
+        ) -> Result<HeadResolution, TransitionError>,
+    ) -> Result<HeadsResolution, TransitionError> {
+        self.resolve_each_head_kept(request, None, per_head)
+    }
+
+    /// [`Self::resolve_each_head`]; a semantic `intent` (whose heads replay through their
+    /// memos) also replays and keeps the whole target's result (`target_memo`).
+    fn resolve_each_head_kept(
+        &self,
+        request: &PhysicalRequest<'_, Self>,
+        intent: Option<&ColorIntent>,
         mut per_head: impl FnMut(
             &Self,
             &ColorHeadDescriptor,
@@ -390,7 +411,10 @@ impl ColorAdapter {
         let descriptor = request.descriptor;
         let mut scratch = descriptor.scratch.lock();
         let ColorScratch {
-            native, current, ..
+            native,
+            current,
+            target,
+            ..
         } = &mut *scratch;
         request.frame.native_raw_into(request.target, native)?;
         if native.destination() != Some(descriptor.root)
@@ -400,6 +424,22 @@ impl ColorAdapter {
                 "Color native raw values belong to another destination or frame",
             ));
         }
+        if let Some(intent) = intent
+            && let Some(replayed) = target
+                .as_ref()
+                .and_then(|memo| memo.replay(descriptor, intent, request.previous, native.raw()))
+        {
+            self.count(|c| {
+                c.result_reuses += replayed.outcomes.len() as u64;
+                c.resolves += 1;
+            });
+            #[cfg(test)]
+            {
+                scratch.target_replays += 1;
+            }
+            return Ok(replayed);
+        }
+        let last = target.take();
         let mut writes = Vec::with_capacity(descriptor.footprint.len());
         let mut outcomes = Vec::with_capacity(descriptor.heads.len());
         let mut continuity = ColorContinuity::default();
@@ -420,11 +460,22 @@ impl ColorAdapter {
             });
         }
         self.count(|c| c.resolves += 1);
-        Ok(HeadsResolution {
+        let resolved = HeadsResolution {
             writes,
             outcomes,
             continuity,
-        })
+        };
+        if let Some(intent) = intent {
+            *target = Some(target_memo::ColorTargetMemo::after_resolve(
+                last,
+                descriptor,
+                intent,
+                request.previous,
+                native.raw(),
+                &resolved,
+            ));
+        }
+        Ok(resolved)
     }
 
     /// The primary head's achieved/quality plus the complete per-head breakdown.

@@ -22,6 +22,8 @@ use std::cell::RefCell;
 
 mod current_native;
 pub(super) mod hybrid;
+mod static_rows;
+use static_rows::{KeptProjection, StaticFamilyRows};
 
 /// Typed Current reads the immutable pre-Freeze baseline retained for final rendering. Keep
 /// this separate from legacy TickSources: scalar Current historically observes Freeze.
@@ -417,6 +419,48 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
             value: &value,
             trace: scratch.family_trace(),
             sources: self,
+            kept: None,
+        })?;
+        self.check()?;
+        Ok(output)
+    }
+
+    /// [`Self::compose_family`] for a static-only row (no samples): the composition and the
+    /// source projection are kept while their inputs are equal (see `static_rows`).
+    fn compose_static_family<T>(
+        &self,
+        group: &light_dynamics::DynamicFamilySampleGroup,
+        context: &light_dynamics::FamilyCompositionContext<'_>,
+        frame: &dyn light_dynamics::WholeFamilyExpressionFrameResolver,
+        scratch: &mut light_dynamics::RetainedFamilyCompositionScratch,
+        rows: &mut StaticFamilyRows,
+        observe: impl FnOnce(CapturedFamilyObservation<'_, '_, S>) -> Result<T, TransitionError>,
+    ) -> Result<T, TransitionError> {
+        debug_assert!(group.samples.is_empty());
+        let base = self
+            .static_sources
+            .value(group.target, &group.owner.key())
+            .ok_or(TransitionError::Requires(
+                TransitionRequirement::MaterializedEndpoints,
+            ))?;
+        let row = rows.row((group.target, group.owner), base, scratch, |scratch| {
+            light_dynamics::compose_retained_dynamic_family_traced(
+                group.owner,
+                base,
+                &group.samples,
+                context,
+                frame,
+                scratch,
+            )
+        })?;
+        self.check()?;
+        let output = observe(CapturedFamilyObservation {
+            target: group.target,
+            owner: group.owner,
+            value: &row.value,
+            trace: &row.trace,
+            sources: self,
+            kept: Some(&row.projection),
         })?;
         self.check()?;
         Ok(output)
@@ -431,6 +475,8 @@ struct CapturedFamilyObservation<'a, 'sources, S> {
     value: &'a AttributeValue,
     trace: &'a light_dynamics::FamilyTraceArena,
     sources: &'a CapturedProgrammingSources<'sources, S>,
+    /// The kept projection of a static-only row, answered again while its inputs are equal.
+    kept: Option<&'a RefCell<Option<KeptProjection>>>,
 }
 
 impl<S: DynamicTickSource> CapturedFamilyObservation<'_, '_, S> {
@@ -443,20 +489,24 @@ impl<S: DynamicTickSource> CapturedFamilyObservation<'_, '_, S> {
         fields: &light_core::programming::ProgrammingFieldScope,
         projection: &mut DynamicFamilySourceProjection,
     ) -> Result<(), TransitionError> {
+        if self.project_kept_fields(fields, projection)? {
+            return Ok(());
+        }
         fields.validate(self.owner)?;
         let query = self
             .trace
             .root()
             .and_then(|root| self.trace.query_fields_with_base(root, fields));
-        let baseline = if query.as_ref().is_some_and(|query| {
+        let address = if query.as_ref().is_some_and(|query| {
             !query.base_fields.is_empty() || !query.base_dependency_fields.is_empty()
         }) {
-            let address = DynamicValueAddress::whole_family(self.owner, self.value)?;
-            self.sources
-                .current_family_occurrence(self.target, &address)
+            Some(DynamicValueAddress::whole_family(self.owner, self.value)?)
         } else {
             None
         };
+        let baseline = address
+            .as_ref()
+            .and_then(|address| self.sources.current_family_occurrence(self.target, address));
         self.sources.check()?;
         if let Some(origins) = &self.sources.origins {
             projection.project(
@@ -475,7 +525,55 @@ impl<S: DynamicTickSource> CapturedFamilyObservation<'_, '_, S> {
                 baseline,
             )?;
         }
+        // Only the baseline record (immutable per occurrence) is read when the query names no
+        // other source; a named source's record could be retired between frames.
+        if let Some(kept) = self.kept
+            && query.as_ref().is_some_and(|query| query.sources.is_empty())
+        {
+            *kept.borrow_mut() = Some(KeptProjection {
+                fields: fields.clone(),
+                address,
+                baseline,
+                records: self
+                    .sources
+                    .origins
+                    .as_ref()
+                    .map(|origins| origins.borrow().records_identity()),
+                result: projection.clone(),
+            });
+        }
         Ok(())
+    }
+
+    /// Answers from the kept projection when the fields and the freshly bound occurrence are
+    /// those it was made from. The binding and the failure check run as on the full path.
+    fn project_kept_fields(
+        &self,
+        fields: &light_core::programming::ProgrammingFieldScope,
+        projection: &mut DynamicFamilySourceProjection,
+    ) -> Result<bool, TransitionError> {
+        let Some(kept) = self.kept else {
+            return Ok(false);
+        };
+        let kept = kept.borrow();
+        let Some(kept) = kept.as_ref().filter(|kept| kept.fields == *fields) else {
+            return Ok(false);
+        };
+        let baseline = kept
+            .address
+            .as_ref()
+            .and_then(|address| self.sources.current_family_occurrence(self.target, address));
+        self.sources.check()?;
+        let same_records = match (&self.sources.origins, &kept.records) {
+            (Some(origins), Some(records)) => origins.borrow().has_records_identity(records),
+            (None, None) => true,
+            _ => false,
+        };
+        if baseline != kept.baseline || !same_records {
+            return Ok(false);
+        }
+        projection.clone_from(&kept.result);
+        Ok(true)
     }
 }
 

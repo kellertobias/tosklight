@@ -275,6 +275,7 @@ impl<'a, 'sources, S: DynamicTickSource> CapturedHybridPositionBatchComposer<'a,
             baseline: self.baseline,
             control: self.control,
             scratch: &mut scratch,
+            static_rows: None,
         };
         let result =
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| action(&mut composer)));

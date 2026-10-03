@@ -185,7 +185,7 @@ enum Node {
 
 /// Reused by the compositor. A trace is meaningful only for the matching composed value and
 /// coherent frame. Node IDs remain valid until `clear` starts the next composition.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct FamilyTraceArena {
     nodes: Vec<Node>,
     root: Option<FamilyTraceNodeId>,

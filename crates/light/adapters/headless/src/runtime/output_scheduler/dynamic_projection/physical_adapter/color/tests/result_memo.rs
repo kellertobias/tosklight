@@ -155,3 +155,70 @@ fn head_input_channels_cover_the_color_footprint_and_never_intensity() {
         }
     }
 }
+
+fn target_replays(descriptor: &ColorDescriptor) -> u64 {
+    descriptor.scratch.lock().target_replays
+}
+
+/// TL-639 round 3: once the intent repeats, the whole target replays its kept result while the
+/// intent, the previous continuity and the raw values of every Color channel are unchanged,
+/// identical to a fresh resolve; Intensity is outside that key.
+#[test]
+fn an_unchanged_target_replays_whole_and_any_key_change_resolves_again() {
+    let rig = Rig::new(&rgbw());
+    let descriptor = descriptor(&rig);
+    let first = paired(&rig, &descriptor, &magenta(), None);
+    let seeded = paired(
+        &rig,
+        &descriptor,
+        &magenta(),
+        Some(&first.retained.result.continuity),
+    );
+    let continuity = seeded.retained.result.continuity.clone();
+    // From the second resolve of the intent on, the target is kept.
+    assert_identical(
+        &paired(&rig, &descriptor, &magenta(), Some(&continuity)),
+        true,
+    );
+    for level in [0.3, 0.9, 0.0] {
+        rig.set("intensity", level);
+        let replays = target_replays(&descriptor);
+        assert_identical(
+            &paired(&rig, &descriptor, &magenta(), Some(&continuity)),
+            true,
+        );
+        assert_eq!(
+            target_replays(&descriptor),
+            replays + 1,
+            "Intensity {level}"
+        );
+    }
+    // A changed previous continuity, intent or Color channel resolves the heads again, with
+    // the output of a fresh resolve.
+    let replays = target_replays(&descriptor);
+    let same_as_fresh = |frame: &Paired| {
+        let (retained, fresh) = (&frame.retained.result, &frame.fresh);
+        assert_eq!(retained.writes, fresh.writes);
+        assert_eq!(retained.achieved, fresh.achieved);
+        assert_eq!(retained.continuity, fresh.continuity);
+        assert_eq!(
+            without_work(retained.quality.clone()),
+            without_work(fresh.quality.clone())
+        );
+    };
+    same_as_fresh(&paired(&rig, &descriptor, &magenta(), None));
+    same_as_fresh(&paired(&rig, &descriptor, &warm_white(), Some(&continuity)));
+    rig.set("color.green", 0.7);
+    same_as_fresh(&paired(&rig, &descriptor, &warm_white(), Some(&continuity)));
+    assert_eq!(target_replays(&descriptor), replays);
+    // The repeated intent was kept by the last resolve: both following resolves replay.
+    assert_identical(
+        &paired(&rig, &descriptor, &warm_white(), Some(&continuity)),
+        true,
+    );
+    assert_identical(
+        &paired(&rig, &descriptor, &warm_white(), Some(&continuity)),
+        true,
+    );
+    assert_eq!(target_replays(&descriptor), replays + 2);
+}
