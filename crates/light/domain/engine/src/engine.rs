@@ -14,7 +14,7 @@ use std::{
     collections::HashMap,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
 };
 
@@ -67,6 +67,13 @@ pub struct Engine {
     pub(crate) profile_scratch_pool: Arc<crate::ValuePool<crate::ResolvedProfileFixtureOutput>>,
     pub(crate) visualization_pool: Arc<crate::ValuePool<crate::ResolvedValues>>,
     pub(crate) clock: SharedClock,
+    /// Threads a frame may split its independent per-fixture work over (TL-639 round 5); one
+    /// keeps every frame on the caller. Never changes an output value.
+    output_workers: AtomicUsize,
+    /// Per-chunk resolved fixture outputs of a parallel render, kept between frames.
+    pub(crate) render_chunks: Mutex<crate::render_fixtures::RenderChunks>,
+    /// The output worker pool, built for the current worker count on first use.
+    output_pool: Mutex<Option<Arc<crate::parallel::OutputPool>>>,
 }
 
 /// The vectors a render fills and empties again.
@@ -165,7 +172,33 @@ impl Engine {
             profile_scratch_pool: Arc::default(),
             visualization_pool: Arc::default(),
             clock,
+            output_workers: AtomicUsize::new(crate::parallel::default_output_workers()),
+            render_chunks: Mutex::default(),
+            output_pool: Mutex::default(),
         }
+    }
+
+    /// Threads a frame may split its independent per-fixture work over; at least one.
+    pub fn output_workers(&self) -> usize {
+        self.output_workers.load(Ordering::Relaxed).max(1)
+    }
+
+    /// Set the output worker count (at least one). Outputs are identical for every count.
+    pub fn set_output_workers(&self, workers: usize) {
+        self.output_workers.store(workers.max(1), Ordering::Relaxed);
+    }
+
+    /// The output worker pool for the current worker count; `None` with one worker.
+    pub fn output_pool(&self) -> Option<Arc<crate::parallel::OutputPool>> {
+        let workers = self.output_workers();
+        if workers <= 1 {
+            return None;
+        }
+        let mut pool = self.output_pool.lock();
+        if pool.as_ref().is_none_or(|pool| pool.workers() != workers) {
+            *pool = crate::parallel::OutputPool::new(workers).map(Arc::new);
+        }
+        pool.clone()
     }
 
     pub fn supported_programming_contract(&self) -> u16 {

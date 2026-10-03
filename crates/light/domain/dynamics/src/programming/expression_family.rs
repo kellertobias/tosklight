@@ -657,7 +657,7 @@ fn validate_whole(owner: ProgrammingOwner, value: &AttributeValue) -> Result<(),
             TransitionRequirement::MaterializedEndpoints,
         ));
     }
-    value.validate_programming_address(&owner.key())?;
+    value.validate_programming_address(owner.key_ref())?;
     Ok(())
 }
 

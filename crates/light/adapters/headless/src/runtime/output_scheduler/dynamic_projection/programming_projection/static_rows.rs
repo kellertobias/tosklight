@@ -18,10 +18,35 @@ use light_dynamics::{DynamicSourceOccurrenceId, FamilyTraceArena};
 
 /// Kept rows of one evaluating lane, by target and owner. Rows no cohort used are dropped at
 /// the end of the next cohort.
-#[derive(Default)]
+///
+/// Rows live in [`ROW_SHARDS`] maps by target (TL-639 round 5), so a parallel section lends
+/// each worker the shards of its own targets by moving maps, never rows.
 pub(super) struct StaticFamilyRows {
-    rows: FxHashMap<(FixtureId, ProgrammingOwner), StaticFamilyRow>,
+    shards: Vec<RowShard>,
+    /// The index of `shards[0]` among all shards (non-zero only for a lent part).
+    first: usize,
     cohort: u64,
+}
+
+type RowShard = FxHashMap<(FixtureId, ProgrammingOwner), StaticFamilyRow>;
+
+/// Shards of a lane's kept rows; parallel sections cut targets along them.
+pub(super) const ROW_SHARDS: usize = 64;
+
+/// The shard of a target's rows (and its parallel chunk's unit).
+pub(super) fn row_shard(target: FixtureId) -> usize {
+    let (high, low) = target.0.as_u64_pair();
+    ((high ^ low) % ROW_SHARDS as u64) as usize
+}
+
+impl Default for StaticFamilyRows {
+    fn default() -> Self {
+        Self {
+            shards: (0..ROW_SHARDS).map(|_| RowShard::default()).collect(),
+            first: 0,
+            cohort: 0,
+        }
+    }
 }
 
 pub(super) struct StaticFamilyRow {
@@ -71,10 +96,11 @@ impl StaticFamilyRows {
         ) -> Result<AttributeValue, TransitionError>,
     ) -> Result<&StaticFamilyRow, TransitionError> {
         let cohort = self.cohort;
-        let kept = self.rows.get(&key).is_some_and(|row| row.base == *base);
+        let rows = &mut self.shards[row_shard(key.0) - self.first];
+        let kept = rows.get(&key).is_some_and(|row| row.base == *base);
         if !kept {
             let value = compose(scratch)?;
-            self.rows.insert(
+            rows.insert(
                 key,
                 StaticFamilyRow {
                     base: base.clone(),
@@ -86,16 +112,52 @@ impl StaticFamilyRows {
                 },
             );
         }
-        let row = self.rows.get_mut(&key).expect("kept or just inserted");
+        let row = rows.get_mut(&key).expect("kept or just inserted");
         row.cohort = cohort;
         Ok(row)
+    }
+
+    /// Lend the shards `ranges[chunk]` to parallel worker `chunk` (TL-639 round 5), stamped
+    /// with this cohort; [`Self::take_back`] returns them.
+    pub fn lend(&mut self, ranges: &[std::ops::Range<usize>]) -> Vec<StaticFamilyRows> {
+        ranges
+            .iter()
+            .map(|range| StaticFamilyRows {
+                shards: self.shards[range.clone()]
+                    .iter_mut()
+                    .map(std::mem::take)
+                    .collect(),
+                first: range.start,
+                cohort: self.cohort,
+            })
+            .collect()
+    }
+
+    /// Take back shards lent to a worker, with whatever it composed or used.
+    pub fn take_back(&mut self, lent: StaticFamilyRows) {
+        for (offset, shard) in lent.shards.into_iter().enumerate() {
+            self.shards[lent.first + offset - self.first] = shard;
+        }
     }
 
     /// Drops the rows the finished cohort did not use and starts the next one.
     pub fn finish_cohort(&mut self) {
         let cohort = self.cohort;
-        self.rows.retain(|_, row| row.cohort == cohort);
+        for rows in &mut self.shards {
+            rows.retain(|_, row| row.cohort == cohort);
+        }
         self.cohort += 1;
+    }
+}
+
+#[cfg(test)]
+impl StaticFamilyRows {
+    fn is_empty(&self) -> bool {
+        self.shards.iter().all(FxHashMap::is_empty)
+    }
+
+    fn contains(&self, key: &(FixtureId, ProgrammingOwner)) -> bool {
+        self.shards[row_shard(key.0) - self.first].contains_key(key)
     }
 }
 

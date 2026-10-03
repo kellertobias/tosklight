@@ -108,7 +108,7 @@ impl DynamicFamilySourceProjection {
     /// yields a passive status, not a failed operation or a partially certified source list.
     pub fn project(
         &mut self,
-        origins: &DynamicSourceOrigins,
+        origins: &(impl SourceRecordLookup + ?Sized),
         target: FixtureId,
         owner: ProgrammingOwner,
         query: Option<&FamilyTraceQuery>,
@@ -132,7 +132,7 @@ impl DynamicFamilySourceProjection {
 
     fn project_known(
         &mut self,
-        origins: &DynamicSourceOrigins,
+        origins: &(impl SourceRecordLookup + ?Sized),
         target: FixtureId,
         owner: ProgrammingOwner,
         query: &FamilyTraceQuery,
@@ -163,7 +163,7 @@ impl DynamicFamilySourceProjection {
 
     fn expand(
         &mut self,
-        origins: &DynamicSourceOrigins,
+        origins: &(impl SourceRecordLookup + ?Sized),
         target: FixtureId,
         owner: ProgrammingOwner,
         occurrence: Option<DynamicSourceOccurrenceId>,
@@ -175,7 +175,7 @@ impl DynamicFamilySourceProjection {
         if fields.is_empty() {
             return Ok(());
         }
-        let Some(record) = occurrence.and_then(|id| origins.get(id)) else {
+        let Some(record) = occurrence.and_then(|id| origins.record(id)) else {
             self.unknown
                 .get_or_insert(DynamicFamilySourceUnknown::Identity);
             return Ok(());

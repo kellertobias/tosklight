@@ -350,6 +350,17 @@ impl AttributeKey {
         COLOR.clone()
     }
 
+    /// [`Self::intensity`] borrowed (TL-639 round 5): reading it never touches the shared
+    /// allocation's reference count, which parallel frame workers would contend on.
+    pub fn intensity_ref() -> &'static Self {
+        &INTENSITY
+    }
+
+    /// [`Self::color`] borrowed, as [`Self::intensity_ref`].
+    pub fn color_ref() -> &'static Self {
+        &COLOR
+    }
+
     pub fn is_intensity(&self) -> bool {
         *self.0 == *"intensity" || self.0.ends_with(".intensity")
     }

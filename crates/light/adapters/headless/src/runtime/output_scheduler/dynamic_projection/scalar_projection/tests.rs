@@ -174,7 +174,7 @@ fn partial_focus_fixed_enters_family_assembly_once_and_keeps_exact_evidence() {
             legacy: &[],
             requirements: &[],
         };
-        let groups = assemble_captured_family_inputs(&prepared, fixed, &mut assembly);
+        let groups = assemble_captured_family_inputs(&prepared, fixed, &mut assembly, None);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].group.samples.len(), 1);
         let compose = |base| {
@@ -445,7 +445,7 @@ fn unavailable_direct_fixed_remains_in_family_requirements_without_scalar_fallba
             requirements: &[],
         };
         let mut assembly = CapturedFamilyInputScratch::default();
-        let groups = assemble_captured_family_inputs(&prepared, fixed, &mut assembly);
+        let groups = assemble_captured_family_inputs(&prepared, fixed, &mut assembly, None);
         assert_eq!(groups.len(), 1);
         assert!(groups[0].group.samples.is_empty());
         let [

@@ -156,7 +156,7 @@ impl AttributeTable {
         &mut self,
         component: crate::programming::ProgrammingComponent,
     ) -> AttributeId {
-        self.intern(&component.owner().key())
+        self.intern(component.owner().key_ref())
     }
 
     /// The number this name already has, or nothing if the show has never named it. Unlike
@@ -226,7 +226,7 @@ mod tests {
             assert_eq!(table.id(&name), table.id(&copy));
             assert!(table.id(&name).is_some());
         }
-        assert_eq!(AttributeTable::new().id(&AttributeKey::color()), None);
+        assert_eq!(AttributeTable::new().id(AttributeKey::color_ref()), None);
     }
 
     #[test]

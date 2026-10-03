@@ -20,7 +20,12 @@ mod projection;
 pub(super) use projection::*;
 mod fixed;
 pub(super) use fixed::*;
+mod overlay;
 mod watermark;
+pub(super) use overlay::{
+    OriginsChanges, OriginsOverlay, OriginsStore, SourceRecordLookup, bind_static_evidence_in,
+    unbind_in,
+};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -613,7 +618,7 @@ pub(in crate::runtime) struct RecordsIdentity(Weak<SourceRecords>);
 type SourceRecords = rustc_hash::FxHashMap<DynamicSourceOccurrenceId, Arc<DynamicSourceRecord>>;
 
 #[derive(Clone, Debug)]
-struct CachedStaticEvidence {
+pub(super) struct CachedStaticEvidence {
     occurrence_id: DynamicSourceOccurrenceId,
     evidence: Weak<light_engine::ContributionFamilyEvidence>,
 }
@@ -626,97 +631,26 @@ impl DynamicSourceOrigins {
             && Arc::ptr_eq(&self.static_evidence, &other.static_evidence)
     }
 
-    /// Validate a captured static family once per immutable evidence allocation. Ordinary
-    /// singleton observations compare borrowed metadata because Playback may recreate them on
-    /// every frame. Multi-source transitions reuse their captured Arc throughout the fade.
+    /// Validate a captured static family once per immutable evidence allocation (see
+    /// [`overlay::bind_static_evidence_in`]).
     pub fn bind_static_evidence(
         &mut self,
         binding: DynamicSourceBinding,
         evidence: &Arc<light_engine::ContributionFamilyEvidence>,
     ) -> Result<DynamicSourceOccurrenceId, IntentError> {
-        if let Some(id) = self.binding(&binding) {
-            if let [entry] = evidence.entries() {
-                if let DynamicSourceOrigin::StaticBaseline { sources } = &self.records[&id].origin
-                    && let [existing] = sources.as_slice()
-                    && existing.matches_evidence(entry)
-                {
-                    self.forget_static_evidence(&binding);
-                    return Ok(id);
-                }
-            } else if let Some(cached) = self.static_evidence.get(&binding)
-                && cached.occurrence_id == id
-                && cached.evidence.as_ptr() == Arc::as_ptr(evidence)
-            {
-                // The Weak keeps its allocation identity reserved even after the value dies;
-                // an incoming strong Arc cannot match a different, recycled allocation.
-                return Ok(id);
-            }
-        }
-        let sources = evidence
-            .entries()
-            .iter()
-            .map(|entry| {
-                DynamicStaticSourceEntry::from_evidence(
-                    DynamicStaticSource::from_contribution(entry.source()),
-                    entry,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        // bind validates before changing records, bindings or the runtime cache. A distinct
-        // allocation with equivalent evidence keeps its occurrence and only warms this cache.
-        let id = self.bind(binding, DynamicSourceOrigin::StaticBaseline { sources })?;
-        if evidence.entries().len() > 1 {
-            Arc::make_mut(&mut self.static_evidence).insert(
-                binding,
-                CachedStaticEvidence {
-                    occurrence_id: id,
-                    evidence: Arc::downgrade(evidence),
-                },
-            );
-        } else {
-            self.forget_static_evidence(&binding);
-        }
-        Ok(id)
+        overlay::bind_static_evidence_in(self, binding, evidence)
     }
 
     fn forget_static_evidence(&mut self, binding: &DynamicSourceBinding) {
-        if self.static_evidence.contains_key(binding) {
-            Arc::make_mut(&mut self.static_evidence).remove(binding);
-        }
+        overlay::forget_static_evidence_in(self, binding);
     }
 
     pub fn bind(
         &mut self,
         binding: DynamicSourceBinding,
-        mut origin: DynamicSourceOrigin,
+        origin: DynamicSourceOrigin,
     ) -> Result<DynamicSourceOccurrenceId, IntentError> {
-        validate_binding(binding)?;
-        origin.validate(binding)?;
-        origin.validate_controller(binding)?;
-        origin.canonicalize();
-        if let Some(id) = self.bindings.get(&binding) {
-            let existing = &self.records[id];
-            if existing.origin == origin {
-                return Ok(*id);
-            }
-        }
-        let id = loop {
-            let candidate = DynamicSourceOccurrenceId::new(Uuid::new_v4())?;
-            if !self.records.contains_key(&candidate) {
-                break candidate;
-            }
-        };
-        Arc::make_mut(&mut self.records).insert(
-            id,
-            Arc::new(DynamicSourceRecord {
-                occurrence_id: id,
-                binding,
-                origin,
-            }),
-        );
-        Arc::make_mut(&mut self.bindings).insert(binding, id);
-        self.forget_static_evidence(&binding);
-        Ok(id)
+        overlay::bind_in(self, binding, origin)
     }
 
     pub fn get(&self, id: DynamicSourceOccurrenceId) -> Option<&Arc<DynamicSourceRecord>> {
@@ -739,12 +673,7 @@ impl DynamicSourceOrigins {
     }
 
     pub fn unbind(&mut self, binding: &DynamicSourceBinding) -> bool {
-        if !self.bindings.contains_key(binding) {
-            return false;
-        }
-        Arc::make_mut(&mut self.bindings).remove(binding);
-        self.forget_static_evidence(binding);
-        true
+        overlay::unbind_in(self, binding)
     }
 
     /// Retire active assignments that no longer belong to the captured source set. Their

@@ -252,7 +252,7 @@ impl PreparedStaticFamilyFrame {
             .projections
             .get(&(write.target, write.owner))
             .map(|(value, _)| value)
-            .or_else(|| self.value(write.target, &write.owner.key()));
+            .or_else(|| self.value(write.target, write.owner.key_ref()));
         match (write.owner, value) {
             (ProgrammingOwner::Position, Some(AttributeValue::Position(value))) => value
                 .validate()

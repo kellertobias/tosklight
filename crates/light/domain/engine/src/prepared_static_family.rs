@@ -169,7 +169,7 @@ impl PreparedStaticFamilyFrame {
         metadata: FamilyProjectionMetadata,
     ) -> Result<(), EngineError> {
         let invalid = |message: &str| EngineError::Invalid(message.into());
-        if self.value(target, &owner.key()).is_none() {
+        if self.value(target, owner.key_ref()).is_none() {
             return Err(invalid(
                 "family projection requires a captured static baseline",
             ));
@@ -231,7 +231,7 @@ impl PreparedStaticFamilyFrame {
             .as_mut()
             .expect("prepared static resolution retains its dense frame");
         for ((target, owner), (value, metadata)) in self.projections {
-            let applied = frame.project_family(target, &owner.key(), value, metadata);
+            let applied = frame.project_family(target, owner.key_ref(), value, metadata);
             debug_assert!(applied, "validated immutable baseline remains present");
         }
         Ok((

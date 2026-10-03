@@ -254,3 +254,59 @@ fn valid_v1_and_v2_checkpoints_restore_without_rewriting_original_sources() {
         );
     }
 }
+
+/// TL-639 round 5: distinct live leaf roots import without the walk's maps, into exactly the
+/// tape (and source keys) the walk builds; anything else takes the walk.
+#[test]
+fn distinct_leaf_roots_import_exactly_as_the_walk_does() {
+    let pan = Arc::new(DynamicSampleExpression::Programming {
+        address: Arc::new(DynamicValueAddress {
+            representation: DynamicFamilyRepresentation::Angles,
+            component: Some(ProgrammingComponent::Pan),
+        }),
+        value: DynamicValue::Scalar(12.5),
+        occurrence: Some(occurrence(7)),
+        dependency_occurrence: None,
+    });
+    let current = Arc::new(DynamicSampleExpression::AngleCurrent {
+        address: Arc::new(DynamicValueAddress {
+            representation: DynamicFamilyRepresentation::Angles,
+            component: Some(ProgrammingComponent::Tilt),
+        }),
+    });
+    let wrapped = Arc::new(DynamicSampleExpression::Operation {
+        origin: None,
+        value: numeric(),
+    });
+    for roots in [
+        vec![pan.clone()],
+        vec![numeric()],
+        vec![pan.clone(), current.clone()],
+        vec![numeric(), current.clone(), wrapped.clone()],
+    ] {
+        let mut fast_keys = Vec::new();
+        let fast = RetainedExpressionTape::import_leaf_roots(&roots, Some(&mut fast_keys))
+            .expect("distinct leaf roots take the direct import")
+            .unwrap();
+        let mut walk_keys = Vec::new();
+        let walk = RetainedExpressionTape::import_roots_walk(&roots, Some(&mut walk_keys)).unwrap();
+        assert_eq!(fast, walk);
+        assert_eq!(fast_keys, walk_keys);
+    }
+    // A repeated root, a root with children and a retained root all take the walk.
+    let held = Arc::new(DynamicSampleExpression::Retained {
+        tape: Arc::new(RetainedExpressionTape::from_roots(std::slice::from_ref(&current)).unwrap()),
+        root: RetainedNodeId(0),
+    });
+    let transition = Arc::new(DynamicSampleExpression::Transition {
+        from: Some(pan.clone()),
+        to: None,
+        progress: 0.5,
+        reason: DynamicTransitionReason::Resume {
+            occurrence_id: Uuid::from_u128(5),
+        },
+    });
+    for roots in [vec![pan.clone(), pan.clone()], vec![transition], vec![held]] {
+        assert!(RetainedExpressionTape::import_leaf_roots(&roots, None).is_none());
+    }
+}

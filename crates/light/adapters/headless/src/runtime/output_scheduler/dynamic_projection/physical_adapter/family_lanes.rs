@@ -31,10 +31,12 @@ use light_engine::PreloadBranch;
 mod bridge;
 mod native;
 mod observer;
+mod parallel;
 #[cfg(test)]
 pub(in crate::runtime) mod tests;
 #[allow(unused_imports)]
 pub(in crate::runtime) use observer::{FamilyFrameObserver, FamilyPreloadObserver};
+pub(in crate::runtime) use parallel::{FamilyLanesShared, FamilyLanesWorker, FamilyStaging};
 
 pub(in crate::runtime) type PositionSidecar = PhysicalHeadResult<PositionAdapter>;
 pub(in crate::runtime) type ColorSidecar = PhysicalHeadResult<RoutingColorAdapter>;
@@ -168,6 +170,8 @@ pub(in crate::runtime) struct FamilyLanes {
         Vec<light_engine::FamilyNativeWrite>,
         light_engine::FamilyNativeMemo,
     )>,
+    /// Emptied stagings of parallel workers, kept for the next section (TL-639 round 5).
+    spare_stagings: std::cell::RefCell<Vec<FamilyStaging>>,
 }
 
 fn lane<A: PhysicalFamilyAdapter>(adapter: A, kind: PhysicalLaneKind) -> PhysicalAdapterLane<A> {
@@ -187,6 +191,7 @@ impl FamilyLanes {
                 PhysicalLaneKind::Preload(branch) => OpticsLanes::preload(branch),
             },
             native: Default::default(),
+            spare_stagings: Default::default(),
         }
     }
 
@@ -359,6 +364,17 @@ impl LiveFrameLanes for FamilyLanes {
 
     fn released_owners(&self) -> Vec<ReleasedPhysicalOwner> {
         self.released()
+    }
+
+    fn retire_on(&self, pool: &light_engine::parallel::OutputPool) {
+        self.position.retire_on(pool);
+        self.color.retire_on(pool);
+        for family in [
+            light_fixture::OpticsFamily::Focus,
+            light_fixture::OpticsFamily::Zoom,
+        ] {
+            self.optics.lane(family).retire_on(pool);
+        }
     }
 }
 

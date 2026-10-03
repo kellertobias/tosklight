@@ -44,6 +44,10 @@ use light_engine::{
 use rustc_hash::FxHashSet;
 
 mod fixed_bases;
+mod parallel_groups;
+mod parallel_preparation;
+use super::super::physical_adapter::family_lanes::FamilyStaging;
+pub(in crate::runtime) use parallel_groups::ParallelLanes;
 mod position_batch;
 mod position_program;
 mod staged;
@@ -596,6 +600,22 @@ pub(in crate::runtime) trait HybridFrameObserver<T> {
     ) -> Result<(), TransitionError> {
         Ok(())
     }
+
+    /// Lend the Color and Focus/Zoom lanes this observer observes ordinary (non-Position) groups
+    /// through to `run`, with how a lane sidecar becomes its own. With them a frame may compose
+    /// those groups on several threads (TL-639 round 5); `None` composes them in turn.
+    fn with_parallel_lanes(&self, run: &mut dyn FnMut(Option<ParallelLanes<'_, '_, T>>)) {
+        run(None)
+    }
+
+    /// Stage a parallel worker's lane results, as if this observer had staged them in order.
+    fn merge_parallel(
+        &mut self,
+        _token: &CapturedFrameToken,
+        _staging: FamilyStaging,
+    ) -> Result<(), TransitionError> {
+        Err(IntentError("this observer lends no lanes to parallel workers".into()).into())
+    }
 }
 
 impl<T, F> HybridFrameObserver<T> for F
@@ -694,6 +714,8 @@ pub(in crate::runtime::output_scheduler::dynamic_projection) struct HybridFrameS
     legacy_owners: FxHashSet<(FixtureId, ProgrammingOwner)>,
     native_current: RefCell<CurrentNativeVerificationCache>,
     static_rows: StaticFamilyRows,
+    /// One composition workspace per parallel worker (TL-639 round 5).
+    parallel: Vec<RetainedFamilyCompositionScratch>,
 }
 
 fn invalid(error: impl std::fmt::Display) -> DynamicRuntimeError {

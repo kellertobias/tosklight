@@ -83,6 +83,9 @@ bytes = "1.10"
 chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3"
 parking_lot = "0.12"
+# The output frame's per-fixture worker pool (TL-639 round 5): persistent threads that borrow one
+# frame's inputs, so a frame neither spawns threads nor warms new ones.
+rayon = "1.12"
 rusqlite = { version = "0.37", features = ["bundled", "backup", "uuid"] }
 rust-embed = { version = "8.7", features = ["interpolate-folder-path"] }
 schemars = "1.2"

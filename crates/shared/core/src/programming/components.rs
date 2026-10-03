@@ -22,6 +22,12 @@ impl ProgrammingOwner {
     /// The owner's family attribute, shared rather than allocated (TL-639: asked for every
     /// animated target several times per frame).
     pub fn key(self) -> AttributeKey {
+        self.key_ref().clone()
+    }
+
+    /// [`Self::key`] borrowed (TL-639 round 5): a lookup that only reads the key never touches
+    /// the shared allocation's reference count, which parallel frame workers would contend on.
+    pub fn key_ref(self) -> &'static AttributeKey {
         static KEYS: std::sync::LazyLock<[AttributeKey; 4]> = std::sync::LazyLock::new(|| {
             [
                 ProgrammingOwner::Color,
@@ -31,13 +37,12 @@ impl ProgrammingOwner {
             ]
             .map(|owner| AttributeKey(owner.id().into()))
         });
-        KEYS[match self {
+        &KEYS[match self {
             Self::Color => 0,
             Self::Position => 1,
             Self::Focus => 2,
             Self::Zoom => 3,
         }]
-        .clone()
     }
 }
 

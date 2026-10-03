@@ -19,7 +19,6 @@ use light_fixture::PatchedFixture;
 use light_fixture::media_color::{
     MediaColorControls, MediaColorHead, MediaColorLimitations, MediaColorSurface,
 };
-use std::cell::Cell;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -54,9 +53,16 @@ pub(in crate::runtime) struct MediaColorAdapterCounters {
     pub resolves: u64,
 }
 
+super::counters::counter_sum!(MediaColorAdapterCounters {
+    descriptor_compiles,
+    multi_head_targets,
+    resolves,
+});
+
 #[derive(Default)]
 pub(in crate::runtime) struct MediaColorAdapter {
-    counters: Cell<MediaColorAdapterCounters>,
+    /// Shared by parallel frame workers (TL-639 round 5).
+    counters: super::counters::ShardedCounters<MediaColorAdapterCounters>,
 }
 
 /// The Media color head of one patched fixture head, if that head is one.
@@ -90,13 +96,11 @@ pub(in crate::runtime) fn has_media_color_identity(
 
 impl MediaColorAdapter {
     pub fn counters(&self) -> MediaColorAdapterCounters {
-        self.counters.get()
+        self.counters.total()
     }
 
     fn count(&self, update: impl FnOnce(&mut MediaColorAdapterCounters)) {
-        let mut counters = self.counters.get();
-        update(&mut counters);
-        self.counters.set(counters);
+        self.counters.update(update);
     }
 }
 

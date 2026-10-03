@@ -12,7 +12,9 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::sync::Arc;
 use uuid::Uuid;
 mod forest;
-pub use forest::{PositionComponentForestBundle, bundle_position_component_forest};
+pub use forest::{
+    PositionComponentForestBundle, bundle_position_component_forest, set_plan_verification,
+};
 
 /// Replace the input source set with these samples; do not keep its original Position lanes.
 /// Non-Position fragments retain their own addresses, component masks and resume influence.

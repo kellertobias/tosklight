@@ -346,7 +346,7 @@ fn validate_bases(
             .validate_programming_scope(ProgrammingValueScope::Fixture)
             .map_err(|e| invalid(&e.0))?;
         base.value
-            .validate_programming_address(&component.owner().key())
+            .validate_programming_address(component.owner().key_ref())
             .map_err(|e| invalid(&e.0))?;
         if let ProgrammingComponent::NativeColor(binding) = component {
             let model = base

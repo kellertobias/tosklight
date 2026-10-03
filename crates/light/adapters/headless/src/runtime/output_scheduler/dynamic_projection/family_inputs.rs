@@ -39,13 +39,22 @@ pub(super) struct CapturedFamilyInputScratch {
 }
 
 impl CapturedFamilyInputScratch {
-    pub fn clear(&mut self) {
+    /// Empty every group. With `pool`, the samples (holding the last references to last frame's
+    /// compiled expressions) are freed on a pool thread (TL-639 round 5).
+    pub fn clear(&mut self, pool: Option<&light_engine::parallel::OutputPool>) {
+        let mut garbage = Vec::new();
         for mut entry in self.groups.drain(..) {
-            entry.group.samples.clear();
+            match pool {
+                Some(_) => garbage.append(&mut entry.group.samples),
+                None => entry.group.samples.clear(),
+            }
             entry.requirements.clear();
             self.spare.push(entry);
         }
         self.indices.clear();
+        if let Some(pool) = pool.filter(|_| !garbage.is_empty()) {
+            pool.drop_later(garbage);
+        }
     }
 
     /// Add only genuinely static owners. A requirement-only Dynamic group remains a
@@ -93,8 +102,9 @@ pub(super) fn assemble_captured_family_inputs<'a>(
     dynamic: &PreparedDynamicFamilySamples<'_>,
     fixed: &[PreparedFixedMask],
     scratch: &'a mut CapturedFamilyInputScratch,
+    pool: Option<&light_engine::parallel::OutputPool>,
 ) -> &'a [CapturedFamilyInput] {
-    scratch.clear();
+    scratch.clear(pool);
     for group in dynamic.families {
         scratch
             .group(group.target, group.owner)

@@ -66,6 +66,7 @@ pub use prepared_static_family::{
     FamilyProjectionEvidence, FamilyProjectionMaster, FamilyProjectionMetadata,
     PreparedStaticFamilyFrame, StaticWinner,
 };
+pub mod parallel;
 mod profile_blackout;
 mod profile_color;
 mod profile_encoding;
@@ -77,6 +78,7 @@ mod programmer_memo;
 mod programmer_release;
 mod programmer_resolution;
 mod render;
+mod render_fixtures;
 mod render_phases;
 mod resolution;
 mod runtime_generation;

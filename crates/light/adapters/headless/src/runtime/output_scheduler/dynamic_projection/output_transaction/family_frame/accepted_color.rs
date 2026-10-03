@@ -17,11 +17,17 @@
 //! report. The sidecars are moved, not cloned: the frame no longer needs them.
 use super::super::super::physical_adapter::NativeControlWrite;
 use super::super::super::physical_adapter::color::{ColorQuality, DirectColorStatus};
-use super::super::super::physical_adapter::color_router::RoutedColorQuality;
+use super::super::super::physical_adapter::color_router::{
+    RoutedColorQuality, RoutingColorAdapter,
+};
 use super::super::super::physical_adapter::family_lanes::FamilySidecar;
+use super::super::super::physical_adapter::{
+    PhysicalFamilyAdapter, PhysicalHeadResult, PhysicalProvenance,
+};
 use chrono::{DateTime, Utc};
 use light_core::{AttributeValue, ColorResolutionQuality, FixtureId};
 use light_engine::CapturedFrameToken;
+use light_engine::FamilyProjectionMetadata;
 use light_fixture::PhysicalDataQuality;
 use light_fixture::forward::{ColorMatch, UvFitStatus};
 use parking_lot::Mutex;
@@ -202,11 +208,14 @@ pub(in crate::runtime) struct AcceptedColorFrames {
 
 impl AcceptedColorFrames {
     /// Record the Color sidecars of one accepted frame. Called only after every lane accepted.
+    /// With `pool`, what the frame no longer needs (the rest of every sidecar, the oldest
+    /// retained frame) is freed on a pool thread (TL-639 round 5).
     pub(in crate::runtime) fn record(
         &self,
         token: &CapturedFrameToken,
         results: Vec<FamilySidecar>,
         held: Vec<FixtureId>,
+        pool: Option<&light_engine::parallel::OutputPool>,
     ) {
         // Sized exactly up front (TL-639 round 2), so neither list is regrown or copied again.
         let (head_count, output_count) = results.iter().filter_map(FamilySidecar::color).fold(
@@ -223,16 +232,44 @@ impl AcceptedColorFrames {
             rows(result, &mut heads);
         }
         let mut outputs = Vec::with_capacity(output_count);
+        // Without a pool everything left is freed here, as it always was.
+        let collect = pool.is_some();
+        let mut garbage = Garbage {
+            color: Vec::with_capacity(if collect { output_count } else { 0 }),
+            other: Vec::new(),
+        };
         outputs.extend(results.into_iter().filter_map(|sidecar| match sidecar {
             FamilySidecar::Color(color) if matches!(color.quality, RoutedColorQuality::Lamp(_)) => {
+                let PhysicalHeadResult {
+                    token,
+                    target,
+                    owner: _,
+                    value,
+                    writes,
+                    requested,
+                    achieved,
+                    quality,
+                    provenance,
+                    metadata,
+                } = *color;
+                if collect {
+                    garbage
+                        .color
+                        .push((requested, achieved, quality, provenance, metadata));
+                }
                 Some(PublishedColorOutput {
-                    token: color.token,
-                    target: color.target,
-                    value: color.value,
-                    writes: color.writes,
+                    token,
+                    target,
+                    value,
+                    writes,
                 })
             }
-            _ => None,
+            other => {
+                if collect {
+                    garbage.other.push(other);
+                }
+                None
+            }
         }));
         // TL-639: a retained frame keeps only what it holds (no-ops when sized exactly).
         heads.shrink_to_fit();
@@ -245,10 +282,14 @@ impl AcceptedColorFrames {
             held,
         });
         let mut frames = self.frames.lock();
-        if frames.len() == RETAINED_FRAMES {
-            frames.pop_front();
-        }
+        let oldest = (frames.len() == RETAINED_FRAMES)
+            .then(|| frames.pop_front())
+            .flatten();
         frames.push_back(frame);
+        drop(frames);
+        if let Some(pool) = pool {
+            pool.drop_later((garbage, oldest));
+        }
     }
 
     /// The accepted frame with exactly this identity, if it is still retained.
@@ -274,4 +315,19 @@ impl AcceptedColorFrames {
     pub(in crate::runtime) fn clear(&self) {
         self.frames.lock().clear();
     }
+}
+
+type Routed = RoutingColorAdapter;
+
+/// What a recorded frame drops of its sidecars.
+struct Garbage {
+    #[allow(clippy::type_complexity)]
+    color: Vec<(
+        <Routed as PhysicalFamilyAdapter>::Requested,
+        <Routed as PhysicalFamilyAdapter>::Achieved,
+        <Routed as PhysicalFamilyAdapter>::Quality,
+        PhysicalProvenance,
+        FamilyProjectionMetadata,
+    )>,
+    other: Vec<FamilySidecar>,
 }

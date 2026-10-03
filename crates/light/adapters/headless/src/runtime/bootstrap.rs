@@ -35,6 +35,7 @@ pub(super) async fn run() -> anyhow::Result<()> {
         return Ok(());
     }
     initialize_tracing();
+    configure_output_workers();
     let Some(options) = process_options()? else {
         return Ok(());
     };
@@ -728,6 +729,22 @@ fn start_discovery(startup: &StartupState) -> discovery_http::DiscoveryResource 
             .as_ref()
             .map(|entry| entry.name.clone()),
     )
+}
+
+/// `LIGHT_OUTPUT_WORKERS` (a count, or `max`) sets how many threads an output frame may split its
+/// independent per-fixture work over. Unset, the engine uses the available parallelism capped at
+/// eight; `1` keeps every frame on the output thread. Outputs are identical for every count.
+/// `LIGHT_VERIFY_PLANS=1` checks every planned Position forest against the general walk.
+fn configure_output_workers() {
+    if env::var("LIGHT_VERIFY_PLANS").is_ok_and(|value| value == "1") {
+        light_dynamics::set_plan_verification(true);
+    }
+    if let Ok(value) = env::var("LIGHT_OUTPUT_WORKERS") {
+        match light_engine::parallel::parse_output_workers(&value) {
+            Some(workers) => light_engine::parallel::set_default_output_workers(workers),
+            None => tracing::warn!(value, "ignoring an invalid LIGHT_OUTPUT_WORKERS"),
+        }
+    }
 }
 
 fn desk_token() -> Option<Arc<str>> {

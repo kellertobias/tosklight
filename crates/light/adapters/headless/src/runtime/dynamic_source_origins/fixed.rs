@@ -134,7 +134,7 @@ pub(super) fn validate_fixed_origin(
         ) => non_nil(*authored_cue_id, "authored Cue")?,
         _ => return Err(invalid("fixed timestamp and source kinds disagree")),
     }
-    let mask = captured_programming_fixed_mask(&owner.key(), value)?
+    let mask = captured_programming_fixed_mask(owner.key_ref(), value)?
         .ok_or_else(|| invalid("fixed record requires a complete typed mask"))?;
     if mask.address.component != component {
         return Err(invalid("fixed record and captured component disagree"));

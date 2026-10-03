@@ -46,7 +46,7 @@ impl DynamicPresetTemplate {
         }
         let validate = |value: &AttributeValue, scope| {
             value.validate_programming_scope(scope)?;
-            value.validate_programming_address(&owner.key())
+            value.validate_programming_address(owner.key_ref())
         };
         if let Some(value) = &self.universal {
             validate(value, ProgrammingValueScope::Universal)?;

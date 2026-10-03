@@ -173,14 +173,15 @@ fn nested_graph_pending_locator_preserves_original_authority_without_consuming_p
                 .unwrap()
                 .is_some()
         );
-        *typed.failure.borrow_mut() =
-            Some(IntentError("injected captured source failure".into()).into());
+        typed.set_failure(Some(
+            IntentError("injected captured source failure".into()).into(),
+        ));
         assert!(
             batch
                 .advance_graph(&mut failed, &frame, &no_adoption)
                 .is_err()
         );
-        *typed.failure.borrow_mut() = None;
+        typed.set_failure(None);
         assert!(
             failed
                 .pending_graph_operation_locator(failed_request.request_id)

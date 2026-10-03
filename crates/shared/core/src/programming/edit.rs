@@ -165,7 +165,7 @@ pub fn edit_family(
         "one edit transaction must address one complete family",
     )?;
     validate_component_edits(edits)?;
-    base.validate_programming_address(&owner.key())?;
+    base.validate_programming_address(owner.key_ref())?;
     let result = match (owner, base) {
         (ProgrammingOwner::Position, AttributeValue::Position(base)) => {
             AttributeValue::Position(Arc::new(edit_position(base, edits, context)?))
@@ -226,7 +226,7 @@ pub fn edit_family(
             ));
         }
     };
-    result.validate_programming_address(&owner.key())?;
+    result.validate_programming_address(owner.key_ref())?;
     Ok(result)
 }
 /// Validate the request without needing a selected fixture or an adoption seed. Empty-target

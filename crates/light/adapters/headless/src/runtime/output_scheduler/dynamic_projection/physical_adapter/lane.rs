@@ -7,6 +7,10 @@ use light_engine::PreloadBranch;
 use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 
+mod worker;
+pub(in crate::runtime) use worker::{LaneShared, LaneStaging, LaneWorker, StagingMark};
+pub(super) use worker::{adopt_in, resolve_in};
+
 type OwnerKey = (FixtureId, ProgrammingOwner);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -72,6 +76,11 @@ struct LaneState<A: PhysicalFamilyAdapter> {
     accepts: u64,
     /// The last accepted frame's staging storage, emptied, for the next frame (TL-639 round 4).
     spare: Option<Staged<A::Continuity>>,
+    /// Entries the last accept replaced, until [`PhysicalAdapterLane::retire_on`] frees them on
+    /// a pool thread (TL-639 round 5); the next accept frees any nobody took. Kept only once a
+    /// pool has taken them (`retiring`); otherwise the accept frees them in place.
+    retired: Vec<Committed<A::Continuity>>,
+    retiring: bool,
 }
 
 /// One lane of one family adapter. Interior mutability lets the same lane serve as the hybrid
@@ -115,6 +124,8 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
                 shared_slots: FxHashMap::default(),
                 accepts: 0,
                 spare: None,
+                retired: Vec::new(),
+                retiring: false,
             }),
         }
     }
@@ -243,49 +254,7 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
         &self,
         observation: HybridFamilyObservation<'_>,
     ) -> Result<(FamilyProjectionMetadata, PhysicalHeadResult<A>), TransitionError> {
-        let frame = observation.frame;
-        let (target, owner) = (observation.target, observation.owner);
-        let descriptor = self.descriptor(frame, target, owner)?;
-        if !frame.token.matches_geometry(frame.geometry) {
-            return invalid("physical adapter geometry belongs to another frame");
-        }
-        let fields = observation
-            .consumed_fields(|| self.adapter.consumed_fields(owner, observation.value))?;
-        let mut sources = DynamicFamilySourceProjection::default();
-        observation.project_fields(&fields, &mut sources)?;
-        let controls = observation.controls_for_fields(&fields);
-        let provenance = PhysicalProvenance {
-            fields,
-            sources,
-            controls,
-        };
-        // Borrowed, not cloned (TL-639 round 2): the adapter never reaches this lane's state.
-        let state = self.state.borrow();
-        let previous = state
-            .committed
-            .get(&(target, owner))
-            .map(|entry| &entry.continuity);
-        let resolution = self.adapter.resolve(PhysicalRequest {
-            frame,
-            target,
-            owner,
-            descriptor: &descriptor,
-            value: observation.value,
-            previous,
-        });
-        drop(state);
-        let resolution = resolution?;
-        validate_complete_writes(self.adapter.footprint(&descriptor), &resolution.writes)?;
-        let metadata = self.adapter.projection_metadata(owner, &provenance);
-        self.stage_resolution(
-            frame.token,
-            target,
-            owner,
-            observation.value.clone(),
-            provenance,
-            metadata,
-            resolution,
-        )
+        worker::observe_in(self, observation)
     }
 
     /// Stage one result only after its complete physical cohort has been fitted.
@@ -440,8 +409,18 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
         // theirs, and every entry neither touched is released with its last provenance.
         state.accepts += 1;
         let stamp = state.accepts;
+        let LaneState {
+            committed,
+            retired,
+            retiring,
+            ..
+        } = &mut *state;
+        retired.clear();
+        if *retiring {
+            retired.reserve(staged.entries.len());
+        }
         for (key, continuity, provenance) in staged.entries.drain(..) {
-            state.committed.insert(
+            let replaced = committed.insert(
                 key,
                 Committed {
                     continuity,
@@ -450,6 +429,9 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
                     stamp,
                 },
             );
+            if *retiring {
+                retired.extend(replaced);
+            }
         }
         for key in staged.held.drain() {
             if let Some(entry) = state.committed.get_mut(&key) {
@@ -476,6 +458,22 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
         state.spare = Some(staged);
         self.adapter.accept_lane_frame(token);
         true
+    }
+}
+
+impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A>
+where
+    A::Continuity: Send + 'static,
+{
+    /// Free the entries the last accept replaced on `pool`, off the frame's thread.
+    pub(in crate::runtime) fn retire_on(&self, pool: &light_engine::parallel::OutputPool) {
+        let mut state = self.state.borrow_mut();
+        state.retiring = true;
+        let retired = std::mem::take(&mut state.retired);
+        drop(state);
+        if !retired.is_empty() {
+            pool.drop_later(retired);
+        }
     }
 }
 

@@ -78,7 +78,7 @@ impl ProgrammingFamilyFixAt {
     pub fn validate(&self) -> Result<(), IntentError> {
         self.address.validate()?;
         self.family
-            .validate_programming_address(&self.address.owner().key())?;
+            .validate_programming_address(self.address.owner().key_ref())?;
         ensure(
             self.family.spread_control_points() == 0
                 && !matches!(self.family, AttributeValue::GroupFamily(_)),

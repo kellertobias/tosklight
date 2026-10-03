@@ -216,3 +216,7 @@ fn collect_rows(rendered: &RenderResult, rows: &mut FixtureRows) {
 fn hash(text: &str) -> String {
     format!("{:016x}", fnv1a(0xcbf2_9ce4_8422_2325, text.as_bytes()))
 }
+
+#[cfg(test)]
+#[path = "digest_tests.rs"]
+mod tests;

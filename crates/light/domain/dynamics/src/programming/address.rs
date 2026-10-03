@@ -58,7 +58,7 @@ impl DynamicValueAddress {
         owner: ProgrammingOwner,
         value: &AttributeValue,
     ) -> Result<Self, IntentError> {
-        value.validate_programming_address(&owner.key())?;
+        value.validate_programming_address(owner.key_ref())?;
         let representation = match value {
             AttributeValue::Position(position) => match position.as_ref() {
                 PositionIntent::Angles { .. } => DynamicFamilyRepresentation::Angles,
@@ -182,7 +182,7 @@ impl DynamicValueAddress {
             self.component.is_none(),
             "component lanes cannot contain whole-family values",
         )?;
-        value.validate_programming_address(&self.owner().key())?;
+        value.validate_programming_address(self.owner().key_ref())?;
         ensure(
             value.spread_control_points() == 0,
             "Dynamic source must be materialized for its target",

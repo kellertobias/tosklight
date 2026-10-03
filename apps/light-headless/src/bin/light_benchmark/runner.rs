@@ -414,6 +414,9 @@ pub(super) fn prepare_scenario(
     } else {
         BenchmarkScenario::build(config, arguments.protocol, destination)?
     };
+    if let Some(workers) = arguments.semantic.output_workers {
+        scenario.engine.set_output_workers(workers);
+    }
     Ok((loopback, scenario))
 }
 

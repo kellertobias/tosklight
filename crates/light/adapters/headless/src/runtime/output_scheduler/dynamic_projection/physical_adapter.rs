@@ -45,6 +45,7 @@ use light_engine::{
 pub(in crate::runtime) mod color;
 pub(in crate::runtime) mod color_router;
 // TL-548 C1: all-family Live/Preload lanes; no production caller until C3.
+mod counters;
 pub(in crate::runtime) mod family_lanes;
 mod lane;
 pub(in crate::runtime) mod live_frame;
@@ -394,16 +395,7 @@ impl<A: PhysicalFamilyAdapter> HybridFrameResolver for PhysicalAdapterLane<A> {
         original: &AttributeValue,
         address: &DynamicValueAddress,
     ) -> Result<AttributeValue, TransitionError> {
-        let descriptor = self.descriptor(frame, target, address.owner())?;
-        let previous = self.continuity(target, address.owner());
-        self.adapter().adopt_with_continuity(
-            frame,
-            &descriptor,
-            target,
-            original,
-            address,
-            previous.as_ref(),
-        )
+        lane::adopt_in(self, frame, target, original, address)
     }
 
     fn resolve(
@@ -415,10 +407,7 @@ impl<A: PhysicalFamilyAdapter> HybridFrameResolver for PhysicalAdapterLane<A> {
         to: &AttributeValue,
         operation: FamilyExpressionOperation,
     ) -> Result<(AttributeValue, Option<ProgrammingTransitionTrace>), TransitionError> {
-        let owner = transition_owner(self.adapter(), requirement, from, to)?;
-        let descriptor = self.descriptor(frame, target, owner)?;
-        self.adapter()
-            .transition(frame, &descriptor, target, requirement, from, to, operation)
+        lane::resolve_in(self, frame, target, requirement, from, to, operation)
     }
 
     fn begin_frame(&self, token: &CapturedFrameToken) -> Result<(), TransitionError> {

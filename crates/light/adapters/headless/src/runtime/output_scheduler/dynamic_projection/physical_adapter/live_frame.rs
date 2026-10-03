@@ -35,6 +35,9 @@ impl<A: PhysicalFamilyAdapter> LiveFrameSidecar for PhysicalHeadResult<A> {
 pub(in crate::runtime) trait LiveFrameLanes: HybridFrameResolver {
     fn abandon_frame(&self);
     fn released_owners(&self) -> Vec<ReleasedPhysicalOwner>;
+    /// Free what the accept replaced on `pool` (TL-639 round 5). Lanes that keep nothing for it
+    /// free it inline.
+    fn retire_on(&self, _pool: &light_engine::parallel::OutputPool) {}
 }
 
 impl<A: PhysicalFamilyAdapter> LiveFrameLanes for PhysicalAdapterLane<A> {
@@ -108,6 +111,9 @@ where
         .map_err(|error| invalid(&error))?;
     let accepted = lanes.accept_frame(&token);
     debug_assert!(accepted, "verified Live token is accepted");
+    if let Some(pool) = engine.output_pool() {
+        lanes.retire_on(&pool);
+    }
     Ok(PublishedLiveFrame {
         rendered,
         token,

@@ -609,14 +609,15 @@ fn resume_locator_refuses_foreign_request_capture_or_failed_evaluation() {
             "the parent's request is not the operand's own response"
         );
         // Source failure is terminal for the operand; its workspace still recycles.
-        *typed.failure.borrow_mut() =
-            Some(IntentError("injected captured source failure".into()).into());
+        typed.set_failure(Some(
+            IntentError("injected captured source failure".into()).into(),
+        ));
         assert!(
             batch
                 .advance_resume(&mut operand, &frame, &no_adoption)
                 .is_err()
         );
-        *typed.failure.borrow_mut() = None;
+        typed.set_failure(None);
         assert!(
             batch
                 .advance_resume(&mut operand, &frame, &no_adoption)
@@ -630,10 +631,11 @@ fn resume_locator_refuses_foreign_request_capture_or_failed_evaluation() {
         );
         batch.recycle_resume(operand).unwrap();
         // A failed Full parent keeps its domain cut but loses all nested locator authority.
-        *typed.failure.borrow_mut() =
-            Some(IntentError("injected captured source failure".into()).into());
+        typed.set_failure(Some(
+            IntentError("injected captured source failure".into()).into(),
+        ));
         assert!(batch.advance(&mut parent, &frame, &no_adoption).is_err());
-        *typed.failure.borrow_mut() = None;
+        typed.set_failure(None);
         assert!(
             parent
                 .pending_resume_operand_locator(request.request_id)

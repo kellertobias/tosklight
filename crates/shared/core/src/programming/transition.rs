@@ -231,7 +231,7 @@ impl CompiledProgrammingTransition {
         require_materialized(&from, &to)?;
         for endpoint in [&from, &to] {
             if let Some(owner) = endpoint.programming_owner() {
-                endpoint.validate_programming_address(&owner.key())?;
+                endpoint.validate_programming_address(owner.key_ref())?;
             }
         }
         let native = match (&from, &to, native_model) {

@@ -589,8 +589,9 @@ fn captured_discovery_freshness_failure_never_resurrects_report_or_pending_autho
                         .complete
                     );
                 }
-                *composer.typed.failure.borrow_mut() =
-                    Some(IntentError("injected captured discovery freshness loss".into()).into());
+                composer.typed.set_failure(Some(
+                    IntentError("injected captured discovery freshness loss".into()).into(),
+                ));
                 match fail_in {
                     "advance" => {
                         assert!(
@@ -614,7 +615,7 @@ fn captured_discovery_freshness_failure_never_resurrects_report_or_pending_autho
                     }
                 }
                 assert!(evaluation.pending_request().is_none());
-                *composer.typed.failure.borrow_mut() = None;
+                composer.typed.set_failure(None);
                 assert!(discovery_report(composer, &mut evaluation).is_err());
                 assert!(advance_discovery(composer, &mut evaluation, &frame, &blocked).is_err());
                 assert!(

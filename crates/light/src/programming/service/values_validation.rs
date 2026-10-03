@@ -527,7 +527,7 @@ mod tests {
         environment.group_memberships.insert("1".into(), 3);
         assert!(validate_group_value("1", &value, &environment, true).is_ok());
         assert!(validate_owner(&ProgrammingOwner::Position.key(), &value).is_ok());
-        assert!(validate_owner(&AttributeKey::color(), &value).is_err());
+        assert!(validate_owner(AttributeKey::color_ref(), &value).is_err());
         let normal = ProgrammingValueMutation::SetGroup {
             group_id: "1".into(),
             attribute: AttributeKey::color(),

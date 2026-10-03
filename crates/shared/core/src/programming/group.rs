@@ -35,7 +35,7 @@ impl GroupFamilyAssignment {
             !matches!(value, AttributeValue::GroupFamily(_)),
             "Group family assignments cannot nest",
         )?;
-        value.validate_programming_address(&self.owner.key())?;
+        value.validate_programming_address(self.owner.key_ref())?;
         if self.owner == ProgrammingOwner::Focus {
             match value {
                 AttributeValue::Normalized(value) => {

@@ -124,6 +124,30 @@ impl HybridFrameObserver<FamilySidecar> for FamilyFrameObserver<'_> {
         }
     }
 
+    fn with_parallel_lanes(
+        &self,
+        run: &mut dyn FnMut(
+            Option<
+                super::super::super::programming_projection::hybrid::ParallelLanes<
+                    '_,
+                    '_,
+                    FamilySidecar,
+                >,
+            >,
+        ),
+    ) {
+        self.lanes
+            .with_shared(|shared| run(Some((shared, |sidecar| sidecar))));
+    }
+
+    fn merge_parallel(
+        &mut self,
+        token: &CapturedFrameToken,
+        staging: super::FamilyStaging,
+    ) -> Result<(), TransitionError> {
+        self.lanes.merge_staging(token, staging)
+    }
+
     /// The Position cohort is fitted over its own rows only; every other row keeps its place.
     fn finish(
         &mut self,
@@ -295,7 +319,7 @@ fn static_color_targets(
             .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
         {
             if !matches!(
-                baseline.value(target, &owner.key()),
+                baseline.value(target, owner.key_ref()),
                 Some(AttributeValue::ColorProgram(_))
             ) || seen.contains(&(target, owner))
             {
@@ -333,7 +357,7 @@ fn static_zoom_targets(
             .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
         {
             if !matches!(
-                baseline.value(target, &owner.key()),
+                baseline.value(target, owner.key_ref()),
                 Some(AttributeValue::Zoom(_))
             ) || seen.contains(&(target, owner))
             {

@@ -46,6 +46,9 @@ pub struct SemanticArguments {
     /// `--digest-lifecycle` (TL-639 round 2): apply Programmer fades, FixAT, Freeze and a
     /// Preload GO at fixed ticks of a digest run.
     pub digest_lifecycle: bool,
+    /// `--output-workers N|max` (TL-639 round 5): threads the engine splits a frame's
+    /// independent per-fixture work over; unset keeps the engine default.
+    pub output_workers: Option<usize>,
 }
 
 impl Default for SemanticArguments {
@@ -62,6 +65,7 @@ impl Default for SemanticArguments {
             rig_height_mm: 9_000,
             digest_ticks: None,
             digest_lifecycle: false,
+            output_workers: None,
         }
     }
 }
@@ -117,6 +121,13 @@ impl SemanticArguments {
                 self.digest_ticks = Some(bounded(&value()?, 1, 100_000, "digest ticks")?)
             }
             "--digest-lifecycle" => self.digest_lifecycle = true,
+            "--output-workers" => {
+                let value = value()?;
+                self.output_workers = Some(
+                    light_engine::parallel::parse_output_workers(&value)
+                        .ok_or_else(|| format!("invalid output workers: {value}"))?,
+                )
+            }
             _ => return Ok(false),
         }
         Ok(true)
@@ -167,7 +178,8 @@ impl SemanticArguments {
   --static-bases-only          Start none of the workload's Dynamics (memo-reuse gates)\n\
   --rig-height-mm N            Height of the workload's fixture grid (default 9000)\n\
   --digest-ticks N             Print per-tick output digests of N unpaced ticks (build equivalence)\n\
-  --digest-lifecycle           Apply fades, FixAT, Freeze and a Preload GO during a digest run\n";
+  --digest-lifecycle           Apply fades, FixAT, Freeze and a Preload GO during a digest run\n\
+  --output-workers N|max       Output worker threads per frame (default: the engine's)\n";
 }
 
 fn bounded(value: &str, min: u64, max: u64, label: &str) -> Result<u64, String> {

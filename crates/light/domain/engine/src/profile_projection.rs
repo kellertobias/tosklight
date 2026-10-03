@@ -606,7 +606,7 @@ fn apply_semantic_highlight(
     }
     if !inputs
         .suppressed_highlight_attributes
-        .contains(&AttributeKey::intensity())
+        .contains(AttributeKey::intensity_ref())
     {
         if let Some(written) = written.as_mut() {
             written.push(AttributeKey::intensity());
@@ -756,14 +756,14 @@ fn apply_hazardous_blackout(
 fn virtual_intensity(inputs: &ProfileHeadInputs<'_, '_>) -> f32 {
     inputs
         .values
-        .get(&AttributeKey::intensity())
+        .get(AttributeKey::intensity_ref())
         .and_then(AttributeValue::normalized)
         .unwrap_or(1.0)
 }
 
 fn requested_color(values: &HeadValueView<'_, '_>) -> Option<Xyz> {
     values
-        .get(&AttributeKey::color())
+        .get(AttributeKey::color_ref())
         .and_then(|value| match value {
             AttributeValue::ColorXyz(color) => Some(*color),
             _ => None,
@@ -847,7 +847,7 @@ fn resolve_channels(
     let intensity_master = context
         .inputs
         .sequence_masters
-        .get(&AttributeKey::intensity());
+        .get(AttributeKey::intensity_ref());
     // TL-639 round 4: the overlay state a fitted native channel renders under depends only on
     // its full-Freeze flag, so it is resolved at most once per flag and head.
     let mut overlays: [Option<HeadOverlayState>; 2] = [None, None];

@@ -10,6 +10,9 @@ use crate::{
     FamilyCompositionSample, FamilySampleRank, programming::expression_coupled::PositionForestNode,
 };
 
+mod plain;
+pub use plain::set_plan_verification;
+
 pub struct PositionComponentForestBundle {
     pub position: Option<FamilyCompositionSample>,
     pub remainder: Vec<DynamicRuntimeSample>,
@@ -44,6 +47,64 @@ pub fn bundle_position_component_forest(
         });
     };
     ensure_one_position_controller(samples, first)?;
+    // TL-639 round 5 (compiled plans, design A): a controller of plain Angle leaves is one
+    // correlated branch with no transition, so its forest is that branch, built directly from
+    // the leaves without importing them into a tape (`plain`). The general walk answers the
+    // same forest; `plan_verification` builds both and compares them.
+    if let Some(plain) = plain::forest(samples, first.target, sources) {
+        let (forest, root) = plain?;
+        if plain::verifying() {
+            plain::verify(samples, sources, &forest, root);
+        }
+        let position = match root {
+            Some(root) => Some(coupled_sample(
+                samples,
+                first,
+                &forest,
+                root,
+                samples.iter().map(|sample| sample.lane_id).max(),
+            )?),
+            None => None,
+        };
+        return Ok(PositionComponentForestBundle {
+            position,
+            remainder: Vec::new(),
+        });
+    }
+    let (forest, root, roots, tape, metadata) = general_forest(samples, first.target, sources)?;
+    let position = if let Some(root) = root {
+        let lane_id = roots
+            .iter()
+            .filter(|(_, id)| metadata[id.0 as usize].contains)
+            .map(|(lane, _)| *lane)
+            .max();
+        Some(coupled_sample(samples, first, &forest, root, lane_id)?)
+    } else {
+        None
+    };
+    let remainder = remainder_samples(samples, &roots, &tape, &metadata)?;
+    Ok(PositionComponentForestBundle {
+        position,
+        remainder,
+    })
+}
+
+/// The general walk: import the lanes into one tape and walk their correlated root sets.
+#[allow(clippy::type_complexity)]
+fn general_forest(
+    samples: &[DynamicRuntimeSample],
+    target: FixtureId,
+    sources: &dyn DynamicValueSourceResolver,
+) -> Result<
+    (
+        Vec<PositionForestNode>,
+        Option<usize>,
+        Roots,
+        Arc<RetainedExpressionTape>,
+        Vec<PositionMetadata>,
+    ),
+    TransitionError,
+> {
     let expressions = samples
         .iter()
         .map(|sample| Arc::new(sample.expression.clone()))
@@ -56,40 +117,38 @@ pub fn bundle_position_component_forest(
         .zip(samples)
         .map(|(root, sample)| (sample.lane_id, *root))
         .collect::<Roots>();
-    let (forest, results) = build_forest(&roots, &tape, &metadata, first.target, sources)?;
-    let position = if let Some(root) = results[&roots] {
-        let lane_id = roots
-            .iter()
-            .filter(|(_, id)| metadata[id.0 as usize].contains)
-            .map(|(lane, _)| *lane)
-            .max()
-            .expect("Position source");
-        Some(FamilyCompositionSample::CoupledExpression {
-            expression: Arc::new(CompiledCoupledExpression::from_position_forest(
-                Arc::from(samples),
-                &forest,
-                root,
-            )?),
-            rank: FamilySampleRank {
-                priority: first.priority,
-                changed_at_millis: first.activated_at_millis,
-                changed_at_submillis_nanos: 0,
-                stable_order: first.controller_id.as_u128(),
-                identity: crate::FamilySampleIdentity::Dynamic {
-                    instance_id: first.instance_id,
-                    controller_id: first.controller_id,
-                    lane_id,
-                },
+    let (forest, results) = build_forest(&roots, &tape, &metadata, target, sources)?;
+    let root = results[&roots];
+    Ok((forest, root, roots, tape, metadata))
+}
+
+/// The compiled Position sample of a forest's root.
+fn coupled_sample(
+    samples: &[DynamicRuntimeSample],
+    first: &DynamicRuntimeSample,
+    forest: &[PositionForestNode],
+    root: usize,
+    lane_id: Option<Uuid>,
+) -> Result<FamilyCompositionSample, TransitionError> {
+    let lane_id = lane_id.expect("Position source");
+    Ok(FamilyCompositionSample::CoupledExpression {
+        expression: Arc::new(CompiledCoupledExpression::from_position_forest(
+            Arc::from(samples),
+            forest,
+            root,
+        )?),
+        rank: FamilySampleRank {
+            priority: first.priority,
+            changed_at_millis: first.activated_at_millis,
+            changed_at_submillis_nanos: 0,
+            stable_order: first.controller_id.as_u128(),
+            identity: crate::FamilySampleIdentity::Dynamic {
+                instance_id: first.instance_id,
+                controller_id: first.controller_id,
+                lane_id,
             },
-            activation_mix: first.activation_mix,
-        })
-    } else {
-        None
-    };
-    let remainder = remainder_samples(samples, &roots, &tape, &metadata)?;
-    Ok(PositionComponentForestBundle {
-        position,
-        remainder,
+        },
+        activation_mix: first.activation_mix,
     })
 }
 

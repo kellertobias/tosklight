@@ -804,7 +804,7 @@ fn preset_recall_keeps_an_intentionally_empty_group_as_the_owner() {
     let current = setup.registry.get(session).unwrap();
     assert!(current.selected.is_empty());
     assert_eq!(
-        current.group_values["5"][&AttributeKey::intensity()].value,
+        current.group_values["5"][AttributeKey::intensity_ref()].value,
         AttributeValue::Normalized(0.8)
     );
 }

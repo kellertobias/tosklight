@@ -9,8 +9,10 @@
 //!   descriptor, including `PositionDescriptor` and its shared `Arc<PositionInstance>`, is
 //!   `Send + Sync`. A lane caches descriptors as `Arc<Descriptor>`, so every production lane
 //!   and lane composite is now `Send`.
-//! - Adapters are `Send`. Only `OpticsAdapter` is also `Sync` (`Arc<Mutex>` shared state); the
-//!   others keep lane-local `RefCell`/`Cell` caches, counters and tracking.
+//! - Adapters are `Send`. `OpticsAdapter` is also `Sync` (`Arc<Mutex>` shared state), and so are
+//!   the Color adapters (TL-639 round 5: their fitter caches are `Mutex`es and their counters
+//!   per-thread shards, so a frame's parallel workers share them); `PositionAdapter` keeps
+//!   lane-local `RefCell`/`Cell` caches, counters and tracking.
 //! - Lanes stay `!Sync` by design: `RefCell<LaneState>` serves one synchronous frame. The owner
 //!   supplies synchronization: `Mutex<FamilyLanes>` is `Send + Sync`, and the Pending episode
 //!   bundle (lanes, retained evaluator state, paired history) can move to a worker thread.
@@ -45,17 +47,24 @@ macro_rules! assert_not_impl {
 }
 
 #[test]
-fn adapters_are_send_and_only_the_optics_adapter_is_also_sync() {
+fn adapters_are_send_and_the_color_and_optics_adapters_are_also_sync() {
     assert_send_sync::<OpticsAdapter>();
-    assert_send::<ColorAdapter>();
-    assert_send::<MediaColorAdapter>();
-    assert_send::<RoutingColorAdapter>();
+    assert_send_sync::<ColorAdapter>();
+    assert_send_sync::<MediaColorAdapter>();
+    assert_send_sync::<RoutingColorAdapter>();
     // Instance cache: Arc<PositionInstance { scratch: Mutex<..> }>.
     assert_send::<PositionAdapter>();
-    assert_not_impl!(ColorAdapter, Sync);
-    assert_not_impl!(MediaColorAdapter, Sync);
-    assert_not_impl!(RoutingColorAdapter, Sync);
     assert_not_impl!(PositionAdapter, Sync);
+}
+
+#[test]
+fn parallel_workers_share_the_color_and_optics_lanes_read_only() {
+    use super::family_lanes::{FamilyLanesShared, FamilyStaging};
+    use super::lane::LaneShared;
+    assert_send_sync::<LaneShared<'static, RoutingColorAdapter>>();
+    assert_send_sync::<LaneShared<'static, OpticsAdapter>>();
+    assert_send_sync::<FamilyLanesShared<'static, 'static>>();
+    assert_send::<FamilyStaging>();
 }
 
 #[test]

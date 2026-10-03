@@ -683,15 +683,16 @@ fn graph_bridge_source_failure_is_terminal_but_recycles_its_owned_workspace() {
                 &no_adoption,
             )
             .unwrap();
-        *typed.failure.borrow_mut() =
-            Some(IntentError("injected captured source failure".into()).into());
+        typed.set_failure(Some(
+            IntentError("injected captured source failure".into()).into(),
+        ));
         assert!(
             batch
                 .advance_graph(&mut operand, &frame, &no_adoption)
                 .is_err()
         );
         assert!(operand.pending_request().is_none());
-        *typed.failure.borrow_mut() = None;
+        typed.set_failure(None);
         assert!(
             batch
                 .advance_graph(&mut operand, &frame, &no_adoption)

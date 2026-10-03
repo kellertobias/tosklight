@@ -5,7 +5,9 @@
 
 use super::*;
 use crate::runtime::dynamic_source_origins::DynamicFamilySourceProjection;
-use crate::runtime::dynamic_source_origins::{DynamicSourceBinding, DynamicSourceOrigins};
+use crate::runtime::dynamic_source_origins::{
+    DynamicSourceBinding, DynamicSourceOrigins, OriginsStore, bind_static_evidence_in, unbind_in,
+};
 #[cfg(test)]
 use crate::runtime::dynamic_source_origins::{
     DynamicSourceOrigin, DynamicStaticSource, DynamicStaticSourceEntry,
@@ -21,8 +23,12 @@ use light_dynamics::{
 use std::cell::RefCell;
 
 mod current_native;
+mod fork;
 pub(super) mod hybrid;
+mod memo;
 mod static_rows;
+use fork::{NativeCurrent, SourceTransaction};
+use memo::{Log, Memo};
 use static_rows::{KeptProjection, StaticFamilyRows};
 
 /// Typed Current reads the immutable pre-Freeze baseline retained for final rendering. Keep
@@ -68,6 +74,7 @@ fn legacy_native_zoom(owner: ProgrammingOwner, base: &AttributeValue) -> bool {
 
 type CurrentAdoption<'a> = dyn Fn(FixtureId, &AttributeValue, &DynamicValueAddress) -> Result<AttributeValue, TransitionError>
     + 'a;
+#[derive(Clone)]
 struct ResolvedCurrent {
     value: DynamicValue,
     /// True only when extraction read the original captured representation. An adoption
@@ -76,10 +83,10 @@ struct ResolvedCurrent {
     dependency: Option<DynamicSourceDependency>,
 }
 type CurrentResult = Result<Option<ResolvedCurrent>, TransitionError>;
-type CurrentCache = FxHashMap<FixtureId, Vec<(DynamicValueAddress, CurrentResult)>>;
-type CapturedFamilyCache = FxHashMap<(FixtureId, ProgrammingOwner), Option<AttributeValue>>;
-type CurrentOccurrenceCache =
-    FxHashMap<(FixtureId, ProgrammingOwner), Option<light_dynamics::DynamicSourceOccurrenceId>>;
+type CurrentCache<'a> = Memo<'a, FixtureId, Vec<(DynamicValueAddress, CurrentResult)>>;
+type CapturedFamilyCache<'a> = Memo<'a, (FixtureId, ProgrammingOwner), Option<AttributeValue>>;
+type CurrentOccurrenceCache<'a> =
+    Memo<'a, (FixtureId, ProgrammingOwner), Option<light_dynamics::DynamicSourceOccurrenceId>>;
 
 /// Expected unresolved geometry/appearance stays attached to its exact target and address.
 /// Other targets continue sampling. The frame publisher can expose this as passive quality data.
@@ -96,15 +103,16 @@ struct CapturedProgrammingSources<'a, S> {
     static_sources: &'a S,
     adopt: &'a CurrentAdoption<'a>,
     presets: Option<&'a dyn DynamicValueSourceResolver>,
-    origins: Option<RefCell<&'a mut DynamicSourceOrigins>>,
-    captured_families: RefCell<CapturedFamilyCache>,
-    current_occurrences: RefCell<CurrentOccurrenceCache>,
-    current: RefCell<CurrentCache>,
-    failure: RefCell<Option<TransitionError>>,
-    requirements: RefCell<Vec<CurrentResolutionRequirement>>,
+    origins: Option<RefCell<SourceTransaction<'a>>>,
+    captured_families: RefCell<CapturedFamilyCache<'a>>,
+    current_occurrences: RefCell<CurrentOccurrenceCache<'a>>,
+    current: RefCell<CurrentCache<'a>>,
+    /// The first failure, sticky; at most one entry (a log only so a fork can layer it).
+    failure: RefCell<Log<'a, TransitionError>>,
+    requirements: RefCell<Log<'a, CurrentResolutionRequirement>>,
     native_current: Option<(
         &'a dyn light_dynamics::DynamicNativeModelResolver,
-        &'a RefCell<current_native::CurrentNativeVerificationCache>,
+        NativeCurrent<'a>,
     )>,
 }
 
@@ -119,11 +127,11 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
             adopt,
             presets,
             origins: None,
-            captured_families: RefCell::new(FxHashMap::default()),
-            current_occurrences: RefCell::new(FxHashMap::default()),
-            current: RefCell::new(FxHashMap::default()),
-            failure: RefCell::new(None),
-            requirements: RefCell::new(Vec::new()),
+            captured_families: RefCell::default(),
+            current_occurrences: RefCell::default(),
+            current: RefCell::default(),
+            failure: RefCell::default(),
+            requirements: RefCell::default(),
             native_current: None,
         }
     }
@@ -135,8 +143,9 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
     fn has_captured_family_base(&self, target: FixtureId, owner: ProgrammingOwner) -> bool {
         self.captured_families
             .borrow_mut()
-            .entry((target, owner))
-            .or_insert_with(|| self.static_sources.value(target, &owner.key()).cloned())
+            .get_or_insert_with((target, owner), || {
+                self.static_sources.value(target, owner.key_ref()).cloned()
+            })
             .is_some()
     }
 
@@ -147,8 +156,9 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
     ) -> Option<AttributeValue> {
         self.captured_families
             .borrow_mut()
-            .entry((target, owner))
-            .or_insert_with(|| self.static_sources.value(target, &owner.key()).cloned())
+            .get_or_insert_with((target, owner), || {
+                self.static_sources.value(target, owner.key_ref()).cloned()
+            })
             .clone()
     }
 
@@ -161,7 +171,7 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
         models: &'a dyn light_dynamics::DynamicNativeModelResolver,
         cache: &'a RefCell<current_native::CurrentNativeVerificationCache>,
     ) -> Self {
-        self.native_current = Some((models, cache));
+        self.native_current = Some((models, NativeCurrent::Frame(cache)));
         self
     }
 
@@ -170,8 +180,8 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
         target: FixtureId,
         base: &AttributeValue,
     ) -> Result<(), TransitionError> {
-        if let Some((models, cache)) = self.native_current {
-            cache.borrow_mut().verify(target, base, models)?;
+        if let Some((models, cache)) = &self.native_current {
+            cache.verify(target, base, *models)?;
         }
         Ok(())
     }
@@ -193,7 +203,7 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
     /// Use only inside the caller's atomic Dynamic/source frame transaction. This adapter can
     /// bind new captured sources but never publishes them or mutates older retained records.
     fn with_source_transaction(mut self, origins: &'a mut DynamicSourceOrigins) -> Self {
-        self.origins = Some(RefCell::new(origins));
+        self.origins = Some(RefCell::new(SourceTransaction::Frame(origins)));
         self
     }
 
@@ -205,7 +215,7 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
     ) -> Result<(), IntentError> {
         if let Some(origins) = &self.origins {
             source_bindings::bind_captured_sources(
-                &mut origins.borrow_mut(),
+                origins.borrow_mut().frame()?,
                 runtime,
                 inputs,
                 assignments,
@@ -229,13 +239,10 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
             .then(|| self.static_sources.family_evidence(target, &key))
             .flatten();
         let Some(evidence) = evidence.filter(|evidence| !evidence.entries().is_empty()) else {
-            origins.borrow_mut().unbind(&binding);
+            unbind_in(&mut *origins.borrow_mut(), &binding);
             return Ok(None);
         };
-        origins
-            .borrow_mut()
-            .bind_static_evidence(binding, evidence)
-            .map(Some)
+        bind_static_evidence_in(&mut *origins.borrow_mut(), binding, evidence).map(Some)
     }
 
     /// Call after sampling, family preparation and composition have made their final Current
@@ -247,6 +254,7 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
             let used = self.current_occurrences.borrow();
             origins
                 .borrow_mut()
+                .frame()?
                 .retain_bindings_by_key(|binding, occurrence_id| match *binding {
                     DynamicSourceBinding::Authored { .. } | DynamicSourceBinding::Fixed { .. } => {
                         true
@@ -316,13 +324,16 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
         address: &DynamicValueAddress,
     ) -> Result<Option<DynamicValue>, TransitionError> {
         let mut cache = self.current.borrow_mut();
-        let entries = cache.entry(target).or_default();
-        let index = entries.iter().position(|(known, _)| known == address);
-        let index = index.unwrap_or_else(|| {
+        let known = cache
+            .get(&target)
+            .and_then(|entries| entries.iter().position(|(known, _)| known == address));
+        let index = known.unwrap_or_else(|| {
             let result = self.resolve_current(target, address);
+            let entries = cache.entry_or_default(target);
             entries.push((address.clone(), result));
             entries.len() - 1
         });
+        let entries = cache.get(&target).expect("cached Current of this target");
         match &entries[index].1 {
             Ok(value) => Ok(value.as_ref().map(|resolved| resolved.value.clone())),
             Err(error) => {
@@ -386,15 +397,23 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
     /// The source trait expresses unavailable data with Option. Invalid values still reject
     /// the evaluation; expected frame requirements stay scoped to the affected address.
     fn check(&self) -> Result<(), TransitionError> {
-        self.failure.borrow().clone().map_or(Ok(()), Err)
+        self.failure
+            .borrow()
+            .iter()
+            .next()
+            .cloned()
+            .map_or(Ok(()), Err)
     }
 
     fn remember_failure(&self, failure: TransitionError) {
-        self.failure.borrow_mut().get_or_insert(failure);
+        let mut known = self.failure.borrow_mut();
+        if known.iter().next().is_none() {
+            known.push(failure);
+        }
     }
 
     fn requirements(&self) -> Vec<CurrentResolutionRequirement> {
-        self.requirements.borrow().clone()
+        self.requirements.borrow().iter().cloned().collect()
     }
 
     /// Compose once and consume both its value and source graph before reusing the workspace.
@@ -411,7 +430,7 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
     ) -> Result<T, TransitionError> {
         let base = self
             .static_sources
-            .value(group.target, &group.owner.key())
+            .value(group.target, group.owner.key_ref())
             .ok_or(TransitionError::Requires(
                 TransitionRequirement::MaterializedEndpoints,
             ))?;
@@ -451,7 +470,7 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
         debug_assert!(group.samples.is_empty());
         let base = self
             .static_sources
-            .value(group.target, &group.owner.key())
+            .value(group.target, group.owner.key_ref())
             .ok_or(TransitionError::Requires(
                 TransitionRequirement::MaterializedEndpoints,
             ))?;
@@ -525,7 +544,7 @@ impl<S: DynamicTickSource> CapturedFamilyObservation<'_, '_, S> {
         self.sources.check()?;
         if let Some(origins) = &self.sources.origins {
             projection.project(
-                &origins.borrow(),
+                &*origins.borrow(),
                 self.target,
                 self.owner,
                 query.as_ref(),
@@ -626,15 +645,15 @@ impl<S: DynamicTickSource> DynamicValueSourceResolver for CapturedProgrammingSou
         target: FixtureId,
         lane_id: Uuid,
     ) -> Option<light_dynamics::DynamicSourceOccurrenceId> {
-        self.origins
-            .as_ref()?
-            .borrow()
-            .binding(&DynamicSourceBinding::Authored {
+        OriginsStore::binding(
+            &*self.origins.as_ref()?.borrow(),
+            &DynamicSourceBinding::Authored {
                 instance_id,
                 controller_id,
                 target,
                 lane_id,
-            })
+            },
+        )
     }
 
     fn current_family_occurrence(
@@ -644,7 +663,7 @@ impl<S: DynamicTickSource> DynamicValueSourceResolver for CapturedProgrammingSou
     ) -> Option<light_dynamics::DynamicSourceOccurrenceId> {
         let key = (target, address.owner());
         let mut cache = self.current_occurrences.borrow_mut();
-        *cache.entry(key).or_insert_with(|| {
+        *cache.get_or_insert_with(key, || {
             match self.bind_current_occurrence(target, address.owner()) {
                 Ok(id) => id,
                 Err(error) => {
@@ -669,6 +688,16 @@ impl<S: DynamicTickSource> DynamicValueSourceResolver for CapturedProgrammingSou
         let _ = self.current(target, address);
         let occurrence = self.current_family_occurrence(target, address);
         let mut current = self.current.borrow_mut();
+        // Read before writing: a fork copies a frame entry up only to change it.
+        if let Some(dependency) = current
+            .get(&target)
+            .and_then(|entries| entries.iter().find(|(known, _)| known == address))
+            .and_then(|(_, result)| result.as_ref().ok())
+            .and_then(Option::as_ref)
+            .and_then(|resolved| resolved.dependency.as_ref())
+        {
+            return dependency.clone();
+        }
         let resolved = current
             .get_mut(&target)
             .and_then(|entries| entries.iter_mut().find(|(known, _)| known == address))

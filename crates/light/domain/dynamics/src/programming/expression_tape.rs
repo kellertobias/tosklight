@@ -402,6 +402,17 @@ impl RetainedExpressionTape {
         roots: &[Arc<DynamicSampleExpression>],
         mut source_keys: Option<&mut Vec<InputKey>>,
     ) -> Result<Self, IntentError> {
+        if let Some(tape) = Self::import_leaf_roots(roots, source_keys.as_deref_mut()) {
+            return tape;
+        }
+        Self::import_roots_walk(roots, source_keys)
+    }
+
+    /// The general import: a depth-first walk that memoizes shared descendants.
+    fn import_roots_walk(
+        roots: &[Arc<DynamicSampleExpression>],
+        mut source_keys: Option<&mut Vec<InputKey>>,
+    ) -> Result<Self, IntentError> {
         let mut tape = Self::empty();
         let mut ids = FxHashMap::<InputKey, RetainedNodeId>::default();
         let mut active = FxHashSet::default();
@@ -479,6 +490,72 @@ impl RetainedExpressionTape {
             .collect();
         tape.validate()?;
         Ok(tape)
+    }
+
+    /// [`Self::import_roots`] for distinct live leaf roots (TL-639 round 5): the general walk
+    /// visits each such root once, in order, with nothing to memoize, so this runs the same
+    /// per-node import without its traversal maps. `None` when any root is a tape node, has
+    /// children or repeats another root.
+    fn import_leaf_roots(
+        roots: &[Arc<DynamicSampleExpression>],
+        mut source_keys: Option<&mut Vec<InputKey>>,
+    ) -> Option<Result<Self, IntentError>> {
+        const MAX_LEAF_ROOTS: usize = 8;
+        if roots.is_empty() || roots.len() > MAX_LEAF_ROOTS {
+            return None;
+        }
+        for (index, root) in roots.iter().enumerate() {
+            let node = ExpressionNodeRef::new(root);
+            let ExpressionNodeRef::Tree(_) = node else {
+                return None;
+            };
+            let leaf = matches!(
+                node.node(),
+                Ok(ExpressionNode::Legacy(..)
+                    | ExpressionNode::Programming(..)
+                    | ExpressionNode::Current(_)
+                    | ExpressionNode::Numeric(_))
+            );
+            if !leaf
+                || roots[..index]
+                    .iter()
+                    .any(|other| ExpressionNodeRef::new(other).key() == node.key())
+            {
+                return None;
+            }
+        }
+        let mut import = || {
+            let mut tape = Self::empty();
+            let mut interner = EmissionInterner::default();
+            let no_children = FxHashMap::<InputKey, RetainedNodeId>::default();
+            for root in roots {
+                let node = ExpressionNodeRef::new(root);
+                let id = RetainedNodeId(tape.nodes.len() as u32);
+                let view = node.node()?;
+                let numeric = match &view {
+                    ExpressionNode::Numeric(program) if !program.operations.is_empty() => {
+                        Some(program.operations.clone())
+                    }
+                    _ => None,
+                };
+                tape.nodes
+                    .push(RetainedExpressionNode::from_view(view, &no_children)?);
+                // Origins move by original witness identity; synthetic nodes receive none.
+                if let Some(origin) = node.operation_origin() {
+                    interner.reference(&mut tape, id, origin, None)?;
+                }
+                for (program_node, origin) in numeric.iter().flat_map(|origins| origins.iter()) {
+                    interner.reference(&mut tape, id, origin, Some(*program_node))?;
+                }
+                if let Some(keys) = source_keys.as_deref_mut() {
+                    keys.push(node.key());
+                }
+            }
+            tape.roots = (0..roots.len() as u32).map(RetainedNodeId).collect();
+            tape.validate()?;
+            Ok(tape)
+        };
+        Some(import())
     }
 
     /// TL-639: `Some` validation of a plain (unwrapped) Programming or legacy scalar leaf. A

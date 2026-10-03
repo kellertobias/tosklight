@@ -159,7 +159,9 @@ fn missing_fixed_mask_bases(
         if !row.enabled
             || mask.address.component.is_some()
             || authored_activation_mix(row.changed_at_millis, timing, now) <= 0.0
-            || static_token.value(row.fixture_id, &owner.key()).is_some()
+            || static_token
+                .value(row.fixture_id, owner.key_ref())
+                .is_some()
         {
             continue;
         }

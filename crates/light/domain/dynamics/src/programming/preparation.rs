@@ -50,6 +50,7 @@ struct CacheKey {
     owner: ProgrammingOwner,
 }
 
+#[derive(Clone)]
 struct CompiledSample {
     // Own the original expression, never a raw pointer key with an unrelated lifetime.
     expression: Arc<DynamicSampleExpression>,
@@ -64,6 +65,10 @@ struct CompiledSample {
 #[derive(Default)]
 pub struct DynamicFamilyPreparationScratch {
     order: Vec<usize>,
+    /// One range of `order` per controller (instance, controller, target).
+    controllers: Vec<std::ops::Range<usize>>,
+    /// Each controller's chunk in a parallel preparation.
+    chunk_of_controller: Vec<usize>,
     sort_keys: Vec<((Uuid, Uuid, Uuid), Uuid, usize)>,
     controller: Vec<DynamicRuntimeSample>,
     position: Vec<DynamicRuntimeSample>,
@@ -77,6 +82,15 @@ pub struct DynamicFamilyPreparationScratch {
 }
 
 impl DynamicFamilyPreparationScratch {
+    /// The last preparation's result.
+    pub fn prepared(&self) -> PreparedDynamicFamilySamples<'_> {
+        PreparedDynamicFamilySamples {
+            families: &self.families,
+            legacy: &self.legacy,
+            requirements: &self.requirements,
+        }
+    }
+
     /// Drop retained compiled sources at a show/dependency boundary.
     pub fn clear(&mut self) {
         self.clear_output();
@@ -97,39 +111,16 @@ impl DynamicFamilyPreparationScratch {
         self.requirements.clear();
         self.sampling_requirements.clear();
     }
+}
 
-    fn append(
-        &mut self,
-        target: FixtureId,
-        owner: ProgrammingOwner,
-        samples: Vec<FamilyCompositionSample>,
-    ) {
-        if samples.is_empty() {
-            return;
-        }
-        let index = *self
-            .family_indices
-            .entry((target, owner))
-            .or_insert_with(|| {
-                let index = self.families.len();
-                self.families.push(DynamicFamilySampleGroup {
-                    target,
-                    owner,
-                    samples: self.family_buffers.pop().unwrap_or_default(),
-                });
-                index
-            });
-        self.families[index].samples.extend(samples);
-    }
-
+impl<O: PreparationOutput> Preparer<'_, O> {
     fn prepare_sample(
         &mut self,
         sample: DynamicRuntimeSample,
         native_models: Option<&dyn DynamicNativeModelResolver>,
-        previous: &mut HashMap<CacheKey, CompiledSample>,
     ) -> Result<(), TransitionError> {
         for (owner, expression) in split_owners(Arc::new(sample.expression.clone()))? {
-            self.prepare_part(&sample, owner, expression, native_models, previous)?;
+            self.prepare_part(&sample, owner, expression, native_models)?;
         }
         Ok(())
     }
@@ -140,19 +131,18 @@ impl DynamicFamilyPreparationScratch {
         owner: Option<ProgrammingOwner>,
         expression: Arc<DynamicSampleExpression>,
         native_models: Option<&dyn DynamicNativeModelResolver>,
-        previous: &mut HashMap<CacheKey, CompiledSample>,
     ) -> Result<(), TransitionError> {
         if let Some(owner) = owner {
             if self.sampling_required(sample, owner) {
                 return Ok(());
             }
-            self.prepare_owner_sample(sample, owner, expression, native_models, previous)
+            self.prepare_owner_sample(sample, owner, expression, native_models)
         } else {
             let mut legacy = sample.clone();
             legacy.expression = expression.as_ref().clone();
             // A retained hot edit can now address several old scalar attributes.
             legacy.address = None;
-            self.legacy.push(legacy);
+            self.out.legacy(legacy);
             Ok(())
         }
     }
@@ -161,11 +151,10 @@ impl DynamicFamilyPreparationScratch {
         &mut self,
         sources: &dyn DynamicValueSourceResolver,
         native_models: Option<&dyn DynamicNativeModelResolver>,
-        previous: &mut HashMap<CacheKey, CompiledSample>,
     ) -> Result<(), TransitionError> {
         self.position.clear();
         if let Some(first) = self.controller.first() {
-            for sample in &self.controller {
+            for sample in self.controller.iter() {
                 address::ensure(
                     sample.priority == first.priority
                         && sample.activated_at_millis == first.activated_at_millis
@@ -188,7 +177,7 @@ impl DynamicFamilyPreparationScratch {
                 } else {
                     // Split independent owners and legacy before resolving the correlated
                     // Position forest. An unavailable Angle partner cannot erase them.
-                    self.prepare_part(&sample, owner, expression, native_models, previous)?;
+                    self.prepare_part(&sample, owner, expression, native_models)?;
                 }
             }
         }
@@ -220,7 +209,7 @@ impl DynamicFamilyPreparationScratch {
                     Some(TransitionRequirement::LiveJointAngles)
                 } else {
                     let (target, _) = representative.expect("Position source");
-                    self.append(
+                    self.out.append(
                         target,
                         ProgrammingOwner::Position,
                         vec![bundle.position.unwrap()],
@@ -232,7 +221,7 @@ impl DynamicFamilyPreparationScratch {
             Err(error) => return Err(error),
         };
         if let (Some(requirement), Some((target, rank))) = (requirement, representative) {
-            self.requirements.push(DynamicFamilyPreparationRequirement {
+            self.out.require(DynamicFamilyPreparationRequirement {
                 target,
                 owner: ProgrammingOwner::Position,
                 rank,
@@ -262,7 +251,7 @@ impl DynamicFamilyPreparationScratch {
         owner: ProgrammingOwner,
         requirement: TransitionRequirement,
     ) {
-        self.requirements.push(DynamicFamilyPreparationRequirement {
+        self.out.require(DynamicFamilyPreparationRequirement {
             target: sample.target,
             owner,
             rank: rank(sample),
@@ -276,7 +265,6 @@ impl DynamicFamilyPreparationScratch {
         owner: ProgrammingOwner,
         expression: Arc<DynamicSampleExpression>,
         native_models: Option<&dyn DynamicNativeModelResolver>,
-        previous: &mut HashMap<CacheKey, CompiledSample>,
     ) -> Result<(), TransitionError> {
         let rank = rank(sample);
         let key = CacheKey {
@@ -301,9 +289,8 @@ impl DynamicFamilyPreparationScratch {
         let captured_models = if shape.native {
             let captured = PreparedNativeSources::capture(&expression, native_models)?;
             if !captured.unavailable.is_empty() {
-                self.requirements
-                    .extend(captured.unavailable.into_iter().map(|unavailable| {
-                        DynamicFamilyPreparationRequirement {
+                for unavailable in captured.unavailable {
+                    self.out.require(DynamicFamilyPreparationRequirement {
                         target: sample.target,
                         owner,
                         rank,
@@ -311,8 +298,8 @@ impl DynamicFamilyPreparationScratch {
                             DynamicFamilyPreparationRequirementReason::NativeColorModelUnavailable(
                                 unavailable,
                             ),
-                    }
-                    }));
+                    });
+                }
                 return Ok(());
             }
             Some(captured)
@@ -323,7 +310,7 @@ impl DynamicFamilyPreparationScratch {
             .as_ref()
             .map(|models| models as &dyn DynamicNativeModelResolver);
         let compiled = if !shape.native
-            && let Some(cached) = previous.remove(&key)
+            && let Some(cached) = self.previous.take(&key)
             && cached.expression == expression
         {
             cached
@@ -370,9 +357,14 @@ impl DynamicFamilyPreparationScratch {
                 }
             }
         }
-        self.append(sample.target, owner, samples);
+        self.out.append(sample.target, owner, samples);
         if !shape.native {
-            self.cache.insert(key, compiled);
+            match &mut self.keep {
+                Keep::Cache(cache) => {
+                    cache.insert(key, compiled);
+                }
+                Keep::Log(log) => log.push((key, compiled)),
+            }
         }
         Ok(())
     }
@@ -502,85 +494,6 @@ pub fn prepare_dynamic_family_samples_with_requirements<'a>(
         legacy: &scratch.legacy,
         requirements: &scratch.requirements,
     })
-}
-
-fn prepare(
-    samples: &[DynamicRuntimeSample],
-    sources: &dyn DynamicValueSourceResolver,
-    native_models: Option<&dyn DynamicNativeModelResolver>,
-    previous: &mut HashMap<CacheKey, CompiledSample>,
-    scratch: &mut DynamicFamilyPreparationScratch,
-) -> Result<(), TransitionError> {
-    let key =
-        |sample: &DynamicRuntimeSample| (sample.instance_id, sample.controller_id, sample.target.0);
-    // TL-639 round 4: sorted by keys gathered once rather than read through the samples on every
-    // comparison. The index breaks ties; equal keys only occur for a duplicate lane, which the
-    // loop below rejects whatever their order.
-    scratch.sort_keys.clear();
-    scratch.sort_keys.extend(
-        samples
-            .iter()
-            .enumerate()
-            .map(|(index, sample)| (key(sample), sample.lane_id, index)),
-    );
-    scratch.sort_keys.sort_unstable();
-    scratch.order.clear();
-    scratch
-        .order
-        .extend(scratch.sort_keys.iter().map(|(_, _, index)| *index));
-    let mut start = 0;
-    while start < scratch.order.len() {
-        let first = &samples[scratch.order[start]];
-        let mut end = start + 1;
-        while end < scratch.order.len() && key(&samples[scratch.order[end]]) == key(first) {
-            end += 1;
-        }
-        scratch.controller.clear();
-        let mut last_lane = None;
-        let mut has_angles = false;
-        for &index in &scratch.order[start..end] {
-            let sample = &samples[index];
-            address::ensure(
-                last_lane != Some(sample.lane_id),
-                "duplicate Dynamic source lane",
-            )?;
-            address::ensure(
-                sample.activation_mix.is_finite() && (0.0..=1.0).contains(&sample.activation_mix),
-                "Dynamic activation influence must be between zero and one",
-            )?;
-            sample.expression.validate()?;
-            last_lane = Some(sample.lane_id);
-            if is_plain_leaf(&sample.expression) {
-                // TL-639: a plain leaf has no exact branch to prune.
-                has_angles |= sample.expression.contains_angles();
-                scratch.controller.push(sample.clone());
-            } else if let Some(expression) =
-                prune_exact_branches(Arc::new(sample.expression.clone()))?
-            {
-                let mut sample = sample.clone();
-                sample.expression = expression.as_ref().clone();
-                has_angles |= sample.expression.contains_angles();
-                scratch.controller.push(sample);
-            }
-        }
-        if has_angles {
-            // The forest preserves original axis/lane ownership and Current dependencies even
-            // for an ordinary Pan-only effect or an exact Target-to-Angle endpoint.
-            scratch.prepare_position_controller(sources, native_models, previous)?;
-        } else {
-            // Pure Target component lanes retain narrow masks and are never promoted to pairs.
-            for index in 0..scratch.controller.len() {
-                scratch.prepare_sample(
-                    scratch.controller[index].clone(),
-                    native_models,
-                    previous,
-                )?;
-            }
-        }
-        start = end;
-    }
-    scratch.controller.clear();
-    Ok(())
 }
 
 /// A completed hot edit has its selected endpoint's mask. Validate the original history first,
@@ -1081,6 +994,14 @@ fn split_owners(
     }
     Ok(result)
 }
+
+mod controller;
+use controller::*;
+mod parallel;
+pub use parallel::{
+    PreparationSources, PreparationWorkers, PreparedChunk, TARGET_SHARDS,
+    prepare_dynamic_family_samples_in_parallel, shard_chunk, target_shard,
+};
 
 #[cfg(test)]
 mod tests;

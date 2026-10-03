@@ -43,7 +43,6 @@ use super::*;
 use light_core::programming::ColorIntent;
 use light_engine::profile_head_destinations;
 use light_fixture::media_color::MediaColorControls;
-use std::cell::Cell;
 
 #[cfg(test)]
 mod tests;
@@ -146,12 +145,20 @@ pub(in crate::runtime) struct RoutingColorAdapterCounters {
     pub discarded_continuity: u64,
 }
 
+super::counters::counter_sum!(RoutingColorAdapterCounters {
+    lamp_routes,
+    media_routes,
+    reserved_passive,
+    discarded_continuity,
+});
+
 /// Routes the Color owner per target between the existing lamp and Media adapters.
 #[derive(Default)]
 pub(in crate::runtime) struct RoutingColorAdapter {
     lamp: ColorAdapter,
     media: MediaColorAdapter,
-    counters: Cell<RoutingColorAdapterCounters>,
+    /// Shared by parallel frame workers (TL-639 round 5).
+    counters: super::counters::ShardedCounters<RoutingColorAdapterCounters>,
 }
 
 /// Route decision for one target of one captured snapshot.
@@ -171,13 +178,11 @@ impl RoutingColorAdapter {
     }
 
     pub fn counters(&self) -> RoutingColorAdapterCounters {
-        self.counters.get()
+        self.counters.total()
     }
 
     fn count(&self, update: impl FnOnce(&mut RoutingColorAdapterCounters)) {
-        let mut counters = self.counters.get();
-        update(&mut counters);
-        self.counters.set(counters);
+        self.counters.update(update);
     }
 
     /// Classify from the captured profile only.

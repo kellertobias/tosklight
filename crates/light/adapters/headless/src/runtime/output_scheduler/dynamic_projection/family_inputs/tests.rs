@@ -136,7 +136,7 @@ fn fixed_pan_masks_one_axis_of_the_complete_dynamic_pair_and_focus_merges_in_its
     let mut compilation = FixedMaskCompilationScratch::default();
     let fixed = compile_captured_fixed_masks(&input(&rows), None, None, &mut compilation).unwrap();
     let mut scratch = CapturedFamilyInputScratch::default();
-    let groups = assemble_captured_family_inputs(&dynamic, fixed, &mut scratch);
+    let groups = assemble_captured_family_inputs(&dynamic, fixed, &mut scratch, None);
     assert_eq!(groups.len(), 2);
     for group in groups {
         assert!(group.requirements.is_empty());
@@ -213,7 +213,7 @@ fn unavailable_fixed_and_position_inputs_keep_complete_evidence_even_without_rea
     let mut compilation = FixedMaskCompilationScratch::default();
     let fixed = compile_captured_fixed_masks(&input(&rows), None, None, &mut compilation).unwrap();
     let mut scratch = CapturedFamilyInputScratch::default();
-    let groups = assemble_captured_family_inputs(&dynamic, fixed, &mut scratch);
+    let groups = assemble_captured_family_inputs(&dynamic, fixed, &mut scratch, None);
     assert_eq!(groups.len(), 2);
     assert!(groups.iter().all(|group| group.group.samples.is_empty()));
     assert_eq!(groups[0].group.target, target(10));
@@ -253,7 +253,8 @@ fn unavailable_fixed_and_position_inputs_keep_complete_evidence_even_without_rea
                 requirements: &[],
             },
             &[],
-            &mut scratch
+            &mut scratch,
+            None,
         )
         .is_empty()
     );
@@ -278,7 +279,8 @@ fn delayed_fixed_input_neither_masks_nor_reports_unavailable_before_its_activati
                 requirements: &[],
             },
             fixed,
-            &mut CapturedFamilyInputScratch::default()
+            &mut CapturedFamilyInputScratch::default(),
+            None,
         )
         .is_empty()
     );
@@ -301,7 +303,7 @@ fn adding_static_programs_preserves_existing_dynamic_groups_and_deduplicates_tar
     assert_eq!(added, vec![(static_peer, ProgrammingOwner::Position)]);
     assert_eq!(groups[0].group.target, active);
     assert!(groups.iter().all(|entry| entry.group.samples.is_empty()));
-    scratch.clear();
+    scratch.clear(None);
     let (groups, added) = scratch.with_static_targets(&[(active, ProgrammingOwner::Position)]);
     assert_eq!(groups.len(), 1);
     assert_eq!(added, vec![(active, ProgrammingOwner::Position)]);

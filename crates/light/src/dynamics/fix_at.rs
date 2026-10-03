@@ -237,7 +237,7 @@ impl DynamicsService {
                     "complete Current intent is unavailable for FixAT",
                 )
             })?;
-            base.validate_programming_address(&command.owner.key())
+            base.validate_programming_address(command.owner.key_ref())
                 .map_err(invalid)?;
             let fallback = OwnedFamilyEditContext::default();
             let family_context = environment.contexts.get(&target).unwrap_or(&fallback);

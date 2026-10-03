@@ -1153,7 +1153,7 @@ mod frame_address_tests {
             std::sync::Arc::new(crate::SlotTable::compile(3, std::slice::from_ref(&fixture)));
         let addresser = crate::FrameAddresser::new(std::sync::Arc::clone(&slots));
         let address = addresser
-            .frame_address(fixture_id, &AttributeKey::intensity())
+            .frame_address(fixture_id, AttributeKey::intensity_ref())
             .expect("a declared pair has an address");
         assert_eq!(address.generation, 3);
         assert!(
@@ -1167,7 +1167,7 @@ mod frame_address_tests {
         resolver.extend_borrowed_samples([&sample(fixture_id, 0.75).at(Some(address))]);
         let values = resolver.finish().named_values();
         assert_eq!(
-            values.value(fixture_id, &AttributeKey::intensity()),
+            values.value(fixture_id, AttributeKey::intensity_ref()),
             Some(&AttributeValue::Normalized(0.75))
         );
     }
@@ -1188,7 +1188,7 @@ mod frame_address_tests {
         resolver.extend_borrowed_samples([&sample(fixture_id, 0.5).at(Some(stale))]);
         let values = resolver.finish().named_values();
         assert_eq!(
-            values.value(fixture_id, &AttributeKey::intensity()),
+            values.value(fixture_id, AttributeKey::intensity_ref()),
             Some(&AttributeValue::Normalized(0.5))
         );
         assert_eq!(values.value(fixture_id, &AttributeKey("pan".into())), None);

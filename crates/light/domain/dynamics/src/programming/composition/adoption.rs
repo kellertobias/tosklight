@@ -23,7 +23,7 @@ pub(super) fn adopt(
     }
     if let Some(resolve) = context.resolve_adoption {
         let adopted = resolve(&value, address)?;
-        adopted.validate_programming_address(&address.owner().key())?;
+        adopted.validate_programming_address(address.owner().key_ref())?;
         ensure(
             adopted.spread_control_points() == 0 && address.matches_authored_source(&adopted),
             "frame resolver returned an incompatible or unmaterialized family",
@@ -35,7 +35,7 @@ pub(super) fn adopt(
         return Err(TransitionError::Requires(requirement(address)));
     }
     if let Some(adopted) = context.adopted_base {
-        adopted.validate_programming_address(&address.owner().key())?;
+        adopted.validate_programming_address(address.owner().key_ref())?;
         ensure(
             adopted.spread_control_points() == 0 && address.matches_authored_source(adopted),
             "coherent Dynamic adoption has a different representation or remains unmaterialized",
@@ -50,7 +50,7 @@ pub(super) fn adopt(
                 pose.pan_degrees,
                 pose.tilt_degrees,
             )));
-            value.validate_programming_address(&address.owner().key())?;
+            value.validate_programming_address(address.owner().key_ref())?;
             Ok(value)
         }
         DynamicFamilyRepresentation::SemanticColor { .. }

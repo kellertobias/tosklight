@@ -428,7 +428,7 @@ fn prepare_family_inputs_with_origins(
     scratch.trace_enabled = tracing;
     scratch.trace.clear();
     let base_trace = tracing.then(|| scratch.trace.base());
-    base.validate_programming_address(&owner.key())?;
+    base.validate_programming_address(owner.key_ref())?;
     if base.spread_control_points() != 0 || matches!(base, AttributeValue::GroupFamily(_)) {
         return Err(TransitionError::Requires(
             TransitionRequirement::MaterializedEndpoints,

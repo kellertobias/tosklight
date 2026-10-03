@@ -233,9 +233,12 @@ pub(super) fn family_output_frame<T>(
         .filter(|required| required.owner == light_core::programming::ProgrammingOwner::Color)
         .map(|required| required.target)
         .collect();
-    family
-        .accepted_color
-        .record(&published.token, published.results, held);
+    family.accepted_color.record(
+        &published.token,
+        published.results,
+        held,
+        engine.output_pool().as_deref(),
+    );
     let output = finish(OutputRenderSource::Hybrid(published.rendered))?;
     Ok((output, published.sampled))
 }

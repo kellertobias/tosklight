@@ -45,8 +45,10 @@ pub(super) fn prepare_hybrid_frame<T>(
         legacy_owners,
         native_current,
         static_rows,
+        parallel,
     } = scratch;
     native_current.borrow_mut().begin_frame();
+    let output_pool = engine.output_pool();
     let result = sample_captured_dynamic_inputs_with_context(
         runtime,
         inputs,
@@ -96,14 +98,18 @@ pub(super) fn prepare_hybrid_frame<T>(
                         .with_source_transaction(origins)
                         .with_native_current_validation(models.as_ref(), native_current);
                     let completed = deferred.complete(&typed)?;
-                    let prepared = prepare_dynamic_family_samples_with_requirements(
+                    super::parallel_preparation::prepare_families(
                         completed.samples(),
                         completed.requirements(),
                         &typed,
-                        Some(models.as_ref()),
+                        frame,
+                        models.as_ref(),
                         preparation,
+                        observer,
+                        output_pool.as_deref(),
                     )
                     .map_err(invalid)?;
+                    let prepared = preparation.prepared();
                     typed.check().map_err(invalid)?;
                     let control = |rank| endpoint_controls.control_for(rank);
                     let view = CohortView {
@@ -124,7 +130,7 @@ pub(super) fn prepare_hybrid_frame<T>(
                         observer,
                         composition,
                         position_batch_scratch,
-                        static_rows,
+                        (static_rows, parallel, output_pool.as_deref()),
                     )?;
                     let samples = completed.samples().to_vec();
                     finish_cohort(observer, frame, typed, &mut projections, &requirements)?;
@@ -257,7 +263,7 @@ fn collect_legacy_owners(
 
 /// The LegacyOwnerOverlap and ScalarBaselineChanged guards: keep the scalar-resolved owner
 /// until safe family adoption with imported scalar rank/source data exists.
-fn scalar_owner_guard(
+pub(super) fn scalar_owner_guard(
     legacy_owners: &FxHashSet<(FixtureId, ProgrammingOwner)>,
     original: &PreparedStaticFamilyFrame,
     scalar: &PreparedStaticFamilyFrame,
@@ -345,36 +351,44 @@ pub(super) fn prepare_static_with_fixed_bases(
     (static_token, with_fixed_bases)
 }
 
+/// The endpoint output control of a sample rank; shared by a cohort's parallel workers.
+pub(super) type EndpointControl<'a> = dyn Fn(light_dynamics::FamilySampleRank) -> light_dynamics::FamilyEndpointOutputControl
+    + Sync
+    + 'a;
+
 /// The pinned, immutable view one family cohort composes against.
-struct CohortView<'a, 't, S, R> {
-    frame: HybridFrameContext<'a>,
-    resolver: &'a R,
-    typed: &'a CapturedProgrammingSources<'t, S>,
-    static_sources: &'a PreparedFamilySources<'a>,
-    static_token: &'a PreparedStaticFamilyFrame,
-    scalar_token: &'a PreparedStaticFamilyFrame,
-    legacy_owners: &'a FxHashSet<(FixtureId, ProgrammingOwner)>,
-    control:
-        &'a dyn Fn(light_dynamics::FamilySampleRank) -> light_dynamics::FamilyEndpointOutputControl,
+pub(super) struct CohortView<'a, 't, S, R> {
+    pub frame: HybridFrameContext<'a>,
+    pub resolver: &'a R,
+    pub typed: &'a CapturedProgrammingSources<'t, S>,
+    pub static_sources: &'a PreparedFamilySources<'a>,
+    pub static_token: &'a PreparedStaticFamilyFrame,
+    pub scalar_token: &'a PreparedStaticFamilyFrame,
+    pub legacy_owners: &'a FxHashSet<(FixtureId, ProgrammingOwner)>,
+    pub control: &'a EndpointControl<'a>,
 }
 
 /// Composes every family group of one pinned cohort: the Position batch first, then each
 /// remaining owner. Returns the requirements that held owners back and the composed rows.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
-fn compose_family_cohort<T, S: DynamicTickSource, R: HybridFrameResolver>(
-    view: &CohortView<'_, '_, S, R>,
+fn compose_family_cohort<T, R: HybridFrameResolver>(
+    view: &CohortView<'_, '_, PreparedFamilySources<'_>, R>,
     prepared: &light_dynamics::PreparedDynamicFamilySamples<'_>,
     fixed: &[PreparedFixedMask],
     families: &mut CapturedFamilyInputScratch,
     observer: &mut impl HybridFrameObserver<T>,
     composition: &mut RetainedFamilyCompositionScratch,
     position_batch_scratch: &mut Vec<RetainedFamilyCompositionScratch>,
-    static_rows: &mut StaticFamilyRows,
+    (static_rows, parallel, pool): (
+        &mut StaticFamilyRows,
+        &mut Vec<RetainedFamilyCompositionScratch>,
+        Option<&light_engine::parallel::OutputPool>,
+    ),
 ) -> Result<(Vec<HybridFamilyRequirement>, Vec<OwnedHybridProjection<T>>), DynamicRuntimeError> {
     let static_targets = observer
         .static_program_targets(view.frame, view.static_token)
         .map_err(invalid)?;
-    assemble_captured_family_inputs(prepared, fixed, families);
+    assemble_captured_family_inputs(prepared, fixed, families, pool);
     let (groups, static_only) = families.with_static_targets(&static_targets);
     // TL-596: membership is asked once per group and batch row; a slice scan made the cohort
     // quadratic in its static-only targets (thousands at full-rig size).
@@ -392,7 +406,7 @@ fn compose_family_cohort<T, S: DynamicTickSource, R: HybridFrameResolver>(
         .filter_map(|entry| {
             let group = &entry.group;
             view.static_sources
-                .value(group.target, &group.owner.key())
+                .value(group.target, group.owner.key_ref())
                 .map(|base| HybridFamilyProgram {
                     target: group.target,
                     owner: group.owner,
@@ -417,18 +431,17 @@ fn compose_family_cohort<T, S: DynamicTickSource, R: HybridFrameResolver>(
         &mut projections,
         &mut requirements,
     )?;
-    for entry in groups {
-        compose_owner_group(
-            view,
-            entry,
-            static_only,
-            &handled_position,
-            observer,
-            (composition, static_rows),
-            &mut projections,
-            &mut requirements,
-        )?;
-    }
+    super::parallel_groups::compose_owner_groups(
+        view,
+        groups,
+        static_only,
+        &handled_position,
+        observer,
+        (composition, static_rows, parallel),
+        &mut projections,
+        &mut requirements,
+        pool,
+    )?;
     static_rows.finish_cohort();
     requirements.extend(view.typed.requirements().into_iter().map(|required| {
         HybridFamilyRequirement {
@@ -444,7 +457,7 @@ fn compose_family_cohort<T, S: DynamicTickSource, R: HybridFrameResolver>(
 }
 
 /// Static-only `(target, owner)` rows of one cohort.
-type StaticOnlyTargets = FxHashSet<(FixtureId, ProgrammingOwner)>;
+pub(super) type StaticOnlyTargets = FxHashSet<(FixtureId, ProgrammingOwner)>;
 
 /// Targets whose Position Current must stay protected: scalar Position owners, and Position
 /// groups held by a scalar guard, a Fixed mask, or a missing static base.
@@ -473,7 +486,7 @@ fn protected_current_targets<S, R>(
                 })
                 || view
                     .static_sources
-                    .value(group.target, &group.owner.key())
+                    .value(group.target, group.owner.key_ref())
                     .is_none())
         {
             protected_current.push(group.target);
@@ -498,7 +511,7 @@ fn eligible_position_groups<'g, S, R>(
                     || static_only.contains(&(group.target, group.owner)))
                 && view
                     .static_sources
-                    .value(group.target, &group.owner.key())
+                    .value(group.target, group.owner.key_ref())
                     .is_some()
                 && scalar_owner_guard(
                     view.legacy_owners,
@@ -547,7 +560,9 @@ fn compose_position_batch<T, S: DynamicTickSource, R>(
             for mut row in batch.projections {
                 if static_only.contains(&(row.target, row.owner)) {
                     row.metadata = FamilyProjectionMetadata {
-                        changed_at: view.static_token.changed_at(row.target, &row.owner.key()),
+                        changed_at: view
+                            .static_token
+                            .changed_at(row.target, row.owner.key_ref()),
                         evidence: light_engine::FamilyProjectionEvidence::PreserveBaseline,
                         master: light_engine::FamilyProjectionMaster::PreserveBaseline,
                     };
@@ -567,7 +582,7 @@ fn compose_position_batch<T, S: DynamicTickSource, R>(
 
 /// Composes one ordinary owner group, or records the requirement that holds it back.
 #[allow(clippy::too_many_arguments)]
-fn compose_owner_group<T, S: DynamicTickSource, R: HybridFrameResolver>(
+pub(super) fn compose_owner_group<T, S: DynamicTickSource, R: HybridFrameResolver>(
     view: &CohortView<'_, '_, S, R>,
     entry: &CapturedFamilyInput,
     static_only: &StaticOnlyTargets,
@@ -633,7 +648,9 @@ fn compose_owner_group<T, S: DynamicTickSource, R: HybridFrameResolver>(
         scratch: composition,
         static_rows: keeps_row.then_some(static_rows),
     };
-    let base = view.static_sources.value(group.target, &group.owner.key());
+    let base = view
+        .static_sources
+        .value(group.target, group.owner.key_ref());
     let deferred = match base {
         Some(base) => observer.compose_program(
             HybridFamilyProgram {
@@ -663,7 +680,7 @@ fn compose_owner_group<T, S: DynamicTickSource, R: HybridFrameResolver>(
                 let metadata = FamilyProjectionMetadata {
                     changed_at: view
                         .static_token
-                        .changed_at(group.target, &group.owner.key()),
+                        .changed_at(group.target, group.owner.key_ref()),
                     evidence: light_engine::FamilyProjectionEvidence::PreserveBaseline,
                     master: light_engine::FamilyProjectionMaster::PreserveBaseline,
                 };

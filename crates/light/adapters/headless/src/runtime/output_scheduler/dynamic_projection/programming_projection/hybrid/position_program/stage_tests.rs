@@ -692,8 +692,9 @@ fn parent_source_freshness_failure_is_terminal_for_advance_resume_and_observe() 
                         .unwrap()
                         .is_some()
                 );
-                *composer.typed.failure.borrow_mut() =
-                    Some(IntentError("injected captured-source freshness failure".into()).into());
+                composer.typed.set_failure(Some(
+                    IntentError("injected captured-source freshness failure".into()).into(),
+                ));
                 if fail_during_resume {
                     assert!(
                         resume(
@@ -713,7 +714,7 @@ fn parent_source_freshness_failure_is_terminal_for_advance_resume_and_observe() 
                 assert!(parent.pending_stage_locator(request.request_id).is_err());
                 // Clearing the source failure simulates a subsequent safe wrapper. It cannot
                 // resurrect the driver that already crossed a failed captured-source boundary.
-                *composer.typed.failure.borrow_mut() = None;
+                composer.typed.set_failure(None);
                 assert!(advance(composer, &mut parent, &frame, &blocked).is_err());
                 assert!(
                     resume(
@@ -758,8 +759,9 @@ fn parent_source_freshness_failure_is_terminal_for_advance_resume_and_observe() 
                 PositionCompositionProgress::Complete(_)
             ));
             assert_eq!(parent.completed_value(), Some(&angles(30., 45.)));
-            *composer.typed.failure.borrow_mut() =
-                Some(IntentError("injected observation freshness failure".into()).into());
+            composer.typed.set_failure(Some(
+                IntentError("injected observation freshness failure".into()).into(),
+            ));
             assert!(
                 observe::<_, ()>(composer, &mut parent, &mut |_| {
                     panic!("initial freshness failure must precede the observer")
@@ -771,7 +773,7 @@ fn parent_source_freshness_failure_is_terminal_for_advance_resume_and_observe() 
                 parent.completed_value().is_none(),
                 "the cached completed value loses publication authority"
             );
-            *composer.typed.failure.borrow_mut() = None;
+            composer.typed.set_failure(None);
             assert!(parent.pending_stage_locator(Uuid::new_v4()).is_err());
             assert!(advance(composer, &mut parent, &frame, &blocked).is_err());
             assert!(

@@ -56,7 +56,7 @@ pub fn compile_programming_ranks(
         ScalarIntent::Spread(points.clone()).validate(ScalarDomain::UNIT)?;
     }
     if let Some(owner) = value.programming_owner() {
-        value.validate_programming_address(&owner.key())?;
+        value.validate_programming_address(owner.key_ref())?;
     }
     if value.spread_control_points() == 0 {
         return Ok(RankedProgrammingValue::Constant(value.clone()));

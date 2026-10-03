@@ -101,7 +101,7 @@ fn a_failed_composition_keeps_nothing_and_unused_rows_leave_with_their_cohort() 
         ))
     });
     assert!(failed.is_err());
-    assert!(rows.rows.is_empty());
+    assert!(rows.is_empty());
     for key in [used, unused] {
         rows.row(key, &base, &mut scratch, |scratch| {
             Ok(compose(&base, scratch))
@@ -112,9 +112,6 @@ fn a_failed_composition_keeps_nothing_and_unused_rows_leave_with_their_cohort() 
     rows.row(used, &base, &mut scratch, |_| panic!("kept"))
         .unwrap();
     rows.finish_cohort();
-    assert!(rows.rows.contains_key(&used));
-    assert!(
-        !rows.rows.contains_key(&unused),
-        "a row no cohort used is dropped"
-    );
+    assert!(rows.contains(&used));
+    assert!(!rows.contains(&unused), "a row no cohort used is dropped");
 }

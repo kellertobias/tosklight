@@ -43,7 +43,7 @@ impl ComponentFrameAddress {
         fixture: FixtureId,
         component: ProgrammingComponent,
     ) -> Option<Self> {
-        let owner = resolver.frame_address(fixture, &component.owner().key())?;
+        let owner = resolver.frame_address(fixture, component.owner().key_ref())?;
         (owner.generation == resolver.generation()).then_some(Self { owner, component })
     }
     pub const fn is_current(self, generation: u64) -> bool {

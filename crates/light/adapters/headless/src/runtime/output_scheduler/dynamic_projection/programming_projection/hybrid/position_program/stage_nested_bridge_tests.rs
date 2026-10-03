@@ -242,10 +242,11 @@ fn captured_stage_and_graph_prefixes_issue_their_own_nested_graph_authority() {
             *composer.scratch = graph.into_scratch();
 
             // Source failure revokes every kind of pending authority, even after recovery.
-            *composer.typed.failure.borrow_mut() =
-                Some(IntentError("injected source failure".into()).into());
+            composer
+                .typed
+                .set_failure(Some(IntentError("injected source failure".into()).into()));
             assert!(advance_stage(composer, &mut stage, &frame, &blocked).is_err());
-            *composer.typed.failure.borrow_mut() = None;
+            composer.typed.set_failure(None);
             all_stage_locators_reject(&stage, nested.request_id);
             recycle_stage(composer, stage).unwrap();
             let mut graph = begin_graph_branch(
@@ -260,10 +261,11 @@ fn captured_stage_and_graph_prefixes_issue_their_own_nested_graph_authority() {
             .unwrap();
             let failed =
                 graph_pending(advance_graph(composer, &mut graph, &frame, &blocked).unwrap());
-            *composer.typed.failure.borrow_mut() =
-                Some(IntentError("injected graph source failure".into()).into());
+            composer.typed.set_failure(Some(
+                IntentError("injected graph source failure".into()).into(),
+            ));
             assert!(advance_graph(composer, &mut graph, &frame, &blocked).is_err());
-            *composer.typed.failure.borrow_mut() = None;
+            composer.typed.set_failure(None);
             all_graph_locators_reject(&graph, failed.request_id);
             *composer.scratch = graph.into_scratch();
             assert_eq!(

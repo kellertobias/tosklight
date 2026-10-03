@@ -124,7 +124,7 @@ impl ProgrammingFieldScope {
     /// every possible representation of the owner (for example, Angle has no Target fields).
     pub fn for_value(owner: ProgrammingOwner, value: &AttributeValue) -> Result<Self, IntentError> {
         use ProgrammingTraceField as F;
-        value.validate_programming_address(&owner.key())?;
+        value.validate_programming_address(owner.key_ref())?;
         require(
             value.spread_control_points() == 0,
             "trace scope requires materialized programming values",

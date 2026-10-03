@@ -11,7 +11,7 @@ pub fn extract_compatible_dynamic_value(
     context: &FamilyEditContext<'_>,
 ) -> Result<Option<DynamicValue>, IntentError> {
     address.validate()?;
-    family.validate_programming_address(&address.owner().key())?;
+    family.validate_programming_address(address.owner().key_ref())?;
     ensure(
         family.spread_control_points() == 0 && !matches!(family, AttributeValue::GroupFamily(_)),
         "Dynamic extraction requires target materialization",

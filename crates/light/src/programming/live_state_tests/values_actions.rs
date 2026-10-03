@@ -1721,7 +1721,7 @@ fn full_group_color_does_not_leak_linked_native_channels_to_fixture_ownership() 
     let state = setup.registry.get(setup.session).unwrap();
     assert!(state.values.is_empty());
     assert_eq!(
-        state.group_values["front"][&AttributeKey::color()].value,
+        state.group_values["front"][AttributeKey::color_ref()].value,
         value
     );
 }

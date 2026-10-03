@@ -53,7 +53,8 @@ use light_fixture::forward::{
 };
 use light_fixture::{MultiPatchInstance, PatchedFixture};
 use parking_lot::Mutex;
-use std::cell::{Cell, RefCell};
+#[cfg(test)]
+use std::cell::RefCell;
 use uuid::Uuid;
 
 mod direct;
@@ -320,6 +321,33 @@ pub(in crate::runtime) struct ColorAdapterCounters {
     pub fitting_shared: u64,
 }
 
+super::counters::counter_sum!(ColorAdapterCounters {
+    descriptor_compiles,
+    fitting_compiles,
+    fitting_cache_hits,
+    fitting_failures,
+    multi_head_targets,
+    copy_destinations,
+    resolves,
+    fits,
+    refits,
+    result_reuses,
+    shared_conflicts,
+    direct_exact,
+    direct_fallbacks,
+    direct_visible_holds,
+    direct_forward_evaluations,
+    representation_transitions,
+    representation_holds,
+    representation_adoptions,
+    candidates_ranked,
+    visible_solves,
+    fixed_offset_solves,
+    level_solves,
+    forward_evaluations,
+    fitting_shared,
+});
+
 type FittingCache = (
     Arc<Vec<PatchedFixture>>,
     FxHashMap<(FixtureId, Uuid), Option<Arc<CompiledColorFitting>>>,
@@ -338,10 +366,13 @@ type InternedFitting = Result<Option<Arc<CompiledColorFitting>>, ()>;
 
 #[derive(Default)]
 pub(in crate::runtime) struct ColorAdapter {
-    fittings: RefCell<Option<FittingCache>>,
+    // Mutex, not RefCell (TL-639 round 5): parallel frame workers share the adapter. Fitters
+    // compile only on a descriptor miss, which a worker never performs.
+    fittings: parking_lot::Mutex<Option<FittingCache>>,
     /// Fitters shared by instances with identical compile inputs, across fixture lists.
-    interned: RefCell<light_fixture::CompiledModelInterner<FittingInputs, InternedFitting>>,
-    counters: Cell<ColorAdapterCounters>,
+    interned:
+        parking_lot::Mutex<light_fixture::CompiledModelInterner<FittingInputs, InternedFitting>>,
+    counters: super::counters::ShardedCounters<ColorAdapterCounters>,
 }
 
 pub(super) fn invalid(message: impl Into<String>) -> TransitionError {
@@ -398,13 +429,11 @@ fn compile_fitting(
 
 impl ColorAdapter {
     pub fn counters(&self) -> ColorAdapterCounters {
-        self.counters.get()
+        self.counters.total()
     }
 
     fn count(&self, update: impl FnOnce(&mut ColorAdapterCounters)) {
-        let mut counters = self.counters.get();
-        update(&mut counters);
-        self.counters.set(counters);
+        self.counters.update(update);
     }
 
     /// One shared fitter per patched instance of this exact fixture list.
@@ -414,13 +443,13 @@ impl ColorAdapter {
         fixture: &PatchedFixture,
         copy: Option<&MultiPatchInstance>,
     ) -> Option<Arc<CompiledColorFitting>> {
-        let mut cache = self.fittings.borrow_mut();
+        let mut cache = self.fittings.lock();
         if !cache
             .as_ref()
             .is_some_and(|(fixtures, _)| Arc::ptr_eq(fixtures, &snapshot.fixtures))
         {
             *cache = Some((Arc::clone(&snapshot.fixtures), FxHashMap::default()));
-            self.interned.borrow_mut().retain_live();
+            self.interned.lock().retain_live();
         }
         let entries = &mut cache.as_mut().expect("cache installed").1;
         let key = (
@@ -451,7 +480,7 @@ impl ColorAdapter {
                         .map(light_fixture::SharedByIdentity),
                 };
                 self.interned
-                    .borrow_mut()
+                    .lock()
                     .get_or_compile(profile, mode, inputs, || compile().map_err(|_| ()))
             }
             _ => (compile().map_err(|_| ()), true),
