@@ -774,7 +774,8 @@ use SipHash (1.5 %); `ColorIntent::validate` runs five times per target (2.5 %).
 
 Found while profiling, outside this item: the first frame after starting Dynamics on 4,000
 targets spends more than 10 s in `merge_dynamic_address_values`/`dynamic_conflicts`, which is
-quadratic in the Programmer's Dynamic rows. It blocks Live output after a large start.
+quadratic in the Programmer's Dynamic rows. It blocks Live output after a large start. Fixed in
+round 3 (next section).
 
 ### Measurement identities
 
@@ -790,3 +791,188 @@ quadratic in the Programmer's Dynamic rows. It blocks Live output after a large 
   `legacy/`, `semantic/` (gate tables in `summary.json`), `before-after-typed/`, `repeat-125/`
   (with slow-frame logs). Digest runs:
   `.artifacts/tmp/tl639r2/{d,l}-*.json`, compared by `.artifacts/tmp/tl639r2/cmp.py`.
+
+## Semantic output, round 3: linear Dynamic folds, kept static rows (TL-639)
+
+Round 3 was asked to fix the quadratic first frame, then build the per-target compiled plan in
+order of yield: memoised static family rows, numeric leaves rebound into compiled Position and
+family samples, component edits planned over a static base, the second static resolution derived
+from the first, and a real-time or user-interactive class for the output thread. The quadratic
+fix and the static rows were built, each proven byte-identical with the digest harness. The
+output thread class was built, measured, and reverted: it did not reduce late frames. The three
+compiled-plan items for animated rows were not built. The typed deadlines are still missed.
+
+### Gates
+
+Runner, thresholds and reference as in round 2; candidate binary `f2a58342…`. Legacy: five
+alternated rounds against `f67c84e48`; typed tiers three rounds; TL-564 one run per
+configuration. Host: another worktree's debug desk (10-60 % CPU), the MOTU audio driver (about
+12 %) and the desktop app ran throughout; no `mediaanalysisd` or Spotlight indexing, no other
+cargo or rustc. Pipeline ms, medians.
+
+| Gate (existing threshold) | Round 2 | Round 3 |
+| --- | --- | --- |
+| Paired p99 regression ≤ max(1 ms, 5 %), stress 2,000 / 60 Hz | pass, +0.11 | **pass**: 5.80 → 6.33 (+0.53) |
+| Paired p99 regression, stress 4,000 / 60 Hz | pass, +0.44 | **pass**: 11.80 → 12.45 (+0.65) |
+| Paired p99 regression, hard floor 4,148 / 125 Hz | pass, -0.51 | **pass**: 4.70 → 4.12 (-0.58); 125 Hz held 5 of 5 |
+| Typed stress 2,000 / 60 Hz: rate held, 0 misses | fail, p99 85.22, 14.2 Hz | **fail**: p50 71.72, p99 91.38, 13.8 Hz |
+| Typed stress 4,000 / 60 Hz | fail, p99 174.3, 6.5 Hz | **fail**: p50 155.87, p99 177.76, 6.5 Hz |
+| Typed hard floor 4,148 / 125 Hz | fail, p99 28.29, 48.3 Hz | **fail**: p50 18.68, p99 23.56, 52.5 Hz (315 misses per round) |
+| TL-564 mix, 27 configurations: rate held, 0 misses | 25 pass | 24 pass (see below) |
+| No generation change or compile from motion | pass | pass |
+| Static bases: 0 Position fits, dependents 6 / 24, unchanged Colour skips solves | pass | pass |
+| Readout consumers do not multiply physical solves | pass | pass |
+
+The three TL-564 failures: static-points, 30 Hz tracking at 44 Hz output, dropped 3 ticks with
+no frame over 7.1 ms (the scheduler did not run on time); all-points-move at 60/60 Hz and
+static-points 30 Hz tracking at 125 Hz had 1 and 2 late frames. Different configurations fail
+in every campaign. Ten alternated 125 Hz all-points-move repeats (`repeat-125/`): round-2 code
+late in 7 of 20 runs (9 frames), this build in 10 of 20 (16); a separate five-round A/B of the
+same workload gave equal pipeline p50 (2.8-3.2 ms both) and 5 late frames for round 2, 2 for
+this build.
+
+Typed tiers, round-2 code (`a4d93948c`, rebuilt) alternated with this one, three rounds
+(`before-after-typed/`):
+
+| Profile | Round 2 p50 / p99 | Round 3 p50 / p99 | Rate |
+| ---: | ---: | ---: | ---: |
+| Typed stress 2,000, 60 Hz | 71.35 / 87.97 | 71.85 / 91.95 | 13.9 → 13.7 Hz |
+| Typed stress 4,000, 60 Hz | 155.66 / 186.07 | 158.88 / 166.95 | 6.4 → 6.3 Hz |
+| Typed hard floor, 125 Hz | 20.25 / 28.64 | 18.60 / 25.80 | 48.0 → 52.7 Hz |
+
+The hard floor p50 falls 8 %. The stress tiers are unchanged within the host's spread (single
+stress 2,000 p99 runs 77.6-101.0 ms); their profiles contain no measurable share of the new code.
+Resident memory: typed 370 → 373 MB (stress 2,000), 263 → 273 MB (hard floor).
+
+### The quadratic first frame
+
+Starting a Dynamic on 4,000 targets took 14.2 s for the first frame and 19.4 s for the whole
+benchmark start; Live output was blocked for that time.
+
+- `merge_dynamic_address_values` (the Off/On precedence fold of one Programmer's Dynamic rows)
+  compared every row with every other row. A row is dropped by a conflicting row that is later,
+  or that precedes it in storage without being earlier. Every row that can conflict with a row
+  lies in one of at most three buckets of that row (same fixture, owner and track key; whole-owner
+  Release against unlinked rows; an instance against its Off rows), and inside a bucket "some
+  member drops this row" reduces to a few maxima over ordered and unordered (legacy zero-order)
+  members. The fold is now O(n log n); inputs of up to 24 rows keep the pairwise scan.
+- The same start spent 3 s in `ProgrammerRegistry::apply_dynamic_values`, which removed the rows
+  each mutation replaces by scanning all stored rows, under the Programmer lock. A Live gesture
+  over many targets now applies through buckets of stored rows (every member of a used bucket is
+  removed, so each row is visited a bounded number of times). Preload keeps the row-by-row path:
+  its released-colour bookkeeping reads the rows between mutations.
+- Result at 4,000 targets: first frame 14.2 s → 0.68 s (2,000 targets: 0.25 s), benchmark start
+  19.4 s → 2.0 s. The remaining first frame is the generation's one-off compile (adapter
+  descriptors, profile head destinations, projection plans).
+- Tests: `indexed_fold_keeps_exactly_the_rows_the_pairwise_relation_keeps` (600 random cases
+  with ties, legacy zero orders, Off, Release, component holds, storage orders) and
+  `fold_time_grows_near_linearly_with_target_count` (25 µs per target bound; the pairwise fold
+  needs 64 ms at 1,000 targets and fails it); `indexed_gesture_leaves_the_rows_and_change_answer_of_the_row_by_row_path`
+  (400 random gestures, rows and the "changes" answer) and
+  `large_gestures_apply_in_time_proportional_to_their_targets` (25 µs per target; the
+  row-by-row path takes 53 ms at 1,000 targets).
+- `origin/main` (`f67c84e48`, as fetched in this worktree) does not have this fold: it
+  reconciles Programmer Dynamics by grouping rows per instance link in one pass. The quadratic
+  path came with this branch's Off/On precedence rules.
+
+### Equivalence
+
+Every step was compared with `a4d93948c` (built separately) by `--digest-ticks` on the eight
+round-1 workloads (20 ticks) and `--digest-lifecycle` on typed and legacy stress 2,000 and hard
+floor (30 ticks): every fixture, tick, DMX checksum, Point pose and work counter matched, and
+every lifecycle event reported the same outcome. The whole-target Colour replay increments the
+Colour counters exactly as the per-head replays it stands for, so the work counters stay equal.
+
+### What changed
+
+- **Kept static-only compositions** (`programming_projection/static_rows.rs`). A static-only
+  owner (Colour or Zoom with no Dynamic samples, kept so the adapter fits its static value)
+  recomposed its base every frame. Composition without samples reads only the owner, the base and
+  the fixed authoring model: it adopts nothing, samples no Current and resolves no transition. The
+  composed value and its trace are kept per lane, target and owner while the base is equal; Position
+  is excluded (its base composition can adopt through the frame geometry). Tests:
+  `a_kept_row_is_the_composition_of_its_base_and_recomposes_only_when_the_base_changes` (with a
+  frame resolver that panics if consulted) and
+  `a_failed_composition_keeps_nothing_and_unused_rows_leave_with_their_cohort`.
+- **Kept source projections.** The observer's projection of a kept row reads the trace query, the
+  bound static-evidence occurrence and that occurrence's record. It is answered again while the
+  requested fields and the freshly bound occurrence are equal and the record catalogue is the same
+  allocation (`DynamicSourceOrigins::records_identity`: records are immutable, and a held `Weak`
+  moves the catalogue on its next write). The binding still runs every frame.
+- **Whole-target Colour replay** (`physical_adapter/color/target_memo.rs`). A head replays its
+  memo while the intent and its fit inputs of the seeded native vector are unchanged and the vector
+  passes the fitter's range check. When the intent, the previous continuity and the native values
+  of every head's inputs and controls are unchanged, and the raw vector passes the range check,
+  every head would replay; the target returns the kept result with zeroed work, as those replays
+  publish it. Intensity and other channels outside the key may change. It is kept only from the
+  second resolve of an unchanged intent on, so animated targets pay one comparison. Test:
+  `an_unchanged_target_replays_whole_and_any_key_change_resolves_again`.
+
+### Output thread class (not kept)
+
+Ten alternated rounds of TL-564 all-points-move at 125 Hz (30 and 120 Hz tracking, 20 runs per
+class) with one binary, the measuring thread in each class:
+
+| Class | Runs with late frames | Late frames | p99 median |
+| --- | ---: | ---: | ---: |
+| Default | 6 / 20 | 9 | 4.24-4.26 ms |
+| User-interactive QoS (`pthread_set_qos_class_self_np`) | 8 / 20 and 10 / 20 | 9 and 15 | 4.18-4.34 ms |
+| Real-time (Mach time-constraint policy, computation half the period) | 19 / 20 | 4,243 | 10.83 ms |
+
+User-interactive QoS did not reduce late frames; the real-time policy made every run late. The
+late frames take 8.1-12 ms against a 3-4 ms median, also with user-interactive QoS. A
+scheduling cause is still likely for some (the dropped ticks above, captures of 0.26-0.53 ms
+instead of 0.03 ms) but a class request does not remove them. The change (a platform crate with
+the only `unsafe` call, the desk's output thread and a benchmark option) was reverted; the
+attempt is kept under `.artifacts/tmp/tl639r3/qos-attempt/`. The repository has no existing
+platform abstraction for thread scheduling, and the desk runtime, output and benchmark crates
+forbid `unsafe`.
+
+### Not built, and where the time goes now
+
+CPU samples of the final binary, share of the frame:
+
+- **Typed stress 2,000 (about 71 ms).** Family composition 41 %: composition of animated rows
+  25 % (retained composition 9.5 %, of which base evaluation 8.7 %; Colour observation 15 %, of
+  which the Colour fit 4.8 %), the Position observer's program composition 4.7 % and cohort fit
+  3.8 %. Typed preparation 22 % (Position forest bundling 8.1 %, expression validation 3 %).
+  Deferred sampling 7.6 %, cohort finish 5.6 %, final render 6.5 %, pinning and binding 6.5 %.
+  Freeing and copying the per-frame structures: about 21 %.
+- **Typed hard floor (about 18.6 ms).** Static Colour rows 23 % (native capture 5.6 %, source
+  binding 4.8 %, field scopes with intent validation 3.7 %, the replayed result's copy 2.7 %),
+  final render 21 %, the two static resolutions 8.6 %, native
+  family rows 7.5 %, static target discovery 3.4 %, accepted Colour record 2.5 %.
+
+The three items not built carry the stress tiers' remaining distance, and each needs a design
+that keeps lineage exact:
+
+1. **Numeric leaves rebound into compiled samples (stress, about 22 %).** The Position forest
+   (`bundle_position_component_forest`) builds a tape, a forest and a `CompiledCoupledExpression`
+   per target and frame, and the lineage it carries (`PositionForestLineage`: tapes, whole and
+   cohort-member maps, the retained samples) is read later by the Position observer's cut
+   coordinator and resume paths. A plan keyed by expression shape needs a mapping from every tape
+   leaf to its compiled node and lineage entry, and a proof that a rebound plan's lineage equals a
+   fresh build; neither exists yet.
+2. **Component edits over a static base (stress, about 9 %).** `BaseEvaluation` rebuilds its
+   tasks, segments and trace arena for the recipe components of every animated row.
+3. **The second static resolution (hard floor, about 9 %).** It re-offers every Playback and
+   Programmer contribution to add the Intensity samples. Deriving it needs the sampled-replacement
+   filter, the Programmer underlay and Move-in-Black (which read the sampled values) applied as a
+   delta, and arbitration ties must not depend on offer order.
+
+Smaller items seen: the static-evidence binding looks its record up in a `BTreeMap` of all records
+per target and frame (4.8 % hard floor); `ProgrammingFieldScope::for_value` validates the whole
+Colour intent for every field-scope query (3.7 %).
+
+### Measurement identities
+
+- Baseline: `f67c84e48`, binary `8a95e4a0…`.
+- Before and digest reference: `a4d93948c` built in `.artifacts/tmp/tl639/base`, binary
+  `0133953b…` (`.artifacts/tmp/tl639r3/bin/lb-base`).
+- Candidate: `a4d93948c` plus the round-3 working tree, binary `f2a58342…`
+  (`.artifacts/tmp/tl639r3/bin/lb-final`), `--release --locked --no-default-features`; source
+  manifest `.artifacts/tmp/tl639r3/identity/final-source-manifest.json`.
+- Evidence: `.artifacts/performance/semantic-output/tl639r3-final-20261003T151215Z/`
+  (`legacy/`, `semantic/`, `before-after-typed/`, `repeat-125/`); output-class runs
+  `.artifacts/tmp/tl639r3/qos-{1,2}/`. Digest runs `.artifacts/tmp/tl639r3/{d,l}-*.json` and
+  summaries `digest-*.txt`, compared by `.artifacts/tmp/tl639r3/cmp.py`.
