@@ -585,7 +585,8 @@ target at stress 2,000:
    per-head view would serve the hybrid and legacy paths alike.
 
 Each of these changes a data model shared with Preload and the cut coordinator, so each needs the
-same frame-by-frame equivalence evidence as this work.
+same frame-by-frame equivalence evidence as this work. Round 2 (next section) did item 4 and
+measured what the others still cost.
 
 ### Measurement identities
 
@@ -600,3 +601,192 @@ same frame-by-frame equivalence evidence as this work.
   `.artifacts/tmp/tl639/cmp.py`.
 - The host was quiet during the final campaign.
 
+## Semantic output, round 2: indexed lookups, kept winners, numbered family owners (TL-639)
+
+Round 2 asked for a per-target compiled plan: composition, observation, the Position forest and
+coupled expressions compiled once per generation, so a frame only samples numbers into pooled
+buffers. That plan was not built. What was built removes overhead the round-1 profile could not
+see behind the larger items: quadratic scans, a per-head map rebuilt for every native channel,
+name lookups forced by unnumbered family owners, Programmer winners arbitrated two or three times
+per frame, and per-frame map rebuilds in the lane commit. Outputs are byte-identical to the
+round-1 build on every digest workload, including a new lifecycle digest that covers fades,
+FixAT, Freeze, Preload GO and the output masters. The typed deadlines are still missed.
+
+### Gates
+
+Same runner, thresholds and host as round 1, final binary `630e5382…`. Legacy: five
+alternated rounds against the pre-semantic baseline (`f67c84e48`); typed tiers three rounds;
+the TL-564 matrix one run per configuration. The host was **not** quiet: macOS
+`mediaanalysisd` (about 115 % CPU), later `spotlightknowledged` (about 100 %) and another
+worktree's debug desk ran throughout; no other cargo or rustc ran. Pipeline ms, medians.
+
+| Gate (existing threshold) | TL-639 round 1 | Round 2 |
+| --- | --- | --- |
+| Paired p99 regression ≤ max(1 ms, 5 %), stress 2,000 / 60 Hz | pass, +0.18 | **pass**: 5.94 → 6.04 (+0.11) |
+| Paired p99 regression, stress 4,000 / 60 Hz | pass, -0.04 | **pass**: 12.15 → 12.59 (+0.44) |
+| Paired p99 regression, hard floor 4,148 / 125 Hz | pass, -0.63 | **pass**: 4.57 → 4.06 (-0.51); 125 Hz held 5 of 5 |
+| Typed stress 2,000 / 60 Hz: rate held, 0 misses | fail, p99 95.18, 11.3 Hz | **fail**: p50 70.39, p99 85.22, 14.2 Hz |
+| Typed stress 4,000 / 60 Hz | fail, p99 208.42, 5.0 Hz | **fail**: p50 154.0, p99 174.3, 6.5 Hz |
+| Typed hard floor 4,148 / 125 Hz | fail, p99 41.05, 28.3 Hz | **fail**: p50 20.26, p99 28.29, 48.3 Hz |
+| TL-564 mix, 27 configurations: rate held, 0 misses | 25 pass | 25 pass; static-points at 125 Hz with 60 and 120 Hz tracking had 1 and 2 late frames (see below) |
+| No generation change or compile from motion | pass | pass |
+| Static bases: 0 Position fits, dependents 6 / 24, unchanged Colour skips solves | pass | pass |
+| Readout consumers do not multiply physical solves | pass | pass |
+
+Legacy resident memory, baseline → candidate: stress 2,000 238 → 70 MB, stress 4,000 456 →
+115 MB, hard floor 212 → 80 MB.
+
+Typed tiers, the round-1 binary (`d09bbd1e…`, `61a62dc33`) alternated with this one,
+three rounds (`before-after-typed/`):
+
+| Profile | Round 1 p50 / p99 | Round 2 p50 / p99 | Rate | RSS |
+| ---: | ---: | ---: | ---: | ---: |
+| Typed stress 2,000, 60 Hz | 81.04 / 87.63 | 70.76 / 86.03 | 12.2 → 14.0 Hz | 372 → 366 MB |
+| Typed stress 4,000, 60 Hz | 185.50 / 208.75 | 153.48 / 168.16 | 5.4 → 6.5 Hz | 680 → 689 MB |
+| Typed hard floor, 125 Hz | 28.76 / 33.38 | 20.38 / 25.84 | 34.4 → 48.2 Hz | 278 → 264 MB |
+
+The p50 falls by 13 % (stress 2,000), 17 % (stress 4,000) and 29 % (hard floor). The stress
+2,000 p99 moved little because two of its six runs met the busiest moments of the host (single
+runs 76.6-105.3 ms). Against the TL-553 binary the hard floor p50 has fallen from 50.9 to 20.4 ms.
+
+### Equivalence
+
+Every step was compared with the round-1 build (`61a62dc33` plus only the harness files below,
+built separately) with `light-benchmark --digest-ticks`: the eight round-1 workloads (20 ticks)
+and, new, `--digest-lifecycle` on typed and legacy stress 2,000 and hard floor (30 ticks). The
+lifecycle run applies, before fixed ticks, a faded Programmer change of Color, Position and
+Intensity, a FixAT of whole Color and Position families, a full and a partial Freeze with
+installation Pan/Tilt inversion (a patch replacement, so also a generation change), a Preload GO
+with a Programmer Fade, the Freeze release, then Grand Master at half, Blackout and control loss.
+Both reference runs reproduce on every fixture and tick; every candidate matched on every
+fixture, tick, DMX checksum, Point pose and work counter, and each event reported the same
+outcome. The harness needed `LiveOutputBench::replace_snapshot` (the desk's prepare/install pair
+for a changed patch); the reference build carries the same harness files.
+
+### What changed
+
+- **Head values read through the frame** (`profile_projection/head_values.rs`). A head on the
+  overlay path, and every fitted native channel, copied its fixture's values and sequence masters
+  into two hash maps. `HeadValueView`/`HeadMasterView` answer each lookup exactly as those maps
+  did (an unnumbered value of a name wins over a numbered one) and keep only the head's own
+  writes, inline. Without control loss, hazardous Blackout or a Highlight look, seeding a native
+  candidate only replaces its own attribute. Test:
+  `head_lookups_answer_like_the_head_maps_they_replaced` (dense frame with unnumbered values, and
+  values handed over by name).
+- **Kept Programmer winners** (`programmer_memo.rs`). Round 1 kept the evaluation; the
+  replacement filter and winner arbitration still ran for every static resolution. The winners
+  are a pure function of the kept evaluation and of the positions the filter removed, so each
+  kept evaluation keeps up to four arbitrations by removed set and offers them borrowed. The key
+  is the evaluation's own key (Programmer vectors by identity, generation, tracing and replacement
+  flags, transition-history version); a new evaluation starts empty. Tests:
+  `kept_winners_belong_to_one_evaluation_and_removed_set` (every input, removed sets, beyond the
+  kept count) and `kept_winners_equal_a_fresh_arbitration_for_every_removed_set_and_flag`.
+- **Family owners are numbered** (`frame_slots.rs`). `position`, `zoom` and `focus` join
+  `intensity` and `color` as attributes every profile head numbers. A typed Position value used to
+  land in the unnumbered overflow of every head that held one, and an overflowed head answers every
+  channel read the patch did not number (the control attribute of every channel, first) by
+  hashing the name. Arbitration of a numbered and an unnumbered value is the same function. Two
+  engine tests used `position`/`zoom` as their example of an unnumbered pair; they now use an
+  unpatched target and `iris`.
+- **Quadratic scans removed.** Per target, the Position batch composer scanned every group
+  (membership, twice per call), the Position observer scanned every program and every current
+  cohort, and Position static targets used `Vec::contains`. Each is now an index built once per
+  frame with the same first-match and duplicate rules.
+- **Smaller per-frame work.**
+  - The physical lane commits in place (entries stamped per accept; untouched entries are
+    released) and lends the previous continuity to the adapter instead of cloning it.
+  - Family sidecars are boxed: a 768-byte row moved through several vectors per frame.
+  - Accepted Colour heads and outputs are sized exactly; native family writes are validated once
+    per owner run; `same_static_baseline` reads each winner once (`StaticWinner`).
+  - A Position-only forest decides it has no remainder by reading the tape instead of copying and
+    compacting it; the Programmer colour set is only built when a Group colour exists.
+
+### Where the time goes now
+
+CPU samples of the final binary, share of the frame:
+
+- **Typed stress 2,000 (≈70 ms).**
+  - Family composition and observation, 40 %: Colour observation 13 % (Colour resolve 8 %, of
+    which fitting about 4.5 %; source projection 4.3 %), retained composition about 7 %, the
+    Position observer's program composition 5.4 % and program preparation 3.1 %, input assembly
+    4.4 % (mostly freeing the previous frame's samples).
+  - Typed preparation 22 %: the Position forest 8.8 %, owner samples 5.1 %, expression
+    validation 2.9 %, the sample sort 1.7 %.
+  - Deferred typed sampling 7.2 %, cohort finish 5.6 %, pinning 3.1 %, source binding 3.1 %.
+  - Final render 5.6 %, static resolutions 2 %. Allocation and copies are about 19 %.
+- **Typed hard floor (≈20 ms).**
+  - Family composition 42 %, almost all of it the static Colour owner of every head: Colour
+    resolve 12.6 % (native capture 5 %, the memoised fit 3 %), source projection 8.8 %,
+    retained composition 4.4 %, static target discovery 3.1 %.
+  - Final render 16 %, the two static resolutions 8 %, native family rows 7 %, accepted Colour
+    record 2.3 %, pinning and source binding 5 %.
+
+### Isolated late frames at 125 Hz (TL-564)
+
+`LIGHT_BENCHMARK_SLOW_FRAME_MS=N` prints the phase breakdown of every frame over N ms.
+
+- Late frames fall on different ticks in every run and are not tied to a tracking sample.
+- In some, every phase slows at once: the capture, a fixed 0.03 ms of work, took 0.18-0.56 ms
+  next to a 7-10 ms transaction. In others only the transaction is long (7.4-9.8 ms against
+  about 4 ms).
+- Ten alternated runs of each build at 125 Hz (all-points-move, 30 and 120 Hz tracking,
+  `repeat-125/`) gave late frames in 4 runs for each build, 1-2 frames each. In this campaign's
+  matrix the two late runs were static-points, not all-points-move.
+- Clamped to the efficiency cores (`taskpolicy -c utility`), the same run has 61 late frames at a
+  p50 of 3.8 ms.
+
+The evidence points to the scheduling of a default-QoS output thread on a busy host
+(descheduling, or a move to a slower core), not to a path this work changed. A frame-work cause
+for the frames where only the transaction is long is not excluded. The next step is a real-time
+or user-interactive QoS class for the output thread of the desk and the benchmark, which needs a
+platform call. The runs stay counted as failures.
+
+### What the compiled plan still needs
+
+Measured by p99, the typed tiers are 5.1× (stress 2,000), 10.4× (stress 4,000) and 3.5× (hard
+floor) from their budgets. No remaining item is larger than 9 %: the cost is spread over the
+per-target pipeline, which builds and discards structures every frame. Reaching the budgets
+needs the compiled plan, in this order of yield:
+
+1. **Static family rows (hard floor, about 30 %).** A static-only Colour owner recomposes, projects
+   its sources and resolves its native writes every frame for the same answer. A per-lane,
+   per-target memo of (composed value, provenance, resolution, metadata) needs an exact change
+   token for each input: the static winner (value `Arc` identity, change time, evidence and origin
+   identity), the bound static-evidence occurrence, the previous continuity, and the native raw
+   values of the head's Colour inputs. The last needs per-channel slot change detection; the
+   whole-fixture native vector changes with Intensity every frame. The binding call must still
+   run, because it keeps the occurrence alive.
+2. **Typed preparation (stress, 22 %).** Animated lanes produce new expressions every frame, so the
+   compiled-sample cache never hits. A plan keyed by expression *shape* with numeric leaves rebound
+   needs a rebinding entry point for `FamilyCompositionSample` and, for the Position forest,
+   `CompiledCoupledExpression` (round 1, item 1) that keeps lineage, occurrences and Current
+   dependencies exact.
+3. **Component edits over a static base (stress, about 11 %).** `BaseEvaluation` rebuilds its
+   tasks, segments and trace arena for three recipe components per target (round 1, item 2), and
+   the source projection replays the same trace query.
+4. **The second static resolution (hard floor, 4 %).** The scalar lane re-offers every Playback and
+   Programmer contribution only to add the Intensity samples; deriving it from the original lane
+   needs the sampled-replacement filter to be applied as a delta.
+
+Smaller, safe items found but not done: the cue and Playback source-binding passes scan every
+authored binding twice per frame with a record lookup each (2 %); the per-instance Dynamics maps
+use SipHash (1.5 %); `ColorIntent::validate` runs five times per target (2.5 %).
+
+Found while profiling, outside this item: the first frame after starting Dynamics on 4,000
+targets spends more than 10 s in `merge_dynamic_address_values`/`dynamic_conflicts`, which is
+quadratic in the Programmer's Dynamic rows. It blocks Live output after a large start.
+
+### Measurement identities
+
+- Baseline: `f67c84e48`, binary `8a95e4a0…`.
+- Before: the round-1 final binary `d09bbd1e…` (`61a62dc33`).
+- Reference for equivalence: `61a62dc33` plus only the harness files (`digest.rs`,
+  `digest_lifecycle.rs`, `mod.rs`, `semantic_arguments.rs`, `live_output_bench.rs`), built in
+  `.artifacts/tmp/tl639/base`.
+- Candidate: `61a62dc33` plus the round-2 working tree, binary `630e5382…`,
+  `--release --locked --no-default-features`; source manifest
+  `.artifacts/tmp/tl639r2/identity/final-source-manifest.json`.
+- Evidence: `.artifacts/performance/semantic-output/tl639r2-final-20261003T131225Z/`:
+  `legacy/`, `semantic/` (gate tables in `summary.json`), `before-after-typed/`, `repeat-125/`
+  (with slow-frame logs). Digest runs:
+  `.artifacts/tmp/tl639r2/{d,l}-*.json`, compared by `.artifacts/tmp/tl639r2/cmp.py`.

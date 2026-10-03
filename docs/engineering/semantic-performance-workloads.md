@@ -259,6 +259,15 @@ Scenarios:
   head values, physical rows and accepted Colour results. Dynamic instance identities are derived
   from their definitions in this mode, so two builds compare frame by frame
   (`engine-render-performance-series.md`, section TL-639).
+  - `--digest-lifecycle` (TL-639 round 2) applies operator events before fixed ticks of the
+    digest run: a faded Programmer change of Color, Position and Intensity (tick 2), a FixAT of
+    whole Color and Position families (5), a full and a partial Freeze plus installation Pan/Tilt
+    inversion through a patch replacement (8), a Preload GO with a Programmer Fade (11) and the
+    Freeze release (17), then Grand Master at half (20-22), Blackout (23) and control loss
+    (24-26). Each event's outcome is part of the digest.
+- `LIGHT_BENCHMARK_SLOW_FRAME_MS=N` (diagnostics only): every semantic frame whose pipeline took
+  longer than N ms prints its tick and phase breakdown (capture, transaction, publication,
+  encode) to stderr. Used to locate isolated late frames.
 
 Each semantic scenario report carries a `semantic` section with the following:
 
