@@ -125,21 +125,24 @@ export async function programmer(api: ApiDriver): Promise<ProgrammerState> {
   return current;
 }
 
+/**
+ * Retries until one programmer satisfies `assertion`. A failed `expect` inside `expect.poll` is not
+ * retried, so the poll would read once; `toPass` retries the whole block until the deadline.
+ */
 export async function expectProgrammer(api: ApiDriver, assertion: (state: ProgrammerState) => void | Promise<void>): Promise<void> {
-  await expect.poll(async () => {
+  await expect(async () => {
     const programmers = await api.request<ProgrammerState[]>("GET", "/api/v2/programmers");
     let error: unknown;
     for (const state of programmers) {
       try {
         await assertion(state);
-        return true;
+        return;
       } catch (candidate) {
         error = candidate;
       }
     }
-    if (error) throw error;
-    throw new Error("No programmer matched assertion");
-  }, { timeout: 3_000 }).toBe(true);
+    throw error ?? new Error("No programmer matched assertion");
+  }).toPass({ timeout: 3_000 });
 }
 
 export async function fixtureIdsByNumber(api: ApiDriver): Promise<Record<number, string>> {
