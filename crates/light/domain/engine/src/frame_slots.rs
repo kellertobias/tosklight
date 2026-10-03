@@ -42,7 +42,12 @@ impl Slot {
 const UNNUMBERED: u32 = u32::MAX;
 
 /// Attributes every profile head can hold regardless of the channels its mode declares.
-const SYNTHESISED_HEAD_ATTRIBUTES: &[&str] = &["intensity", "color"];
+///
+/// TL-639 round 2: the semantic family owners are numbered too. A typed Position, Zoom or Focus
+/// value used to land in the unnumbered overflow of every head that held one, which sent every
+/// channel read of that head (the never-numbered control attribute first) through a name lookup.
+/// Arbitration of a numbered and an unnumbered value is the same; only where it is kept changes.
+const SYNTHESISED_HEAD_ATTRIBUTES: &[&str] = &["intensity", "color", "position", "zoom", "focus"];
 
 /// The two attributes every head is asked for before its channels are resolved.
 ///

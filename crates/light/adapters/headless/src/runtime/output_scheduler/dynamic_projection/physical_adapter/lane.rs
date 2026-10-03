@@ -42,6 +42,8 @@ struct Committed<C> {
     continuity: C,
     provenance: PhysicalProvenance,
     token: CapturedFrameToken,
+    /// The accept that last produced or held this entry; anything older is released.
+    stamp: u64,
 }
 
 struct Staged<C> {
@@ -66,6 +68,8 @@ struct LaneState<A: PhysicalFamilyAdapter> {
     released: Vec<ReleasedPhysicalOwner>,
     /// Reused by `verify`: the first raw value staged for each shared native slot.
     shared_slots: FxHashMap<NativeControlSlot, u32>,
+    /// Number of accepted frames; stamps the committed entries each accept keeps.
+    accepts: u64,
 }
 
 /// One lane of one family adapter. Interior mutability lets the same lane serve as the hybrid
@@ -107,6 +111,7 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
                 last_accepted: None,
                 released: Vec::new(),
                 shared_slots: FxHashMap::default(),
+                accepts: 0,
             }),
         }
     }
@@ -244,15 +249,22 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
             sources,
             controls,
         };
-        let previous = self.continuity(target, owner);
+        // Borrowed, not cloned (TL-639 round 2): the adapter never reaches this lane's state.
+        let state = self.state.borrow();
+        let previous = state
+            .committed
+            .get(&(target, owner))
+            .map(|entry| &entry.continuity);
         let resolution = self.adapter.resolve(PhysicalRequest {
             frame,
             target,
             owner,
             descriptor: &descriptor,
             value: observation.value,
-            previous: previous.as_ref(),
-        })?;
+            previous,
+        });
+        drop(state);
+        let resolution = resolution?;
         validate_complete_writes(self.adapter.footprint(&descriptor), &resolution.writes)?;
         let metadata = self.adapter.projection_metadata(owner, &provenance);
         self.stage_resolution(
@@ -414,32 +426,40 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
             return false;
         }
         let staged = state.staged.take().expect("matched staged frame");
-        let mut previous = std::mem::take(&mut state.committed);
+        // TL-639 round 2: updated in place. Produced entries replace theirs, held owners keep
+        // theirs, and every entry neither touched is released with its last provenance.
+        state.accepts += 1;
+        let stamp = state.accepts;
         for (key, continuity, provenance) in staged.entries {
-            previous.remove(&key);
             state.committed.insert(
                 key,
                 Committed {
                     continuity,
                     provenance,
                     token: staged.token.clone(),
+                    stamp,
                 },
             );
         }
         for key in staged.held {
-            if let Some(entry) = previous.remove(&key) {
-                state.committed.insert(key, entry);
+            if let Some(entry) = state.committed.get_mut(&key) {
+                entry.stamp = stamp;
             }
         }
-        state.released = previous
-            .into_iter()
-            .map(|((target, owner), entry)| ReleasedPhysicalOwner {
+        let LaneState {
+            committed,
+            released,
+            ..
+        } = &mut *state;
+        released.clear();
+        released.extend(committed.extract_if(|_, entry| entry.stamp != stamp).map(
+            |((target, owner), entry)| ReleasedPhysicalOwner {
                 target,
                 owner,
                 last_token: entry.token,
                 last_provenance: entry.provenance,
-            })
-            .collect();
+            },
+        ));
         state.last_accepted = Some(staged.token);
         self.adapter.accept_lane_frame(token);
         true

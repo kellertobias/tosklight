@@ -111,11 +111,16 @@ impl Engine {
                 lane.addresses,
             )
         });
-        let programmer_colors = programmer
-            .iter()
-            .filter(|value| value.attribute().0.as_ref() == "color")
-            .map(EngineContribution::fixture_id)
-            .collect();
+        // Read only by the Group colour overlay: without a Group colour it is never consulted.
+        let programmer_colors = if frame.colors.is_empty() {
+            Default::default()
+        } else {
+            programmer
+                .iter()
+                .filter(|value| value.attribute().0.as_ref() == "color")
+                .map(EngineContribution::fixture_id)
+                .collect()
+        };
         let mut resolver =
             EngineContributionResolver::for_generation(generation.slots(), generation.frames());
         if trace_sources {
@@ -123,7 +128,7 @@ impl Engine {
         }
         crate::timed(crate::RenderPhase::ContributionMerge, || {
             resolver.extend_borrowed_contributions(playback());
-            resolver.extend(programmer);
+            programmer.offer_to(&mut resolver);
             if has_samples {
                 resolver.extend_borrowed_samples(sampled_values(sampled));
             }
@@ -260,11 +265,16 @@ impl Engine {
                 &self.programmer_addresses,
             )
         });
-        let programmer_colors = programmer
-            .iter()
-            .filter(|contribution| &*contribution.attribute().0 == "color")
-            .map(EngineContribution::fixture_id)
-            .collect::<std::collections::HashSet<_>>();
+        // Read only by the Group colour overlay: without a Group colour it is never consulted.
+        let programmer_colors = if colors.is_empty() {
+            std::collections::HashSet::new()
+        } else {
+            programmer
+                .iter()
+                .filter(|contribution| &*contribution.attribute().0 == "color")
+                .map(EngineContribution::fixture_id)
+                .collect::<std::collections::HashSet<_>>()
+        };
         let mut resolver =
             EngineContributionResolver::for_generation(generation.slots(), generation.frames());
         if trace_sources {
@@ -277,7 +287,7 @@ impl Engine {
             let mut contributions = std::mem::take(&mut playback.contributions);
             resolver.extend(contributions.drain(..));
             self.recycle_contributions(contributions);
-            resolver.extend(programmer);
+            programmer.offer_to(&mut resolver);
             if has_samples {
                 resolver.extend_borrowed_samples(sampled_values(sampled));
             }

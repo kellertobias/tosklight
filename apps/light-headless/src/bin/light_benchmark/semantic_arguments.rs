@@ -43,6 +43,9 @@ pub struct SemanticArguments {
     /// `--digest-ticks N` (TL-639): print per-tick output digests of N unpaced logical ticks
     /// instead of the timed report, to compare two builds frame by frame.
     pub digest_ticks: Option<u64>,
+    /// `--digest-lifecycle` (TL-639 round 2): apply Programmer fades, FixAT, Freeze and a
+    /// Preload GO at fixed ticks of a digest run.
+    pub digest_lifecycle: bool,
 }
 
 impl Default for SemanticArguments {
@@ -58,6 +61,7 @@ impl Default for SemanticArguments {
             static_bases_only: false,
             rig_height_mm: 9_000,
             digest_ticks: None,
+            digest_lifecycle: false,
         }
     }
 }
@@ -112,6 +116,7 @@ impl SemanticArguments {
             "--digest-ticks" => {
                 self.digest_ticks = Some(bounded(&value()?, 1, 100_000, "digest ticks")?)
             }
+            "--digest-lifecycle" => self.digest_lifecycle = true,
             _ => return Ok(false),
         }
         Ok(true)
@@ -139,6 +144,9 @@ impl SemanticArguments {
                 "tracking, consumer and publication options need a semantic scenario".into(),
             );
         }
+        if self.digest_lifecycle && self.digest_ticks.is_none() {
+            return Err("--digest-lifecycle needs --digest-ticks".into());
+        }
         if self.static_bases_only && self.workload_dir.is_none() {
             return Err("--static-bases-only needs a --semantic-workload".into());
         }
@@ -158,7 +166,8 @@ impl SemanticArguments {
   --no-publish                 Skip the visualization publication step\n\
   --static-bases-only          Start none of the workload's Dynamics (memo-reuse gates)\n\
   --rig-height-mm N            Height of the workload's fixture grid (default 9000)\n\
-  --digest-ticks N             Print per-tick output digests of N unpaced ticks (build equivalence)\n";
+  --digest-ticks N             Print per-tick output digests of N unpaced ticks (build equivalence)\n\
+  --digest-lifecycle           Apply fades, FixAT, Freeze and a Preload GO during a digest run\n";
 }
 
 fn bounded(value: &str, min: u64, max: u64, label: &str) -> Result<u64, String> {
@@ -228,5 +237,18 @@ mod tests {
         );
         assert!(parse(&["--digest-ticks", "0"]).is_err());
         assert!(parse(&["--digest-ticks", "100001"]).is_err());
+        assert!(!parse(&[]).unwrap().digest_lifecycle);
+        assert!(
+            parse(&["--digest-lifecycle"])
+                .unwrap()
+                .validate(true)
+                .is_err()
+        );
+        assert!(
+            parse(&["--digest-ticks", "30", "--digest-lifecycle"])
+                .unwrap()
+                .validate(true)
+                .is_ok()
+        );
     }
 }

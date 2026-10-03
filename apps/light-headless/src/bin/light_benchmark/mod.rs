@@ -1,5 +1,6 @@
 mod arguments;
 mod digest;
+mod digest_lifecycle;
 mod headless_stress_show;
 mod loopback;
 mod metadata;

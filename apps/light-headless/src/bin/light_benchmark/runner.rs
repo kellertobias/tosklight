@@ -572,6 +572,7 @@ fn run_tick(
                 .live
                 .record(frame, state.live_work, tracking_age, total);
         }
+        report_slow_frame(logical_tick, total, encode, frame, tracking_age);
         state.live_work = frame.work;
     }
     let validation = validation_started.elapsed();
@@ -586,6 +587,37 @@ fn run_tick(
         wire_bytes: packets.iter().map(|packet| packet.bytes.len() as u64).sum(),
         checksum,
     })
+}
+
+/// TL-639 round 2 diagnostics: `LIGHT_BENCHMARK_SLOW_FRAME_MS=N` prints the phase breakdown of
+/// every semantic frame whose pipeline took longer than N ms, to locate isolated late frames.
+fn report_slow_frame(
+    tick: u64,
+    total: std::time::Duration,
+    encode: std::time::Duration,
+    frame: &light_headless_runtime::output_benchmark::LiveOutputFrame,
+    tracking_age: Option<std::time::Duration>,
+) {
+    static THRESHOLD: std::sync::OnceLock<Option<f64>> = std::sync::OnceLock::new();
+    let Some(threshold) = *THRESHOLD.get_or_init(|| {
+        std::env::var("LIGHT_BENCHMARK_SLOW_FRAME_MS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+    }) else {
+        return;
+    };
+    let ms = |duration: std::time::Duration| duration.as_secs_f64() * 1_000.0;
+    if ms(total) > threshold {
+        eprintln!(
+            "slow frame tick {tick}: total {:.3} capture {:.3} transaction {:.3} publication {:.3} encode {:.3} tracking {:?}",
+            ms(total),
+            ms(frame.capture),
+            ms(frame.transaction),
+            ms(frame.publication),
+            ms(encode),
+            tracking_age,
+        );
+    }
 }
 
 fn validate_full_output(

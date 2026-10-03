@@ -649,19 +649,25 @@ fn same_static_baseline(
     owner: ProgrammingOwner,
 ) -> bool {
     let key = owner.key();
-    if original.value(target, &key) != scalar.value(target, &key)
-        || original.changed_at(target, &key) != scalar.changed_at(target, &key)
-        || original.sequence_master(target, &key) != scalar.sequence_master(target, &key)
+    // One lookup per token (TL-639 round 2); the comparisons are those of the field queries.
+    let (original, scalar) = match (
+        original.static_winner(target, &key),
+        scalar.static_winner(target, &key),
+    ) {
+        (None, None) => return true,
+        (Some(original), Some(scalar)) => (original, scalar),
+        _ => return false,
+    };
+    if original.value() != scalar.value()
+        || original.changed_at() != scalar.changed_at()
+        || original.sequence_master() != scalar.sequence_master()
     {
         return false;
     }
     let same_stamp = |a: light_core::ProgrammerEditStamp, b: light_core::ProgrammerEditStamp| {
         a.changed_at == b.changed_at && a.programmer_order == b.programmer_order
     };
-    let same_origin = match (
-        original.contribution_origin(target, &key),
-        scalar.contribution_origin(target, &key),
-    ) {
+    let same_origin = match (original.contribution_origin(), scalar.contribution_origin()) {
         (None, None) => true,
         (Some(a), Some(b)) => {
             a.source() == b.source()
@@ -672,8 +678,8 @@ fn same_static_baseline(
     };
     same_origin
         && match (
-            original.contribution_family_evidence(target, &key),
-            scalar.contribution_family_evidence(target, &key),
+            original.contribution_family_evidence(),
+            scalar.contribution_family_evidence(),
         ) {
             (None, None) => true,
             (Some(a), Some(b)) => {

@@ -151,16 +151,15 @@ fn lamp_delta_uv(quality: &ColorQuality) -> Option<f32> {
         .map(|delta| delta as f32)
 }
 
-fn rows(sidecar: &FamilySidecar) -> Vec<AcceptedColorHead> {
+/// Appends the report rows of one sidecar (none for another family) to `heads`.
+fn rows(sidecar: &FamilySidecar, heads: &mut Vec<AcceptedColorHead>) {
     let Some(color) = sidecar.color() else {
-        return Vec::new();
+        return;
     };
     let target = color.target;
     match &color.quality {
-        RoutedColorQuality::Lamp(quality) if !quality.heads.is_empty() => quality
-            .heads
-            .iter()
-            .map(|head| AcceptedColorHead {
+        RoutedColorQuality::Lamp(quality) if !quality.heads.is_empty() => {
+            heads.extend(quality.heads.iter().map(|head| AcceptedColorHead {
                 target,
                 destination: head.destination,
                 head_id: Some(head.head_id),
@@ -168,9 +167,9 @@ fn rows(sidecar: &FamilySidecar) -> Vec<AcceptedColorHead> {
                 delta_uv: lamp_delta_uv(&head.quality),
                 uv: lamp_uv(&head.quality),
                 direct: head.quality.direct.clone(),
-            })
-            .collect(),
-        RoutedColorQuality::Lamp(quality) => vec![AcceptedColorHead {
+            }))
+        }
+        RoutedColorQuality::Lamp(quality) => heads.push(AcceptedColorHead {
             target,
             destination: target,
             head_id: None,
@@ -178,8 +177,8 @@ fn rows(sidecar: &FamilySidecar) -> Vec<AcceptedColorHead> {
             delta_uv: lamp_delta_uv(quality),
             uv: lamp_uv(quality),
             direct: quality.direct.clone(),
-        }],
-        RoutedColorQuality::Media(quality) => vec![AcceptedColorHead {
+        }),
+        RoutedColorQuality::Media(quality) => heads.push(AcceptedColorHead {
             target,
             destination: target,
             head_id: None,
@@ -191,7 +190,7 @@ fn rows(sidecar: &FamilySidecar) -> Vec<AcceptedColorHead> {
             delta_uv: None,
             uv: None,
             direct: None,
-        }],
+        }),
     }
 }
 
@@ -209,25 +208,33 @@ impl AcceptedColorFrames {
         results: Vec<FamilySidecar>,
         held: Vec<FixtureId>,
     ) {
-        let mut heads = results.iter().flat_map(rows).collect::<Vec<_>>();
-        let mut outputs = results
-            .into_iter()
-            .filter_map(|sidecar| match sidecar {
-                FamilySidecar::Color(color)
-                    if matches!(color.quality, RoutedColorQuality::Lamp(_)) =>
-                {
-                    Some(PublishedColorOutput {
-                        token: color.token,
-                        target: color.target,
-                        value: color.value,
-                        writes: color.writes,
-                    })
+        // Sized exactly up front (TL-639 round 2), so neither list is regrown or copied again.
+        let (head_count, output_count) = results.iter().filter_map(FamilySidecar::color).fold(
+            (0, 0),
+            |(heads, outputs), color| match &color.quality {
+                RoutedColorQuality::Lamp(quality) => {
+                    (heads + quality.heads.len().max(1), outputs + 1)
                 }
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        // TL-639: the outputs are collected in place into the sidecars' larger allocation, and
-        // the heads grow by doubling. A retained frame keeps only what it holds.
+                RoutedColorQuality::Media(_) => (heads + 1, outputs),
+            },
+        );
+        let mut heads = Vec::with_capacity(head_count);
+        for result in &results {
+            rows(result, &mut heads);
+        }
+        let mut outputs = Vec::with_capacity(output_count);
+        outputs.extend(results.into_iter().filter_map(|sidecar| match sidecar {
+            FamilySidecar::Color(color) if matches!(color.quality, RoutedColorQuality::Lamp(_)) => {
+                Some(PublishedColorOutput {
+                    token: color.token,
+                    target: color.target,
+                    value: color.value,
+                    writes: color.writes,
+                })
+            }
+            _ => None,
+        }));
+        // TL-639: a retained frame keeps only what it holds (no-ops when sized exactly).
         heads.shrink_to_fit();
         outputs.shrink_to_fit();
         let frame = Arc::new(AcceptedColorFrame {

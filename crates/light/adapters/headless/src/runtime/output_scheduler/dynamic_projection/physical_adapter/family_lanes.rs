@@ -43,11 +43,12 @@ pub(in crate::runtime) type OpticsSidecar = PhysicalHeadResult<OpticsAdapter>;
 pub(in crate::runtime) type PublishedFamilyFrame = PublishedLiveFrame<FamilySidecar>;
 
 /// One owned per-head result of whichever family produced it. Fully owned like its payload.
-#[allow(clippy::large_enum_variant)] // Moved once per head and frame, like each family's own row.
+/// Boxed (TL-639 round 2): a row moves through the cohort, its finish and its projection
+/// several times per frame, and an inline result is several hundred bytes.
 pub(in crate::runtime) enum FamilySidecar {
-    Position(PositionSidecar),
-    Color(ColorSidecar),
-    Optics(OpticsSidecar),
+    Position(Box<PositionSidecar>),
+    Color(Box<ColorSidecar>),
+    Optics(Box<OpticsSidecar>),
 }
 
 macro_rules! each_sidecar {
@@ -88,21 +89,21 @@ impl FamilySidecar {
 
     pub fn position(&self) -> Option<&PositionSidecar> {
         match self {
-            Self::Position(row) => Some(row),
+            Self::Position(row) => Some(row.as_ref()),
             _ => None,
         }
     }
 
     pub fn color(&self) -> Option<&ColorSidecar> {
         match self {
-            Self::Color(row) => Some(row),
+            Self::Color(row) => Some(row.as_ref()),
             _ => None,
         }
     }
 
     pub fn optics(&self) -> Option<&OpticsSidecar> {
         match self {
-            Self::Optics(row) => Some(row),
+            Self::Optics(row) => Some(row.as_ref()),
             _ => None,
         }
     }
@@ -256,15 +257,15 @@ impl FamilyLanes {
             PhysicalFamily::Position => self
                 .position
                 .observe(observation)
-                .map(|(metadata, row)| (metadata, FamilySidecar::Position(row))),
+                .map(|(metadata, row)| (metadata, FamilySidecar::Position(Box::new(row)))),
             PhysicalFamily::Color => self
                 .color
                 .observe(observation)
-                .map(|(metadata, row)| (metadata, FamilySidecar::Color(row))),
+                .map(|(metadata, row)| (metadata, FamilySidecar::Color(Box::new(row)))),
             PhysicalFamily::Optics => self
                 .optics
                 .observe(observation)
-                .map(|(metadata, row)| (metadata, FamilySidecar::Optics(row))),
+                .map(|(metadata, row)| (metadata, FamilySidecar::Optics(Box::new(row)))),
         }
     }
 

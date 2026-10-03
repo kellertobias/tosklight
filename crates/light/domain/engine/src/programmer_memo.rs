@@ -96,6 +96,45 @@ impl ProgrammerTransitions {
 /// One Programmer's resolved values in order, each with the source a sampled batch may replace.
 pub(crate) type ResolvedProgrammerValues = Vec<(Addressed, Option<ContributionSourceId>)>;
 
+/// TL-639 round 2: the arbitrated contributions of one kept evaluation. The replacement filter
+/// still runs against each call's own samples; the winners are a pure function of the evaluation
+/// and of which values that filter removed, so they are kept per removed set (the static lane
+/// removes none, the scalar lane the values its samples replace). Readers borrow them.
+#[derive(Default)]
+pub(crate) struct KeptWinners(parking_lot::Mutex<Vec<(Vec<u32>, ArbitratedWinners)>>);
+
+/// One arbitration's contributions, shared by every reader of the same removed set.
+type ArbitratedWinners = Arc<Vec<crate::EngineContribution>>;
+
+/// Distinct removed sets kept per evaluation.
+const KEPT_WINNER_SETS: usize = 4;
+
+impl KeptWinners {
+    /// The winners after removing exactly `removed` (positions in evaluation order), computed by
+    /// `arbitrate` the first time this set is seen.
+    pub(crate) fn get_or_arbitrate(
+        &self,
+        removed: Vec<u32>,
+        arbitrate: impl FnOnce() -> Vec<crate::EngineContribution>,
+    ) -> ArbitratedWinners {
+        if let Some((_, winners)) = self.0.lock().iter().find(|(set, _)| *set == removed) {
+            return Arc::clone(winners);
+        }
+        let winners = Arc::new(arbitrate());
+        let mut kept = self.0.lock();
+        if kept.len() < KEPT_WINNER_SETS {
+            kept.push((removed, Arc::clone(&winners)));
+        }
+        winners
+    }
+}
+
+/// One kept evaluation and its winners.
+pub(crate) struct KeptEvaluation {
+    pub resolved: Arc<Vec<ResolvedProgrammerValues>>,
+    pub winners: Arc<KeptWinners>,
+}
+
 struct Entry {
     /// Holds every captured vector alive, so pointer identity stays exact.
     states: Vec<ProgrammerOutputState>,
@@ -103,6 +142,7 @@ struct Entry {
     flags: (bool, bool),
     transitions: u64,
     resolved: Arc<Vec<ResolvedProgrammerValues>>,
+    winners: Arc<KeptWinners>,
 }
 
 /// The most recent evaluations (Live and Preload lanes, with and without source tracing).
@@ -151,7 +191,7 @@ impl ProgrammerContributionMemo {
         generation: u64,
         flags: (bool, bool),
         transitions: u64,
-    ) -> Option<Arc<Vec<ResolvedProgrammerValues>>> {
+    ) -> Option<KeptEvaluation> {
         self.entries
             .iter()
             .find(|entry| {
@@ -160,7 +200,10 @@ impl ProgrammerContributionMemo {
                     && entry.transitions == transitions
                     && same_states(&entry.states, states)
             })
-            .map(|entry| Arc::clone(&entry.resolved))
+            .map(|entry| KeptEvaluation {
+                resolved: Arc::clone(&entry.resolved),
+                winners: Arc::clone(&entry.winners),
+            })
     }
 
     pub(crate) fn keep(
@@ -170,12 +213,13 @@ impl ProgrammerContributionMemo {
         flags: (bool, bool),
         transitions: u64,
         resolved: Arc<Vec<ResolvedProgrammerValues>>,
-    ) {
+    ) -> Arc<KeptWinners> {
         self.entries.retain(|entry| {
             !(entry.generation == generation
                 && entry.flags == flags
                 && same_states(&entry.states, &states))
         });
+        let winners = Arc::new(KeptWinners::default());
         self.entries.insert(
             0,
             Entry {
@@ -184,8 +228,61 @@ impl ProgrammerContributionMemo {
                 flags,
                 transitions,
                 resolved,
+                winners: Arc::clone(&winners),
             },
         );
         self.entries.truncate(RETAINED);
+        winners
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kept_winners_belong_to_one_evaluation_and_removed_set() {
+        let mut memo = ProgrammerContributionMemo::default();
+        let resolved = Arc::new(Vec::new());
+        let winners = memo.keep(Vec::new(), 7, (true, false), 3, Arc::clone(&resolved));
+        let kept = memo.find(&[], 7, (true, false), 3).expect("kept");
+        assert!(Arc::ptr_eq(&kept.winners, &winners));
+        // Every input that selects the evaluation selects its winners too.
+        assert!(memo.find(&[], 8, (true, false), 3).is_none(), "generation");
+        assert!(
+            memo.find(&[], 7, (false, false), 3).is_none(),
+            "tracing flag"
+        );
+        assert!(
+            memo.find(&[], 7, (true, true), 3).is_none(),
+            "replacements flag"
+        );
+        assert!(
+            memo.find(&[], 7, (true, false), 4).is_none(),
+            "transition history"
+        );
+        // Keeping the evaluation again starts with no winners.
+        let renewed = memo.keep(Vec::new(), 7, (true, false), 3, resolved);
+        assert!(!Arc::ptr_eq(&renewed, &winners));
+        let arbitrations = std::cell::Cell::new(0);
+        let arbitrate = |removed: Vec<u32>| {
+            renewed.get_or_arbitrate(removed, || {
+                arbitrations.set(arbitrations.get() + 1);
+                Vec::new()
+            })
+        };
+        let none = arbitrate(Vec::new());
+        assert!(Arc::ptr_eq(&none, &arbitrate(Vec::new())));
+        assert_eq!(arbitrations.get(), 1);
+        let first = arbitrate(vec![0]);
+        assert!(!Arc::ptr_eq(&none, &first));
+        assert_eq!(arbitrations.get(), 2);
+        // More distinct sets than are kept are still answered, by arbitrating each time.
+        for removed in 1..8 {
+            arbitrate(vec![removed]);
+            arbitrate(vec![removed]);
+        }
+        assert!(arbitrations.get() > 2 + 7);
+        assert!(Arc::ptr_eq(&none, &arbitrate(Vec::new())));
     }
 }

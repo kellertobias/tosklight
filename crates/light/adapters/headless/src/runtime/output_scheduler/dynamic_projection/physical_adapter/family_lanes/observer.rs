@@ -113,7 +113,7 @@ impl HybridFrameObserver<FamilySidecar> for FamilyFrameObserver<'_> {
             PhysicalFamily::Position => self
                 .position
                 .observe(observation)
-                .map(|(metadata, row)| (metadata, FamilySidecar::Position(row))),
+                .map(|(metadata, row)| (metadata, FamilySidecar::Position(Box::new(row)))),
             PhysicalFamily::Color | PhysicalFamily::Optics => self.lanes.observe(observation),
         }
     }

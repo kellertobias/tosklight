@@ -20,6 +20,30 @@ pub(crate) struct EngineContribution {
     family_evidence: Option<std::sync::Arc<crate::ContributionFamilyEvidence>>,
 }
 
+#[cfg(test)]
+impl EngineContribution {
+    pub(crate) fn timed_value(&self) -> &TimedValue {
+        &self.value
+    }
+
+    pub(crate) fn applicable_sequence_master(&self) -> Option<ApplicableSequenceMaster> {
+        self.sequence_master
+    }
+
+    /// Every field, for tests comparing two contribution lists in order.
+    pub(crate) fn describe(&self) -> String {
+        format!(
+            "{:?} {:?} {:?} {:?} {:?} {:?}",
+            self.value,
+            self.transition_ordinal,
+            self.sequence_master,
+            self.address,
+            self.origin,
+            self.family_evidence
+        )
+    }
+}
+
 /// Borrowed arbitration result for intermediate lookups during one render.
 ///
 /// The index owns neither addresses nor values, so resolving the playback underlay and optional

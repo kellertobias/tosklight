@@ -80,6 +80,32 @@ pub struct PreparedStaticFamilyFrame {
     pub(crate) native_raw: crate::native_raw::NativeRawCache,
 }
 
+/// One resolved static winner, answering the same queries as [`PreparedStaticFamilyFrame`].
+#[derive(Clone, Copy)]
+pub struct StaticWinner<'a>(&'a crate::SlotWinner);
+
+impl<'a> StaticWinner<'a> {
+    pub fn value(self) -> &'a AttributeValue {
+        &self.0.value
+    }
+
+    pub fn changed_at(self) -> Option<DateTime<Utc>> {
+        self.0.output_changed_at()
+    }
+
+    pub fn contribution_origin(self) -> Option<&'a ContributionOrigin> {
+        self.0.origin.as_deref()
+    }
+
+    pub fn contribution_family_evidence(self) -> Option<&'a Arc<ContributionFamilyEvidence>> {
+        self.0.family_evidence.as_ref()
+    }
+
+    pub fn sequence_master(self) -> Option<ContributionSequenceMaster> {
+        self.0.sequence_master
+    }
+}
+
 impl PreparedStaticFamilyFrame {
     fn winner(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&crate::SlotWinner> {
         self.resolved.frame.as_ref()?.winner(target, attribute)
@@ -116,6 +142,15 @@ impl PreparedStaticFamilyFrame {
         attribute: &AttributeKey,
     ) -> Option<ContributionSequenceMaster> {
         self.winner(target, attribute)?.sequence_master
+    }
+
+    /// Every query above for one target and attribute, from one lookup (TL-639 round 2).
+    pub fn static_winner(
+        &self,
+        target: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<StaticWinner<'_>> {
+        self.winner(target, attribute).map(StaticWinner)
     }
 
     /// Queue a complete materialized family. At most one result may address each target/owner;

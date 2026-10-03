@@ -25,13 +25,33 @@ pub fn run(arguments: &Arguments, ticks: u64) -> Result<Value, String> {
         let (_loopback, scenario) = prepare_scenario(arguments, config)?;
         let mut sequences = HashMap::new();
         let mut frames = Vec::with_capacity(ticks as usize);
+        let mut last_values = HashMap::new();
         for tick in 0..ticks {
-            frames.push(digest_tick(
+            let event = if arguments.semantic.digest_lifecycle {
+                set_logical_time(&scenario, tick, config.rate_hz);
+                super::digest_lifecycle::apply(&scenario, tick, &last_values)?
+            } else {
+                None
+            };
+            let options = if arguments.semantic.digest_lifecycle {
+                super::digest_lifecycle::render_options(tick)
+            } else {
+                Default::default()
+            };
+            let mut frame = digest_tick(
                 &scenario,
                 &mut sequences,
-                tick,
+                (tick, options),
                 config.rate_hz,
-            )?);
+                arguments
+                    .semantic
+                    .digest_lifecycle
+                    .then_some(&mut last_values),
+            )?;
+            if let Some(event) = event {
+                frame["event"] = Value::String(event);
+            }
+            frames.push(frame);
         }
         profiles.push(
             json!({ "profile": config.profile, "rate_hz": config.rate_hz, "frames": frames }),
@@ -40,16 +60,30 @@ pub fn run(arguments: &Arguments, ticks: u64) -> Result<Value, String> {
     Ok(json!({ "digest_ticks": ticks, "profiles": profiles }))
 }
 
-fn digest_tick(
+/// Sets the scenario clock to `tick`'s logical time and returns it with its offset in
+/// nanoseconds.
+fn set_logical_time(
     scenario: &BenchmarkScenario,
-    sequences: &mut HashMap<(light_output::Protocol, u16), u8>,
     tick: u64,
     rate_hz: u16,
-) -> Result<Value, String> {
+) -> (chrono::DateTime<chrono::Utc>, u64) {
     let logical_nanos = tick.saturating_mul(1_000_000_000) / u64::from(rate_hz);
     let logical_time = scenario.logical_start
         + ChronoDuration::nanoseconds(i64::try_from(logical_nanos).unwrap_or(i64::MAX));
     scenario.clock.set(logical_time);
+    (logical_time, logical_nanos)
+}
+
+fn digest_tick(
+    scenario: &BenchmarkScenario,
+    sequences: &mut HashMap<(light_output::Protocol, u16), u8>,
+    (tick, options): (u64, light_engine::RenderOptions),
+    rate_hz: u16,
+    last_values: Option<
+        &mut HashMap<(FixtureId, light_core::AttributeKey), light_core::AttributeValue>,
+    >,
+) -> Result<Value, String> {
+    let (logical_time, logical_nanos) = set_logical_time(scenario, tick, rate_hz);
     if let Some(feed) = scenario
         .live
         .as_ref()
@@ -62,7 +96,7 @@ fn digest_tick(
         Some(live) => {
             let frame = live
                 .bench
-                .render(Default::default(), &[])
+                .render(options, &[])
                 .map_err(|error| format!("render semantic digest frame: {error}"))?;
             for (target, row) in live.bench.readout_digest(&frame.rendered) {
                 rows.push(target, row);
@@ -72,11 +106,10 @@ fn digest_tick(
         None => {
             let dynamic = scenario.dynamic_batch(logical_time);
             let rendered = match dynamic.as_ref() {
-                Some(dynamic) => scenario.engine.render_with_contribution_batches(
-                    Default::default(),
-                    std::slice::from_ref(dynamic),
-                ),
-                None => scenario.engine.render(Default::default()),
+                Some(dynamic) => scenario
+                    .engine
+                    .render_with_contribution_batches(options, std::slice::from_ref(dynamic)),
+                None => scenario.engine.render(options),
             }
             .map_err(|error| format!("render digest frame: {error}"))?;
             (rendered, None)
@@ -93,6 +126,16 @@ fn digest_tick(
     )
     .map_err(|error| format!("encode digest routes: {error}"))?;
     collect_rows(&rendered, &mut rows);
+    if let Some(last_values) = last_values {
+        last_values.clear();
+        last_values.extend(
+            rendered
+                .resolved_values
+                .values()
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone())),
+        );
+    }
     if let Some(directory) = std::env::var_os("LIGHT_BENCHMARK_DIGEST_DUMP") {
         rows.dump(&std::path::Path::new(&directory).join(format!("tick-{tick}.txt")))?;
     }

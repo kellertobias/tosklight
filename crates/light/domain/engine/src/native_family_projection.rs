@@ -82,11 +82,38 @@ impl PreparedStaticFamilyFrame {
             return Err(invalid("native family projection is already installed"));
         }
         let mut candidate = NativePositionProjection::default();
-        let mut seen = FxHashSet::default();
-        let mut counts = FxHashMap::<(FixtureId, ProgrammingOwner, Uuid), usize>::default();
+        // Sized up front: each write is checked once, and owners arrive in runs.
+        let mut seen = FxHashSet::with_capacity_and_hasher(writes.len(), Default::default());
+        let mut counts =
+            FxHashMap::<(FixtureId, ProgrammingOwner, Uuid), usize>::with_capacity_and_hasher(
+                writes.len() / 2,
+                Default::default(),
+            );
         let mut targets = FxHashMap::<(FixtureId, ProgrammingOwner), (FixtureId, usize)>::default();
+        // TL-639 round 2: an owner's writes arrive together. What depends only on the owner and
+        // instance (destination, semantic owner, mode, footprint) is validated once per run.
+        let mut run: Option<WriteRun<'_>> = None;
         for write in writes {
-            let destination = self.validate_family_write(capture, write)?;
+            let key = (write.target, write.owner, write.instance_id);
+            if run.as_ref().is_none_or(|run| run.key != key) {
+                if let Some(done) = run.take() {
+                    *counts.entry(done.key).or_default() += done.count;
+                }
+                let (destination, mode, footprint) = self.validate_family_owner(capture, write)?;
+                targets.insert(
+                    (write.target, write.owner),
+                    (destination.root, destination.fixture_index),
+                );
+                run = Some(WriteRun {
+                    key,
+                    destination,
+                    mode,
+                    footprint,
+                    count: 0,
+                });
+            }
+            let current = run.as_mut().expect("a run for this write");
+            validate_family_control(current.mode, current.footprint, write)?;
             let index = write.channel_index as usize;
             if !seen.insert((write.owner, write.target, write.instance_id, index)) {
                 return Err(invalid(format!(
@@ -94,27 +121,24 @@ impl PreparedStaticFamilyFrame {
                     family(write.owner)
                 )));
             }
-            *counts
-                .entry((write.target, write.owner, write.instance_id))
-                .or_default() += 1;
-            targets.insert(
-                (write.target, write.owner),
-                (destination.root, destination.fixture_index),
-            );
-            install(&mut candidate, write, &destination)?;
+            current.count += 1;
+            install(&mut candidate, write, &current.destination)?;
+        }
+        if let Some(done) = run {
+            *counts.entry(done.key).or_default() += done.count;
         }
         verify_complete(capture, &targets, &counts)?;
         self.position_native = candidate;
         Ok(())
     }
 
-    /// Validate one write against the capture: semantic owner, instance, footprint, channel
-    /// identity, raw range and function. Returns its destination.
-    fn validate_family_write(
+    /// Validate what one write's owner and instance determine: destination, semantic owner,
+    /// instance, mode and footprint. Returns the destination, mode and footprint.
+    fn validate_family_owner<'g>(
         &self,
-        capture: &PreparedOutputFrame,
+        capture: &'g PreparedOutputFrame,
         write: &FamilyNativeWrite,
-    ) -> Result<Destination, EngineError> {
+    ) -> Result<(Destination, &'g light_fixture::FixtureMode, &'g [usize]), EngineError> {
         let name = family(write.owner);
         let generation = &capture.generation;
         let (root, fixture_index) = generation
@@ -142,45 +166,15 @@ impl PreparedStaticFamilyFrame {
                 write.instance_id,
             )
             .ok_or_else(|| invalid(format!("native {name} target has no verified footprint")))?;
-        let index = write.channel_index as usize;
-        if !footprint.contains(&index) {
-            return Err(invalid(format!(
-                "native {name} writes outside its owner's footprint"
-            )));
-        }
-        let channel = &mode.channels[index];
-        if channel.id != write.channel_id
-            || channel.split != write.split
-            || write.raw > channel.resolution.max_raw()
-        {
-            return Err(invalid(format!(
-                "native {name} channel identity or raw range is invalid"
-            )));
-        }
-        if let Some(function_id) = write.function_id {
-            let function = channel.functions.iter().any(|function| {
-                function.id == function_id
-                    && (function.dmx_from..=function.dmx_to).contains(&write.raw)
-            });
-            let bound = write.owner != ProgrammingOwner::Position
-                || mode.position_physical.as_ref().is_some_and(|model| {
-                    model.bindings.iter().any(|binding| {
-                        binding.channel_id == write.channel_id && binding.function_id == function_id
-                    })
-                });
-            if !function || !bound {
-                return Err(invalid(if write.owner == ProgrammingOwner::Position {
-                    "native Position function is not a motion binding".to_owned()
-                } else {
-                    format!("native {name} function does not select this raw")
-                }));
-            }
-        }
-        Ok(Destination {
-            root,
-            fixture_index,
-            channels: mode.channels.len(),
-        })
+        Ok((
+            Destination {
+                root,
+                fixture_index,
+                channels: mode.channels.len(),
+            },
+            mode,
+            footprint,
+        ))
     }
 
     /// The owner must carry a captured semantic value on this frame: queued by `project_family`
@@ -205,6 +199,59 @@ impl PreparedStaticFamilyFrame {
             ))),
         }
     }
+}
+
+/// The owner and instance of consecutive writes, validated once for the run.
+struct WriteRun<'g> {
+    key: (FixtureId, ProgrammingOwner, Uuid),
+    destination: Destination,
+    mode: &'g light_fixture::FixtureMode,
+    footprint: &'g [usize],
+    count: usize,
+}
+
+/// Validate one write against its owner's mode and footprint: footprint membership, channel
+/// identity, raw range and function.
+fn validate_family_control(
+    mode: &light_fixture::FixtureMode,
+    footprint: &[usize],
+    write: &FamilyNativeWrite,
+) -> Result<(), EngineError> {
+    let name = family(write.owner);
+    let index = write.channel_index as usize;
+    if !footprint.contains(&index) {
+        return Err(invalid(format!(
+            "native {name} writes outside its owner's footprint"
+        )));
+    }
+    let channel = &mode.channels[index];
+    if channel.id != write.channel_id
+        || channel.split != write.split
+        || write.raw > channel.resolution.max_raw()
+    {
+        return Err(invalid(format!(
+            "native {name} channel identity or raw range is invalid"
+        )));
+    }
+    if let Some(function_id) = write.function_id {
+        let function = channel.functions.iter().any(|function| {
+            function.id == function_id && (function.dmx_from..=function.dmx_to).contains(&write.raw)
+        });
+        let bound = write.owner != ProgrammingOwner::Position
+            || mode.position_physical.as_ref().is_some_and(|model| {
+                model.bindings.iter().any(|binding| {
+                    binding.channel_id == write.channel_id && binding.function_id == function_id
+                })
+            });
+        if !function || !bound {
+            return Err(invalid(if write.owner == ProgrammingOwner::Position {
+                "native Position function is not a motion binding".to_owned()
+            } else {
+                format!("native {name} function does not select this raw")
+            }));
+        }
+    }
+    Ok(())
 }
 
 /// Place one validated write. Same-family owners may share an agreeing control; a control already

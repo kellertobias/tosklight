@@ -273,6 +273,14 @@ fn remainder_samples(
     tape: &Arc<RetainedExpressionTape>,
     metadata: &[PositionMetadata],
 ) -> Result<Vec<DynamicRuntimeSample>, TransitionError> {
+    // TL-639 round 2: a Position-only forest (every caller's ordinary case) has no remainder;
+    // decide that by reading the tape instead of copying and compacting it first.
+    if roots
+        .iter()
+        .all(|(_, root)| !has_non_position_part(tape, metadata, *root))
+    {
+        return Ok(Vec::new());
+    }
     let mut remainder_tape = tape.as_ref().clone();
     let non_position = non_position_roots(&mut remainder_tape, metadata)?;
     let remaining = roots
@@ -297,6 +305,26 @@ fn remainder_samples(
         })
         .collect();
     Ok(remainder)
+}
+
+/// Whether `non_position_roots` would keep a remainder root for `root`: the node is not
+/// Position, or a transition with such a side.
+fn has_non_position_part(
+    tape: &RetainedExpressionTape,
+    metadata: &[PositionMetadata],
+    root: RetainedNodeId,
+) -> bool {
+    let index = root.0 as usize;
+    if !metadata[index].contains {
+        return true;
+    }
+    match &tape.nodes[index] {
+        Node::Transition { from, to, .. } => from
+            .iter()
+            .chain(to)
+            .any(|child| has_non_position_part(tape, metadata, *child)),
+        _ => false,
+    }
 }
 
 fn endpoint(

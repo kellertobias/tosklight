@@ -101,7 +101,7 @@ pub(super) fn seed_native_candidate(
     fixture: &PatchedFixture,
     mode: &FixtureMode,
     options: RenderOptions,
-    inputs: &mut ProfileHeadInputs,
+    inputs: &mut ProfileHeadInputs<'_, '_>,
     index: usize,
     native: &NativePositionInput,
 ) -> Vec<AttributeKey> {

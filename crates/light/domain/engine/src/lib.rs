@@ -64,7 +64,7 @@ pub use preload_frame::{
 pub use prepared_frame::PreparedOutputFrame;
 pub use prepared_static_family::{
     FamilyProjectionEvidence, FamilyProjectionMaster, FamilyProjectionMetadata,
-    PreparedStaticFamilyFrame,
+    PreparedStaticFamilyFrame, StaticWinner,
 };
 mod profile_blackout;
 mod profile_color;
@@ -143,8 +143,6 @@ pub use value_pool::{Pooled, Reusable, ValuePool};
 /// this desk, so they are hashed for speed rather than against an adversary.
 pub(crate) type HeadValues =
     rustc_hash::FxHashMap<light_core::AttributeKey, light_core::AttributeValue>;
-pub(crate) type HeadSequenceMasters =
-    rustc_hash::FxHashMap<light_core::AttributeKey, contribution::ApplicableSequenceMaster>;
 pub(crate) use move_in_black_candidate::PreparedCandidate;
 pub(crate) use move_in_black_runtime::{MoveInBlackKey, MoveInBlackRuntime};
 pub(crate) use profile_blackout::blackout_raw;

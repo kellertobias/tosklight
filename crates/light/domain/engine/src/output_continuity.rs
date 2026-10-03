@@ -158,7 +158,7 @@ mod tests {
                 &HashMap::new(),
                 &engine.programmer_addresses,
             );
-            crate::ResolvedContributionIndex::new(&values)
+            crate::ResolvedContributionIndex::new(&values[..])
                 .value(fixture, &AttributeKey("tilt".into()))
                 .and_then(AttributeValue::normalized)
                 .unwrap()

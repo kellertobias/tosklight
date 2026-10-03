@@ -488,3 +488,46 @@ fn masters_blackout_and_highlight_apply_once_after_the_native_writes() {
         [200, 100, 50, 77, 33]
     );
 }
+
+/// TL-639 round 2: an owner's writes are validated once per consecutive run. Interleaving
+/// owners must not change what is installed, what counts as complete or what is a duplicate.
+#[test]
+fn interleaved_owner_runs_install_exactly_like_grouped_writes() {
+    let rig = Rig::new(false);
+    let grouped = rig.all();
+    // Alternate writes of every owner and instance so no run is longer than one write.
+    let mut runs = grouped.clone();
+    let (first, second): (Vec<_>, Vec<_>) =
+        runs.drain(..).enumerate().partition(|(i, _)| i % 2 == 0);
+    let interleaved = first
+        .into_iter()
+        .map(|(_, write)| write)
+        .rev()
+        .chain(second.into_iter().map(|(_, write)| write))
+        .collect::<Vec<_>>();
+    let render = |writes: &[FamilyNativeWrite]| {
+        let (capture, mut frame) = rig.frame(Default::default());
+        frame
+            .project_family_native(&capture, &capture.frame_token(), writes)
+            .map(|()| {
+                rig.engine
+                    .render_static_family_frame(&capture, frame)
+                    .unwrap()
+                    .universes[&1]
+                    .to_vec()
+            })
+    };
+    assert_eq!(render(&interleaved).unwrap(), render(&grouped).unwrap());
+    // A duplicate in a later, separate run of the same owner is still a duplicate.
+    let mut duplicated = interleaved.clone();
+    duplicated.push(interleaved[0]);
+    assert!(render(&duplicated).is_err());
+    // An owner whose writes are spread over runs is complete only with all of them.
+    let mut incomplete = interleaved;
+    let missing = incomplete
+        .iter()
+        .position(|write| write.owner == ProgrammingOwner::Color)
+        .unwrap();
+    incomplete.remove(missing);
+    assert!(render(&incomplete).is_err());
+}

@@ -113,6 +113,28 @@ impl LiveOutputBench {
         self.family.engaged(&self.engine)
     }
 
+    /// TL-639 round 2: install a changed patch (a Freeze, say) the way the desk does: Engine and
+    /// Dynamics definitions are prepared from the snapshot and published together.
+    pub fn replace_snapshot(&self, snapshot: light_engine::EngineSnapshot) -> Result<(), String> {
+        let prepared = self
+            .engine
+            .prepare_snapshot(snapshot)
+            .map_err(|error| error.to_string())?;
+        let definitions = self
+            .dynamics
+            .lock()
+            .prepare_definitions(prepared.snapshot().dynamics.iter().cloned())
+            .map_err(|error| error.to_string())?;
+        let _publication = self.publication.begin_install();
+        let installed = prepared.snapshot_arc();
+        self.engine.install_prepared_snapshot(prepared);
+        self.dynamics
+            .lock()
+            .install_prepared_definitions(definitions);
+        self.publication.installed(installed);
+        Ok(())
+    }
+
     /// Render one frame through the production Live transaction.
     pub fn render(
         &self,

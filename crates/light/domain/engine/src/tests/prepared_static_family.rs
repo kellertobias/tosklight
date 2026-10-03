@@ -162,6 +162,9 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
     let capture = engine.prepare_output_frame(Default::default());
     let focus = AttributeKey("focus".into());
     let position = AttributeKey("position".into());
+    // TL-639 round 2: every profile head numbers its family owners, so the unnumbered pair is a
+    // Position on a target the patch does not hold.
+    let unnumbered = FixtureId::new();
     assert!(
         capture
             .frame_addresser()
@@ -171,7 +174,7 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
     assert!(
         capture
             .frame_addresser()
-            .frame_address(fixture, &position)
+            .frame_address(unnumbered, &position)
             .is_none()
     );
     let master = ContributionSequenceMaster::new(source(), 0.5);
@@ -213,7 +216,7 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
         ),
         ContributionSample::replacing_playback(
             sample(
-                fixture,
+                unnumbered,
                 position.clone(),
                 position_value.clone(),
                 capture.sampled_at(),
@@ -226,16 +229,16 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
     ]);
     let mut lane = engine.prepare_static_family_frame(&capture, std::slice::from_ref(&samples));
     let evidence = Arc::clone(
-        lane.contribution_family_evidence(fixture, &position)
+        lane.contribution_family_evidence(unnumbered, &position)
             .unwrap(),
     );
     let origin = Arc::new(
-        lane.contribution_origin(fixture, &position)
+        lane.contribution_origin(unnumbered, &position)
             .unwrap()
             .clone(),
     );
-    for key in [&focus, &position] {
-        assert_eq!(lane.sequence_master(fixture, key), Some(master));
+    for (target, key) in [(fixture, &focus), (unnumbered, &position)] {
+        assert_eq!(lane.sequence_master(target, key), Some(master));
     }
     let output_at = capture.sampled_at() - ChronoDuration::seconds(1);
     lane.project_family(
@@ -251,7 +254,7 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
     .unwrap();
     let replacement_master = ContributionSequenceMaster::new(source(), 0.25);
     lane.project_family(
-        fixture,
+        unnumbered,
         ProgrammingOwner::Position,
         position_value.clone(),
         FamilyProjectionMetadata {
@@ -268,9 +271,9 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
     let output = engine.preview_static_family_frame(&capture, lane).unwrap();
     assert_eq!(engine.capture_output_continuity().0, revision);
     let values = &output.resolved_values;
-    assert_eq!(values.value(fixture, &position), Some(&position_value));
+    assert_eq!(values.value(unnumbered, &position), Some(&position_value));
     assert_eq!(values.changed_at(fixture, &focus), Some(output_at));
-    assert_eq!(values.changed_at(fixture, &position), Some(output_at));
+    assert_eq!(values.changed_at(unnumbered, &position), Some(output_at));
     assert_eq!(
         values
             .frame()
@@ -284,14 +287,14 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
         values
             .frame()
             .unwrap()
-            .winner(fixture, &position)
+            .winner(unnumbered, &position)
             .unwrap()
             .sequence_master,
         Some(replacement_master)
     );
     assert!(Arc::ptr_eq(
         values
-            .contribution_family_evidence(fixture, &position)
+            .contribution_family_evidence(unnumbered, &position)
             .unwrap(),
         &evidence
     ));
@@ -307,12 +310,16 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
         "sequence master must scale 0.6 once"
     );
     let mut lane = engine.prepare_static_family_frame(&capture, &[samples]);
-    for (owner, value) in [
-        (ProgrammingOwner::Focus, AttributeValue::Normalized(0.6)),
-        (ProgrammingOwner::Position, position_value),
+    for (target, owner, value) in [
+        (
+            fixture,
+            ProgrammingOwner::Focus,
+            AttributeValue::Normalized(0.6),
+        ),
+        (unnumbered, ProgrammingOwner::Position, position_value),
     ] {
         lane.project_family(
-            fixture,
+            target,
             owner,
             value,
             unknown(FamilyProjectionMaster::Remove),
@@ -320,17 +327,17 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
         .unwrap();
     }
     let output = engine.render_static_family_frame(&capture, lane).unwrap();
-    for key in [&focus, &position] {
+    for (target, key) in [(fixture, &focus), (unnumbered, &position)] {
         let winner = output
             .resolved_values
             .frame()
             .unwrap()
-            .winner(fixture, key)
+            .winner(target, key)
             .unwrap();
         assert!(winner.sequence_master.is_none());
         assert!(winner.origin.is_none());
         assert!(winner.family_evidence.is_none());
-        assert!(output.resolved_values.changed_at(fixture, key).is_none());
+        assert!(output.resolved_values.changed_at(target, key).is_none());
     }
     assert!((i16::from(output.universes[&1][0]) - 153).abs() <= 1);
     assert!(output.resolved_values.changed_at_map().is_empty());

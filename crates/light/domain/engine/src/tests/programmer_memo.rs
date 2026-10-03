@@ -171,3 +171,99 @@ fn fades_and_changed_histories_are_always_evaluated_again() {
         started.programmer_transitions.version()
     );
 }
+
+type KeptWinners = Arc<Vec<crate::contribution::EngineContribution>>;
+
+/// TL-639 round 2: one resolution's Programmer contributions, in offer order, and the kept
+/// winners when they came from the memo.
+fn contributions(
+    rig: &Rig,
+    sampled: &[ContributionBatch],
+    trace: bool,
+) -> (
+    Option<Arc<Vec<crate::contribution::EngineContribution>>>,
+    Vec<String>,
+) {
+    let generation = rig.engine.generation.load_full();
+    let (_, mut continuity) = rig.engine.capture_output_continuity();
+    let offered = rig.engine.programmer_contributions_with_state(
+        rig.programmers.active_output_states(),
+        &generation,
+        rig.clock.now(),
+        None,
+        sampled,
+        trace,
+        &mut continuity,
+        0,
+        &HashMap::new(),
+        &rig.engine.programmer_addresses,
+    );
+    let kept = match &offered {
+        crate::programmer_resolution::ProgrammerContributions::Shared(winners) => {
+            Some(Arc::clone(winners))
+        }
+        crate::programmer_resolution::ProgrammerContributions::Owned(_) => None,
+    };
+    (
+        kept,
+        offered
+            .iter()
+            .map(crate::contribution::EngineContribution::describe)
+            .collect(),
+    )
+}
+
+#[test]
+fn kept_winners_equal_a_fresh_arbitration_for_every_removed_set_and_flag() {
+    let rig = rig();
+    let replacing = rig.replacing();
+    let lanes: [(&[ContributionBatch], bool); 4] = [
+        (&[], true),
+        (std::slice::from_ref(&replacing), true),
+        (&[], false),
+        (std::slice::from_ref(&replacing), false),
+    ];
+    for step in 0..3 {
+        if step == 2 {
+            // An edit is a new evaluation: its winners are arbitrated again.
+            rig.programmers.set(
+                rig.session,
+                rig.fixtures[1],
+                AttributeKey::intensity(),
+                AttributeValue::Normalized(0.15),
+            );
+        }
+        // The render commits what evaluating the Programmer adds to the transition history, so
+        // the evaluations below leave it unchanged and are kept.
+        rig.engine.render(RenderOptions::default()).unwrap();
+        let mut identities: Vec<KeptWinners> = Vec::new();
+        for (sampled, trace) in lanes {
+            let (_, first) = contributions(&rig, sampled, trace);
+            let (kept, again) = contributions(&rig, sampled, trace);
+            let (repeated, _) = contributions(&rig, sampled, trace);
+            let kept = kept.expect("an unchanged evaluation offers its kept winners");
+            assert!(
+                repeated.is_some_and(|repeated| Arc::ptr_eq(&repeated, &kept)),
+                "the same removed set reuses its winners"
+            );
+            rig.engine.programmer_memo.lock().clear();
+            let (fresh_identity, fresh) = contributions(&rig, sampled, trace);
+            assert_eq!(first, fresh, "step {step}");
+            assert_eq!(again, fresh, "step {step}");
+            assert!(
+                !fresh_identity.is_some_and(|fresh| Arc::ptr_eq(&fresh, &kept)),
+                "a cleared memo never answers with old winners"
+            );
+            identities.push(kept);
+        }
+        // Every removed set and tracing flag has winners of its own (all still held here).
+        for (index, winners) in identities.iter().enumerate() {
+            assert!(
+                identities[..index]
+                    .iter()
+                    .all(|other| !Arc::ptr_eq(other, winners)),
+                "step {step}"
+            );
+        }
+    }
+}

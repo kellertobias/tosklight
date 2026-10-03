@@ -195,6 +195,9 @@ pub(in crate::runtime) trait HybridPositionBatchComposer<T> {
 pub(super) struct CapturedHybridPositionBatchComposer<'a, 'sources, S> {
     typed: &'a CapturedProgrammingSources<'sources, S>,
     groups: Vec<&'a light_dynamics::DynamicFamilySampleGroup>,
+    /// TL-639 round 2: each target's first group and how many groups name it, so a membership
+    /// query is a lookup rather than a scan of every group (quadratic per cohort).
+    membership: rustc_hash::FxHashMap<FixtureId, (usize, usize)>,
     frame: HybridFrameContext<'a>,
     baseline: &'a PreparedStaticFamilyFrame,
     control:
@@ -228,8 +231,17 @@ impl<'a, 'sources, S: DynamicTickSource> CapturedHybridPositionBatchComposer<'a,
     ) -> Self {
         pool.truncate(256);
         pool.push(scratch);
+        let mut membership =
+            rustc_hash::FxHashMap::<FixtureId, (usize, usize)>::with_capacity_and_hasher(
+                groups.len(),
+                Default::default(),
+            );
+        for (index, group) in groups.iter().enumerate() {
+            membership.entry(group.target).or_insert((index, 0)).1 += 1;
+        }
         Self {
             typed,
+            membership,
             groups: groups.to_vec(),
             frame,
             baseline,
@@ -245,22 +257,11 @@ impl<'a, 'sources, S: DynamicTickSource> CapturedHybridPositionBatchComposer<'a,
             &mut CapturedHybridProgramComposer<'_, 'sources, S>,
         ) -> Result<R, TransitionError>,
     ) -> Result<R, TransitionError> {
-        let group = self
-            .groups
-            .iter()
-            .copied()
-            .find(|group| group.target == target)
-            .ok_or_else(|| {
-                IntentError("Position batch target is unavailable in this captured context".into())
-            })?;
-        if group.owner != ProgrammingOwner::Position
-            || self
-                .groups
-                .iter()
-                .filter(|group| group.target == target)
-                .count()
-                != 1
-        {
+        let (first, count) = *self.membership.get(&target).ok_or_else(|| {
+            IntentError("Position batch target is unavailable in this captured context".into())
+        })?;
+        let group = self.groups[first];
+        if group.owner != ProgrammingOwner::Position || count != 1 {
             return Err(IntentError(
                 "Position batch has duplicate or foreign owner membership".into(),
             )
@@ -307,10 +308,7 @@ impl<'a, 'sources, S: DynamicTickSource> CapturedHybridPositionBatchComposer<'a,
         accepts: impl Fn(light_dynamics::FamilyEndpointOutputControl) -> bool,
     ) -> Result<bool, TransitionError> {
         if program.frame_token() != self.frame.token
-            || !self
-                .groups
-                .iter()
-                .any(|group| group.target == program.target())
+            || !self.membership.contains_key(&program.target())
         {
             return Err(
                 IntentError("Position batch control query names a foreign program".into()).into(),
@@ -366,15 +364,12 @@ impl<S: DynamicTickSource, T> HybridPositionBatchComposer<T>
             )
             .into());
         }
-        let mut matches = self
-            .groups
-            .iter()
-            .copied()
-            .filter(|group| group.target == target);
-        let group = matches
-            .next()
+        let (first, count) = *self
+            .membership
+            .get(&target)
             .ok_or_else(|| IntentError("Position gate query target is absent".into()))?;
-        if group.owner != ProgrammingOwner::Position || matches.next().is_some() {
+        let group = self.groups[first];
+        if group.owner != ProgrammingOwner::Position || count > 1 {
             return Err(IntentError(
                 "Position gate query has duplicate or foreign owner membership".into(),
             )

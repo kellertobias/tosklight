@@ -23,17 +23,27 @@ pub(in crate::runtime) struct PositionFrameObserver<'a> {
     pub(super) pending: Vec<PendingPosition>,
     pub(super) current: current_cohort::CapturedCurrentCohorts,
     pub(super) programs: Vec<CapturedPositionPeer>,
+    /// TL-639 round 2: each program's position in `programs` (targets are unique).
+    pub(super) program_index: rustc_hash::FxHashMap<FixtureId, usize>,
     pub(super) active_programs: Arc<[FixtureId]>,
     /// Physical ownership in this observer's capture, including roots without DMX heads.
     pub(super) roots: BTreeMap<Uuid, usize>,
 }
 impl<'a> PositionFrameObserver<'a> {
+    /// The collected program of `target`, if any.
+    pub(super) fn program(&self, target: FixtureId) -> Option<&CapturedPositionPeer> {
+        self.program_index
+            .get(&target)
+            .map(|index| &self.programs[*index])
+    }
+
     pub fn new(lane: &'a PhysicalAdapterLane<PositionAdapter>) -> Self {
         Self {
             lane,
             pending: Vec::new(),
             current: Default::default(),
             programs: Vec::new(),
+            program_index: Default::default(),
             active_programs: Default::default(),
             roots: Default::default(),
         }
@@ -54,6 +64,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
         self.pending.clear();
         self.current.clear();
         self.programs.clear();
+        self.program_index.clear();
         self.active_programs = Default::default();
         Ok(())
     }
@@ -76,6 +87,8 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
             return Err(invalid("Position static registry belongs to another frame"));
         }
         let mut targets = Vec::new();
+        // TL-639 round 2: a set for the duplicate check; scanning `targets` was quadratic.
+        let mut seen = rustc_hash::FxHashSet::default();
         for fixture in frame.capture.snapshot().fixtures.iter() {
             for target in std::iter::once(fixture.fixture_id)
                 .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
@@ -91,7 +104,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
                     .descriptor(frame, target, ProgrammingOwner::Position)
                 {
                     Ok(_) => {
-                        if !targets.contains(&(target, ProgrammingOwner::Position)) {
+                        if seen.insert(target) {
                             targets.push((target, ProgrammingOwner::Position));
                         }
                     }
@@ -108,6 +121,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
         programs: &[super::super::super::programming_projection::hybrid::HybridFamilyProgram<'_>],
     ) -> Result<(), TransitionError> {
         self.programs.clear();
+        self.program_index.clear();
         let mut active_programs = Vec::new();
         // TL-596: a set for the duplicate check; scanning every earlier program was quadratic.
         let mut seen = rustc_hash::FxHashSet::default();
@@ -123,6 +137,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
             if !p.samples.is_empty() || p.has_requirements {
                 active_programs.push(p.target);
             }
+            self.program_index.insert(p.target, self.programs.len());
             self.programs.push(CapturedPositionPeer {
                 target: p.target,
                 requested: Arc::new(PositionProgram {
@@ -209,9 +224,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
             return Ok(None);
         }
         let (program, captured) = self
-            .programs
-            .iter()
-            .find(|program| program.target == p.target)
+            .program(p.target)
             .map(|program| {
                 (
                     Arc::clone(&program.requested),

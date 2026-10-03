@@ -40,7 +40,7 @@ pub(super) fn position_row(row: OwnedHybridProjection<FamilySidecar>) -> SplitRo
             owner,
             value,
             metadata,
-            sidecar,
+            sidecar: *sidecar,
         }),
         sidecar => SplitRow::Other(OwnedHybridProjection {
             target,
@@ -60,7 +60,7 @@ pub(super) fn family_row(
         owner: row.owner,
         value: row.value,
         metadata: row.metadata,
-        sidecar: FamilySidecar::Position(row.sidecar),
+        sidecar: FamilySidecar::Position(Box::new(row.sidecar)),
     }
 }
 
@@ -80,7 +80,8 @@ fn wrapped(
     observe: &mut PositionObserve<'_>,
     observation: HybridFamilyObservation<'_>,
 ) -> Result<(FamilyProjectionMetadata, FamilySidecar), TransitionError> {
-    observe(observation).map(|(metadata, sidecar)| (metadata, FamilySidecar::Position(sidecar)))
+    observe(observation)
+        .map(|(metadata, sidecar)| (metadata, FamilySidecar::Position(Box::new(sidecar))))
 }
 
 /// The family program composer, seen by the Position observer as a Position composer.

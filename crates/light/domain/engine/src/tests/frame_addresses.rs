@@ -21,7 +21,7 @@ fn playback_contributions_carry_the_current_generation_address() {
             ),
             CueChange::set(
                 fixture_id,
-                AttributeKey("zoom".into()),
+                AttributeKey("iris".into()),
                 AttributeValue::Normalized(0.5),
             ),
         ],
@@ -54,7 +54,7 @@ fn playback_contributions_carry_the_current_generation_address() {
         "a declared pair is offered by number for this generation"
     );
     assert_eq!(
-        address_of("zoom"),
+        address_of("iris"),
         None,
         "an undeclared pair is offered by name"
     );

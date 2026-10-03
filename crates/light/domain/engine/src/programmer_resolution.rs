@@ -240,7 +240,7 @@ impl Engine {
         default_fade_millis: u64,
         group_colors: &HashMap<String, crate::engine::GroupColorContribution>,
         addresses: &parking_lot::Mutex<ProgrammerAddressMemo>,
-    ) -> Vec<EngineContribution> {
+    ) -> ProgrammerContributions {
         let has_replacements = sampled.iter().any(ContributionBatch::has_replacements);
         // TL-639: without a fade the evaluation before the replacement filter depends only on
         // the captured vectors, the generation, these flags and the transition history.
@@ -257,8 +257,8 @@ impl Engine {
                 )
             })
             .flatten();
-        let resolved = match kept {
-            Some(resolved) => resolved,
+        let (resolved, winners) = match kept {
+            Some(kept) => (kept.resolved, Some(kept.winners)),
             None => {
                 let kept_states = memoizable.then(|| programmers.clone());
                 let resolved = Arc::new(self.resolve_programmers(
@@ -273,42 +273,29 @@ impl Engine {
                     group_colors,
                     addresses,
                 ));
-                if let Some(states) = kept_states
-                    && continuity.programmer_transitions.version() == transitions
-                {
-                    self.programmer_memo.lock().keep(
-                        states,
-                        generation.identity(),
-                        flags,
-                        transitions,
-                        Arc::clone(&resolved),
-                    );
-                }
-                resolved
+                let winners = kept_states
+                    .filter(|_| continuity.programmer_transitions.version() == transitions)
+                    .map(|states| {
+                        self.programmer_memo.lock().keep(
+                            states,
+                            generation.identity(),
+                            flags,
+                            transitions,
+                            Arc::clone(&resolved),
+                        )
+                    });
+                (resolved, winners)
             }
         };
-        resolved
-            .iter()
-            .flat_map(|values| {
-                programmer_winners(
-                    values
-                        .iter()
-                        .filter(|((value, ..), replacement)| {
-                            !replacement
-                                .as_ref()
-                                .is_some_and(|source| replaces_source(sampled, source, value))
-                        })
-                        .map(|(addressed, _)| addressed.clone())
-                        .collect(),
+        match winners {
+            Some(winners) => {
+                let removed = removed_by(&resolved, sampled);
+                ProgrammerContributions::Shared(
+                    winners.get_or_arbitrate(removed, || arbitrate(&resolved, sampled)),
                 )
-            })
-            .map(|(value, address, origin, evidence)| {
-                EngineContribution::unscaled(value)
-                    .at(address)
-                    .with_origin(origin)
-                    .with_family_evidence(evidence)
-            })
-            .collect()
+            }
+            None => ProgrammerContributions::Owned(arbitrate(&resolved, sampled)),
+        }
     }
 
     /// Every Programmer's values in order, before the sampled-replacement filter.
@@ -668,6 +655,84 @@ fn supersedes(value: &TimedValue, current: &TimedValue) -> bool {
 enum WinnerKey {
     Address(FrameAddress),
     Name(FixtureId, AttributeKey),
+}
+
+/// Positions (in evaluation order) of the values `sampled` replaces.
+fn removed_by(
+    resolved: &[crate::programmer_memo::ResolvedProgrammerValues],
+    sampled: &[ContributionBatch],
+) -> Vec<u32> {
+    resolved
+        .iter()
+        .flatten()
+        .enumerate()
+        .filter(|(_, ((value, ..), replacement))| {
+            replacement
+                .as_ref()
+                .is_some_and(|source| replaces_source(sampled, source, value))
+        })
+        .map(|(index, _)| index as u32)
+        .collect()
+}
+
+/// Every Programmer's winning contributions after the sampled-replacement filter.
+fn arbitrate(
+    resolved: &[crate::programmer_memo::ResolvedProgrammerValues],
+    sampled: &[ContributionBatch],
+) -> Vec<EngineContribution> {
+    resolved
+        .iter()
+        .flat_map(|values| {
+            programmer_winners(
+                values
+                    .iter()
+                    .filter(|((value, ..), replacement)| {
+                        !replacement
+                            .as_ref()
+                            .is_some_and(|source| replaces_source(sampled, source, value))
+                    })
+                    .map(|(addressed, _)| addressed.clone())
+                    .collect(),
+            )
+        })
+        .map(|(value, address, origin, evidence)| {
+            EngineContribution::unscaled(value)
+                .at(address)
+                .with_origin(origin)
+                .with_family_evidence(evidence)
+        })
+        .collect()
+}
+
+/// The Programmer contributions of one resolution: computed for it, or the winners kept with an
+/// unchanged evaluation (TL-639 round 2). Both hold the same values in the same order.
+pub(crate) enum ProgrammerContributions {
+    Owned(Vec<EngineContribution>),
+    Shared(Arc<Vec<EngineContribution>>),
+}
+
+impl std::ops::Deref for ProgrammerContributions {
+    type Target = [EngineContribution];
+
+    fn deref(&self) -> &[EngineContribution] {
+        match self {
+            Self::Owned(values) => values,
+            Self::Shared(values) => values,
+        }
+    }
+}
+
+impl ProgrammerContributions {
+    /// Offer every contribution to `resolver` in order: moved when owned, borrowed when kept.
+    pub(crate) fn offer_to(
+        self,
+        resolver: &mut crate::contribution::EngineContributionResolver<'_>,
+    ) {
+        match self {
+            Self::Owned(values) => resolver.extend(values),
+            Self::Shared(values) => resolver.extend_borrowed_contributions(values.iter()),
+        }
+    }
 }
 
 fn programmer_winners(values: Vec<Addressed>) -> Vec<Addressed> {

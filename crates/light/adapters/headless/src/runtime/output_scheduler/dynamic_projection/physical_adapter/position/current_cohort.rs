@@ -21,12 +21,15 @@ pub(super) struct CapturedCurrentCohorts {
     token: Option<CapturedFrameToken>,
     groups: Arc<[CurrentCohort]>,
     owners: Arc<FxHashMap<FixtureId, (usize, usize)>>,
+    /// TL-639 round 2: each root's cohort, so a membership query is a lookup, not a scan.
+    roots: Arc<FxHashMap<FixtureId, usize>>,
 }
 impl CapturedCurrentCohorts {
     pub fn clear(&mut self) {
         self.token = None;
         self.groups = Default::default();
         self.owners = Default::default();
+        self.roots = Default::default();
     }
     pub fn capture(
         &mut self,
@@ -94,6 +97,7 @@ impl CapturedCurrentCohorts {
         }
         self.groups = groups.into();
         self.owners = Arc::new(owner_indices);
+        self.roots = Arc::new(root_indices);
         self.token = Some(frame.token.clone());
         Ok(())
     }
@@ -107,7 +111,7 @@ impl CapturedCurrentCohorts {
         if self.token.as_ref() != Some(frame.token) {
             return Err(invalid("Position cut membership belongs to another frame"));
         }
-        let Some(cohort) = self.groups.iter().find(|cohort| cohort.root == root) else {
+        let Some(cohort) = self.roots.get(&root).map(|index| &self.groups[*index]) else {
             return Ok(None);
         };
         if cohort.protected || cohort.owners.is_empty() {

@@ -97,11 +97,7 @@ pub(super) fn compose(
         }
         let mut peers = Vec::new();
         for target in members {
-            let Some(program) = observer
-                .programs
-                .iter()
-                .find(|program| program.target == target)
-            else {
+            let Some(program) = observer.program(target) else {
                 peers.clear();
                 break;
             };
