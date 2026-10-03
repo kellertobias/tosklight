@@ -254,6 +254,11 @@ Scenarios:
   - `--readout-consumers N --slow-consumer-ms M` adds threads that read every published frame,
     its physical sidecars and its accepted Colour results.
   - `--no-publish` skips publication.
+- `--digest-ticks N` (TL-639, any scenario): instead of the timed report, render N unpaced
+  logical ticks and print per-tick digests of the encoded DMX and, per fixture, of resolved and
+  head values, physical rows and accepted Colour results. Dynamic instance identities are derived
+  from their definitions in this mode, so two builds compare frame by frame
+  (`engine-render-performance-series.md`, section TL-639).
 
 Each semantic scenario report carries a `semantic` section with the following:
 

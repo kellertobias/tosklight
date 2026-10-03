@@ -266,6 +266,8 @@ Run each from the candidate root with `--fixture-package-dir assets/fixture-libr
 
 ## Semantic output optimisation, October 2026 (TL-553)
 
+TL-639 below continues this work with a build-equivalence harness and new numbers.
+
 The question was whether the TL-596 workloads could be brought within their deadlines without
 changing semantics. Not yet: every output is still identical, the dirty-work gates and the 2,000
 and hard-floor legacy gates now pass, and the TL-564 mix holds all 27 configurations. The typed
@@ -435,3 +437,166 @@ identical profiles, which is the first candidate for a reduction.
   `legacy-phases/`, `rig500-*`).
 - The runner's consumer comparison and its test changed after the source capture; the gates
   were re-evaluated from the raw runs. Other agents shared the host; every comparison alternates.
+
+## Semantic output: shared models, memoised Programmer, deferred physics (TL-639)
+
+The question was whether typed semantic output could be compiled once and sampled per frame so
+that the typed tiers meet their deadlines, with byte-identical output. The legacy paired gate now
+passes on every tier, including stress 4,000, and memory is cut by roughly half to three quarters.
+The typed tiers improved by 28-32 % (p50) and still miss: stress 2,000 runs at 11.3 Hz (p99
+95 ms), the hard floor at 28.3 Hz (p99 41 ms). Every change was verified frame by frame against
+the TL-553 build (below). A per-target compiled plan for composition and observation was not
+built; the remaining time and what such a plan needs are listed below.
+
+### Gates
+
+Same runner, thresholds and host as TL-553. Legacy five alternated rounds against the
+pre-semantic baseline; typed tiers and the TL-564 matrix three rounds. Pipeline ms, medians.
+
+| Gate (existing threshold) | TL-553 | TL-639 |
+| --- | --- | --- |
+| Paired p99 regression ≤ max(1 ms, 5 %), stress 2,000 / 60 Hz | pass, +0.51 | **pass**: 6.03 → 6.21 (+0.18) |
+| Paired p99 regression, stress 4,000 / 60 Hz | fail, +1.72 | **pass**: 12.77 → 12.73 (-0.04) |
+| Paired p99 regression, hard floor 4,148 / 125 Hz | pass, +0.29 | **pass**: 5.15 → 4.52 (-0.63); 125 Hz held 5 of 5 |
+| Typed stress 2,000 / 60 Hz: rate held, 0 misses | fail, p99 122.95, 8.8 Hz | **fail**: p99 95.18, 11.3 Hz |
+| Typed stress 4,000 / 60 Hz | fail, p99 262.8, 4.0 Hz | **fail**: p99 208.42, 5.0 Hz |
+| Typed hard floor 4,148 / 125 Hz | fail, p99 50.3, 23.0 Hz | **fail**: p99 41.05, 28.3 Hz |
+| TL-564 mix, 27 configurations: rate held, 0 misses | 27 pass | 25 pass; all-points-move at 125 Hz had one late frame in the 30 and 120 Hz tracking runs (see below) |
+| No generation change or compile from motion | pass | pass |
+| Static bases: 0 Position fits, dependents 6 / 24, unchanged Colour skips solves | pass | pass |
+| Readout consumers do not multiply physical solves | pass | pass |
+
+TL-564 at 125 Hz, all-points-move: the pipeline p99 is lower (3.9-4.3 ms against 4.6-5.9 ms for
+the TL-553 build), but both builds show isolated late frames. Five extra alternated rounds of the
+two configurations (`repeat-125/`) gave the TL-553 build 2 misses in 10 runs and this build 4 in
+10, each a single frame (max 6.9-9.2 ms) in an otherwise 4 ms run. TL-596 recorded the same two
+configurations failing the same way. This is not attributed to a code path; it stays a fail.
+
+Typed tiers, the TL-553 final binary (`1e8c7f19…`) alternated with this one, three rounds
+(`before-after-typed/`):
+
+| Profile | Before p50 / p99 | After p50 / p99 | RSS before → after |
+| --- | ---: | ---: | ---: |
+| Typed stress 2,000, 60 Hz | 125.03 / 137.95 | 89.83 / 104.17 | 649 → 372 MB |
+| Typed stress 4,000, 60 Hz | 270.86 / 278.25 | 199.10 / 215.91 | 1,181 → 675 MB |
+| Typed hard floor, 125 Hz | 50.91 / 58.42 | 34.82 / 39.60 | 575 → 281 MB |
+
+Legacy resident memory, baseline → candidate: stress 2,000 237 → 66 MB, stress 4,000 454 → 112
+MB, hard floor 214 → 77 MB.
+
+### Equivalence
+
+`light-benchmark --digest-ticks N` renders N unpaced logical ticks and prints, per tick, the
+encoded DMX checksum and per fixture a hash of every resolved value, profile head value, physical
+row (native raw values and every forward result) and accepted Color head/output. Dynamic instance
+identities seed Random lanes and were random per process, so this mode derives them from the
+definition (`DynamicRuntime::derive_instance_ids_from`) and samples instances in identity order;
+two runs of one build are then identical. Each step was compared with the TL-553 build (built from
+`8997670d0` plus only the harness files) over 20 ticks of: typed stress 2,000, typed hard floor,
+legacy stress 2,000, legacy hard floor, and the TL-564 workload in four modes (small-subset 60 Hz
+tracking, all-points-move 120 Hz, static bases, static bases with the grid at 500 mm). Every
+fixture and tick, every DMX checksum and every Point pose matched. The only differing work
+counter is `color_fitting_compiles` (fitters are now shared).
+
+Preload, Freeze, FixAT and fades are not in these workloads; their equivalence rests on the
+existing suites, all green, and the focused tests named below.
+
+### What changed
+
+- **Field scopes are bit sets** (`light-core` `field_trace/scope.rs`). Every trace query
+  unioned, intersected and subtracted sorted `Arc<[field]>` sets, allocating on each operation.
+  Unit fields are now bits; individual wheels and native channels keep a sorted list. Equality,
+  ordering, iteration, Debug and serialization are those of the sorted list (test:
+  `bit_scopes_match_the_sorted_slice_reference_on_every_operation`, 20,000 random pairs against
+  the former implementation). Owner validation is a mask; owner keys are shared statics.
+- **Physical forward results are evaluated on first read** (`physical_projection.rs`). The
+  render captures native values and `complete`; Color, Position and Focus/Zoom forward models run
+  when a reader calls `colors()`, `axes()`, `lenses()` or `optics()`, into recycled buffers, and
+  unchanged native values keep earlier results. Readers are Stage native lanes (raw values only),
+  freeze capture, Position and Zoom readouts, output API rows and Preload projections; all read
+  after publication, off the output path (tests:
+  `forward_results_are_evaluated_on_first_read_and_equal_a_fresh_evaluation`,
+  `changed_native_values_are_never_read_through_stale_forward_results`, and the existing
+  reuse/layout tests).
+- **Shared profiles and models.** `FixtureDefinition.profile_snapshot` is an
+  `Arc<FixtureProfile>`; fixtures compiled from one profile revision share it (it was deep-cloned
+  per fixture: 225 MB in typed stress 2,000). Serialization is unchanged; in-place edits use
+  `Arc::make_mut`. `CompiledModelInterner` shares compiled Colour fitters (headless adapter,
+  across fixture lists) and Color/Position/Optics forward models (engine layout) between
+  instances whose snapshot, mode, calibration, appearance and context are identical; the context
+  compares by identity (tests: `identical_inputs_share_one_compile_and_any_difference_compiles_again`,
+  `identical_fitting_inputs_share_one_fitter_across_fixtures_and_copies`,
+  `identical_installations_share_compiled_forward_models`). Retained accepted Color frames no
+  longer keep the sidecars' larger in-place allocation (110 MB across 32 frames).
+- **Programmer evaluation memo** (`programmer_memo.rs`). Without fades, a Programmer's values
+  before the sampled-replacement filter are a pure function of its captured vectors, the
+  generation, the tracing flags and the transition history. The transition history now carries a
+  process-unique content version; an evaluation that left it unchanged is kept and reused by the
+  next static resolution and the next frame. The replacement filter and winner arbitration still
+  run per call (tests: `kept_evaluations_equal_fresh_ones_with_and_without_sampled_replacements`,
+  `fades_and_changed_histories_are_always_evaluated_again`).
+- **Plain leaf samples** skip the generic tape import, pruning, owner split and classification
+  traversals; their validation runs the leaf's own node checks (tests: `plain_leaves.rs`, each
+  shortcut against the generic path).
+- **Hashing and retains.** Programmer transitions, source-origin bindings, sampling work sets and
+  binding membership sets use the Fx hasher (never iterated order-dependently). Retaining
+  bindings by key or by authored binding no longer looks up a record for every static binding
+  (test: `key_and_authored_retains_equal_the_record_retain`).
+
+### Where the typed frame's time goes now
+
+CPU samples of the final binary (`sample(1)`), share of the frame:
+
+- **Typed stress 2,000 (≈88 ms).**
+  - Family composition and observation, 42 %:
+    - observation 13 % (Colour resolve 7 %, field projection 4 %);
+    - retained composition 8 %;
+    - the Position observer's program composition and finish 11 %.
+  - Typed preparation 19.5 %. Position forest bundling and coupled compilation alone are 8.5 %,
+    for two plain Pan/Tilt leaves per target.
+  - Deferred typed sampling 6.6 %; cohort finish 5.5 %; pinning 3 %; source binding 3 %.
+  - Final render 7 %; static resolutions 2 %.
+  - The physical math is small: Colour fits 3.2 %, Position fits 0.4 %.
+  - Allocation, free and copies are about 19 %.
+- **Typed hard floor (≈35 ms).**
+  - Final render 19 %, of which the per-head value maps (`prepare_head_inputs`) are a quarter.
+  - Family observation 24 %, of which Colour resolve is 12 %: it replays memoised fits, but must
+    capture the fixture's native raw values for the memo key (7 %).
+  - Static resolutions 7.7 %, Programmer contributions 6 %.
+  - Native family rows 6.5 %; family row projection 2.5 %; accepted Color record 2.8 %.
+
+### What reaching the deadlines needs
+
+The budget is 16.7 ms (stress 2,000) and 8 ms (hard floor); the scalar control frames are 5.5 and
+3.5 ms. The remaining typed cost is the per-target pipeline itself, about 40 µs per animated
+target at stress 2,000:
+
+1. **A compiled per-target Position plan.** Building a forest, a retained tape and a coupled
+   expression for two numeric leaves every frame is 8.5 %; the observer's composition and finish
+   another 11 %. A plan compiled when the lane structure changes, with numeric leaves rebound per
+   frame, needs a value-rebinding entry point on `CompiledCoupledExpression` that keeps lineage,
+   origins and Current dependencies exact.
+2. **Retained composition routes.** `BaseEvaluation` rebuilds its tasks, segments and trace arena
+   per target and frame; only the leaf values change.
+3. **Native capture reuse.** The hard floor captures every Colour fixture's native vector each
+   frame only to confirm an unchanged memo key. Replaying the recorded value reads and reusing the
+   vector when they are equal would remove most of the 7 %.
+4. **Final render head maps.** `prepare_head_inputs` builds a hash map per head per frame; a dense
+   per-head view would serve the hybrid and legacy paths alike.
+
+Each of these changes a data model shared with Preload and the cut coordinator, so each needs the
+same frame-by-frame equivalence evidence as this work.
+
+### Measurement identities
+
+- Baseline: `f67c84e48`, binary `8a95e4a0…` (the TL-596 baseline).
+- Before: the TL-553 final binary `1e8c7f19…` (`8997670d0`).
+- Candidate: `8997670d0` plus the TL-639 working tree, binary `d09bbd1e…`,
+  `--release --locked --no-default-features`; source manifest
+  `.artifacts/tmp/tl639/identity/final-source-manifest.json`.
+- Evidence: `.artifacts/performance/semantic-output/tl639-final-20261003T102423Z/`
+  (`legacy/`, `semantic/` with the gate tables in `summary.json`, `before-after-typed/`,
+  `repeat-125/`). Digest runs: `.artifacts/tmp/tl639/d-*.json`, compared by
+  `.artifacts/tmp/tl639/cmp.py`.
+- The host was quiet during the final campaign.
+
