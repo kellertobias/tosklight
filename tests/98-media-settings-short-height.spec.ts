@@ -217,9 +217,10 @@ for (const viewport of [
 	{ name: "short and wide", width: 1280, height: 420 },
 ]) {
 	test.describe(`Settings in a ${viewport.name} window`, () => {
-		test.beforeEach(async ({ page }) => {
-			await page.setViewportSize(viewport);
-		});
+		// The page opens at the short size instead of being shrunk from the default viewport after
+		// it was created: Chrome sometimes keeps a dead band along the bottom of a page shrunk that
+		// way, where a touch drag starts a gesture that scrolls nothing.
+		test.use({ viewport: { width: viewport.width, height: viewport.height } });
 
 		test(`TL-455 @ui › the section scrolls to its last control with the mouse wheel and small trackpad steps (${viewport.name})`, async ({
 			page,
