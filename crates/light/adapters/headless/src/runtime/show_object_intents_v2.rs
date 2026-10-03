@@ -57,7 +57,7 @@ async fn dynamic_create_action(
 ) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::DynamicCreate(request.definition.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state
@@ -154,7 +154,7 @@ async fn dynamic_pool_action(
 ) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = if copy {
         ReplayAction::DynamicCopy(id, request.clone())
     } else {
@@ -247,7 +247,7 @@ async fn dynamic_update_action(
 ) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::DynamicUpdate(id, request.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state
@@ -346,7 +346,7 @@ async fn dynamic_delete_action(
 ) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::DynamicDelete(id, request.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state
@@ -438,7 +438,7 @@ async fn user_layout_action(
 ) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::UserLayout(request.action.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state
@@ -518,7 +518,7 @@ async fn patch_layer_action(
 ) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::PatchLayer(request.action.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state
@@ -594,7 +594,7 @@ async fn preload_record_action(
 ) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::Preload(request.action.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state

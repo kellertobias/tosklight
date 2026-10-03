@@ -129,6 +129,29 @@ async fn run_show_library_action(
     Ok(Json(outcome))
 }
 
+/// Show recovery preserves the failed show's file: library actions that rewrite it in place are
+/// refused for it (see `ensure_not_recovering_show`).
+fn ensure_library_action_spares_recovering_show(
+    state: &AppState,
+    action: &wire::ShowLibraryAction,
+) -> Result<(), ApiError> {
+    use wire::ShowLibraryAction as Action;
+    match action {
+        Action::SetDescription { show_id, .. } | Action::Rename { show_id, .. } => {
+            ensure_not_recovering_show(state, *show_id)
+        }
+        Action::Overwrite {
+            destination_show_id,
+            ..
+        }
+        | Action::UpdateDocument {
+            destination_show_id,
+            ..
+        } => ensure_not_recovering_show(state, *destination_show_id),
+        _ => Ok(()),
+    }
+}
+
 async fn execute_action(
     state: &AppState,
     headers: &HeaderMap,
@@ -136,6 +159,7 @@ async fn execute_action(
     action: wire::ShowLibraryAction,
 ) -> Result<wire::ShowLibraryActionResult, ApiError> {
     use wire::ShowLibraryAction as Action;
+    ensure_library_action_spares_recovering_show(state, &action)?;
     match action {
         Action::SetDescription {
             show_id,

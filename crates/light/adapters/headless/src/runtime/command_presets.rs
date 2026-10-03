@@ -17,6 +17,11 @@ pub(super) fn active_show_store(
         .current()
         .clone()
         .ok_or("no active show is loaded")?;
+    // Show recovery: the command line neither reads nor writes the show that failed to load.
+    state
+        .active_show
+        .ensure_content_writable()
+        .map_err(|error| error.message)?;
     let store = ActiveShowRepository::open(&entry.path).map_err(|error| error.to_string())?;
     Ok((entry, store))
 }

@@ -31,7 +31,9 @@ async fn record_preset(
     request: Result<Json<PresetRecordRequest>, JsonRejection>,
 ) -> Result<Response, PresetRecordHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
-    let show_id = show.resolve(&state).map_err(PresetRecordHttpError::api)?;
+    let show_id = show
+        .resolve_writable(&state)
+        .map_err(PresetRecordHttpError::api)?;
     let Json(request) = request.map_err(PresetRecordHttpError::json)?;
     super::routes::validate_request_id(&request.request_id).map_err(PresetRecordHttpError::api)?;
     validate_name(&request.name)?;

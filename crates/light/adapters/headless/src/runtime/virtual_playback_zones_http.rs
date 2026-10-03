@@ -69,7 +69,7 @@ async fn update_zones(
     };
 
     let _activation = state.active_show.acquire().await;
-    let show_id = show.resolve(&state)?;
+    let show_id = show.resolve_writable(&state)?;
     let action = ReplayAction {
         show_id: show_id.0,
         expected_revision: request.expected_revision,

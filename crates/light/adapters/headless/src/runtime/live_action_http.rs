@@ -265,7 +265,7 @@ async fn generate_fixture_presets(
 ) -> Result<Json<GenerateFixturePresetsOutcome>, ApiError> {
     output_runtime_v2::validate_request_id(&request.request_id).map_err(ApiError::bad_request)?;
     let session = session_for_desk(&state, &headers, &desk)?;
-    let show_id = show.resolve(&state)?;
+    let show_id = show.resolve_writable(&state)?;
     let replay_key = PresetGenerationReplayKey {
         session_id: session.id.0,
         show_id,

@@ -73,7 +73,7 @@ async fn patch_fixtures(
     request: Result<TolerantJson<PatchFixturesRequest>, JsonRejection>,
 ) -> Result<Response, PatchHttpError> {
     let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
-    let show_id = show.resolve(&state).map_err(PatchHttpError::api)?;
+    let show_id = show.resolve_writable(&state).map_err(PatchHttpError::api)?;
     let expected_patch_revision = parse_if_match(&headers).map_err(PatchHttpError::api)?;
     let TolerantJson(request) =
         request.map_err(|error| PatchHttpError::bad_request(error.body_text()))?;
@@ -91,7 +91,7 @@ async fn patch_fixture_policy(
     request: Result<TolerantJson<PatchFixturePolicyActionRequest>, JsonRejection>,
 ) -> Result<Response, PatchHttpError> {
     let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
-    let show_id = show.resolve(&state).map_err(PatchHttpError::api)?;
+    let show_id = show.resolve_writable(&state).map_err(PatchHttpError::api)?;
     let expected_patch_revision = parse_if_match(&headers).map_err(PatchHttpError::api)?;
     let TolerantJson(request) =
         request.map_err(|error| PatchHttpError::bad_request(error.body_text()))?;
@@ -120,7 +120,7 @@ async fn patch_fixture_update(
     request: Result<TolerantJson<PatchFixtureUpdateRequest>, JsonRejection>,
 ) -> Result<Response, PatchHttpError> {
     let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
-    let show_id = show.resolve(&state).map_err(PatchHttpError::api)?;
+    let show_id = show.resolve_writable(&state).map_err(PatchHttpError::api)?;
     let TolerantJson(request) =
         request.map_err(|error| PatchHttpError::bad_request(error.body_text()))?;
     let request_id = request.request_id.clone();

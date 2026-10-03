@@ -89,7 +89,7 @@ async fn import_audio(
     body: Bytes,
 ) -> Result<Json<wire::TimecodeAudioImportResult>, ApiError> {
     authenticate(&state, &headers)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     if query.name.trim().is_empty() {
         return Err(ApiError::bad_request(
             "Timecode audio name must not be empty",
@@ -190,7 +190,7 @@ async fn object_action(
 ) -> Result<Json<ShowObjectActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::Timecode(request.action.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state
@@ -678,6 +678,10 @@ async fn runtime_snapshots(
 ) -> Result<Json<Vec<wire::TimecodeTransportSnapshot>>, ApiError> {
     let _session = session_for_desk(&state, &headers, &desk)?;
     let show_id = context.resolve(&state)?;
+    // Show recovery runs none of the failed show's Timecodes.
+    if state.active_show.in_recovery() {
+        return Ok(Json(Vec::new()));
+    }
     install_show_timecodes(&state, show_id)?;
     Ok(Json(
         state

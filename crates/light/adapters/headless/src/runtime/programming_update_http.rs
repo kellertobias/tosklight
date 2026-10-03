@@ -43,7 +43,7 @@ async fn preview(
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
     let show_id = show
-        .resolve(&state)
+        .resolve_writable(&state)
         .map_err(ProgrammingUpdateHttpError::api)?;
     let Json(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
     validate_request_id(&request.request_id)?;
@@ -70,7 +70,7 @@ async fn targets(
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
     let show_id = show
-        .resolve(&state)
+        .resolve_writable(&state)
         .map_err(ProgrammingUpdateHttpError::api)?;
     let Json(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
     validate_request_id(&request.request_id)?;
@@ -96,7 +96,7 @@ async fn apply_action(
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
     let show_id = show
-        .resolve(&state)
+        .resolve_writable(&state)
         .map_err(ProgrammingUpdateHttpError::api)?;
     let expected_show_revision =
         parse_if_match(&headers).map_err(ProgrammingUpdateHttpError::api)?;

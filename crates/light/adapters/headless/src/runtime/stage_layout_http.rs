@@ -29,7 +29,9 @@ async fn stage_layout_action(
 ) -> Result<Response, StageLayoutHttpError> {
     let session = authenticate(&state, &headers).map_err(StageLayoutHttpError::api)?;
     validate_request(&request)?;
-    let show_id = context.resolve(&state).map_err(StageLayoutHttpError::api)?;
+    let show_id = context
+        .resolve_writable(&state)
+        .map_err(StageLayoutHttpError::api)?;
     let key = ReplayKey {
         desk_id: session.desk.id,
         session_id: session.id.0,

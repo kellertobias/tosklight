@@ -42,6 +42,8 @@ fn environment(
         .current()
         .clone()
         .ok_or_else(|| not_found("no active Show is loaded"))?;
+    // Show recovery: the failed show's Presets are not recalled.
+    ports.state().active_show.ensure_content_writable()?;
     if active.id != request.show_id {
         return Err(conflict("the requested Show is not active"));
     }

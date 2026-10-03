@@ -63,6 +63,15 @@ rest went.
 
 If startup reports an invalid show, preserve the affected file, load a known revision or other show, and inspect diagnostics before overwriting anything. See [Shows, Revisions, and MVR](10-shows-revisions-and-mvr.md).
 
+While the desk is in show recovery, the show that could not be loaded is still named, but none of
+it runs: the desk shows and outputs an empty show, with no fixtures, Groups, Presets, Cues,
+Playbacks, Schedules, Timecodes or Cue previews. Nothing changes that show's file. Recording,
+editing, patching, importing into it, renaming it, or changing its description is refused with
+**The active show could not be loaded; load the built-in default or a new empty show first**. Desk
+settings, sessions and the show library keep working. Choose **Load Clean Built-in Default**,
+**Initialize New Empty Show**, or open another show to leave recovery; the damaged file stays in
+the library exactly as it was.
+
 ### Shows programmed before fixture-independent programming
 
 The desk programs Position in degrees and targets, Color as one fixture-independent colour, and

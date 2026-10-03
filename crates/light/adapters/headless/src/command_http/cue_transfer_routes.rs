@@ -29,7 +29,9 @@ async fn transfer_cue(
     request: Result<TolerantJson<CueTransferRequest>, JsonRejection>,
 ) -> Result<Response, CueTransferHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
-    let show_id = show.resolve(&state).map_err(CueTransferHttpError::api)?;
+    let show_id = show
+        .resolve_writable(&state)
+        .map_err(CueTransferHttpError::api)?;
     let expected_revision =
         super::super::parse_if_match(&headers).map_err(CueTransferHttpError::api)?;
     let TolerantJson(request) = request.map_err(CueTransferHttpError::json)?;

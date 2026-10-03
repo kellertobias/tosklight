@@ -313,6 +313,25 @@ impl ActiveShowResource {
         self.error.read().is_some()
     }
 
+    /// The one gate for every change to the active show's content in show recovery.
+    ///
+    /// The failed show stays named so the operator can recover it, so a write would land in the
+    /// preserved original — a show the engine does not run. Every show-content mutation (the
+    /// active-show unit of work, and the routes that write the store directly) asks here first
+    /// and changes nothing when refused. Desk settings, the show library and the recovery actions
+    /// do not change the active show's content and are not gated.
+    pub(in crate::runtime) fn ensure_content_writable(
+        &self,
+    ) -> Result<(), light_application::ActionError> {
+        if self.in_recovery() {
+            return Err(light_application::ActionError::new(
+                light_application::ActionErrorKind::Conflict,
+                SHOW_RECOVERY_WRITE_REFUSED,
+            ));
+        }
+        Ok(())
+    }
+
     pub(in crate::runtime) fn set_error(&self, error: Option<String>) {
         *self.error.write() = error;
     }

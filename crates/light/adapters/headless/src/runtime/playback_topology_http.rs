@@ -35,7 +35,7 @@ async fn apply_action(
 ) -> Result<Response, PlaybackTopologyHttpError> {
     let session = authenticate(&state, &headers).map_err(PlaybackTopologyHttpError::api)?;
     let show_id = show
-        .resolve(&state)
+        .resolve_writable(&state)
         .map_err(PlaybackTopologyHttpError::api)?;
     let expected_revision = parse_if_match(&headers).map_err(PlaybackTopologyHttpError::api)?;
     validate_safe_revision(expected_revision, "If-Match")?;

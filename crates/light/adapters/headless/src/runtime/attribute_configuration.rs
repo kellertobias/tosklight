@@ -168,7 +168,8 @@ async fn color_model_impact(
     axum::extract::Query(query): axum::extract::Query<ColorModelImpactQuery>,
 ) -> Result<Json<wire::ColorModelImpact>, ApiError> {
     authenticate(&state, &headers)?;
-    let show_id = context.resolve(&state)?;
+    // Previews a change to the show's content, so it is refused in show recovery like the change.
+    let show_id = context.resolve_writable(&state)?;
     let installed = state.attributes.snapshot();
     if installed.show_id != Some(show_id) {
         return Err(ApiError::conflict(
@@ -207,6 +208,13 @@ async fn snapshot(
 ) -> Result<Json<wire::AttributeConfigurationSnapshot>, ApiError> {
     authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
+    // Show recovery: the failed show's configuration is not served; an empty show has the
+    // recommended one.
+    if state.active_show.in_recovery() {
+        return Ok(Json(wire_snapshot(
+            &InstalledAttributeConfiguration::recommended(Some(show_id), 0),
+        )));
+    }
     let installed = state.attributes.snapshot();
     if installed.show_id != Some(show_id) {
         return Err(ApiError::conflict(
@@ -224,7 +232,7 @@ async fn update_configuration(
 ) -> Result<Json<wire::AttributeConfigurationUpdateOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     show_objects_v2::validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let key = ReplayKey {
         session_id: session.id.0,
         show_id,

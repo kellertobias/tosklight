@@ -422,6 +422,10 @@ impl Drop for TimecodeAudioWorkerResource {
     }
 }
 
+/// What every refused show-content write answers in show recovery (409).
+pub(in crate::runtime) const SHOW_RECOVERY_WRITE_REFUSED: &str =
+    "The active show could not be loaded; load the built-in default or a new empty show first";
+
 #[derive(Clone)]
 pub(in crate::runtime) struct ActiveShowResource {
     activation: ActiveShowCoordinator,

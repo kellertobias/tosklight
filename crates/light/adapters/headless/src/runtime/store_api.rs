@@ -9,6 +9,7 @@ pub(super) async fn store_preload_intent(
     expected_revision: u64,
 ) -> Result<StoredPreloadIntent, ApiError> {
     let activation = state.active_show.acquire().await;
+    ensure_show_content_writable(state)?;
     let entry = state
         .installation
         .show(show_id)

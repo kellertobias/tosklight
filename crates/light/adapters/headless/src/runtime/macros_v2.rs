@@ -34,7 +34,7 @@ async fn run_macro(
     TolerantJson(request): TolerantJson<wire::MacroRunActionRequest>,
 ) -> Result<Json<wire::MacroExecutionSnapshot>, ApiError> {
     let session = command_http::authenticate_desk_mutation(&state, &headers, &desk)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let (revision, definition) = macro_for_run(&state, show_id, macro_id)?;
     if request
         .source_revision
@@ -65,7 +65,7 @@ async fn run_macro_line(
     TolerantJson(request): TolerantJson<wire::MacroRunLineActionRequest>,
 ) -> Result<Json<wire::MacroExecutionSnapshot>, ApiError> {
     let session = command_http::authenticate_desk_mutation(&state, &headers, &desk)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let (revision, definition) = macro_for_run(&state, show_id, macro_id)?;
     if request.source_revision != revision {
         return Err(ApiError::conflict(format!(
@@ -399,7 +399,7 @@ async fn undo_run_line(
     headers: HeaderMap,
 ) -> Result<Json<wire::MacroRunLineUndoOutcome>, ApiError> {
     let session = command_http::authenticate_desk_mutation(&state, &headers, &desk)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let execution = state
         .macros
         .execution(session.desk.id, execution_id)
@@ -521,7 +521,7 @@ async fn macro_object_action(
 ) -> Result<Json<ShowObjectActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::Macro(request.action.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state

@@ -98,7 +98,7 @@ async fn output_route_action_v2(
 ) -> Result<Json<wire::OutputRouteActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let key = ReplayKey {
         session_id: session.id.0,
         show_id,
@@ -260,10 +260,16 @@ fn apply_route_patch(
     Ok(body)
 }
 
+/// The active show's library entry, for routes that open its store directly.
+///
+/// Show recovery refuses it (409, see `ActiveShowResource::ensure_content_writable`): no route
+/// reads or writes the failed show's file through this. Collection reads answer their empty shape
+/// before they get here.
 pub(super) fn active_entry(
     state: &AppState,
     show_id: light_core::ShowId,
 ) -> Result<ShowEntry, ApiError> {
+    super::ensure_show_content_writable(state)?;
     state
         .active_show
         .current()

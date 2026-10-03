@@ -31,7 +31,9 @@ async fn record_group(
     request: Result<Json<GroupRecordRequest>, JsonRejection>,
 ) -> Result<Response, GroupRecordHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
-    let show_id = show.resolve(&state).map_err(GroupRecordHttpError::api)?;
+    let show_id = show
+        .resolve_writable(&state)
+        .map_err(GroupRecordHttpError::api)?;
     let Json(request) = request.map_err(GroupRecordHttpError::json)?;
     super::routes::validate_request_id(&request.request_id).map_err(GroupRecordHttpError::api)?;
     validate_group_id(&request.group_id)?;

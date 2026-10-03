@@ -117,6 +117,8 @@ mod show_object_v2_route_tests;
 mod show_patch_route_tests;
 #[path = "show_recovery_route_tests.rs"]
 mod show_recovery_route_tests;
+#[path = "show_recovery_write_tests.rs"]
+mod show_recovery_write_tests;
 #[path = "speed_group_v2_tests.rs"]
 mod speed_group_v2_tests;
 

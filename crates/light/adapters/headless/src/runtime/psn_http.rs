@@ -31,7 +31,14 @@ async fn read_psn(
 ) -> Result<Response, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
-    let (revision, configuration) = stored_configuration(&state, show_id)?;
+    // Show recovery: the failed show's PSN configuration and Macros are not served; the answer is
+    // the empty show's "off, nothing bound".
+    let recovery = state.active_show.in_recovery();
+    let (revision, configuration) = if recovery {
+        (0, light_application::PsnConfiguration::default())
+    } else {
+        stored_configuration(&state, show_id)?
+    };
     let status = state.psn.status(super::psn::listener::now_millis());
     Ok(json_with_etag(
         revision,
@@ -40,7 +47,11 @@ async fn read_psn(
             configuration: wire_configuration(&configuration),
             status: wire_status(&status),
             points: points(&state),
-            macros: macros(&state, show_id)?,
+            macros: if recovery {
+                Vec::new()
+            } else {
+                macros(&state, show_id)?
+            },
         },
     ))
 }
@@ -57,7 +68,7 @@ async fn update_psn(
             "request_id must be between 1 and 128 characters",
         ));
     }
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let key = ReplayKey {
         desk_id: session.desk.id,
         session_id: session.id.0,

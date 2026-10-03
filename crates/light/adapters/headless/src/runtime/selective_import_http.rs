@@ -65,7 +65,7 @@ async fn preview_import(
 ) -> Result<Response, SelectiveImportHttpError> {
     let session = authenticate(&state, &headers).map_err(SelectiveImportHttpError::api)?;
     let target_show_id = show
-        .resolve(&state)
+        .resolve_writable(&state)
         .map_err(SelectiveImportHttpError::api)?;
     let source_show_id = parse_source_show_id(source_show_id)?;
     let Json(selection) =
@@ -88,7 +88,7 @@ async fn apply_import(
 ) -> Result<Response, SelectiveImportHttpError> {
     let session = authenticate(&state, &headers).map_err(SelectiveImportHttpError::api)?;
     let target_show_id = show
-        .resolve(&state)
+        .resolve_writable(&state)
         .map_err(SelectiveImportHttpError::api)?;
     let source_show_id = parse_source_show_id(source_show_id)?;
     let expected_target_revision =

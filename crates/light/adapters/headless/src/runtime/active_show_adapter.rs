@@ -287,6 +287,9 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
     }
 
     fn backup(&mut self, identity: &BackupIdentity) -> Result<(), ActionError> {
+        // Show recovery: every active-show write backs up and commits through this unit, whatever
+        // the transport (HTTP, WebSocket, OSC, command line). Refused before either changes disk.
+        self.state.active_show.ensure_content_writable()?;
         let revision = self.document().revision().value();
         let show_id = self.document().id();
         if identity.show_id != show_id {
@@ -333,6 +336,7 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
         &mut self,
         mut transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError> {
+        self.state.active_show.ensure_content_writable()?;
         let revision = self.document().revision().value();
         let supported = self.state.output.supported_programming_contract();
         // TL-552 follow-up: a contract ≥ 1 commit never stores legacy programming, so no accepted
