@@ -4,6 +4,8 @@ use light_dynamics::{DynamicAddressValue, DynamicSemanticValue};
 use std::sync::Arc;
 use uuid::Uuid;
 
+mod batch;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReleaseProgrammerFixtureValue {
     pub fixture_id: FixtureId,
@@ -70,10 +72,21 @@ impl ProgrammerRegistry {
         } else {
             &state.dynamic_values
         };
-        if !mutations
-            .iter()
-            .any(|mutation| mutation_changes(values, mutation))
-        {
+        // A Live gesture over many targets uses the indexed path. Preload interleaves its
+        // released-colour bookkeeping with every row, so it stays row by row.
+        let mut indexed = (!preload
+            && mutations
+                .len()
+                .saturating_mul(values.len() + mutations.len())
+                >= batch::INDEXED_PAIRS)
+            .then(|| batch::DynamicValueIndex::new(values));
+        let changes = match &indexed {
+            Some(index) => mutations.iter().any(|mutation| index.changes(mutation)),
+            None => mutations
+                .iter()
+                .any(|mutation| mutation_changes(values, mutation)),
+        };
+        if !changes {
             return false;
         }
         self.close_selection_gesture(session);
@@ -89,7 +102,25 @@ impl ProgrammerRegistry {
             state.checkpoint();
         }
         state.active_value_undo_group = undo_group.map(|group| (preload, group.to_owned()));
-        for mutation in mutations {
+        let row_by_row = match indexed.take() {
+            None => mutations,
+            Some(mut index) => {
+                for mutation in mutations {
+                    index.remove(mutation);
+                    if let DynamicProgrammerValueMutation::Set {
+                        fixture_id,
+                        attribute,
+                        value,
+                    } = mutation
+                    {
+                        index.push(new_row(self, *fixture_id, attribute, value));
+                    }
+                }
+                *Arc::make_mut(&mut state.dynamic_values) = index.into_values();
+                &[]
+            }
+        };
+        for mutation in row_by_row {
             if preload {
                 match mutation {
                     DynamicProgrammerValueMutation::Set {
@@ -320,14 +351,23 @@ fn apply_mutation(
         }
     });
     if let DynamicProgrammerValueMutation::Set { value, .. } = mutation {
-        values.push(DynamicAddressValue {
-            fixture_id,
-            attribute: attribute.clone(),
-            value: value.clone(),
-            programmer_order: registry.next_programmer_order(),
-            changed_at_millis: u64::try_from(registry.clock.now().timestamp_millis())
-                .unwrap_or_default(),
-        });
+        values.push(new_row(registry, fixture_id, attribute, value));
+    }
+}
+
+fn new_row(
+    registry: &ProgrammerRegistry,
+    fixture_id: FixtureId,
+    attribute: &AttributeKey,
+    value: &DynamicSemanticValue,
+) -> DynamicAddressValue {
+    DynamicAddressValue {
+        fixture_id,
+        attribute: attribute.clone(),
+        value: value.clone(),
+        programmer_order: registry.next_programmer_order(),
+        changed_at_millis: u64::try_from(registry.clock.now().timestamp_millis())
+            .unwrap_or_default(),
     }
 }
 

@@ -5,6 +5,8 @@ use light_core::{
 };
 use uuid::Uuid;
 
+mod merge;
+
 /// Stable runtime controller for one authored Programmer Dynamic link. Live and Preload edits
 /// share this logical motion/clock; their separate source lanes belong to the captured rows.
 /// Session IDs are excluded because every connected surface controls the desk's one Programmer.
@@ -23,22 +25,10 @@ pub fn programmer_dynamic_controller_id(programmer_id: ProgrammerId, authored_li
 pub fn merge_dynamic_address_values<'a>(
     rows: impl IntoIterator<Item = &'a DynamicAddressValue>,
 ) -> Vec<&'a DynamicAddressValue> {
-    let rows = rows.into_iter().collect::<Vec<_>>();
     // A newer On can hide an Off without undoing that Off's cutoff for other lanes. Keep
     // every original edit as a precedence barrier until all rows have been considered.
     // Input storage order is not chronological (normal and Preload are separate vectors).
-    rows.iter()
-        .enumerate()
-        .filter(|(index, value)| {
-            !rows.iter().enumerate().any(|(other_index, other)| {
-                other_index != *index
-                    && dynamic_conflicts(value, other)
-                    && (dynamic_address_edit_is_later(other, value)
-                        || (other_index < *index && !dynamic_address_edit_is_later(value, other)))
-            })
-        })
-        .map(|(_, value)| *value)
-        .collect()
+    merge::fold(rows.into_iter().collect())
 }
 
 /// The existing Programmer edit order relation, including legacy zero-order timestamp fallback.
@@ -204,7 +194,7 @@ mod tests {
     };
     use std::sync::Arc;
 
-    fn reference() -> DynamicReference {
+    pub(super) fn reference() -> DynamicReference {
         let definition = DynamicDefinition {
             id: Uuid::from_u128(0xd1),
             pool_number: 1,
@@ -243,7 +233,7 @@ mod tests {
         }
     }
 
-    fn on(
+    pub(super) fn on(
         fixture_id: FixtureId,
         instance_link: Uuid,
         lane_id: Uuid,
@@ -269,7 +259,11 @@ mod tests {
         }
     }
 
-    fn off(fixture_id: FixtureId, instance_link: Uuid, order: u64) -> DynamicAddressValue {
+    pub(super) fn off(
+        fixture_id: FixtureId,
+        instance_link: Uuid,
+        order: u64,
+    ) -> DynamicAddressValue {
         DynamicAddressValue {
             fixture_id,
             attribute: AttributeKey("color".into()),
