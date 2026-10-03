@@ -28,6 +28,9 @@ build_e2e(){
   # assets from disk in debug builds, so opt into a self-contained UI for the transferable binary.
   light_with_cargo_command_lock "npm run test:e2e build" \
     cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features --features e2e-embedded-ui
+  # The headless Architect the Control <-> Architect show-sync scenarios drive (tests/117-*).
+  light_with_cargo_command_lock "npm run test:e2e build" \
+    cargo build --manifest-path "$ROOT/Cargo.toml" -p viz-sync --bin viz-sync-harness
 }
 architecture_check(){
   local label="$1"
