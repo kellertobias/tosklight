@@ -25,6 +25,10 @@ pub(super) struct SubscriberState {
 }
 
 impl SubscriberState {
+    pub(super) const fn filter(&self) -> &EventFilter {
+        &self.filter
+    }
+
     pub(super) fn from_replay(
         state: &EventBusState,
         filter: EventFilter,

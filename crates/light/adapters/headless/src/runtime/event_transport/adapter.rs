@@ -1,6 +1,7 @@
 //! Translation between transport-independent application events and v2 wire DTOs.
 
 mod selective_import;
+mod show_sync;
 
 use light_application as application;
 use light_wire::v2::events as wire;
@@ -46,6 +47,13 @@ pub(super) fn application_filter(
             .collect(),
         classes: filter.classes.into_iter().map(app_class).collect(),
         objects: filter.objects.into_iter().map(app_object).collect(),
+        topics: filter
+            .topics
+            .into_iter()
+            .map(|topic| match topic {
+                wire::EventTopic::ShowSync => application::EventTopic::ShowSync,
+            })
+            .collect(),
     }
 }
 
@@ -280,6 +288,16 @@ fn wire_payload(
         application::ApplicationEvent::Show(application::ShowEvent::ObjectsChanged(change)) => {
             wire::EventPayload::ShowObjectsChanged {
                 change: wire_show_objects_change(change),
+            }
+        }
+        application::ApplicationEvent::Show(application::ShowEvent::SyncCommitted(change)) => {
+            wire::EventPayload::ShowSyncCommitted {
+                change: Box::new(show_sync::wire_commit(change)),
+            }
+        }
+        application::ApplicationEvent::Show(application::ShowEvent::SyncGap(gap)) => {
+            wire::EventPayload::ShowSyncGap {
+                gap: show_sync::wire_gap(gap),
             }
         }
         application::ApplicationEvent::Show(application::ShowEvent::ScheduleRuntimeChanged(

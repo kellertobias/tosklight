@@ -1,0 +1,1058 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ShowSyncTransactionRequest",
+  "type": "object",
+  "properties": {
+    "association_id": {
+      "description": "The Architect binding this transaction belongs to. Request identities are scoped to it.",
+      "type": "string",
+      "format": "uuid"
+    },
+    "base_show_revision": {
+      "description": "The show revision the client's mirror held when it built the transaction. Informational:\ncompare-and-set is per field, not per show.",
+      "type": "integer",
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ShowSyncOperation"
+      },
+      "maxItems": 1024,
+      "minItems": 1
+    },
+    "origin": {
+      "$ref": "#/$defs/ShowSyncOrigin"
+    },
+    "request_id": {
+      "description": "Client-generated identity, kept by the client's journal across retries and restarts.",
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    },
+    "show_id": {
+      "description": "The show the binding names. A transaction for any other show is refused, never applied.",
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "request_id",
+    "association_id",
+    "show_id",
+    "base_show_revision",
+    "origin",
+    "operations"
+  ],
+  "$defs": {
+    "PatchChainBottomEnd": {
+      "type": "string",
+      "enum": [
+        "direct",
+        "steelflex_loop",
+        "motor"
+      ]
+    },
+    "PatchChainTopEnd": {
+      "type": "string",
+      "enum": [
+        "motor",
+        "direct",
+        "steelflex_loop"
+      ]
+    },
+    "PatchDirectControlEndpoint": {
+      "type": "object",
+      "properties": {
+        "ip_address": {
+          "description": "Transport adapters validate this as an IP address before invoking the application service.",
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "protocol": {
+          "$ref": "#/$defs/PatchDirectControlProtocol"
+        }
+      },
+      "required": [
+        "protocol",
+        "ip_address",
+        "port"
+      ]
+    },
+    "PatchDirectControlProtocol": {
+      "type": "string",
+      "enum": [
+        "citp"
+      ]
+    },
+    "PatchFixtureInput": {
+      "description": "One fixture candidate containing only identities and state owned by the portable patch.",
+      "type": "object",
+      "properties": {
+        "bracket_angle": {
+          "description": "Degrees the mounting bracket is set to, positive nose-down. A mechanical setting the desk\ncannot drive, recorded so the visualizer draws the rig as it actually hangs.",
+          "type": "number",
+          "format": "float",
+          "default": 0.0
+        },
+        "direct_control": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchDirectControlEndpoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixture_id": {
+          "description": "Stable identity generated once by the caller and retained across an idempotent retry.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "fixture_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "grand_master_enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "group_masters_enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "highlight_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchHighlightOverrideInput"
+          }
+        },
+        "installed_appearance": {
+          "$ref": "#/$defs/PatchInstalledFixtureAppearance",
+          "default": {
+            "color_temperature_kelvin": null,
+            "gel": {
+              "type": "open_white"
+            },
+            "light_source": {
+              "type": "profile_default"
+            },
+            "luminous_output_lumens": null,
+            "shaper_angles_degrees": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "internal_bindings": {
+          "$ref": "#/$defs/PatchInternalFixtureBindings",
+          "default": {
+            "library": null,
+            "output": null
+          }
+        },
+        "invert_pan": {
+          "type": "boolean",
+          "default": false
+        },
+        "invert_tilt": {
+          "type": "boolean",
+          "default": false
+        },
+        "layer_id": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/PatchFixtureLocation"
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "model_scale": {
+          "description": "How many times its built size a placed Venue object is drawn, from 0.01 to 100. Absent is\nthe size it was built at.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "move_in_black_delay_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "move_in_black_enabled": {
+          "type": "boolean"
+        },
+        "multipatch": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchMultiPatchInput"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "note": {
+          "description": "An operator's own note against this fixture, distinct from the profile's shared notes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "position_master": {
+          "description": "The 3D Point this fixture is slaved to. Omitted by a client that does not use points, and\nby every request written before they existed.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "rotation": {
+          "$ref": "#/$defs/PatchFixtureRotation"
+        },
+        "scenery_options": {
+          "description": "What an operator chose for a generated Venue object beyond its size. Absent keeps the\nkind's own defaults.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchSceneryOptions"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scenery_size_metres": {
+          "description": "The size a generated Venue object was placed at, in millimetres, like every other\nmeasurement the patch carries. Absent means the profile's own default.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchFixtureLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shaper_angle": {
+          "description": "Degrees a fitted shaper or barn-door module is turned to, or absent when none is fitted.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "split_patches": {
+          "description": "Canonical split assignments. An unpatched split has two `null` address fields.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchSplitAssignment"
+          },
+          "minItems": 1
+        },
+        "virtual_fixture_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "fixture_id",
+        "name",
+        "profile_id",
+        "profile_revision",
+        "mode_id",
+        "split_patches",
+        "layer_id",
+        "location",
+        "rotation",
+        "multipatch",
+        "move_in_black_enabled",
+        "move_in_black_delay_millis",
+        "highlight_overrides"
+      ]
+    },
+    "PatchFixtureLocation": {
+      "description": "Stage position in integer millimetres.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "y": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "z": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "PatchFixtureRotation": {
+      "description": "Stage rotation in degrees.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "float"
+        },
+        "y": {
+          "type": "number",
+          "format": "float"
+        },
+        "z": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "PatchGelAssignment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "open_white"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "catalog_id": {
+              "type": "string"
+            },
+            "embedded_fallback": {
+              "$ref": "#/$defs/PatchGelDefinitionSnapshot"
+            },
+            "entry_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "built_in"
+            }
+          },
+          "required": [
+            "type",
+            "catalog_id",
+            "entry_id",
+            "embedded_fallback"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "color_srgb": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "custom"
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "color_srgb"
+          ]
+        }
+      ]
+    },
+    "PatchGelDefinitionSnapshot": {
+      "type": "object",
+      "properties": {
+        "display_srgb": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "number": {
+          "type": "string"
+        },
+        "visualizer_srgb": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "name",
+        "display_srgb",
+        "visualizer_srgb"
+      ]
+    },
+    "PatchHighlightOverrideInput": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "raw_value": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "channel_id",
+        "raw_value"
+      ]
+    },
+    "PatchInstalledFixtureAppearance": {
+      "description": "Portable installed lamp/filter/static-shaper appearance for one physical fixture instance.",
+      "type": "object",
+      "properties": {
+        "color_temperature_kelvin": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "gel": {
+          "$ref": "#/$defs/PatchGelAssignment",
+          "default": {
+            "type": "open_white"
+          }
+        },
+        "light_source": {
+          "$ref": "#/$defs/PatchInstalledLightSource",
+          "default": {
+            "type": "profile_default"
+          }
+        },
+        "luminous_output_lumens": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "shaper_angles_degrees": {
+          "type": "array",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        }
+      }
+    },
+    "PatchInstalledLightSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "profile_default"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tungsten"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "halogen"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "discharge"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "led"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "fluorescent"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "arc"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "other"
+            }
+          },
+          "required": [
+            "type",
+            "label"
+          ]
+        }
+      ]
+    },
+    "PatchInternalFixtureBindings": {
+      "description": "Portable names resolved to machine-local audio resources by each desk.",
+      "type": "object",
+      "properties": {
+        "library": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "PatchMultiPatchInput": {
+      "type": "object",
+      "properties": {
+        "bracket_angle": {
+          "type": "number",
+          "format": "float",
+          "default": 0.0
+        },
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "installed_appearance": {
+          "$ref": "#/$defs/PatchInstalledFixtureAppearance",
+          "default": {
+            "color_temperature_kelvin": null,
+            "gel": {
+              "type": "open_white"
+            },
+            "light_source": {
+              "type": "profile_default"
+            },
+            "luminous_output_lumens": null,
+            "shaper_angles_degrees": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "invert_pan": {
+          "type": "boolean",
+          "default": false
+        },
+        "invert_tilt": {
+          "type": "boolean",
+          "default": false
+        },
+        "location": {
+          "$ref": "#/$defs/PatchFixtureLocation"
+        },
+        "name": {
+          "type": "string"
+        },
+        "rotation": {
+          "$ref": "#/$defs/PatchFixtureRotation"
+        },
+        "scenery_size_metres": {
+          "description": "The size a generated Venue object was placed at, in millimetres, like every other\nmeasurement the patch carries. Absent means the profile's own default.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchFixtureLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shaper_angle": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "split_patches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchSplitAssignment"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "split_patches",
+        "location",
+        "rotation"
+      ]
+    },
+    "PatchSceneryOptions": {
+      "description": "Per-placement choices for a generated Venue object beyond its size.",
+      "type": "object",
+      "properties": {
+        "chain_bottom": {
+          "description": "What the bottom of a chain holds.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchChainBottomEnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "chain_top": {
+          "description": "What the top of a chain hangs from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchChainTopEnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "colour_srgb": {
+          "description": "The object's colour as `#RRGGBB` in sRGB. Absent keeps its kind's own material.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "handrails": {
+          "description": "Which sides of a flight of stairs carry a handrail. Absent keeps what the profile declares.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchStairHandrails"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "PatchSplitAssignment": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "split": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "universe": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "split"
+      ]
+    },
+    "PatchStairHandrails": {
+      "description": "Which sides of a flight of stairs a handrail runs up, as seen climbing it.",
+      "type": "string",
+      "enum": [
+        "none",
+        "left",
+        "right",
+        "both"
+      ]
+    },
+    "ShowSyncApp": {
+      "type": "string",
+      "enum": [
+        "architect",
+        "control"
+      ]
+    },
+    "ShowSyncFieldEdit": {
+      "description": "One field of an object body, addressed by an RFC 6901 JSON pointer. `null` and an absent\nfield are the same state; arrays are best edited as one field holding the whole array.",
+      "type": "object",
+      "properties": {
+        "base": {
+          "default": null
+        },
+        "path": {
+          "type": "string"
+        },
+        "value": {
+          "default": null
+        }
+      },
+      "required": [
+        "path"
+      ]
+    },
+    "ShowSyncOperation": {
+      "description": "One edit inside a sync transaction.",
+      "oneOf": [
+        {
+          "description": "Field edits against a synchronized object's JSON body.",
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ShowSyncFieldEdit"
+              }
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "update_object"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "id",
+            "fields"
+          ]
+        },
+        {
+          "description": "A new object under a client-minted identity. Re-creating identical content is a no-op.",
+          "type": "object",
+          "properties": {
+            "body": true,
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "create_object"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "id",
+            "body"
+          ]
+        },
+        {
+          "description": "Deletes an object unless it changed since the client's base revision.",
+          "type": "object",
+          "properties": {
+            "base_object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "delete_object"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "id",
+            "base_object_revision"
+          ]
+        },
+        {
+          "description": "Field edits against the fixture's `PatchFixtureInput` document.",
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ShowSyncFieldEdit"
+              }
+            },
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "update_patch_fixture"
+            }
+          },
+          "required": [
+            "type",
+            "fixture_id",
+            "fields"
+          ]
+        },
+        {
+          "description": "A new patched fixture under a client-minted identity.",
+          "type": "object",
+          "properties": {
+            "fixture": {
+              "$ref": "#/$defs/PatchFixtureInput"
+            },
+            "type": {
+              "type": "string",
+              "const": "create_patch_fixture"
+            }
+          },
+          "required": [
+            "type",
+            "fixture"
+          ]
+        },
+        {
+          "description": "Removes a patched fixture unless it changed since the client's base revision.",
+          "type": "object",
+          "properties": {
+            "base_fixture_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "remove_patch_fixture"
+            }
+          },
+          "required": [
+            "type",
+            "fixture_id",
+            "base_fixture_revision"
+          ]
+        },
+        {
+          "description": "An immutable fixture profile revision referenced by this transaction's fixtures, retained\nin the show when the desk's library has no copy.",
+          "type": "object",
+          "properties": {
+            "profile": true,
+            "profile_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "retain_profile_revision"
+            }
+          },
+          "required": [
+            "type",
+            "profile_id",
+            "revision",
+            "profile"
+          ]
+        },
+        {
+          "description": "One `previs.*` or `architect.*` metadata value. `None` removes it.",
+          "type": "object",
+          "properties": {
+            "base": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "key": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_metadata"
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "type",
+            "key"
+          ]
+        }
+      ]
+    },
+    "ShowSyncOrigin": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "$ref": "#/$defs/ShowSyncApp"
+        },
+        "client_instance": {
+          "description": "Free-form identity of the client process, for diagnostics.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "desk_identity": {
+          "description": "The desk installation the client believes it is bound to. A mismatch is refused, so a\nbinding never writes into a different desk that answered on the same address.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid",
+          "default": null
+        }
+      },
+      "required": [
+        "app"
+      ]
+    }
+  }
+}

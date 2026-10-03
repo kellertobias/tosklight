@@ -7,6 +7,7 @@ pub(crate) const SHOW_SCHEMA_VERSION: i64 = 9;
 pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute_batch(SHOW_SCHEMA)?;
+    tx.execute(super::sync_requests::SYNC_APPLIED_REQUESTS_TABLE, [])?;
     if schema_version(&tx)? < 4 {
         materialize_legacy_fixture_profile_revisions(&tx)?;
     }

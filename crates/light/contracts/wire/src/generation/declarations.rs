@@ -43,6 +43,7 @@ use crate::v2::selective_import::*;
 use crate::v2::show_library::*;
 use crate::v2::show_network::*;
 use crate::v2::show_objects::*;
+use crate::v2::show_sync::*;
 use crate::v2::speed_group::*;
 use crate::v2::stage_layout::*;
 use crate::v2::timecode::*;
@@ -81,6 +82,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(visualizer_view(config));
     declarations.extend(selective_import(config));
     declarations.extend(show_library(config));
+    declarations.extend(show_sync(config));
     declarations.extend(interaction(config));
     declarations.extend(internal_audio(config));
     declarations.extend(live_actions(config));
@@ -546,6 +548,29 @@ fn runtime(config: &Config) -> Vec<String> {
     ]
 }
 
+fn show_sync(config: &Config) -> Vec<String> {
+    vec![
+        ShowSyncTransactionRequest::decl(config),
+        ShowSyncOrigin::decl(config),
+        ShowSyncApp::decl(config),
+        ShowSyncOperation::decl(config),
+        ShowSyncFieldEdit::decl(config),
+        ShowSyncStatus::decl(config),
+        ShowSyncConflictReason::decl(config),
+        ShowSyncConflict::decl(config),
+        ShowSyncAppliedObject::decl(config),
+        ShowSyncTransactionOutcome::decl(config),
+        ShowSyncErrorKind::decl(config),
+        ShowSyncErrorResponse::decl(config),
+        ShowSyncCommit::decl(config),
+        ShowSyncCommittedObject::decl(config),
+        ShowSyncMetadataChange::decl(config),
+        ShowSyncProfileReference::decl(config),
+        ShowSyncGapReason::decl(config),
+        ShowSyncGap::decl(config),
+    ]
+}
+
 fn virtual_playback_zones(config: &Config) -> Vec<String> {
     vec![
         VirtualPlaybackExclusionZone::decl(config),
@@ -659,6 +684,7 @@ fn event_subscription(config: &Config) -> Vec<String> {
         EventActionSource::decl(config),
         EventObject::decl(config),
         EventSubscriptionFilter::decl(config),
+        EventTopic::decl(config),
         EventRateLimit::decl(config),
         EventSnapshotCursor::decl(config),
         SequenceGap::decl(config),

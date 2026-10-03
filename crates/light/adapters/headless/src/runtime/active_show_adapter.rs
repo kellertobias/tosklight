@@ -230,6 +230,18 @@ impl ServerActiveShowUnitOfWork {
         })
     }
 
+    /// The stored outcome of a sync request this show already applied, read through the unit's
+    /// own connection while the application gate is held.
+    pub(super) fn sync_applied_request(
+        &self,
+        association_id: uuid::Uuid,
+        request_id: &str,
+    ) -> Result<Option<light_show::SyncAppliedRequest>, ActionError> {
+        self.store
+            .sync_applied_request(association_id, request_id)
+            .map_err(|error| store_error(error, None))
+    }
+
     pub(super) fn prepare_object_undo(
         &self,
         kind: &str,
@@ -307,9 +319,12 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
         &mut self,
         transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError> {
-        let revision = self.document().revision().value();
+        let previous = self.document().revision();
+        let show_id = self.document().id();
+        let revision = previous.value();
         match self.store.apply_portable_transaction(transaction) {
             Ok(commit) => {
+                super::show_sync_feed::publish_commit(&self.state, show_id, previous, &commit);
                 if let Some(document) = self.document.as_mut() {
                     document.apply_commit(&commit);
                     debug_assert_eq!(document.revision(), commit.revision());

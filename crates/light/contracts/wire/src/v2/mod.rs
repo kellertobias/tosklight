@@ -43,6 +43,7 @@ pub mod selective_import;
 pub mod show_library;
 pub mod show_network;
 pub mod show_objects;
+pub mod show_sync;
 pub mod speed_group;
 pub mod stage_layout;
 pub mod timecode;

@@ -362,6 +362,12 @@ impl PortableShowDocument {
                     .insert(index, revision.clone()),
             }
         }
+        for (key, value) in commit.metadata_changes() {
+            match value {
+                Some(value) => self.metadata.insert(key.clone(), value.clone()),
+                None => self.metadata.remove(key),
+            };
+        }
         self.revision = commit.revision();
         self.patch_revision = commit.patch_revision();
         self.metadata.insert(

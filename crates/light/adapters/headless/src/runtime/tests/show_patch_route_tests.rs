@@ -1013,7 +1013,7 @@ fn valid_patch_request_for(profile_id: Uuid, mode_id: Uuid, request_id: &str) ->
     })
 }
 
-fn install_patch_route_profile(state: &AppState) -> (Uuid, Uuid) {
+pub(super) fn install_patch_route_profile(state: &AppState) -> (Uuid, Uuid) {
     let mut profile = light_fixture::FixtureProfile::blank();
     profile.manufacturer = "Route Test".into();
     profile.name = "Patch Fixture".into();
@@ -1173,7 +1173,7 @@ async fn programmer_undo(app: &Router, token: &str, show_id: &str, desk_id: Uuid
         .unwrap()
 }
 
-async fn post_patch_update(
+pub(super) async fn post_patch_update(
     app: &Router,
     token: &str,
     show_id: &str,

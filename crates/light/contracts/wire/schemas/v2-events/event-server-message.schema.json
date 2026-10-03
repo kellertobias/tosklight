@@ -2461,6 +2461,38 @@
           "type": "object",
           "properties": {
             "change": {
+              "$ref": "#/$defs/ShowSyncCommit"
+            },
+            "type": {
+              "type": "string",
+              "const": "show_sync_committed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "gap": {
+              "$ref": "#/$defs/ShowSyncGap"
+            },
+            "type": {
+              "type": "string",
+              "const": "show_sync_gap"
+            }
+          },
+          "required": [
+            "type",
+            "gap"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
               "$ref": "#/$defs/ScheduleRuntimeChange"
             },
             "type": {
@@ -7452,6 +7484,203 @@
         "show_id",
         "show_revision",
         "changes"
+      ]
+    },
+    "ShowSyncCommit": {
+      "description": "The committed state of one show commit, published for every accepted commit of the active\nshow, from any Control path or a sync transaction.",
+      "type": "object",
+      "properties": {
+        "association_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "desk_only_changes": {
+          "description": "Desk-only objects the commit also changed. They are not mirrored and carry no bodies.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "metadata": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShowSyncMetadataChange"
+          }
+        },
+        "objects": {
+          "description": "Synchronized objects written or deleted.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShowSyncCommittedObject"
+          }
+        },
+        "patch_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "previous_show_revision": {
+          "description": "The revision before it. A client whose mirror is not here missed a change and must re-read.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "profile_revisions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShowSyncProfileReference"
+          }
+        },
+        "request_id": {
+          "description": "Present when a sync transaction produced the commit, so its sender recognises the echo.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "description": "The revision this commit produced: the client's durable reconnect cursor.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "show_id",
+        "show_revision",
+        "previous_show_revision",
+        "patch_revision",
+        "request_id",
+        "association_id",
+        "objects",
+        "metadata",
+        "profile_revisions",
+        "desk_only_changes"
+      ]
+    },
+    "ShowSyncCommittedObject": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "description": "The committed body, omitted when larger than the per-object event budget."
+        },
+        "body_omitted": {
+          "description": "`true` when `body` was withheld for size; read it with `GET /api/v2/objects/{kind}/{id}`.",
+          "type": "boolean"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "revision": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision",
+        "deleted",
+        "body",
+        "body_omitted"
+      ]
+    },
+    "ShowSyncGap": {
+      "description": "The show moved to `show_revision` in a way no `show_sync_committed` describes. A client\nre-reads its synchronized kinds from snapshots before trusting its mirror again.",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/ShowSyncGapReason"
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "show_id",
+        "show_revision",
+        "reason"
+      ]
+    },
+    "ShowSyncGapReason": {
+      "oneOf": [
+        {
+          "description": "One commit changed more than an event may carry.",
+          "type": "string",
+          "const": "bulk_commit"
+        },
+        {
+          "description": "The show changed outside the incremental commit path.",
+          "type": "string",
+          "const": "out_of_band_write"
+        },
+        {
+          "description": "The show file was replaced or reloaded as a whole.",
+          "type": "string",
+          "const": "show_replaced"
+        }
+      ]
+    },
+    "ShowSyncMetadataChange": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ]
+    },
+    "ShowSyncProfileReference": {
+      "type": "object",
+      "properties": {
+        "content_digest": {
+          "type": "string"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "profile_id",
+        "revision",
+        "content_digest"
       ]
     },
     "SoundLossReason": {

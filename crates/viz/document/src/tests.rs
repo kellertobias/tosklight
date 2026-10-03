@@ -532,3 +532,35 @@ fn truss_scenery(section: f32) -> light_fixture::ProfileScenery {
 
 #[path = "mvr_bracket_tests.rs"]
 mod mvr_bracket;
+
+/// Characterizes Save As as it stands (TL-543 chunk 1): the copy keeps the show UUID. Automatic
+/// sync relies on the binding store, not the file, to tell the copy apart; the Save As fork that
+/// mints a new identity is a later chunk, which will replace this assertion.
+#[test]
+fn save_as_currently_keeps_the_show_identity() {
+    let source = temp_path("save-as-source");
+    let copy = temp_path("save-as-copy");
+    let document = PlanningDocument::create(&source, "Saved show").unwrap();
+    let identity = document.show_id();
+    document.save_as(&copy).unwrap();
+    let reopened = PlanningDocument::open(&copy).unwrap();
+    assert_eq!(reopened.show_id(), identity);
+    assert_eq!(reopened.name().unwrap(), "Saved show");
+    drop((document, reopened));
+    let _ = std::fs::remove_file(source);
+    let _ = std::fs::remove_file(copy);
+}
+
+/// A planning document carries no sync request identities of its own: the table exists only so a
+/// file moved to Control can record them, and Architect never writes it.
+#[test]
+fn a_planning_document_records_no_sync_requests() {
+    let rig = rig("sync-table");
+    let store = ShowStore::open(&rig.path).unwrap();
+    assert!(
+        store
+            .sync_applied_request(Uuid::new_v4(), "anything")
+            .unwrap()
+            .is_none()
+    );
+}

@@ -22,6 +22,12 @@ impl PreparedShowCandidate {
         &self.transaction
     }
 
+    /// Records non-content companions of the commit, such as a sync request identity. Callers
+    /// must not change object content here: the snapshot was compiled from the transaction.
+    pub(crate) const fn transaction_mut(&mut self) -> &mut PortableShowTransaction {
+        &mut self.transaction
+    }
+
     pub fn into_parts(self) -> (PortableShowTransaction, EngineSnapshot) {
         (self.transaction, self.snapshot)
     }

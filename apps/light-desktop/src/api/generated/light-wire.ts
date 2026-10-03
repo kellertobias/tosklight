@@ -221,7 +221,13 @@ export type EventClass = "transition" | "projection" | "command_outcome" | "erro
 export type EventDeliveryPolicy = "lossless" | "replaceable";
 export type EventActionSource = "user_interface" | "keyboard" | "osc" | "http" | "extension" | "matter" | "cue" | "timecode" | "scheduler" | "macro" | "system";
 export type EventObject = { capability: EventCapability, id: string, };
-export type EventSubscriptionFilter = { capabilities: Array<EventCapability>, classes: Array<EventClass>, objects: Array<EventObject>, };
+export type EventSubscriptionFilter = { capabilities: Array<EventCapability>, classes: Array<EventClass>, objects: Array<EventObject>,
+/**
+ * Opt-in event families delivered in addition to the default stream. A subscription that
+ * names none receives exactly the stream it always did.
+ */
+topics?: Array<EventTopic>, };
+export type EventTopic = "show_sync";
 export type EventRateLimit = { capability: EventCapability, class: EventClass, object: EventObject | null, min_interval_millis: number, };
 export type EventSnapshotCursor = { sequence: number, };
 export type SequenceGap = { after_sequence: number, oldest_available: number, latest_sequence: number, };
@@ -721,7 +727,7 @@ export type UpdateTargetFamilyNotification = "cue" | "preset" | "group";
 export type UpdateTargetNotification = { family: UpdateTargetFamilyNotification, object_id: string, playback_number: number | null, cue_id: string | null, cue_number: string | null, validate_active_context: boolean | null, };
 export type UpdateWorkflowNotification = { "type": "armed", desk_id: string, armed: boolean, } | { "type": "target_requested", desk_id: string, target: UpdateTargetNotification, } | { "type": "target_rejected", desk_id: string, error: string | null, } | { "type": "targets_requested", desk_id: string, } | { "type": "settings_requested", desk_id: string, };
 export type OperatorNotification = { "type": "desk_action", revision: number, notification: DeskActionNotification, } | { "type": "file_input", revision: number, notification: FileInputNotification, } | { "type": "file_operation", revision: number, notification: FileOperationNotification, } | { "type": "group_configuration", revision: number, notification: GroupConfigurationNotification, } | { "type": "playback_configuration", revision: number, notification: PlaybackConfigurationNotification, } | { "type": "update_workflow", revision: number, notification: UpdateWorkflowNotification, } | { "type": "command_history_changed", revision: number, desk_id: string, };
-export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "macro_execution_changed", execution: MacroExecutionSnapshot, } | { "type": "timecode_runtime_changed", snapshot: TimecodeTransportSnapshot, } | { "type": "playback_telemetry_sampled", tick: PlaybackTelemetryTick, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "dynamic_runtime_changed", change: DynamicRuntimeChange, } | { "type": "speed_groups_changed", change: SpeedGroupChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "schedule_runtime_changed", change: ScheduleRuntimeChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, } | { "type": "virtual_playback_exclusion_zones_changed", change: VirtualPlaybackExclusionZonesChange, } | { "type": "highlight_changed", change: HighlightChange, } | { "type": "server_configuration_changed", change: NotificationRevision, } | { "type": "screens_changed", change: ScreenNotification, } | { "type": "show_library_changed", change: ShowLibraryNotification, } | { "type": "fixture_library_changed", change: FixtureLibraryNotification, } | { "type": "media_changed", change: MediaNotification, } | { "type": "hardware_connection_changed", change: HardwareConnectionNotification, } | { "type": "visualizer_connection_changed", change: VisualizerConnectionNotification, } | { "type": "operator_notification", notification: OperatorNotification, };
+export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "macro_execution_changed", execution: MacroExecutionSnapshot, } | { "type": "timecode_runtime_changed", snapshot: TimecodeTransportSnapshot, } | { "type": "playback_telemetry_sampled", tick: PlaybackTelemetryTick, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "dynamic_runtime_changed", change: DynamicRuntimeChange, } | { "type": "speed_groups_changed", change: SpeedGroupChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "show_sync_committed", change: ShowSyncCommit, } | { "type": "show_sync_gap", gap: ShowSyncGap, } | { "type": "schedule_runtime_changed", change: ScheduleRuntimeChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, } | { "type": "virtual_playback_exclusion_zones_changed", change: VirtualPlaybackExclusionZonesChange, } | { "type": "highlight_changed", change: HighlightChange, } | { "type": "server_configuration_changed", change: NotificationRevision, } | { "type": "screens_changed", change: ScreenNotification, } | { "type": "show_library_changed", change: ShowLibraryNotification, } | { "type": "fixture_library_changed", change: FixtureLibraryNotification, } | { "type": "media_changed", change: MediaNotification, } | { "type": "hardware_connection_changed", change: HardwareConnectionNotification, } | { "type": "visualizer_connection_changed", change: VisualizerConnectionNotification, } | { "type": "operator_notification", notification: OperatorNotification, };
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 export type EventClientMessage = { "type": "subscribe", filter: EventSubscriptionFilter, after_sequence?: number | null, capacity?: number | null, rate_limits: Array<EventRateLimit>, } | { "type": "repair", cursor: EventSnapshotCursor, };
 export type EventServerMessage = { "type": "ready", cursor: EventSnapshotCursor, } | { "type": "event", event: EventEnvelope, } | { "type": "gap", gap: SequenceGap, } | { "type": "repaired", cursor: EventSnapshotCursor, } | { "type": "error", error: string, };
@@ -1197,7 +1203,12 @@ color_model: ColorProgrammingModel, desk: RuntimeControlDesk | null, clients: Ar
  * Retained as an empty compatibility collection until the facade is removed.
  */
 active_programmers: unknown[], highlight_states: Array<RuntimeBootstrapHighlightState>, frame_rate_hz: number, output_health: RuntimeOutputHealth, active_timecode_source: string | null, active_timecode: string | null, active_show_error: string | null, hardware_connected: boolean, };
-export type RuntimeReadinessSnapshot = { status: string, active_show: string | null, active_show_last_loaded_at: string | null, active_show_error: string | null, recovery_mode: boolean, snapshot_revision: number, };
+export type RuntimeReadinessSnapshot = { status: string,
+/**
+ * Stable identity of this desk installation. An Architect binds a show to it, so a desk that
+ * moved address is still recognised and a different desk is never mistaken for it.
+ */
+desk_identity: string, active_show: string | null, active_show_last_loaded_at: string | null, active_show_error: string | null, recovery_mode: boolean, snapshot_revision: number, };
 export type RuntimeVisualizationDiagnostics = { normal_subscribers: number, preload_subscribers: number, projections: number, projection_micros: number, payload_bytes: number, source_age_millis: number, skipped_source_frames: number, snapshot_requests: number, snapshot_projection_micros: number, snapshot_serialization_micros: number, snapshot_payload_bytes: number, snapshot_source_frame: number, snapshot_source_age_millis: number, stream_serializations: number, stream_serialization_micros: number, stream_payload_bytes: number, stream_sends: number, stream_send_micros: number, stream_send_failures: number, stream_queue_depth: number, stream_queue_drops: number, };
 export type RuntimeDiagnosticsSnapshot = { output: RuntimeOutputHealth, output_bind_ip: string, output_routes: unknown, route_send_errors: unknown, active_programmers: unknown, active_playbacks: unknown, move_in_black: unknown, timecode_source: string | null, media_servers: unknown, snapshot_revision: number, programmer_action_timing: unknown, visualization: RuntimeVisualizationDiagnostics, extensions: unknown, compatibility_reports: unknown, };
 export type RuntimePerformanceDiagnosticsSnapshot = { output: RuntimeOutputHealth, programmer_action_timing: unknown, visualization: RuntimeVisualizationDiagnostics, };
@@ -1469,6 +1480,86 @@ export type PreloadRecordAction = { "type": "preset", target_id: string, expecte
 export type PreloadPresetMode = "merge" | "overwrite" | "add_missing_fixtures";
 export type PreloadPresetFamily = "mixed" | "intensity" | "color" | "position" | "beam";
 export type ShowObjectActionOutcome = { request_id: string, replayed: boolean, show_id: string, show_revision: number, object: ShowObjectRecord, event_sequence?: number | null, };
+export type ShowSyncTransactionRequest = {
+/**
+ * Client-generated identity, kept by the client's journal across retries and restarts.
+ */
+request_id: string,
+/**
+ * The Architect binding this transaction belongs to. Request identities are scoped to it.
+ */
+association_id: string,
+/**
+ * The show the binding names. A transaction for any other show is refused, never applied.
+ */
+show_id: string,
+/**
+ * The show revision the client's mirror held when it built the transaction. Informational:
+ * compare-and-set is per field, not per show.
+ */
+base_show_revision: number, origin: ShowSyncOrigin, operations: Array<ShowSyncOperation>, };
+export type ShowSyncOrigin = { app: ShowSyncApp,
+/**
+ * The desk installation the client believes it is bound to. A mismatch is refused, so a
+ * binding never writes into a different desk that answered on the same address.
+ */
+desk_identity: string | null,
+/**
+ * Free-form identity of the client process, for diagnostics.
+ */
+client_instance: string | null, };
+export type ShowSyncApp = "architect" | "control";
+export type ShowSyncOperation = { "type": "update_object", kind: string, id: string, fields: Array<ShowSyncFieldEdit>, } | { "type": "create_object", kind: string, id: string, body: Record<string, unknown>, } | { "type": "delete_object", kind: string, id: string, base_object_revision: number, } | { "type": "update_patch_fixture", fixture_id: string, fields: Array<ShowSyncFieldEdit>, } | { "type": "create_patch_fixture", fixture: PatchFixtureInput, } | { "type": "remove_patch_fixture", fixture_id: string, base_fixture_revision: number, } | { "type": "retain_profile_revision", profile_id: string, revision: number, profile: Record<string, unknown>, } | { "type": "set_metadata", key: string, base: string | null, value: string | null, };
+export type ShowSyncFieldEdit = { path: string, base: unknown, value: unknown, };
+export type ShowSyncStatus = "accepted" | "conflicted";
+export type ShowSyncConflictReason = "field_changed" | "object_deleted" | "object_modified" | "object_exists";
+export type ShowSyncConflict = {
+/**
+ * Object kind, `patched_fixture`, or `metadata`.
+ */
+kind: string, id: string, path: string, base: unknown, mine: unknown, theirs: unknown, theirs_revision: number | null, reason: ShowSyncConflictReason, };
+export type ShowSyncAppliedObject = { kind: string, id: string, revision: number | null, deleted: boolean, };
+export type ShowSyncTransactionOutcome = { request_id: string, association_id: string, show_id: string, status: ShowSyncStatus,
+/**
+ * `true` when this answers a retry of a request the show already applied.
+ */
+replayed: boolean, show_revision: number, patch_revision: number, applied: Array<ShowSyncAppliedObject>, metadata: Array<string>, conflicts: Array<ShowSyncConflict>, event_sequence: number | null, };
+export type ShowSyncErrorKind = "show_not_active" | "desk_mismatch" | "request_reused" | "invalid" | "unavailable" | "internal";
+export type ShowSyncErrorResponse = { error: string, kind: ShowSyncErrorKind, active_show_id: string | null, retryable: boolean, };
+export type ShowSyncCommit = { show_id: string,
+/**
+ * The revision this commit produced: the client's durable reconnect cursor.
+ */
+show_revision: number,
+/**
+ * The revision before it. A client whose mirror is not here missed a change and must re-read.
+ */
+previous_show_revision: number, patch_revision: number,
+/**
+ * Present when a sync transaction produced the commit, so its sender recognises the echo.
+ */
+request_id: string | null, association_id: string | null,
+/**
+ * Synchronized objects written or deleted.
+ */
+objects: Array<ShowSyncCommittedObject>, metadata: Array<ShowSyncMetadataChange>, profile_revisions: Array<ShowSyncProfileReference>,
+/**
+ * Desk-only objects the commit also changed. They are not mirrored and carry no bodies.
+ */
+desk_only_changes: number, };
+export type ShowSyncCommittedObject = { kind: string, id: string, revision: number | null, deleted: boolean,
+/**
+ * The committed body, omitted when larger than the per-object event budget.
+ */
+body: unknown,
+/**
+ * `true` when `body` was withheld for size; read it with `GET /api/v2/objects/{kind}/{id}`.
+ */
+body_omitted: boolean, };
+export type ShowSyncMetadataChange = { key: string, value: string | null, };
+export type ShowSyncProfileReference = { profile_id: string, revision: number, content_digest: string, };
+export type ShowSyncGapReason = "bulk_commit" | "out_of_band_write" | "show_replaced";
+export type ShowSyncGap = { show_id: string, show_revision: number, reason: ShowSyncGapReason, };
 export type ProgrammerSelectionRule = { "type": "all" } | { "type": "odd" } | { "type": "even" } | { "type": "every_nth", n: number, offset: number, };
 export type ProgrammerSelectionReference = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "remove_fixture", fixture_id: string, } | { "type": "remove_live_group", group_id: string, };
 export type ProgrammerSelectionExpression = { "type": "static" } | { "type": "live_group", group_id: string, rule: ProgrammerSelectionRule, } | { "type": "playback_contents", items: Array<ProgrammerSelectionReference>, } | { "type": "sources", items: Array<ProgrammerSelectionReference>, };

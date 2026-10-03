@@ -83,6 +83,9 @@ use crate::v2::selective_import::{
     SelectiveImportOutcome, SelectiveImportPreview, SelectiveImportSelection,
 };
 use crate::v2::show_objects::DynamicUpdateActionRequest;
+use crate::v2::show_sync::{
+    ShowSyncErrorResponse, ShowSyncTransactionOutcome, ShowSyncTransactionRequest,
+};
 use crate::v2::speed_group::{
     SpeedGroupActionOutcome, SpeedGroupActionRequest, SpeedGroupErrorResponse, SpeedGroupSnapshot,
 };
@@ -100,6 +103,7 @@ const SELECTIVE_IMPORT_SCHEMA_DIRECTORY: &str =
     "crates/light/contracts/wire/schemas/v2-selective-import";
 const SCHEDULE_SCHEMA_DIRECTORY: &str = "crates/light/contracts/wire/schemas/v2-schedules";
 const STAGE_LAYOUT_SCHEMA_DIRECTORY: &str = "crates/light/contracts/wire/schemas/v2-stage-layout";
+const SHOW_SYNC_SCHEMA_DIRECTORY: &str = "crates/light/contracts/wire/schemas/v2-show-sync";
 
 /// One generated artifact relative to the workspace root.
 #[derive(Debug, Eq, PartialEq)]
@@ -320,7 +324,23 @@ fn playback_and_show_artifacts() -> Vec<GeneratedArtifact> {
         selective_import_response_schema::<SelectiveImportPreview>("preview"),
         selective_import_response_schema::<SelectiveImportOutcome>("outcome"),
         selective_import_response_schema::<SelectiveImportErrorResponse>("error-response"),
+        show_sync_schema::<ShowSyncTransactionRequest>(
+            "transaction-request",
+            SchemaSettings::draft2020_12().for_deserialize(),
+        ),
+        show_sync_schema::<ShowSyncTransactionOutcome>(
+            "transaction-outcome",
+            SchemaSettings::draft2020_12().for_serialize(),
+        ),
+        show_sync_schema::<ShowSyncErrorResponse>(
+            "error-response",
+            SchemaSettings::draft2020_12().for_serialize(),
+        ),
     ]
+}
+
+fn show_sync_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
+    namespaced_schema::<T>(SHOW_SYNC_SCHEMA_DIRECTORY, name, settings)
 }
 
 /// Rewrite all generated artifacts below `workspace_root`.

@@ -2,7 +2,9 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use uuid::Uuid;
 
-use super::model::{DeliveryPolicy, EventCapability, EventClass, EventEnvelope, EventObject};
+use super::model::{
+    DeliveryPolicy, EventCapability, EventClass, EventEnvelope, EventObject, EventTopic,
+};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct EventFilter {
@@ -10,6 +12,8 @@ pub struct EventFilter {
     pub capabilities: HashSet<EventCapability>,
     pub classes: HashSet<EventClass>,
     pub objects: HashSet<EventObject>,
+    /// Opt-in topics this subscription receives in addition to the default stream.
+    pub topics: HashSet<EventTopic>,
 }
 
 impl EventFilter {
@@ -35,7 +39,19 @@ impl EventFilter {
         self
     }
 
+    pub fn with_topic(mut self, topic: EventTopic) -> Self {
+        self.topics.insert(topic);
+        self
+    }
+
     pub(super) fn matches(&self, event: &EventEnvelope) -> bool {
+        if event
+            .payload
+            .opt_in_topic()
+            .is_some_and(|topic| !self.topics.contains(&topic))
+        {
+            return false;
+        }
         if self
             .desk_id
             .zip(event.desk_id)

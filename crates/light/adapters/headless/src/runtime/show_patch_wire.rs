@@ -309,7 +309,7 @@ pub(super) fn wire_delta(
     }
 }
 
-fn application_fixture(
+pub(crate) fn application_fixture(
     input: wire::PatchFixtureInput,
 ) -> Result<application::PatchFixtureCandidate, String> {
     Ok(application::PatchFixtureCandidate {
@@ -559,7 +559,9 @@ fn application_highlights(
     Ok(values)
 }
 
-fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtureProjection {
+pub(crate) fn wire_fixture(
+    input: &application::PatchFixtureProjection,
+) -> wire::PatchFixtureProjection {
     let patch = &input.patch;
     wire::PatchFixtureProjection {
         fixture_id: patch.fixture_id.0,

@@ -859,6 +859,15 @@ async fn execute_document_update(
     std::fs::write(&staged, bytes).map_err(ApiError::io)?;
     let result = (|| {
         validate_show_file(&staged).map_err(ApiError::store)?;
+        let staged_store = ActiveShowRepository::open(&staged).map_err(ApiError::store)?;
+        // The desk's sync request identities outlive a manual save, so an Architect retry that
+        // follows it still applies exactly once (docs/engineering/show-sync.md).
+        staged_store
+            .adopt_sync_applied_requests(
+                &ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?,
+            )
+            .map_err(ApiError::store)?;
+        drop(staged_store);
         ActiveShowRepository::open(&staged)
             .map_err(ApiError::store)?
             .set_identity(entry.id, &entry.name, entry.revision_copy.as_ref())

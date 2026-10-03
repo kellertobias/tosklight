@@ -30,6 +30,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(discovery_http::router())
         .merge(programming_update_http::router())
         .merge(show_patch_http::router())
+        .merge(show_sync_http::router())
         .merge(cue_thumbnails_http::router())
         .merge(cue_media_previews_http::router())
         .merge(psn_http::router())

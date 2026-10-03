@@ -1,5 +1,6 @@
 mod cue_thumbnail;
 mod desk_configuration;
+mod desk_identity;
 mod show_library;
 mod show_store;
 

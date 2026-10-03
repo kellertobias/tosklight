@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ShowSyncErrorResponse",
+  "type": "object",
+  "properties": {
+    "active_show_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "error": {
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/ShowSyncErrorKind"
+    },
+    "retryable": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "error",
+    "kind",
+    "active_show_id",
+    "retryable"
+  ],
+  "$defs": {
+    "ShowSyncErrorKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "invalid",
+            "internal"
+          ]
+        },
+        {
+          "description": "The named show is not the desk's active show. The client holds its edits Offline.",
+          "type": "string",
+          "const": "show_not_active"
+        },
+        {
+          "description": "The client is bound to a different desk installation.",
+          "type": "string",
+          "const": "desk_mismatch"
+        },
+        {
+          "description": "A request identity was reused for different content.",
+          "type": "string",
+          "const": "request_reused"
+        },
+        {
+          "description": "The show store is busy or unavailable; retry the same request.",
+          "type": "string",
+          "const": "unavailable"
+        }
+      ]
+    }
+  }
+}

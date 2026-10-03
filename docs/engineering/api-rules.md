@@ -51,6 +51,10 @@ polled.
   request id, the server keeps a replay window, and a resend returns the stored outcome of
   the first execution instead of executing again. This machinery belongs to *edits*; live
   control gets its safety from the WebSocket rule above.
+- **Exception (TL-543): `POST /api/v2/show-sync/transactions`.** A bound Architect sends one CAD
+  gesture as one multi-object transaction so it commits atomically or not at all, and its request
+  identities are stored durably in the show file rather than in a replay window. It is the only
+  multi-object write route; see `docs/engineering/show-sync.md`.
 
 ## 4 — Show logic lives on the server
 
@@ -119,6 +123,12 @@ per-fixture values.
   exist to protect a client from acting on **stale state it didn't know changed** — they
   are not inter-user locks, and a revision conflict must never permanently block a
   deliberate operator action; the surface re-reads and reapplies.
+- **Exception (TL-543): the Architect sync route compares fields.** A sync transaction carries the
+  value each field held when the Architect last saw it; a field another user changed since is
+  reported as a conflict and keeps that user's value, while every other field commits. This
+  applies only to `POST /api/v2/show-sync/transactions` — an Architect may have been offline for
+  hours, and a silent overwrite would discard desk work. Desk UI, OSC and object intents remain
+  last-write-wins (`docs/engineering/show-sync.md`).
 - **Concurrent additions must not collide.** Operations that create new entries (two
   users storing a cue on the same cuelist) are server-assigned: the server picks the next
   cue number/slot at execution time, so both stores succeed as two new cues. Intent-shaped

@@ -1,3 +1,4 @@
+use super::sync_requests::{SyncRequestRecord, insert_sync_request};
 use super::{
     FixtureProfileRevision, FixtureProfileRevisionId, PortablePatchRevision, PortableShowDocument,
     PortableShowObject, PortableShowObjectKey, PortableShowObjectRedo, PortableShowObjectUndo,
@@ -26,6 +27,10 @@ pub struct PortableShowTransaction {
     pub(super) deletes: BTreeSet<PortableShowObjectKey>,
     pub(super) profile_revisions: BTreeMap<FixtureProfileRevisionId, FixtureProfileRevision>,
     pub(super) patch_changed: bool,
+    /// Metadata values to write (`Some`) or remove (`None`) in the same commit.
+    pub(super) metadata: BTreeMap<String, Option<String>>,
+    /// The sync request identity recorded atomically with these changes.
+    pub(super) sync_request: Option<SyncRequestRecord>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -42,9 +47,23 @@ pub struct PortableShowCommit {
     written: Vec<PortableShowObject>,
     deleted: Vec<PortableShowObjectKey>,
     profile_revisions: Vec<FixtureProfileRevision>,
+    metadata: Vec<(String, Option<String>)>,
+    sync_request: Option<(uuid::Uuid, String)>,
 }
 
 impl PortableShowCommit {
+    /// Metadata keys this commit wrote (`Some`) or removed (`None`).
+    pub fn metadata_changes(&self) -> &[(String, Option<String>)] {
+        &self.metadata
+    }
+
+    /// `(association_id, request_id)` of the sync request recorded with this commit, if any.
+    pub fn sync_request(&self) -> Option<(uuid::Uuid, &str)> {
+        self.sync_request
+            .as_ref()
+            .map(|(association, request)| (*association, request.as_str()))
+    }
+
     pub const fn revision(&self) -> PortableShowRevision {
         self.revision
     }
@@ -82,7 +101,32 @@ impl PortableShowTransaction {
             deletes: BTreeSet::new(),
             profile_revisions: BTreeMap::new(),
             patch_changed: false,
+            metadata: BTreeMap::new(),
+            sync_request: None,
         }
+    }
+
+    /// Writes (`Some`) or removes (`None`) one metadata value in this transaction.
+    pub fn set_metadata(&mut self, key: impl Into<String>, value: Option<String>) -> &mut Self {
+        self.metadata.insert(key.into(), value);
+        self
+    }
+
+    /// Records a sync request identity in the same commit as these changes. The row is written
+    /// only when the transaction changes the show, so a retry finds it exactly when its edit
+    /// landed.
+    pub fn record_sync_request(&mut self, record: SyncRequestRecord) -> &mut Self {
+        self.sync_request = Some(record);
+        self
+    }
+
+    pub fn sync_request(&self) -> Option<&SyncRequestRecord> {
+        self.sync_request.as_ref()
+    }
+
+    /// Metadata values staged by this transaction.
+    pub fn metadata_changes(&self) -> &BTreeMap<String, Option<String>> {
+        &self.metadata
     }
 
     pub const fn expected_revision(&self) -> PortableShowRevision {
@@ -180,6 +224,7 @@ impl PortableShowTransaction {
         self.writes.is_empty()
             && self.deletes.is_empty()
             && self.profile_revisions.is_empty()
+            && self.metadata.is_empty()
             && !self.patch_changed
     }
 
@@ -187,6 +232,7 @@ impl PortableShowTransaction {
         self.writes.len()
             + self.deletes.len()
             + self.profile_revisions.len()
+            + self.metadata.len()
             + usize::from(self.patch_changed)
     }
 
@@ -226,10 +272,20 @@ impl ShowStore {
     ) -> Result<PortableShowCommit, StoreError> {
         let tx = immediate_transaction(&self.conn)?;
         ensure_document_revision(&tx, changes.expected)?;
+        let sync_request = changes.sync_request.clone();
         let applied = apply_changes(&tx, changes)?;
         let (revision, patch_revision) =
             committed_revisions(&tx, applied.changed(), applied.patch_changed)?;
+        let sync_request = match sync_request {
+            Some(record) if applied.changed() => {
+                insert_sync_request(&tx, &record, revision.value())?;
+                Some((record.association_id, record.request_id))
+            }
+            _ => None,
+        };
         tx.commit()?;
+        let mut applied = applied;
+        applied.sync_request = sync_request;
         Ok(applied.into_commit(revision, patch_revision))
     }
 }
@@ -238,7 +294,9 @@ struct AppliedChanges {
     written: Vec<PortableShowObject>,
     deleted: Vec<PortableShowObjectKey>,
     profile_revisions: Vec<FixtureProfileRevision>,
+    metadata: Vec<(String, Option<String>)>,
     patch_changed: bool,
+    sync_request: Option<(uuid::Uuid, String)>,
 }
 
 impl AppliedChanges {
@@ -247,6 +305,7 @@ impl AppliedChanges {
             || !self.written.is_empty()
             || !self.deleted.is_empty()
             || !self.profile_revisions.is_empty()
+            || !self.metadata.is_empty()
     }
 
     fn into_commit(
@@ -260,6 +319,8 @@ impl AppliedChanges {
             written: self.written,
             deleted: self.deleted,
             profile_revisions: self.profile_revisions,
+            metadata: self.metadata,
+            sync_request: self.sync_request,
         }
     }
 }
@@ -288,13 +349,33 @@ fn apply_changes(
         deletes,
         profile_revisions,
         patch_changed,
+        metadata,
+        sync_request: _,
     } = changes;
     Ok(AppliedChanges {
         profile_revisions: apply_profile_revisions(tx, profile_revisions)?,
         written: apply_writes(tx, writes, undoes, redoes)?,
         deleted: apply_deletes(tx, deletes)?,
+        metadata: apply_metadata(tx, metadata)?,
         patch_changed,
+        sync_request: None,
     })
+}
+
+fn apply_metadata(
+    tx: &rusqlite::Transaction<'_>,
+    metadata: BTreeMap<String, Option<String>>,
+) -> Result<Vec<(String, Option<String>)>, StoreError> {
+    for (key, value) in &metadata {
+        match value {
+            Some(value) => tx.execute(
+                "INSERT INTO metadata(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )?,
+            None => tx.execute("DELETE FROM metadata WHERE key=?1", [key])?,
+        };
+    }
+    Ok(metadata.into_iter().collect())
 }
 
 fn apply_profile_revisions(

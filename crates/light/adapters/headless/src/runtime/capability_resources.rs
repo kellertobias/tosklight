@@ -384,6 +384,9 @@ pub(in crate::runtime) struct ActiveShowResource {
     active: Arc<RwLock<Option<ShowEntry>>>,
     document: Arc<Mutex<Option<light_show::PortableShowDocument>>>,
     backup_checkpoint: Arc<Mutex<Option<(light_core::ShowId, u64)>>>,
+    /// The last show revision announced on the sync feed, so a commit can tell when the show
+    /// moved without an announcement and publish a gap first.
+    sync_watermark: Arc<Mutex<Option<(light_core::ShowId, u64)>>>,
     error: Arc<RwLock<Option<String>>>,
     service: ActiveShowService,
     patch: ShowPatchService,
@@ -414,6 +417,7 @@ impl ActiveShowResource {
             active,
             document: Arc::default(),
             backup_checkpoint: Arc::default(),
+            sync_watermark: Arc::default(),
             error: Arc::new(RwLock::new(error)),
             service,
             patch,
@@ -447,6 +451,14 @@ impl EventResource {
             audit: Arc::new(Mutex::new(VecDeque::with_capacity(Self::AUDIT_CAPACITY))),
             revision: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// Whether a live subscription opted into `topic`; opt-in families publish only then.
+    pub(in crate::runtime) fn has_subscriber_for(
+        &self,
+        topic: light_application::EventTopic,
+    ) -> bool {
+        self.application.has_subscriber_for(topic)
     }
 }
 

@@ -29,6 +29,19 @@ pub struct EventSubscriptionFilter {
     pub classes: Vec<EventClass>,
     #[serde(default)]
     pub objects: Vec<EventObject>,
+    /// Opt-in event families delivered in addition to the default stream. A subscription that
+    /// names none receives exactly the stream it always did.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<EventTopic>>", optional)]
+    pub topics: Vec<EventTopic>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum EventTopic {
+    /// `show_sync_committed` and `show_sync_gap`, for a bound Architect.
+    ShowSync,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -217,6 +230,12 @@ pub enum EventPayload {
     },
     ShowObjectsChanged {
         change: ShowObjectsChange,
+    },
+    ShowSyncCommitted {
+        change: Box<super::show_sync::ShowSyncCommit>,
+    },
+    ShowSyncGap {
+        gap: super::show_sync::ShowSyncGap,
     },
     ScheduleRuntimeChanged {
         change: ScheduleRuntimeChange,

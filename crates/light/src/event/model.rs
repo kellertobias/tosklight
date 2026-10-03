@@ -218,6 +218,10 @@ pub enum ShowEvent {
     ShowLibraryChanged(ShowLibraryNotification),
     FixtureLibraryChanged(FixtureLibraryNotification),
     ScheduleRuntimeChanged(crate::ScheduleRuntimeChange),
+    /// The committed content of one active-show commit, for a bound Architect's mirror.
+    SyncCommitted(Box<crate::show_sync::ShowSyncCommitChange>),
+    /// The active show moved in a way no `SyncCommitted` describes; mirrors re-read snapshots.
+    SyncGap(crate::show_sync::ShowSyncGapChange),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -439,6 +443,26 @@ pub enum ApplicationEvent {
     Output(OutputEvent),
     Show(ShowEvent),
     System(SystemEvent),
+}
+
+/// An event family delivered only to subscriptions that name it, so existing subscribers see
+/// exactly the stream they saw before the family existed.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum EventTopic {
+    /// The Control → Architect show sync feed (`show_sync_committed`, `show_sync_gap`).
+    ShowSync,
+}
+
+impl ApplicationEvent {
+    /// The opt-in topic this event belongs to, if it is not part of the default stream.
+    pub const fn opt_in_topic(&self) -> Option<EventTopic> {
+        match self {
+            Self::Show(ShowEvent::SyncCommitted(_) | ShowEvent::SyncGap(_)) => {
+                Some(EventTopic::ShowSync)
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

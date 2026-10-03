@@ -26,6 +26,7 @@ pub mod scheduling;
 pub mod selective_import;
 pub mod show_compiler;
 pub mod show_patch;
+pub mod show_sync;
 pub mod speed_group;
 pub mod timeline;
 
@@ -65,16 +66,16 @@ pub use dynamics::{
 pub use event::{
     ApplicationEvent, DeliveryPolicy, DeskActionNotification, DeskEvent, DynamicRuntimeChange,
     DynamicRuntimeEventKind, EventBus, EventCapability, EventClass, EventDraft, EventEnvelope,
-    EventFilter, EventObject, EventReplay, EventSource, EventSubscription, FileInputNotification,
-    FileOperationItemNotification, FileOperationNotification, FixtureLibraryNotification,
-    FixtureLibraryNotificationKind, GroupConfigurationNotification, HardwareConnectionNotification,
-    HighlightChange, MediaNotification, MediaNotificationKind, NotificationRevision,
-    OperatorNotification, OutputEvent, PlaybackConfigurationNotification, PlaybackEvent,
-    ProgrammingEvent, ReplaceableEventRateLimit, ScreenNotification, ScreenNotificationKind,
-    SequenceGap, ShowEvent, ShowLibraryNotification, ShowLibraryNotificationKind,
-    SubscriptionDelivery, SubscriptionOptions, SystemEvent, UpdateTargetFamilyNotification,
-    UpdateTargetNotification, UpdateWorkflowNotification, VirtualPlaybackExclusionZonesChange,
-    VisualizerConnectionNotification,
+    EventFilter, EventObject, EventReplay, EventSource, EventSubscription, EventTopic,
+    FileInputNotification, FileOperationItemNotification, FileOperationNotification,
+    FixtureLibraryNotification, FixtureLibraryNotificationKind, GroupConfigurationNotification,
+    HardwareConnectionNotification, HighlightChange, MediaNotification, MediaNotificationKind,
+    NotificationRevision, OperatorNotification, OutputEvent, PlaybackConfigurationNotification,
+    PlaybackEvent, ProgrammingEvent, ReplaceableEventRateLimit, ScreenNotification,
+    ScreenNotificationKind, SequenceGap, ShowEvent, ShowLibraryNotification,
+    ShowLibraryNotificationKind, SubscriptionDelivery, SubscriptionOptions, SystemEvent,
+    UpdateTargetFamilyNotification, UpdateTargetNotification, UpdateWorkflowNotification,
+    VirtualPlaybackExclusionZonesChange, VisualizerConnectionNotification,
 };
 pub use fixture_position::{
     FixturePositionCommand, FixturePositionExecution, FixturePositionOutcome, FixturePositionPorts,
@@ -230,6 +231,10 @@ pub use show_patch::{
     PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
     PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
     ShowPatchPorts, ShowPatchService,
+};
+pub use show_sync::{
+    ShowSyncAppliedObject, ShowSyncCommand, ShowSyncConflict, ShowSyncConflictReason,
+    ShowSyncFieldEdit, ShowSyncOperation, ShowSyncPorts, ShowSyncResult,
 };
 pub use speed_group::{
     SPEED_GROUP_COUNT, SpeedBpm, SpeedBpmDelta, SpeedGroupAction, SpeedGroupApplication,
