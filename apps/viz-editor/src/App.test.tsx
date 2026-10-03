@@ -501,29 +501,6 @@ describe("the Viz editor window", () => {
 		expect(await screen.findByText("Opened Recent rig")).toBeInTheDocument();
 	});
 
-	it("shows source-desk save progress, success and failure", async () => {
-		const base = invoke.getMockImplementation();
-		let resolveSave: (value: string) => void = () => {};
-		invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
-			if (command === "source_desk") return Promise.resolve("Front desk");
-			if (command === "save_to_source_desk") return new Promise<string>((resolve) => { resolveSave = resolve; });
-			return base?.(command, args);
-		});
-		renderApp();
-		fireEvent.click(await screen.findByRole("button", { name: "Save to Front desk" }));
-		expect(screen.getByText("Saving to Front desk…")).toBeInTheDocument();
-		await act(async () => resolveSave("Saved to Front desk"));
-		expect(await screen.findByText("Saved to Front desk")).toBeInTheDocument();
-		invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
-			if (command === "save_to_source_desk") return Promise.reject(new Error("Desk disconnected"));
-			if (command === "source_desk") return Promise.resolve("Front desk");
-			return base?.(command, args);
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Save to Front desk" }));
-		expect(await screen.findByText("Saving to Front desk failed: Error: Desk disconnected")).toBeInTheDocument();
-		expect(screen.queryByText("Saved to Front desk")).not.toBeInTheDocument();
-	});
-
 	it("offers the file actions the planning workflow needs", async () => {
 		renderApp();
 		for (const label of [
@@ -687,6 +664,40 @@ describe("the Viz editor window", () => {
 		}));
 		expect(
 			await screen.findByText("Loaded Summer Tour from front-of-house"),
+		).toBeInTheDocument();
+	});
+
+	it("publishes a show to a desk, including a desk with no show open, and continues bound to it", async () => {
+		const found = [
+			{ instance: "desk-idle", name: "Idle desk", show: null, address: "10.0.0.5:5000" },
+		];
+		const published = { ...document, name: "Planning show", path: "/downloads/Planning show.show" };
+		invoke.mockImplementation((command: string) => {
+			switch (command) {
+				case "discovered_desks":
+					return Promise.resolve(found);
+				case "publish_to_desk":
+					return Promise.resolve(published);
+				case "document_summary":
+					return Promise.resolve(document);
+				case "patch_snapshot":
+					return Promise.resolve(snapshot);
+				case "live_dmx_inputs":
+					return Promise.resolve(liveInputs);
+				default:
+					return Promise.resolve([]);
+			}
+		});
+		renderApp();
+		await waitFor(() => expect(invoke).toHaveBeenCalledWith("discovered_desks"));
+		fireEvent.click(await screen.findByRole("button", { name: "Publish to ToskLight Control" }));
+		const dialog = await screen.findByRole("dialog", { name: "Publish to ToskLight Control" });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Publish to Idle desk" }));
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("publish_to_desk", { instance: "desk-idle" }),
+		);
+		expect(
+			await screen.findByText("Published Planning show to Idle desk; it now stays in step with the desk's show"),
 		).toBeInTheDocument();
 	});
 

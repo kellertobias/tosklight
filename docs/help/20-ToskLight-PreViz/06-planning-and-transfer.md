@@ -40,8 +40,8 @@ see what the Visualizer draws, and the rig the product demonstration video is sh
 
 **Show**, at the top of the dock, is the open show as a document. It is available with no show open,
 because it is where a show is created or opened. Its file actions run across the top: **New Show**
-and **Open Demo Show** under **New Show**; **Load Show from Disk**, **Load Recent Shows**, and **Load from ToskLight Control** under **Open**; then **Save As**, **Import
-MVR** and **Export MVR**.
+and **Open Demo Show** under **New Show**; **Load Show from Disk**, **Load Recent Shows**, and **Load from ToskLight Control** under **Open**; then **Save As**,
+**Publish to ToskLight Control**, **Import MVR** and **Export MVR**.
 
 
 **Load Recent Shows** opens a modal with a scrollable table of files opened on this computer,
@@ -49,11 +49,16 @@ newest first. Names omit the `.show` extension; Location shows an Internal badge
 **Load from ToskLight Control** lists only active shows announced by discovered desks.
 The table includes the desk IP address and operating system when announced. There is no manual host or IP input.
 
-A show loaded from a desk keeps that desk and show as its save destination. **Save to** the desk
-writes the edited document back there, and **Save As** writes a portable copy and also saves to
-the originating desk. Progress and confirmation appear in the file bar. If the desk has changed
-the show since it was opened, saving is refused and the local edits remain available: keep a local
-copy and reopen the desk show before applying those edits. Named revisions on the desk are retained.
+A show loaded from a desk stays synchronized with that desk's show: there is no save to the desk.
+See [Stay in step with Control](#stay-in-step-with-control). **Save As** writes a copy as a *new*
+show, with its own identity and no desk: the copy opens in its place and never writes into the desk
+show the original follows.
+
+**Publish to ToskLight Control**, beside **Save As**, is how a show made here — or a Save As copy —
+joins a desk. Choose a desk from the list of desks on the network: the desk adds the show to its
+show library as a new show, and the window continues with the desk's copy, in step with it from
+then on. It starts sending edits once the show is opened on the desk; until then the chip reads
+**Show not active on Control**.
 
 Below them the show is seen from both sides at once. The left half draws the rig from above, with the
 show's name over it. The right half is **Show information**, which titles every printed CAD page, in
@@ -137,7 +142,8 @@ A show has a name of its own, separate from its file. The **Show** screen shows 
 overview, with a pencil beside it. Press the pencil, type the new name, and press Enter or click
 away to keep it; Escape leaves the name as it was, and an empty name changes nothing. The name is
 what a desk's **Load Show** menu offers, so a renamed show is offered under its new name at once.
-The file keeps its name; **Save As** writes the show to a new one.
+The file keeps its name; **Save As** writes the show to a new one. Renaming a show that follows a
+desk renames it on this computer only: the desk's show keeps the name its own library gave it.
 
 ## Configure the fixtures the rig is made of
 
@@ -326,13 +332,53 @@ control desks on the network. Desks without an active show are omitted. Select *
 a show to copy the desk's currently active show into Architect. There is no IP address input or
 manual desk configuration. The list follows network discovery as desks arrive and disappear.
 
-The local document keeps its source desk association on this computer. **Save to** that desk and
-**Save As** send changes back to the selected source show, preserving its identity and named
-revisions. An active source show also refreshes the desk's rig without releasing its playback.
-If another operator has changed that show since it was opened, the save is refused with a clear
-message so newer desk programming is preserved. Keep the local copy and reopen the source show
-to apply the edits against its current state. A portable copy transferred to another computer
-does not carry this computer's desk connection.
+The loaded document is bound to that desk and that show on this computer, and from then on the two
+stay in step on their own. A portable copy transferred to another computer, or written with
+**Save As**, carries no desk binding.
+
+## Stay in step with Control
+
+A document loaded from ToskLight Control follows the desk's show without any Save:
+
+* Every edit made here — moving a lamp, drawing an annotation, renaming a layer, editing the show
+  information — reaches the desk as soon as it is made. One drag, one paste or one undo is one
+  change on the desk, however many lamps it moves.
+* Every change made on the desk to the rig — a fixture's address, a layer, a note — appears here
+  without reopening the document. Cues, playbacks, programmer values, selection and Highlight are
+  the desk's own and never travel.
+* Edits are saved on this computer before anything is sent. Quit, lose the network or restart the
+  computer, and they are still there; they reach the desk, each exactly once and in order, the next
+  time it can be reached.
+* Live control — the preview controls, received DMX — never becomes an edit and is never sent.
+
+The chip under the file name in the dock says where the document stands. It shows nothing for a
+document that follows no desk.
+
+| Chip | Meaning |
+|---|---|
+| **Synced** (green) | The desk has every edit. Only this state says *Saved to Control*. |
+| **N pending** (blue) | Saved on this computer and on its way to the desk. |
+| **Offline** (grey) | The desk cannot be reached, the operator chose **Work offline**, or the desk has a different show open — then it reads **Show not active on Control**. Edits keep being saved here and are sent once the show is open on the desk again; nothing is ever written into another show. |
+| **N conflicts** (amber) | Someone on the desk changed the same thing. |
+| **Sync error** (red) | Something needs a look: the desk refused a change, a different desk answers at the desk's address, or a file this computer keeps for synchronization was damaged and has been rebuilt. |
+
+When two people change *different* things — a layer's order here and its name on the desk — both
+changes are kept. When both change the *same* thing, the desk's version stays in the document and
+the chip turns amber. Press it: the panel lists each conflict with **Control's** version and
+**yours**. **Keep Control's** drops your version; **Use mine** sends yours again, this time over
+Control's. Until you choose, your version is kept and nothing is lost.
+
+A change the desk refuses outright appears in the same panel with **Discard my change** and **Send
+again**. **Dismiss** clears a sync error once you have read it. **Work offline** stops talking to
+the desk while you keep working; **Reconnect** catches up.
+
+On the desk, the show name in the dock shows **⇄ Architect** while an Architect is following the
+show.
+
+If a file this computer keeps for synchronization is damaged, the document still opens. A damaged
+list of followed documents opens the document on its own, without its desk, and says why; the
+damaged file is left in place. A damaged record of unconfirmed edits is set aside, and the edits are
+recovered from the document itself.
 
 
 ## The Patch screen's DMX tab

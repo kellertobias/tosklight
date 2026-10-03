@@ -83,34 +83,3 @@ fn a_damaged_binding_opens_the_document_standalone() {
     drop((session, reopened));
     let _ = std::fs::remove_dir_all(directory);
 }
-
-#[test]
-fn a_save_completion_cannot_advance_a_reopened_copy_of_the_same_desk_show() {
-    let directory = temporary("architect-race");
-    let path = directory.join("source.show");
-    let document = viz_document::PlanningDocument::create(&path, "Source").unwrap();
-    let source = SyncBinding::new(
-        None,
-        document.show_id().0,
-        "http://127.0.0.1:5000".into(),
-        "Desk".into(),
-        0,
-    );
-    drop(document);
-    let session = session_with_store(&directory);
-    session.open_from_desk(&path, source).unwrap();
-    let (original, generation, _, _) = session.desk_save_snapshot().unwrap();
-    session.open(&path).unwrap();
-    session.confirm_desk_save(generation, 999).unwrap();
-    assert_eq!(
-        session
-            .binding
-            .lock()
-            .as_ref()
-            .unwrap()
-            .acknowledged_show_revision,
-        original.acknowledged_show_revision
-    );
-    drop(session);
-    let _ = std::fs::remove_dir_all(directory);
-}

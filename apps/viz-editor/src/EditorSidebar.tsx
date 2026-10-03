@@ -2,6 +2,7 @@ import { Button } from "@tosklight/ui";
 import { OperatorDestinationList } from "@tosklight/ui/application";
 import { useState } from "react";
 import appIcon from "../src-tauri/icons/icon.svg";
+import { SyncStatusChip } from "./sync/SyncStatusChip";
 import { beginWindowDrag } from "./WindowChrome";
 
 export type EditorWorkspace =
@@ -52,6 +53,8 @@ export function EditorSidebar({
 				/>
 				<span>{filename}</span>
 			</div>
+			{/* Keyed by the file, so opening or saving as another document reads its own status. */}
+			<SyncStatusChip documentKey={filename} />
 			<OperatorDestinationList
 				ariaLabel="Visualizer screens"
 				activeId={workspace}

@@ -14,7 +14,7 @@ type Answer<T> = Result<T, String>;
 
 /// One Architect document bound to one show on one desk installation.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) struct SyncBinding {
+pub struct SyncBinding {
     /// Scopes every sync request identity this document sends.
     pub association_id: Uuid,
     /// The desk installation, as its readiness reports it. Absent for a desk that predates
@@ -31,7 +31,7 @@ pub(crate) struct SyncBinding {
 }
 
 impl SyncBinding {
-    pub(crate) fn new(
+    pub fn new(
         desk_identity: Option<Uuid>,
         show_id: Uuid,
         base_url: String,
@@ -54,7 +54,7 @@ impl SyncBinding {
     }
 
     /// The address to try first.
-    pub(crate) fn base_url(&self) -> Option<&str> {
+    pub fn base_url(&self) -> Option<&str> {
         self.base_urls.first().map(String::as_str)
     }
 }
@@ -67,12 +67,12 @@ struct BindingIndex {
 
 /// Bindings for every document this installation has opened from a desk.
 #[derive(Clone, Debug)]
-pub(crate) struct SyncBindingStore {
+pub struct SyncBindingStore {
     root: PathBuf,
 }
 
 impl SyncBindingStore {
-    pub(crate) fn at(root: impl Into<PathBuf>) -> Self {
+    pub fn at(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
 
@@ -80,7 +80,7 @@ impl SyncBindingStore {
     ///
     /// A damaged index or binding is an error rather than "unbound", so the caller can say so
     /// instead of quietly turning a bound document into a standalone one.
-    pub(crate) fn for_document(&self, working_path: &Path) -> Answer<Option<SyncBinding>> {
+    pub fn for_document(&self, working_path: &Path) -> Answer<Option<SyncBinding>> {
         let index = self.read_index()?;
         let Some(association) = index.documents.get(&document_key(working_path)) else {
             return Ok(None);
@@ -97,7 +97,7 @@ impl SyncBindingStore {
     }
 
     /// Binds `working_path` to `binding`, replacing any binding it had.
-    pub(crate) fn bind(&self, working_path: &Path, binding: &SyncBinding) -> Answer<()> {
+    pub fn bind(&self, working_path: &Path, binding: &SyncBinding) -> Answer<()> {
         self.write_binding(binding)?;
         let mut index = self.read_index().unwrap_or_default();
         index
@@ -107,12 +107,12 @@ impl SyncBindingStore {
     }
 
     /// Records a changed binding, such as a newly confirmed revision.
-    pub(crate) fn update(&self, binding: &SyncBinding) -> Answer<()> {
+    pub fn update(&self, binding: &SyncBinding) -> Answer<()> {
         self.write_binding(binding)
     }
 
     /// Removes the document's binding; the association directory stays for its journal.
-    pub(crate) fn unbind(&self, working_path: &Path) -> Answer<()> {
+    pub fn unbind(&self, working_path: &Path) -> Answer<()> {
         let mut index = self.read_index()?;
         if index
             .documents
@@ -124,12 +124,17 @@ impl SyncBindingStore {
         Ok(())
     }
 
+    /// The directory holding one association's binding, journal and mirror.
+    pub fn association_dir(&self, association: Uuid) -> PathBuf {
+        self.root.join(association.to_string())
+    }
+
     fn index_path(&self) -> PathBuf {
         self.root.join("index.json")
     }
 
     fn binding_path(&self, association: Uuid) -> PathBuf {
-        self.root.join(association.to_string()).join("binding.json")
+        self.association_dir(association).join("binding.json")
     }
 
     fn read_index(&self) -> Answer<BindingIndex> {

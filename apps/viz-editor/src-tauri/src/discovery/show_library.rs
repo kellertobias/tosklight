@@ -1,4 +1,7 @@
-//! Browse desk libraries and save documents to their originating library entry.
+//! Browse desk libraries and open a desk's show as a document bound to it.
+//!
+//! A document opened here stays synchronized with its desk show automatically (`crate::sync`);
+//! there is no separate save to the desk.
 
 use super::*;
 use crate::sync::SyncBinding;
@@ -191,122 +194,86 @@ pub fn source_desk(session: tauri::State<'_, Session>) -> Option<String> {
         .map(|binding| binding.desk_name.clone())
 }
 
-#[derive(Clone)]
-pub(crate) struct PendingDeskSave {
-    generation: u64,
-    base: String,
-    source: SyncBinding,
-    token: String,
-    session_id: String,
-    request: serde_json::Value,
-    local_revision: u64,
-}
-
-async fn close_edit_session(client: &reqwest::Client, pending: &PendingDeskSave) {
-    let _ = client
-        .delete(format!(
-            "{}/api/v2/sessions/{}",
-            pending.base, pending.session_id
-        ))
-        .bearer_auth(&pending.token)
-        .send()
-        .await;
-}
-
+/// Publishes the open document to a desk's show library as a new show, then continues with the
+/// desk's copy, bound to it.
+///
+/// This is the deliberate way to associate a document with a desk: a standalone show, or a copy
+/// made with Save As, which has its own identity and is bound to nothing. The local file stays
+/// as it was; the document that opens afterwards is the desk's show, in step with it from then on.
 #[tauri::command]
-pub async fn save_to_source_desk(session: tauri::State<'_, Session>) -> Answer<String> {
-    save_to_desk(&session).await
-}
-
-async fn save_to_desk(session: &Session) -> Answer<String> {
+pub async fn publish_to_desk(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    discovery: tauri::State<'_, Discovery>,
+    session: tauri::State<'_, Session>,
+    instance: String,
+) -> Answer<DocumentSummary> {
     use base64::Engine;
-    let _save = session.desk_save_gate.lock().await;
-    let (source, generation, bytes, local_revision) = session.desk_save_snapshot()?;
-    let base = source
-        .base_url()
-        .ok_or("This show's desk binding names no address")?
-        .to_owned();
+    if session.binding.lock().is_some() {
+        return Err("This show already follows a desk. Save As first to publish a copy.".into());
+    }
+    let desk = discovery
+        .desks()
+        .into_iter()
+        .find(|desk| desk.instance == instance)
+        .ok_or("That desk is no longer on the network")?;
     let client = discovery_client(std::time::Duration::from_secs(60))?;
-    let previous = session.pending_desk_save.lock().clone();
-    let pending = if let Some(pending) = previous {
-        pending
-    } else {
-        let credentials: serde_json::Value = client
-            .post(format!("{base}/api/v2/sessions"))
-            .json(&serde_json::json!({"role":"operator"}))
-            .send()
-            .await
-            .map_err(|e| e.to_string())?
-            .error_for_status()
-            .map_err(|e| format!("Desk refused an editing session: {e}"))?
-            .json()
-            .await
-            .map_err(|e| e.to_string())?;
-        let pending = PendingDeskSave {
-            generation,
-            local_revision,
-            base: base.clone(),
-            source: source.clone(),
-            token: credentials["token"]
-                .as_str()
-                .ok_or("Desk returned no editing token")?
-                .into(),
-            session_id: credentials["session_id"]
-                .as_str()
-                .ok_or("Desk returned no session identity")?
-                .into(),
-            request: serde_json::json!({"request_id":uuid::Uuid::new_v4().to_string(),"action":{
-                "type":"update_document","destination_show_id":source.show_id,"expected_revision":source.acknowledged_show_revision,
-                "data_base64":base64::engine::general_purpose::STANDARD.encode(bytes)
-            }}),
-        };
-        *session.pending_desk_save.lock() = Some(pending.clone());
-        pending
-    };
-    let response = client
-        .post(format!("{}/api/v2/shows", pending.base))
-        .bearer_auth(&pending.token)
-        .json(&pending.request)
+    let base = reachable_base(&client, &desk).await?;
+    let (name, bytes) = session.with(|document| {
+        let staged = document
+            .path()
+            .with_file_name(format!(".publish-{}.show", uuid::Uuid::new_v4()));
+        let bytes = document
+            .save_as(&staged)
+            .map_err(|e| e.to_string())
+            .and_then(|_| std::fs::read(&staged).map_err(|e| e.to_string()));
+        let _ = std::fs::remove_file(&staged);
+        Ok((document.name().map_err(|e| e.to_string())?, bytes?))
+    })?;
+    let credentials: serde_json::Value = client
+        .post(format!("{base}/api/v2/sessions"))
+        .json(&serde_json::json!({"role": "operator"}))
         .send()
         .await
-        .map_err(|e| {
-            format!("Desk save is unconfirmed. Press Save again to recover the same request: {e}")
-        })?;
-    let status = response.status();
-    let outcome: serde_json::Value = response.json().await.map_err(|e| {
-        format!("Desk save is unconfirmed. Press Save again to recover the same request: {e}")
-    })?;
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| format!("{} refused an editing session: {e}", desk.name))?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+    let token = credentials["token"].as_str().unwrap_or_default().to_owned();
+    let session_id = credentials["session_id"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let created = client
+        .post(format!("{base}/api/v2/shows"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "request_id": uuid::Uuid::new_v4().to_string(),
+            "action": {"type": "create", "name": name, "overwrite": false,
+                "data_base64": base64::engine::general_purpose::STANDARD.encode(bytes)},
+        }))
+        .send()
+        .await;
+    let _ = client
+        .delete(format!("{base}/api/v2/sessions/{session_id}"))
+        .bearer_auth(&token)
+        .send()
+        .await;
+    let created = created.map_err(|e| e.to_string())?;
+    let status = created.status();
+    let body: serde_json::Value = created.json().await.unwrap_or_default();
     if !status.is_success() {
-        // A server-side failure may occur after commit. Retain identity for a safe retry.
-        if status.is_client_error() {
-            *session.pending_desk_save.lock() = None;
-            close_edit_session(&client, &pending).await;
-        }
-        return Err(format!("Desk save failed ({status}): {outcome}"));
+        return Err(format!(
+            "{} did not take the show ({status}): {}",
+            desk.name,
+            body["error"].as_str().unwrap_or("no reason given")
+        ));
     }
-    let revision = outcome["result"]["document_revision"]
-        .as_u64()
-        .ok_or("Desk did not confirm the saved revision; retry Save")?;
-    session.confirm_desk_save(pending.generation, revision)?;
-    *session.pending_desk_save.lock() = None;
-    close_edit_session(&client, &pending).await;
-    if pending.generation != generation {
-        Ok(format!(
-            "Confirmed the previous save to {}; the current document has not been saved to its desk",
-            pending.source.desk_name
-        ))
-    } else if session.with(|document| document.portable_revision().map_err(|e| e.to_string()))?
-        != pending.local_revision
-    {
-        Ok(format!(
-            "Saved the earlier snapshot to {}; press Save again to send newer local edits",
-            pending.source.desk_name
-        ))
-    } else {
-        Ok(format!("Saved to {}", pending.source.desk_name))
-    }
+    let show_id = body["result"]["show"]["id"]
+        .as_str()
+        .ok_or("The desk did not say which show it created")?
+        .to_owned();
+    load_desk_show(app, window, discovery, session, base, desk.name, show_id).await
 }
-
-#[cfg(test)]
-#[path = "show_library_tests.rs"]
-mod tests;

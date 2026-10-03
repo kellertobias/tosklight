@@ -225,6 +225,75 @@ body {
 	overflow-wrap: anywhere;
 }
 
+/* The sync chip of a document opened from ToskLight Control: a touch-sized button under the
+   identity, coloured by state. Only Synced is green; nothing unconfirmed ever looks saved. */
+.viz-sync-chip {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	width: 100%;
+	min-height: 32px;
+	margin: -6px 0 10px;
+	padding: 4px 6px;
+	border: 1px solid var(--border-subtle, #1d2530);
+	border-radius: 6px;
+	background: var(--surface, #0b0f14);
+	color: var(--text-secondary, #98a4b3);
+	font: inherit;
+	font-size: 10px;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.viz-sync-dot {
+	width: 8px;
+	height: 8px;
+	flex: none;
+	border-radius: 50%;
+	background: #8b95a3;
+}
+
+.viz-sync-chip.is-synced .viz-sync-dot { background: #3fbf6f; }
+.viz-sync-chip.is-pending .viz-sync-dot { background: #4f9cf0; }
+.viz-sync-chip.is-offline .viz-sync-dot { background: #8b95a3; }
+.viz-sync-chip.is-conflict .viz-sync-dot { background: #f0a020; }
+.viz-sync-chip.is-error .viz-sync-dot { background: #e5484d; }
+.viz-sync-chip.is-conflict,
+.viz-sync-chip.is-error { color: var(--text-primary, #e6edf5); }
+
+.viz-sync-panel .viz-sync-facts {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 4px 12px;
+}
+
+.viz-sync-panel .viz-sync-conflict {
+	margin-top: 12px;
+	padding: 8px;
+	border: 1px solid var(--border-subtle, #1d2530);
+	border-radius: 6px;
+}
+
+.viz-sync-panel .viz-sync-conflict li {
+	display: grid;
+	gap: 2px;
+	margin-bottom: 6px;
+}
+
+.viz-sync-conflict-actions,
+.viz-sync-panel-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.viz-sync-conflict-actions > *,
+.viz-sync-panel-actions > * {
+	min-height: 40px;
+}
+
 .viz-editor-sidebar .ui-operator-destination-list {
 	display: grid;
 	gap: 4px;
