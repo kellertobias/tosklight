@@ -40,10 +40,30 @@ async fn patch_snapshot(
 ) -> Result<Response, PatchHttpError> {
     let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
     let show_id = show.resolve(&state).map_err(PatchHttpError::api)?;
+    if state.active_show.in_recovery() {
+        return Ok(json_with_etag(0, recovery_patch_snapshot(&state, show_id)));
+    }
     let context = http_context(&session);
     let snapshot = run_patch_snapshot(state, context, show_id).await?;
     let response = super::show_patch_wire::wire_snapshot(snapshot);
     Ok(json_with_etag(response.patch_revision, response))
+}
+
+/// Show recovery patches nothing: the failed show's fixtures are not running.
+fn recovery_patch_snapshot(
+    state: &AppState,
+    show_id: ShowId,
+) -> light_wire::v2::patch::PatchSnapshot {
+    light_wire::v2::patch::PatchSnapshot {
+        show_id: show_id.0,
+        show_revision: 0,
+        patch_revision: 0,
+        cursor: light_wire::v2::events::EventSnapshotCursor {
+            sequence: state.events.latest_sequence(),
+        },
+        fixtures: Vec::new(),
+        profile_revisions: Vec::new(),
+    }
 }
 
 async fn patch_fixtures(

@@ -113,6 +113,8 @@ mod show_library_v2_route_tests;
 mod show_object_intents_v2_route_tests;
 #[path = "show_object_v2_route_tests.rs"]
 mod show_object_v2_route_tests;
+#[path = "show_recovery_route_tests.rs"]
+mod show_recovery_route_tests;
 #[path = "show_patch_route_tests.rs"]
 mod show_patch_route_tests;
 #[path = "speed_group_v2_tests.rs"]

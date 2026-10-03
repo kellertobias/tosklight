@@ -57,6 +57,7 @@ import type { BootstrapSnapshot } from "./types/desk";
 import type { TimecodeTransportSnapshot } from "./types/timecode";
 import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 import { FamilyEncodersProvider } from "../features/familyEncoders/FamilyEncodersProvider";
+import { runningShowId } from "../features/deskSnapshot/selectors";
 
 export type {
 	CommandChoiceOption,
@@ -512,9 +513,7 @@ function ServerShowProviderStack({
 	// through a session-backed transport. Naming the Show first asks those surfaces to load
 	// through a transport that does not exist yet, and the desk reports a failure for a desk that
 	// is only still starting — a blocking alert over a console that is about to be fine.
-	const showId = state.session
-		? (state.bootstrap?.active_show?.id ?? null)
-		: null;
+	const showId = state.session ? runningShowId(state.bootstrap) : null;
 	return (
 		<ServerDeskBoundaries state={state} sessionRole={sessionRole}>
 			<ServerVisualizationRuntimeBoundary

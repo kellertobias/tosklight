@@ -31,6 +31,14 @@ async fn collection_snapshot(
 ) -> Result<Json<wire::ShowObjectCollectionSnapshot>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
+    if state.active_show.in_recovery() {
+        return Ok(Json(wire::ShowObjectCollectionSnapshot {
+            show_id: show_id.0,
+            show_revision: 0,
+            kind,
+            objects: Vec::new(),
+        }));
+    }
     let entry = active_entry(&state, show_id)?;
     let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let (show_revision, mut objects) = store
@@ -53,6 +61,15 @@ async fn exact_snapshot(
 ) -> Result<Json<wire::ShowObjectExactSnapshot>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
+    if state.active_show.in_recovery() {
+        return Ok(Json(wire::ShowObjectExactSnapshot {
+            show_id: show_id.0,
+            show_revision: 0,
+            kind,
+            object_id,
+            object: None,
+        }));
+    }
     let entry = active_entry(&state, show_id)?;
     let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let (show_revision, mut object) = exact_object_snapshot(&store, &kind, &object_id)?;

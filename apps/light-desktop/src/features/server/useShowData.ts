@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { runningShowId } from "../deskSnapshot/selectors";
 import type {
 	CueList,
 	OutputRoute,
@@ -155,7 +156,7 @@ export function useServerRefresh(
 		setFixtureProfiles(fixtureProfiles);
 		setFixtureProfileWarnings(fixtureProfileWarnings);
 		if (mediaServers) setMediaServers(mediaServers.fixtures);
-		await loadShowObjects(bootstrap.active_show?.id ?? null);
+		await loadShowObjects(runningShowId(bootstrap));
 	}, [
 		api,
 		loadShowObjects,

@@ -151,6 +151,12 @@ async fn timecode_objects(
 ) -> Result<Json<wire::TimecodeCollectionSnapshot>, ApiError> {
     let _session = session_for_desk(&state, &headers, &desk)?;
     let show_id = context.resolve(&state)?;
+    if state.active_show.in_recovery() {
+        return Ok(Json(wire::TimecodeCollectionSnapshot {
+            show_revision: 0,
+            objects: Vec::new(),
+        }));
+    }
     let entry = active_entry(&state, show_id)?;
     let (show_revision, objects) = ActiveShowRepository::open(&entry.path)
         .map_err(ApiError::store)?

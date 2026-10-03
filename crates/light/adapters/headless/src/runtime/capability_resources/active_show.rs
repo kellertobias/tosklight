@@ -305,6 +305,14 @@ impl ActiveShowResource {
         self.error.read().clone()
     }
 
+    /// Show recovery keeps the failed show as the active entry (the recovery dialog names it and
+    /// its file stays untouched), but none of it runs: the engine holds an empty show. Routes
+    /// that read the stored show answer as for an empty one, so no client derives runtime
+    /// identities (Groups, Playbacks, Pages, fixtures) from a show the engine does not hold.
+    pub(in crate::runtime) fn in_recovery(&self) -> bool {
+        self.error.read().is_some()
+    }
+
     pub(in crate::runtime) fn set_error(&self, error: Option<String>) {
         *self.error.write() = error;
     }
