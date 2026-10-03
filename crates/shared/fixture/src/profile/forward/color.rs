@@ -386,6 +386,27 @@ impl CompiledColorForward {
             .find(|path| path.head == head)
             .map(|path| path.controls.as_ref())
     }
+    /// Every raw channel the evaluation of one head's path reads, sorted and unique: its
+    /// controls, emitter and filter bindings and measured recipes. The whole-vector layout and
+    /// range validation is separate. `None` for a head without a Color path.
+    pub fn head_input_channels(&self, head: Uuid) -> Option<Box<[usize]>> {
+        let path = self.paths.iter().find(|path| path.head == head)?;
+        let mut channels = path.controls.to_vec();
+        if let Source::Additive(emitters) = &path.source {
+            channels.extend(emitters.iter().map(|emitter| emitter.binding.channel));
+        }
+        channels.extend(path.filters.iter().map(|filter| filter.binding.channel));
+        channels.extend(path.modeled.iter().flatten().map(|binding| binding.channel));
+        channels.extend(
+            path.measurements
+                .values()
+                .flatten()
+                .flat_map(|measurement| measurement.recipe.iter().map(|(channel, _)| *channel)),
+        );
+        channels.sort_unstable();
+        channels.dedup();
+        Some(channels.into_boxed_slice())
+    }
     /// Missing unrelated mode channels must not hide a head whose optical inputs are known.
     pub fn inputs_available(&self, path: usize, available: &[bool]) -> bool {
         self.paths

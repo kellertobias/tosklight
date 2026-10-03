@@ -361,3 +361,54 @@ fn position_native_unpatched_dmx_keeps_inversion_but_internal_profile_does_not()
         &[49151, 13107, 39321, 204]
     );
 }
+
+/// TL-553: a static token captures each root/instance vector once and replays it. Every replay
+/// must equal a fresh capture from another token of the same capture, root, copy and generic
+/// domains must not share entries, and a later capture sees later Programmer values.
+#[test]
+fn repeated_native_captures_of_one_token_equal_fresh_captures() {
+    let rig = rig();
+    let read = |frame: &PreparedStaticFamilyFrame,
+                capture: &PreparedOutputFrame,
+                instance: Option<Uuid>| {
+        let token = capture.frame_token();
+        let mut out = CapturedNativeRaw::default();
+        match instance {
+            Some(id) => frame.native_position_raw_into(capture, &token, rig.root, id, &mut out),
+            None => frame.native_raw_into(capture, &token, rig.root, &mut out),
+        }
+        .unwrap();
+        assert_eq!(out.token(), Some(&token));
+        assert_eq!(out.destination(), Some(rig.root));
+        assert_eq!(out.instance_id(), instance);
+        out.raw().to_vec()
+    };
+    let instances = [None, Some(rig.root.0), Some(rig.copy)];
+    let mut previous: Option<Vec<Vec<u32>>> = None;
+    for step in 0..3 {
+        rig.programmers.set(
+            rig.session,
+            rig.root,
+            AttributeKey("pan".into()),
+            AttributeValue::Normalized(0.2 + 0.3 * step as f32),
+        );
+        let capture = rig.engine.prepare_output_frame(Default::default());
+        let cached = rig.engine.prepare_static_family_frame(&capture, &[]);
+        let first = instances.map(|instance| read(&cached, &capture, instance));
+        for (index, instance) in instances.into_iter().enumerate() {
+            let replayed = read(&cached, &capture, instance);
+            let fresh = rig.engine.prepare_static_family_frame(&capture, &[]);
+            assert_eq!(replayed, read(&fresh, &capture, instance), "{instance:?}");
+            assert_eq!(replayed, first[index]);
+        }
+        // Installation inversion differs between root and copy, so their entries differ.
+        assert_ne!(first[1], first[2]);
+        if let Some(previous) = &previous {
+            assert_ne!(
+                previous[0], first[0],
+                "a new capture reads the new Pan value"
+            );
+        }
+        previous = Some(first.to_vec());
+    }
+}

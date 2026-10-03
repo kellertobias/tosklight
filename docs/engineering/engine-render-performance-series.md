@@ -91,6 +91,8 @@ was reverted with those numbers in the message. The lesson is the method above.
 
 ## Semantic output, October 2026 (TL-596)
 
+TL-553 below follows up on every workload this section handed over, with new numbers.
+
 The question was whether the production semantic output path holds the established deadlines,
 and whether its dirty work stays bounded. The established gates do not hold, and the
 semantic capacity tiers miss by an order of magnitude. The 112-fixture TL-564 mix holds 44, 60
@@ -261,3 +263,175 @@ Run each from the candidate root with `--fixture-package-dir assets/fixture-libr
 5. **Memory roughly doubles with typed lanes** (table above). No bound has been decided.
 6. **The legacy-workload regression** (+0.7–2.1 ms p50) is in engine-wide code paths, listed
    above. Reproduce with `node tools/run-semantic-output-benchmark.mjs --suites legacy`.
+
+## Semantic output optimisation, October 2026 (TL-553)
+
+The question was whether the TL-596 workloads could be brought within their deadlines without
+changing semantics. Not yet: every output is still identical, the dirty-work gates and the 2,000
+and hard-floor legacy gates now pass, and the TL-564 mix holds all 27 configurations. The typed
+capacity tiers improved by 7-20 % and still miss by roughly 7x (stress 2,000) and 6x (hard floor).
+What remains is the per-frame design of typed sampling and composition, described below with
+reproducible workloads, not one more hotspot.
+
+### Gates
+
+Same runner, thresholds and host as TL-596 (`tools/run-semantic-output-benchmark.mjs`; legacy
+five alternated rounds against the pre-semantic baseline, typed tiers and the TL-564 matrix three
+rounds). Pipeline ms, medians.
+
+| Gate (existing threshold) | TL-596 | TL-553 |
+| --- | --- | --- |
+| Paired p99 regression ≤ max(1 ms, 5 %), stress 2,000 / 60 Hz | fail, +1.20 | **pass**: 5.57 → 6.08 (+0.51) |
+| Paired p99 regression, stress 4,000 / 60 Hz | fail, +2.13 | **fail**: 10.99 → 12.71 (+1.72) |
+| Paired p99 regression, hard floor 4,148 / 125 Hz | pass, +0.78 | pass: 4.23 → 4.52 (+0.29); 125 Hz held 5 of 5 |
+| Typed stress 2,000 / 60 Hz: rate held, 0 misses | fail, p99 133.6 | **fail**: p99 122.95, 8.8 Hz |
+| Typed stress 4,000 / 60 Hz | fail, p99 296.0 | **fail**: p99 262.8, 4.0 Hz |
+| Typed hard floor 4,148 / 125 Hz | fail, p99 65.2 | **fail**: p99 50.3, 23.0 Hz |
+| TL-564 mix, 27 configurations: rate held, 0 misses | 25 pass | **27 pass** (p99 6.6-8.0 / 5.4-5.8 / 4.2-4.4 ms at 44 / 60 / 125 Hz) |
+| No generation change or compile from motion | pass | pass |
+| `static-points`: 0 Position fits | pass | pass |
+| `small-subset` / `all-points-move`: fits and dirty set equal the dependents | pass | pass (6 / 24) |
+| Unchanged Colour targets skip solves | fail, 66 of 66 refit | **pass**: 0 fits, 66 exact replays per frame |
+| Readout consumers do not multiply physical solves | pass | pass, now compared by Colour resolves (see below) |
+| Non-converging static Target fits (`--rig-height-mm 500`) | 7 fits, 4,380 evaluations per frame | **0 fits**, 54 memo hits |
+
+The readout-consumer gate compared Colour *fits* per frame. A fit is now either solved or replayed
+from unchanged inputs, and how many frames replay depends on the sampled Dynamics timeline, which
+the unpaced warmup shifts by a few ticks per run (14,424 against 14,426 fits in 240 frames, with
+15,840 resolves in both). The gate therefore compares Position fits, Colour resolves and optics
+resolves, still exactly; Colour fits stay in the observed row.
+
+Typed tiers before and after this work, the TL-596 final binary (`06ef7036…`) alternated with
+the final candidate, three rounds, medians (`before-after-typed/`):
+
+| Profile | Before p50 / p99 | After p50 / p99 |
+| --- | ---: | ---: |
+| Typed stress 2,000, 60 Hz | 125.16 / 131.64 | 118.26 / 126.89 |
+| Typed stress 4,000, 60 Hz | 276.32 / 283.69 | 256.25 / 261.95 |
+| Typed hard floor 4,148, 125 Hz | 55.08 / 59.40 | 43.95 / 49.57 |
+
+### What changed
+
+Every change keeps outputs identical; each has focused tests that compare against the
+unoptimised path and change every key input.
+
+- **Colour result reuse.** A destination head replays its last semantic fit when the intent and
+  every raw channel its fit reads (`CompiledColorFitting::head_input_channels`: the Colour-owned
+  controls plus every input of the head's forward model) are unchanged, and the whole native
+  vector passes the fitter's range check (`accepts_raw`). Intensity is not an input, so an
+  Intensity Dynamic no longer forces a refit. The memo lives in the head's scratch, which a new
+  runtime generation recompiles. A replay publishes the same writes, achieved output, quality and
+  continuity with zero work counters, and counts `result_reuses` (`color/resolve.rs`; tests:
+  `color/tests/result_memo.rs`, updated `fitting_bench` and `color_router` assertions).
+- **Position memo keyed on the fit's inputs.** The accepted-fit memo compared the full native
+  baseline. It now compares native values and availability only at the axis drivers' channels,
+  which are the only channels a fit reads, plus the fit's whole-vector range check. At the hard
+  floor all 104 static Angle owners now reuse their fits (`position/fit_cache.rs`; tests:
+  `exact_fit_input_comparison…`, `an_unrelated_intensity_change_keeps_the_accepted_fit_identical_to_a_fresh_fit`).
+- **Unreachable static Targets.** A bounded search that finds no solution
+  (`UnreachableTarget`) is a pure function of the memo key, so it is memoised with its held
+  status like a fit; other held statuses are not (test:
+  `an_unreachable_static_target_is_reused_with_its_held_status`).
+- **One scalar resolution fewer per hybrid frame.** The scalar Current source resolved the
+  captured frame a second time. Without missing fixed bases and without any Freeze it now reads
+  the static lane already prepared over the same samples (`TickSources::over_static`,
+  `PreparedOutputFrame::freezes_nothing`; test:
+  `static_lane_scalar_sources_equal_the_observed_resolution_and_freeze_keeps_observing`). The
+  remaining two resolutions are genuinely different inputs (with and without the scalar Dynamic
+  samples).
+- **Physical projection of unchanged instances.** A pooled frame instance whose final native
+  values equal the ones its forward results describe keeps them (`physical_projection.rs`; tests:
+  `unchanged_native_values_reuse_forward_results_identical_to_a_fresh_evaluation`,
+  `a_rejected_physical_layout_never_reuses_stale_forward_results`).
+- **Native raw capture once per root and token.** Every head of a multi-head root captured the
+  whole root again; the static token now keeps each root/instance vector (test:
+  `repeated_native_captures_of_one_token_equal_fresh_captures`).
+- **Hashing.** Per-frame maps in typed preparation, retained-tape import, expression traversal,
+  Angle forests and the projection plans use the Fx hasher; none is iterated in an
+  order-dependent way.
+- **Benchmark harness.** The legacy stress sampler cloned the lane's owner key twice per sample
+  inside the timed region since TL-596; it borrows one key per lane again, as the baseline did.
+
+### Where the typed frame's time goes now
+
+CPU samples of the final binary (`sample(1)`), share of the frame:
+
+- Typed stress 2,000 (≈118 ms): per-target family composition and observation 25 % (source
+  projection 9 %, Colour resolve 6 %, retained-family composition 5.5 %); the other per-cohort
+  observer passes 12 %; typed sample preparation 21 % (expression validation, Angle-forest
+  bundling, owner splitting); deferred typed sampling 6 %; cohort finish 5 %; source binding
+  4 %; pinning 2 %; the two static resolutions 5 %; the final render 7 %. Allocation, free and
+  copies are 31 % of all samples, spread through the above.
+- Typed hard floor (≈44 ms): the two static resolutions 18 % (7.8 ms, Programmer resolution
+  dominates); the final render 16 %; family composition and observation 22 % (native raw capture
+  for the Colour key 5.6 %); native family row installation 7 %; the rest spread thin.
+
+### Why the deadlines need a redesign
+
+The typed frame recompiles what the operator programmed on every frame:
+
+1. Every animated Dynamic sample is a fully materialised expression. Preparation validates it by
+   building a whole retained tape, prunes and splits it by owner, bundles Angle forests and
+   compiles coupled expressions, all per target, lane and frame, because values change every
+   frame (`light-dynamics` `programming/preparation.rs` documents this as "a correctness bridge,
+   not a no-allocation or no-compilation frame-path guarantee").
+2. Composition, observation, source-occurrence binding and native row installation then run per
+   target with fresh allocations (31 % of samples are the allocator).
+3. The scalar-resolved token is a second complete resolution of the show, although it differs
+   from the static lane only by the scalar Dynamic samples.
+
+At stress 2,000 the typed overhead is ≈40 µs per animated target per frame against a budget of
+≈3 µs once the scalar baseline is paid. Reaching it needs, at least: a compiled per-generation
+program per lane and target that samples numbers per frame instead of rebuilding expressions;
+retained per-target composition and observation state with no per-frame allocation; and an
+incremental scalar overlay on the static lane instead of a second resolution. These change the
+family sampling pipeline's data model, so they are design work, not tuning.
+
+Reproduce each (from the candidate root, `--fixture-package-dir assets/fixture-library
+--protocol both --transport encode-only`):
+
+- `light-benchmark --headless-stress-fixtures 2000 --semantic --seconds 6` (and `4000`);
+- `light-benchmark --profile hard-floor --rate-hz 125 --sustained-show --semantic --seconds 6`;
+- `LIGHT_RENDER_PHASES=1` and `sample <pid> 8` on a running process give the two breakdowns above.
+
+### The legacy stress 4,000 regression
+
+Render-phase counters, one run each, µs per frame (`legacy-phases/`):
+
+| Phase | Baseline | Candidate |
+| --- | ---: | ---: |
+| Fixture projection | 3,720 | 4,579 |
+| Contribution merge | 676 | 968 |
+| Playback resolution (now inside the prepared capture) | 263 | 274 |
+| Prepared capture total | - | 293 |
+| Pipeline p50 | 9,901 | 11,237 |
+
+- About 0.33 ms p50 and 0.5 ms p99 of fixture projection is the new observational physical
+  projection: a knockout build without it measured +0.86 ms p99 against the baseline. Evaluating
+  forward models after send, or on demand per instance, would remove it from the output path;
+  `RenderResult.physical` is read directly by Stage publication, freeze capture, adoption and
+  readouts, so this is an API change, left for a decision.
+- The rest of fixture projection and the contribution merge are the larger winner record
+  (origin, family evidence and projected timestamp added to every slot: 128 bytes per slot now)
+  and the per-head native-projection checks; there is no single further hotspot.
+
+### Memory
+
+Resident memory is bounded over time: the typed hard floor holds 583-592 MB from 72 to 704
+frames. Typed lanes still roughly double it (stress 2,000: 287 → 654 MB; hard floor: 253 →
+575 MB). The heap holds 2.6 M allocations: about 160 MB in 63 buffers of 1.7-3.4 MB, 33 MB in
+≈4,100 per-fixture 8 KB blocks, and ≈200 MB of 16-768 byte objects. No duplicated slot table
+was found (one per generation); the per-fixture compiled Colour fitters are not shared between
+identical profiles, which is the first candidate for a reduction.
+
+### Measurement identities
+
+- Baseline: `f67c84e48`, source `85f4401a…`, binary `8a95e4a0…` (the TL-596 baseline).
+- Before: the TL-596 final binary `06ef7036…` (`182471506`, the TL-596 tree).
+- Candidate: `182471506` plus the TL-553 working tree, source `28a9c7c7…` captured at build time,
+  binary `1e8c7f19…`, `--release --locked --no-default-features`.
+- Evidence: `.artifacts/performance/semantic-output/tl553-final-20261003T061850Z/`
+  (`legacy/`, `semantic/` with the gate tables in `summary.json`, `before-after-typed/`,
+  `legacy-phases/`, `rig500-*`).
+- The runner's consumer comparison and its test changed after the source capture; the gates
+  were re-evaluated from the raw runs. Other agents shared the host; every comparison alternates.

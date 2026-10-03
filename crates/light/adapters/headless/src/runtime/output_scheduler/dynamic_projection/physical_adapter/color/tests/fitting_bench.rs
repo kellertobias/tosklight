@@ -356,6 +356,7 @@ fn delta(after: ColorAdapterCounters, before: ColorAdapterCounters) -> ColorAdap
         resolves,
         fits,
         refits,
+        result_reuses,
         shared_conflicts,
         direct_exact,
         direct_fallbacks,
@@ -763,7 +764,9 @@ fn run_one(
             constraint: quality.constraints.first().map(|c| c.status),
             writes: resolved.result.writes.iter().map(|w| w.raw).collect(),
         };
-        if scenario.sweep == Sweep::Unchanged {
+        // TL-553: the first warm frame may still fit (its continuity differs from the cold
+        // frame's); every later unchanged frame replays it, so compare after the warmup.
+        if scenario.sweep == Sweep::Unchanged && frame >= parameters.warmup {
             match &reference {
                 None => reference = Some(observation.clone()),
                 Some(first) => {
@@ -875,7 +878,14 @@ fn captured_color_fitting_smoke_reuses_descriptors_and_measures_changed_request_
                 (0, 0, 0)
             );
             assert_eq!(c.resolves, 1);
+            if run.scenario == "warm-unchanged" {
+                // TL-553: an unchanged request on unchanged raw values replays its last fit.
+                assert_eq!((c.fits, c.result_reuses), (0, 1), "{}", run.fixture);
+                assert_eq!(c.forward_evaluations, 0);
+                continue;
+            }
             assert!(c.fits >= 1, "{}/{}", run.fixture, run.scenario);
+            assert_eq!(c.result_reuses, 0);
             assert!(c.forward_evaluations >= 1);
         }
     }
@@ -938,9 +948,11 @@ fn captured_color_fitting_smoke_reuses_descriptors_and_measures_changed_request_
     for run in runs.iter().filter(|run| {
         run.fixture == "hybrid-rgbw-wheel" && run.scenario != "wheel-constraint-sweep"
     }) {
+        // TL-553: unchanged warm frames replay their fit and solve nothing.
+        let solves = u64::from(run.scenario != "warm-unchanged");
         for frame in &run.samples {
             assert_eq!(frame.visible, VisibleFitStatus::Fitted, "{}", run.scenario);
-            assert_eq!(frame.counters.visible_solves, 1, "{}", run.scenario);
+            assert_eq!(frame.counters.visible_solves, solves, "{}", run.scenario);
         }
     }
 
@@ -1406,7 +1418,7 @@ fn manual_color_fitting_benchmark() {
     let started = Instant::now();
     let parameters = Parameters {
         cold: env_usize("LIGHT_COLOR_BENCH_COLD", 20).clamp(1, 200),
-        warmup: env_usize("LIGHT_COLOR_BENCH_WARMUP", 20).min(1000),
+        warmup: env_usize("LIGHT_COLOR_BENCH_WARMUP", 20).clamp(1, 1000),
         samples: env_usize("LIGHT_COLOR_BENCH_SAMPLES", 300).clamp(1, 10_000),
     };
     let runs = run_all(parameters);

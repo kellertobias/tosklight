@@ -750,20 +750,30 @@ fn one_live_lane_routes_lamps_and_media_with_acceptance_rollback_and_passive_res
             [(lamp, &l.value), (layers[0], &m.value)],
             lamp_continuity.as_ref(),
         );
+        let after = lane.adapter().lamp().counters();
+        // TL-553: the dropped attempts above already fitted frame 0's unchanged inputs, so the
+        // lane may replay that fit; only the published work counters then differ.
+        let reused = after.result_reuses - before.result_reuses;
+        assert!(reused <= 1, "frame {frame}: at most one replayed head");
         assert_eq!(l.writes, o_lamp.writes, "frame {frame}: lamp writes");
         assert_eq!(l.achieved, RoutedAchievedColor::Lamp(o_lamp.achieved));
-        assert_eq!(l.quality, RoutedColorQuality::Lamp(o_lamp.quality.clone()));
+        let expected = if reused == 1 {
+            without_work(o_lamp.quality.clone())
+        } else {
+            o_lamp.quality.clone()
+        };
+        assert_eq!(l.quality, RoutedColorQuality::Lamp(expected));
         assert_eq!(m.writes, o_media.writes, "frame {frame}: Media writes");
         assert_eq!(m.achieved, RoutedAchievedColor::Media(o_media.achieved));
         assert_eq!(m.quality, RoutedColorQuality::Media(o_media.quality));
         assert_eq!(raws(&m.writes), [0, 128, 255, 128]);
-        let after = lane.adapter().lamp().counters();
         assert_eq!(
             after.resolves - before.resolves,
             1,
             "one lamp resolve per frame"
         );
-        assert_eq!(after.fits - before.fits, u64::from(o_lamp_fits(&o_lamp)));
+        let fits = if reused == 1 { 0 } else { o_lamp_fits(&o_lamp) };
+        assert_eq!(after.fits - before.fits, u64::from(fits));
         let RoutedColorContinuity::Lamp(committed) =
             lane.continuity(lamp, ProgrammingOwner::Color).unwrap()
         else {
@@ -791,6 +801,15 @@ fn one_live_lane_routes_lamps_and_media_with_acceptance_rollback_and_passive_res
     // The failed and the dropped attempt resolved too (staged only, never committed); each
     // accepted frame resolved once.
     assert_eq!(lane.adapter().media().counters().resolves, 4);
+}
+
+/// A replayed resolve publishes the same quality with zero work (TL-553).
+fn without_work(mut quality: ColorQuality) -> ColorQuality {
+    quality.work = Default::default();
+    for head in &mut quality.heads {
+        head.quality.work = Default::default();
+    }
+    quality
 }
 
 fn o_lamp_fits(resolution: &PhysicalResolution<ColorAdapter>) -> u32 {

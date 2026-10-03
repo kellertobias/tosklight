@@ -34,7 +34,7 @@ function benchmark({ p99 = 5, misses = 0, met = true, semantic } = {}) {
 	};
 }
 
-function semantic({ fits = 0, dirty = 6, expected = 6, color = 66, generation = 0, compiles = 0, tracking = true } = {}) {
+function semantic({ fits = 0, dirty = 6, expected = 6, color = 66, resolves = color, generation = 0, compiles = 0, tracking = true } = {}) {
 	return {
 		family_engaged: true,
 		frames: 10,
@@ -45,6 +45,7 @@ function semantic({ fits = 0, dirty = 6, expected = 6, color = 66, generation = 
 			position_fits: counts(fits),
 			position_fit_cache_hits: counts(47),
 			color_fits_and_refits: counts(color),
+			color_resolves: counts(resolves),
 			optics_resolves: counts(12),
 			tracking_changed_points: counts(1),
 			tracking_dirty_instances: counts(dirty),
@@ -100,9 +101,12 @@ test("dirty-work gates compare exactly against the manifest", () => {
 });
 
 test("consumer gates need a zero-consumer reference and equal per-frame solves", () => {
-	const run = (consumers, color) => ({ consumers, holdMs: 0, summary: summarizeScenario(benchmark({ semantic: semantic({ color }) })) });
+	const run = (consumers, color, resolves = color) => ({ consumers, holdMs: 0, summary: summarizeScenario(benchmark({ semantic: semantic({ color, resolves }) })) });
 	const gates = evaluateGates({ workload: { consumers: [run(0, 66), run(4, 66), run(8, 70)] } });
 	assert.deepEqual(gates.map((row) => row.status), ["pass", "fail"]);
+	// TL-553: replayed unchanged Color fits follow the sampled timeline; resolves are compared.
+	const replays = evaluateGates({ workload: { consumers: [run(0, 60, 66), run(4, 61, 66), run(4, 60, 67)] } });
+	assert.deepEqual(replays.map((row) => row.status), ["pass", "fail"]);
 	assert.equal(evaluateGates({ workload: { consumers: [run(4, 66)] } })[0].status, "unavailable");
 });
 

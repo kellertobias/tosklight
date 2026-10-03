@@ -58,6 +58,8 @@ pub struct LiveOutputWork {
     pub color_resolves: u64,
     pub color_fits: u64,
     pub color_refits: u64,
+    /// Color head resolves replayed from unchanged fit inputs (TL-553).
+    pub color_result_reuses: u64,
     pub color_candidates_ranked: u64,
     pub optics_descriptor_compiles: u64,
     pub optics_fitting_compiles: u64,
@@ -200,6 +202,7 @@ impl LiveOutputBench {
                 color_resolves: color.resolves,
                 color_fits: color.fits,
                 color_refits: color.refits,
+                color_result_reuses: color.result_reuses,
                 color_candidates_ranked: color.candidates_ranked,
                 optics_descriptor_compiles: optics.descriptor_compiles,
                 optics_fitting_compiles: optics.fitting_compiles,

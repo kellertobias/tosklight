@@ -74,6 +74,10 @@ pub struct PreparedStaticFamilyFrame {
         (FixtureId, ProgrammingOwner),
         (AttributeValue, FamilyProjectionMetadata),
     >,
+    /// TL-553: native raw values already captured from this token's immutable resolution, by
+    /// physical root and Position instance. Every head of a multi-head root reads the same root
+    /// vector; capturing it once per frame instead of once per head yields identical values.
+    pub(crate) native_raw: crate::native_raw::NativeRawCache,
 }
 
 impl PreparedStaticFamilyFrame {
@@ -227,6 +231,7 @@ impl Engine {
             geometry: None,
             projections: Default::default(),
             position_native: Default::default(),
+            native_raw: Default::default(),
         }
     }
 

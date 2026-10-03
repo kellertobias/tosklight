@@ -110,6 +110,7 @@ pub struct LiveRecorder {
     candidate_evaluations: Vec<u64>,
     color_resolves: Vec<u64>,
     color_fits: Vec<u64>,
+    color_result_reuses: Vec<u64>,
     optics_resolves: Vec<u64>,
     dirty_instances: Vec<u64>,
     changed_points: Vec<u64>,
@@ -151,6 +152,8 @@ impl LiveRecorder {
         self.color_fits.push(
             (work.color_fits + work.color_refits) - (previous.color_fits + previous.color_refits),
         );
+        self.color_result_reuses
+            .push(work.color_result_reuses - previous.color_result_reuses);
         self.optics_resolves
             .push(work.optics_resolves - previous.optics_resolves);
         if let (Some(changed), Some(dirty)) =
@@ -212,6 +215,7 @@ impl LiveRecorder {
                 position_candidate_evaluations: counts(&self.candidate_evaluations),
                 color_resolves: counts(&self.color_resolves),
                 color_fits_and_refits: counts(&self.color_fits),
+                color_result_reuses: counts(&self.color_result_reuses),
                 optics_resolves: counts(&self.optics_resolves),
                 census_frames: self.census_frames,
                 tracking_changed_points: counts(&self.changed_points),
@@ -296,6 +300,8 @@ pub struct SemanticWork {
     pub position_candidate_evaluations: Option<CountDistribution>,
     pub color_resolves: Option<CountDistribution>,
     pub color_fits_and_refits: Option<CountDistribution>,
+    /// Color head resolves replayed from unchanged fit inputs (TL-553).
+    pub color_result_reuses: Option<CountDistribution>,
     pub optics_resolves: Option<CountDistribution>,
     pub census_frames: u64,
     pub tracking_changed_points: Option<CountDistribution>,

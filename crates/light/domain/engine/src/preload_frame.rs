@@ -332,6 +332,7 @@ impl Engine {
             geometry: None,
             projections: Default::default(),
             position_native: Default::default(),
+            native_raw: Default::default(),
         }
     }
 

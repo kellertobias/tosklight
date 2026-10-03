@@ -764,7 +764,29 @@ pub(in crate::runtime::output_scheduler::dynamic_projection) fn prepare_captured
             "hybrid source inputs do not belong to this Live capture",
         ));
     }
+    // A generation number alone cannot certify a custom resolver's slot mapping. Every lookup
+    // in reconciliation, scalar projection and typed sampling uses this capture's index.
+    let addresser = capture.frame_addresser();
+    let inputs = &CapturedDynamicInputs {
+        addresser: &addresser,
+        ..*inputs
+    };
+    let prepare_static =
+        |samples: &[ContributionBatch]| engine.prepare_static_family_frame(capture, samples);
+    let (static_token, with_fixed_bases) = staged::prepare_static_with_fixed_bases(
+        engine,
+        runtime,
+        inputs,
+        baseline_samples,
+        &prepare_static,
+    );
     let scalar_sources = TickSources::prepared(engine, capture, baseline_samples);
+    // TL-553: without missing fixed bases the static lane is the scalar observation's own
+    // resolution; reading it resolves the frame once instead of twice.
+    let scalar_sources = match with_fixed_bases {
+        None => scalar_sources.over_static(&static_token),
+        Some(_) => scalar_sources,
+    };
     prepare_hybrid_frame(
         engine,
         capture,
@@ -778,7 +800,11 @@ pub(in crate::runtime::output_scheduler::dynamic_projection) fn prepare_captured
         presets,
         observer,
         &scalar_sources,
-        |samples| engine.prepare_static_family_frame(capture, samples),
+        staged::StaticLane {
+            token: &static_token,
+            with_fixed_bases: with_fixed_bases.as_deref(),
+        },
+        prepare_static,
     )
 }
 
@@ -877,6 +903,21 @@ pub(in crate::runtime::output_scheduler::dynamic_projection) fn prepare_captured
         baseline_samples,
         values: OnceLock::new(),
     };
+    let addresser = capture.frame_addresser();
+    let inputs = &CapturedDynamicInputs {
+        addresser: &addresser,
+        ..*inputs
+    };
+    let prepare_static = |samples: &[ContributionBatch]| {
+        engine.prepare_preload_static_family_frame(input, samples, state, branch)
+    };
+    let (static_token, with_fixed_bases) = staged::prepare_static_with_fixed_bases(
+        engine,
+        runtime,
+        inputs,
+        baseline_samples,
+        &prepare_static,
+    );
     prepare_hybrid_frame(
         engine,
         capture,
@@ -890,6 +931,10 @@ pub(in crate::runtime::output_scheduler::dynamic_projection) fn prepare_captured
         presets,
         observer,
         &scalar_sources,
-        |samples| engine.prepare_preload_static_family_frame(input, samples, state, branch),
+        staged::StaticLane {
+            token: &static_token,
+            with_fixed_bases: with_fixed_bases.as_deref(),
+        },
+        prepare_static,
     )
 }

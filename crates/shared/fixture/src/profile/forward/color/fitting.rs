@@ -446,6 +446,31 @@ impl CompiledColorFitting {
         self.heads.iter().position(|h| h.head_id == head_id)
     }
 
+    /// Every raw channel a fit of one head reads besides the whole-vector validation of
+    /// [`Self::accepts_raw`]: its fitting controls and every input of its forward model. Two
+    /// fits of the same head and intent whose raw values agree on these channels, and that both
+    /// pass `accepts_raw`, produce identical results.
+    pub fn head_input_channels(&self, head: usize) -> Option<Box<[usize]>> {
+        let tables = self.heads.get(head)?;
+        let mut channels = tables
+            .forward
+            .head_input_channels(tables.head_id)?
+            .into_vec();
+        channels.extend(tables.controls.iter().map(|control| control.channel));
+        channels.sort_unstable();
+        channels.dedup();
+        Some(channels.into_boxed_slice())
+    }
+
+    /// The whole-vector layout and range validation every fit applies to `current`.
+    pub fn accepts_raw(&self, current: &[u32]) -> bool {
+        current.len() == self.maxima.len()
+            && current
+                .iter()
+                .zip(&self.maxima)
+                .all(|(value, max)| value <= max)
+    }
+
     /// The complete Color-owned native footprint of one head, in fitting order.
     pub fn controls(
         &self,

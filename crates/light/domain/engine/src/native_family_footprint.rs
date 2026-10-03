@@ -14,7 +14,9 @@ use crate::physical_projection::PhysicalProjectionIndex;
 use crate::profile_projection_plan::ProfileHeadPlan;
 use light_core::{FixtureId, programming::ProgrammingOwner};
 use light_fixture::{CompiledOpticsFitting, FixtureMode, OpticsFamily, PatchedFixture};
-use std::collections::{BTreeSet, HashMap};
+// Per-frame lookups by owner: hashed for speed, never for adversaries (TL-553).
+use rustc_hash::FxHashMap as HashMap;
+use std::collections::BTreeSet;
 use uuid::Uuid;
 
 #[derive(Debug, Default)]
@@ -29,7 +31,7 @@ impl FamilyFootprints {
         heads: &[ProfileHeadPlan],
         physical: &PhysicalProjectionIndex,
     ) -> Self {
-        let mut rows: HashMap<_, BTreeSet<usize>> = HashMap::new();
+        let mut rows: HashMap<_, BTreeSet<usize>> = HashMap::default();
         // Optics bindings are mode-level: one compile serves every instance. A mode the optics
         // model rejects owns no Focus/Zoom control, exactly as the adapter then has no fitter.
         let optics = CompiledOpticsFitting::compile(mode).ok();

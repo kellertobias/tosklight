@@ -92,7 +92,7 @@ fn assert_expression_eq(actual: &Expression, expected: Expression) {
     let actual = RetainedExpressionTape::from_roots(&[Arc::new(actual.clone())]).unwrap();
     let expected = RetainedExpressionTape::from_roots(&[Arc::new(expected)]).unwrap();
     let mut stack = vec![(actual.roots[0], expected.roots[0])];
-    let mut compared = HashSet::new();
+    let mut compared = HashSet::default();
     while let Some((a, b)) = stack.pop() {
         if !compared.insert((a, b)) {
             continue;

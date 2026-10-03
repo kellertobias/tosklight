@@ -35,6 +35,8 @@ pub(in crate::runtime) struct PositionDescriptor {
 pub(in crate::runtime) struct PositionInstance {
     pub destination: FixtureId,
     pub model: CompiledPositionFitting,
+    /// Every channel a fit of `model` reads: its axis drivers, sorted and unique (TL-553).
+    inputs: Box<[usize]>,
     mount_reference: Option<Uuid>,
     compatibility: [u8; 32],
     scratch: parking_lot::Mutex<PositionScratch>,
@@ -326,9 +328,18 @@ impl PositionAdapter {
                 previous: vec![None; model.axes().len()],
                 requests: vec![None; model.emitters().len()],
             };
+            let mut inputs = model
+                .axes()
+                .iter()
+                .flat_map(|axis| axis.controls.iter())
+                .map(|control| control.channel_index as usize)
+                .collect::<Vec<_>>();
+            inputs.sort_unstable();
+            inputs.dedup();
             instances.push(Arc::new(PositionInstance {
                 destination,
                 model,
+                inputs: inputs.into_boxed_slice(),
                 mount_reference,
                 compatibility,
                 scratch: parking_lot::Mutex::new(scratch),
@@ -425,6 +436,8 @@ impl PositionAdapter {
                             .desk_pose_to_profile(),
                     },
                     native_baseline: native.raw(),
+                    inputs: &instance.inputs,
+                    raw_accepted: instance.model.accepts_raw(raw),
                     missing_mount,
                     protected,
                     geometry_dirty,

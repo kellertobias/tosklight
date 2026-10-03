@@ -4,7 +4,8 @@ use super::expression::{ExpressionNode, ExpressionNodeRef};
 use super::*;
 use crate::{DynamicNativeModelResolver, DynamicRuntimeSample};
 use light_core::{AttributeValue, FixtureId, programming::*};
-use std::{cell::Cell, collections::HashMap, sync::Arc};
+use rustc_hash::FxHashMap as HashMap;
+use std::{cell::Cell, sync::Arc};
 use uuid::Uuid;
 
 pub struct DynamicFamilySampleGroup {

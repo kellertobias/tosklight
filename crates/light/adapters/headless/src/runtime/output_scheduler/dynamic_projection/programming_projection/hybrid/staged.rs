@@ -21,23 +21,17 @@ pub(super) fn prepare_hybrid_frame<T>(
     presets: Option<&dyn DynamicValueSourceResolver>,
     observer: &mut impl HybridFrameObserver<T>,
     scalar_sources: &impl DynamicTickSource,
+    static_lane: StaticLane<'_>,
     prepare_static: impl Fn(&[ContributionBatch]) -> PreparedStaticFamilyFrame,
 ) -> Result<PreparedHybridFrame<T>, DynamicRuntimeError> {
-    // A generation number alone cannot certify a custom resolver's slot mapping. Every lookup
-    // in reconciliation, scalar projection and typed sampling uses this capture's index.
-    let addresser = capture.frame_addresser();
-    let inputs = &CapturedDynamicInputs {
-        addresser: &addresser,
-        ..*inputs
-    };
-    // Typed Current and whole Size always read this original pre-Freeze source. The later
-    // scalar-resolved token is an output underlay and geometry input, never Current feedback.
-    let (static_token, with_fixed_bases) =
-        prepare_static_with_fixed_bases(engine, runtime, inputs, baseline_samples, &prepare_static);
-    let baseline_samples = with_fixed_bases.as_deref().unwrap_or(baseline_samples);
-    begin_hybrid_frame(resolver, &frame_token, &static_token)?;
+    let StaticLane {
+        token: static_token,
+        with_fixed_bases,
+    } = static_lane;
+    let baseline_samples = with_fixed_bases.unwrap_or(baseline_samples);
+    begin_hybrid_frame(resolver, &frame_token, static_token)?;
     observer.begin_frame(&frame_token).map_err(invalid)?;
-    let static_sources = PreparedFamilySources(&static_token);
+    let static_sources = PreparedFamilySources(static_token);
     let models = runtime.captured_native_color_models();
     let HybridFrameScratch {
         sampling,
@@ -115,7 +109,7 @@ pub(super) fn prepare_hybrid_frame<T>(
                         resolver,
                         typed: &typed,
                         static_sources: &static_sources,
-                        static_token: &static_token,
+                        static_token,
                         scalar_token: &token,
                         legacy_owners,
                         control: &control,
@@ -319,9 +313,17 @@ fn compile_cohort_controls<'s, 'c>(
     Ok((fixed, endpoint_controls))
 }
 
+/// The original pre-Freeze static lane of one hybrid frame, and the extended baseline when
+/// fixed bases were missing. Typed Current and whole Size always read this source; the later
+/// scalar-resolved token is an output underlay and geometry input, never Current feedback.
+pub(super) struct StaticLane<'a> {
+    pub token: &'a PreparedStaticFamilyFrame,
+    pub with_fixed_bases: Option<&'a [ContributionBatch]>,
+}
+
 /// Prepares the static lane, then appends the fixed bases it is missing and re-prepares it over
 /// them. Returns the extended baseline only when bases were missing.
-fn prepare_static_with_fixed_bases(
+pub(super) fn prepare_static_with_fixed_bases(
     engine: &Engine,
     runtime: &DynamicRuntime,
     inputs: &CapturedDynamicInputs<'_>,

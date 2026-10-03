@@ -87,6 +87,8 @@ pub(in crate::runtime) struct ColorHeadDescriptor {
     pub native: Option<NativeColorIdentity>,
     /// Authoritative native controls of the head's optical path, in path order (TL-554 pages).
     pub native_controls: Box<[native::NativeColorControl]>,
+    /// Every raw channel a fit of this head reads (`CompiledColorFitting::head_input_channels`).
+    inputs: Box<[usize]>,
     scratch: Mutex<ColorHeadScratch>,
 }
 
@@ -95,6 +97,8 @@ struct ColorHeadScratch {
     output: ColorFitResult,
     /// Forward re-evaluation, used only after a shared-slot conflict.
     forward: Vec<ColorForwardResult>,
+    /// The last semantic resolve, replayed while its inputs are unchanged.
+    memo: Option<resolve::ColorHeadMemo>,
 }
 
 /// Compiled Color destinations of one programming target. Scratch is lane-local (Mutex: Send).
@@ -281,6 +285,8 @@ pub(in crate::runtime) struct ColorAdapterCounters {
     pub resolves: u64,
     pub fits: u64,
     pub refits: u64,
+    /// Semantic head resolves replayed from unchanged fit inputs (TL-553), never fitted.
+    pub result_reuses: u64,
     /// Heads whose master-shared slot kept an earlier head's value.
     pub shared_conflicts: u64,
     /// Direct heads written with their exact recorded native controls.
@@ -444,7 +450,9 @@ impl ColorAdapter {
             workspace: fitting.create_workspace(),
             output: fitting.create_output(index).ok_or_else(disappeared)?,
             forward: Vec::new(),
+            memo: None,
         };
+        let inputs = fitting.head_input_channels(index).ok_or_else(disappeared)?;
         let (native, native_controls) = native::head_native(fixture, head_id, &controls);
         Ok(ColorHeadDescriptor {
             destination,
@@ -454,6 +462,7 @@ impl ColorAdapter {
             writes_control,
             native,
             native_controls,
+            inputs,
             scratch: Mutex::new(scratch),
             fitting,
         })

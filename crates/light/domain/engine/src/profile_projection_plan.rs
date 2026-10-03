@@ -4,7 +4,8 @@ use light_fixture::{
     CompiledPositionFitting, FixtureMode, FixtureModeResolutionPlan, PatchedFixture,
     PositionAxisRole,
 };
-use std::collections::{HashMap, HashSet};
+// Per-frame lookups by fixture and owner: hashed for speed, never for adversaries (TL-553).
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use uuid::Uuid;
 
 /// Immutable semantic projection metadata compiled with an engine generation.
@@ -56,8 +57,8 @@ pub(crate) struct ProfileHeadPlan {
 
 impl ProfileProjectionIndex {
     pub(crate) fn compile(snapshot: &EngineSnapshot) -> Result<Self, EngineError> {
-        let mut fixtures = HashMap::new();
-        let mut owners = HashMap::new();
+        let mut fixtures = HashMap::default();
+        let mut owners = HashMap::default();
         for (index, fixture) in snapshot.fixtures.iter().enumerate() {
             let Some(mode) = profile_mode(fixture) else {
                 continue;
@@ -155,7 +156,7 @@ impl FixtureProjectionPlan {
 
     pub(crate) fn native_ownership(
         &self,
-        previewed: &HashSet<(FixtureId, AttributeKey)>,
+        previewed: &std::collections::HashSet<(FixtureId, AttributeKey)>,
         color_writes: &[(FixtureId, usize)],
         values: &crate::ResolvedValues,
         active_attributes: &[Option<AttributeKey>],
@@ -285,7 +286,7 @@ fn compile_native_dependencies(
     mode: &FixtureMode,
     heads: &[ProfileHeadPlan],
 ) -> HashMap<(FixtureId, AttributeKey), Box<[usize]>> {
-    let mut dependencies: HashMap<(FixtureId, AttributeKey), Vec<usize>> = HashMap::new();
+    let mut dependencies: HashMap<(FixtureId, AttributeKey), Vec<usize>> = HashMap::default();
     let mut add = |owner, attribute: AttributeKey, index| {
         let channels = dependencies.entry((owner, attribute)).or_default();
         if !channels.contains(&index) {
@@ -332,8 +333,8 @@ fn compile_position_ownership(
 ) -> PositionOwnership {
     // Ownership is geometry-derived, including root-owned shared ancestral motors.
     // This cold-only compilation reuses the existing fitter's exact footprint rules.
-    let mut position_footprints = HashMap::new();
-    let mut position_adoption_emitters = HashMap::new();
+    let mut position_footprints = HashMap::default();
+    let mut position_adoption_emitters = HashMap::default();
     if let Some(profile) = fixture.definition.profile_snapshot.as_deref()
         && let Ok(Some(model)) = light_fixture::CompiledPositionFitting::compile(
             profile,
@@ -346,7 +347,7 @@ fn compile_position_ownership(
             .chain(heads.iter().map(|head| head.owner))
             .collect();
         for owner in owners {
-            let mut channels = HashSet::new();
+            let mut channels = HashSet::default();
             let mut adoption = Vec::new();
             for emitter in model.emitters().filter(|emitter| {
                 emitter
@@ -399,7 +400,7 @@ fn compile_position_freeze_signatures(
     mode: &FixtureMode,
     position_footprints: &HashMap<FixtureId, Box<[usize]>>,
 ) -> HashMap<Uuid, Box<[Option<String>]>> {
-    let mut position_freeze_signatures = HashMap::new();
+    let mut position_freeze_signatures = HashMap::default();
     if !position_footprints.is_empty()
         && let Some(profile) = fixture.definition.profile_snapshot.as_deref()
     {
@@ -525,7 +526,7 @@ fn compile_position_freeze_inputs(
     signatures: &HashMap<Uuid, Box<[Option<String>]>>,
 ) -> HashMap<Uuid, Box<[Option<crate::native_position_projection::NativePositionInput>]>> {
     use crate::native_position_projection::NativePositionInput;
-    let mut output: HashMap<Uuid, Box<[Option<NativePositionInput>]>> = HashMap::new();
+    let mut output: HashMap<Uuid, Box<[Option<NativePositionInput>]>> = HashMap::default();
     let mut owners: Vec<_> = fixture.freeze.targets.iter().collect();
     owners.sort_by_key(|(owner, _)| owner.0);
     for (owner, target) in owners {

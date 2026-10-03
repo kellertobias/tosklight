@@ -297,6 +297,16 @@ impl CompiledPositionFitting {
             axis_metadata,
         }))
     }
+    /// The whole-vector layout and range validation every fit applies to its native values.
+    /// Beyond it a fit reads native values and availability only at the axis drivers' channels
+    /// (`axes()[..].controls`), which lets a caller key an exact result on those channels.
+    pub fn accepts_raw(&self, current_raw: &[u32]) -> bool {
+        current_raw.len() == self.channels.len()
+            && current_raw
+                .iter()
+                .zip(&self.channels)
+                .all(|(raw, channel)| *raw <= channel.maximum)
+    }
     /// Cold axis records. Reading metadata does not allocate or decode native input.
     pub fn axes(&self) -> &[PositionFitAxisMetadata] {
         &self.axis_metadata

@@ -9,6 +9,7 @@ use super::{
 };
 use light_core::{AttributeKey, attribute_descriptor, programming::*};
 type InputKey = (usize, Option<RetainedNodeId>);
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -82,7 +83,7 @@ impl RetainedExpressionNode {
 
     fn from_view(
         node: ExpressionNode<'_>,
-        ids: &HashMap<InputKey, RetainedNodeId>,
+        ids: &FxHashMap<InputKey, RetainedNodeId>,
     ) -> Result<Self, IntentError> {
         let child = |value: ExpressionNodeRef<'_>| {
             ids.get(&value.key()).copied().ok_or_else(|| {
@@ -203,7 +204,7 @@ impl RetainedOperationOwner {
 
 /// Interns witnesses by original object identity while a tape gains references.
 #[derive(Default)]
-struct EmissionInterner(HashMap<usize, u32>);
+struct EmissionInterner(FxHashMap<usize, u32>);
 
 impl EmissionInterner {
     fn reference(
@@ -402,9 +403,9 @@ impl RetainedExpressionTape {
         mut source_keys: Option<&mut Vec<InputKey>>,
     ) -> Result<Self, IntentError> {
         let mut tape = Self::empty();
-        let mut ids = HashMap::<InputKey, RetainedNodeId>::new();
-        let mut active = HashSet::new();
-        let mut verified_tapes = HashSet::new();
+        let mut ids = FxHashMap::<InputKey, RetainedNodeId>::default();
+        let mut active = FxHashSet::default();
+        let mut verified_tapes = FxHashSet::default();
         let mut interner = EmissionInterner::default();
         let mut pending = roots
             .iter()

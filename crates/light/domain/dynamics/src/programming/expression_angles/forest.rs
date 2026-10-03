@@ -97,7 +97,7 @@ fn ensure_one_position_controller(
     samples: &[DynamicRuntimeSample],
     first: &DynamicRuntimeSample,
 ) -> Result<(), TransitionError> {
-    let mut lanes = HashSet::new();
+    let mut lanes = HashSet::default();
     for sample in samples {
         ensure(
             sample.instance_id == first.instance_id
@@ -128,7 +128,7 @@ fn build_forest(
     sources: &dyn DynamicValueSourceResolver,
 ) -> Result<(Vec<PositionForestNode>, ForestResults), TransitionError> {
     let mut forest = Vec::new();
-    let mut results = ForestResults::new();
+    let mut results = ForestResults::default();
     let mut tasks = vec![Task::Visit(roots.clone())];
     let mut current = [None, None, None];
     let mut captured_current = None;

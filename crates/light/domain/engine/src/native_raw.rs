@@ -53,6 +53,34 @@ impl CapturedNativeRaw {
     }
 }
 
+/// Native raw vectors already captured from one static token, by physical root and Position
+/// instance (TL-553). The token's resolution never changes after preparation, so a vector stays
+/// exact for the token's lifetime; dropping the token drops the cache.
+#[derive(Default)]
+pub(crate) struct NativeRawCache(
+    parking_lot::Mutex<rustc_hash::FxHashMap<NativeRawKey, Box<[u32]>>>,
+);
+
+/// Physical root and, for the Position domain, the instance whose inversion was applied.
+type NativeRawKey = (FixtureId, Option<Uuid>);
+
+impl NativeRawCache {
+    /// Appends the cached vector to `out`; false when this key was not captured yet.
+    fn copy_into(&self, key: &NativeRawKey, out: &mut Vec<u32>) -> bool {
+        match self.0.lock().get(key) {
+            Some(raw) => {
+                out.extend_from_slice(raw);
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn insert(&self, key: NativeRawKey, raw: &[u32]) {
+        self.0.lock().insert(key, raw.into());
+    }
+}
+
 /// One profile head of a patched fixture owned by a programming target.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProfileHeadDestination {
@@ -196,6 +224,15 @@ impl PreparedStaticFamilyFrame {
         } else {
             crate::profile_projection::AxisInversion::default()
         };
+        // The mode, projection and resolution binding below are generation constants: a
+        // cached vector of this token proves they succeeded for this destination before.
+        let key = (destination, instance_id);
+        if self.native_raw.copy_into(&key, &mut out.raw) {
+            out.token = Some(token.clone());
+            out.destination = Some(destination);
+            out.instance_id = instance_id;
+            return Ok(());
+        }
         let mode = crate::fixture::profile_mode(fixture)
             .ok_or_else(|| invalid("native raw destination has no profile mode"))?;
         let projection = generation
@@ -239,6 +276,7 @@ impl PreparedStaticFamilyFrame {
                 out.raw[channel_index] = resolved.raw;
             }
         }
+        self.native_raw.insert(key, &out.raw);
         out.token = Some(token.clone());
         out.destination = Some(destination);
         out.instance_id = instance_id;

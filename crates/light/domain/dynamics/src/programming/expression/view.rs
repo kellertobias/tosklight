@@ -1,7 +1,7 @@
 //! Borrowed, shallow access to live trees and flat history. No traversal expands history.
 use super::*;
 use crate::RetainedExpressionNode as N;
-use std::collections::HashSet;
+use rustc_hash::FxHashSet as HashSet;
 
 #[derive(Clone, Copy)]
 pub(crate) enum ExpressionNodeRef<'a> {
@@ -183,8 +183,8 @@ impl<'a> ExpressionNodeRef<'a> {
     /// Children precede their parents exactly once, including shared historical descendants.
     pub fn postorder(self, active_only: bool) -> Result<Vec<Self>, IntentError> {
         let mut pending = vec![(self, false)];
-        let mut complete = HashSet::new();
-        let mut active = HashSet::new();
+        let mut complete = HashSet::default();
+        let mut active = HashSet::default();
         let mut ordered = Vec::new();
         while let Some((node, exit)) = pending.pop() {
             let key = node.key();

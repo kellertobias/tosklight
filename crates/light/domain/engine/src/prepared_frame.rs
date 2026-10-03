@@ -42,6 +42,16 @@ impl PreparedOutputFrame {
     pub fn snapshot(&self) -> Arc<EngineSnapshot> {
         self.generation.snapshot_arc()
     }
+    /// No patched fixture holds a Freeze. `Engine::observe_prepared_values` is the prepared
+    /// resolution followed by the Freeze overrides, so for such a capture its values equal those
+    /// of `Engine::prepare_static_family_frame` over the same samples (TL-553).
+    pub fn freezes_nothing(&self) -> bool {
+        self.generation
+            .snapshot()
+            .fixtures
+            .iter()
+            .all(|fixture| fixture.freeze.is_empty())
+    }
     pub fn sampled_at(&self) -> DateTime<Utc> {
         self.sampled_at
     }

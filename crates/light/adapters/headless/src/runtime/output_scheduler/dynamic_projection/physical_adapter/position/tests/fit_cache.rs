@@ -315,3 +315,207 @@ fn unheaded_root_requirement_protects_root_and_copy_through_real_observer_finish
     }
     assert!(lane.accept(&token));
 }
+
+/// TL-553: the accepted fit memo is keyed on the channels the fit reads. An Intensity change on
+/// the same fixture keeps the accepted fit, and the published result equals a fresh lane's fit
+/// of the same captured frame; a new request still refits.
+#[test]
+fn an_unrelated_intensity_change_keeps_the_accepted_fit_identical_to_a_fresh_fit() {
+    let mut profile = moving_head();
+    let head = profile.modes[0].heads[0].id;
+    profile.modes[0]
+        .channels
+        .push(super::channel(head, "intensity", 5));
+    profile.modes[0].splits[0].footprint = 6;
+    let root = FixtureId::new();
+    let rig = Rig::new(vec![patched(&profile, root, 1)], root);
+    let value = angles(40., 25.);
+    rig.programmers.set(
+        rig.session,
+        root,
+        ProgrammingOwner::Position.key(),
+        value.clone(),
+    );
+    let lane = PhysicalAdapterLane::live(PositionAdapter::default());
+    let mut runtime =
+        DynamicRuntime::with_programming_contract_support(PROGRAMMING_CONTRACT_VERSION);
+    let mut origins = DynamicSourceOrigins::default();
+    let mut scratch = HybridFrameScratch::default();
+    let frame = |lane: &PhysicalAdapterLane<PositionAdapter>,
+                 runtime: &mut DynamicRuntime,
+                 origins: &mut DynamicSourceOrigins,
+                 scratch: &mut HybridFrameScratch| {
+        let capture = rig.capture();
+        prepare_live(&rig, &capture, &capture, lane, runtime, origins, scratch).unwrap()
+    };
+    let mut warmed = false;
+    for _ in 0..8 {
+        let output = frame(&lane, &mut runtime, &mut origins, &mut scratch);
+        if output.results[0].quality.reused_fits == 1 {
+            warmed = true;
+            break;
+        }
+    }
+    assert!(
+        warmed,
+        "an unchanged request reaches an accepted stable fit"
+    );
+    for (step, level) in [0.2f32, 0.9, 0.0, 0.55].into_iter().enumerate() {
+        rig.set(root, "intensity", level);
+        let before = lane.adapter().counters();
+        let output = frame(&lane, &mut runtime, &mut origins, &mut scratch);
+        let after = lane.adapter().counters();
+        assert_eq!(
+            (
+                after.fits - before.fits,
+                after.fit_cache_hits - before.fit_cache_hits
+            ),
+            (0, 1),
+            "step {step}: Intensity is not a Position fit input"
+        );
+        let physical = output
+            .rendered
+            .physical
+            .instances
+            .iter()
+            .find(|instance| instance.instance_id == root.0)
+            .unwrap();
+        // A fresh lane with no memo fits the same request against the same accepted seed.
+        let fresh = PhysicalAdapterLane::live(PositionAdapter::default());
+        let capture = rig.capture();
+        let reference = prepare_live(
+            &rig,
+            &capture,
+            &capture,
+            &fresh,
+            &mut DynamicRuntime::with_programming_contract_support(PROGRAMMING_CONTRACT_VERSION),
+            &mut DynamicSourceOrigins::default(),
+            &mut HybridFrameScratch::default(),
+        )
+        .unwrap();
+        let (row, expected) = (&output.results[0], &reference.results[0]);
+        assert_eq!(row.value, expected.value);
+        assert_eq!(row.writes, expected.writes, "step {step}");
+        assert_eq!(
+            row.achieved.outcomes, expected.achieved.outcomes,
+            "step {step}"
+        );
+        for write in &row.writes {
+            assert_eq!(
+                physical.native_raw[write.slot.channel_index as usize],
+                write.raw
+            );
+        }
+        let intensity = (f64::from(level) * 65535.).round() as u32;
+        let observed = physical.native_raw[physical.native_raw.len() - 1];
+        assert!(
+            observed.abs_diff(intensity) <= 1,
+            "step {step}: Intensity reached output"
+        );
+    }
+    rig.programmers.set(
+        rig.session,
+        root,
+        ProgrammingOwner::Position.key(),
+        angles(-30., 60.),
+    );
+    let before = lane.adapter().counters();
+    frame(&lane, &mut runtime, &mut origins, &mut scratch);
+    assert_eq!(lane.adapter().counters().fits - before.fits, 1);
+}
+
+/// TL-553: a static Target that the bounded search cannot reach repeats the same search for the
+/// same inputs. Once accepted it is reused with the same held status and writes as a fresh fit,
+/// instead of being re-solved every frame.
+#[test]
+fn an_unreachable_static_target_is_reused_with_its_held_status() {
+    let mut profile = moving_head();
+    profile.modes[0].channels[1].functions[0].behavior = ChannelFunctionBehavior::Continuous {
+        physical_min: 0.,
+        physical_max: 2.,
+        unit: Some("deg".into()),
+    };
+    profile.validate().unwrap();
+    let root = FixtureId::new();
+    let aim = FixtureId::new();
+    let mut fixture = patched(&profile, root, 1);
+    fixture.location.z = 3000;
+    let rig = Rig::new(
+        vec![
+            fixture,
+            point(
+                aim,
+                FixtureLocation {
+                    x: 2000,
+                    y: -5000,
+                    z: 6000,
+                },
+            ),
+        ],
+        root,
+    );
+    let value = target(TargetReference::Point { point_id: aim.0 }, [0.; 3]);
+    rig.programmers.set(
+        rig.session,
+        root,
+        ProgrammingOwner::Position.key(),
+        value.clone(),
+    );
+    let lane = PhysicalAdapterLane::live(PositionAdapter::default());
+    let mut runtime =
+        DynamicRuntime::with_programming_contract_support(PROGRAMMING_CONTRACT_VERSION);
+    let mut origins = DynamicSourceOrigins::default();
+    let mut scratch = HybridFrameScratch::default();
+    let mut reused = 0;
+    let mut first_writes = None;
+    for frame in 0..6 {
+        let capture = rig.capture();
+        let before = lane.adapter().counters();
+        let output = prepare_live(
+            &rig,
+            &capture,
+            &capture,
+            &lane,
+            &mut runtime,
+            &mut origins,
+            &mut scratch,
+        )
+        .unwrap();
+        let after = lane.adapter().counters();
+        let row = &output.results[0];
+        assert_eq!(
+            row.achieved.outcomes[0].result.status,
+            PositionFitStatus::UnreachableTarget,
+            "frame {frame}"
+        );
+        assert!(row.quality.held);
+        reused += row.quality.reused_fits;
+        assert_eq!(
+            after.fits - before.fits + after.fit_cache_hits - before.fit_cache_hits,
+            1
+        );
+        let fresh = PhysicalAdapterLane::live(PositionAdapter::default());
+        let capture = rig.capture();
+        let reference = prepare_live(
+            &rig,
+            &capture,
+            &capture,
+            &fresh,
+            &mut DynamicRuntime::with_programming_contract_support(PROGRAMMING_CONTRACT_VERSION),
+            &mut DynamicSourceOrigins::default(),
+            &mut HybridFrameScratch::default(),
+        )
+        .unwrap();
+        assert_eq!(row.writes, reference.results[0].writes, "frame {frame}");
+        assert_eq!(
+            row.achieved.outcomes, reference.results[0].achieved.outcomes,
+            "frame {frame}"
+        );
+        first_writes.get_or_insert_with(|| row.writes.clone());
+        assert_eq!(Some(&row.writes), first_writes.as_ref());
+    }
+    assert!(
+        reused >= 4,
+        "an accepted unreachable search is reused: {reused}"
+    );
+}

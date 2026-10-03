@@ -3,6 +3,7 @@
 use super::*;
 
 /// Outcome of one head before it is folded into the published resolution.
+#[derive(Clone)]
 pub(super) struct HeadResolution {
     pub achieved: AchievedColor,
     pub quality: ColorQuality,
@@ -14,6 +15,29 @@ pub(super) struct HeadsResolution {
     pub writes: Vec<NativeControlWrite>,
     pub outcomes: Vec<ColorHeadOutcome>,
     pub continuity: ColorContinuity,
+}
+
+/// The last semantic resolve of one destination head (TL-553). The fit reads only the intent
+/// and the head's input channels of the seeded `current` (after the whole-vector validation),
+/// so an unchanged key replays the exact writes, achieved output, quality and continuity.
+/// The descriptor, and with it this memo, is recompiled with every runtime generation.
+pub(super) struct ColorHeadMemo {
+    intent: ColorIntent,
+    key: Vec<u32>,
+    writes: Vec<NativeControlWrite>,
+    resolution: HeadResolution,
+}
+
+impl ColorHeadMemo {
+    fn matches(&self, head: &ColorHeadDescriptor, intent: &ColorIntent, current: &[u32]) -> bool {
+        self.intent == *intent
+            && head.fitting.accepts_raw(current)
+            && head
+                .inputs
+                .iter()
+                .zip(&self.key)
+                .all(|(&index, &raw)| current[index] == raw)
+    }
 }
 
 impl ColorAdapter {
@@ -252,6 +276,23 @@ impl ColorAdapter {
     ) -> Result<HeadResolution, TransitionError> {
         let mut scratch = head.scratch.lock();
         Self::seed_head(head, previous, current);
+        if let Some(memo) = scratch
+            .memo
+            .as_ref()
+            .filter(|memo| memo.matches(head, intent, current))
+        {
+            // TL-553: identical fit inputs give the identical result; replay it exactly.
+            for write in &memo.writes {
+                current[write.slot.channel_index as usize] = write.raw;
+            }
+            writes.extend_from_slice(&memo.writes);
+            self.count(|c| c.result_reuses += 1);
+            let mut resolution = memo.resolution.clone();
+            // The published work describes this resolve, which fitted nothing.
+            resolution.quality.work = ColorSolveWork::default();
+            return Ok(resolution);
+        }
+        let key = head.inputs.iter().map(|&index| current[index]).collect();
         let mut work = ColorSolveWork::default();
         self.fit(head, intent, current, &mut scratch, &mut work)?;
         if Self::park_retained(head, &scratch.output, current) {
@@ -271,7 +312,7 @@ impl ColorAdapter {
         );
         let achieved = Self::achieved(head, &mut scratch, current, conflict)?;
         self.record(&work, conflict);
-        Ok(HeadResolution {
+        let resolution = HeadResolution {
             achieved,
             quality: ColorQuality {
                 discrete: !head.fitting.has_visible_emitters(head.head),
@@ -289,7 +330,14 @@ impl ColorAdapter {
                     .map(|w| (w.slot.channel_index, w.channel_id, w.raw))
                     .collect(),
             },
-        })
+        };
+        scratch.memo = Some(ColorHeadMemo {
+            intent: intent.clone(),
+            key,
+            writes: writes[first..].to_vec(),
+            resolution: resolution.clone(),
+        });
+        Ok(resolution)
     }
 
     pub(super) fn record(&self, work: &ColorSolveWork, conflict: bool) {

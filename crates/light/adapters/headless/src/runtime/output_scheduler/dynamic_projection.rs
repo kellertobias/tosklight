@@ -106,6 +106,10 @@ struct TickSources<'a> {
     engine: &'a Engine,
     prepared: Option<&'a light_engine::PreparedOutputFrame>,
     baseline_samples: &'a [ContributionBatch],
+    /// TL-553: the static family lane already resolved over exactly `baseline_samples` for a
+    /// capture without Freeze. Its values are the observed values, so reading it replaces a
+    /// second resolution of the same frame.
+    static_frame: Option<&'a light_engine::PreparedStaticFamilyFrame>,
     values: OnceLock<TickValues>,
 }
 
@@ -120,6 +124,7 @@ impl<'a> TickSources<'a> {
             engine,
             prepared: None,
             baseline_samples: &[],
+            static_frame: None,
             values: OnceLock::new(),
         }
     }
@@ -133,8 +138,22 @@ impl<'a> TickSources<'a> {
             engine,
             prepared: Some(frame),
             baseline_samples,
+            static_frame: None,
             values: OnceLock::new(),
         }
+    }
+
+    /// Read `static_frame` instead of observing the capture again. The caller guarantees it was
+    /// prepared from this capture over exactly `baseline_samples`; a capture with a Freeze keeps
+    /// the observed resolution, which applies the Freeze overrides.
+    fn over_static(mut self, static_frame: &'a light_engine::PreparedStaticFamilyFrame) -> Self {
+        if self
+            .prepared
+            .is_some_and(light_engine::PreparedOutputFrame::freezes_nothing)
+        {
+            self.static_frame = Some(static_frame);
+        }
+        self
     }
 
     fn captured_values(&self) -> &TickValues {
@@ -148,6 +167,9 @@ impl<'a> TickSources<'a> {
     }
 
     fn value(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&AttributeValue> {
+        if let Some(frame) = self.static_frame {
+            return frame.value(target, attribute);
+        }
         match self.captured_values() {
             TickValues::Legacy(values) => values.get(&(target, attribute.clone())),
             TickValues::Prepared(frame) => frame.value(target, attribute),
@@ -196,6 +218,9 @@ impl DynamicTickSource for TickSources<'_> {
         target: FixtureId,
         attribute: &AttributeKey,
     ) -> Option<&Arc<light_engine::ContributionFamilyEvidence>> {
+        if let Some(frame) = self.static_frame {
+            return frame.contribution_family_evidence(target, attribute);
+        }
         match self.captured_values() {
             TickValues::Prepared(frame) => frame.contribution_family_evidence(target, attribute),
             TickValues::Legacy(_) => None,

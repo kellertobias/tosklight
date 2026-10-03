@@ -20,6 +20,7 @@ pub(in crate::runtime) mod direct;
 mod fitting_bench;
 mod lifecycle;
 mod reference;
+mod result_memo;
 mod review;
 
 pub(in crate::runtime) fn intent(rgb: [f32; 3], amber: f32) -> ColorIntent {
@@ -144,6 +145,18 @@ impl Rig {
         previous: Option<&ColorContinuity>,
         options: RenderOptions,
     ) -> Result<Resolved, TransitionError> {
+        self.resolve_on(None, intent, previous, options)
+    }
+
+    /// Resolve through `descriptor` (a retained descriptor keeps its per-head scratch across
+    /// frames, as the lane's does) or through a freshly compiled one.
+    fn resolve_on(
+        &self,
+        retained: Option<&ColorDescriptor>,
+        intent: &ColorIntent,
+        previous: Option<&ColorContinuity>,
+        options: RenderOptions,
+    ) -> Result<Resolved, TransitionError> {
         self.clock.advance_millis(25);
         let capture = self.engine.prepare_output_frame(options);
         let token = capture.frame_token();
@@ -174,7 +187,7 @@ impl Rig {
             frame,
             target: self.target,
             owner: ProgrammingOwner::Color,
-            descriptor: &descriptor,
+            descriptor: retained.unwrap_or(&descriptor),
             value: &value,
             previous,
         })?;

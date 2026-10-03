@@ -8,10 +8,8 @@ use super::{
 };
 use crate::DynamicRuntimeSample;
 use light_core::{AttributeValue, FixtureId, programming::*};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use std::sync::Arc;
 use uuid::Uuid;
 mod forest;
 pub use forest::{PositionComponentForestBundle, bundle_position_component_forest};
@@ -48,7 +46,7 @@ pub fn bundle_position_sample_expressions(
             TransitionRequirement::CompatibleOwners,
         ));
     }
-    let mut lanes = HashSet::with_capacity(samples.len());
+    let mut lanes = HashSet::with_capacity_and_hasher(samples.len(), Default::default());
     for sample in samples {
         ensure(
             sample.instance_id == first.instance_id
@@ -233,7 +231,7 @@ fn bundle(
     target: FixtureId,
     sources: &dyn DynamicValueSourceResolver,
 ) -> Result<Option<RetainedNodeId>, TransitionError> {
-    let mut results = HashMap::<Vec<RetainedNodeId>, Option<RetainedNodeId>>::new();
+    let mut results = HashMap::<Vec<RetainedNodeId>, Option<RetainedNodeId>>::default();
     let mut stack = vec![PairTask::Visit(roots.to_vec())];
     // The caller supplies one coherent frame. Query each Current component only if a visible
     // branch needs it, then share that frame value across every interrupted occurrence.

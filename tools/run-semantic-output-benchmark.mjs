@@ -82,6 +82,7 @@ export function summarizeScenario(report) {
 			positionFitsP99: work.position_fits?.p99 ?? null,
 			positionHitsP50: work.position_fit_cache_hits?.p50 ?? null,
 			colorFitsP50: work.color_fits_and_refits?.p50 ?? null,
+			colorReusesP50: work.color_result_reuses?.p50 ?? null,
 			opticsResolvesP50: work.optics_resolves?.p50 ?? null,
 			changedPointsP95: work.tracking_changed_points?.p95 ?? null,
 			dirtyInstancesP50: work.tracking_dirty_instances?.p50 ?? null,
@@ -101,6 +102,9 @@ function perFrameWork(work) {
 		positionFits: mean(work.position_fits),
 		positionHits: mean(work.position_fit_cache_hits),
 		colorFits: mean(work.color_fits_and_refits),
+		// TL-553: a Color resolve either fits or replays an unchanged fit; how many replay depends
+		// on the sampled Dynamics timeline, so readout consumers are compared by resolves.
+		colorResolves: mean(work.color_resolves),
 		opticsResolves: mean(work.optics_resolves),
 	};
 }
@@ -181,7 +185,7 @@ function workloadGates(workload) {
 	const consumers = workload?.consumers ?? [];
 	const reference = consumers.find((run) => run.consumers === 0);
 	for (const run of consumers.filter((entry) => entry.consumers > 0)) {
-		const same = reference && ["positionFits", "colorFits", "opticsResolves"].every((key) => Math.abs(run.summary.semantic.perFrame[key] - reference.summary.semantic.perFrame[key]) < 1e-9);
+		const same = reference && ["positionFits", "colorResolves", "opticsResolves"].every((key) => Math.abs(run.summary.semantic.perFrame[key] - reference.summary.semantic.perFrame[key]) < 1e-9);
 		rows.push(gate(`readout consumers x${run.consumers} (hold ${run.holdMs} ms): physical solves per frame unchanged`, "TL-596 scope", "equal to 0 consumers", JSON.stringify(run.summary.semantic.perFrame), reference ? same : null));
 	}
 	return rows;

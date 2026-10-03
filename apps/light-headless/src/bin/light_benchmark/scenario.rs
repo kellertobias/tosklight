@@ -515,6 +515,13 @@ impl BenchmarkDynamic {
         let mut samples = Vec::with_capacity(self.targets.len() * 6);
         for (definition_index, definition) in self.definitions.iter().enumerate() {
             let evaluator = DynamicEvaluator::new(definition);
+            // TL-553: one owner key per lane, borrowed per target as the pre-semantic harness
+            // borrowed `lane.attribute`; a key per sample added two atomic Arc operations each.
+            let owners = definition
+                .lanes
+                .iter()
+                .map(|lane| lane.output_owner())
+                .collect::<Vec<_>>();
             let cycle_duration_millis = match definition.speed {
                 DynamicSpeed::Fixed { duration_millis } => duration_millis,
                 DynamicSpeed::SpeedGroup {
@@ -535,10 +542,10 @@ impl BenchmarkDynamic {
                 if !selected {
                     continue;
                 }
-                for lane in &definition.lanes {
+                for (lane, owner) in definition.lanes.iter().zip(&owners) {
                     // The desk's Dynamics runtime remembers these; the benchmark asks each tick,
                     // outside the timed path, and hands the engine the same numbers.
-                    let address = addresser.frame_address(*target, &lane.output_owner());
+                    let address = addresser.frame_address(*target, owner);
                     let Some(mut value) = evaluator.sample_lane(
                         lane,
                         DynamicEvaluationContext {
@@ -569,7 +576,7 @@ impl BenchmarkDynamic {
                     samples.push(
                         ContributionSample::independent(TimedValue {
                             fixture_id: *target,
-                            attribute: lane.output_owner(),
+                            attribute: owner.clone(),
                             value: AttributeValue::Normalized(value),
                             priority: 10 + definition_index as i16 + controller_switch,
                             changed_at: at,
@@ -585,7 +592,7 @@ impl BenchmarkDynamic {
                         samples.push(
                             ContributionSample::independent(TimedValue {
                                 fixture_id: *target,
-                                attribute: lane.output_owner(),
+                                attribute: owner.clone(),
                                 value: AttributeValue::Normalized(0.65),
                                 priority: 40,
                                 changed_at: at,

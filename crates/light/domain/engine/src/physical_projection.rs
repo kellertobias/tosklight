@@ -3,7 +3,8 @@
 use crate::{EngineError, EngineSnapshot, Pooled, Reusable, ValuePool};
 use light_core::{FixtureId, spatial::RigidTransform};
 use light_fixture::{FixtureProfile, InstalledColorCalibration, forward::*};
-use std::{collections::HashMap, sync::Arc};
+use rustc_hash::FxHashMap;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -29,6 +30,9 @@ pub struct PhysicalInstanceOutput {
     pub native_identity: Arc<str>,
     pub native_raw: Box<[u32]>,
     pub complete: bool,
+    /// TL-553: the forward results describe `native_raw` exactly. Survives a pool reset, so an
+    /// instance whose final native values are unchanged keeps its results without re-evaluation.
+    evaluated: bool,
     /// Configuration-time reasons for passive details, never operation-blocking notifications.
     pub color_diagnostic: Option<Arc<str>>,
     pub position_diagnostic: Option<Arc<str>>,
@@ -139,6 +143,7 @@ impl Plan {
             native_raw: vec![0; self.channels].into_boxed_slice(),
             seen: vec![false; self.channels].into_boxed_slice(),
             complete: false,
+            evaluated: false,
             color_diagnostic: self.color.as_ref().err().cloned(),
             position_diagnostic: self.position.as_ref().err().cloned(),
             optics_diagnostic: self.optics.as_ref().err().cloned(),
@@ -152,21 +157,32 @@ impl Plan {
     ) -> Result<(), EngineError> {
         output.complete = false;
         output.seen.fill(false);
+        let mut unchanged = output.evaluated;
         for &(index, raw) in channels {
             let index = index as usize;
             if index >= output.native_raw.len() || output.seen[index] {
+                output.evaluated = false;
                 return Err(EngineError::Invalid(
                     "physical projection has invalid native channel layout".into(),
                 ));
             }
+            unchanged &= output.native_raw[index] == raw;
             output.native_raw[index] = raw;
             output.seen[index] = true;
         }
         if output.seen.iter().any(|seen| !*seen) {
+            output.evaluated = false;
             return Err(EngineError::Invalid(
                 "physical projection requires a complete native fixture result".into(),
             ));
         }
+        // The forward models are pure functions of the compiled plan and the native values: the
+        // results already held for these exact values are the results of evaluating them again.
+        if unchanged {
+            output.complete = true;
+            return Ok(());
+        }
+        output.evaluated = false;
         let failure = |family| {
             EngineError::Invalid(format!(
                 "compiled {family} forward output layout is inconsistent"
@@ -198,6 +214,7 @@ impl Plan {
                 )
                 .map_err(|_| failure("Position"))?;
         }
+        output.evaluated = true;
         output.complete = true;
         Ok(())
     }
@@ -205,7 +222,8 @@ impl Plan {
 
 pub(crate) struct PhysicalProjectionIndex {
     layout: Uuid,
-    fixtures: HashMap<FixtureId, Box<[usize]>>,
+    /// Looked up once per fixture and frame, so hashed for speed (TL-553).
+    fixtures: FxHashMap<FixtureId, Box<[usize]>>,
     plans: Vec<Plan>,
     pool: Arc<ValuePool<PhysicalForwardFrame>>,
 }
@@ -220,7 +238,7 @@ impl Default for PhysicalProjectionIndex {
     fn default() -> Self {
         Self {
             layout: Uuid::new_v4(),
-            fixtures: HashMap::new(),
+            fixtures: FxHashMap::default(),
             plans: Vec::new(),
             pool: Arc::default(),
         }

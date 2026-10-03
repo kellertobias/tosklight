@@ -526,3 +526,82 @@ fn preload_forward_prediction_honors_captured_color_freeze() {
     );
     assert_eq!(preload.physical.instances[0].colors[0].uv_drive_max, 0.);
 }
+
+/// TL-553: a pooled instance whose final native values are unchanged keeps its forward results
+/// instead of re-evaluating them. Every frame must equal a fresh evaluation of its values.
+#[test]
+fn unchanged_native_values_reuse_forward_results_identical_to_a_fresh_evaluation() {
+    let fixture = physical_fixture();
+    let id = fixture.fixture_id;
+    let (engine, session) = engine_with(fixture);
+    let generation = engine.generation.load_full();
+    let fresh = |instance: &crate::PhysicalInstanceOutput| {
+        let index = crate::physical_projection::PhysicalProjectionIndex::compile(
+            &generation.snapshot_arc(),
+        );
+        let mut frame = index.take_frame();
+        let raw = (0u32..)
+            .zip(instance.native_raw.iter().copied())
+            .collect::<Vec<_>>();
+        index.evaluate(id, 0, &raw, &mut frame).unwrap();
+        let output = &frame.instances[0];
+        (
+            output.colors.clone(),
+            output.axes.clone(),
+            output.lenses.clone(),
+            output.optics.clone(),
+        )
+    };
+    let mut held = Vec::new();
+    for step in 0..16 {
+        if step % 4 == 3 {
+            engine.programmers.set(
+                session,
+                id,
+                AttributeKey("color.blue".into()),
+                AttributeValue::Normalized(step as f32 / 16.),
+            );
+        }
+        let result = engine.render(RenderOptions::default()).unwrap();
+        let instance = &result.physical.instances[0];
+        assert!(instance.complete, "step {step}");
+        let observed = (
+            instance.colors.clone(),
+            instance.axes.clone(),
+            instance.lenses.clone(),
+            instance.optics.clone(),
+        );
+        assert_eq!(observed, fresh(instance), "step {step}");
+        // Holding some frames makes the pool hand out different loans with older values.
+        if step % 5 == 0 {
+            held.push(result);
+        }
+    }
+}
+
+/// A rejected layout clears the reuse, so the next valid values are evaluated again.
+#[test]
+fn a_rejected_physical_layout_never_reuses_stale_forward_results() {
+    let fixture = physical_fixture();
+    let id = fixture.fixture_id;
+    let (engine, _) = engine_with(fixture);
+    let generation = engine.generation.load_full();
+    let index =
+        crate::physical_projection::PhysicalProjectionIndex::compile(&generation.snapshot_arc());
+    let mut frame = index.take_frame();
+    let channels = frame.instances[0].native_raw.len() as u32;
+    let raw = |level: u32| (0..channels).map(|i| (i, level)).collect::<Vec<_>>();
+    index.evaluate(id, 0, &raw(255), &mut frame).unwrap();
+    let bright = frame.instances[0].colors.clone();
+    index.evaluate(id, 0, &raw(0), &mut frame).unwrap();
+    let dark = frame.instances[0].colors.clone();
+    assert_ne!(bright, dark);
+    // A duplicate channel is rejected after the earlier channels were already stored.
+    let mut invalid = raw(255);
+    invalid[1] = (0, 255);
+    assert!(index.evaluate(id, 0, &invalid, &mut frame).is_err());
+    assert!(!frame.instances[0].complete);
+    index.evaluate(id, 0, &raw(255), &mut frame).unwrap();
+    assert!(frame.instances[0].complete);
+    assert_eq!(frame.instances[0].colors, bright);
+}

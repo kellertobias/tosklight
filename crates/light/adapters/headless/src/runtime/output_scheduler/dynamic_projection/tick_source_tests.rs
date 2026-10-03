@@ -449,3 +449,108 @@ fn programmer_reconciliation_ignores_unrelated_engine_snapshot_replacement() {
 
     assert!(cache.changed(&Arc::new(Vec::new()), &snapshot));
 }
+
+/// TL-553: the hybrid frame reads scalar Current from its static family lane instead of a second
+/// resolution. Every value and family evidence must equal the observed resolution, and a capture
+/// with a Freeze must keep the observation (which applies the Freeze overrides).
+#[test]
+fn static_lane_scalar_sources_equal_the_observed_resolution_and_freeze_keeps_observing() {
+    use super::physical_adapter::color::profiles::{patched, rgbw};
+    let programmers = ProgrammerRegistry::default();
+    let session = light_core::SessionId::new();
+    programmers.start(session);
+    let engine = Engine::new(programmers.clone());
+    let (lamp, frozen) = (FixtureId::new(), FixtureId::new());
+    let install = |freeze: bool| {
+        let mut held = patched(&rgbw(), frozen, 20);
+        held.fixture_number = Some(2);
+        if freeze {
+            held.freeze.targets.insert(
+                frozen,
+                light_fixture::FrozenFixtureTarget {
+                    values: HashMap::from([(
+                        AttributeKey::intensity(),
+                        AttributeValue::Normalized(0.125),
+                    )]),
+                    ..Default::default()
+                },
+            );
+        }
+        engine
+            .replace_snapshot(light_engine::EngineSnapshot {
+                fixtures: vec![patched(&rgbw(), lamp, 1), held].into(),
+                revision: 1 + u64::from(freeze),
+                ..Default::default()
+            })
+            .unwrap();
+    };
+    for (fixture, attribute, value) in [
+        (lamp, "intensity", 0.6),
+        (lamp, "color.red", 0.3),
+        (frozen, "intensity", 0.9),
+        (frozen, "color.blue", 0.4),
+    ] {
+        programmers.set(
+            session,
+            fixture,
+            AttributeKey(attribute.into()),
+            AttributeValue::Normalized(value),
+        );
+    }
+    let attributes = [
+        "intensity",
+        "color.red",
+        "color.green",
+        "color.blue",
+        "audio.volume",
+    ]
+    .map(|name| AttributeKey(name.into()));
+    for freeze in [false, true] {
+        install(freeze);
+        let frame = engine.prepare_output_frame(RenderOptions::default());
+        let baseline = [ContributionBatch::new([ContributionSample::independent(
+            TimedValue {
+                fixture_id: lamp,
+                attribute: AttributeKey("audio.volume".into()),
+                value: AttributeValue::Normalized(0.35),
+                priority: 75,
+                changed_at: frame.sampled_at(),
+                programmer_order: 1,
+                merge_mode: MergeMode::Ltp,
+                fade: false,
+                fade_millis: None,
+                delay_millis: None,
+            },
+        )])];
+        let static_frame = engine.prepare_static_family_frame(&frame, &baseline);
+        let observed = TickSources::prepared(&engine, &frame, &baseline);
+        let over_static =
+            TickSources::prepared(&engine, &frame, &baseline).over_static(&static_frame);
+        assert_eq!(over_static.static_frame.is_some(), !freeze);
+        for fixture in [lamp, frozen] {
+            for attribute in &attributes {
+                assert_eq!(
+                    DynamicTickSource::value(&over_static, fixture, attribute),
+                    DynamicTickSource::value(&observed, fixture, attribute),
+                    "freeze {freeze}: {attribute:?}"
+                );
+                let evidence = |sources: &TickSources<'_>| {
+                    sources
+                        .family_evidence(fixture, attribute)
+                        .map(|evidence| Arc::as_ptr(evidence) as usize)
+                };
+                assert_eq!(evidence(&over_static), evidence(&observed));
+            }
+        }
+        assert!(
+            over_static.values.get().is_none() || freeze,
+            "no second resolution without a Freeze"
+        );
+        let frozen_intensity = DynamicTickSource::value(&over_static, frozen, &attributes[0]);
+        let expected = if freeze { 0.125 } else { 0.9 };
+        assert_eq!(
+            frozen_intensity.and_then(AttributeValue::normalized),
+            Some(expected)
+        );
+    }
+}
