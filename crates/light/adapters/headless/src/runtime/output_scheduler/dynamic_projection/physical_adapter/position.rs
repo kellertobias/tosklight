@@ -203,6 +203,17 @@ impl PositionAdapter {
     pub fn counters(&self) -> PositionAdapterCounters {
         self.counters.get()
     }
+    /// TL-596: the last accepted tracking census as (capture time, changed Points, dirty
+    /// instances). `None` until a frame with registered Point dependencies was accepted.
+    pub fn tracking_census(&self) -> Option<(chrono::DateTime<chrono::Utc>, usize, usize)> {
+        self.tracking.borrow().snapshot().map(|snapshot| {
+            (
+                snapshot.token().sampled_at(),
+                snapshot.changed_points().len(),
+                snapshot.dirty_instances().len(),
+            )
+        })
+    }
     fn instances(
         &self,
         snapshot: &EngineSnapshot,

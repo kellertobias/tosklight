@@ -13,6 +13,7 @@ use super::bridge::{
 };
 use super::native::project_family_native_rows;
 use super::*;
+use rustc_hash::FxHashSet;
 
 /// Observer of one complete Live frame or one retained branch over one [`FamilyLanes`] set.
 pub(in crate::runtime) struct FamilyFrameObserver<'a> {
@@ -60,8 +61,11 @@ impl HybridFrameObserver<FamilySidecar> for FamilyFrameObserver<'_> {
         baseline: &light_engine::PreparedStaticFamilyFrame,
     ) -> Result<Vec<(FixtureId, ProgrammingOwner)>, TransitionError> {
         let mut targets = self.position.static_program_targets(frame, baseline)?;
-        static_color_targets(self.lanes, frame, baseline, &mut targets)?;
-        static_zoom_targets(self.lanes, frame, baseline, &mut targets)?;
+        // TL-596: a set for membership; scanning `targets` per head was quadratic at full-rig
+        // size. `targets` keeps its order.
+        let mut seen = targets.iter().copied().collect::<FxHashSet<_>>();
+        static_color_targets(self.lanes, frame, baseline, &mut targets, &mut seen)?;
+        static_zoom_targets(self.lanes, frame, baseline, &mut targets, &mut seen)?;
         Ok(targets)
     }
 
@@ -277,6 +281,7 @@ fn static_color_targets(
     frame: HybridFrameContext<'_>,
     baseline: &light_engine::PreparedStaticFamilyFrame,
     targets: &mut Vec<(FixtureId, ProgrammingOwner)>,
+    seen: &mut FxHashSet<(FixtureId, ProgrammingOwner)>,
 ) -> Result<(), TransitionError> {
     let owner = ProgrammingOwner::Color;
     for fixture in frame.capture.snapshot().fixtures.iter() {
@@ -286,12 +291,15 @@ fn static_color_targets(
             if !matches!(
                 baseline.value(target, &owner.key()),
                 Some(AttributeValue::ColorProgram(_))
-            ) || targets.contains(&(target, owner))
+            ) || seen.contains(&(target, owner))
             {
                 continue;
             }
             match lanes.color.descriptor(frame, target, owner) {
-                Ok(_) => targets.push((target, owner)),
+                Ok(_) => {
+                    seen.insert((target, owner));
+                    targets.push((target, owner));
+                }
                 Err(TransitionError::Requires(_)) => {}
                 Err(error) => return Err(error),
             }
@@ -310,6 +318,7 @@ fn static_zoom_targets(
     frame: HybridFrameContext<'_>,
     baseline: &light_engine::PreparedStaticFamilyFrame,
     targets: &mut Vec<(FixtureId, ProgrammingOwner)>,
+    seen: &mut FxHashSet<(FixtureId, ProgrammingOwner)>,
 ) -> Result<(), TransitionError> {
     let owner = ProgrammingOwner::Zoom;
     let lane = lanes.optics.lane(light_fixture::OpticsFamily::Zoom);
@@ -320,12 +329,15 @@ fn static_zoom_targets(
             if !matches!(
                 baseline.value(target, &owner.key()),
                 Some(AttributeValue::Zoom(_))
-            ) || targets.contains(&(target, owner))
+            ) || seen.contains(&(target, owner))
             {
                 continue;
             }
             match lane.descriptor(frame, target, owner) {
-                Ok(_) => targets.push((target, owner)),
+                Ok(_) => {
+                    seen.insert((target, owner));
+                    targets.push((target, owner));
+                }
                 Err(TransitionError::Requires(_)) => {}
                 Err(error) => return Err(error),
             }

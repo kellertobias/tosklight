@@ -160,8 +160,8 @@ impl LiveFamilyAdapters {
         self.accepted_color.latest()
     }
 
-    /// Read the Live lanes (tests and diagnostics). Never call while holding `dynamics`.
-    #[cfg(test)]
+    /// Read the Live lanes (tests, diagnostics and the TL-596 output benchmark seam). Never call
+    /// while holding `dynamics`.
     pub(in crate::runtime) fn with_lanes<R>(&self, read: impl FnOnce(&FamilyLanes) -> R) -> R {
         read(&self.state.lock().lanes)
     }

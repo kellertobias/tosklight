@@ -527,6 +527,45 @@ fn live_passive_hold_keeps_last_solve_and_recovery_uses_it() {
     assert_eq!(first_result.results[0].token, first.frame_token());
 }
 
+/// TL-596: verification is one pass over the staged writes; a disagreement after agreeing
+/// writes, and a retry after a rejected frame, behave exactly as the pairwise check did.
+#[test]
+fn a_late_shared_disagreement_after_agreeing_writes_is_rejected_and_retries_cleanly() {
+    let mut live = Live::new(target(15.), current_pan());
+    let [second, third] = [FixtureId::new(), FixtureId::new()];
+    live.fixed_position(second, 35., 15.);
+    live.fixed_position(third, 35., 15.);
+    let mut adapter = SeamAdapter::new(&[ProgrammingOwner::Position]);
+    adapter.shared_destination = Some(live.target);
+    let lane = PhysicalAdapterLane::live(adapter);
+    let agreeing = live.capture();
+    assert_eq!(
+        live.run(&agreeing, &lane, Tamper::None)
+            .unwrap()
+            .results
+            .len(),
+        3
+    );
+    live.fixed_position(third, 70., 15.);
+    let late = live.capture();
+    let error = live
+        .run(&late, &lane, Tamper::None)
+        .err()
+        .expect("late shared conflict");
+    assert!(
+        error.to_string().contains("shared native control"),
+        "{error}"
+    );
+    assert_eq!(lane.last_accepted(), Some(agreeing.frame_token()));
+    live.fixed_position(third, 35., 15.);
+    let retry = live.capture();
+    assert_eq!(
+        live.run(&retry, &lane, Tamper::None).unwrap().results.len(),
+        3
+    );
+    assert_eq!(lane.last_accepted(), Some(retry.frame_token()));
+}
+
 #[test]
 fn shared_native_heads_disagree_before_finalization_and_equal_writes_retry() {
     let mut live = Live::new(target(15.), current_pan());

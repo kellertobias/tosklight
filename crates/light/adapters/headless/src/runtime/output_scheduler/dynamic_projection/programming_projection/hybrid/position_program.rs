@@ -43,7 +43,7 @@ impl HybridCapturedPositionProgram {
         Ok(Self {
             token: token.clone(),
             target,
-            registry: CapturedPositionProgram::new(uuid::Uuid::new_v4(), base, samples)?,
+            registry: CapturedPositionProgram::new(capture_identity(), base, samples)?,
         })
     }
     pub fn frame_token(&self) -> &CapturedFrameToken {
@@ -55,6 +55,17 @@ impl HybridCapturedPositionProgram {
     pub fn registry(&self) -> &CapturedPositionProgram {
         &self.registry
     }
+}
+
+/// A process-unique, non-nil identity for one captured Position program. TL-596: a random v4
+/// UUID per program and frame cost one `getentropy` system call each (about 2% of a frame with
+/// 1,000 animated Position owners); the identity only has to be unique within this process.
+fn capture_identity() -> uuid::Uuid {
+    static PROCESS: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let process = *PROCESS.get_or_init(|| uuid::Uuid::new_v4().as_u64_pair().0);
+    let next = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    uuid::Uuid::from_u64_pair(process, next)
 }
 
 pub(in crate::runtime) struct HybridPositionEvaluation {
@@ -520,3 +531,15 @@ mod discovery_tests;
 
 #[cfg(test)]
 mod graph_tests;
+
+#[cfg(test)]
+mod capture_identity_tests {
+    #[test]
+    fn captured_program_identities_are_unique_and_never_nil() {
+        let identities = (0..10_000)
+            .map(|_| super::capture_identity())
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(identities.len(), 10_000);
+        assert!(!identities.contains(&uuid::Uuid::nil()));
+    }
+}

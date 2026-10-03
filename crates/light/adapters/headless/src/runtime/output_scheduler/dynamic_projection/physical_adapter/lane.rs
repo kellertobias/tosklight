@@ -64,6 +64,8 @@ struct LaneState<A: PhysicalFamilyAdapter> {
     staged: Option<Staged<A::Continuity>>,
     last_accepted: Option<CapturedFrameToken>,
     released: Vec<ReleasedPhysicalOwner>,
+    /// Reused by `verify`: the first raw value staged for each shared native slot.
+    shared_slots: FxHashMap<NativeControlSlot, u32>,
 }
 
 /// One lane of one family adapter. Interior mutability lets the same lane serve as the hybrid
@@ -104,6 +106,7 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
                 staged: None,
                 last_accepted: None,
                 released: Vec::new(),
+                shared_slots: FxHashMap::default(),
             }),
         }
     }
@@ -377,21 +380,27 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
     /// Last fallible check: the staged frame is exactly `token` and its heads agree on every
     /// shared native control. Different raw values for one slot are an ownership conflict.
     pub(super) fn verify(&self, token: &CapturedFrameToken) -> Result<(), TransitionError> {
-        let state = self.state.borrow();
-        let Some(staged) = state
-            .staged
-            .as_ref()
-            .filter(|staged| staged.token == *token)
-        else {
-            return invalid("physical adapter verification uses a mixed or stale frame token");
-        };
-        for (index, write) in staged.writes.iter().enumerate() {
-            if staged.writes[..index]
-                .iter()
-                .any(|other| other.slot == write.slot && other.raw != write.raw)
-            {
-                return invalid("physical adapter heads disagree on a shared native control");
+        {
+            let mut state = self.state.borrow_mut();
+            let LaneState {
+                staged,
+                shared_slots,
+                ..
+            } = &mut *state;
+            let Some(staged) = staged.as_ref().filter(|staged| staged.token == *token) else {
+                return invalid("physical adapter verification uses a mixed or stale frame token");
+            };
+            // TL-596: one pass over the staged writes. Comparing every write with every earlier
+            // one was quadratic in the frame's write count (about 27 ms per frame for 2,520
+            // Color heads). Any disagreement on a slot differs from that slot's first value.
+            shared_slots.clear();
+            for write in &staged.writes {
+                if *shared_slots.entry(write.slot).or_insert(write.raw) != write.raw {
+                    shared_slots.clear();
+                    return invalid("physical adapter heads disagree on a shared native control");
+                }
             }
+            shared_slots.clear();
         }
         self.adapter.verify_lane_frame(token)
     }

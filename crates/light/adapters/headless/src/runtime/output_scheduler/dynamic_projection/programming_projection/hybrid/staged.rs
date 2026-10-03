@@ -370,7 +370,10 @@ fn compose_family_cohort<T, S: DynamicTickSource, R: HybridFrameResolver>(
         .map_err(invalid)?;
     assemble_captured_family_inputs(prepared, fixed, families);
     let (groups, static_only) = families.with_static_targets(&static_targets);
-    let static_only = static_only.as_slice();
+    // TL-596: membership is asked once per group and batch row; a slice scan made the cohort
+    // quadratic in its static-only targets (thousands at full-rig size).
+    let static_only = static_only.into_iter().collect::<StaticOnlyTargets>();
+    let static_only = &static_only;
     let (mut requirements, mut projections) = (Vec::new(), Vec::new());
     let protected_current = protected_current_targets(view, groups);
     observer
@@ -431,6 +434,9 @@ fn compose_family_cohort<T, S: DynamicTickSource, R: HybridFrameResolver>(
     Ok((requirements, projections))
 }
 
+/// Static-only `(target, owner)` rows of one cohort.
+type StaticOnlyTargets = FxHashSet<(FixtureId, ProgrammingOwner)>;
+
 /// Targets whose Position Current must stay protected: scalar Position owners, and Position
 /// groups held by a scalar guard, a Fixed mask, or a missing static base.
 fn protected_current_targets<S, R>(
@@ -472,7 +478,7 @@ fn protected_current_targets<S, R>(
 fn eligible_position_groups<'g, S, R>(
     view: &CohortView<'_, '_, S, R>,
     groups: &'g [CapturedFamilyInput],
-    static_only: &[(FixtureId, ProgrammingOwner)],
+    static_only: &StaticOnlyTargets,
 ) -> Vec<&'g light_dynamics::DynamicFamilySampleGroup> {
     groups
         .iter()
@@ -507,7 +513,7 @@ fn eligible_position_groups<'g, S, R>(
 fn compose_position_batch<T, S: DynamicTickSource, R>(
     view: &CohortView<'_, '_, S, R>,
     eligible_position_groups: &[&light_dynamics::DynamicFamilySampleGroup],
-    static_only: &[(FixtureId, ProgrammingOwner)],
+    static_only: &StaticOnlyTargets,
     observer: &mut impl HybridFrameObserver<T>,
     composition: &mut RetainedFamilyCompositionScratch,
     position_batch_scratch: &mut Vec<RetainedFamilyCompositionScratch>,
@@ -555,7 +561,7 @@ fn compose_position_batch<T, S: DynamicTickSource, R>(
 fn compose_owner_group<T, S: DynamicTickSource, R: HybridFrameResolver>(
     view: &CohortView<'_, '_, S, R>,
     entry: &CapturedFamilyInput,
-    static_only: &[(FixtureId, ProgrammingOwner)],
+    static_only: &StaticOnlyTargets,
     handled_position: &FxHashSet<FixtureId>,
     observer: &mut impl HybridFrameObserver<T>,
     composition: &mut RetainedFamilyCompositionScratch,

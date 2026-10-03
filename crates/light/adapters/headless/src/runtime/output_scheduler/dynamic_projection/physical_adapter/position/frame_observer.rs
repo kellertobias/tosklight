@@ -109,16 +109,13 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
     ) -> Result<(), TransitionError> {
         self.programs.clear();
         let mut active_programs = Vec::new();
+        // TL-596: a set for the duplicate check; scanning every earlier program was quadratic.
+        let mut seen = rustc_hash::FxHashSet::default();
         for p in programs
             .iter()
             .filter(|p| p.owner == ProgrammingOwner::Position)
         {
-            if p.frame.token != frame.token
-                || self
-                    .programs
-                    .iter()
-                    .any(|program| program.target == p.target)
-            {
+            if p.frame.token != frame.token || !seen.insert(p.target) {
                 return Err(invalid(
                     "Position registry contains a foreign or duplicate program",
                 ));
