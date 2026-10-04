@@ -377,12 +377,31 @@ fn media_stays_on_its_own_path_and_layered_engines_are_excluded_with_a_reason() 
         ));
         assert!(mode.derived_color_physical().is_none());
     }
-    // A hue/saturation engine with direct emitters on top: how they combine is not described,
-    // so the outcome is an explicit reason, never a silent nothing.
+    // A hue/saturation engine with direct emitters on top and no described activation gate: how
+    // they combine is not described, so the outcome is an explicit reason, never a silent
+    // nothing. (With ETC's Plus Seven gate the direct emitters are the engine; see
+    // `derived_color_coverage::lustr_plus_seven_*`.)
     let lustr = package("etc--source-four-led-series-2-lustr");
-    let plus = lustr.modes.iter().find(|m| m.name == "HSI Plus 7").unwrap();
+    let mut plus = lustr
+        .modes
+        .iter()
+        .find(|m| m.name == "HSI Plus 7")
+        .unwrap()
+        .clone();
+    assert!(matches!(
+        plus.derived_color_outcome(),
+        DerivedColorOutcome::Derived(_)
+    ));
+    for channel in &mut plus.channels {
+        channel.functions.retain(|f| {
+            !matches!(
+                &f.behavior,
+                ChannelFunctionBehavior::Fixed { semantic_id, .. } if semantic_id == "plus_seven_on"
+            )
+        });
+    }
     let DerivedColorOutcome::Excluded(reason) = plus.derived_color_outcome() else {
-        panic!("HSI Plus 7 is excluded with a reason");
+        panic!("an ungated layered engine is excluded with a reason");
     };
     assert!(reason.contains("hue/saturation"), "{reason}");
     let head = plus.heads[0].id;

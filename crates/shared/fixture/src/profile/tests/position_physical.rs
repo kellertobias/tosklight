@@ -46,6 +46,7 @@ fn example() -> FixtureProfile {
         m.channels.push(c);
     }
     m.position_physical = Some(PositionPhysicalModel {
+        kinematics: Default::default(),
         version: 1,
         revision: 0,
         bindings,

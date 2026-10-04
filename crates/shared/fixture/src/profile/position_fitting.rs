@@ -107,7 +107,8 @@ pub struct PositionFitResult {
     pub search_limited: bool,
     pub quality: PhysicalDataQuality,
     pub flags: PositionForwardFlags,
-    /// Pan then Tilt. Fitted results carry both writes or neither; they form one family.
+    /// Pan then Tilt. Fitted results carry a write for every driven axis of the pair (a fixed
+    /// axis never writes) or none at all; they form one family.
     pub writes: [Option<PositionControlWrite>; 2],
 }
 /// One captured physical-copy input. All quantities belong to the caller's same frame;
@@ -654,10 +655,8 @@ impl CompiledPositionFitting {
             return;
         }
         if pair.iter().any(|&i| {
-            !self.forward.fitting_axes()[i]
-                .drivers
-                .iter()
-                .any(|d| !d.velocity)
+            let axis = &self.forward.fitting_axes()[i];
+            axis.fixed.is_none() && !axis.drivers.iter().any(|d| !d.velocity)
         }) {
             out.status = PositionFitStatus::VelocityAuthority;
             return;
@@ -673,6 +672,11 @@ impl CompiledPositionFitting {
                 let mut chosen = [None; 2];
                 for j in 0..2 {
                     let axis = &self.forward.fitting_axes()[pair[j]];
+                    // A fixed axis keeps its angle; any other request is reported as clipped.
+                    if let Some(fixed) = axis.fixed {
+                        out.clipped |= (fixed - desired[j]).abs() > 1e-9;
+                        continue;
+                    }
                     let mut distance = f64::INFINITY;
                     for driver in axis.drivers.iter().filter(|d| !d.velocity) {
                         let mapped = driver
@@ -687,10 +691,10 @@ impl CompiledPositionFitting {
                         }
                     }
                 }
-                let writes = std::array::from_fn(|j| {
-                    let (driver, mapped) = chosen[j].unwrap();
+                let writes = chosen.map(|chosen| {
+                    let (driver, mapped) = chosen?;
                     out.clipped |= mapped.clipped;
-                    self.write(driver.channel, driver.mapping.function_id, mapped.raw)
+                    Some(self.write(driver.channel, driver.mapping.function_id, mapped.raw))
                 });
                 self.verify_pair(index, pair, writes, context, ws, out);
             }
@@ -721,18 +725,20 @@ impl CompiledPositionFitting {
         &self,
         index: usize,
         pair: [usize; 2],
-        writes: [PositionControlWrite; 2],
+        writes: [Option<PositionControlWrite>; 2],
         context: FitContext<'_>,
         ws: &mut PositionFitWorkspace,
         out: &mut PositionFitResult,
     ) -> bool {
         let FitContext { raw, mount, .. } = context;
-        if writes[0].channel_index == writes[1].channel_index {
+        if let [Some(pan), Some(tilt)] = writes
+            && pan.channel_index == tilt.channel_index
+        {
             out.status = PositionFitStatus::OwnershipConflict;
             return false;
         }
         ws.trial_raw.copy_from_slice(raw);
-        for w in writes {
+        for w in writes.iter().flatten() {
             ws.trial_raw[w.channel_index as usize] = w.raw;
         }
         self.forward
@@ -742,10 +748,13 @@ impl CompiledPositionFitting {
             out.status = PositionFitStatus::VelocityAuthority;
             return false;
         }
+        // A driven axis decodes to the written function; a fixed axis (no write) to its angle.
         if pair.iter().enumerate().any(|(j, &i)| {
-            ws.commands[i]
-                .absolute
-                .is_none_or(|a| a.function_id != writes[j].function_id)
+            ws.commands[i].absolute.is_none_or(|a| {
+                writes[j].map_or(self.forward.fitting_axes()[i].fixed.is_none(), |w| {
+                    a.function_id != w.function_id
+                })
+            })
         }) {
             out.status = PositionFitStatus::ForwardMismatch;
             return false;
@@ -762,7 +771,7 @@ impl CompiledPositionFitting {
             return false;
         }
         out.status = PositionFitStatus::Fitted;
-        out.writes = writes.map(Some);
+        out.writes = writes;
         true
     }
 }

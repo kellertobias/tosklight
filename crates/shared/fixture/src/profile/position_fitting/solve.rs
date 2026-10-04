@@ -1,4 +1,5 @@
 use super::*;
+use crate::forward::Driver;
 
 // Bounded numerical work. A previous valid branch normally converges in a few iterations;
 // all phase seeds are considered unless an unchanged encoded pair is already optimal. Authored
@@ -18,6 +19,39 @@ pub(super) struct TargetGoal {
 struct WorldRay {
     target: [f64; 3],
     mount: R,
+    /// False for a fixed axis: the minimizer never moves it.
+    free: [bool; 2],
+}
+/// One verified native proposal of a Target solve.
+#[derive(Clone, Copy)]
+struct Candidate {
+    writes: [Option<PositionControlWrite>; 2],
+    error: f64,
+    distance: f64,
+}
+impl Candidate {
+    /// Within the encoded tolerance, continuity decides; otherwise the smaller ray error.
+    fn improves(&self, best: &Self) -> bool {
+        if self.error <= ENCODED_MATCH_DEGREES && best.error <= ENCODED_MATCH_DEGREES {
+            self.distance < best.distance
+        } else {
+            self.error < best.error
+        }
+    }
+}
+fn seed_angles(seed: usize, first: [f64; 2], anchor: [f64; 2], bounds: [[f64; 2]; 2]) -> [f64; 2] {
+    match seed {
+        0 => first,
+        1 => std::array::from_fn(|j| (bounds[j][0] + bounds[j][1]) * 0.5),
+        _ => {
+            let n = seed - 2;
+            std::array::from_fn(|j| {
+                let phase = if j == 0 { n / 4 } else { n % 4 } as f64;
+                let span = (bounds[j][1] - bounds[j][0]).min(360.);
+                nearest_equivalent(bounds[j][0] + span * phase / 4., anchor[j], bounds[j])
+            })
+        }
+    }
 }
 
 impl CompiledPositionFitting {
@@ -33,21 +67,33 @@ impl CompiledPositionFitting {
         let TargetGoal { anchor, target } = goal;
         let FitContext { mount, .. } = context;
         let models = self.forward.fitting_axes();
-        let pan = &models[pair[0]];
-        let tilt = &models[pair[1]];
-        let count = pan
-            .drivers
-            .iter()
-            .filter(|d| !d.velocity)
-            .count()
-            .saturating_mul(tilt.drivers.iter().filter(|d| !d.velocity).count());
-        if count > MAX_FUNCTION_PAIRS {
+        // Every absolute driver of an axis; a fixed axis offers only its held angle (no write).
+        let options: [Vec<Option<&Driver>>; 2] = pair.map(|i| {
+            let axis = &models[i];
+            if axis.fixed.is_some() {
+                vec![None]
+            } else {
+                axis.drivers
+                    .iter()
+                    .filter(|d| !d.velocity)
+                    .map(Some)
+                    .collect()
+            }
+        });
+        if options[0].len().saturating_mul(options[1].len()) > MAX_FUNCTION_PAIRS {
             out.status = PositionFitStatus::SolverCapacity;
             return;
         }
+        // With a fixed axis the beam sweeps one cone: aim as closely as it allows and report the
+        // remaining error, instead of requiring an exact ray.
+        let free = pair.map(|i| models[i].fixed.is_none());
         ws.trial_axes.copy_from_slice(&ws.axes);
         for j in 0..2 {
-            ws.trial_axes[pair[j]] = Some(anchor[j]);
+            ws.trial_axes[pair[j]] = Some(if free[j] {
+                anchor[j]
+            } else {
+                ws.axes[pair[j]].unwrap_or(anchor[j])
+            });
         }
         self.forward
             .evaluate_pose(&ws.trial_axes, mount, &mut ws.geometry, &mut ws.poses)
@@ -61,22 +107,13 @@ impl CompiledPositionFitting {
             out.status = PositionFitStatus::UnsupportedGeometry;
             return;
         }
-        let mut best: Option<([f64; 2], [PositionControlWrite; 2], f64, f64)> = None;
+        let mut best: Option<Candidate> = None;
         let mut failed_verification = PositionFitStatus::UnreachableTarget;
-        'functions: for pd in pan.drivers.iter().filter(|d| !d.velocity) {
-            for td in tilt.drivers.iter().filter(|d| !d.velocity) {
-                let drivers = [pd, td];
-                let bounds: [[f64; 2]; 2] = std::array::from_fn(|j| {
-                    let axis = &models[pair[j]];
-                    let d = drivers[j];
-                    let a = axis
-                        .calibration
-                        .physical_to_calibrated(d.mapping.physical_for_raw(d.from).physical);
-                    let b = axis
-                        .calibration
-                        .physical_to_calibrated(d.mapping.physical_for_raw(d.to).physical);
-                    [a.min(b), a.max(b)]
-                });
+        'functions: for pd in &options[0] {
+            for td in &options[1] {
+                let drivers = [*pd, *td];
+                let bounds: [[f64; 2]; 2] =
+                    std::array::from_fn(|j| self.axis_bounds(pair[j], drivers[j]));
                 let first = std::array::from_fn(|j| anchor[j].clamp(bounds[j][0], bounds[j][1]));
                 // Include an alternate head branch and boundary phases, not only a turn-lift of
                 // one atan2 result. Arbitrary pivots/neutral transforms need full ray fitting.
@@ -85,24 +122,13 @@ impl CompiledPositionFitting {
                         out.search_limited = true;
                         break 'functions;
                     }
-                    let initial = match seed {
-                        0 => first,
-                        1 => std::array::from_fn(|j| (bounds[j][0] + bounds[j][1]) * 0.5),
-                        _ => {
-                            let n = seed - 2;
-                            std::array::from_fn(|j| {
-                                let phase = if j == 0 { n / 4 } else { n % 4 } as f64;
-                                let span = (bounds[j][1] - bounds[j][0]).min(360.);
-                                nearest_equivalent(
-                                    bounds[j][0] + span * phase / 4.,
-                                    anchor[j],
-                                    bounds[j],
-                                )
-                            })
-                        }
+                    let initial = seed_angles(seed, first, anchor, bounds);
+                    let ray = WorldRay {
+                        target,
+                        mount,
+                        free,
                     };
-                    let Some(mut angles) =
-                        self.minimize(index, pair, initial, bounds, WorldRay { target, mount }, ws)
+                    let Some(mut angles) = self.minimize(index, pair, initial, bounds, ray, ws)
                     else {
                         continue;
                     };
@@ -113,18 +139,17 @@ impl CompiledPositionFitting {
                     else {
                         continue;
                     };
-                    let error = dot(residual, residual).sqrt();
-                    if error > RESIDUAL_TOLERANCE {
+                    if free == [true; 2] && dot(residual, residual).sqrt() > RESIDUAL_TOLERANCE {
                         continue;
                     }
                     let writes = std::array::from_fn(|j| {
+                        let driver = drivers[j]?;
                         let axis = &models[pair[j]];
-                        let driver = drivers[j];
                         let mapped = driver
                             .mapping
                             .raw_for_physical(axis.calibration.calibrated_to_physical(angles[j]))
                             .unwrap();
-                        self.write(driver.channel, driver.mapping.function_id, mapped.raw)
+                        Some(self.write(driver.channel, driver.mapping.function_id, mapped.raw))
                     });
                     let mut verified = out.clone();
                     if !self.verify_pair(index, pair, writes, context, ws, &mut verified) {
@@ -138,15 +163,13 @@ impl CompiledPositionFitting {
                     };
                     let achieved = pair.map(|i| ws.commands[i].absolute_degrees().unwrap());
                     let distance = (achieved[0] - anchor[0]).hypot(achieved[1] - anchor[1]);
-                    let improve = best.is_none_or(|(_, _, e, d)| {
-                        if encoded_error <= ENCODED_MATCH_DEGREES && e <= ENCODED_MATCH_DEGREES {
-                            distance < d
-                        } else {
-                            encoded_error < e
-                        }
-                    });
-                    if improve {
-                        best = Some((angles, writes, encoded_error, distance));
+                    let candidate = Candidate {
+                        writes,
+                        error: encoded_error,
+                        distance,
+                    };
+                    if best.is_none_or(|b| candidate.improves(&b)) {
+                        best = Some(candidate);
                     }
                     // Only an unchanged verified joint pair is an unconditional continuity optimum.
                     if distance < 1e-8 && encoded_error <= ENCODED_MATCH_DEGREES {
@@ -156,7 +179,7 @@ impl CompiledPositionFitting {
             }
         }
         out.search_limited |= ws.evaluations >= MAX_EVALUATIONS_PER_FIT;
-        let Some((_, writes, _, _)) = best else {
+        let Some(best) = best else {
             out.status = if out.search_limited {
                 PositionFitStatus::SolverCapacity
             } else {
@@ -166,7 +189,24 @@ impl CompiledPositionFitting {
         };
         // Quantization is reported by the final achieved ray, not hidden by continuous solver
         // accuracy. A coarse native channel can have a larger error even for a reachable target.
-        self.verify_pair(index, pair, writes, context, ws, out);
+        // A single moving axis that cannot reach the ray reports the shortfall as clipping.
+        out.clipped |= free != [true; 2] && best.error > ENCODED_MATCH_DEGREES;
+        self.verify_pair(index, pair, best.writes, context, ws, out);
+    }
+    /// Calibrated travel of one driver, or the held angle of a fixed axis.
+    fn axis_bounds(&self, axis: usize, driver: Option<&Driver>) -> [f64; 2] {
+        let axis = &self.forward.fitting_axes()[axis];
+        let Some(d) = driver else {
+            let held = axis.fixed.unwrap_or(0.);
+            return [held, held];
+        };
+        let a = axis
+            .calibration
+            .physical_to_calibrated(d.mapping.physical_for_raw(d.from).physical);
+        let b = axis
+            .calibration
+            .physical_to_calibrated(d.mapping.physical_for_raw(d.to).physical);
+        [a.min(b), a.max(b)]
     }
     fn residual(
         &self,
@@ -197,18 +237,14 @@ impl CompiledPositionFitting {
         let wanted = unit(toward)?;
         let direction = unit(pose.direction([0., -1., 0.]))?;
         let jacobian = tangents.map(|axis| {
-            let origin_derivative = cross(
-                axis.radians_per_degree,
-                std::array::from_fn(|i| origin[i] - axis.pivot[i]),
-            );
-            let direction_derivative = cross(axis.radians_per_degree, direction);
-            let projection = dot(wanted, origin_derivative);
+            let projection = dot(wanted, axis.origin);
             std::array::from_fn(|i| {
-                direction_derivative[i] + (origin_derivative[i] - wanted[i] * projection) / distance
+                axis.direction[i] + (axis.origin[i] - wanted[i] * projection) / distance
             })
         });
         // Full direction difference rejects antiparallel rays. The derivative includes moving
-        // lens origin as well as beam direction; an origin at the mounting point is not assumed.
+        // lens origin as well as beam direction (rigid or reflected by a mirror); an origin at
+        // the mounting point is not assumed.
         Some((std::array::from_fn(|i| direction[i] - wanted[i]), jacobian))
     }
     fn minimize(
@@ -220,8 +256,20 @@ impl CompiledPositionFitting {
         world: WorldRay,
         ws: &mut PositionFitWorkspace,
     ) -> Option<[f64; 2]> {
-        let WorldRay { target, mount } = world;
-        let (mut r, mut jacobian) = self.residual(index, pair, angles, target, mount, ws)?;
+        let WorldRay {
+            target,
+            mount,
+            free,
+        } = world;
+        let held = |(r, mut jacobian): ([f64; 3], [[f64; 3]; 2])| {
+            for j in 0..2 {
+                if !free[j] {
+                    jacobian[j] = [0.; 3];
+                }
+            }
+            (r, jacobian)
+        };
+        let (mut r, mut jacobian) = held(self.residual(index, pair, angles, target, mount, ws)?);
         let mut lambda = 1e-7;
         for _ in 0..ITERATIONS {
             if dot(r, r) < 1e-18 {
@@ -242,7 +290,8 @@ impl CompiledPositionFitting {
             }
             let next =
                 std::array::from_fn(|j| (angles[j] + step[j]).clamp(bounds[j][0], bounds[j][1]));
-            let (next_r, next_jacobian) = self.residual(index, pair, next, target, mount, ws)?;
+            let (next_r, next_jacobian) =
+                held(self.residual(index, pair, next, target, mount, ws)?);
             if dot(next_r, next_r) < dot(r, r) {
                 angles = next;
                 r = next_r;

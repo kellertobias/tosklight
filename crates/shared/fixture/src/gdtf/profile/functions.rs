@@ -100,7 +100,13 @@ pub(super) fn from_channel(channel: &FixtureChannel) -> Result<Vec<Function>, Pr
             }
         };
         output.push(Function {
-            name: unique(&gdtf_name(&function.name), "Function", " ", &mut names),
+            // A GDTF reader resolves `InitialFunction` links with `/` as a separator too.
+            name: unique(
+                &gdtf_name(&function.name).replace('/', "-"),
+                "Function",
+                " ",
+                &mut names,
+            ),
             attribute,
             main_attribute: None,
             original_attribute: native_attribute.to_owned(),
@@ -114,6 +120,9 @@ pub(super) fn from_channel(channel: &FixtureChannel) -> Result<Vec<Function>, Pr
                 name: label.to_owned(),
                 from: function.dmx_from,
             }],
+            emitter: None,
+            filter: None,
+            wheel: None,
         });
         next = u64::from(function.dmx_to) + 1;
     }
@@ -136,6 +145,9 @@ fn gap(from: u32, to: u32, default: u32, names: &mut HashSet<String>) -> Functio
         default: default.clamp(from, to),
         physical: None,
         sets: Vec::new(),
+        emitter: None,
+        filter: None,
+        wheel: None,
     }
 }
 
@@ -153,7 +165,7 @@ pub(super) fn physical_unit(unit: Option<&str>) -> Result<Option<String>, Profil
         }
         "%" | "percent" | "percentage" => "Percent",
         "m" | "metre" | "metres" | "meter" | "meters" | "length" => "Length",
-        "hz" | "frequency" => "Frequency",
+        "hz" | "hertz" | "frequency" => "Frequency",
         "k" | "kelvin" | "temperature" => "Temperature",
         "s" | "second" | "seconds" | "time" => "Time",
         "colorcomponent" => "ColorComponent",

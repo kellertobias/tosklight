@@ -89,6 +89,32 @@ impl RigidTransform {
             ..inverse
         }
     }
+    /// A pose from the images of the X, Y and Z axes and a translation. None unless the columns
+    /// are a finite right-handed orthonormal basis (within 1e-9) and the translation is finite.
+    pub fn from_columns(columns: [[f64; 3]; 3], translation: [f64; 3]) -> Option<Self> {
+        let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        let [x, y, z] = columns;
+        let cross = [
+            x[1] * y[2] - x[2] * y[1],
+            x[2] * y[0] - x[0] * y[2],
+            x[0] * y[1] - x[1] * y[0],
+        ];
+        let orthonormal = (0..3).all(|i| {
+            (0..3).all(|j| {
+                let expected = if i == j { 1.0 } else { 0.0 };
+                (dot(columns[i], columns[j]) - expected).abs() <= 1e-9
+            })
+        });
+        let finite = columns
+            .iter()
+            .flatten()
+            .chain(&translation)
+            .all(|v| v.is_finite());
+        (finite && orthonormal && dot(cross, z) > 0.0).then(|| Self {
+            rotation: std::array::from_fn(|row| std::array::from_fn(|column| columns[column][row])),
+            translation,
+        })
+    }
     pub fn about_pivot(rotation: Self, pivot: [f64; 3]) -> Option<Self> {
         Some(
             Self::translation(pivot)?
@@ -181,6 +207,20 @@ mod tests {
         for axis in [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]] {
             near(actual.direction(axis), expected.direction(axis));
         }
+    }
+    #[test]
+    fn columns_build_the_same_pose_and_reject_reflections() {
+        let expected = RigidTransform::euler_xyz([24., 37., -52.]).unwrap();
+        let columns = [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]].map(|v| expected.direction(v));
+        let actual = RigidTransform::from_columns(columns, [1., 2., 3.]).unwrap();
+        for v in [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]] {
+            near(actual.direction(v), expected.direction(v));
+        }
+        near(actual.point([0.; 3]), [1., 2., 3.]);
+        let mirrored = [columns[0].map(|v| -v), columns[1], columns[2]];
+        assert!(RigidTransform::from_columns(mirrored, [0.; 3]).is_none());
+        let skewed = [[1., 0., 0.], [0.5, 1., 0.], [0., 0., 1.]];
+        assert!(RigidTransform::from_columns(skewed, [0.; 3]).is_none());
     }
     #[test]
     fn invalid_axes_and_nonfinite_poses_are_rejected() {

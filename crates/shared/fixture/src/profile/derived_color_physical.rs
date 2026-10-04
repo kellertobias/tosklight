@@ -28,8 +28,10 @@
 //! neutral range with a unit transmission, so the fitter writes that state and the forward model
 //! knows the output exactly while it stays there. A master-shared head's colour controls over
 //! child heads with their own emitters stay at their defaults (several logical heads would
-//! otherwise co-own them). What cannot be described yields an explicit reason
-//! ([`DerivedColorOutcome::Excluded`]). The immutable profile is never changed.
+//! otherwise co-own them). A hue/saturation engine layered over direct emitters behind an
+//! activation gate (ETC "Plus Seven") uses the direct emitters as its engine, holds the gate on
+//! and parks the hue/saturation engine at saturation 0 ([`DERIVED_LAYERED_SOURCE`]). What cannot
+//! be described yields an explicit reason ([`DerivedColorOutcome::Excluded`]). The immutable profile is never changed.
 use super::{ColorPhysicalModel, FixtureChannel, FixtureMode, FixtureProfile, OpticalSource};
 use uuid::Uuid;
 
@@ -44,6 +46,11 @@ pub const DERIVED_NOMINAL_SOURCE: &str =
 /// Provenance of a colour control parked at its neutral state (unit transmission).
 pub const DERIVED_PARKED_SOURCE: &str =
     "Parked: colour control held at its neutral default; its other states are not modelled";
+/// Provenance of a hue/saturation engine parked under direct emitters (ETC "Plus Seven"), and of
+/// the activation gate held on for them.
+pub const DERIVED_LAYERED_SOURCE: &str = "Assumed: the direct emitters define the colour while \
+     their activation gate is on and the layered hue/saturation engine is parked at saturation 0; \
+     the manufacturer documents them only as fine-tuning the mix";
 /// Provenance of a hue/saturation engine's nominal sRGB HSV grid.
 pub const DERIVED_HUE_SATURATION_SOURCE: &str =
     "Nominal: hue/saturation engine mapped to an sRGB HSV grid; not fixture data";
@@ -177,11 +184,27 @@ impl FixtureMode {
         let parked: Vec<String> = path
             .filters
             .iter()
-            .filter(|f| f.provenance.source.as_deref() == Some(DERIVED_PARKED_SOURCE))
+            .filter(|f| {
+                matches!(
+                    f.provenance.source.as_deref(),
+                    Some(DERIVED_PARKED_SOURCE | DERIVED_LAYERED_SOURCE)
+                )
+            })
             .filter_map(|f| name(f.binding.channel_id))
             .collect();
         if !parked.is_empty() {
             notes.push(format!("parked at neutral: {}", parked.join(", ")));
+        }
+        if path
+            .filters
+            .iter()
+            .any(|f| f.provenance.source.as_deref() == Some(DERIVED_LAYERED_SOURCE))
+        {
+            notes.push(
+                "direct emitters drive colour with their activation held on and the layered \
+                 hue/saturation engine at saturation 0 (assumed, not fixture data)"
+                    .into(),
+            );
         }
         let colored = self.colored_heads();
         let shared: Vec<String> = self

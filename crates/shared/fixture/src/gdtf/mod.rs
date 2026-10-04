@@ -9,8 +9,12 @@
 
 use std::io::Write as _;
 
+pub mod physical;
 pub mod profile;
 pub mod read;
+
+#[cfg(test)]
+mod physical_tests;
 
 /// How much of a value a channel carries, and therefore how many slots it occupies.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -130,6 +134,12 @@ pub struct Function {
     pub default: u32,
     pub physical: Option<(f32, f32)>,
     pub sets: Vec<ChannelSet>,
+    /// `Emitter=` link into the physical descriptions.
+    pub emitter: Option<String>,
+    /// `Filter=` link into the physical descriptions.
+    pub filter: Option<String>,
+    /// `Wheel=` link and the one-based slot every set of this function selects.
+    pub wheel: Option<(String, u16)>,
 }
 
 impl Channel {
@@ -180,6 +190,8 @@ pub struct FixtureType {
     pub body_size: Option<[f32; 3]>,
     /// Light-emitting geometries below the body, one per independently controlled head.
     pub beams: Vec<String>,
+    /// Emitters, filters, colour wheels and nominal beam optics.
+    pub physical: physical::PhysicalDescriptions,
 }
 
 /// The geometry every channel of these fixtures belongs to unless it names a beam.
@@ -207,7 +219,8 @@ pub fn description_xml(fixture: &FixtureType) -> String {
         fixture.id
     ));
     push_attribute_definitions(&mut xml, fixture);
-    xml.push_str("    <Wheels/>\n    <PhysicalDescriptions/>\n");
+    physical::push_wheels(&mut xml, &fixture.physical);
+    physical::push_physical_descriptions(&mut xml, &fixture.physical);
     push_models(&mut xml, fixture);
     push_geometries(&mut xml, fixture);
 
@@ -327,8 +340,9 @@ fn push_geometries(xml: &mut String, fixture: &FixtureType) {
         xml.push_str(&format!(
             "        <Beam Name=\"{}\"{beam_model} \
              Position=\"{{1,0,0,{x:.6}}}{{0,1,0,0}}{{0,0,1,{z:.6}}}{{0,0,0,1}}\" \
-             BeamType=\"Wash\"/>\n",
-            escape(&gdtf_name(beam))
+             BeamType=\"Wash\"{}/>\n",
+            escape(&gdtf_name(beam)),
+            fixture.physical.beam_attributes(beam)
         ));
     }
     xml.push_str("      </Geometry>\n    </Geometries>\n");
@@ -461,13 +475,20 @@ fn detailed_channel_xml(channel: &Channel) -> String {
             // Shortest round-tripping decimal preserves f32 endpoint data, including tiny ranges.
             format!(" PhysicalFrom=\"{from}\" PhysicalTo=\"{to}\"")
         });
+        let links = physical_links(function);
         xml.push_str(&format!(
-            "              <ChannelFunction Name=\"{}\" Attribute=\"{}\" OriginalAttribute=\"{}\" DMXFrom=\"{}/{resolution}\" Default=\"{}/{resolution}\"{physical} RealFade=\"0\">\n",
+            "              <ChannelFunction Name=\"{}\" Attribute=\"{}\" OriginalAttribute=\"{}\" DMXFrom=\"{}/{resolution}\" Default=\"{}/{resolution}\"{physical}{links} RealFade=\"0\">\n",
             escape(&function.name), escape(&function.attribute), escape(&function.original_attribute), function.from, function.default
         ));
+        let slot = function
+            .wheel
+            .as_ref()
+            .map_or_else(String::new, |(_, slot)| {
+                format!(" WheelSlotIndex=\"{slot}\"")
+            });
         for set in &function.sets {
             xml.push_str(&format!(
-                "                <ChannelSet Name=\"{}\" DMXFrom=\"{}/{resolution}\"/>\n",
+                "                <ChannelSet Name=\"{}\" DMXFrom=\"{}/{resolution}\"{slot}/>\n",
                 escape(&gdtf_name(&set.name)),
                 set.from
             ));
@@ -476,6 +497,19 @@ fn detailed_channel_xml(channel: &Channel) -> String {
     }
     xml.push_str("            </LogicalChannel>\n          </DMXChannel>\n");
     xml
+}
+
+/// `Emitter=`, `Filter=` and `Wheel=` links of one channel function.
+fn physical_links(function: &Function) -> String {
+    let wheel = function.wheel.as_ref().map(|(wheel, _)| wheel);
+    [
+        ("Emitter", function.emitter.as_ref()),
+        ("Filter", function.filter.as_ref()),
+        ("Wheel", wheel),
+    ]
+    .into_iter()
+    .filter_map(|(key, name)| Some(format!(" {key}=\"{}\"", escape(&gdtf_name(name?)))))
+    .collect()
 }
 
 /// Indexed gobos use the standard feature MagicQ maps as media wheels; everything else a caller

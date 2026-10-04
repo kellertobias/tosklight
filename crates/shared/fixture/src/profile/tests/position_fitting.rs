@@ -1156,18 +1156,9 @@ fn analytic_joint_derivatives_match_independent_central_differences() {
     let mount = R::translation([2., -1., 3.])
         .unwrap()
         .compose(R::euler_xyz([30., -40., 80.]).unwrap());
-    let (pose, tangents) = forward
+    let (_, tangents) = forward
         .fitting_lens_geometry(0, &forward.fitting_ancestry(0), &axes, mount, pair)
         .unwrap();
-    let cross = |a: [f64; 3], b: [f64; 3]| {
-        [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-    };
-    let origin = pose.point([0.; 3]);
-    let direction = pose.direction([0., -1., 0.]);
     for j in 0..2 {
         let mut before = axes.clone();
         let mut after = axes.clone();
@@ -1183,11 +1174,8 @@ fn analytic_joint_derivatives_match_independent_central_differences() {
             .evaluate_pose(&after, mount, &mut scratch, &mut output)
             .unwrap();
         let b = output[0].world.unwrap();
-        let analytic_origin = cross(
-            tangents[j].radians_per_degree,
-            std::array::from_fn(|i| origin[i] - tangents[j].pivot[i]),
-        );
-        let analytic_direction = cross(tangents[j].radians_per_degree, direction);
+        let analytic_origin = tangents[j].origin;
+        let analytic_direction = tangents[j].direction;
         for i in 0..3 {
             assert!(
                 ((b.point([0.; 3])[i] - a.point([0.; 3])[i]) / 0.0002 - analytic_origin[i]).abs()

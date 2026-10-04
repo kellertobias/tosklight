@@ -154,6 +154,7 @@ impl<R: FixtureProfileRevisionResolver> PatchedFixtureCompiler<R> {
             {
                 crate::apply_derived_color_physical(profile);
                 crate::apply_derived_position_physical(profile);
+                crate::apply_derived_zoom_physical(profile);
             }
             return Ok(fixture);
         }

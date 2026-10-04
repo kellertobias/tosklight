@@ -1,7 +1,7 @@
 //! Explicit physical coordinates and exact motion bindings; current normalized output is unchanged.
 use super::{
     AngularMotionKind, CompiledPhysicalMapping, FixtureMode, FixtureProfile, GeometryGraph,
-    GeometryMotionKind, OpticalProvenance, PhysicalUnit, ProfileError, Vector3,
+    GeometryMotionKind, OpticalProvenance, PhysicalUnit, PositionKinematics, ProfileError, Vector3,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -52,6 +52,9 @@ pub struct PositionPhysicalModel {
     pub version: u16,
     pub revision: u32,
     pub bindings: Vec<MotionFunctionBinding>,
+    /// Mirror deflection and fixed axes; absent for a rigid moving head.
+    #[serde(default, skip_serializing_if = "PositionKinematics::is_moving_head")]
+    pub kinematics: PositionKinematics,
 }
 /// Physical identity deliberately excludes source archives and unrelated color edits.
 /// Mode and profile identity still matter: unrelated templates can share node UUIDs.
@@ -296,7 +299,8 @@ impl FixtureMode {
                 ));
             }
         }
-        Ok(())
+        let bound = model.bindings.iter().map(|b| b.node_id).collect();
+        self.validate_position_kinematics(graph, &bound)
     }
 }
 impl FixtureProfile {
@@ -331,7 +335,12 @@ impl FixtureProfile {
             let f=c.functions.iter().find(|f|f.id==b.function_id).unwrap();
             serde_json::json!({"binding":b,"head":c.head_id,"resolution":c.resolution,"invert":c.invert,"transform":c.canonical_transform,"function": {"from":f.dmx_from,"to":f.dmx_to,"behavior":f.behavior,"samples":f.physical_mapping.as_ref().map(|m|&m.samples),"angular":f.angular_motion.map(|a|a.kind)}})
         }).collect::<Vec<_>>();
-        let canonical = serde_json::json!({"nodes":nodes,"lenses":lenses,"coordinate_version":graph.physical_contract.as_ref().unwrap().version,"bracket":graph.physical_contract.as_ref().unwrap().bracket,"controls":controls});
+        let mut canonical = serde_json::json!({"nodes":nodes,"lenses":lenses,"coordinate_version":graph.physical_contract.as_ref().unwrap().version,"bracket":graph.physical_contract.as_ref().unwrap().bracket,"controls":controls});
+        // A moving head keeps its existing digest; mirror and fixed axes change the physics.
+        let kinematics = &mode.position_physical.as_ref().unwrap().kinematics;
+        if !kinematics.is_moving_head() {
+            canonical["kinematics"] = serde_json::json!(kinematics);
+        }
         let bytes = serde_json::to_vec(&canonical).map_err(|e| invalid(e.to_string()))?;
         Ok(Some(PositionCalibrationIdentity {
             profile_id: self.id.0,

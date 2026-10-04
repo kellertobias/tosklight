@@ -92,7 +92,7 @@ pub(super) fn read(
             to,
             default,
         };
-        for reference in ["Emitter", "Filter", "Wheel", "ColorSpace", "Gamut"] {
+        for reference in ["ColorSpace", "Gamut"] {
             if let Some(value) = node.attr(reference).filter(|value| !value.is_empty()) {
                 diagnostic(
                     diagnostics,
@@ -103,7 +103,11 @@ pub(super) fn read(
                 );
             }
         }
-        let scalar = is_scalar_attribute(semantic_attribute);
+        // An emitter level or a continuous filter is a continuous axis whatever its attribute.
+        let scalar = is_scalar_attribute(semantic_attribute)
+            || ["Emitter", "Filter"]
+                .iter()
+                .any(|link| node.attr(link).is_some_and(|value| !value.is_empty()));
         if scalar && !sets.is_empty() {
             validate_scalar_sets(&function, &sets, (physical_from, physical_to), resolution)?;
             diagnostic(
@@ -128,7 +132,7 @@ pub(super) fn read(
             diagnostic(
                 diagnostics,
                 &path,
-                "Named channel sets retain exact native ranges; physical subranges and wheel-slot optical references remain in source and are not treated as a calibrated continuous mapping.",
+                "Named channel sets retain exact native ranges; physical subranges remain in source and are not treated as a calibrated continuous mapping.",
             );
         }
     }

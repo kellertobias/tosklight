@@ -1,8 +1,9 @@
+use crate::profile::position_kinematics::CompiledMirror;
 use crate::{
     AngularMotionKind, CompiledPhysicalMapping, EffectiveAxisCalibration, FixtureMode,
     FixtureProfile, GeometryBracket, GeometryGraph, GeometryMotion, GeometryMotionKind,
     GeometryNode, InstalledPositionCalibration, MotionFunctionBinding, PhysicalDataQuality,
-    PositionAxisRole, PositionCalibrationContext, ProfileError, Vector3,
+    PositionAxisRole, PositionCalibrationContext, PositionKinematics, ProfileError, Vector3,
 };
 use light_core::spatial::RigidTransform as R;
 use std::collections::{HashMap, HashSet};
@@ -111,6 +112,8 @@ pub(in crate::profile) struct Axis {
     pub(in crate::profile) calibration: EffectiveAxisCalibration,
     pub(in crate::profile) calibration_quality: Option<PhysicalDataQuality>,
     pub(in crate::profile) drivers: Box<[Driver]>,
+    /// A fixed axis (no driver) always reports this calibrated angle.
+    pub(in crate::profile) fixed: Option<f64>,
 }
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct Node {
@@ -122,6 +125,12 @@ struct Node {
     direction: [f64; 3],
     translation: bool,
     neutral_world: R,
+    /// Node degrees per joint degree (a mirror turning half as far as its beam).
+    #[serde(default = "unit_ratio")]
+    ratio: f64,
+}
+fn unit_ratio() -> f64 {
+    1.
 }
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct Lens {
@@ -129,6 +138,8 @@ struct Lens {
     head: Option<Uuid>,
     node: usize,
     local: R,
+    #[serde(default)]
+    mirror: Option<CompiledMirror>,
 }
 fn invalid(s: impl Into<String>) -> ProfileError {
     ProfileError::Invalid(format!("Position forward model: {}", s.into()))
@@ -247,7 +258,11 @@ fn compile_drivers(
         .collect::<Result<Box<[_]>, ProfileError>>()
 }
 
-fn compile_lenses(graph: &GeometryGraph, indices: &HashMap<Uuid, usize>) -> Box<[Lens]> {
+fn compile_lenses(
+    graph: &GeometryGraph,
+    indices: &HashMap<Uuid, usize>,
+    kinematics: &PositionKinematics,
+) -> Box<[Lens]> {
     graph
         .emitters
         .iter()
@@ -258,8 +273,55 @@ fn compile_lenses(graph: &GeometryGraph, indices: &HashMap<Uuid, usize>) -> Box<
             local: R::translation(metres(e.origin))
                 .unwrap()
                 .compose(R::euler_xyz(vector(e.orientation_degrees)).unwrap()),
+            // Validation guarantees the lamp node is an ancestor of this lens and is indexed.
+            mirror: kinematics
+                .mirror
+                .as_ref()
+                .filter(|m| m.emitter_id == e.id)
+                .and_then(|m| CompiledMirror::new(indices[&m.source_node_id], m.incident)),
         })
         .collect()
+}
+
+/// A bound axis's calibrated drivers, or a fixed axis held at its declared angle.
+fn compile_axis(
+    mode: &FixtureMode,
+    n: &GeometryNode,
+    motion: &GeometryMotion,
+    channel_indices: &HashMap<Uuid, usize>,
+    calibration: (
+        Option<&PositionCalibrationContext>,
+        &InstalledPositionCalibration,
+        PositionInstallation<'_>,
+    ),
+) -> Result<Axis, ProfileError> {
+    let (context, calibration, installed) = calibration;
+    let model = mode.position_physical.as_ref();
+    let bindings = model.map_or(&[][..], |m| m.bindings.as_slice());
+    let fixed = model.and_then(|m| m.kinematics.fixed_axes.iter().find(|f| f.node_id == n.id));
+    let role = bindings
+        .iter()
+        .find(|b| b.node_id == n.id)
+        .map(|b| b.role)
+        .or(fixed.map(|f| f.role));
+    // A fixed axis never moves, so installed zero/inversion cannot apply to it.
+    let correction = match (context, role, fixed) {
+        (Some(c), Some(role), None) => calibration
+            .effective_axis(c, n.id, role, installed.invert_pan, installed.invert_tilt)
+            .map_err(invalid)?,
+        _ => EffectiveAxisCalibration {
+            zero_degrees: 0.,
+            invert: false,
+        },
+    };
+    Ok(Axis {
+        node_id: n.id,
+        role,
+        calibration: correction,
+        calibration_quality: installed.calibration.map(|c| c.quality),
+        drivers: compile_drivers(mode, bindings, channel_indices, n.id, motion)?,
+        fixed: fixed.map(|f| f64::from(f.degrees)),
+    })
 }
 
 /// A node's neutral and bracket-adjusted transforms around its pivot.
@@ -351,10 +413,11 @@ impl CompiledPositionForward {
             .enumerate()
             .map(|(i, c)| (c.id, i))
             .collect();
-        let bindings = mode
+        let kinematics = mode
             .position_physical
             .as_ref()
-            .map_or(&[][..], |m| m.bindings.as_slice());
+            .map(|m| m.kinematics.clone())
+            .unwrap_or_default();
         let mut axes = Vec::new();
         let mut nodes: Vec<Node> = Vec::new();
         for n in order {
@@ -376,24 +439,13 @@ impl CompiledPositionForward {
                 if translation {
                     direction = neutral_rotation.inverse().direction(direction);
                 }
-                let role = bindings.iter().find(|b| b.node_id == n.id).map(|b| b.role);
-                let correction = match (context.as_ref(), role) {
-                    (Some(c), Some(role)) => calibration
-                        .effective_axis(c, n.id, role, installed.invert_pan, installed.invert_tilt)
-                        .map_err(invalid)?,
-                    _ => EffectiveAxisCalibration {
-                        zero_degrees: 0.,
-                        invert: false,
-                    },
-                };
-                let drivers = compile_drivers(mode, bindings, &channel_indices, n.id, motion)?;
-                axes.push(Axis {
-                    node_id: n.id,
-                    role,
-                    calibration: correction,
-                    calibration_quality: installed.calibration.map(|c| c.quality),
-                    drivers,
-                });
+                axes.push(compile_axis(
+                    mode,
+                    n,
+                    motion,
+                    &channel_indices,
+                    (context.as_ref(), &calibration, installed),
+                )?);
             }
             let neutral_world = parent
                 .map_or(R::IDENTITY, |i| nodes[i].neutral_world)
@@ -407,9 +459,15 @@ impl CompiledPositionForward {
                 direction,
                 translation,
                 neutral_world,
+                ratio: kinematics
+                    .mirror
+                    .iter()
+                    .flat_map(|m| &m.axis_ratios)
+                    .find(|r| r.node_id == n.id)
+                    .map_or(1., |r| f64::from(r.mechanical_per_degree)),
             });
         }
-        let lenses = compile_lenses(&graph, &indices);
+        let lenses = compile_lenses(&graph, &indices, &kinematics);
         Ok(Some(Self {
             maxima: mode
                 .channels
@@ -442,7 +500,8 @@ impl CompiledPositionForward {
         path.reverse();
         path.into_boxed_slice()
     }
-    /// One candidate ray, using the same local transforms as evaluate_pose. The chain is supplied
+    /// One candidate ray, using the same local transforms as evaluate_pose, and the exact
+    /// derivative of its origin and beam direction for the two fitted joints. The chain is supplied
     /// only by the immutable inverse compiler; unrelated heads/nodes are not evaluated per trial.
     pub(in crate::profile) fn fitting_lens_geometry(
         &self,
@@ -459,8 +518,11 @@ impl CompiledPositionForward {
         {
             return None;
         }
+        let lens = &self.geometry.lenses[lens];
         let mut pose = mount;
-        let mut tangents = [None; 2];
+        let mut source = None;
+        // World rotation (radians per joint degree), pivot and whether it also turns the lamp.
+        let mut joints: [Option<Joint>; 2] = [None; 2];
         for &i in chain {
             let node = &self.geometry.nodes[i];
             if let Some(j) = node.axis.and_then(|a| pair.iter().position(|&p| p == a)) {
@@ -471,19 +533,42 @@ impl CompiledPositionForward {
                 let length = node.direction[0]
                     .hypot(node.direction[1])
                     .hypot(node.direction[2]);
-                tangents[j] = Some(AxisTangent {
-                    radians_per_degree: before
+                let scale = node.ratio * std::f64::consts::PI / 180.;
+                joints[j] = Some((
+                    before
                         .direction(node.direction.map(|v| v / length))
-                        .map(|v| v * std::f64::consts::PI / 180.),
-                    pivot: before.point([0.; 3]),
-                });
+                        .map(|v| v * scale),
+                    before.point([0.; 3]),
+                    false,
+                ));
             }
             pose = pose.compose(node.local_pose(axes)?);
+            if lens.mirror.is_some_and(|m| m.source == i) {
+                source = Some(pose);
+                // Joints at or above the lamp node turn the incident beam with the mirror.
+                for joint in joints.iter_mut().flatten() {
+                    joint.2 = true;
+                }
+            }
         }
-        Some((
-            pose.compose(self.geometry.lenses[lens].local),
-            [tangents[0]?, tangents[1]?],
-        ))
+        let on_mirror = pose.compose(lens.local);
+        let ray = match lens.mirror {
+            None => on_mirror,
+            Some(m) => m.reflect(on_mirror, source?)?,
+        };
+        let origin = ray.point([0.; 3]);
+        let direction = ray.direction([0., -1., 0.]);
+        let tangent = |joint: Option<Joint>| {
+            let (omega, pivot, moves_lamp) = joint?;
+            Some(AxisTangent {
+                origin: cross(omega, std::array::from_fn(|i| origin[i] - pivot[i])),
+                direction: match lens.mirror {
+                    None => cross(omega, direction),
+                    Some(m) => m.direction_derivative(on_mirror, source?, omega, moves_lamp),
+                },
+            })
+        };
+        Some((ray, [tangent(joints[0])?, tangent(joints[1])?]))
     }
     pub fn inputs_available(&self, axis: usize, available: &[bool]) -> bool {
         self.axes.get(axis).is_some_and(|a| {
@@ -523,7 +608,12 @@ impl CompiledPositionForward {
             return Err(PositionForwardInputError::OutputLayout);
         }
         for (axis, out) in self.axes.iter().zip(output) {
-            out.absolute = None;
+            out.absolute = axis.fixed.map(|degrees| PhysicalAxisValue {
+                function_id: Uuid::nil(),
+                value: degrees,
+                limits: ForwardMotionLimits::default(),
+                quality: self.geometry.geometry_quality,
+            });
             out.velocity = None;
             for d in axis
                 .drivers
@@ -664,7 +754,12 @@ impl PositionPoseGraph {
             {
                 None
             } else {
-                workspace.nodes[lens.node].map(|n| n.compose(lens.local))
+                workspace.nodes[lens.node]
+                    .map(|n| n.compose(lens.local))
+                    .and_then(|pose| match lens.mirror {
+                        None => Some(pose),
+                        Some(m) => m.reflect(pose, workspace.nodes[m.source]?),
+                    })
             };
             out.world = out.local.map(|p| mount.compose(p));
             out.geometry_quality = self.geometry_quality;
@@ -702,11 +797,24 @@ impl PositionPoseGraph {
     }
 }
 
-/// Exact world-space angular derivative of a calibrated graph joint (not installation drive).
+/// One fitted joint while walking a lens chain: world rotation (radians per joint degree),
+/// pivot, and whether it also turns a mirror's lamp.
+type Joint = ([f64; 3], [f64; 3], bool);
+
+/// Exact world-space derivative, per degree of a calibrated graph joint (not installation
+/// drive), of the beam origin and of its unit direction.
 #[derive(Clone, Copy, Debug)]
 pub(in crate::profile) struct AxisTangent {
-    pub(in crate::profile) radians_per_degree: [f64; 3],
-    pub(in crate::profile) pivot: [f64; 3],
+    pub(in crate::profile) origin: [f64; 3],
+    pub(in crate::profile) direction: [f64; 3],
+}
+
+fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 
 impl Node {
@@ -717,7 +825,7 @@ impl Node {
                 if self.translation {
                     R::translation(self.direction.map(|v| v * value / 1000.))
                 } else {
-                    R::axis_angle(self.direction, value)
+                    R::axis_angle(self.direction, value * self.ratio)
                 }
             }),
         }?;

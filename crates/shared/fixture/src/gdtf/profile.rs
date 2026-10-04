@@ -4,11 +4,16 @@
 //! when that file is absent. Retained source archives may predate profile edits, so this describes
 //! the current ToskLight profile in the writer's subset: every mode with its
 //! exact slots, byte widths, splits, defaults, Highlight values and function ranges, and one beam
-//! per logical head. Wheels, emitters and 3D models are not reconstructed.
+//! per logical head. Authored physical colour models become emitters, filters, colour wheels and
+//! beam spectra; nominal beam optics are written on every beam. 3D models and Axis geometry are
+//! not reconstructed, and every piece of authored physical data GDTF cannot carry is reported by
+//! [`export_diagnostics`].
 
 use super::{Channel, FixtureType, GEOMETRY, Mode, Width, gdtf_name};
 
 mod functions;
+mod limitations;
+mod optics;
 use crate::{ChannelResolution, FixtureChannel, FixtureMode, FixtureProfile, ProfileError};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
@@ -16,10 +21,34 @@ use uuid::Uuid;
 /// Body edge in metres where the profile records no dimension, so the fixture is still drawn.
 const DEFAULT_BODY_METRES: f32 = 0.3;
 
+/// Authored data a generated GDTF does not carry, named so an export is never silently partial.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GdtfExportDiagnostic {
+    /// Mode, geometry and item the data belongs to.
+    pub node: String,
+    pub message: String,
+}
+
 /// Packages every mode of `profile` as a `.gdtf` archive.
 pub fn package_profile(profile: &FixtureProfile) -> Result<Vec<u8>, ProfileError> {
-    super::package(&fixture_type(profile)?)
-        .map_err(|error| ProfileError::Invalid(error.to_string()))
+    Ok(package_profile_with_diagnostics(profile)?.0)
+}
+
+/// Packages `profile` and reports the authored data the archive does not carry.
+pub fn package_profile_with_diagnostics(
+    profile: &FixtureProfile,
+) -> Result<(Vec<u8>, Vec<GdtfExportDiagnostic>), ProfileError> {
+    let (fixture, diagnostics) = describe(profile)?;
+    let bytes =
+        super::package(&fixture).map_err(|error| ProfileError::Invalid(error.to_string()))?;
+    Ok((bytes, diagnostics))
+}
+
+/// The authored physical data a generated GDTF of `profile` cannot carry.
+pub fn export_diagnostics(
+    profile: &FixtureProfile,
+) -> Result<Vec<GdtfExportDiagnostic>, ProfileError> {
+    Ok(describe(profile)?.1)
 }
 
 /// The DMX mode names the generated fixture type uses, in profile mode order.
@@ -38,15 +67,25 @@ pub fn mode_names(profile: &FixtureProfile) -> Vec<String> {
 
 /// Describes every mode of `profile` as one GDTF fixture type.
 pub fn fixture_type(profile: &FixtureProfile) -> Result<FixtureType, ProfileError> {
+    Ok(describe(profile)?.0)
+}
+
+fn describe(
+    profile: &FixtureProfile,
+) -> Result<(FixtureType, Vec<GdtfExportDiagnostic>), ProfileError> {
     let (heads, beams) = beams(profile);
+    let optics = optics::build(profile, &heads);
     let mut modes = profile
         .modes
         .iter()
         .zip(mode_names(profile))
-        .map(|(mode, name)| {
+        .enumerate()
+        .map(|(index, (mode, name))| {
             Ok(Mode {
                 name,
-                channels: channels(mode, &heads)?,
+                channels: channels(mode, &heads, |channel, functions| {
+                    optics.annotate(index, channel, functions)
+                })?,
             })
         })
         .collect::<Result<Vec<_>, ProfileError>>()?;
@@ -65,7 +104,9 @@ pub fn fixture_type(profile: &FixtureProfile) -> Result<FixtureType, ProfileErro
         "" => "Generic".to_owned(),
         manufacturer => manufacturer.to_owned(),
     };
-    Ok(FixtureType {
+    let mut diagnostics = optics.diagnostics;
+    limitations::position_and_optics(profile, &mut diagnostics);
+    let fixture = FixtureType {
         name,
         short_name,
         manufacturer,
@@ -77,7 +118,9 @@ pub fn fixture_type(profile: &FixtureProfile) -> Result<FixtureType, ProfileErro
         modes,
         body_size: Some(body_size(profile)),
         beams,
-    })
+        physical: optics.physical,
+    };
+    Ok((fixture, diagnostics))
 }
 
 /// Length (X), width (Y) and height (Z) in metres, from the profile's millimetre dimensions.
@@ -122,6 +165,7 @@ fn beams(profile: &FixtureProfile) -> (HashMap<Uuid, String>, Vec<String>) {
 fn channels(
     mode: &FixtureMode,
     heads: &HashMap<Uuid, String>,
+    annotate: impl Fn(&FixtureChannel, &mut [super::Function]),
 ) -> Result<Vec<Channel>, ProfileError> {
     let primary = mode.primary_slots()?;
     let mut used = HashSet::new();
@@ -146,7 +190,8 @@ fn channels(
                     "GDTF channel default/highlight exceeds its resolution".into(),
                 ));
             }
-            let functions = functions::from_channel(channel)?;
+            let mut functions = functions::from_channel(channel)?;
+            annotate(channel, &mut functions);
             let physical_unit = functions::physical_unit(channel.unit.as_deref())?.or_else(|| {
                 functions
                     .iter()
@@ -272,6 +317,12 @@ fn attribute_key(key: &str) -> (String, &'static str) {
     };
     if let Some((name, feature)) = standard {
         return (name.to_owned(), feature);
+    }
+    if let Some(color) = key
+        .strip_prefix("color.wheel.")
+        .and_then(|rest| wheel(rest, "Color"))
+    {
+        return (color, "Color.Color");
     }
     if let Some(gobo) = key
         .strip_prefix("gobo.")

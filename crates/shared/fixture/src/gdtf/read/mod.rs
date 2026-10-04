@@ -6,6 +6,7 @@
 mod channels;
 mod dmx;
 mod functions;
+mod optics;
 mod xml;
 
 use crate::{FixtureProfile, ProfileError};
@@ -138,6 +139,8 @@ fn from_xml(xml: &str) -> Result<GdtfImport, ProfileError> {
         root.attr("DataVersion").unwrap(),
         fixture_id
     );
+    let descriptions = optics::descriptions(fixture);
+    optics::beam_optics(&descriptions, &mut profile);
     let mut diagnostics = Vec::new();
     let modes = fixture
         .child("DMXModes")
@@ -148,12 +151,15 @@ fn from_xml(xml: &str) -> Result<GdtfImport, ProfileError> {
         if !mode_names.insert(name) {
             return Err(invalid(format!("duplicate DMXMode {name:?}")));
         }
-        profile.modes.push(channels::mode(
+        let mut imported = channels::mode(mode, fixture_id, &attributes, &mut diagnostics)?;
+        optics::attach(
+            &descriptions,
             mode,
-            fixture_id,
+            &mut imported,
             &attributes,
             &mut diagnostics,
-        )?);
+        );
+        profile.modes.push(imported);
     }
     for (section, message) in [
         (
@@ -162,11 +168,11 @@ fn from_xml(xml: &str) -> Result<GdtfImport, ProfileError> {
         ),
         (
             "PhysicalDescriptions",
-            "Optical measurements and response profiles are retained in source only; they are not assumed to be calibrated fixture output.",
+            "Emitters and filters linked from channel functions or beams are imported as nominal, unverified physical colour data; colour spaces, gamuts, DMX profiles, CRIs and unlinked descriptions are retained in source only.",
         ),
         (
             "Wheels",
-            "Wheel artwork and optical transmission are retained in source only; no wheel color has been inferred.",
+            "Colour-wheel slots import their linked filters; wheel artwork, slot colours and gobo/prism wheels are retained in source only.",
         ),
         (
             "Models",
@@ -190,6 +196,12 @@ fn from_xml(xml: &str) -> Result<GdtfImport, ProfileError> {
         profile,
         diagnostics,
     })
+}
+
+/// Imports a bare `description.xml`, for tests that edit generated XML.
+#[cfg(test)]
+pub(crate) fn import_xml_for_tests(xml: &str) -> GdtfImport {
+    from_xml(xml).unwrap()
 }
 
 fn named_nodes<'a>(

@@ -8,19 +8,10 @@ use crate::forward::*;
 
 const LIBRARY: &str = "../../../assets/fixture-library";
 
-/// The only shipped modes whose colour is honestly not describable, with the reason's gist.
-const EXCLUDED: [(&str, &str, &str); 2] = [
-    (
-        "etc--source-four-led-series-2-lustr",
-        "HSI Plus 7",
-        "layered over the hue/saturation engine",
-    ),
-    (
-        "etc--source-four-led-series-2-lustr",
-        "HSIC Plus 7",
-        "layered over the hue/saturation engine",
-    ),
-];
+/// The only shipped modes whose colour is honestly not describable, with the reason's gist. Lustr
+/// HSI(C) Plus 7 are no longer here: their direct emitters are the engine and the layered
+/// hue/saturation engine is parked (see `lustr_plus_seven_*`).
+const EXCLUDED: [(&str, &str, &str); 0] = [];
 
 fn current_defaults(profile: &FixtureProfile) -> Vec<u32> {
     profile.modes[0]
@@ -359,4 +350,142 @@ fn only_a_unit_transmission_is_treated_as_no_filter() {
     set(&profile, &mut raw, "color.temperature", 0);
     forward.evaluate(&raw, &mut output).unwrap();
     assert!(!output[0].visible_complete);
+}
+
+/// ETC Lustr "HSI Plus 7" / "HSIC Plus 7": the seven direct emitters are the engine, the Plus
+/// Seven gate is held on, and the layered HSI engine is parked at saturation 0 (hue at its
+/// default). Every control starts away from that state.
+#[test]
+fn lustr_plus_seven_drives_the_direct_emitters_with_the_hsi_engine_parked() {
+    for mode in ["HSI Plus 7", "HSIC Plus 7"] {
+        let profile = runtime("etc--source-four-led-series-2-lustr", mode);
+        let path = &profile.modes[0].color_physical.as_ref().unwrap().paths[0];
+        let OpticalSource::Additive { emitters } = &path.source else {
+            panic!("{mode}: the direct emitters are the engine")
+        };
+        let names: Vec<&str> = emitters.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["Red", "Lime", "Amber", "Green", "Blue", "Indigo", "Cyan"],
+            "{mode}"
+        );
+        let mut current = current_defaults(&profile);
+        set(&profile, &mut current, "color.hue", 30_000);
+        set(&profile, &mut current, "color.saturation", 200);
+        set(&profile, &mut current, "fixture.plus_7_control", 0);
+        let ctc = mode == "HSIC Plus 7";
+        if ctc {
+            set(&profile, &mut current, "color.temperature", 90);
+        }
+        let mut fit = Fit::new(profile);
+        for (rgb, lit) in [([1., 0., 0.], "color.red"), ([0., 0., 1.], "color.blue")] {
+            let result = fit.run_from(&current, &intent(rgb));
+            let direct = [
+                "color.red",
+                "color.lime",
+                "color.amber",
+                "color.green",
+                "color.cyan",
+                "color.blue",
+                "color.indigo",
+            ];
+            let want: Vec<Option<u32>> = direct
+                .iter()
+                .map(|a| Some(if *a == lit { 255 } else { 0 }))
+                .collect();
+            assert_eq!(fit.raws(&direct), want, "{mode} {lit}");
+            assert_eq!(
+                fit.raws(&["color.hue", "color.saturation", "fixture.plus_7_control"]),
+                [Some(0), Some(0), Some(192)],
+                "{mode}: HSI parked at saturation 0, Plus Seven held inside its activated range"
+            );
+            if ctc {
+                assert_eq!(fit.raw("color.temperature"), Some(0), "{mode}");
+            }
+            // Brightness stays Intensity's.
+            assert_eq!(fit.raw("intensity"), None, "{mode}");
+            assert_eq!(
+                result.visible.color_match,
+                ColorMatch::Exact,
+                "{mode} {lit}"
+            );
+            assert_eq!(result.visible.data_quality, PhysicalDataQuality::Unknown);
+        }
+        let mode = &fit.profile.modes[0];
+        let note = mode.derived_color_note(mode.heads[0].id).unwrap();
+        assert!(
+            note.contains("parked at neutral")
+                && note.contains("Hue")
+                && note.contains("Saturation")
+                && note.contains("plus 7 control")
+                && note.contains("direct emitters drive colour"),
+            "{note}"
+        );
+    }
+}
+
+#[test]
+fn lustr_plus_seven_prediction_is_unknown_off_the_parked_hsi_state_or_with_plus_seven_off() {
+    // Negative controls: only saturation 0 with Plus Seven activated is modelled.
+    let profile = runtime("etc--source-four-led-series-2-lustr", "HSI Plus 7");
+    let mode = &profile.modes[0];
+    let forward = CompiledColorForward::compile(&profile, mode.id, None)
+        .unwrap()
+        .unwrap();
+    let mut output = forward.create_output();
+    let mut raw = current_defaults(&profile);
+    for (attribute, value) in [
+        ("color.red", 255),
+        ("color.lime", 0),
+        ("color.amber", 0),
+        ("color.green", 0),
+        ("color.cyan", 0),
+        ("color.blue", 0),
+        ("color.indigo", 0),
+        ("color.hue", 0),
+        ("color.saturation", 0),
+        ("fixture.plus_7_control", 130),
+    ] {
+        set(&profile, &mut raw, attribute, value);
+    }
+    forward.evaluate(&raw, &mut output).unwrap();
+    assert!(output[0].visible_complete, "parked: known red");
+    // Anywhere in the "activated" range is the same state.
+    set(&profile, &mut raw, "fixture.plus_7_control", 255);
+    forward.evaluate(&raw, &mut output).unwrap();
+    assert!(output[0].visible_complete, "Plus Seven activated at 255");
+
+    // Hue/saturation off their parked state fall outside the only known filter sample; Plus
+    // Seven deactivated is a function the model does not bind at all.
+    for (attribute, value, flag) in [
+        (
+            "color.saturation",
+            200,
+            ColorForwardFlags::FILTER_SAMPLE_GAP,
+        ),
+        ("color.hue", 30_000, ColorForwardFlags::FILTER_SAMPLE_GAP),
+        (
+            "fixture.plus_7_control",
+            0,
+            ColorForwardFlags::UNMODELED_CONTROL,
+        ),
+    ] {
+        let mut moved = raw.clone();
+        set(&profile, &mut moved, attribute, value);
+        forward.evaluate(&moved, &mut output).unwrap();
+        assert!(!output[0].visible_complete, "{attribute} {value}: unknown");
+        assert!(
+            output[0].flags.contains(flag),
+            "{attribute} {value}: {:?}",
+            output[0].flags
+        );
+    }
+    // Every parked state of the layered engine names the assumption.
+    let path = &mode.color_physical.as_ref().unwrap().paths[0];
+    let layered = path
+        .filters
+        .iter()
+        .filter(|f| f.provenance.source.as_deref() == Some(DERIVED_LAYERED_SOURCE))
+        .count();
+    assert_eq!(layered, 3, "hue, saturation and the Plus Seven gate");
 }

@@ -254,16 +254,6 @@ fn authored_models_stored_bytes_and_excluded_modes_are_unchanged() {
     // Excluded modes keep no Position model and keep their channels untouched.
     for (name, mode, reason) in [
         (
-            "glp--jdc1",
-            "Normal 23-channel",
-            PositionDerivationExclusion::SingleAxis,
-        ),
-        (
-            "generic--endless-pan-tilt",
-            "Endless Pan/Tilt 16-bit",
-            PositionDerivationExclusion::EndlessRotation,
-        ),
-        (
             "tosklight--media-server",
             "2 layers",
             PositionDerivationExclusion::MediaModelRotation,
@@ -304,8 +294,6 @@ fn authored_models_stored_bytes_and_excluded_modes_are_unchanged() {
 fn every_shipped_pan_tilt_mode_has_a_position_graph_or_a_named_exclusion() {
     use PositionDerivationExclusion as X;
     let expected_exclusions = [
-        ("glp--jdc1", X::SingleAxis),
-        ("generic--endless-pan-tilt", X::EndlessRotation),
         ("tosklight--media-server", X::MediaModelRotation),
         ("tosklight--visualizer-laser", X::LaserScanEngine),
     ];
@@ -354,6 +342,8 @@ fn every_shipped_pan_tilt_mode_has_a_position_graph_or_a_named_exclusion() {
         assert_eq!(std::fs::read(&path).unwrap(), bytes, "{name}");
     }
     assert_eq!(authored, 10, "authored Position modes");
-    assert_eq!(derived, 32, "derived Position modes");
-    assert_eq!(excluded, 10, "named exclusions");
+    // TL-544: the six Tilt-only GLP JDC1 modes (fixed Pan) and the endless Pan/Tilt (multi-turn)
+    // are derived now; the scanners carry mirror kinematics.
+    assert_eq!(derived, 39, "derived Position modes");
+    assert_eq!(excluded, 3, "named exclusions");
 }

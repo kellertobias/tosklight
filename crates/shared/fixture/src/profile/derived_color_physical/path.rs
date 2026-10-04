@@ -18,6 +18,8 @@ use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use uuid::Uuid;
 
+mod layered;
+
 const DERIVED_MEASURED_SOURCE: &str = "Measured colour system of the profile";
 /// Hue steps of the nominal hue/saturation grid (3°) and its saturation rings.
 const HUE_STEPS: u32 = 120;
@@ -278,6 +280,8 @@ struct PathBuilder<'a> {
     parked: Vec<NativeColorValue>,
     /// The chosen engine, for reasons.
     engine_name: &'static str,
+    /// Direct emitters chosen over a layered hue/saturation engine, which is parked.
+    layered: Option<layered::LayeredEngine>,
 }
 
 /// One head's path from its most capable engine; every other colour control is parked.
@@ -307,6 +311,7 @@ pub(super) fn derive_head_path(
         covered: HashSet::new(),
         parked: Vec::new(),
         engine_name: "white-only",
+        layered: None,
     };
     let engine = builder.engine(&systems, &controls)?;
     builder.engine_name = match engine {
@@ -315,6 +320,12 @@ pub(super) fn derive_head_path(
         Engine::Wheel(_) => "colour wheel",
         Engine::White => "white-only",
     };
+    let mut controls = controls;
+    if let Some(layered) = builder.layered.take() {
+        // The activation gate is not a colour channel, but the model only holds while it is on.
+        controls.push(layered.gate);
+        builder.park_layered(&layered)?;
+    }
     for id in &controls {
         if !builder.covered.contains(id) {
             builder.park(*id)?;
@@ -400,6 +411,16 @@ impl<'a> PathBuilder<'a> {
                 self.continuous(system)?;
             }
             self.check_emitters()?;
+            return Ok(Engine::Continuous);
+        }
+        // A hue/saturation engine layered over direct emitters behind an activation gate (ETC
+        // "Plus Seven"): the direct emitters become the engine and the HSI engine is parked.
+        if let [system] = hue_saturation.as_slice()
+            && let Some(layered) = layered::LayeredEngine::find(self.mode, self.head, system)
+        {
+            self.continuous(&layered.direct)?;
+            self.check_emitters()?;
+            self.layered = Some(layered);
             return Ok(Engine::Continuous);
         }
         match hue_saturation.as_slice() {
@@ -675,7 +696,23 @@ impl<'a> PathBuilder<'a> {
                 self.engine_name
             ));
         }
-        self.claim(id)?;
+        let provenance = OpticalProvenance {
+            quality: PhysicalDataQuality::Estimated,
+            source: Some(DERIVED_PARKED_SOURCE.into()),
+            revision: 0,
+        };
+        self.park_state(channel, function, (from, to), provenance)
+    }
+
+    /// Bind a control's `from..=to` state as a unit-transmission filter and write `from`.
+    fn park_state(
+        &mut self,
+        channel: &FixtureChannel,
+        function: &ChannelFunction,
+        (from, to): (u32, u32),
+        provenance: OpticalProvenance,
+    ) -> Result<(), String> {
+        self.claim(channel.id)?;
         let unit = |wavelength_nm| SpectrumSample {
             wavelength_nm,
             value: 1.0,
@@ -698,11 +735,7 @@ impl<'a> PathBuilder<'a> {
                     spectrum: vec![unit(360.0), unit(830.0)],
                 }],
             },
-            provenance: OpticalProvenance {
-                quality: PhysicalDataQuality::Estimated,
-                source: Some(DERIVED_PARKED_SOURCE.into()),
-                revision: 0,
-            },
+            provenance,
         });
         self.parked.push(NativeColorValue {
             channel_id: channel.id,
