@@ -22,9 +22,9 @@ Executable coverage:
   and the next step starting from the undone value.
 - POSITION-CONTROLS-006 arms Preload through the Preload lifecycle route and leaves it with Blind
   off, so the pending Preload values stay. It reads the lane of every dialog write from the request
-  the desk sends. Production publishes no Preload (Pending) Position readouts yet, so step 1 runs
-  the held joystick from requested Preload Angles. The adoption of the displayed pose in Preload,
-  POSITION-CONTROLS-005 step 4, is kept as an expected failure. Step 2 is covered: the open
+  the desk sends. Step 1 runs the held joystick from requested Preload Angles. The adoption of the
+  displayed pose in Preload (POSITION-CONTROLS-005 step 4) opens the dialog before the Pending
+  lane has published and ticks frames until the dialog reads it. Step 2 is covered: the open
   gesture's Finish stays on Preload, and the next gesture writes to the Normal Programmer. The
   rest of the held motion after the switch is not sent yet; that case is also an expected failure.
 - POSITION-CONTROLS-005 has no Playwright case yet.

@@ -580,16 +580,19 @@ test.describe("docs/testing/35-focus-zoom-operator-controls.md", () => {
 	});
 
 	test("FOCUS-ZOOM-008 @ui › in Preload the first Zoom step from scratch adopts the displayed opening", async ({ api, bench, desk, page }) => {
-		test.fail(
-			true,
-			"BUG: in Preload with no pending Zoom the dialog refuses every Zoom edit (Requested · unsupported): GET /api/v2/output/readouts?lane=preload answers unavailable no_accepted_preload because production never starts the Pending episode worker (pending_executor/resource.rs start_if_gated)",
-		);
 		const { showId, selected } = await arrange({ api, bench, desk, page }, "008-adopt", BEAM_RIG);
 		requireSemanticContract(await semanticFocus(api, selected), GATE);
 		await enterPreloadCapture(api, showId);
 		await bench.tick(25);
 		await desk.open(api.baseUrl);
 		const dialog = await openFocusDialog(page);
+		// The Pending lane publishes on the next output frames; the open dialog reads it again.
+		await expect
+			.poll(async () => {
+				await bench.tick(25);
+				return (await dialog.getByTestId("focus-zoom-zoom-status").textContent()) ?? "";
+			}, { timeout: 5_000 })
+			.not.toMatch(/unsupported/);
 		await stepZoomUp(page, dialog, 5);
 		await expect
 			.poll(async () => zoomDegrees((await preloadValues(api, "zoom")).map((row) => row.value)), { timeout: 2_000 })

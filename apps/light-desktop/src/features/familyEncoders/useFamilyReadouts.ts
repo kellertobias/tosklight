@@ -58,6 +58,10 @@ function olderLease(
 	return next.lease != null && shown?.lease != null && shown.lease > next.lease;
 }
 
+/** Re-reads of an unavailable Preload readout, one per interval (10 s in all). */
+export const PRELOAD_UNAVAILABLE_RETRIES = 40;
+export const PRELOAD_UNAVAILABLE_RETRY_MILLIS = 250;
+
 export function useFamilyReadouts(
 	lane: DisplayedSourceLane,
 	fixtureIds: readonly string[],
@@ -84,13 +88,32 @@ export function useFamilyReadouts(
 			readouts.observe(next);
 			setSnapshot((shown) => (olderLease(next, shown) ? shown : next));
 		};
-		readouts.read(lane, ids).then(install, () => undefined);
+		// Preload has no stream: its Pending lineage publishes shortly after Preload is armed or
+		// changed, so an early "no accepted Preload" is read again until it is available.
+		let retries = PRELOAD_UNAVAILABLE_RETRIES;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const retry = () => {
+			if (!current || lane !== "preload" || retries <= 0) return;
+			retries -= 1;
+			timer = setTimeout(read, PRELOAD_UNAVAILABLE_RETRY_MILLIS);
+		};
+		const read = () => {
+			readouts.read(lane, ids).then(
+				(next) => {
+					install(next);
+					if (next.unavailable) retry();
+				},
+				() => retry(),
+			);
+		};
+		read();
 		const release =
 			lane === "normal"
 				? (session?.claimReadouts(ids, install, consumerId) ?? null)
 				: null;
 		return () => {
 			current = false;
+			clearTimeout(timer);
 			release?.();
 		};
 	}, [consumerId, enabled, generation, key, lane, readouts, session, visible]);

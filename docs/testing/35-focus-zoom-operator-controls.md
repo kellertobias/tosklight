@@ -20,9 +20,9 @@ The root Playwright spec `tests/118-focus-zoom-operator-controls.spec.ts` covers
   document becoming hidden. Both are synthetic browser events. It counts every Programmer write
   the desk sends. A real application switch and a minimised desk window remain manual checks.
 - FOCUS-ZOOM-008 arms Preload through the Preload lifecycle route and leaves it with Blind off,
-  and reads the lane of every write from the request. Production publishes no Preload (Pending)
-  readouts yet, so the Preload drags start from a requested Preload Zoom. The first Zoom step
-  from scratch in Preload is kept as an expected failure. Step 3 is covered: no write of the
+  and reads the lane of every write from the request. The Preload drags start from a requested Preload
+  Zoom; the first Zoom step from scratch in Preload opens the dialog before the Pending lane has
+  published and ticks frames until the dialog reads it. Step 3 is covered: no write of the
   switched drag reaches the Normal Programmer, its Finish stays on Preload, and the next drag is
   Normal. The rest of the drag after the switch is not sent yet; that case is also an expected
   failure.

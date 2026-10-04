@@ -652,10 +652,6 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 	});
 
 	test("POSITION-CONTROLS-006 @ui › in Preload the first Tilt edit adopts the displayed pose", async ({ api, bench, desk, page }) => {
-		test.fail(
-			true,
-			"BUG: in Preload with no pending Position the dialog is inert (Pan/Tilt read —, joystick unavailable): GET /api/v2/output/readouts?lane=preload answers unavailable no_accepted_preload because production never starts the Pending episode worker (pending_executor/resource.rs start_if_gated)",
-		);
 		const { showId, selected } = await arrange({ api, bench, desk, page }, "006-adopt");
 		requireSemanticContract(await semanticPosition(api, selected), GATE);
 		const lanes = recordLaneWrites(page);
@@ -664,7 +660,13 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 		await desk.open(api.baseUrl);
 		const dialog = await openPositionDialog(page);
 		const tilt = dialog.getByRole("slider", { name: "Tilt angle" });
-		await expect(tilt).toBeEnabled({ timeout: 2_000 });
+		// The Pending lane publishes on the next output frames; the open dialog reads it again.
+		await expect
+			.poll(async () => {
+				await bench.tick(25);
+				return tilt.isEnabled();
+			}, { timeout: 5_000 })
+			.toBe(true);
 		await tilt.focus();
 		await page.keyboard.press("ArrowUp");
 		await expect.poll(async () => (await preloadValues(api, "position")).length, { timeout: 2_000 }).toBe(selected.length);
