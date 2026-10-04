@@ -133,6 +133,33 @@ export function fixtureSheetValueIndex(snapshot: VisualizationSnapshot | null) {
 	return result;
 }
 
+/**
+ * The native Red/Green/Blue channels the sheet shows for the Color group. Under the semantic
+ * programming contract the registry publishes no encoder descriptors for them (Color is edited
+ * as one Color Intent), yet the visualization still reports their output, so the sheet keeps
+ * its colour dot and readable values for every fixture that has them.
+ */
+const NATIVE_RGB_DESCRIPTORS: readonly AttributeDescriptor[] = (
+	[
+		["color.red", "Red", 1],
+		["color.green", "Green", 2],
+		["color.blue", "Blue", 3],
+	] as const
+).map(([id, label, slot]) => ({
+	id,
+	label,
+	family: "color",
+	value_type: "continuous",
+	default_unit: "percent",
+	display_unit: "percent",
+	domain_min: null,
+	domain_max: null,
+	encoder_group: "color",
+	encoder_page: 1,
+	encoder_slot: slot,
+	retired: false,
+}));
+
 export function fixtureSheetGroupValues({
 	target,
 	registry,
@@ -150,9 +177,14 @@ export function fixtureSheetGroupValues({
 	dynamicStack: readonly FixtureSheetDynamicEntry[];
 	preloadDynamicStack: readonly FixtureSheetDynamicEntry[];
 }): FixtureSheetGroupValues {
+	const known = new Set(registry.map((descriptor) => descriptor.id));
+	const fullRegistry = [
+		...registry,
+		...NATIVE_RGB_DESCRIPTORS.filter((descriptor) => !known.has(descriptor.id)),
+	];
 	return Object.fromEntries(
 		FIXTURE_SHEET_ATTRIBUTE_GROUPS.map((group) => {
-			const descriptors = registry
+			const descriptors = fullRegistry
 				.filter(
 					(descriptor) =>
 						descriptor.encoder_group === group &&
@@ -176,8 +208,10 @@ export function fixtureSheetGroupValues({
 					pending && !fixtureSheetAttributeValuesEqual(pending, value)
 						? pending
 						: null;
-				// Since TL-552 Pan and Tilt are programmed as the Position family.
-				const family = group === "position" ? "position" : descriptor.id;
+				// Since TL-552 Pan and Tilt are programmed as the Position family, and colour
+				// channels as one Color Intent.
+				const family =
+					group === "position" || group === "color" ? group : descriptor.id;
 				const source =
 					programmerAttributes.has(descriptor.id) ||
 					programmerAttributes.has(family)

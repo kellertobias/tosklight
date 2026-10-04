@@ -325,17 +325,13 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 		desk,
 		page,
 	}) => {
-		test.fail(
-			true,
-			"BUG: the Fixture Sheet Color cell reads '—' with no colour dot for a fixture whose Programmer holds a semantic colour (color_program), although DMX outputs it",
-		);
 		test.setTimeout(60_000);
 		await arrangeUvSheet({ api, bench, desk, page });
 		const sheet = await openFixtureSheet(desk, page, api.baseUrl);
 		const row = sheetRow(sheet, "RGB 1");
 		await bench.tick(25);
-		const value = row.locator(".fixture-sheet-group-presentation");
-		await expect(value.locator(".color-dot")).toHaveCount(1, { timeout: 3_000 });
+		const value = row.locator(".fixture-sheet-group-presentation").filter({ has: page.locator(".color-dot") });
+		await expect(value).toHaveCount(1, { timeout: 3_000 });
 		await expect(value).not.toHaveText("—");
 	});
 
@@ -345,10 +341,6 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 		desk,
 		page,
 	}) => {
-		test.fail(
-			true,
-			"BUG: useAcceptedColorReport drops a not_yet_available colour report and never re-reads until the Programmer projection changes, so the triangle stays missing after the frame is accepted",
-		);
 		test.setTimeout(60_000);
 		const { show, all } = await arrangeUvSheet({ api, bench, desk, page });
 		// The sheet's reads while it opens land before the frame is accepted, as when the output

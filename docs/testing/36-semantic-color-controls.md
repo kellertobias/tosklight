@@ -28,10 +28,9 @@ Executable coverage:
   slots, because an uncalibrated head never shows a Δu′v′); the Media color dialog with White Blend
   read from the layers' DMX greyscale and tint and from the preview card, with layer and Master
   Intensity unchanged; and the Fixture Sheet triangle, its single batched report request, the
-  absence of any message or focus move, and tap and Enter opening the details. Known defects are
-  kept as expected failures there: the full modal overflows vertically at 1496×761 because of the
-  Direct color section, the Fixture Sheet Color cell shows no value for a semantic colour, and a
-  report read before the frame is accepted is not repeated until the Programmer changes.
+  absence of any message or focus move, and tap and Enter opening the details. One known defect is
+  kept as an expected failure there: the full modal overflows vertically at 1496×761 because of the
+  Direct color section.
 - All of these run under `npm run test:e2e`, because production reports programming contract 1;
   `npm run test:e2e-semantic` runs them on the contract-1 E2E test server, where a missing semantic
   publication fails instead of skipping.

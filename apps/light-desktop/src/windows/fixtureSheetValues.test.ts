@@ -345,6 +345,26 @@ describe("Fixture Sheet attribute-group values", () => {
 			source: "playback",
 		});
 	});
+	it("shows native Red/Green/Blue output when the semantic registry publishes no Color descriptors", () => {
+		const target = fixtureSheetTargets(fixture())[0];
+		const semanticRegistry = registry.filter((descriptor) => !descriptor.id.startsWith("color."));
+		const groups = fixtureSheetGroupValues({
+			target,
+			registry: semanticRegistry,
+			values: new Map([["color.red", { kind: "normalized" as const, value: 0.5 }]]),
+			preloadValues: undefined,
+			programmerAttributes: new Set(["color"]),
+			dynamicStack: [],
+			preloadDynamicStack: [],
+		});
+		expect(groups.color.available).toBe(true);
+		expect(groups.color.members[0]).toMatchObject({
+			attribute: "color.red",
+			label: "Red",
+			text: "50%",
+			source: "programmer",
+		});
+	});
 	describe("Position reads the commanded pose in degrees (TL-552)", () => {
 		// Production Pan/Tilt descriptors carry degrees without a channel domain.
 		const angleRegistry = registry.map((descriptor) =>
