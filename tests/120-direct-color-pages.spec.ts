@@ -473,8 +473,13 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 		await expect.poll(() => sent.length).toBeGreaterThan(0);
 		// One software detent moves 1/255 of the function's range (at least 1).
 		const step = Math.max(1, Math.floor(Math.abs(red.functions[0].raw_to - red.functions[0].raw_from) / 255));
+		// A default already at the top of the range stays there (the step is clamped).
+		const top = Math.max(red.functions[0].raw_from, red.functions[0].raw_to);
 		const expected = byChannel(
-			shown.map((entry) => ({ ...entry, raw: entry.channel_id === red.channel_id ? entry.raw + step : entry.raw })),
+			shown.map((entry) => ({
+				...entry,
+				raw: entry.channel_id === red.channel_id ? Math.min(entry.raw + step, top) : entry.raw,
+			})),
 		);
 		for (const fixture of [a1, a2])
 			await expect.poll(async () => byChannel((await colorOf(api, fixture))?.recipe?.channels ?? [])).toEqual(expected);
