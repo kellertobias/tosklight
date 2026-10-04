@@ -4,7 +4,7 @@ use super::*;
 use std::collections::HashSet;
 
 type SampleKey = (Uuid, FixtureId, Uuid);
-type SampleValues = HashMap<SampleKey, DynamicSampleExpression>;
+type SampleValues = super::SampleValueMap;
 type RandomKey = (Uuid, FixtureId);
 
 /// Reuse one workspace for each independently committed Live or Preload output lane.

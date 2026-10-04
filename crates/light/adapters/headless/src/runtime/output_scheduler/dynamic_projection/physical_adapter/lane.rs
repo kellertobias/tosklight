@@ -7,9 +7,10 @@ use light_engine::PreloadBranch;
 use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 
+mod static_targets;
 mod worker;
+pub(super) use worker::{LaneAccess, adopt_in, resolve_in};
 pub(in crate::runtime) use worker::{LaneShared, LaneStaging, LaneWorker, StagingMark};
-pub(super) use worker::{adopt_in, resolve_in};
 
 type OwnerKey = (FixtureId, ProgrammingOwner);
 

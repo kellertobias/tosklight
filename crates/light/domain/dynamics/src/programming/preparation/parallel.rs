@@ -50,9 +50,35 @@ pub trait PreparationWorkers {
         prepare: &(dyn Fn(usize, &dyn PreparationSources) -> PreparedChunk + Sync),
     ) -> Result<Vec<PreparedChunk>, TransitionError>;
 
+    /// [`Self::run`] for a parallel deferred completion (TL-639 round 6): the same forks,
+    /// one [`PreparationSources::finish_controller`] per typed lane.
+    fn run_completion(
+        &mut self,
+        complete: &(dyn Fn(usize, &dyn PreparationSources) -> crate::CompletedChunk + Sync),
+    ) -> Result<Vec<crate::CompletedChunk>, TransitionError>;
+
     /// Append chunk `chunk`'s fork logs between two [`PreparationSources::finish_controller`]
     /// lengths, as one controller recorded them in turn.
     fn append_logs(&mut self, chunk: usize, from: (usize, usize), to: (usize, usize));
+
+    /// Sort the controllers' keys (distinct: each ends with its sample index); on the workers'
+    /// threads if the caller has them (TL-639 round 6).
+    fn sort_controller_keys(&self, keys: &mut [ControllerSortKey]) {
+        keys.sort_unstable();
+    }
+
+    /// Sort the prepared groups by target and owner (distinct: one group per pair).
+    fn sort_families(&self, families: &mut [DynamicFamilySampleGroup]) {
+        families.sort_unstable_by_key(family_order);
+    }
+}
+
+/// One controller sort key: the controller key, the lane and the sample's index.
+pub type ControllerSortKey = ((Uuid, Uuid, Uuid), Uuid, usize);
+
+/// The order prepared family groups are returned in.
+pub fn family_order(group: &DynamicFamilySampleGroup) -> (Uuid, &'static str) {
+    (group.target.0, group.owner.id())
 }
 
 /// One write of a controller's preparation, in order.
@@ -122,13 +148,12 @@ pub fn prepare_dynamic_family_samples_in_parallel<'a>(
         scratch,
         workers,
     );
+    scratch.retired = previous;
     if let Err(error) = result {
         scratch.clear();
         return Err(error);
     }
-    scratch
-        .families
-        .sort_unstable_by_key(|group| (group.target.0, group.owner.id()));
+    workers.sort_families(&mut scratch.families);
     Ok(PreparedDynamicFamilySamples {
         families: &scratch.families,
         legacy: &scratch.legacy,
@@ -144,7 +169,7 @@ fn prepare_in_parallel(
     scratch: &mut DynamicFamilyPreparationScratch,
     workers: &mut dyn PreparationWorkers,
 ) -> Result<(), TransitionError> {
-    sort_controllers(samples, scratch);
+    sort_controllers(samples, scratch, &|keys| workers.sort_controller_keys(keys));
     let chunks = workers.chunks().clamp(1, TARGET_SHARDS);
     let mut members = vec![Vec::new(); chunks];
     scratch.chunk_of_controller.clear();

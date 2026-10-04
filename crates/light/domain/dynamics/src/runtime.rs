@@ -36,7 +36,9 @@ mod transaction;
 pub use output_gate::DynamicControllerOutputGateSnapshot;
 pub use programmer_identity::normalize_legacy_programmer_controller_ids;
 pub use sample_boundary::{DynamicSampleBoundary, DynamicSampleScope};
-pub use sampling::{CompletedDynamicSamples, DeferredTypedSampling, DynamicSamplingScratch};
+pub use sampling::{
+    CompletedChunk, CompletedDynamicSamples, DeferredTypedSampling, DynamicSamplingScratch,
+};
 pub use transaction::DynamicOutputFrameScratch;
 
 use helpers::*;
@@ -378,14 +380,19 @@ struct DynamicInstance {
     synchronized_hold_captured: bool,
     last_synchronized_elapsed_millis: Option<u64>,
     synchronized_resume_transition: Option<DynamicSynchronizedResumeTransitionSnapshot>,
-    last_sample_values: HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
-    synchronized_hold_values: HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
+    last_sample_values: SampleValueMap,
+    synchronized_hold_values: SampleValueMap,
     synchronized_hold_angle_sources: std::collections::HashSet<(Uuid, FixtureId, Uuid)>,
     /// Cold-derived capability gaps; payloads remain intact until the original is available.
     unavailable_samples: native_capability::UnavailableSamples,
     /// Where each target-and-lane pair lives in the engine's frame, remembered across ticks.
     frame_addresses: Option<FrameAddressTable>,
 }
+
+/// Retained sample values of an instance by (controller, target, lane). Fx-hashed (TL-639
+/// round 6): rebuilt every frame, only looked up, and sorted wherever they are listed.
+pub(crate) type SampleValueMap =
+    rustc_hash::FxHashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>;
 
 /// One instance's addresses, valid for one patch generation, one definition and one target list.
 #[derive(Clone, Debug)]

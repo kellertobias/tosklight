@@ -9,11 +9,13 @@
 use super::super::CurrentResolutionRequirement;
 use super::*;
 use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::family_lanes::{
-    FamilyLanesShared, FamilyLanesWorker, FamilyStaging,
+    FamilyLanesWorker, FamilyStaging,
 };
 use light_dynamics::{
-    DynamicFamilyPreparationRequirement, DynamicRuntimeSample, DynamicSourceDependency,
-    DynamicSourceOccurrenceId, DynamicValue, PreparationSources, PreparationWorkers, PreparedChunk,
+    CompletedChunk, CompletedDynamicSamples, DeferredTypedSampling,
+    DynamicFamilyPreparationRequirement, DynamicRuntimeError, DynamicRuntimeSample,
+    DynamicSourceDependency, DynamicSourceOccurrenceId, DynamicValue, PreparationSources,
+    PreparationWorkers, PreparedChunk,
 };
 use std::cell::Cell;
 
@@ -34,6 +36,34 @@ pub(super) fn prepare_families<T>(
     observer: &mut impl HybridFrameObserver<T>,
     pool: Option<&light_engine::parallel::OutputPool>,
 ) -> Result<(), TransitionError> {
+    let prepared = prepare_families_on(
+        samples,
+        sampling_requirements,
+        typed,
+        frame,
+        native_models,
+        scratch,
+        observer,
+        pool,
+    );
+    // TL-639 round 6: last frame's compiled samples nothing reused are freed on the pool.
+    if let Some(pool) = pool {
+        pool.drop_later(scratch.take_retired());
+    }
+    prepared
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prepare_families_on<T>(
+    samples: &[DynamicRuntimeSample],
+    sampling_requirements: &[DynamicFamilyPreparationRequirement],
+    typed: &CapturedProgrammingSources<'_, PreparedFamilySources<'_>>,
+    frame: HybridFrameContext<'_>,
+    native_models: &dyn DynamicNativeModelResolver,
+    scratch: &mut DynamicFamilyPreparationScratch,
+    observer: &mut impl HybridFrameObserver<T>,
+    pool: Option<&light_engine::parallel::OutputPool>,
+) -> Result<(), TransitionError> {
     let Some(pool) = pool.filter(|_| samples.len() >= MIN_PARALLEL_SAMPLES && typed.forks()) else {
         return prepare_dynamic_family_samples_with_requirements(
             samples,
@@ -44,54 +74,77 @@ pub(super) fn prepare_families<T>(
         )
         .map(drop);
     };
-    let mut result = None;
-    let mut stagings = Vec::new();
-    observer.with_parallel_lanes(&mut |lanes| {
-        let Some((shared, _)) = lanes else {
-            return;
-        };
-        let mut workers = FrameWorkers {
-            typed,
-            frame,
-            shared,
-            pool,
-            logs: Vec::new(),
-            stagings: Vec::new(),
-        };
-        result = Some(
-            light_dynamics::prepare_dynamic_family_samples_in_parallel(
-                samples,
-                sampling_requirements,
-                typed,
-                Some(native_models),
-                scratch,
-                &mut workers,
-            )
-            .map(drop),
-        );
-        stagings = workers.stagings;
-    });
-    for staging in stagings {
-        observer.merge_parallel(frame.token, staging)?;
-    }
-    match result {
-        Some(result) => result,
-        None => prepare_dynamic_family_samples_with_requirements(
+    if !lends_lanes(observer) {
+        return prepare_dynamic_family_samples_with_requirements(
             samples,
             sampling_requirements,
             typed,
             Some(native_models),
             scratch,
         )
-        .map(drop),
+        .map(drop);
     }
+    let mut workers = FrameWorkers::new(typed, frame, &*observer, pool);
+    let result = light_dynamics::prepare_dynamic_family_samples_in_parallel(
+        samples,
+        sampling_requirements,
+        typed,
+        Some(native_models),
+        scratch,
+        &mut workers,
+    )
+    .map(drop);
+    let stagings = workers.stagings;
+    for staging in stagings {
+        observer.merge_parallel(frame.token, staging)?;
+    }
+    result
 }
 
-/// The pool and forks one parallel preparation runs on.
-struct FrameWorkers<'a, 't, 's, 'l> {
+/// Whether `observer` lends its lanes to parallel sections.
+fn lends_lanes<T>(observer: &impl HybridFrameObserver<T>) -> bool {
+    let mut lends = false;
+    observer.with_parallel_lanes(&mut |lanes| lends = lanes.is_some());
+    lends
+}
+
+/// Complete the frame's deferred typed lanes, on the pool when the observer lends its lanes and
+/// the frame has enough of them (TL-639 round 6). Lane stagings the forks took come back
+/// through `observer`.
+pub(super) fn complete_deferred<'frame, T>(
+    deferred: DeferredTypedSampling<'frame>,
+    typed: &CapturedProgrammingSources<'_, PreparedFamilySources<'_>>,
+    frame: HybridFrameContext<'_>,
+    observer: &mut impl HybridFrameObserver<T>,
+    pool: Option<&light_engine::parallel::OutputPool>,
+) -> Result<CompletedDynamicSamples<'frame>, DynamicRuntimeError> {
+    let Some(pool) =
+        pool.filter(|_| deferred.typed_lane_count() >= MIN_PARALLEL_SAMPLES && typed.forks())
+    else {
+        return deferred.complete(typed);
+    };
+    if !lends_lanes(observer) {
+        return deferred.complete(typed);
+    }
+    let mut workers = FrameWorkers::new(typed, frame, &*observer, pool);
+    let result = deferred.complete_in_parallel(typed, &mut workers);
+    let stagings = workers.stagings;
+    for staging in stagings {
+        observer
+            .merge_parallel(frame.token, staging)
+            .map_err(|error| DynamicRuntimeError::InvalidSample(error.to_string()))?;
+    }
+    result
+}
+
+/// The pool and forks one parallel preparation or completion runs on. The observer lends its
+/// lanes for each parallel section only (TL-639 round 6), so whatever the frame prepares or
+/// completes itself between sections reaches the lanes as it would without workers.
+struct FrameWorkers<'a, 't, O, T> {
     typed: &'a CapturedProgrammingSources<'t, PreparedFamilySources<'t>>,
     frame: HybridFrameContext<'a>,
-    shared: &'s FamilyLanesShared<'s, 'l>,
+    observer: &'a O,
+    sidecar: std::marker::PhantomData<fn() -> T>,
     pool: &'a light_engine::parallel::OutputPool,
     /// Each chunk's ordered fork logs: requirements and failures.
     #[allow(clippy::type_complexity)]
@@ -100,7 +153,26 @@ struct FrameWorkers<'a, 't, 's, 'l> {
     stagings: Vec<FamilyStaging>,
 }
 
-impl PreparationWorkers for FrameWorkers<'_, '_, '_, '_> {
+impl<'a, 't, O: HybridFrameObserver<T>, T> FrameWorkers<'a, 't, O, T> {
+    fn new(
+        typed: &'a CapturedProgrammingSources<'t, PreparedFamilySources<'t>>,
+        frame: HybridFrameContext<'a>,
+        observer: &'a O,
+        pool: &'a light_engine::parallel::OutputPool,
+    ) -> Self {
+        Self {
+            typed,
+            frame,
+            observer,
+            sidecar: std::marker::PhantomData,
+            pool,
+            logs: Vec::new(),
+            stagings: Vec::new(),
+        }
+    }
+}
+
+impl<O: HybridFrameObserver<T>, T> PreparationWorkers for FrameWorkers<'_, '_, O, T> {
     fn chunks(&self) -> usize {
         light_engine::parallel::chunk_count(light_dynamics::TARGET_SHARDS, self.pool.workers(), 1)
     }
@@ -109,29 +181,78 @@ impl PreparationWorkers for FrameWorkers<'_, '_, '_, '_> {
         &mut self,
         prepare: &(dyn Fn(usize, &dyn PreparationSources) -> PreparedChunk + Sync),
     ) -> Result<Vec<PreparedChunk>, TransitionError> {
+        self.run_forked(prepare)
+    }
+
+    fn run_completion(
+        &mut self,
+        complete: &(dyn Fn(usize, &dyn PreparationSources) -> CompletedChunk + Sync),
+    ) -> Result<Vec<CompletedChunk>, TransitionError> {
+        self.run_forked(complete)
+    }
+
+    fn append_logs(&mut self, chunk: usize, from: (usize, usize), to: (usize, usize)) {
+        let (requirements, failures) = &self.logs[chunk];
+        self.typed
+            .append_fork_logs(&requirements[from.0..to.0], &failures[from.1..to.1]);
+    }
+
+    fn sort_controller_keys(&self, keys: &mut [light_dynamics::ControllerSortKey]) {
+        light_engine::parallel::sort_unstable_by_key(Some(self.pool), keys, |key| *key);
+    }
+
+    fn sort_families(&self, families: &mut [light_dynamics::DynamicFamilySampleGroup]) {
+        light_engine::parallel::sort_unstable_by_key(
+            Some(self.pool),
+            families,
+            light_dynamics::family_order,
+        );
+    }
+}
+
+impl<O: HybridFrameObserver<T>, T> FrameWorkers<'_, '_, O, T> {
+    /// Run `section(chunk, fork)` for every chunk on the pool, each against its own fork of the
+    /// frame's sources, and take the forks' keyed changes back (their logs wait in `logs`).
+    fn run_forked<R: Send>(
+        &mut self,
+        section: &(dyn Fn(usize, &dyn PreparationSources) -> R + Sync),
+    ) -> Result<Vec<R>, TransitionError> {
+        self.logs.clear();
         let chunks = self.chunks();
-        let (typed, frame, shared) = (self.typed, self.frame, self.shared);
-        let mut slots = vec![(); self.pool.workers()];
+        let (typed, frame, pool) = (self.typed, self.frame, self.pool);
+        let mut slots = vec![(); pool.workers()];
         let frozen = typed.freeze();
-        let outputs = typed.with_fork_base(&frozen, |base| {
-            light_engine::parallel::run_ordered(Some(self.pool), &mut slots, chunks, |_, chunk| {
-                let missed = Cell::new(false);
-                let lanes = FamilyLanesWorker::new(shared, &missed);
-                let adopt = |target, original: &AttributeValue, address: &DynamicValueAddress| {
-                    lanes.adopt(frame, target, original, address)
-                };
-                let fork = base.fork(&adopt);
-                let prepared = prepare(
-                    chunk,
-                    &PreparationFork {
-                        typed: &fork,
-                        missed: &missed,
-                    },
-                );
-                (prepared, fork.into_changes(), lanes.into_staging())
-            })
+        let mut outputs = None;
+        self.observer.with_parallel_lanes(&mut |lanes| {
+            let Some((shared, _, _)) = lanes else {
+                return;
+            };
+            outputs = Some(typed.with_fork_base(&frozen, |base| {
+                light_engine::parallel::run_ordered(Some(pool), &mut slots, chunks, |_, chunk| {
+                    let missed = Cell::new(false);
+                    let lanes = FamilyLanesWorker::new(shared, &missed);
+                    let adopt =
+                        |target, original: &AttributeValue, address: &DynamicValueAddress| {
+                            lanes.adopt(frame, target, original, address)
+                        };
+                    let fork = base.fork(&adopt);
+                    let prepared = section(
+                        chunk,
+                        &PreparationFork {
+                            typed: &fork,
+                            missed: &missed,
+                        },
+                    );
+                    (prepared, fork.into_changes(), lanes.into_staging())
+                })
+            }));
         });
         typed.thaw(frozen);
+        let outputs = outputs.ok_or_else(|| {
+            TransitionError::from(IntentError(
+                "the frame observer stopped lending its lanes".into(),
+            ))
+        })?;
         let mut prepared = Vec::with_capacity(outputs.len());
         let mut failed = None;
         for (chunk, changes, staging) in outputs {
@@ -149,12 +270,6 @@ impl PreparationWorkers for FrameWorkers<'_, '_, '_, '_> {
             Some(error) => Err(error.into()),
             None => Ok(prepared),
         }
-    }
-
-    fn append_logs(&mut self, chunk: usize, from: (usize, usize), to: (usize, usize)) {
-        let (requirements, failures) = &self.logs[chunk];
-        self.typed
-            .append_fork_logs(&requirements[from.0..to.0], &failures[from.1..to.1]);
     }
 }
 

@@ -36,7 +36,9 @@ mod parallel;
 pub(in crate::runtime) mod tests;
 #[allow(unused_imports)]
 pub(in crate::runtime) use observer::{FamilyFrameObserver, FamilyPreloadObserver};
-pub(in crate::runtime) use parallel::{FamilyLanesShared, FamilyLanesWorker, FamilyStaging};
+pub(in crate::runtime) use parallel::{
+    FamilyLanesShared, FamilyLanesWorker, FamilyPositionWorker, FamilyStaging,
+};
 
 pub(in crate::runtime) type PositionSidecar = PhysicalHeadResult<PositionAdapter>;
 pub(in crate::runtime) type ColorSidecar = PhysicalHeadResult<RoutingColorAdapter>;

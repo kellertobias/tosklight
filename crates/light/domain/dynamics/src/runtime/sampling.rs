@@ -40,7 +40,9 @@ impl ScalarSourceResolver for ObservedScalarSources<'_> {
 
 mod staged;
 pub(super) use staged::SamplingWorkBuffers;
-pub use staged::{CompletedDynamicSamples, DeferredTypedSampling, DynamicSamplingScratch};
+pub use staged::{
+    CompletedChunk, CompletedDynamicSamples, DeferredTypedSampling, DynamicSamplingScratch,
+};
 
 struct SamplingFrame {
     definition: Arc<DynamicDefinition>,
@@ -156,6 +158,7 @@ impl DynamicRuntime {
             &mut samples,
             None,
             self.output_frame_undo.as_mut(),
+            &mut || None,
         );
         self.sampling_buffers.recycle(plan);
         result?;
@@ -627,7 +630,7 @@ fn append_sample(
         expression
     } else if expression.legacy_leaf().is_some() || expression.programming_leaf().is_some() {
         expression
-            .shallow()
+            .into_shallow()
             .map_err(|error| DynamicRuntimeError::InvalidSample(error.to_string()))?
     } else {
         expression

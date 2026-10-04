@@ -203,7 +203,7 @@ impl CompiledLaneSelection {
         definition: &DynamicDefinition,
         key: (Uuid, FixtureId, Uuid),
         expression: &DynamicSampleExpression,
-        values: &HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
+        values: &SampleValueMap,
     ) -> bool {
         if self.allows(key.1, key.2) {
             return true;

@@ -11,8 +11,9 @@
 //!   and lane composite is now `Send`.
 //! - Adapters are `Send`. `OpticsAdapter` is also `Sync` (`Arc<Mutex>` shared state), and so are
 //!   the Color adapters (TL-639 round 5: their fitter caches are `Mutex`es and their counters
-//!   per-thread shards, so a frame's parallel workers share them); `PositionAdapter` keeps
-//!   lane-local `RefCell`/`Cell` caches, counters and tracking.
+//!   per-thread shards, so a frame's parallel workers share them). `PositionAdapter` is `Sync`
+//!   too since TL-639 round 6: its instance cache and counters are `Mutex`es and its tracking a
+//!   read/write lock (`SharedCell`), so workers compose Position programs and fit roots on it.
 //! - Lanes stay `!Sync` by design: `RefCell<LaneState>` serves one synchronous frame. The owner
 //!   supplies synchronization: `Mutex<FamilyLanes>` is `Send + Sync`, and the Pending episode
 //!   bundle (lanes, retained evaluator state, paired history) can move to a worker thread.
@@ -47,14 +48,13 @@ macro_rules! assert_not_impl {
 }
 
 #[test]
-fn adapters_are_send_and_the_color_and_optics_adapters_are_also_sync() {
+fn adapters_are_send_and_sync() {
     assert_send_sync::<OpticsAdapter>();
     assert_send_sync::<ColorAdapter>();
     assert_send_sync::<MediaColorAdapter>();
     assert_send_sync::<RoutingColorAdapter>();
-    // Instance cache: Arc<PositionInstance { scratch: Mutex<..> }>.
-    assert_send::<PositionAdapter>();
-    assert_not_impl!(PositionAdapter, Sync);
+    // Instance cache: Arc<PositionInstance { scratch: Mutex<..> }>; TL-639 round 6 locks.
+    assert_send_sync::<PositionAdapter>();
 }
 
 #[test]
@@ -65,6 +65,9 @@ fn parallel_workers_share_the_color_and_optics_lanes_read_only() {
     assert_send_sync::<LaneShared<'static, OpticsAdapter>>();
     assert_send_sync::<FamilyLanesShared<'static, 'static>>();
     assert_send::<FamilyStaging>();
+    // TL-639 round 6: Position composition state is shared read-only as well.
+    assert_send_sync::<LaneShared<'static, PositionAdapter>>();
+    assert_send_sync::<super::position::PositionFrameShared<'static, 'static>>();
 }
 
 #[test]

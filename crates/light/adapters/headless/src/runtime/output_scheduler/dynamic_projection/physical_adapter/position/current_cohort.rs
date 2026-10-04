@@ -14,7 +14,8 @@ struct CurrentCohort {
     root: FixtureId,
     owners: Vec<CurrentOwner>,
     protected: bool,
-    resolved: RefCell<Option<Vec<PhysicalResolution<PositionAdapter>>>>,
+    /// Fitted lazily, once, by whichever thread asks first (TL-639 round 6: workers share it).
+    resolved: parking_lot::Mutex<Option<Vec<PhysicalResolution<PositionAdapter>>>>,
 }
 #[derive(Default, Clone)]
 pub(super) struct CapturedCurrentCohorts {
@@ -61,11 +62,11 @@ impl CapturedCurrentCohorts {
                     protected_roots.insert(fixture.fixture_id);
                 }
                 let Some(value @ AttributeValue::Position(_)) =
-                    baseline.value(target, &ProgrammingOwner::Position.key())
+                    baseline.value(target, ProgrammingOwner::Position.key_ref())
                 else {
                     continue;
                 };
-                value.validate_programming_address(&ProgrammingOwner::Position.key())?;
+                value.validate_programming_address(ProgrammingOwner::Position.key_ref())?;
                 let descriptor = match lane.descriptor(frame, target, ProgrammingOwner::Position) {
                     Ok(descriptor) => descriptor,
                     Err(TransitionError::Requires(_)) => {
@@ -79,7 +80,7 @@ impl CapturedCurrentCohorts {
                         root: descriptor.root,
                         owners: Vec::new(),
                         protected: false,
-                        resolved: RefCell::new(None),
+                        resolved: parking_lot::Mutex::new(None),
                     });
                     groups.len() - 1
                 });
@@ -265,7 +266,7 @@ impl CapturedCurrentCohorts {
                 TransitionRequirement::LiveJointAngles,
             ));
         }
-        let mut resolved = cohort.resolved.borrow_mut();
+        let mut resolved = cohort.resolved.lock();
         if resolved.is_none() {
             let requests = cohort
                 .owners

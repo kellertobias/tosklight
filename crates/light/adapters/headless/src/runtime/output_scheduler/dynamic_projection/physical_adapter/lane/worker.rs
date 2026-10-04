@@ -280,6 +280,13 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
     }
 }
 
+impl<'l, A: PhysicalFamilyAdapter> LaneShared<'l, A> {
+    /// The lane's adapter, for as long as the lane is lent.
+    pub fn adapter_ref(&self) -> &'l A {
+        self.adapter
+    }
+}
+
 impl<'s, 'l, A: PhysicalFamilyAdapter> LaneWorker<'s, 'l, A> {
     /// A worker staging into `staging` (an emptied staging of an earlier frame keeps its room).
     pub fn new(

@@ -306,9 +306,11 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let (routes, frames, patched_slots) = {
         let mut control = runtime.control.lock();
         if !control.effective_hold() {
-            runtime
-                .visualization_frames
-                .publish(&rendered, visualization_scope);
+            runtime.visualization_frames.publish(
+                &rendered,
+                visualization_scope,
+                runtime.engine.output_pool().as_deref(),
+            );
         }
         output_payload(
             &mut control,

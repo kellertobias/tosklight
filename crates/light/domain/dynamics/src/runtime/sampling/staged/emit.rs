@@ -16,17 +16,28 @@ pub(super) fn emit_controller_samples(
 ) -> Result<(), DynamicRuntimeError> {
     let track_emitted = !work.retained.is_empty();
     work.emitted_keys.clear();
-    for pinned in &work.lanes {
+    let PinnedController {
+        lanes,
+        retained,
+        emitted_keys,
+        required_keys,
+        activation_mix,
+        ..
+    } = work;
+    let activation_mix = *activation_mix;
+    for pinned in lanes.iter_mut() {
         let lane = &definition.lanes[pinned.lane_index];
         let key = (controller.id, pinned.target, lane.id);
-        let expression = match &pinned.value {
-            PinnedValue::Ready(expression) => expression.clone(),
+        // TL-639 round 6: moved out, not cloned; a pinned lane is emitted once and the plan is
+        // recycled after its frame.
+        let expression = match std::mem::replace(&mut pinned.value, PinnedValue::Absent) {
+            PinnedValue::Ready(expression) => expression,
             PinnedValue::Absent | PinnedValue::Required => continue,
             PinnedValue::Typed { .. } => {
                 unreachable!("all numeric work resolved before emission")
             }
         };
-        if pinned.fresh && !work.required_keys.contains(&key) {
+        if pinned.fresh && !required_keys.contains(&key) {
             if holding && !instance.synchronized_hold_values.contains_key(&key) {
                 if let Some(undo) = undo.as_deref_mut() {
                     undo.held(instance);
@@ -46,14 +57,14 @@ pub(super) fn emit_controller_samples(
             }
         }
         let address = expression_address(&expression, lane, pinned.address);
-        if work.required_keys.contains(&key) {
+        if required_keys.contains(&key) {
             append_sample(
                 controller,
                 instance_id,
                 pinned.target,
                 lane.id,
                 expression,
-                work.activation_mix,
+                activation_mix,
                 address,
                 samples,
             )?;
@@ -65,25 +76,25 @@ pub(super) fn emit_controller_samples(
                 pinned.target,
                 lane.id,
                 expression,
-                work.activation_mix,
+                activation_mix,
                 address,
                 samples,
             )?;
         }
         if track_emitted {
-            work.emitted_keys.insert(key);
+            emitted_keys.insert(key);
         }
     }
-    for (key, expression) in &work.retained {
-        if !work.emitted_keys.contains(key) {
-            if work.required_keys.contains(key) {
+    for (key, expression) in &*retained {
+        if !emitted_keys.contains(key) {
+            if required_keys.contains(key) {
                 append_sample(
                     controller,
                     instance_id,
                     key.1,
                     key.2,
                     expression.clone(),
-                    work.activation_mix,
+                    activation_mix,
                     None,
                     samples,
                 )?;
@@ -95,7 +106,7 @@ pub(super) fn emit_controller_samples(
                     key.1,
                     key.2,
                     expression.clone(),
-                    work.activation_mix,
+                    activation_mix,
                     None,
                     samples,
                 )?;

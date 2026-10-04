@@ -341,6 +341,15 @@ impl DynamicSampleExpression {
         }
     }
 
+    /// [`Self::shallow`] of an owned expression: one that is already shallow is kept rather
+    /// than cloned and dropped (TL-639 round 6).
+    pub(crate) fn into_shallow(self) -> Result<Self, IntentError> {
+        match self {
+            Self::Operation { .. } | Self::Retained { .. } => self.shallow(),
+            shallow => Ok(shallow),
+        }
+    }
+
     /// Expose a single historical node. Children stay shared handles; this never reconstructs
     /// a recursive history and is suitable for callers that already use a heap task stack.
     pub(crate) fn shallow(&self) -> Result<Self, IntentError> {

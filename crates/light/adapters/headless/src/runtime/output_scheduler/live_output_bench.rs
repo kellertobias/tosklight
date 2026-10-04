@@ -188,8 +188,11 @@ impl LiveOutputBench {
             })),
         };
         if self.publish {
-            self.visualization
-                .publish(&frame, VisualizationScope { show_id: None });
+            self.visualization.publish(
+                &frame,
+                VisualizationScope { show_id: None },
+                self.engine.output_pool().as_deref(),
+            );
         }
         let publication = publish_started.elapsed();
         let work = self.work(frame.rendered.sampled_at);

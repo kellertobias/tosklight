@@ -550,7 +550,7 @@ impl PhysicalFamilyAdapter for OpticsAdapter {
         if descriptor.family != OpticsFamily::Zoom
             || !legacy
             || descriptor.control.is_err()
-            || frame.scalar.value(target, &ProgrammingOwner::Zoom.key()) != Some(original)
+            || frame.scalar.value(target, ProgrammingOwner::Zoom.key_ref()) != Some(original)
         {
             return requires();
         }

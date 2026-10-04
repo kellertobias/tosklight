@@ -28,6 +28,17 @@ impl<'a> FamilyFrameObserver<'a> {
             position: PositionFrameObserver::new(&lanes.position),
         }
     }
+
+    /// Free the frame's Position state off the frame's thread when there is a pool.
+    pub fn retire(mut self) {
+        self.position.retire(true);
+    }
+
+    /// Lend the frame's output pool to the Position observer's per-target work (TL-639 round 6).
+    pub fn with_pool(mut self, pool: Option<Arc<light_engine::parallel::OutputPool>>) -> Self {
+        self.position.pool = pool;
+        self
+    }
 }
 
 impl HybridFrameObserver<FamilySidecar> for FamilyFrameObserver<'_> {
@@ -70,8 +81,38 @@ impl HybridFrameObserver<FamilySidecar> for FamilyFrameObserver<'_> {
         // TL-596: a set for membership; scanning `targets` per head was quadratic at full-rig
         // size. `targets` keeps its order.
         let mut seen = targets.iter().copied().collect::<FxHashSet<_>>();
-        static_color_targets(self.lanes, frame, baseline, &mut targets, &mut seen)?;
-        static_zoom_targets(self.lanes, frame, baseline, &mut targets, &mut seen)?;
+        let pool = self.position.pool.as_deref();
+        // TL-554: a static Color program (Semantic or Direct) is resolved by the routed Color
+        // adapter like any other Color owner, so the published frame carries its complete
+        // native output, the premaster values a first native edit adopts, and the per-head
+        // Direct replay status. Targets without a compiled Color destination keep their
+        // ordinary baseline output.
+        self.lanes.color.static_targets(
+            frame,
+            baseline,
+            ProgrammingOwner::Color,
+            |value| matches!(value, AttributeValue::ColorProgram(_)),
+            &mut targets,
+            &mut seen,
+            pool,
+        )?;
+        // TL-560: a static typed Zoom (Programmer, played Cue, committed Preload) is owned by
+        // the Zoom adapter like a static Color program; the scalar path cannot render a typed
+        // opening, so without this the Zoom control kept its default whenever no Dynamic sampled
+        // the owner. Focus stays a Normalized scalar on the ordinary path. Targets without a
+        // compiled Zoom destination keep their ordinary baseline output.
+        self.lanes
+            .optics
+            .lane(light_fixture::OpticsFamily::Zoom)
+            .static_targets(
+                frame,
+                baseline,
+                ProgrammingOwner::Zoom,
+                |value| matches!(value, AttributeValue::Zoom(_)),
+                &mut targets,
+                &mut seen,
+                pool,
+            )?;
         Ok(targets)
     }
 
@@ -136,8 +177,17 @@ impl HybridFrameObserver<FamilySidecar> for FamilyFrameObserver<'_> {
             >,
         ),
     ) {
-        self.lanes
-            .with_shared(|shared| run(Some((shared, |sidecar| sidecar))));
+        self.lanes.with_shared(|shared| {
+            self.position
+                .with_shared(|position| run(Some((shared, Some(position), |sidecar| sidecar))))
+        });
+    }
+
+    fn take_position_pending(
+        &mut self,
+        pending: &mut dyn Iterator<Item = super::super::position::PendingPosition>,
+    ) {
+        self.position.take_pending(pending);
     }
 
     fn merge_parallel(
@@ -300,78 +350,4 @@ impl RetainedHybridFrameObserver<FamilySidecar> for FamilyPreloadObserver<'_> {
         self.observer(branch)
             .finish(frame, projections, requirements)
     }
-}
-
-/// TL-554: a static Color program (Semantic or Direct) is resolved by the routed Color adapter
-/// like any other Color owner, so the published frame carries its complete native output, the
-/// premaster values a first native edit adopts, and the per-head Direct replay status. Targets
-/// without a compiled Color destination keep their ordinary baseline output.
-fn static_color_targets(
-    lanes: &FamilyLanes,
-    frame: HybridFrameContext<'_>,
-    baseline: &light_engine::PreparedStaticFamilyFrame,
-    targets: &mut Vec<(FixtureId, ProgrammingOwner)>,
-    seen: &mut FxHashSet<(FixtureId, ProgrammingOwner)>,
-) -> Result<(), TransitionError> {
-    let owner = ProgrammingOwner::Color;
-    for fixture in frame.capture.snapshot().fixtures.iter() {
-        for target in std::iter::once(fixture.fixture_id)
-            .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
-        {
-            if !matches!(
-                baseline.value(target, owner.key_ref()),
-                Some(AttributeValue::ColorProgram(_))
-            ) || seen.contains(&(target, owner))
-            {
-                continue;
-            }
-            match lanes.color.descriptor(frame, target, owner) {
-                Ok(_) => {
-                    seen.insert((target, owner));
-                    targets.push((target, owner));
-                }
-                Err(TransitionError::Requires(_)) => {}
-                Err(error) => return Err(error),
-            }
-        }
-    }
-    Ok(())
-}
-
-/// TL-560: a static typed Zoom (Programmer, played Cue, committed Preload) is owned by the Zoom
-/// adapter like a static Color program; the scalar path cannot render a typed opening, so
-/// without this the Zoom control kept its default whenever no Dynamic sampled the owner. Focus
-/// stays a Normalized scalar on the ordinary path. Targets without a compiled Zoom destination
-/// keep their ordinary baseline output.
-fn static_zoom_targets(
-    lanes: &FamilyLanes,
-    frame: HybridFrameContext<'_>,
-    baseline: &light_engine::PreparedStaticFamilyFrame,
-    targets: &mut Vec<(FixtureId, ProgrammingOwner)>,
-    seen: &mut FxHashSet<(FixtureId, ProgrammingOwner)>,
-) -> Result<(), TransitionError> {
-    let owner = ProgrammingOwner::Zoom;
-    let lane = lanes.optics.lane(light_fixture::OpticsFamily::Zoom);
-    for fixture in frame.capture.snapshot().fixtures.iter() {
-        for target in std::iter::once(fixture.fixture_id)
-            .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
-        {
-            if !matches!(
-                baseline.value(target, owner.key_ref()),
-                Some(AttributeValue::Zoom(_))
-            ) || seen.contains(&(target, owner))
-            {
-                continue;
-            }
-            match lane.descriptor(frame, target, owner) {
-                Ok(_) => {
-                    seen.insert((target, owner));
-                    targets.push((target, owner));
-                }
-                Err(TransitionError::Requires(_)) => {}
-                Err(error) => return Err(error),
-            }
-        }
-    }
-    Ok(())
 }

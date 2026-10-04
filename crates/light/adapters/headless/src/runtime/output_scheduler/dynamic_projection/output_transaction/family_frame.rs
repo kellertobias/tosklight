@@ -190,6 +190,7 @@ pub(super) fn family_output_frame<T>(
     let mut state = family.state.lock();
     let LiveFamilyState { lanes, scratch } = &mut *state;
     let lanes = &*lanes;
+    let mut observer = FamilyFrameObserver::new(lanes).with_pool(engine.output_pool());
     let published = prepare_captured_hybrid_frame_with_observer(
         engine,
         frame,
@@ -200,9 +201,11 @@ pub(super) fn family_output_frame<T>(
         scratch,
         lanes,
         None,
-        &mut FamilyFrameObserver::new(lanes),
-    )
-    .and_then(|prepared| finalize_live_family_frame(engine, frame, lanes, prepared));
+        &mut observer,
+    );
+    observer.retire();
+    let published =
+        published.and_then(|prepared| finalize_live_family_frame(engine, frame, lanes, prepared));
     let published = match published {
         Ok(published) => published,
         Err(error) => {

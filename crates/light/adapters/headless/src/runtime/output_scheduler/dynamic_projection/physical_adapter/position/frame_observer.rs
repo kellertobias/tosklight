@@ -3,7 +3,7 @@
 
 use super::*;
 
-pub(super) struct PendingPosition {
+pub(in crate::runtime) struct PendingPosition {
     pub(super) target: FixtureId,
     pub(super) descriptor: Arc<PositionDescriptor>,
     pub(super) previous: Option<PositionContinuity>,
@@ -28,6 +28,9 @@ pub(in crate::runtime) struct PositionFrameObserver<'a> {
     pub(super) active_programs: Arc<[FixtureId]>,
     /// Physical ownership in this observer's capture, including roots without DMX heads.
     pub(super) roots: BTreeMap<Uuid, usize>,
+    /// The frame's output pool, for per-target work whose results merge in program order
+    /// (TL-639 round 6). `None` keeps everything on the frame's thread.
+    pub(in crate::runtime) pool: Option<Arc<light_engine::parallel::OutputPool>>,
 }
 impl<'a> PositionFrameObserver<'a> {
     /// The collected program of `target`, if any.
@@ -46,9 +49,79 @@ impl<'a> PositionFrameObserver<'a> {
             program_index: Default::default(),
             active_programs: Default::default(),
             roots: Default::default(),
+            pool: None,
         }
     }
 }
+impl<'a> frame_worker::PositionComposition<'a> for PositionFrameObserver<'a> {
+    fn adapter(&self) -> &'a PositionAdapter {
+        self.lane.adapter()
+    }
+
+    fn descriptor(
+        &self,
+        frame: HybridFrameContext<'_>,
+        target: FixtureId,
+        owner: ProgrammingOwner,
+    ) -> Result<Arc<PositionDescriptor>, TransitionError> {
+        self.lane.descriptor(frame, target, owner)
+    }
+
+    fn continuity(&self, target: FixtureId, owner: ProgrammingOwner) -> Option<PositionContinuity> {
+        self.lane.continuity(target, owner)
+    }
+
+    fn program(
+        &self,
+        target: FixtureId,
+    ) -> Option<(Arc<PositionProgram>, Arc<HybridCapturedPositionProgram>)> {
+        PositionFrameObserver::program(self, target).map(|program| {
+            (
+                Arc::clone(&program.requested),
+                Arc::clone(&program.captured),
+            )
+        })
+    }
+
+    fn current(&self) -> current_cohort::CapturedCurrentCohorts {
+        self.current.clone()
+    }
+
+    fn active_programs(&self) -> Arc<[FixtureId]> {
+        Arc::clone(&self.active_programs)
+    }
+
+    fn pending(&mut self) -> &mut Vec<PendingPosition> {
+        &mut self.pending
+    }
+}
+
+impl<'a> PositionFrameObserver<'a> {
+    /// Lend this frame's Position composition state to a parallel section (TL-639 round 6).
+    pub(in crate::runtime) fn with_shared<R>(
+        &self,
+        run: impl FnOnce(&frame_worker::PositionFrameShared<'_, '_>) -> R,
+    ) -> R {
+        self.lane.with_shared(|lane| {
+            run(&frame_worker::PositionFrameShared {
+                lane,
+                programs: &self.programs,
+                program_index: &self.program_index,
+                current: &self.current,
+                active_programs: &self.active_programs,
+            })
+        })
+    }
+
+    /// Take a worker's pending cohort members of one group, in order.
+    pub(in crate::runtime) fn take_pending(
+        &mut self,
+        pending: impl Iterator<Item = PendingPosition>,
+    ) {
+        self.pending.extend(pending);
+    }
+}
+
 impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameObserver<'_> {
     fn project_native(
         &mut self,
@@ -89,30 +162,17 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
         let mut targets = Vec::new();
         // TL-639 round 2: a set for the duplicate check; scanning `targets` was quadratic.
         let mut seen = rustc_hash::FxHashSet::default();
-        for fixture in frame.capture.snapshot().fixtures.iter() {
-            for target in std::iter::once(fixture.fixture_id)
-                .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
-            {
-                if !matches!(
-                    baseline.value(target, &ProgrammingOwner::Position.key()),
-                    Some(AttributeValue::Position(_))
-                ) {
-                    continue;
-                }
-                match self
-                    .lane
-                    .descriptor(frame, target, ProgrammingOwner::Position)
-                {
-                    Ok(_) => {
-                        if seen.insert(target) {
-                            targets.push((target, ProgrammingOwner::Position));
-                        }
-                    }
-                    Err(TransitionError::Requires(_)) => {} // No owned compiled emitter: preserve ordinary baseline output.
-                    Err(error) => return Err(error),
-                }
-            }
-        }
+        // TL-639 round 6: scanned on the pool; no owned compiled emitter (`Requires`) preserves
+        // ordinary baseline output.
+        self.lane.static_targets(
+            frame,
+            baseline,
+            ProgrammingOwner::Position,
+            |value| matches!(value, AttributeValue::Position(_)),
+            &mut targets,
+            &mut seen,
+            self.pool.as_deref(),
+        )?;
         Ok(targets)
     }
     fn prepare_programs(
@@ -123,12 +183,14 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
         self.programs.clear();
         self.program_index.clear();
         let mut active_programs = Vec::new();
-        // TL-596: a set for the duplicate check; scanning every earlier program was quadratic.
-        let mut seen = rustc_hash::FxHashSet::default();
-        for p in programs
+        let position = programs
             .iter()
             .filter(|p| p.owner == ProgrammingOwner::Position)
-        {
+            .collect::<Vec<_>>();
+        let captured = capture_programs(frame.token, &position, self.pool.as_deref());
+        // TL-596: a set for the duplicate check; scanning every earlier program was quadratic.
+        let mut seen = rustc_hash::FxHashSet::default();
+        for (p, (samples, captured)) in position.into_iter().zip(captured) {
             if p.frame.token != frame.token || !seen.insert(p.target) {
                 return Err(invalid(
                     "Position registry contains a foreign or duplicate program",
@@ -142,15 +204,10 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
                 target: p.target,
                 requested: Arc::new(PositionProgram {
                     base: p.base.clone(),
-                    samples: p.samples.to_vec().into(),
+                    samples,
                 }),
                 has_requirements: p.has_requirements,
-                captured: Arc::new(HybridCapturedPositionProgram::new(
-                    frame.token,
-                    p.target,
-                    p.base,
-                    p.samples,
-                )?),
+                captured: Arc::new(captured?),
             });
         }
         self.active_programs = active_programs.into();
@@ -220,84 +277,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
         >,
     ) -> Result<Option<OwnedHybridProjection<PhysicalHeadResult<PositionAdapter>>>, TransitionError>
     {
-        if p.owner != ProgrammingOwner::Position {
-            return Ok(None);
-        }
-        let (program, captured) = self
-            .program(p.target)
-            .map(|program| {
-                (
-                    Arc::clone(&program.requested),
-                    Arc::clone(&program.captured),
-                )
-            })
-            .ok_or_else(|| invalid("Position program was not collected before composition"))?;
-        let descriptor = self.lane.descriptor(p.frame, p.target, p.owner)?;
-        let previous = self.lane.continuity(p.target, p.owner);
-        let mut destinations = Vec::with_capacity(descriptor.instances.len());
-        let mut representative = None;
-        let current = self.current.clone();
-        let active_programs = Arc::clone(&self.active_programs);
-        for instance in &descriptor.instances {
-            let bound = destination::PositionDestinationFrame {
-                adapter: self.lane.adapter(),
-                frame: p.frame,
-                descriptor: &descriptor,
-                target: p.target,
-                instance,
-                previous: previous.as_ref(),
-                current: &current,
-                active_programs: &active_programs,
-            };
-            let adoption = |original: &AttributeValue, address: &DynamicValueAddress| {
-                bound.adopt(original, address)
-            };
-            let pending_start = self.pending.len();
-            let mut evaluation =
-                composer.begin_position(&captured, instance.destination, &adoption)?;
-            let result = match composer.advance_position(&mut evaluation, &bound, &adoption) {
-                Ok(light_dynamics::PositionCompositionProgress::Complete(_)) => composer
-                    .observe_position(&mut evaluation, &mut |observation| {
-                        self.observe(observation)
-                    }),
-                Ok(light_dynamics::PositionCompositionProgress::NeedsMaterialization(request)) => {
-                    // The owned request retains its exact original registry node. Complete
-                    // changing-peer environments must be established by the batch coordinator;
-                    // this bridge never replaces a missing peer with its static underlay.
-                    Err(TransitionError::Requires(request.requirement))
-                }
-                Err(error) => Err(error),
-            };
-            composer.recycle_position(evaluation);
-            self.pending.truncate(pending_start);
-            let row = result?;
-            destinations.push(PositionProgramDestination {
-                destination: instance.destination,
-                value: row.value.clone(),
-                provenance: row.sidecar.provenance.clone(),
-            });
-            if representative.is_none() {
-                representative = Some(row);
-            }
-        }
-        let mut row = representative
-            .ok_or_else(|| invalid("Position program has no physical destinations"))?;
-        let program = if p.samples.is_empty() {
-            None
-        } else {
-            Some(program)
-        };
-        if let Some(program) = &program {
-            row.sidecar.requested = PositionRequest::Program(Arc::clone(program));
-        }
-        self.pending.push(PendingPosition {
-            target: p.target,
-            descriptor,
-            previous,
-            program,
-            destinations,
-        });
-        Ok(Some(row))
+        frame_worker::compose_program(self, p, composer)
     }
 
     fn observe(
@@ -310,42 +290,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
         ),
         TransitionError,
     > {
-        let descriptor = self.lane.descriptor(o.frame, o.target, o.owner)?;
-        let requested = intent(o.value)?.clone();
-        let fields = self.lane.adapter().consumed_fields(o.owner, o.value)?;
-        let mut sources = DynamicFamilySourceProjection::default();
-        o.project_fields(&fields, &mut sources)?;
-        let provenance = PhysicalProvenance {
-            controls: o.controls_for_fields(&fields),
-            fields,
-            sources,
-        };
-        let metadata = self
-            .lane
-            .adapter()
-            .projection_metadata(o.owner, &provenance);
-        self.pending.push(PendingPosition {
-            target: o.target,
-            descriptor,
-            previous: self.lane.continuity(o.target, o.owner),
-            program: None,
-            destinations: Vec::new(),
-        });
-        Ok((
-            metadata.clone(),
-            PhysicalHeadResult {
-                token: o.frame.token.clone(),
-                target: o.target,
-                owner: o.owner,
-                value: o.value.clone(),
-                writes: Vec::new(),
-                requested: PositionRequest::Intent(requested),
-                achieved: AchievedPosition::default(),
-                quality: PositionQuality::default(),
-                provenance,
-                metadata,
-            },
-        ))
+        frame_worker::observe(self, o)
     }
     fn finish(
         &mut self,
@@ -353,13 +298,19 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
         rows: &mut Vec<OwnedHybridProjection<PhysicalHeadResult<PositionAdapter>>>,
         requirements: &[HybridFamilyRequirement],
     ) -> Result<(), TransitionError> {
+        // TL-639 round 6: the first pending entry of each target, as `find` returned it, without
+        // scanning every pending entry per row.
+        let mut first_pending =
+            rustc_hash::FxHashMap::with_capacity_and_hasher(self.pending.len(), Default::default());
+        for (index, pending) in self.pending.iter().enumerate() {
+            first_pending.entry(pending.target).or_insert(index);
+        }
         let requests = rows
             .iter()
             .map(|row| {
-                let pending = self
-                    .pending
-                    .iter()
-                    .find(|p| p.target == row.target)
+                let pending = first_pending
+                    .get(&row.target)
+                    .map(|index| &self.pending[*index])
                     .ok_or_else(|| invalid("missing Position cohort member"))?;
                 Ok(PhysicalRequest {
                     frame,
@@ -391,17 +342,15 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
                     .map(|_| (p.target, p.destinations.as_slice()))
             })
             .collect::<Vec<_>>();
-        let resolved = self
-            .lane
-            .adapter()
-            .resolve_cohort_programs(&requests, &protected, &programs)?;
+        let resolved = self.lane.adapter().resolve_cohort_programs_on(
+            &requests,
+            &protected,
+            &programs,
+            self.pool.as_deref(),
+        )?;
         drop(requests);
         for (row, mut resolution) in rows.iter_mut().zip(resolved) {
-            let pending = self
-                .pending
-                .iter()
-                .find(|p| p.target == row.target)
-                .unwrap();
+            let pending = &self.pending[first_pending[&row.target]];
             if let Some(program) = &pending.program {
                 resolution.requested = PositionRequest::Program(Arc::clone(program));
             }
@@ -432,10 +381,88 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
             row.metadata = metadata;
             row.sidecar = sidecar;
         }
-        self.pending.clear();
-        self.current.clear();
+        self.retire(false);
         Ok(())
     }
+}
+
+impl PositionFrameObserver<'_> {
+    /// Free this frame's pending cohort members and Current cohorts (and, at the end of the
+    /// frame, its captured programs) on the pool when there is one (TL-639 round 6).
+    pub(in crate::runtime) fn retire(&mut self, programs: bool) {
+        let pending = std::mem::take(&mut self.pending);
+        let current = std::mem::take(&mut self.current);
+        let programs = if programs {
+            self.program_index.clear();
+            self.active_programs = Default::default();
+            std::mem::take(&mut self.programs)
+        } else {
+            Vec::new()
+        };
+        match &self.pool {
+            Some(pool) => pool.drop_later((pending, current, programs)),
+            None => drop((pending, current, programs)),
+        }
+    }
+}
+
+/// Below this many Position programs a frame captures them on its own thread.
+const MIN_PARALLEL_PROGRAMS: usize = if cfg!(test) { 2 } else { 64 };
+
+type CapturedProgramResult = (
+    Arc<[light_dynamics::FamilyCompositionSample]>,
+    Result<HybridCapturedPositionProgram, TransitionError>,
+);
+
+/// Each Position program's shared sample list and captured registry, in program order. The
+/// registries are independent per target; capture identities are drawn in program order on the
+/// frame's thread first, so the result does not depend on which thread built which registry.
+fn capture_programs(
+    token: &CapturedFrameToken,
+    programs: &[&super::super::super::programming_projection::hybrid::HybridFamilyProgram<'_>],
+    pool: Option<&light_engine::parallel::OutputPool>,
+) -> Vec<CapturedProgramResult> {
+    let identities = programs
+        .iter()
+        .map(|_| super::super::super::programming_projection::hybrid::position_capture_identity())
+        .collect::<Vec<_>>();
+    let inputs = programs
+        .iter()
+        .zip(identities)
+        .map(|(p, identity)| (p.target, p.base, p.samples, identity))
+        .collect::<Vec<_>>();
+    let capture = |range: std::ops::Range<usize>| {
+        inputs[range]
+            .iter()
+            .map(|(target, base, samples, identity)| {
+                let samples: Arc<[light_dynamics::FamilyCompositionSample]> = (*samples).into();
+                let captured = HybridCapturedPositionProgram::new_shared(
+                    token,
+                    *target,
+                    base,
+                    Arc::clone(&samples),
+                    *identity,
+                );
+                (samples, captured)
+            })
+            .collect::<Vec<_>>()
+    };
+    let pool = pool.filter(|_| inputs.len() >= MIN_PARALLEL_PROGRAMS);
+    let Some(pool) = pool else {
+        return capture(0..inputs.len());
+    };
+    let chunks = light_engine::parallel::chunk_count(inputs.len(), pool.workers(), 16);
+    let mut slots = vec![(); pool.workers()];
+    light_engine::parallel::run_ordered(Some(pool), &mut slots, chunks, |_, chunk| {
+        capture(light_engine::parallel::chunk_range(
+            inputs.len(),
+            chunks,
+            chunk,
+        ))
+    })
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 /// The existing retained evaluator supplies two isolated branch observers. No Live cache,

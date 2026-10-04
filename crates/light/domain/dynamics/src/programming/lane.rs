@@ -43,6 +43,13 @@ pub struct CompiledProgrammingLane {
     transitions: HashMap<(uuid::Uuid, FixtureId, usize), CachedTransition>,
 }
 
+/// A keyframe transition compiled by [`CompiledProgrammingLane::sample_with_cache`], for
+/// [`CompiledProgrammingLane::keep_transition`].
+pub(crate) struct KeyframeTransition {
+    key: (uuid::Uuid, FixtureId, usize),
+    transition: CachedTransition,
+}
+
 #[derive(Clone)]
 struct CachedTransition {
     compiled: CompiledDynamicValueTransition,
@@ -545,6 +552,28 @@ impl CompiledProgrammingLane {
         context: ProgrammingEvaluationContext<'_>,
         operation: Option<DynamicOperationContext<'_>>,
     ) -> Result<Option<DynamicSampleExpression>, TransitionError> {
+        let mut compiled = None;
+        let sampled = self.sample_with_cache(context, operation, &mut compiled);
+        self.keep_transition(compiled);
+        sampled
+    }
+
+    /// Keep a keyframe transition [`Self::sample_with_cache`] compiled.
+    pub(crate) fn keep_transition(&mut self, compiled: Option<KeyframeTransition>) {
+        if let Some(KeyframeTransition { key, transition }) = compiled {
+            self.transitions.insert(key, transition);
+        }
+    }
+
+    /// [`Self::sample_with_operations`] without touching the lane (TL-639 round 6): a keyframe
+    /// transition the cache lacks, or holds for other endpoints, is compiled into `compiled`
+    /// for the caller to keep (in frame order) instead of being inserted here.
+    pub(crate) fn sample_with_cache(
+        &self,
+        context: ProgrammingEvaluationContext<'_>,
+        operation: Option<DynamicOperationContext<'_>>,
+        compiled: &mut Option<KeyframeTransition>,
+    ) -> Result<Option<DynamicSampleExpression>, TransitionError> {
         let position = self.evaluation_position(&context);
         let current_used = Cell::new(false);
         let resolve = |source: &CompiledDynamicValueSource| {
@@ -574,15 +603,16 @@ impl CompiledProgrammingLane {
                     .flatten();
                 let to_dependency = right.source.is_current().then_some(dependency).flatten();
                 let key = (context.controller_id, context.target, index);
-                if self.transitions.get(&key).is_none_or(|t| {
-                    t.compiled.endpoints() != (&from, &to)
-                        || t.authored_occurrence != context.authored_occurrence
-                        || t.from_dependency != from_dependency
-                        || t.to_dependency != to_dependency
-                }) {
-                    self.transitions.insert(
+                let cached = self.transitions.get(&key).filter(|t| {
+                    t.compiled.endpoints() == (&from, &to)
+                        && t.authored_occurrence == context.authored_occurrence
+                        && t.from_dependency == from_dependency
+                        && t.to_dependency == to_dependency
+                });
+                if cached.is_none() {
+                    *compiled = Some(KeyframeTransition {
                         key,
-                        CachedTransition {
+                        transition: CachedTransition {
                             from: Arc::new(DynamicSampleExpression::Programming {
                                 address: Arc::clone(&self.expression_address),
                                 value: from.clone(),
@@ -600,9 +630,12 @@ impl CompiledProgrammingLane {
                             from_dependency,
                             to_dependency,
                         },
-                    );
+                    });
                 }
-                let transition = &self.transitions[&key];
+                let transition = match cached {
+                    Some(transition) => transition,
+                    None => &compiled.as_ref().expect("compiled above").transition,
+                };
                 let value = match transition.compiled.sample(progress) {
                     Ok(value) => value,
                     Err(TransitionError::Requires(requirement)) => {

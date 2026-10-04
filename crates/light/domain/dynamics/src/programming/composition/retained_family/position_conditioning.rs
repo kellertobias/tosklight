@@ -214,15 +214,27 @@ impl CapturedPositionProgram {
         base: &AttributeValue,
         sources: &[FamilyCompositionSample],
     ) -> Result<Self, TransitionError> {
+        Self::new_shared(capture_id, base, sources.into())
+    }
+
+    /// [`Self::new`] over an already shared sample list (TL-639 round 6): the caller's requested
+    /// program and this registry hold one copy of the samples.
+    pub fn new_shared(
+        capture_id: Uuid,
+        base: &AttributeValue,
+        shared: Arc<[FamilyCompositionSample]>,
+    ) -> Result<Self, TransitionError> {
         ensure(
             !capture_id.is_nil(),
             "Position branch registry requires a captured frame identity",
         )?;
         position_completion::validate_position(base)?;
+        let sources = Arc::clone(&shared);
+        let sources = &sources[..];
         let mut captured = CapturedProgram {
             capture_id,
             base: base.clone(),
-            sources: sources.into(),
+            sources: shared,
             tapes: Vec::with_capacity(sources.len()),
             forests: Vec::with_capacity(sources.len()),
             active: Vec::with_capacity(sources.len()),

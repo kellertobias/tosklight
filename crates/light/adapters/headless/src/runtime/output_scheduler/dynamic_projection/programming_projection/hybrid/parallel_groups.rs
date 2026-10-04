@@ -6,17 +6,21 @@
 //! targets' groups in the cohort's order on a worker, against a fork of the sources and a private
 //! staging of the Color and Focus/Zoom lanes. The frame then takes back every chunk's keyed
 //! changes (caches, bindings, stagings, kept rows) and walks the cohort's groups in order once
-//! more: a group a worker composed contributes its rows, requirements and source logs there; a
-//! group the worker left (a Position group the batch did not handle, which composes through the
-//! Position observer) or could not finish (a descriptor its lane has not compiled), and every
-//! later group of that chunk, is composed by the frame itself at its place. The result is the
-//! single-threaded loop's, in its order, for any worker count.
+//! more: a group a worker composed contributes its rows, requirements, source logs and pending
+//! Position cohort members there; a group the worker could not finish (a descriptor its lane has
+//! not compiled), and every later group of that chunk, is composed by the frame itself at its
+//! place. A Position group the batch did not handle composes on the worker through the frame's
+//! shared Position state (TL-639 round 6) when the observer lends it, else on the frame. The
+//! result is the single-threaded loop's, in its order, for any worker count.
 use super::super::super::family_inputs::CapturedFamilyInput;
 use super::super::static_rows::{ROW_SHARDS, StaticFamilyRows, row_shard};
 use super::staged::{CohortView, StaticOnlyTargets, compose_owner_group};
 use super::*;
 use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::family_lanes::{
-    FamilyLanesShared, FamilyLanesWorker, FamilySidecar, FamilyStaging,
+    FamilyLanesShared, FamilyLanesWorker, FamilyPositionWorker, FamilySidecar, FamilyStaging,
+};
+use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::position::{
+    PositionFrameShared, PositionPendingLog,
 };
 use std::cell::Cell;
 
@@ -26,9 +30,13 @@ const MIN_PARALLEL_GROUPS: usize = if cfg!(test) { 2 } else { 64 };
 /// Groups per chunk at least.
 const MIN_GROUPS_PER_CHUNK: usize = if cfg!(test) { 1 } else { 16 };
 
-/// The lanes a `FamilyLanes` observer lends to a parallel section, and its sidecar wrapper.
-pub(in crate::runtime) type ParallelLanes<'s, 'l, T> =
-    (&'s FamilyLanesShared<'s, 'l>, fn(FamilySidecar) -> T);
+/// The lanes a `FamilyLanes` observer lends to a parallel section, its Position composition
+/// state (if any), and its sidecar wrapper.
+pub(in crate::runtime) type ParallelLanes<'s, 'l, T> = (
+    &'s FamilyLanesShared<'s, 'l>,
+    Option<&'s PositionFrameShared<'s, 'l>>,
+    fn(FamilySidecar) -> T,
+);
 
 /// How one group of a chunk was composed.
 enum GroupRecord {
@@ -37,6 +45,7 @@ enum GroupRecord {
         projections: usize,
         requirements: usize,
         logs: (usize, usize),
+        pending: usize,
     },
     /// Left to the frame's thread (a Position group the batch did not handle).
     Frame,
@@ -49,6 +58,8 @@ struct ChunkOutput {
     sources: super::super::fork::SourcesChanges,
     staging: FamilyStaging,
     rows: StaticFamilyRows,
+    /// Pending Position cohort members, in group order.
+    position: PositionPendingLog,
     /// One record per member group before `stopped`.
     groups: Vec<GroupRecord>,
     /// The first member the frame composes itself with every later one, and the worker's error
@@ -100,11 +111,14 @@ struct ChunkCursor {
         Vec<TransitionError>,
     ),
     records: std::vec::IntoIter<GroupRecord>,
+    pending: std::vec::IntoIter<
+        crate::runtime::output_scheduler::dynamic_projection::physical_adapter::position::PendingPosition,
+    >,
     stopped: Option<(usize, Option<DynamicRuntimeError>)>,
     /// The next member group.
     next: usize,
-    /// Rows, requirements and source logs taken so far.
-    taken: (usize, usize, (usize, usize)),
+    /// Rows, requirements, source logs and pending members taken so far.
+    taken: (usize, usize, (usize, usize), usize),
 }
 
 /// Compose every ordinary group of the cohort, on `workers` threads when the observer offers
@@ -180,9 +194,10 @@ pub(super) fn compose_owner_groups<T, R: HybridFrameResolver>(
             required: output.requirements,
             logs,
             records: output.groups.into_iter(),
+            pending: output.position.into_iter(),
             stopped: output.stopped,
             next: 0,
-            taken: (0, 0, (0, 0)),
+            taken: (0, 0, (0, 0), 0),
         });
     }
     for (entry, &chunk) in groups.iter().zip(&partition.chunk_of_group) {
@@ -206,12 +221,13 @@ pub(super) fn compose_owner_groups<T, R: HybridFrameResolver>(
             projections: rows_to,
             requirements: required_to,
             logs: logs_to,
+            pending: pending_to,
         } = record
         else {
             compose_here!(entry)?;
             continue;
         };
-        let (rows_from, required_from, logs_from) = cursor.taken;
+        let (rows_from, required_from, logs_from, pending_from) = cursor.taken;
         projections.extend(cursor.rows.by_ref().take(rows_to - rows_from).map(|row| {
             OwnedHybridProjection {
                 target: row.target,
@@ -226,7 +242,12 @@ pub(super) fn compose_owner_groups<T, R: HybridFrameResolver>(
             &cursor.logs.0[logs_from.0..logs_to.0],
             &cursor.logs.1[logs_from.1..logs_to.1],
         );
-        cursor.taken = (rows_to, required_to, logs_to);
+        if pending_to > pending_from {
+            observer.take_position_pending(
+                &mut cursor.pending.by_ref().take(pending_to - pending_from),
+            );
+        }
+        cursor.taken = (rows_to, required_to, logs_to, pending_to);
     }
     Ok(())
 }
@@ -240,7 +261,7 @@ fn compose_in_parallel<T, R>(
     groups: &[CapturedFamilyInput],
     partition: &Partition,
     (static_only, handled_position): (&StaticOnlyTargets, &FxHashSet<FixtureId>),
-    (shared, wrap): ParallelLanes<'_, '_, T>,
+    (shared, position, wrap): ParallelLanes<'_, '_, T>,
     (static_rows, scratch): (
         &mut StaticFamilyRows,
         &mut Vec<RetainedFamilyCompositionScratch>,
@@ -271,7 +292,7 @@ fn compose_in_parallel<T, R>(
                 let rows = lent[chunk].lock().take().unwrap_or_default();
                 compose_chunk(
                     &shared_view,
-                    (shared, base),
+                    (shared, position, base),
                     groups,
                     &partition.members[chunk],
                     (static_only, handled_position),
@@ -300,8 +321,9 @@ struct SharedView<'a> {
 #[allow(clippy::type_complexity)]
 fn compose_chunk(
     view: &SharedView<'_>,
-    (shared, base): (
+    (shared, position, base): (
         &FamilyLanesShared<'_, '_>,
+        Option<&PositionFrameShared<'_, '_>>,
         super::super::fork::ForkBase<'_, PreparedFamilySources<'_>>,
     ),
     groups: &[CapturedFamilyInput],
@@ -327,15 +349,20 @@ fn compose_chunk(
         legacy_owners: view.legacy_owners,
         control: view.control,
     };
-    let mut observer = WorkerObserver { lanes: &lanes };
+    let mut observer = WorkerObserver {
+        lanes: &lanes,
+        position: position.map(|position| FamilyPositionWorker::new(position, &missed)),
+    };
     let (mut projections, mut requirements) = (Vec::new(), Vec::new());
     let (mut records, mut stopped) = (Vec::with_capacity(members.len()), None);
     for (member, &index) in members.iter().enumerate() {
         let entry = &groups[index];
         let group = &entry.group;
-        // A Position group the batch did not handle composes through the Position observer,
-        // which stays on the frame's thread; one held by a scalar guard only records that.
-        if group.owner == ProgrammingOwner::Position
+        // A Position group the batch did not handle composes through the Position observer:
+        // here when it lends its state, else on the frame's thread. One held by a scalar guard
+        // only records that.
+        if observer.position.is_none()
+            && group.owner == ProgrammingOwner::Position
             && !handled_position.contains(&group.target)
             && super::staged::scalar_owner_guard(
                 view.legacy_owners,
@@ -349,7 +376,15 @@ fn compose_chunk(
             records.push(GroupRecord::Frame);
             continue;
         }
-        let marks = (lanes.mark(), projections.len(), requirements.len());
+        let marks = (
+            lanes.mark(),
+            projections.len(),
+            requirements.len(),
+            observer
+                .position
+                .as_ref()
+                .map_or(0, FamilyPositionWorker::mark),
+        );
         let composed = compose_owner_group(
             &worker_view,
             entry,
@@ -365,6 +400,9 @@ fn compose_chunk(
             lanes.truncate(marks.0);
             projections.truncate(marks.1);
             requirements.truncate(marks.2);
+            if let Some(position) = &mut observer.position {
+                position.truncate(marks.3);
+            }
             stopped = Some((member, None));
             break;
         }
@@ -377,9 +415,18 @@ fn compose_chunk(
             projections: projections.len(),
             requirements: requirements.len(),
             logs: typed.log_lengths(),
+            pending: observer
+                .position
+                .as_ref()
+                .map_or(0, FamilyPositionWorker::mark),
         });
     }
+    let position = observer
+        .position
+        .map(FamilyPositionWorker::into_pending)
+        .unwrap_or_default();
     ChunkOutput {
+        position,
         projections,
         requirements,
         sources: typed.into_changes(),
@@ -390,12 +437,27 @@ fn compose_chunk(
     }
 }
 
-/// The worker's observer: ordinary groups observe through its lane view.
+/// The worker's observer: ordinary groups observe through its lane view, Position groups
+/// compose through its Position worker.
 struct WorkerObserver<'w, 's, 'l> {
     lanes: &'w FamilyLanesWorker<'s, 'l>,
+    position: Option<FamilyPositionWorker<'s, 'l>>,
 }
 
 impl HybridFrameObserver<FamilySidecar> for WorkerObserver<'_, '_, '_> {
+    fn compose_program(
+        &mut self,
+        program: HybridFamilyProgram<'_>,
+        composer: &mut dyn HybridProgramComposer<FamilySidecar>,
+    ) -> Result<Option<OwnedHybridProjection<FamilySidecar>>, TransitionError> {
+        match &mut self.position {
+            Some(position) if program.owner == ProgrammingOwner::Position => {
+                position.compose_program(program, composer)
+            }
+            _ => Ok(None),
+        }
+    }
+
     fn observe(
         &mut self,
         observation: HybridFamilyObservation<'_>,

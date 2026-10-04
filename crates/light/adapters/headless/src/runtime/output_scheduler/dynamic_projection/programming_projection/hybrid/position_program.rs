@@ -46,6 +46,21 @@ impl HybridCapturedPositionProgram {
             registry: CapturedPositionProgram::new(capture_identity(), base, samples)?,
         })
     }
+    /// [`Self::new`] over a sample list the caller shares, with an identity it drew
+    /// (TL-639 round 6: drawn in program order, so a parallel capture numbers them alike).
+    pub fn new_shared(
+        token: &CapturedFrameToken,
+        target: FixtureId,
+        base: &AttributeValue,
+        samples: Arc<[FamilyCompositionSample]>,
+        identity: uuid::Uuid,
+    ) -> Result<Self, TransitionError> {
+        Ok(Self {
+            token: token.clone(),
+            target,
+            registry: CapturedPositionProgram::new_shared(identity, base, samples)?,
+        })
+    }
     pub fn frame_token(&self) -> &CapturedFrameToken {
         &self.token
     }
@@ -60,7 +75,7 @@ impl HybridCapturedPositionProgram {
 /// A process-unique, non-nil identity for one captured Position program. TL-596: a random v4
 /// UUID per program and frame cost one `getentropy` system call each (about 2% of a frame with
 /// 1,000 animated Position owners); the identity only has to be unique within this process.
-fn capture_identity() -> uuid::Uuid {
+pub(in crate::runtime) fn capture_identity() -> uuid::Uuid {
     static PROCESS: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let process = *PROCESS.get_or_init(|| uuid::Uuid::new_v4().as_u64_pair().0);

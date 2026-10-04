@@ -10,8 +10,10 @@ use light_core::programming::{ProgrammingOwner, TransitionError};
 use std::{cell::Cell, collections::HashSet};
 
 mod emit;
+mod parallel;
 mod pin;
 mod resolve;
+pub use parallel::CompletedChunk;
 
 type SampleKey = (Uuid, FixtureId, Uuid);
 type RandomKey = (Uuid, Uuid, FixtureId);
@@ -71,7 +73,7 @@ impl SamplingWorkBuffers {
 /// Full expressions include legacy history; apply the scalar stage to physical output once,
 /// and use these samples only for typed preparation/composition after that scalar stage.
 pub struct CompletedDynamicSamples<'frame> {
-    samples: &'frame [DynamicRuntimeSample],
+    samples: &'frame mut Vec<DynamicRuntimeSample>,
     completion_identity: usize,
     requirements: &'frame [DynamicFamilyPreparationRequirement],
 }
@@ -79,6 +81,13 @@ pub struct CompletedDynamicSamples<'frame> {
 impl CompletedDynamicSamples<'_> {
     pub fn samples(&self) -> &[DynamicRuntimeSample] {
         self.samples
+    }
+    /// Move the completed samples out (TL-639 round 6). The frame publishes them as its owned
+    /// sample list instead of cloning every expression; the scratch keeps an empty buffer of
+    /// the same capacity for the next frame. `samples()` is empty afterwards.
+    pub fn take_samples(&mut self) -> Vec<DynamicRuntimeSample> {
+        let capacity = self.samples.len();
+        std::mem::replace(self.samples, Vec::with_capacity(capacity))
     }
     pub fn requirements(&self) -> &[DynamicFamilyPreparationRequirement] {
         self.requirements
@@ -115,6 +124,7 @@ impl<'frame> DeferredTypedSampling<'frame> {
                 self.samples,
                 Some(self.requirements),
                 self.runtime.output_frame_undo.as_mut(),
+                &mut || None,
             )?;
         }
         for id in self.completed_instances {
@@ -442,13 +452,14 @@ pub(super) fn complete_samples(
     samples: &mut Vec<DynamicRuntimeSample>,
     requirements: Option<&mut Vec<DynamicFamilyPreparationRequirement>>,
     mut undo: Option<&mut transaction::OutputFrameUndo>,
+    recorded: &mut dyn FnMut() -> Option<resolve::Evaluated>,
 ) -> Result<(), DynamicRuntimeError> {
     let sources = super::super::preset_values::RetainedPresetSources {
         current: sources,
         instance_id: plan.instance_id,
         values: Arc::clone(&instance.preset_values.by_binding),
     };
-    resolve::resolve_deferred(instance, plan, &sources, requirements)?;
+    resolve::resolve_deferred(instance, plan, &sources, requirements, recorded)?;
     let mut unavailable_last = if instance.unavailable_samples.is_empty() {
         Vec::new()
     } else {
@@ -525,7 +536,7 @@ mod tests {
                             let samples = if finish_own_frame {
                                 deferred.complete(&UnavailableProgrammingSources)?.samples
                             } else {
-                                &[]
+                                Box::leak(Box::default())
                             };
                             // Internal misuse: a private proof from another frame must not certify
                             // a dropped continuation, nor replace this frame's actual proof.

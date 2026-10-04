@@ -11,7 +11,6 @@ use light_fixture::{
     forward::PositionInstallation,
 };
 use sha2::{Digest, Sha256};
-use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 mod current_cohort;
@@ -19,12 +18,16 @@ mod cut_coordinator;
 mod destination;
 mod fit_cache;
 mod frame_observer;
+mod frame_worker;
 pub(in crate::runtime) mod native_rows;
 #[cfg(test)]
 pub(in crate::runtime) mod tests;
 mod tracking;
-use frame_observer::PendingPosition;
+pub(in crate::runtime) use frame_observer::PendingPosition;
 pub(in crate::runtime) use frame_observer::{PositionFrameObserver, PositionPreloadObserver};
+pub(in crate::runtime) use frame_worker::{
+    PositionFrameShared, PositionPendingLog, PositionWorker,
+};
 
 pub(in crate::runtime) struct PositionDescriptor {
     pub root: FixtureId,
@@ -130,11 +133,37 @@ type InstanceCache = (
     Arc<Vec<PatchedFixture>>,
     FxHashMap<FixtureId, Option<Vec<Arc<PositionInstance>>>>,
 );
+/// `PositionAdapter` is shared by the output pool's workers (TL-639 round 6), so its frame
+/// state sits behind locks; the frame's own thread uses the same `borrow` API as before.
 #[derive(Default)]
 pub(in crate::runtime) struct PositionAdapter {
-    cache: RefCell<Option<InstanceCache>>,
-    counters: Cell<PositionAdapterCounters>,
-    tracking: RefCell<tracking::TrackingState>,
+    cache: parking_lot::Mutex<Option<InstanceCache>>,
+    counters: parking_lot::Mutex<PositionAdapterCounters>,
+    tracking: SharedCell<tracking::TrackingState>,
+}
+
+/// A `RefCell`-like cell the output pool's workers can share: `borrow` reads, `borrow_mut`
+/// writes. Code that never overlapped a `RefCell`'s borrows never waits on it.
+#[derive(Default)]
+pub(in crate::runtime) struct SharedCell<T>(parking_lot::RwLock<T>);
+
+impl<T> SharedCell<T> {
+    fn borrow(&self) -> parking_lot::RwLockReadGuard<'_, T> {
+        self.0.read_recursive()
+    }
+
+    fn borrow_mut(&self) -> parking_lot::RwLockWriteGuard<'_, T> {
+        self.0.write()
+    }
+}
+
+impl PositionAdapterCounters {
+    fn add(&mut self, delta: Self) {
+        self.compiles += delta.compiles;
+        self.fits += delta.fits;
+        self.candidate_evaluations += delta.candidate_evaluations;
+        self.fit_cache_hits += delta.fit_cache_hits;
+    }
 }
 fn invalid(message: impl Into<String>) -> TransitionError {
     IntentError(message.into()).into()
@@ -203,7 +232,7 @@ fn request(
 }
 impl PositionAdapter {
     pub fn counters(&self) -> PositionAdapterCounters {
-        self.counters.get()
+        *self.counters.lock()
     }
     /// TL-596: the last accepted tracking census as (capture time, changed Points, dirty
     /// instances). `None` until a frame with registered Point dependencies was accepted.
@@ -221,7 +250,7 @@ impl PositionAdapter {
         snapshot: &EngineSnapshot,
         fixture: &PatchedFixture,
     ) -> Result<Option<Vec<Arc<PositionInstance>>>, TransitionError> {
-        let mut cache = self.cache.borrow_mut();
+        let mut cache = self.cache.lock();
         if !cache
             .as_ref()
             .is_some_and(|(fixtures, _)| Arc::ptr_eq(fixtures, &snapshot.fixtures))
@@ -365,118 +394,82 @@ impl PositionAdapter {
         protected_roots: &[FixtureId],
         programs: &[(FixtureId, &[PositionProgramDestination])],
     ) -> Result<Vec<PhysicalResolution<Self>>, TransitionError> {
+        self.resolve_cohort_programs_on(requests, protected_roots, programs, None)
+    }
+
+    /// [`Self::resolve_cohort_programs`], with each physical root fitted on `pool` when the
+    /// cohort has enough of them (TL-639 round 6). A root's fit reads only its own requests,
+    /// instances and accepted continuity and writes only its own members' resolutions; the
+    /// roots' results, the first error and the work counters are taken in root order.
+    pub(super) fn resolve_cohort_programs_on(
+        &self,
+        requests: &[PhysicalRequest<'_, Self>],
+        protected_roots: &[FixtureId],
+        programs: &[(FixtureId, &[PositionProgramDestination])],
+        pool: Option<&light_engine::parallel::OutputPool>,
+    ) -> Result<Vec<PhysicalResolution<Self>>, TransitionError> {
         let Some(first) = requests.first() else {
             return Ok(Vec::new());
         };
         validate_cohort(requests, first)?;
-        let mut results: Vec<PhysicalResolution<Self>> = requests
-            .iter()
-            .map(|r| PhysicalResolution {
-                writes: Vec::new(),
-                requested: PositionRequest::Intent(intent(r.value).unwrap().clone()),
-                achieved: AchievedPosition::default(),
-                quality: PositionQuality::default(),
-                continuity: PositionContinuity::default(),
-            })
-            .collect();
-        for (root, mut group) in cohort_groups(requests) {
-            group.sort_by_key(|(_, request)| request.target.0);
-            let cohort_owners = group
-                .iter()
-                .map(|(_, request)| (request.target, request.descriptor.emitters.as_ref()))
-                .collect::<Vec<_>>();
-            let mut native = CapturedNativeRaw::default();
-            for instance in &group[0].1.descriptor.instances {
-                capture_instance_native(first, root, instance, &mut native)?;
-                let mut scratch = instance.scratch.lock();
-                scratch.raw.copy_from_slice(native.raw());
-                scratch.previous.fill(None);
-                scratch.requests.fill(None);
-                let protected = protected_roots.contains(&root);
-                seed_accepted_continuity(instance, &group, &native, protected, &mut scratch)?;
-                let mount = first
-                    .frame
-                    .geometry
-                    .mounts()
-                    .mount(instance.destination.0)
-                    .and_then(|m| m.world_from_fixture);
-                let reference_known = instance
-                    .mount_reference
-                    .is_none_or(|id| first.frame.geometry.point(FixtureId(id)).is_some());
-                let missing_mount = mount.is_none() || !reference_known;
-                if !protected {
-                    request_cohort_goals(&group, programs, instance, missing_mount, &mut scratch)?;
-                }
-                let PositionScratch {
-                    workspace,
-                    output,
-                    raw,
-                    available,
-                    previous,
-                    requests: goals,
-                } = &mut *scratch;
-                let geometry_dirty = self
-                    .tracking
-                    .borrow()
-                    .dirty_instance(root, instance.destination);
-                let fit_input = fit_cache::PositionFitMemoInput {
-                    root,
-                    destination: instance.destination,
-                    generation: first.frame.token.generation(),
-                    lane: first.frame.token.lane(),
-                    compatibility: &instance.compatibility,
-                    owners: &cohort_owners,
-                    fit: PositionFitInput {
-                        current_raw: raw,
-                        available,
-                        requests: goals,
-                        previous,
-                        mount: mount
-                            .unwrap_or(RigidTransform::IDENTITY)
-                            .desk_pose_to_profile(),
-                    },
-                    native_baseline: native.raw(),
-                    inputs: &instance.inputs,
-                    raw_accepted: instance.model.accepts_raw(raw),
-                    missing_mount,
-                    protected,
-                    geometry_dirty,
-                };
-                // A memo has authority only through every peer's accepted lane continuity.
-                // Equal independently constructed cache values cannot certify one cohort.
-                let (memo, reused, evaluations) =
-                    fit_or_reuse(&group, instance, &fit_input, workspace, output)?;
-                let solved_output = memo
-                    .as_ref()
-                    .map_or_else(|| output.as_slice(), |memo| memo.output());
-                let proposed_raw = memo
-                    .as_ref()
-                    .map_or_else(|| workspace.proposed_raw(), |memo| memo.proposed_raw());
-                let achieved_axes = memo
-                    .as_ref()
-                    .map_or_else(|| workspace.achieved_axes(), |memo| memo.achieved_axes());
-                let mut counters = self.counters.get();
-                counters.fits += u64::from(!reused);
-                counters.fit_cache_hits += u64::from(reused);
-                counters.candidate_evaluations += evaluations as u64;
-                self.counters.set(counters);
-                publish_fitted_instance(
-                    &mut results,
-                    &group,
-                    &FittedInstance {
-                        instance,
-                        native_raw: native.raw(),
-                        solved_output,
-                        proposed_raw,
-                        achieved_axes,
-                        memo: &memo,
-                        evaluations,
-                        reused,
-                        geometry_dirty,
-                        missing_mount,
-                        protected,
-                    },
-                );
+        let mut results: Vec<PhysicalResolution<Self>> =
+            requests.iter().map(initial_resolution).collect();
+        let groups = cohort_groups(requests);
+        let tracking_guard = self.tracking.borrow();
+        let tracking: &tracking::TrackingState = &tracking_guard;
+        let fit_root = |root: FixtureId,
+                        group: &mut Vec<(usize, &PhysicalRequest<'_, Self>)>,
+                        results: &mut [PhysicalResolution<Self>],
+                        counters: &mut PositionAdapterCounters| {
+            resolve_root(
+                first,
+                root,
+                group,
+                protected_roots,
+                programs,
+                tracking,
+                results,
+                counters,
+            )
+        };
+        let pool = pool.filter(|_| groups.len() >= MIN_PARALLEL_ROOTS);
+        let Some(pool) = pool else {
+            for (root, mut group) in groups {
+                let mut counters = PositionAdapterCounters::default();
+                let fitted = fit_root(root, &mut group, &mut results, &mut counters);
+                self.counters.lock().add(counters);
+                fitted?;
+            }
+            return Ok(results);
+        };
+        let chunks = light_engine::parallel::chunk_count(groups.len(), pool.workers(), 8);
+        let mut slots = vec![(); pool.workers()];
+        let groups = &groups;
+        let fitted =
+            light_engine::parallel::run_ordered(Some(pool), &mut slots, chunks, |_, chunk| {
+                light_engine::parallel::chunk_range(groups.len(), chunks, chunk)
+                    .map(|index| {
+                        let (root, group) = &groups[index];
+                        // The root's members, renumbered into a local result list.
+                        let mut local = group
+                            .iter()
+                            .enumerate()
+                            .map(|(local, (_, request))| (local, *request))
+                            .collect::<Vec<_>>();
+                        let mut resolved = group
+                            .iter()
+                            .map(|(_, request)| initial_resolution(request))
+                            .collect::<Vec<_>>();
+                        let mut counters = PositionAdapterCounters::default();
+                        let fitted = fit_root(*root, &mut local, &mut resolved, &mut counters);
+                        (fitted.map(|()| resolved), counters)
+                    })
+                    .collect::<Vec<_>>()
+            });
+        for ((_, group), (fitted, delta)) in groups.iter().zip(fitted.into_iter().flatten()) {
+            self.counters.lock().add(delta);
+            for ((index, _), resolution) in group.iter().zip(fitted?) {
+                results[*index] = resolution;
             }
         }
         Ok(results)
@@ -484,6 +477,132 @@ impl PositionAdapter {
 }
 /// Requests grouped by physical root, in first-seen root order, each with its result index.
 #[allow(clippy::type_complexity)]
+/// From this many physical roots a cohort fits them on the output pool.
+const MIN_PARALLEL_ROOTS: usize = if cfg!(test) { 2 } else { 64 };
+
+/// A request's resolution before any instance is fitted.
+fn initial_resolution(
+    r: &PhysicalRequest<'_, PositionAdapter>,
+) -> PhysicalResolution<PositionAdapter> {
+    PhysicalResolution {
+        writes: Vec::new(),
+        requested: PositionRequest::Intent(intent(r.value).unwrap().clone()),
+        achieved: AchievedPosition::default(),
+        quality: PositionQuality::default(),
+        continuity: PositionContinuity::default(),
+    }
+}
+
+/// Fit every instance of one physical root and publish it on its members' resolutions.
+/// `group` holds the members' indices into `results`.
+#[allow(clippy::too_many_arguments)]
+fn resolve_root(
+    first: &PhysicalRequest<'_, PositionAdapter>,
+    root: FixtureId,
+    group: &mut Vec<(usize, &PhysicalRequest<'_, PositionAdapter>)>,
+    protected_roots: &[FixtureId],
+    programs: &[(FixtureId, &[PositionProgramDestination])],
+    tracking: &tracking::TrackingState,
+    results: &mut [PhysicalResolution<PositionAdapter>],
+    counters: &mut PositionAdapterCounters,
+) -> Result<(), TransitionError> {
+    group.sort_by_key(|(_, request)| request.target.0);
+    let group = &*group;
+    let cohort_owners = group
+        .iter()
+        .map(|(_, request)| (request.target, request.descriptor.emitters.as_ref()))
+        .collect::<Vec<_>>();
+    let mut native = CapturedNativeRaw::default();
+    for instance in &group[0].1.descriptor.instances {
+        capture_instance_native(first, root, instance, &mut native)?;
+        let mut scratch = instance.scratch.lock();
+        scratch.raw.copy_from_slice(native.raw());
+        scratch.previous.fill(None);
+        scratch.requests.fill(None);
+        let protected = protected_roots.contains(&root);
+        seed_accepted_continuity(instance, group, &native, protected, &mut scratch)?;
+        let mount = first
+            .frame
+            .geometry
+            .mounts()
+            .mount(instance.destination.0)
+            .and_then(|m| m.world_from_fixture);
+        let reference_known = instance
+            .mount_reference
+            .is_none_or(|id| first.frame.geometry.point(FixtureId(id)).is_some());
+        let missing_mount = mount.is_none() || !reference_known;
+        if !protected {
+            request_cohort_goals(group, programs, instance, missing_mount, &mut scratch)?;
+        }
+        let PositionScratch {
+            workspace,
+            output,
+            raw,
+            available,
+            previous,
+            requests: goals,
+        } = &mut *scratch;
+        let geometry_dirty = tracking.dirty_instance(root, instance.destination);
+        let fit_input = fit_cache::PositionFitMemoInput {
+            root,
+            destination: instance.destination,
+            generation: first.frame.token.generation(),
+            lane: first.frame.token.lane(),
+            compatibility: &instance.compatibility,
+            owners: &cohort_owners,
+            fit: PositionFitInput {
+                current_raw: raw,
+                available,
+                requests: goals,
+                previous,
+                mount: mount
+                    .unwrap_or(RigidTransform::IDENTITY)
+                    .desk_pose_to_profile(),
+            },
+            native_baseline: native.raw(),
+            inputs: &instance.inputs,
+            raw_accepted: instance.model.accepts_raw(raw),
+            missing_mount,
+            protected,
+            geometry_dirty,
+        };
+        // A memo has authority only through every peer's accepted lane continuity.
+        // Equal independently constructed cache values cannot certify one cohort.
+        let (memo, reused, evaluations) =
+            fit_or_reuse(group, instance, &fit_input, workspace, output)?;
+        let solved_output = memo
+            .as_ref()
+            .map_or_else(|| output.as_slice(), |memo| memo.output());
+        let proposed_raw = memo
+            .as_ref()
+            .map_or_else(|| workspace.proposed_raw(), |memo| memo.proposed_raw());
+        let achieved_axes = memo
+            .as_ref()
+            .map_or_else(|| workspace.achieved_axes(), |memo| memo.achieved_axes());
+        counters.fits += u64::from(!reused);
+        counters.fit_cache_hits += u64::from(reused);
+        counters.candidate_evaluations += evaluations as u64;
+        publish_fitted_instance(
+            results,
+            group,
+            &FittedInstance {
+                instance,
+                native_raw: native.raw(),
+                solved_output,
+                proposed_raw,
+                achieved_axes,
+                memo: &memo,
+                evaluations,
+                reused,
+                geometry_dirty,
+                missing_mount,
+                protected,
+            },
+        );
+    }
+    Ok(())
+}
+
 fn cohort_groups<'r, 'a>(
     requests: &'r [PhysicalRequest<'a, PositionAdapter>],
 ) -> Vec<(
@@ -857,9 +976,7 @@ impl PhysicalFamilyAdapter for PositionAdapter {
         snapshot: &EngineSnapshot,
         target: FixtureId,
     ) -> Result<Option<PositionDescriptor>, TransitionError> {
-        let mut counters = self.counters.get();
-        counters.compiles += 1;
-        self.counters.set(counters);
+        self.counters.lock().compiles += 1;
         let heads = profile_head_destinations(snapshot, target);
         // Root identity and emitter ownership are distinct from head ownership. An
         // unheaded emitter stays with its physical fixture even if every head is logical.

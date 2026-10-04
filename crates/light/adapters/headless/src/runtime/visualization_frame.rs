@@ -178,28 +178,37 @@ pub(super) struct VisualizationFrameHub {
 }
 
 impl VisualizationFrameHub {
-    pub(super) fn publish(&self, completed: &RenderedSemanticFrame, scope: VisualizationScope) {
+    /// Publish `completed`. The frame it replaces (often the last reference to its samples and
+    /// values) is freed on `pool` when there is one (TL-639 round 6).
+    pub(super) fn publish(
+        &self,
+        completed: &RenderedSemanticFrame,
+        scope: VisualizationScope,
+        pool: Option<&light_engine::parallel::OutputPool>,
+    ) {
         let rendered = &completed.rendered;
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed) + 1;
-        self.latest
-            .store(Some(Arc::new(PublishedVisualizationFrame {
-                sequence,
-                generation: rendered.generation,
-                sampled_at: rendered.sampled_at,
-                source_snapshot: Arc::clone(&rendered.source_snapshot),
-                tracking: Arc::clone(&rendered.tracking),
-                points: Arc::clone(&rendered.points),
-                mounts: Arc::clone(&rendered.mounts),
-                generated_at: SystemTime::now(),
-                scope,
-                show_revision: rendered.revision,
-                options: completed.options,
-                values: rendered.resolved_values.clone(),
-                dynamics: completed.dynamics.clone(),
-                physical: Arc::clone(&rendered.physical),
-                profile_visualization_values: Arc::clone(&rendered.profile_visualization_values),
-            })));
+        let previous = self.latest.swap(Some(Arc::new(PublishedVisualizationFrame {
+            sequence,
+            generation: rendered.generation,
+            sampled_at: rendered.sampled_at,
+            source_snapshot: Arc::clone(&rendered.source_snapshot),
+            tracking: Arc::clone(&rendered.tracking),
+            points: Arc::clone(&rendered.points),
+            mounts: Arc::clone(&rendered.mounts),
+            generated_at: SystemTime::now(),
+            scope,
+            show_revision: rendered.revision,
+            options: completed.options,
+            values: rendered.resolved_values.clone(),
+            dynamics: completed.dynamics.clone(),
+            physical: Arc::clone(&rendered.physical),
+            profile_visualization_values: Arc::clone(&rendered.profile_visualization_values),
+        })));
         self.source_notify.notify_one();
+        if let (Some(pool), Some(previous)) = (pool, previous) {
+            pool.drop_later(previous);
+        }
     }
 
     pub(super) fn latest(&self) -> Option<Arc<PublishedVisualizationFrame>> {
@@ -713,9 +722,9 @@ mod tests {
     fn retains_only_the_latest_complete_frame() {
         let hub = VisualizationFrameHub::default();
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), scope);
-        hub.publish(&rendered(20), scope);
-        hub.publish(&rendered(30), scope);
+        hub.publish(&rendered(10), scope, None);
+        hub.publish(&rendered(20), scope, None);
+        hub.publish(&rendered(30), scope, None);
 
         let latest = hub.latest().expect("a frame was published");
         assert_eq!(latest.sequence, 3);
@@ -739,7 +748,7 @@ mod tests {
         let weak = Arc::downgrade(&sources);
         let mut first = rendered(10);
         first.dynamics = Some(sources);
-        hub.publish(&first, scope);
+        hub.publish(&first, scope, None);
         let retained = hub.latest().unwrap();
         assert!(Arc::ptr_eq(&first.rendered.mounts, &retained.mounts));
         assert!(Arc::ptr_eq(
@@ -747,7 +756,7 @@ mod tests {
             retained.dynamics.as_ref().unwrap(),
         ));
         drop(first);
-        hub.publish(&rendered(20), scope);
+        hub.publish(&rendered(20), scope, None);
         let latest = hub.latest().unwrap();
         assert_eq!(latest.sequence, 2);
         assert!(
@@ -770,7 +779,7 @@ mod tests {
     fn shares_one_projection_for_the_same_lane_and_source_frame() {
         let hub = VisualizationFrameHub::default();
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         let source = hub.latest().unwrap();
         let builds = AtomicUsize::new(0);
         let build = |_| {
@@ -823,7 +832,7 @@ mod tests {
             include_dynamic_stack: true,
             complete_values: false,
         };
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         let first_source = hub.latest().unwrap();
         hub.projection(key, &first_source, |refresh| {
             assert!(refresh);
@@ -831,7 +840,7 @@ mod tests {
         })
         .unwrap();
 
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         let second_source = hub.latest().unwrap();
         let second = hub
             .projection(key, &second_source, |refresh| {
@@ -843,7 +852,7 @@ mod tests {
         assert!(second.delta.dynamic_stack.is_none());
 
         std::thread::sleep(DYNAMIC_STACK_PUBLICATION_INTERVAL);
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         let third_source = hub.latest().unwrap();
         let third = hub
             .projection(key, &third_source, |refresh| {
@@ -858,7 +867,7 @@ mod tests {
     fn sampler_publishes_one_shared_source_only_while_subscribed() {
         let hub = VisualizationFrameHub::default();
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         hub.sample_latest();
         assert!(hub.sampled().is_none());
 
@@ -866,7 +875,7 @@ mod tests {
         hub.sample_latest();
         assert_eq!(hub.sampled().unwrap().sequence, 1);
 
-        hub.publish(&rendered(20), scope);
+        hub.publish(&rendered(20), scope, None);
         assert_eq!(hub.sampled().unwrap().sequence, 1);
         hub.sample_latest();
         assert_eq!(hub.sampled().unwrap().sequence, 2);
@@ -878,7 +887,7 @@ mod tests {
         let cancellation = CancellationToken::new();
         let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         tokio::time::advance(Duration::from_secs(1)).await;
         assert!(hub.sampled().is_none());
 
@@ -887,7 +896,7 @@ mod tests {
         assert_eq!(hub.sampled().unwrap().sequence, 1);
 
         hub.change_subscribers(VisualizationLane::Normal, -1);
-        hub.publish(&rendered(20), scope);
+        hub.publish(&rendered(20), scope, None);
         tokio::time::advance(Duration::from_secs(1)).await;
         assert_eq!(hub.sampled().unwrap().sequence, 1);
 
@@ -901,7 +910,7 @@ mod tests {
         let cancellation = CancellationToken::new();
         let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
 
         let first_waiter = {
             let hub = Arc::clone(&hub);
@@ -914,7 +923,7 @@ mod tests {
             let hub = Arc::clone(&hub);
             tokio::spawn(async move { hub.wait_for_sample_after(1).await.sequence })
         };
-        hub.publish(&rendered(20), scope);
+        hub.publish(&rendered(20), scope, None);
         tokio::task::yield_now().await;
         assert!(!second_waiter.is_finished());
 
@@ -932,7 +941,7 @@ mod tests {
         let cancellation = CancellationToken::new();
         let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         hub.change_subscribers(VisualizationLane::Normal, 1);
         assert_eq!(hub.wait_for_sample_after(0).await.sequence, 1);
         tokio::task::yield_now().await;
@@ -945,7 +954,7 @@ mod tests {
         tokio::task::yield_now().await;
         assert!(!next_waiter.is_finished());
 
-        hub.publish(&rendered(20), scope);
+        hub.publish(&rendered(20), scope, None);
         assert_eq!(next_waiter.await.unwrap(), 2);
 
         hub.change_subscribers(VisualizationLane::Normal, -1);
@@ -959,19 +968,19 @@ mod tests {
         let cancellation = CancellationToken::new();
         let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         hub.change_subscribers(VisualizationLane::Normal, 1);
         assert_eq!(hub.wait_for_sample_after(0).await.sequence, 1);
         tokio::task::yield_now().await;
 
         tokio::time::advance(VISUALIZATION_SOURCE_SAMPLE_INTERVAL / 2).await;
         hub.change_subscribers(VisualizationLane::Normal, -1);
-        hub.publish(&rendered(20), scope);
+        hub.publish(&rendered(20), scope, None);
         hub.change_subscribers(VisualizationLane::Normal, 1);
         assert_eq!(hub.wait_for_sample_after(1).await.sequence, 2);
         tokio::task::yield_now().await;
 
-        hub.publish(&rendered(30), scope);
+        hub.publish(&rendered(30), scope, None);
         let next_waiter = {
             let hub = Arc::clone(&hub);
             tokio::spawn(async move { hub.wait_for_sample_after(2).await.sequence })
@@ -991,7 +1000,7 @@ mod tests {
     fn preload_projection_uses_its_own_authoritative_source_identity_and_timestamp() {
         let hub = VisualizationFrameHub::default();
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         let source = hub.latest().unwrap();
         let stale_timestamp = "2020-01-01T00:00:00Z";
 
@@ -1050,7 +1059,7 @@ mod tests {
         };
         let scope = scope(Uuid::new_v4());
         hub.change_projection_claim(key, 1);
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         let source = hub.latest().unwrap();
         let builds = AtomicUsize::new(0);
         let mut build = |_| {
@@ -1140,7 +1149,7 @@ mod tests {
     fn projection_work_cannot_block_latest_frame_publication() {
         let hub = Arc::new(VisualizationFrameHub::default());
         let scope = scope(Uuid::new_v4());
-        hub.publish(&rendered(10), scope);
+        hub.publish(&rendered(10), scope, None);
         let source = hub.latest().unwrap();
         let (projection_started_tx, projection_started_rx) = mpsc::channel();
         let (release_projection_tx, release_projection_rx) = mpsc::channel();
@@ -1176,7 +1185,7 @@ mod tests {
         let (published_tx, published_rx) = mpsc::channel();
         let publisher_hub = Arc::clone(&hub);
         thread::spawn(move || {
-            publisher_hub.publish(&rendered(20), scope);
+            publisher_hub.publish(&rendered(20), scope, None);
             published_tx.send(()).unwrap();
         });
         published_rx

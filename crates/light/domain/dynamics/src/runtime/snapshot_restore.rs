@@ -2,7 +2,7 @@
 use super::*;
 use std::collections::HashSet;
 
-type SampleValues = HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>;
+type SampleValues = SampleValueMap;
 
 /// The retained sample rows of one stored instance, moved out of its snapshot.
 struct RetainedSampleRows {

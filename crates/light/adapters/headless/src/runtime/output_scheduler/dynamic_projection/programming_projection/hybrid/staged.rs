@@ -97,7 +97,13 @@ pub(super) fn prepare_hybrid_frame<T>(
                     let typed = CapturedProgrammingSources::new(&static_sources, &adopt, presets)
                         .with_source_transaction(origins)
                         .with_native_current_validation(models.as_ref(), native_current);
-                    let completed = deferred.complete(&typed)?;
+                    let mut completed = super::parallel_preparation::complete_deferred(
+                        deferred,
+                        &typed,
+                        frame,
+                        observer,
+                        output_pool.as_deref(),
+                    )?;
                     super::parallel_preparation::prepare_families(
                         completed.samples(),
                         completed.requirements(),
@@ -132,7 +138,8 @@ pub(super) fn prepare_hybrid_frame<T>(
                         position_batch_scratch,
                         (static_rows, parallel, output_pool.as_deref()),
                     )?;
-                    let samples = completed.samples().to_vec();
+                    // TL-639 round 6: moved, not cloned; nothing reads them from `completed` again.
+                    let samples = completed.take_samples();
                     finish_cohort(observer, frame, typed, &mut projections, &requirements)?;
                     let sidecars = project_family_rows(&mut token, projections)?;
                     observer

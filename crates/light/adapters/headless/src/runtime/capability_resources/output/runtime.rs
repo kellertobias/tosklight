@@ -311,8 +311,11 @@ impl OutputResource {
         control
             .last_patched_slots
             .clone_from(&rendered.patched_slots);
-        self.visualization_frames
-            .publish(completed, visualization_scope);
+        self.visualization_frames.publish(
+            completed,
+            visualization_scope,
+            self.engine().output_pool().as_deref(),
+        );
         frames
     }
 

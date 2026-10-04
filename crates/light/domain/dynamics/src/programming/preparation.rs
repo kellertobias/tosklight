@@ -69,7 +69,7 @@ pub struct DynamicFamilyPreparationScratch {
     controllers: Vec<std::ops::Range<usize>>,
     /// Each controller's chunk in a parallel preparation.
     chunk_of_controller: Vec<usize>,
-    sort_keys: Vec<((Uuid, Uuid, Uuid), Uuid, usize)>,
+    sort_keys: Vec<ControllerSortKey>,
     controller: Vec<DynamicRuntimeSample>,
     position: Vec<DynamicRuntimeSample>,
     families: Vec<DynamicFamilySampleGroup>,
@@ -79,9 +79,21 @@ pub struct DynamicFamilyPreparationScratch {
     requirements: Vec<DynamicFamilyPreparationRequirement>,
     sampling_requirements: Vec<DynamicFamilyPreparationRequirement>,
     cache: HashMap<CacheKey, CompiledSample>,
+    /// Last frame's compiled samples this preparation did not reuse (TL-639 round 6), for the
+    /// caller to free off the frame's thread ([`Self::take_retired`]).
+    retired: HashMap<CacheKey, CompiledSample>,
 }
 
+/// Compiled samples a preparation no longer needs; dropping them only frees memory.
+pub struct RetiredPreparation(#[allow(dead_code)] HashMap<CacheKey, CompiledSample>);
+
 impl DynamicFamilyPreparationScratch {
+    /// Take the compiled samples the last preparation retired, to drop them elsewhere. Left
+    /// in place, they are dropped by the next preparation.
+    pub fn take_retired(&mut self) -> RetiredPreparation {
+        RetiredPreparation(std::mem::take(&mut self.retired))
+    }
+
     /// The last preparation's result.
     pub fn prepared(&self) -> PreparedDynamicFamilySamples<'_> {
         PreparedDynamicFamilySamples {
@@ -482,13 +494,12 @@ pub fn prepare_dynamic_family_samples_with_requirements<'a>(
         .extend_from_slice(sampling_requirements);
     let mut previous = std::mem::take(&mut scratch.cache);
     let result = prepare(samples, sources, native_models, &mut previous, scratch);
+    scratch.retired = previous;
     if let Err(error) = result {
         scratch.clear();
         return Err(error);
     }
-    scratch
-        .families
-        .sort_unstable_by_key(|group| (group.target.0, group.owner.id()));
+    scratch.families.sort_unstable_by_key(family_order);
     Ok(PreparedDynamicFamilySamples {
         families: &scratch.families,
         legacy: &scratch.legacy,
@@ -999,8 +1010,8 @@ mod controller;
 use controller::*;
 mod parallel;
 pub use parallel::{
-    PreparationSources, PreparationWorkers, PreparedChunk, TARGET_SHARDS,
-    prepare_dynamic_family_samples_in_parallel, shard_chunk, target_shard,
+    ControllerSortKey, PreparationSources, PreparationWorkers, PreparedChunk, TARGET_SHARDS,
+    family_order, prepare_dynamic_family_samples_in_parallel, shard_chunk, target_shard,
 };
 
 #[cfg(test)]

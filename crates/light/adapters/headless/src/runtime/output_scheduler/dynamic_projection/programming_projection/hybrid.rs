@@ -54,6 +54,7 @@ mod staged;
 pub(in crate::runtime) use position_batch::{
     HybridPositionBatchComposer, HybridPositionBatchResult,
 };
+pub(in crate::runtime) use position_program::capture_identity as position_capture_identity;
 pub(in crate::runtime) use position_program::{
     HybridCapturedPositionProgram, HybridPositionDiscoveryEvaluation, HybridPositionEvaluation,
     HybridPositionGraphEvaluation, HybridPositionResumeEvaluation, HybridPositionStageEvaluation,
@@ -606,6 +607,20 @@ pub(in crate::runtime) trait HybridFrameObserver<T> {
     /// those groups on several threads (TL-639 round 5); `None` composes them in turn.
     fn with_parallel_lanes(&self, run: &mut dyn FnMut(Option<ParallelLanes<'_, '_, T>>)) {
         run(None)
+    }
+
+    /// Take a parallel worker's pending Position cohort members of one group, in group order
+    /// (TL-639 round 6). Only an observer that lends Position state to workers receives any.
+    fn take_position_pending(
+        &mut self,
+        pending: &mut dyn Iterator<
+            Item = crate::runtime::output_scheduler::dynamic_projection::physical_adapter::position::PendingPosition,
+        >,
+    ) {
+        assert!(
+            pending.next().is_none(),
+            "this observer lends no Position state to parallel workers"
+        );
     }
 
     /// Stage a parallel worker's lane results, as if this observer had staged them in order.

@@ -62,14 +62,14 @@ pub(super) fn project_instance_phases(
 }
 
 pub(super) fn sample_values_snapshot(
-    last: &HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
-    held: &HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
+    last: &SampleValueMap,
+    held: &SampleValueMap,
 ) -> (
     Option<Arc<crate::RetainedExpressionTape>>,
     Vec<DynamicHeldSampleSnapshot>,
     Vec<DynamicHeldSampleSnapshot>,
 ) {
-    let sorted = |values: &HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>| {
+    let sorted = |values: &SampleValueMap| {
         let mut values = values
             .iter()
             .map(|(key, value)| (*key, Arc::new(value.clone())))
@@ -109,9 +109,7 @@ pub(super) fn sample_values_snapshot(
 
 /// Promote only at a pause boundary. Ordinary frames wrap immutable historical roots and
 /// never append a sample to a growing tape or clone its node vector.
-pub(super) fn retain_sample_history(
-    values: &mut HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
-) {
+pub(super) fn retain_sample_history(values: &mut SampleValueMap) {
     if values.is_empty() {
         return;
     }
@@ -136,7 +134,7 @@ pub(super) fn retain_sample_history(
 }
 
 pub(super) fn held_angle_sources(
-    values: &HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>,
+    values: &SampleValueMap,
     prepared: Option<&PreparedSampleTape>,
 ) -> HashSet<(Uuid, FixtureId, Uuid)> {
     let mut angles = HashSet::new();
@@ -290,8 +288,8 @@ pub(super) fn sample_values_from_snapshot(
     definition: &DynamicDefinition,
     supported_contract: u16,
     prepared: Option<&PreparedSampleTape>,
-) -> Result<HashMap<(Uuid, FixtureId, Uuid), DynamicSampleExpression>, DynamicRuntimeError> {
-    let mut samples = HashMap::new();
+) -> Result<SampleValueMap, DynamicRuntimeError> {
+    let mut samples = SampleValueMap::default();
     for sample in values {
         let (expression, required) = match sample.payload {
             DynamicHeldPayload::TapeRoot { tape_root } => {

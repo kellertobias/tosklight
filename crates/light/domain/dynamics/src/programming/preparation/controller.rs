@@ -101,6 +101,7 @@ pub(super) fn controller_key(sample: &DynamicRuntimeSample) -> (Uuid, Uuid, Uuid
 pub(super) fn sort_controllers(
     samples: &[DynamicRuntimeSample],
     scratch: &mut DynamicFamilyPreparationScratch,
+    sort: &dyn Fn(&mut [ControllerSortKey]),
 ) {
     // TL-639 round 4: sorted by keys gathered once rather than read through the samples on every
     // comparison. The index breaks ties; equal keys only occur for a duplicate lane, which the
@@ -112,7 +113,7 @@ pub(super) fn sort_controllers(
             .enumerate()
             .map(|(index, sample)| (controller_key(sample), sample.lane_id, index)),
     );
-    scratch.sort_keys.sort_unstable();
+    sort(&mut scratch.sort_keys);
     scratch.order.clear();
     scratch
         .order
@@ -137,7 +138,7 @@ pub(super) fn prepare(
     previous: &mut HashMap<CacheKey, CompiledSample>,
     scratch: &mut DynamicFamilyPreparationScratch,
 ) -> Result<(), TransitionError> {
-    sort_controllers(samples, scratch);
+    sort_controllers(samples, scratch, &|keys| keys.sort_unstable());
     let DynamicFamilyPreparationScratch {
         order,
         controllers,

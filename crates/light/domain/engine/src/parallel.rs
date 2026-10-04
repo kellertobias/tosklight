@@ -96,6 +96,25 @@ impl OutputPool {
     }
 }
 
+/// Below this many items a sort stays on the caller.
+const MIN_PARALLEL_SORT: usize = if cfg!(test) { 2 } else { 4096 };
+
+/// `items.sort_unstable_by_key(key)` on `pool`'s threads (TL-639 round 6). The keys must be
+/// distinct, so the result is the single-threaded sort's for any worker count.
+pub fn sort_unstable_by_key<T: Send, K: Ord>(
+    pool: Option<&OutputPool>,
+    items: &mut [T],
+    key: impl Fn(&T) -> K + Sync,
+) {
+    use rayon::prelude::*;
+    match pool.filter(|pool| pool.workers() > 1 && items.len() >= MIN_PARALLEL_SORT) {
+        Some(pool) => pool
+            .pool
+            .install(|| items.par_sort_unstable_by_key(|item| key(item))),
+        None => items.sort_unstable_by_key(key),
+    }
+}
+
 /// Run `chunks` chunks on `pool` (on the caller without one) and return the results in chunk
 /// order. Each pool thread uses one `workers` entry (its scratch), which must have at least
 /// [`OutputPool::workers`] entries; which thread ran which chunk is never observable in the
@@ -163,6 +182,21 @@ mod tests {
         assert_eq!(chunk_count(100, 1, 8), 1);
         assert_eq!(chunk_count(100, 4, 8), 13);
         assert_eq!(chunk_count(4000, 8, 64), 32);
+    }
+
+    #[test]
+    fn a_parallel_sort_of_distinct_keys_is_the_single_threaded_sort() {
+        let items = (0..10_000u64)
+            .map(|item| item.wrapping_mul(0x9E37_79B9_7F4A_7C15))
+            .collect::<Vec<_>>();
+        let mut expected = items.clone();
+        expected.sort_unstable();
+        for workers in [1, 2, 8] {
+            let pool = OutputPool::new(workers);
+            let mut sorted = items.clone();
+            sort_unstable_by_key(pool.as_ref(), &mut sorted, |item| *item);
+            assert_eq!(sorted, expected);
+        }
     }
 
     #[test]

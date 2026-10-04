@@ -1,8 +1,14 @@
 //! The Color and Focus/Zoom lanes of one [`FamilyLanes`] set as seen by a parallel section's
-//! workers (TL-639 round 5). Position stays on the frame's own thread: its cohort is coupled
-//! across targets. A worker resolves, adopts and stages exactly as the lanes would, into its own
-//! [`FamilyStaging`]; the frame merges the stagings in group order.
+//! workers (TL-639 round 5). A worker resolves, adopts and stages exactly as the lanes would,
+//! into its own [`FamilyStaging`]; the frame merges the stagings in group order. Position
+//! groups compose on a worker through the frame's shared Position state (round 6,
+//! [`FamilyPositionWorker`]); their cohort is still fitted and staged by the frame.
 use super::super::lane::{LaneShared, LaneStaging, LaneWorker, StagingMark};
+use super::super::position::{PositionFrameShared, PositionPendingLog, PositionWorker};
+use super::super::programming_projection::hybrid::{
+    HybridFamilyProgram, HybridProgramComposer, OwnedHybridProjection,
+};
+use super::bridge::{PositionProgramBridge, family_row};
 use super::*;
 use std::cell::Cell;
 
@@ -191,5 +197,39 @@ impl HybridFrameResolver for FamilyLanesWorker<'_, '_> {
             }
             None => Err(TransitionError::Requires(requirement)),
         }
+    }
+}
+
+/// One worker's Position composer, with the all-family sidecar (TL-639 round 6).
+pub(in crate::runtime) struct FamilyPositionWorker<'s, 'l>(PositionWorker<'s, 'l>);
+
+impl<'s, 'l> FamilyPositionWorker<'s, 'l> {
+    pub fn new(shared: &'s PositionFrameShared<'s, 'l>, missed: &'s Cell<bool>) -> Self {
+        Self(PositionWorker::new(shared, missed))
+    }
+
+    pub fn mark(&self) -> usize {
+        self.0.mark()
+    }
+
+    pub fn truncate(&mut self, mark: usize) {
+        self.0.truncate(mark);
+    }
+
+    pub fn into_pending(self) -> PositionPendingLog {
+        self.0.into_pending()
+    }
+
+    /// [`FamilyFrameObserver`]'s Position composition, on this worker.
+    pub fn compose_program(
+        &mut self,
+        program: HybridFamilyProgram<'_>,
+        composer: &mut dyn HybridProgramComposer<FamilySidecar>,
+    ) -> Result<Option<OwnedHybridProjection<FamilySidecar>>, TransitionError> {
+        let mut bridge = PositionProgramBridge { inner: composer };
+        Ok(self
+            .0
+            .compose_program(program, &mut bridge)?
+            .map(family_row))
     }
 }
