@@ -3390,7 +3390,7 @@ describe("installed Position calibration", () => {
 		fireEvent.click(await screen.findByRole("button", { name: "Position calibration…" }));
 		const dialog = await screen.findByRole("dialog", { name: copy ? "Position calibration Opposite hang" : "Position calibration 17" });
 		expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
-		expect(within(dialog).getByText(/They do not yet change live output or Stage/)).toBeInTheDocument();
+		expect(within(dialog).getByText(/They correct how\s+Position Angles and Target values reach its DMX/)).toBeInTheDocument();
 		fireEvent.change(within(dialog).getByLabelText("Pan zero offset (°)"), { target: { value: "-720.5" } });
 		fireEvent.change(within(dialog).getByLabelText("Tilt zero offset (°)"), { target: { value: "12.25" } });
 		fireEvent.click(within(dialog).getByRole("button", { name: "Calibration quality" }));

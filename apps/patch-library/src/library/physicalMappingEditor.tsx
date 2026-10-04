@@ -80,7 +80,7 @@ export function PhysicalMappingEditor({
 		<section className="fixture-physical-mapping" aria-label="Physical mapping calibration">
 			<h4>Physical mapping</h4>
 			<p className="field-hint">The function endpoints define its scale. Add samples for a measured or documented curve; an empty sample list uses a straight line. Missing data remains Unknown.</p>
-			<p className="field-hint">Calibration samples are saved and previewed here. They do not yet change live output.</p>
+			<p className="field-hint">Calibration samples convert this function's physical values, such as Zoom degrees, to DMX for fixture-independent programming.</p>
 			<div className="fixture-physical-mapping-fields">
 				<SelectField label="Mapping quality" ariaLabel="Mapping quality" value={mapping.quality ?? "unknown"}
 					options={[

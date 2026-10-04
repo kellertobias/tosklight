@@ -383,7 +383,7 @@ fn export_verification_and_type_cache_use_each_actual_snapshot_not_library_ident
         summary
             .warnings
             .iter()
-            .any(|warning| warning.contains("without optical wheels"))
+            .any(|warning| warning.contains("without native calibration provenance"))
     );
 }
 

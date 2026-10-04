@@ -148,9 +148,9 @@ export function PositionCalibrationEditor({
 						onClose={close}
 					/>
 					<p className="field-hint">
-						These offsets are saved for this physical fixture only. They do not
-						yet change live output or Stage. Mounting rotation and current Pan /
-						Tilt inversion remain separate.
+						These offsets belong to this physical fixture only. They correct how
+						Position Angles and Target values reach its DMX and how Stage aims it.
+						Mounting rotation and current Pan / Tilt inversion remain separate.
 					</p>
 					<div className="form-grid">
 						<NumberField

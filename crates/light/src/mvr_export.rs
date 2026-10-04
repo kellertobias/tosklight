@@ -444,8 +444,9 @@ fn add_profile_warnings(summary: &mut MvrExportSummary) {
     if summary.generated_profiles > 0 {
         summary.warnings.push(
             "ToskLight generated GDTF files from the current fixture profiles with their modes, \
-             channels and supported physical functions, but without optical wheels, emitter/filter \
-             data, native calibration provenance or detailed 3D models"
+             channels, supported physical functions and colour emitters, filters and wheels, but \
+             without native calibration provenance, Position geometry, Zoom conventions or \
+             detailed 3D models"
                 .to_owned(),
         );
     }
