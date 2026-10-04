@@ -31,9 +31,9 @@ Executable coverage:
 - Every case starts from scratch: a fresh show patched from the shipped library and an empty
   Programmer. The rig is two Cameo AURO SPOT Z300, whose profile carries a nominal Position physical
   graph (TL-637), so the displayed output seeds the first Position edit. POSITION-CONTROLS-008 uses
-  two GLP JDC1, whose Tilt-only head cannot form a Pan/Tilt pair and so gets no Position physical
-  data. Movers with Pan and Tilt but no authored data, such as the Claypaky Sharpy, get a derived
-  nominal model and are programmed normally.
+  two copies of a user profile made from the GLP JDC1 whose Tilt has no continuous function, so
+  no Position physical data can be derived. Every shipped mover, including Tilt-only ones such as
+  the JDC1, now gets an authored or derived nominal model and is programmed normally.
 
 Physical aiming must be verified by hand on real fixtures. Record the build, the desk mode, the
 viewport and the fixtures with every manual run.
@@ -137,9 +137,9 @@ hardware-connected layout.
 
 ## POSITION-CONTROLS-008 — Fixtures without Position physical data are quietly unsupported
 
-1. Patch two fixtures that have no Position physical data, for example the Tilt-only GLP JDC1
-   (a mover with Pan and Tilt gets a derived nominal model), and select them with an empty
-   Programmer.
+1. Patch two fixtures that have no Position physical data, for example a user copy of the GLP
+   JDC1 whose Tilt has no continuous function (every shipped mover gets an authored or derived
+   nominal model), and select them with an empty Programmer.
 2. Open the **Position** tab. Verify that encoder page 1 reads **Pan · Unsupported** and
    **Tilt · Unsupported** and that both encoders are disabled.
 3. Turn the encoders on screen, on an attached hardware desk and with OSC `encode/1` and

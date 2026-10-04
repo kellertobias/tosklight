@@ -29,8 +29,9 @@ The root Playwright spec `tests/118-focus-zoom-operator-controls.spec.ts` covers
 
 - FOCUS-ZOOM-002 to 005 use two Cameo AURO SPOT Z300. Its profile declares the Beam convention from
   the user manual (TL-637), with 10–25° selection limits.
-- FOCUS-ZOOM-001, 007 and 009 use one AURO SPOT Z300 and one ROBE Robin DLS Profile. The Robin's
-  Zoom has no degree mapping or convention, so the selection shares none.
+- FOCUS-ZOOM-001, 007 and 009 use one AURO SPOT Z300 and one user copy of it whose Zoom declares
+  degrees but no Beam/Field convention, so the selection shares none.
+  Every shipped Zoom light declares a convention, so the gap is authored on a copy.
 - Every case starts from scratch: nothing is programmed beforehand. The first Zoom step adopts the
   displayed output's opening in degrees, and keys are pressed at operator pace, the next one while
   the previous step is still settling.

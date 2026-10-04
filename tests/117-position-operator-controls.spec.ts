@@ -17,6 +17,7 @@ import {
 	recordLaneWrites,
 } from "./bench/programmer/semanticPreloadLanes";
 import { BrowserPatch } from "./bench/show-setup/patchScenario";
+import { continuousFunctions, saveProfileVariant } from "./bench/show-setup/profileVariant";
 
 /**
  * docs/testing/34-position-operator-controls.md (TL-549, TL-637): the production Position encoders
@@ -44,12 +45,32 @@ const GATE =
 
 const SPOT = { manufacturer: "Cameo", profile: "AURO SPOT Z300", mode: "20-Channel", footprint: 20 } as const;
 /**
- * A Tilt-only fixture: one axis cannot form the complete Pan/Tilt Position family, so it gets no
- * derived nominal Position model (TL-552) and stays Unsupported. Movers with Pan and Tilt but no
- * authored Position data, such as the Sharpy, are now programmed through that derived model.
+ * A fixture without Position physical data: a user copy of the GLP JDC1 whose Tilt has no
+ * continuous function, so no nominal Position model can be derived and it stays Unsupported.
+ * Every shipped mover now gets an authored or derived model, so the gap is authored on a copy.
  */
-const TILT_ONLY = { manufacturer: "GLP", profile: "JDC1", mode: "Easy 11-channel", footprint: 11 } as const;
-type Mover = typeof SPOT | typeof TILT_ONLY;
+const NO_POSITION_MODEL = {
+	manufacturer: "POSITION-CONTROLS",
+	profile: "JDC1 without Position model",
+	mode: "Easy 11-channel",
+	footprint: 11,
+} as const;
+
+async function saveNoPositionModelProfile(api: ApiDriver) {
+	await saveProfileVariant(
+		api,
+		{ manufacturer: "GLP", profile: "JDC1" },
+		{ manufacturer: NO_POSITION_MODEL.manufacturer, name: NO_POSITION_MODEL.profile },
+		(profile) => {
+			for (const mode of profile.modes) delete mode.position_physical;
+			for (const axis of ["pan", "tilt"])
+				for (const fn of continuousFunctions(profile, axis))
+					fn.behavior = { type: "fixed", semantic_id: `${axis}.home`, label: `${axis} home`, raw_value: 0 };
+		},
+	);
+}
+
+type Mover = typeof SPOT | typeof NO_POSITION_MODEL;
 
 /** AURO default Pan/Tilt raw 32767 of 65535 across ±270° / ±135°: the displayed start pose. */
 const SPOT_HOME_PAN = -270 + (540 * 32767) / 65535;
@@ -463,7 +484,8 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 	});
 
 	test("POSITION-CONTROLS-008 @ui › fixtures without Position physical data are quietly Unsupported and send nothing", async ({ api, bench, desk, page }) => {
-		const { selected } = await arrange({ api, bench, desk, page }, "008", TILT_ONLY);
+		await saveNoPositionModelProfile(api);
+		const { selected } = await arrange({ api, bench, desk, page }, "008", NO_POSITION_MODEL);
 		requireSemanticContract(await semanticPosition(api, selected), GATE);
 		const sent = recordPositionEdits(page);
 		await desk.open(api.baseUrl);

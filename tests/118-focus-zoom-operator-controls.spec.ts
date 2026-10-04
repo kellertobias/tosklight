@@ -19,6 +19,11 @@ import {
 	showDesk,
 } from "./bench/programmer/semanticPreloadLanes";
 import { BrowserPatch } from "./bench/show-setup/patchScenario";
+import {
+	continuousFunctions,
+	mapAttributesToControl,
+	saveProfileVariant,
+} from "./bench/show-setup/profileVariant";
 
 /**
  * docs/testing/35-focus-zoom-operator-controls.md (TL-551): the production Focus Special Dialog and
@@ -31,8 +36,8 @@ import { BrowserPatch } from "./bench/show-setup/patchScenario";
  *
  * The Beam rig is two Cameo AURO SPOT Z300: its profile declares the Beam convention from the
  * user manual (TL-637) with 10–25° selection limits, so FOCUS-ZOOM-002 to 005 run on it. The
- * unknown-convention rig adds a ROBE Robin DLS Profile, whose Zoom has no degree mapping and no
- * convention, to one AURO: the selection then shares no convention (FOCUS-ZOOM-007 and 009).
+ * unknown-convention rig adds a user copy of the AURO whose Zoom declares degrees but no
+ * convention to one AURO: the selection then shares no convention (FOCUS-ZOOM-007 and 009).
  *
  * Every case starts from scratch: no Zoom is programmed through the API. The first dialog Zoom
  * step adopts the displayed output's opening in degrees (TL-637 follow-up), and key steps are
@@ -47,7 +52,26 @@ const GATE =
 	"semantic programming contract is not enabled on this runtime (a contract-0 server; run npm run test:e2e-semantic)";
 
 const SPOT = { manufacturer: "Cameo", profile: "AURO SPOT Z300", mode: "20-Channel" } as const;
-const DLS = { manufacturer: "ROBE", profile: "Robin DLS Profile", mode: "Mode 2" } as const;
+/**
+ * A user copy of the Cameo AURO SPOT Z300 whose Zoom declares degrees but no Beam/Field
+ * convention. Every shipped Zoom light now declares a convention, so the gap is authored here.
+ */
+const DLS = { manufacturer: "FOCUS-ZOOM", profile: "AURO SPOT without Zoom convention", mode: "20-Channel" } as const;
+
+async function saveNoConventionProfile(api: ApiDriver) {
+	await saveProfileVariant(
+		api,
+		{ manufacturer: SPOT.manufacturer, profile: SPOT.profile },
+		{ manufacturer: DLS.manufacturer, name: DLS.profile },
+		(profile) => {
+			mapAttributesToControl(profile, "fixture.");
+			for (const fn of continuousFunctions(profile, "zoom")) {
+				fn.behavior = { type: "continuous", physical_min: 45, physical_max: 10, unit: "degrees" };
+				delete fn.physical_mapping;
+			}
+		},
+	);
+}
 /** Two Beam-convention spots, or one spot plus a profile without any Zoom convention. */
 const BEAM_RIG = [SPOT, SPOT] as const;
 const MIXED_RIG = [SPOT, DLS] as const;
@@ -67,6 +91,7 @@ async function arrange(
 	await api.request("PUT", "/api/v2/configuration", { programmer_fade_millis: 0 });
 	const show = await api.createShow<{ id: string }>({ name: `FOCUS-ZOOM ${label} ${crypto.randomUUID()}` });
 	await api.openShow(show.id, { transition: "hold_current" });
+	if (rig.includes(DLS)) await saveNoConventionProfile(api);
 	const patch = new BrowserPatch(api, page, desk);
 	for (const [index, profile] of rig.entries())
 		await patch.via.api.add({ number: index + 1, name: `Head ${index + 1}`, ...profile, address: `1.${index * 64 + 1}` });
