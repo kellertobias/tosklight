@@ -1,10 +1,33 @@
 # Tracking with PosiStageNet
 
-## Purpose
+## Purpose and status
 
 Prove that a PosiStageNet source can drive 3D Points without ever moving a light the operator did
 not ask it to, that a source going quiet holds rather than releases, and that a zone runs its Macros
 once per crossing rather than once per frame.
+
+Automated in `tests/123-tracking-with-posistagenet.spec.ts`; test titles carry the IDs below (all
+match `PSN-`). Each case puts the desk's real receiver on its own free UDP port and sends real PSN v2
+datagrams unicast to `127.0.0.1` from the bench sender `tests/bench/protocols/psnSender.ts`, whose
+bytes are checked against the Rust encoder (`crates/shared/psn/src/encode.rs`) by
+`tests/bench/protocols/psnSender.test.ts`. For manual testing against a running desk,
+`node tools/psn-sender.mjs --tracker 1:Presenter:0,1,2 [--host <group|host>] [--port <port>]
+[--circle <m>]` sends the same stream (default `236.10.10.10:56565`).
+
+| Section | ID | Covered |
+| --- | --- | --- |
+| Nothing is bound | `PSN-NOTHING-BOUND` | Steps 1–4 (tab, switch, tracker rows, status line, unchanged DMX, Point pose and Programmer). The port is stored through the API first; the switch is touched on the tab. |
+| Coordinate boundary | `PSN-COORDINATE-BOUNDARY` | Steps 1–3 on the tracker readout and the bound Point's output pose. Step 4 (displayed beam against desk Aim with compound mount and Point rotations) is native Stage rendering and stays manual; the Aim side is Rust (`aim_point_tests.rs`, `engine/src/tests/mount_projection.rs`), calibration reprojection is Rust (`psn/service_tests.rs` `calibration_*`). |
+| A marker moves a point | `PSN-MARKER-MOVES-POINT` | Steps 1–5: binding through the tab's 3D Point choice; Point output pose follows the marker; a mover programmed to Position Target at the Point changes its Pan/Tilt DMX with it (gated by `requireSemanticContract`); a recorded cue and a Programmer Point value do not take the Point; switching the binding off returns the Point to the show in the next output frame while the tracker keeps moving. The Stage view drawing itself is native and not asserted. |
+| Silence holds | `PSN-SILENCE-HOLDS`, `PSN-SILENCE-HOLDS-NEW-SOURCE` | Steps 1–5 with the same sender socket stopping and resuming. `PSN-SILENCE-HOLDS-NEW-SOURCE` is an expected failure (`test.fail`): a sender restarted from a new source port is tracked again, but the status stays stale. |
+| Zones run Macros | `PSN-ZONES-RUN-MACROS` | Steps 1–5, counted from the Macro runtime's tracking-triggered executions. The command line has no text form for a playback Off, so the two Macros set and clear the front dimmers instead of a playback. |
+| What arrives that should not | `PSN-UNWANTED-ART-NET`, `PSN-UNWANTED-UNICAST-GROUP`, `PSN-UNWANTED-PORT-IN-USE` | Steps 1–3. |
+| Settings stay in reach | `PSN-SETTINGS-IN-REACH` | Steps 1–4 at 1280×560 (also covered per window size in `tests/100-show-patch-configuration-layout.spec.ts`). |
+| Compatibility | `PSN-COMPATIBILITY-LEGACY-SHOW`, `PSN-COMPATIBILITY-ROUND-TRIP` | Step 1 with the committed pre-tracking `compact-rig` show; step 2 through the downloaded show file opened as a new show, and the original reopened. |
+
+Multicast group delivery itself (sender to `236.10.10.10`) is not asserted in CI because it depends
+on the host's multicast routing; the receiver path is the same socket. Use `tools/psn-sender.mjs`
+without `--host` to check it on a rig.
 
 ## Nothing is bound
 

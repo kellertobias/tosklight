@@ -1,7 +1,50 @@
 # Fixture physical mapping calibration
 
-These scenarios cover the TL-545 and TL-555 fixture-data implementation increments. They verify fixture data and
-editor behavior; calibration does not yet change live output or Stage simulation.
+These scenarios cover the TL-545 and TL-555 fixture-data implementation increments and their later live
+activation. Calibration now feeds live output: installed Position calibration and per-axis overrides are
+applied by the Position fitter
+(`crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/physical_adapter/position.rs`),
+sampled Zoom/Focus mapping curves by the optics fitter (`CompiledOpticsFitting`), and installed Color
+calibration compiles each instance's Color fitter (`physical_adapter/color.rs`). Stage simulation of
+these values is not covered here.
+
+## Purpose and status
+
+Root Playwright coverage: `tests/122-fixture-physical-mapping.spec.ts` (helpers in
+`tests/bench/show-setup/{installedCalibrationScenario,fixtureMappingEditorScenario,gdtfTransferScenario}.ts`).
+Production reports programming contract 1, so the semantic-output tests run under `npm run test:e2e`.
+
+- Playwright, desk UI (Setup → Fixture Library editor and Show Patch): FIXTURE-MAPPING-001 steps 1–5 and 7;
+  FIXTURE-MAPPING-002 steps 1–2; FIXTURE-MAPPING-003 step 4 (1496×761 and 1024×768); FIXTURE-OPTICS-001
+  step 1; FIXTURE-INSTALLATION-001 steps 1–3 (Pan / Tilt → Position calibration… for root and copy).
+- Playwright, API: FIXTURE-MAPPING-001 step 6 (.toskfixture export/delete/import) and live Zoom fitting
+  through a sampled curve; FIXTURE-MAPPING-002 step 3 and the step-5 percent/Beam refusal;
+  FIXTURE-MAPPING-003 step 3; FIXTURE-INSTALLATION-001 steps 2 (inversion/placement edits), 3, 4 (portable
+  round trip only) and 5 (emitted Pan/Tilt); FIXTURE-INSTALLATION-002 steps 1, 2, 5, 6
+  (zero gain, root/copy, refusals, exact replay, clear); FIXTURE-GDTF-001 steps 1–4 and 5 (exact-byte
+  reuse only); FIXTURE-GDTF-002 steps 1–3, 4 (reused request ID, stale revision) and 6 (package source
+  retention); FIXTURE-GDTF-003 steps 1–2 (300 fixtures);
+  FIXTURE-GDTF-004 step 1 (preview writes nothing); FIXTURE-PHYSICAL-MOTION-001 step 4 (root/copy axis
+  overrides, no stacking, emitted words, portable round trip); FIXTURE-OPTICAL-UV-001 step 4.
+- One `test.fail` records an open defect: a nonzero patch bracket angle on a profile without an authored
+  Hinge bracket is accepted, after which that instance silently emits the profile-default Pan/Tilt.
+- Rust/Vitest evidence for the rest: MAPPING/OPTICS editor rules in
+  `apps/patch-library/src/library/physicalMappingEditor.test.tsx`, `colorPhysicalEditor.test.tsx` and
+  `crates/shared/fixture/src/profile/tests/{physical_mapping,color_physical}.rs`; GDTF/MVR in
+  `crates/shared/fixture/src/gdtf/{read/tests.rs,profile_tests.rs}`, `crates/light/src/mvr_export_tests.rs`,
+  `crates/light/adapters/headless/src/runtime/tests/{fixture_profile_api_tests,mvr_import_route_tests}.rs`
+  and `crates/light/src/mvr_import/tests/mod.rs`; GDTF-005 (Architect) in
+  `apps/viz-editor/src-tauri/src/session/mvr_preview.rs`, `crates/viz/document/src/tests/mvr_sources.rs`
+  and `apps/viz-editor/src/MvrImport.test.tsx`; PHYSICAL-MOTION-001 steps 1–3 and 5–8 in
+  `apps/patch-library/src/library/positionPhysical.test.tsx`,
+  `apps/light-desktop/src/components/setup/fixturePatch/PositionCalibration.test.tsx` and
+  `crates/shared/fixture/src/profile/tests/position_physical*.rs`; NATIVE-PRELOAD-001 in
+  `crates/light/domain/engine/src/tests/preview_ownership.rs`,
+  `crates/light/adapters/headless/src/runtime/tests/native_output_route_tests.rs` and
+  `crates/viz/project/src/physical/tests.rs`; NATIVE-UV-002 in
+  `apps/viz-renderer/src/ui/status/fixture_label_tests.rs` and `crates/viz/scene/src/values/tests.rs`.
+- Remaining manual: NATIVE-UV-002 renderer captures (the GPU capture test is ignored by default) and
+  physical rig/meter accuracy for every scenario.
 
 ## FIXTURE-MAPPING-001 — Author and preserve a response curve
 
@@ -70,7 +113,8 @@ the repository's canonical .artifacts paths.
    values. Preserve U32 values. Measured appearance never implies exact cross-fixture matching.
 8. Compare identities after a calibration-only change and a native function-domain change: the
    former updates the pinned appearance digest but keeps the native signature; the latter changes
-   native compatibility. The live Color resolver remains on its existing implementation.
+   native compatibility. Installed Color calibration and appearance now compile each instance's live
+   Color fitter, so a calibration-only change also changes the fitted native output.
 9. Add a White channel outside the legacy color-system list. Saving the physical path must require
    owning that channel. Shared-head Color controls stay explicit dependencies; do not require plate
    RGB on an independent white beam head. Unmodeled owned functions remain visibly unknown.
@@ -88,8 +132,9 @@ the repository's canonical .artifacts paths.
    editor retains the draft and shows errors; Clear calibration saves absence for that instance.
 4. Round-trip portable show/patch and Architect data. Old documents without the optional field
    still load. Malformed calibration is rejected through existing validation/recovery paths.
-5. Observe output before/after saving offsets: this foundation stores metadata only. Existing
-   inversion/output semantics remain unchanged; no applied calibration or physical accuracy claim.
+5. Observe output before/after saving offsets: for the same programmed Pan/Tilt degrees the emitted
+   native words move by the saved zero offsets, and clearing restores them. Inversion still mirrors
+   only the wire word and never stacks with the calibration; no physical accuracy claim.
 
 ## FIXTURE-GDTF-001 — Honest physical function export
 
@@ -194,7 +239,8 @@ the repository's canonical .artifacts paths.
    nonfinite output, out-of-function raw values, and gains overflowing known source data. A failed
    save leaves the editor open with an error and performs no partial patch mutation.
 6. Repeated request identity replays one exact sparse update. Saving or clearing one copy does not
-   change the root, other copies, profile, preset/cue intent, or current live output in this increment.
+   change the root, other copies, profile or preset/cue intent; only that instance's fitted Color output
+   follows its own calibration.
 7. Round-trip through portable inline/reference records and Architect patch DTOs. Full immutable
    profile identity is derived once per resolved mode; compact runtime projections cannot redefine
    identity. Source archives are not hashed per fixture frame or per emitter correction.
@@ -226,8 +272,8 @@ or the later Stage/fitting acceptance gate.
    moving-mount reference resolves to (1,4,4) m; the bracket reference resolves its lens to
    (0,−450,−250) mm; inverted U16 +720→−720 with +30° zero maps requested +390° to raw 49151.
 8. Verify generated wire schemas, exact source identities and axis overrides through snapshots,
-   transactions and portable inline/lean records. Current metadata authoring must not activate
-   the new solver or change existing DMX/Stage output. TL-546/TL-556 cover live activation.
+   transactions and portable inline/lean records. With TL-546/TL-556 live activation, the Position
+   fitter applies these overrides to semantic Position output (once, without stacking).
 
 
 ## FIXTURE-GDTF-005 — Architect exact preview and atomic apply

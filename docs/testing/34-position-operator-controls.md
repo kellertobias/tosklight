@@ -14,9 +14,20 @@ Executable coverage:
 - The Storybook mockup spec `fixture-abstraction-mockup.spec.ts` covers geometry and held-joystick
   behaviour on the shared `PositionDialog`.
 - The root Playwright spec `tests/117-position-operator-controls.spec.ts` covers POSITION-CONTROLS-001,
-  003, 004, 007, 008 and 009. Under `npm run test:e2e` it skips, because production reports programming
-  contract 0. `npm run test:e2e-semantic` runs it on the contract-1 E2E test server, where a missing
-  semantic publication fails instead of skipping.
+  002, 003, 004, 006, 007, 008 and 009. Production reports programming contract 1, so it runs under
+  `npm run test:e2e` as well as `npm run test:e2e-semantic`, where a missing semantic publication
+  fails instead of skipping.
+- POSITION-CONTROLS-002 drags the Pan circle to +450° and back to −450° and checks ±90° and
+  **UND** against the Programmer. An open dialog does not yet follow **UND** of its own ±90° step;
+  that case is kept as an expected failure until it is fixed.
+- POSITION-CONTROLS-006 arms Preload through the Preload lifecycle route and leaves it with Blind
+  off, so the pending Preload values stay. It reads the lane of every dialog write from the request
+  the desk sends. Production publishes no Preload (Pending) Position readouts yet, so step 1 runs
+  the held joystick from requested Preload Angles. The adoption of the displayed pose in Preload,
+  POSITION-CONTROLS-005 step 4, is kept as an expected failure. Step 2 is covered: the open
+  gesture's Finish stays on Preload, and the next gesture writes to the Normal Programmer. The
+  rest of the held motion after the switch is not sent yet; that case is also an expected failure.
+- POSITION-CONTROLS-005 has no Playwright case yet.
 - Every case starts from scratch: a fresh show patched from the shipped library and an empty
   Programmer. The rig is two Cameo AURO SPOT Z300, whose profile carries a nominal Position physical
   graph (TL-637), so the displayed output seeds the first Position edit. POSITION-CONTROLS-008 uses

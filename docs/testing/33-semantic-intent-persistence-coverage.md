@@ -15,10 +15,12 @@ being checked is part of
 (INTENT-FRAME-003) and [Fixture-independent programming](../plans/fixture-independent-programming.md).
 
 These are Rust tests. Payload equality proves retained authoring only. Output claims are named
-per test. Production still runs programming contract 0. Contract-1 evidence comes from
-application tests (whose domain default is contract 1), from the `#[cfg(test)]` startup harness,
-and from the E2E semantic server. Agent tests and Review/test status remain distinct from human
-acceptance.
+per test. Production runs programming contract 1 since the TL-552 cutover
+(`PRODUCTION_PROGRAMMING_CONTRACT` in `HL/e2e_semantic_contract.rs`; START
+`the_packaged_default_show_is_semantic_after_the_tl552_swap`). Rust evidence comes from
+application tests, from the `#[cfg(test)]` startup harness, and from TLC desks that additionally
+opt into the all-family Live output path; Playwright evidence comes from the E2E semantic server.
+Agent tests and Review/test status remain distinct from human acceptance.
 
 ## Deterministic cases
 
@@ -87,8 +89,12 @@ historical D2 parser defect, now fixed by TL-571.
   - A file the inspection cannot read falls through to the existing "corrupted or incompatible"
     recovery.
 - **Activation gate.** After `build_app_state`, the activation gate uses the contract the real
-  startup engaged. Synthetic `test_state()` desks (engine contract 1, no startup) keep it
-  dormant until TL-552 migrates their legacy fixtures.
+  startup engaged; since TL-552 synthetic `test_state()` desks use their engine contract as well
+  (`ActiveShowResource::legacy_programming_gate`).
+- **Runtime payloads and history.** At contract ≥ 1 startup rejects legacy programming in the
+  stored Playback and Output runtime payloads and preserves them for recovery
+  (`show_programming_contract::check_runtime_payload`), and object Undo/Redo refuses to restore a
+  legacy history body (`check_history_body`).
 
 ## Family × path matrix
 
@@ -108,24 +114,23 @@ Abbreviations:
 
 Status markers:
 - *(stored)* means payload equality only, with no output.
-- *(in progress)* means a TL-560 test written by the parallel TL-560 test work in `TLC/tl560/`; its result is reported in that handoff.
 - **Gap** means no evidence yet.
 
 | Path | Position Angles | Position Target (Point UUID) | Color semantic | Color Direct | UV | Focus | Zoom | Media color |
 |---|---|---|---|---|---|---|---|---|
-| Preset record | SIS `recorded_semantic_presets_reopen_with_identical_bodies_and_typed_intent` | same; `command_http_semantic_aim_tests::semantic_aim_record_stores_target_and_group_recall_keeps_live_owner` | SIS (same) | `direct_intent::recorded_direct_preset_reopens_identically_and_rerecord_is_a_no_change` | SIS (`uv_only_black`, `magenta_with_uv`) | SIS (Beam preset) | SIS | **Gap** (planned TL-560 `media_color`) |
-| Preset recall | `family_ownership::complete_families_replace_independent_values_in_normal_preload_and_preset_recall_with_one_undo`; `preset_recall::color_position_and_mixed_presets_share_empty_selection_target_behavior` | `command_http_semantic_aim_tests::semantic_aim_v2_recall_and_ws_preserve_target_in_normal_blind_and_preload` | `preset_recall` (same) | `update/tests/direct_cases::preset_recall_materializes_tagged_direct_without_baking_destination_values` | Direct only: `preset_recall_plan::native_universal_spread_uses_original_source_and_predicts_each_exact_u32_and_uv`. Semantic UV: **Gap** | **Gap** | `optics_physical::a_recalled_zoom_preset_reaches_its_opening_on_differing_optics_and_leaves_focus` | **Gap** |
+| Preset record | SIS `recorded_semantic_presets_reopen_with_identical_bodies_and_typed_intent` | same; `command_http_semantic_aim_tests::semantic_aim_record_stores_target_and_group_recall_keeps_live_owner` | SIS (same) | `direct_intent::recorded_direct_preset_reopens_identically_and_rerecord_is_a_no_change` | SIS (`uv_only_black`, `magenta_with_uv`) | SIS (Beam preset) | SIS | TLC `tl560/media_color.rs::media_layer_color_survives_preset_record_update_undo_and_live_group_growth`; `tl560/preset_recall.rs::recalled_media_color_preset_restores_each_layer_intent_without_rewriting_the_preset` |
+| Preset recall | `family_ownership::complete_families_replace_independent_values_in_normal_preload_and_preset_recall_with_one_undo`; `preset_recall::color_position_and_mixed_presets_share_empty_selection_target_behavior` | `command_http_semantic_aim_tests::semantic_aim_v2_recall_and_ws_preserve_target_in_normal_blind_and_preload` | `preset_recall` (same) | `update/tests/direct_cases::preset_recall_materializes_tagged_direct_without_baking_destination_values` | Direct only: `preset_recall_plan::native_universal_spread_uses_original_source_and_predicts_each_exact_u32_and_uv`. Semantic UV: TLC `tl560/preset_recall.rs::recalled_semantic_uv_preset_restores_each_stored_uv_amount_without_rewriting_the_preset`; `tl560/replacement_presets.rs::visible_color_plus_uv_survives_uv_loss_and_readdition_with_live_group_growth` | TLC `tl560/preset_recall.rs::recalled_focus_preset_sets_focus_only_and_leaves_the_programmer_zoom` | `optics_physical::a_recalled_zoom_preset_reaches_its_opening_on_differing_optics_and_leaves_focus` | TLC `tl560/preset_recall.rs::recalled_media_color_preset_restores_each_layer_intent_without_rewriting_the_preset` |
 | Cue record (TL-606) | 606 `recorded_semantic_cue_reopens_with_exact_fixture_group_and_direct_payloads`, `merge_replaces_only_captured_rows_and_keeps_every_other_intent_exact`, `overwrite_replaces_the_cue_with_exactly_the_new_requested_intent`, `identical_overwrite_and_merge_after_reopen_are_verified_no_changes` | 606 | 606; CL `recorded_semantic_cues_survive_save_reload_fixture_replacement_and_new_live_group_members` | 606; CL `recorded_direct_cues_keep_tagged_identity_through_reload_replacement_group_and_rerecord` | 606 | 606; `command_http_optics_tests::recorded_cues_store_focus_and_zoom_as_independent_typed_changes_in_the_show` | 606; same | CL `media_layer_cues_carry_semantic_intent_through_record_rerecord_and_reload` |
-| Update (TL-627) | 627 `preset_update_commits_exact_semantic_and_direct_payloads_after_reopen`, `preset_update_reopens_with_the_named_semantic_and_direct_facts`, `cue_update_modes_write_exact_intent_to_their_actual_sources_only` | 627 | 627 | 627 | 627 | 627 | 627 | **Gap** |
-| Undo (Programmer and Record) | `position_intent_authoring_tests::canonical_pan_edit_adopts_actual_calibrated_fitted_pose_and_undo_restores_target`; STORE `committed_semantic_intent_reopens_backs_up_and_undoes_to_identical_typed_values` | `command_http_semantic_aim_tests::semantic_aim_commands_replace_whole_position_family_and_undo_once`; STORE | `values_actions::semantic_color_edits_adopt_each_fixture_once_and_undo_the_whole_gesture`; STORE | Import undo only (`direct_intent::import_undo_restores_the_replaced_direct_preset_exactly`). Programmer and Record undo: **Gap** (planned TL-560 `direct_undo`) | STORE | `optics_values_tests::focus_and_zoom_edit_spread_release_and_undo_as_independent_owners` | same; `optics_physical::releasing_the_zoom_effect_keeps_focus_and_undo_restores_the_same_request` | **Gap** |
-| Save/reload (store) | STORE `reopened_semantic_body_is_bitwise_identical_to_the_committed_body`; SIS `semantic_cue_list_reopens_and_recompiles_through_the_show_open_reader`; 606/627 reopen | same | CL; 606/627 | CL; `direct_intent`; 606/627 | CL `uv_only_black_and_wheel_constraints_persist_and_degrade_passively_on_replacement` | `optics_replacement::group_focus_zoom_cues_survive_reopen_replacement_group_growth_and_convention_mismatch` (TL-629) | same; `programming_contract_recovery_tests::typed_focus_and_zoom_programmer_round_trips_and_production_preserves_it` | CL (media) |
+| Update (TL-627) | 627 `preset_update_commits_exact_semantic_and_direct_payloads_after_reopen`, `preset_update_reopens_with_the_named_semantic_and_direct_facts`, `cue_update_modes_write_exact_intent_to_their_actual_sources_only` | 627 | 627 | 627 | 627 | 627 | 627 | TLC `tl560/media_color.rs` (Update Existing on a universal Media Preset) |
+| Undo (Programmer and Record) | `position_intent_authoring_tests::canonical_pan_edit_adopts_actual_calibrated_fitted_pose_and_undo_restores_target`; STORE `committed_semantic_intent_reopens_backs_up_and_undoes_to_identical_typed_values` | `command_http_semantic_aim_tests::semantic_aim_commands_replace_whole_position_family_and_undo_once`; STORE | `values_actions::semantic_color_edits_adopt_each_fixture_once_and_undo_the_whole_gesture`; STORE | `HL/tests/tl560_direct_undo_tests.rs::direct_color_programmer_undo_and_record_undo_restore_the_exact_tagged_recipe`; import undo `direct_intent::import_undo_restores_the_replaced_direct_preset_exactly` | STORE | `optics_values_tests::focus_and_zoom_edit_spread_release_and_undo_as_independent_owners` | same; `optics_physical::releasing_the_zoom_effect_keeps_focus_and_undo_restores_the_same_request` | Programmer undo: TLC `tl560/media_color.rs`; Record undo **Gap** |
+| Save/reload (store) | STORE `reopened_semantic_body_is_bitwise_identical_to_the_committed_body`; SIS `semantic_cue_list_reopens_and_recompiles_through_the_show_open_reader`; 606/627 reopen | same | CL; 606/627 | CL; `direct_intent`; 606/627 | CL `uv_only_black_and_wheel_constraints_persist_and_degrade_passively_on_replacement` | `optics_replacement::group_focus_zoom_cues_survive_reopen_replacement_group_growth_and_convention_mismatch` (TL-629); TLC `tl560/focus.rs::recorded_focus_reopens_plays_and_survives_replacement_independent_of_zoom` (per fixture; a Focus-only Cue keeps the tracked Zoom output) | same; `programming_contract_recovery_tests::typed_focus_and_zoom_programmer_round_trips_and_production_preserves_it` | CL (media) |
 | Save/reload via **real headless startup at contract 1** (TL-560) | START `contract_one_startup_loads_position_angles` | START `contract_one_startup_loads_position_point_target` | START `contract_one_startup_loads_semantic_color` | START `contract_one_startup_loads_direct_color` | START `contract_one_startup_loads_uv` | START `contract_one_startup_loads_focus_and_contract_zero_still_does` | START `contract_one_startup_loads_zoom` | START `contract_one_startup_loads_media_color` |
-| Selective import | SI `semantic_presets_cues_and_dynamic_sources_survive_import_with_remapped_identities`; SSI `static_dynamic_cue_intent_follows_duplicated_identities_after_collisions`; `programming::typed_dynamic_import_remaps_point_preset_fallback_and_nested_group_member_keys` | SI `unresolved_point_target_blocks_the_whole_import`; SSI | SI; `semantic_import_undo::*` | `direct_intent::import_keeps_direct_portable_appearance_relative_output_uv_and_pinned_identity`; `programming_native::*`; TL-607 `group_direct_color::*`; TL-608 `installed_color_calibration::*` | SI; SSI | SI; SSI | SI; SSI | **Gap** |
-| MVR import (patch and geometry only, by decision) | **Gap**: `mvr_import/tests` covers patch only; no semantic Cue survives an MVR profile change | **Gap** | **Gap** | **Gap** | **Gap** | **Gap** | **Gap** | **Gap** |
-| Fixture replacement (output) | *(in progress)* TLC `tl560/position_replacement.rs::recorded_angles_and_point_target_survive_reopen_shipped_replacement_inversion_and_point_edits`; `position_compatibility::*` (history rejection only) | *(in progress)* same; `static_programs::actual_live_static_target_with_no_dynamics_tracks_an_independent_moving_mount` (runtime only) | CL; `color/tests::rgb_to_rgbw_replacement_with_white_seeded_decides_every_new_control`; `color_physical::fixture_replacement_recompiles_and_decides_every_new_color_control`; TL-628 `dynamic_programming::recorded_semantic_color_dynamic_keeps_intent_across_reopen_and_fixture_replacement` | CL `recorded_direct_cues_…` | CL `uv_only_black_…`; TL-611 `color_uv_widths::*` (widths and output only) | TL-629 `optics_replacement` | TL-629; `optics/tests::fixture_replacement_recompiles_and_keeps_the_stored_request` | **Gap** |
-| Live Group | `position_group_authoring_tests::live_group_pan_edit_adopts_each_actual_calibrated_pose_and_retains_one_group_owner`; SI `live_group_stored_programming_remaps_nested_point_and_member_identities` | SI (same); `family_values::different_target_references_adopt_offsets_and_keep_dormant_members` | CL (new member); TL-628 `new_live_group_member_receives_the_current_semantic_dynamic_sample_without_rewrite`; START `contract_one_startup_loads_live_group_color` | TL-607 `group_direct_color::duplicate_remaps_group_stored_direct_template_exceptions_and_dormant_members` | SIS Group value *(stored)* | TL-629 | TL-629 | **Gap** |
-| Unpatched fixture | 606/627 dormant row *(stored)*; *(in progress)* TLC `tl560/unpatched.rs::unpatched_members_keep_semantic_programming_and_visibility_and_only_lose_dmx_until_repatched` | 606/627 dormant row *(stored)*; behaviour **Gap** | *(in progress)* `tl560/unpatched.rs` (per fixture and live Group) | TL-607 dormant member *(stored)*; behaviour **Gap** | `engine/tests/physical_forward::unpatched_uv_only_copies_retain_native_activity_without_visible_white` (native only); semantic **Gap** | **Gap** | **Gap** | **Gap** |
-| Preload GO (commit) | `preload_commit_order::go_preserves_cross_lane_order_shared_edits_and_complete_intents`; 606 `every_capture_lane_records_the_same_exact_intent_through_the_programming_service` | *(in progress)* TLC `tl560/preload_go.rs::preload_go_commits_target_direct_uv_and_zoom_unchanged_into_live_and_the_recorded_show`; output: `retained_preload_hybrid/tests/position/static_programs::pending_static_target_without_fixat_fits_both_branches_and_preserves_original_evidence` | `preload_commit_order::typed_color_release_keeps_original_component_cutoff_after_go`; `retained_preload_hybrid/tests/physical::preload_color_release_is_source_aware_and_retained_evidence_is_owned` | *(in progress)* `tl560/preload_go.rs`; output: `retained_preload_hybrid/tests/color_direct::retained_preload_branches_fade_into_a_foreign_direct_recipe_independently` | *(in progress)* `tl560/preload_go.rs` (live Group) | Output only: `retained_preload_hybrid/tests/optics::preload_focus_and_zoom_resolve_per_branch_and_release_only_the_released_owner`; GO commit **Gap** | *(in progress)* `tl560/preload_go.rs`, with `tl560/static_zoom.rs` as its static-Zoom regression | **Gap** |
+| Selective import | SI `semantic_presets_cues_and_dynamic_sources_survive_import_with_remapped_identities`; SSI `static_dynamic_cue_intent_follows_duplicated_identities_after_collisions`; `programming::typed_dynamic_import_remaps_point_preset_fallback_and_nested_group_member_keys` | SI `unresolved_point_target_blocks_the_whole_import`; SSI | SI; `semantic_import_undo::*` | `direct_intent::import_keeps_direct_portable_appearance_relative_output_uv_and_pinned_identity`; `programming_native::*`; TL-607 `group_direct_color::*`; TL-608 `installed_color_calibration::*` | SI; SSI | SI; SSI | SI; SSI | `selective_import/tests/semantic_media_color.rs::media_layer_color_survives_selective_import_with_duplicated_layer_identities` |
+| MVR import (patch and geometry only, by decision; storage and binding, no fitted output) | `HL/tests/tl560_mvr_reimport_tests.rs::mvr_reimport_updates_patch_and_geometry_only_and_never_rebinds_semantic_programming` (Preset) | same (Preset, desk-owned Point untouched) | same (live-Group Color Preset) | not stored by these tests | not stored by these tests | not stored by these tests | not stored by these tests | `…::mvr_reimport_leaves_desk_patched_media_layers_and_their_media_color_untouched` (desk-patched Media Server; Preset, live Group, Cue byte-identical) |
+| Fixture replacement (output) | TLC `tl560/position_replacement.rs::recorded_angles_and_point_target_survive_reopen_shipped_replacement_inversion_and_point_edits`; `position_compatibility::*` (history rejection only) | same; `static_programs::actual_live_static_target_with_no_dynamics_tracks_an_independent_moving_mount` (runtime only) | CL; `color/tests::rgb_to_rgbw_replacement_with_white_seeded_decides_every_new_control`; `color_physical::fixture_replacement_recompiles_and_decides_every_new_color_control`; TL-628 `dynamic_programming::recorded_semantic_color_dynamic_keeps_intent_across_reopen_and_fixture_replacement` | CL `recorded_direct_cues_…` | CL `uv_only_black_…`; TL-611 `color_uv_widths::*` (widths and output only) | TL-629 `optics_replacement` | TL-629; `optics/tests::fixture_replacement_recompiles_and_keeps_the_stored_request` | TLC `tl560/media_replacement.rs::media_layer_cue_survives_reopen_and_replacement_by_the_eight_layer_personality` |
+| Live Group | `position_group_authoring_tests::live_group_pan_edit_adopts_each_actual_calibrated_pose_and_retains_one_group_owner`; SI `live_group_stored_programming_remaps_nested_point_and_member_identities` | SI (same); `family_values::different_target_references_adopt_offsets_and_keep_dormant_members` | CL (new member); TL-628 `new_live_group_member_receives_the_current_semantic_dynamic_sample_without_rewrite`; START `contract_one_startup_loads_live_group_color` | TL-607 `group_direct_color::duplicate_remaps_group_stored_direct_template_exceptions_and_dormant_members` | SIS Group value *(stored)*; TLC `tl560/preload_go.rs` (live Group UV output) | TL-629 | TL-629 | TLC `tl560/media_color.rs`; `tl560/media_replacement.rs` (new layer joins) |
+| Unpatched fixture | 606/627 dormant row *(stored)*; TLC `tl560/unpatched.rs::unpatched_members_keep_semantic_programming_and_visibility_and_only_lose_dmx_until_repatched` | TLC `tl560/unpatched_families.rs::unpatched_target_direct_uv_focus_zoom_and_media_keep_their_intent_and_only_lose_dmx` (record, reopen, fitted while unpatched, no DMX, re-patch encodes the same native command) | `tl560/unpatched.rs` (per fixture and live Group) | `tl560/unpatched_families.rs` | same | same | same | same |
+| Preload GO (commit) | `preload_commit_order::go_preserves_cross_lane_order_shared_edits_and_complete_intents`; 606 `every_capture_lane_records_the_same_exact_intent_through_the_programming_service` | TLC `tl560/preload_go.rs::preload_go_commits_target_direct_uv_and_zoom_unchanged_into_live_and_the_recorded_show`; output: `retained_preload_hybrid/tests/position/static_programs::pending_static_target_without_fixat_fits_both_branches_and_preserves_original_evidence` | `preload_commit_order::typed_color_release_keeps_original_component_cutoff_after_go`; `retained_preload_hybrid/tests/physical::preload_color_release_is_source_aware_and_retained_evidence_is_owned` | `tl560/preload_go.rs`; output: `retained_preload_hybrid/tests/color_direct::retained_preload_branches_fade_into_a_foreign_direct_recipe_independently` | `tl560/preload_go.rs` (live Group) | TLC `tl560/preload_go_focus_media.rs::preload_go_commits_focus_and_media_color_unchanged_into_live_and_the_recorded_show`; output: `retained_preload_hybrid/tests/optics::preload_focus_and_zoom_resolve_per_branch_and_release_only_the_released_owner` | `tl560/preload_go.rs`, with `tl560/static_zoom.rs` as its static-Zoom regression | TLC `tl560/preload_go_focus_media.rs` (live Group of a Media layer) |
 
 These neighbouring rows are not persistence paths:
 - **Cue GO playback** has evidence for Direct and UV (TL-603 `PP/color_direct_cues.rs`:
@@ -153,7 +158,10 @@ These neighbouring rows are not persistence paths:
 | Writer stamps only at contract 1 and only for programming kinds | `…::writers_stamp_the_marker_only_at_contract_one_and_only_for_programming_changes`; START `the_preset_writer_stamps_the_marker_only_at_contract_one` (real `/api/v2/presets/record`) |
 | Real startup rejects a legacy show; bytes and desk settings preserved; a new show opens; reopening the legacy show is refused | START `legacy_show_is_rejected_at_contract_one_keeps_bytes_and_settings_and_a_new_show_opens` |
 | Legacy Programmer JSON preserved for recovery | START `legacy_programmer_is_preserved_for_recovery_at_contract_one_and_restored_at_zero` |
-| The packaged default show (`assets/demo.show`) is still legacy | START `the_packaged_default_show_is_legacy_until_the_tl552_swap` (TL-552 inverts it) |
+| The packaged default show (`assets/demo.show`) is the regenerated contract-1 demo (marker 1, no legacy programming) and production startup loads it | START `the_packaged_default_show_is_semantic_after_the_tl552_swap` |
+| Percentage Zoom is legacy; Zoom in degrees is not | `…::percentage_zoom_is_legacy_and_zoom_in_degrees_is_not` |
+| Legacy Playback and Output runtime payloads are rejected and preserved for recovery | `programming_contract_recovery_tests::legacy_playback_and_output_runtime_payloads_are_preserved_for_recovery_at_contract_one` |
+| Undo/Redo refuses a legacy history body | `active_show_programmer_object_tests::undo_and_redo_refuse_a_legacy_programming_body_quietly_at_contract_one` |
 | Harness scope | START `the_startup_harness_is_scoped_to_its_call`; `e2e_semantic_contract::tests::the_startup_contract_override_is_scoped_thread_local_and_restored` |
 
 ## Storage and import detail (TL-567)
@@ -193,25 +201,28 @@ their implementation evidence is distinct from final TL-560 or human acceptance.
 
 ## Remaining gaps for TL-552
 
-- **Media color:**
-  - Preset record and recall, Update, undo;
-  - selective and MVR import, fixture replacement;
-  - live Group, unpatched, Preload GO.
-  - Only Cue record, save/reload and real startup are covered.
-- **Color Direct:** Programmer undo and Record undo.
-- **Preset recall:** semantic UV and Focus.
-- **MVR re-import of a GDTF profile change under a semantic Cue:** every column.
-- **Unpatched behaviour (not just stored rows):** Target, Direct, UV, Focus and Zoom.
-- **Preload GO commit:** Focus and Media.
-- **Contract coverage beyond the portable show:**
-  - Playback and Output runtime payloads are gated by the existing content-derived requirement
-    only. They have no legacy-key validator.
-  - Undo history (`object_history`) is not inspected.
-- **Legacy Zoom:** a percentage `zoom` is not rejected (owner scope). It is listed as a cutover
-  decision in the engineering checklist.
+- **Media color, Record undo:** only Programmer undo of a Media Group colour is covered
+  (`tl560/media_color.rs`).
+- **MVR import:** by decision patch and geometry only. The re-import tests prove storage and
+  binding (no rebinding, byte-identical programming), not fitted output, and they store no UV,
+  Direct, Focus or Zoom object.
+- **Defect: static Focus output ignores the authored Focus curve.** A static Focus (Programmer,
+  played Cue, committed Preload) stays on the scalar path of the Live frame
+  (`family_lanes/observer.rs`), which maps Normalized Focus linearly over the function's DMX
+  range. On Wash A (100 % at raw 10 → 0 % at raw 200) 37 % is output as raw 80, while the Focus
+  adapter used for Dynamics and Preload hybrids outputs raw 130 for the same stored value. The
+  expectation is `tl560/focus.rs::recorded_focus_reaches_the_authored_focus_curve_on_every_profile`,
+  `#[ignore]`d until fixed. The other new Focus tests therefore check stored intent, played
+  values, Zoom independence and that Focus reaches the wire, not the curve value.
+
+The earlier contract-coverage items are closed: Playback and Output runtime payloads and object
+Undo/Redo history are gated (`HL/show_programming_contract.rs`, tests in the legacy table above),
+and percentage Zoom is legacy (`light-show` `programming_contract.rs`).
 
 Run the regressions with:
 - `cargo test -p light-application --lib semantic_`;
 - `cargo test -p light-show --lib semantic_intent`;
 - `cargo test -p light-show --lib programming_contract`;
+- `cargo test -p light-application --lib semantic_media_color`;
+- `LIGHT_TMP_DIR=$PWD/.artifacts/tmp cargo test -p light-headless-runtime --lib tl560`;
 - `LIGHT_TMP_DIR=$PWD/.artifacts/tmp cargo test -p light-headless-runtime --lib semantic_contract_startup`.

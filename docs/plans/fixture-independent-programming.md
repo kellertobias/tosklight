@@ -6,13 +6,13 @@ This document records the researched architecture and implementation plan. The S
 
 Read [the delivery sequence](#implementation-sequence), [the application-wide change map](#7-application-wide-change-map), [the shared value contract](#8-shared-semantic-value-and-operation-contract), [the frame and tracking architecture](#10-authoritative-frames-tracking-and-rendering), and [the implementation issues](#12-implementation-issues-and-dependencies) together. UI completion does not complete any engine feature.
 
-## Current delivery checkpoint — 2026-10-01
+## Current delivery checkpoint — 2026-10-01 (contract status updated 2026-10-04)
 
 The architecture sections below include the original codebase assessment; later implementation checkpoints supersede historical missing-prerequisite statements. UI/mockup completion and library verification are separate from production delivery and human acceptance.
 
 The Position adapter now resolves its first complete common Resume cut across changing shared-motor peers and physical copies using captured original registries, conditioned endpoint cohorts and owned parent continuations. Requested intent/history stays separate from fitted values. Temporary retained evaluators can borrow episode-owned state, and bounded warm batch scratch survives frames independently per branch. Latest bounded Position verification: headless-runtime1585 passed with one existing ignored; the new complete whole Fixed-peer adapter tests passed3, output gate suite4, and corrected original cohort-rank assertion passed8 independent randomized runs. Four owned source hashes were stable; concurrent Claude changes are recorded separately. [Position Fixed-peer report](../../.artifacts/tmp/tl556-position-fixed-peer/integration-report.md) records scope and limits. Earlier [Position batch report](../../.artifacts/tmp/tl556-position-batch/integration-report.md) remains historical evidence.
 
-**Still required before production:** general nested/multi-source and operation-local shared-motor cuts, persistent paired Pending episodes and accepted publication, compiled-emitter container ownership, active Target dependencies/readouts, all-family native producer/arbitration/publication, native Stage/operator and performance/cutover acceptance. Production `SUPPORTED_PROGRAMMING_CONTRACT=0`; TL556 remains In progress. The full initiative is not complete.
+**Production contract (updated 2026-10-04):** since the TL-552 cutover production reports programming contract 1 (`PROGRAMMING_CONTRACT_VERSION`) and the all-family Live path is engaged (`crates/light/adapters/headless/src/runtime/e2e_semantic_contract.rs`); legacy-programming shows are rejected read-only. The full initiative is not complete: the remaining functional, coverage and documentation gaps are listed in the TL-544 gap audit (cross-representation fades, Direct Color first edits, typed command-line values, fixture coverage, native Stage/operator and performance acceptance). The paragraph above is the historical 2026-10-01 checkpoint.
 
 ## 1. Architecture and research conclusions
 
@@ -2814,7 +2814,7 @@ generation comparisons conservatively refit after unrelated edits, and moving ta
 require solves. [TL-615](https://plans.tokenet.de/TL/615) owns isolated captured Position benchmark
 workloads; TL-596 owns assembled output deadline evidence and TL-553 owns full native Stage and
 operator acceptance. [Verified checkpoint](../../.artifacts/tmp/tl556-position-target-dependencies/integration-report.md).
-Production support remains gated at contract 0 until the complete reader/writer and consumer cutover.
+At this checkpoint production support was gated at contract 0; the TL-552 cutover has since raised production to contract 1.
 
 Deleting a Cue during an interrupted transition now captures the actual sampled output before
 clearing the retained transition source. Navigation then starts from that exact held value.

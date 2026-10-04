@@ -6,10 +6,51 @@ Acceptance for the Position, Color and Focus/Zoom work in TL-544, especially the
 frame boundary in TL-548. The architecture is specified in
 [Fixture-independent programming](../plans/fixture-independent-programming.md).
 
-These are acceptance scenarios for the new programming contract. Production still accepts
-contract 0 until the integration gates in the plan pass. Rust domain and adapter tests cover
-parts of these scenarios; they do not establish completed operator, native Stage or capacity
-acceptance. No Playwright automation is claimed for this document.
+These are acceptance scenarios for the programming contract production reports since TL-552
+(contract 1). `tests/121-intention-programming-frame-contract.spec.ts` drives the operator- and
+API-observable parts end to end through the real server (HTTP, command line, published frame
+readouts and DMX). Steps not listed below remain Rust-only or manual; Rust tests do not establish
+operator, native Stage or capacity acceptance.
+
+- **INTENT-FRAME-001**: Playwright covers steps 1–6 and storage/recall: the saved Pan Dynamic gains
+  a Current Tilt partner; Tilt follows a static edit, a Speed Group pause and save/reopen; a later
+  Angle Dynamic wins the whole pair with no mixed frame; a Pan FixAT masks only Pan and Undo reveals
+  the running phase; Target and Angles replace each other atomically; Angles stored in a Preset, a
+  Cue and a Group Cue recall in degrees on a replaced mover, and Preload GO commits them. FixAT fade
+  timing is Rust-only (`full_coverage_and_release_make_masks_inactive_or_reveal_the_continuing_phase`,
+  `angle_pair_normalization_is_persisted_stable_and_prunes_only_untouched_partners`).
+- **INTENT-FRAME-002**: Playwright covers steps 1–3 and 6: deleting the aimed Point withholds the
+  Angle Dynamic as a complete pair while Intensity continues and the Target reference is kept; a
+  static Target holds its last aim; edits, FixAT and a Preset recall with nothing selected leave the
+  Programmer unchanged (Undo history is not yet asserted). Steps 4–5 (Resume clocks across
+  save/reopen, an unavailable original Direct model) are Rust-only. Two tests are expected failures
+  documenting product bugs: a Dynamic start with nothing selected advances the Programmer revision,
+  and the Dynamic status reports running semantic Angle lanes as skipped.
+- **INTENT-FRAME-003**: Playwright covers steps 1–4 and the record comparison of step 6: magenta with
+  UV and a warm white survive RGB → RGBW → CMY replacement through Presets and a Group Cue, White is
+  never retained, the wheel head reports its quality and unsupported UV passively, and a Direct
+  recipe keeps its source identity with best-effort replay on a different fixture. Step 5 (Color
+  FixAT masks) and the pause/release/transition parts of step 6 are Rust-only.
+- **INTENT-FRAME-004**: Playwright covers steps 1–3 without PSN: DMX, Position readouts and the
+  Color report publish one frame identity; reads are inert; a scalar Dynamic on a Point axis moves
+  the Point once, the aimed mover follows in the same frame, and the show is not written. PSN steps
+  (1, 7, 8) belong to tests/123 for [doc 19](19-tracking-with-posistagenet.md). Freeze is
+  family-wide, so freezing one Point axis is not an operator action. Steps 4–6 and 9–20 are
+  Rust-only, or manual where native Stage is involved.
+- **INTENT-FRAME-005**: Playwright covers steps 1, 7 and 8 for static values: Preload publishes its
+  own frame with the pending Tilt while the Live effect and Live Tilt are unchanged, reads dispatch
+  nothing, Shift Preload clears, and Preload GO commits the pending Tilt under the running effect.
+  Steps 2–6 and 9–20 (coalesced replay, journal cursors, rollback) are Rust-only
+  (`cold_and_controls_follow_cursor_order_even_at_equal_time` and the `retained_preload_hybrid`
+  tests). Observing both lanes in native Stage is manual.
+- **INTENT-FRAME-006**: Playwright covers steps 3, 5 and 6: with crossfade enabled, a standalone
+  Dynamic Playback master blends from static Current and zero is a Current-valued vote; without
+  crossfade, a positive master keeps the endpoint and zero casts no vote; Cue brightness dims only
+  Intensity; a Pan FixAT keeps its value while the master blends Tilt. These tests move the virtual
+  fader. One test is an expected failure documenting a product bug: the physical fader is rejected.
+  Steps 1–2, 4 and 7–8 are Rust-only
+  (`cue_submillis_precedes_stable_order_in_actual_fixed_composition`,
+  `captured_master_controls_endpoint_before_activation_over_a_different_dynamic_underlay`).
 
 The older [Color Intent](26-color-intent.md) and [Dynamic reuse](28-dynamic-reuse-across-groups.md)
 scenarios describe the existing contract. Their normalized Position and show-wide Direct/Intent

@@ -5,8 +5,8 @@
 These scenarios are the acceptance contract for TL-550. They cover the production Color Special
 Dialog, its compact and full layouts, Shift ranges, the desk's Easy/Advanced Color setting, Media
 layers and the quiet Fixture Sheet Color status under the fixture-independent programming
-contract. The legacy Color dialog and encoder pages stay in force while the runtime reports
-programming contract 0.
+contract. Production reports programming contract 1 (TL-552), so the semantic Color dialog and
+encoder pages are the desk's Color controls.
 
 Executable coverage:
 
@@ -21,10 +21,22 @@ Executable coverage:
 - The root Playwright spec `tests/65-semantic-special-dialogs-and-hardware-selection.spec.ts`
   carries COLOR-RANGE-001, the SEMANTIC-COLOR-003 White Blend range from the keyboard Shift (one
   drag) and the attached hardware Shift (two touches), its Undo and a cancelled first endpoint.
-- The root Playwright spec `tests/112-color-intent.spec.ts` carries SEMANTIC-COLOR-001 and 004. Under
-  `npm run test:e2e` they skip, because production reports programming contract 0.
+- The root Playwright spec `tests/112-color-intent.spec.ts` carries SEMANTIC-COLOR-001 and 004.
+- The root Playwright spec `tests/119-semantic-color-controls.spec.ts` carries SEMANTIC-COLOR-002,
+  005 and 006 at 1496×761 in the software-only layout: the full modal's frame, hue ring, faders and
+  approximation of a JBLED A7 / ROOT PAR 6 / wheel-only rig (the wheel profile carries measured
+  slots, because an uncalibrated head never shows a Δu′v′); the Media color dialog with White Blend
+  read from the layers' DMX greyscale and tint and from the preview card, with layer and Master
+  Intensity unchanged; and the Fixture Sheet triangle, its single batched report request, the
+  absence of any message or focus move, and tap and Enter opening the details. Known defects are
+  kept as expected failures there: the full modal overflows vertically at 1496×761 because of the
+  Direct color section, the Fixture Sheet Color cell shows no value for a semantic colour, and a
+  report read before the frame is accepted is not repeated until the Programmer changes.
+- All of these run under `npm run test:e2e`, because production reports programming contract 1;
   `npm run test:e2e-semantic` runs them on the contract-1 E2E test server, where a missing semantic
   publication fails instead of skipping.
+- Manual: the 1024×768 and 760×900 viewports and the hardware-connected layout for 002, the physical
+  Media picture for 005 (TL-523) and the absence of sound for 006.
 
 Physical colour, UV and Media picture evidence is manual (TL-523). Record the build, the desk mode,
 the viewport, the fixtures and the Media personality with every manual run.

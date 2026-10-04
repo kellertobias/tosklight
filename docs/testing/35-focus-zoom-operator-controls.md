@@ -6,15 +6,26 @@ These scenarios are the acceptance contract for TL-551: the production Focus Spe
 Focus family encoders under the fixture-independent programming contract. Zoom is a full opening
 angle in degrees, in the profile's Beam or Field convention. Focus is lens travel from 0% to 100%.
 
-Executable coverage today is Vitest only:
+Executable coverage:
 
-- `apps/light-desktop/src/components/modals/specialDialogs/focus/`
-- `…/parameterControls/familyEncoders/useFamilyEncoderBinding.focus.test.tsx`
+- Vitest: `apps/light-desktop/src/components/modals/specialDialogs/focus/` and
+  `…/parameterControls/familyEncoders/useFamilyEncoderBinding.focus.test.tsx`
 - the Storybook mockup spec `fixture-abstraction-mockup.spec.ts`
 
 The root Playwright spec `tests/118-focus-zoom-operator-controls.spec.ts` covers FOCUS-ZOOM-001 to
-005, 007 and 009. Under `npm run test:e2e` it skips, because production reports programming
-contract 0. `npm run test:e2e-semantic` runs it on the contract-1 E2E test server.
+009. Production reports programming contract 1, so it runs under `npm run test:e2e` as well as
+`npm run test:e2e-semantic`.
+
+- FOCUS-ZOOM-006 ends a dialog Focus drag with a window `blur` and a dialog Zoom drag with the
+  document becoming hidden. Both are synthetic browser events. It counts every Programmer write
+  the desk sends. A real application switch and a minimised desk window remain manual checks.
+- FOCUS-ZOOM-008 arms Preload through the Preload lifecycle route and leaves it with Blind off,
+  and reads the lane of every write from the request. Production publishes no Preload (Pending)
+  readouts yet, so the Preload drags start from a requested Preload Zoom. The first Zoom step
+  from scratch in Preload is kept as an expected failure. Step 3 is covered: no write of the
+  switched drag reaches the Normal Programmer, its Finish stays on Preload, and the next drag is
+  Normal. The rest of the drag after the switch is not sent yet; that case is also an expected
+  failure.
 
 - FOCUS-ZOOM-002 to 005 use two Cameo AURO SPOT Z300. Its profile declares the Beam convention from
   the user manual (TL-637), with 10–25° selection limits.
@@ -42,8 +53,6 @@ hardware-connected layout.
 4. Verify that the beam diagram stays inside the modal and that the labels are at least 12 px.
 5. Close the dialog with the close button, then open it again and close it with **Escape**. Each
    time, verify that the encoders are restored and that no Programmer request was sent.
-6. Repeat on a contract-0 desk. The Focus tab offers no Special Dialog, and the encoders keep their
-   normalized behaviour.
 
 ## FOCUS-ZOOM-002 — Drag Zoom by the beam edges
 

@@ -346,7 +346,9 @@ the show.
 The Color tab also contains **Physical optical paths**, one per head. Use **Create physical path**
 to start from the head's existing Color controls. Existing emitter values retain their evidence
 quality; a missing source or filter measurement stays Unknown. These settings are saved with the
-fixture and its portable package. They do not yet change live Color matching or Stage simulation.
+fixture and its portable package. Live Color matching uses them: a requested colour is fitted to
+this head's native controls through its optical path, and the Color dialog's approximation reports
+the result with the path's evidence quality.
 
 **Native Color controls** lists the exact profile channels participating in Color. Include all
 emitters, filters, wheels and color-mode controls. Function selectors identify the actual native
@@ -379,10 +381,11 @@ unwrapped **Pan zero offset (°)** and **Tilt zero offset (°)**, quality, sourc
 Manufacturer and Measured quality require a source. **Clear calibration** returns that physical
 instance to missing calibration; the fixture-library profile remains unchanged.
 
-The offsets are stored with the portable show/patch and survive edits in Architect. In this
-increment they do not yet alter DMX output or Stage. Existing normalized Pan/Tilt inversion and
-mounting rotation remain separate; the future calibrated resolver applies direction and zero
-correction once.
+The offsets are stored with the portable show/patch and survive edits in Architect. When Position
+is programmed in degrees or as a Target, the desk applies them while converting to Pan/Tilt DMX, so
+they change the DMX output and the Stage beam that follows it. Existing Pan/Tilt inversion and
+mounting rotation remain separate settings; the resolver applies direction and zero correction
+once.
 
 ### Emitters & Motion
 
