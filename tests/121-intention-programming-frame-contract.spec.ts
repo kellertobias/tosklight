@@ -454,7 +454,10 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		api,
 		bench,
 	}) => {
-		test.fail(true, "BUG: POST /api/v2/dynamics/{id}/start with an empty selection advances the Programmer values revision although nothing is activated");
+		test.fail(
+			true,
+			"OPEN: a targetless Dynamic started with nothing selected falls back to every fixture in the show (crates/light/src/dynamics/helpers.rs resolve_targets), so the Programmer changes; product decision pending",
+		);
 		const rig = await moverRig(api, "002-no-selection-dynamic");
 		const sweep = await createDynamic(api, rig, PAN_SWEEP);
 		await select(api, rig, []);
