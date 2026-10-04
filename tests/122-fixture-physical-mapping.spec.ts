@@ -616,10 +616,6 @@ test.describe("docs/testing/31-fixture-physical-mapping.md", () => {
 		api,
 		bench,
 	}) => {
-		test.fail(
-			true,
-			"BUG: Patch accepts a nonzero bracket_angle on a profile whose Position contract has no Hinge bracket, after which that instance emits the profile default Pan/Tilt instead of the programmed Angles, without any error",
-		);
 		const { showId, fixtureIds } = await arrangeMovers(api, bench, "INSTALLATION-001 bracket");
 		requireSemanticContract(await publishesSemanticPosition(api, fixtureIds), GATE);
 		const [mover] = fixtureIds;

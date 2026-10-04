@@ -271,9 +271,28 @@ fn bracket_moves_lens_and_model_delta_without_double_neutral_transform() {
             &mut output,
         )
         .unwrap();
-    assert!(output[0].world.is_none());
+    // Without a hinge the bracket turns the whole fixture about its X axis between the mount and
+    // the graph: `world` turns ((x, y, z) -> (x, -z, y) at +90°), `local` and the node delta
+    // stay bracket-free for a renderer that turns the instance itself.
+    let level = compile(&p, PositionInstallation::default());
+    let mut level_workspace = level.create_workspace();
+    let mut level_output = level.create_output();
+    level
+        .evaluate_pose(
+            &[Some(0.), Some(0.)],
+            R::IDENTITY,
+            &mut level_workspace,
+            &mut level_output,
+        )
+        .unwrap();
+    let flat = level_output[0].local.unwrap().point([0.; 3]);
+    near(output[0].local.unwrap().point([0.; 3]), flat);
+    near(
+        output[0].world.unwrap().point([0.; 3]),
+        [flat[0], -flat[2], flat[1]],
+    );
     assert!(
-        output[0]
+        !output[0]
             .flags
             .contains(PositionForwardFlags::UNSUPPORTED_BRACKET)
     );

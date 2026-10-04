@@ -374,9 +374,6 @@ impl GeometryGraph {
                 return Err(invalid("unknown or nonfinite physical axis"));
             }
         }
-        if bracket_degrees != 0.0 && !matches!(contract.bracket, GeometryBracket::Hinge { .. }) {
-            return Err(invalid("nonzero bracket requires an authored hinge"));
-        }
         let e = self
             .emitters
             .iter()
@@ -399,7 +396,16 @@ impl GeometryGraph {
             chain.push(n);
             cursor = n.parent_id;
         }
-        let mut world = R::IDENTITY;
+        // Without an authored hinge the bracket turns the whole fixture about its own transverse
+        // axis at its origin, positive nose-down, exactly as the Stage draws it.
+        let mut world = if bracket_degrees != 0.0
+            && !matches!(contract.bracket, GeometryBracket::Hinge { .. })
+        {
+            R::axis_angle([1.0, 0.0, 0.0], bracket_degrees)
+                .ok_or_else(|| invalid("invalid bracket rotation"))?
+        } else {
+            R::IDENTITY
+        };
         for n in chain.into_iter().rev() {
             let mut rotation = R::euler_xyz(vec(n.transform.rotation_degrees))
                 .ok_or_else(|| invalid("invalid neutral rotation"))?;

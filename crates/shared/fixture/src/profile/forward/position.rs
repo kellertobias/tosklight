@@ -95,6 +95,12 @@ pub struct PositionPoseGraph {
     lenses: Box<[Lens]>,
     flags: PositionForwardFlags,
     geometry_quality: PhysicalDataQuality,
+    /// A bracket angle without an authored hinge turns the whole fixture about its own
+    /// transverse (X) axis at its origin, positive nose-down, exactly as the Stage draws it. It
+    /// applies between the mount and the fixture, so `local` poses and node deltas stay
+    /// bracket-free for renderers that turn the instance themselves.
+    #[serde(default)]
+    whole_bracket_degrees: f64,
 }
 #[derive(Clone, Debug)]
 pub(in crate::profile) struct Driver {
@@ -401,11 +407,11 @@ impl CompiledPositionForward {
             flags.0 |= PositionForwardFlags::STALE_CALIBRATION.0;
             calibration.axis_overrides = None;
         }
-        if installed.bracket_degrees != 0.
-            && !matches!(contract.bracket, GeometryBracket::Hinge { .. })
-        {
-            flags.0 |= PositionForwardFlags::UNSUPPORTED_BRACKET.0;
-        }
+        let whole_bracket_degrees = if matches!(contract.bracket, GeometryBracket::Hinge { .. }) {
+            0.
+        } else {
+            installed.bracket_degrees
+        };
         let (indices, order) = physical_ancestry(&graph)?;
         let channel_indices: HashMap<_, _> = mode
             .channels
@@ -481,6 +487,7 @@ impl CompiledPositionForward {
                 lenses,
                 flags,
                 geometry_quality: contract.provenance.quality,
+                whole_bracket_degrees,
             }),
             axes: axes.into_boxed_slice(),
         }))
@@ -519,7 +526,7 @@ impl CompiledPositionForward {
             return None;
         }
         let lens = &self.geometry.lenses[lens];
-        let mut pose = mount;
+        let mut pose = self.geometry.mounted(mount);
         let mut source = None;
         // World rotation (radians per joint degree), pivot and whether it also turns the lamp.
         let mut joints: [Option<Joint>; 2] = [None; 2];
@@ -674,6 +681,14 @@ impl CompiledPositionForward {
     }
 }
 impl PositionPoseGraph {
+    /// The mount followed by a hinge-less bracket's whole-fixture turn.
+    fn mounted(&self, mount: R) -> R {
+        if self.whole_bracket_degrees == 0. {
+            return mount;
+        }
+        R::axis_angle([1., 0., 0.], self.whole_bracket_degrees)
+            .map_or(mount, |bracket| mount.compose(bracket))
+    }
     /// Configuration-time ancestor dependency list; unrelated articulated heads stay independent.
     pub fn lens_axis_indices(&self, lens: usize) -> Box<[usize]> {
         let mut result = Vec::new();
@@ -761,7 +776,7 @@ impl PositionPoseGraph {
                         Some(m) => m.reflect(pose, workspace.nodes[m.source]?),
                     })
             };
-            out.world = out.local.map(|p| mount.compose(p));
+            out.world = out.local.map(|p| self.mounted(mount).compose(p));
             out.geometry_quality = self.geometry_quality;
             if workspace.nodes[lens.node].is_none() {
                 out.flags.0 |= PositionForwardFlags::UNKNOWN_AXIS.0;

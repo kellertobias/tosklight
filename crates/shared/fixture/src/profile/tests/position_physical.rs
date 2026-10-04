@@ -270,12 +270,22 @@ fn bracket_and_lens_use_profile_geometry_without_artwork() {
             .reference_lens_pose(id, &HashMap::new(), 90.0)
             .unwrap()
     );
+    // Without an authored hinge the bracket turns the whole lamp about its own X axis at its
+    // origin, as the Stage draws it: +90° maps (x, y, z) to (x, −z, y).
     p.geometry.physical_contract.as_mut().unwrap().bracket = GeometryBracket::Unknown;
-    assert!(
-        p.geometry
-            .reference_lens_pose(id, &HashMap::new(), 90.0)
-            .is_err()
-    );
+    let level = p
+        .geometry
+        .reference_lens_pose(id, &HashMap::new(), 0.0)
+        .unwrap()
+        .point([0.0; 3]);
+    let turned = p
+        .geometry
+        .reference_lens_pose(id, &HashMap::new(), 90.0)
+        .unwrap()
+        .point([0.0; 3]);
+    for (a, b) in turned.into_iter().zip([level[0], -level[2], level[1]]) {
+        assert!((a - b).abs() < 1e-10)
+    }
 }
 #[test]
 fn shared_pan_can_reach_other_heads_only_through_shared_control() {

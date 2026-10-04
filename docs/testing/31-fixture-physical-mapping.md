@@ -26,8 +26,8 @@ Production reports programming contract 1, so the semantic-output tests run unde
   retention); FIXTURE-GDTF-003 steps 1–2 (300 fixtures);
   FIXTURE-GDTF-004 step 1 (preview writes nothing); FIXTURE-PHYSICAL-MOTION-001 step 4 (root/copy axis
   overrides, no stacking, emitted words, portable round trip); FIXTURE-OPTICAL-UV-001 step 4.
-- One `test.fail` records an open defect: a nonzero patch bracket angle on a profile without an authored
-  Hinge bracket is accepted, after which that instance silently emits the profile-default Pan/Tilt.
+- A nonzero patch bracket angle on a profile without an authored Hinge bracket turns the whole
+  fixture about its own transverse axis, as the Stage draws it; programmed Angles still reach the wire.
 - Rust/Vitest evidence for the rest: MAPPING/OPTICS editor rules in
   `apps/patch-library/src/library/physicalMappingEditor.test.tsx`, `colorPhysicalEditor.test.tsx` and
   `crates/shared/fixture/src/profile/tests/{physical_mapping,color_physical}.rs`; GDTF/MVR in
