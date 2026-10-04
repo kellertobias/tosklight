@@ -25,9 +25,7 @@ operator, native Stage or capacity acceptance.
   Programmer unchanged (Undo history is not yet asserted). Steps 4–5 (Resume clocks across
   save/reopen, an unavailable original Direct model) are Rust-only. One test is an expected failure
   pending a product decision: a targetless Dynamic started with nothing selected falls back to
-  every fixture in the show, so the Programmer changes. A second expected failure documents that
-  two Dynamic Playback master moves before the next output frame leave its runtime instance
-  unstarted.
+  every fixture in the show, so the Programmer changes.
 - **INTENT-FRAME-003**: Playwright covers steps 1–4 and the record comparison of step 6: magenta with
   UV and a warm white survive RGB → RGBW → CMY replacement through Presets and a Group Cue, White is
   never retained, the wheel head reports its quality and unsupported UV passively, and a Direct

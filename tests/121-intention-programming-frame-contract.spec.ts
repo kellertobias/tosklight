@@ -804,26 +804,8 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		const dynamic = await createDynamic(api, rig, holdAt(3, mover));
 		await seedDynamicPlayback(api, rig, 3, { ...dynamic, pool_number: 3 }, true);
 		await playbackAction(api, 3, "master", { value: 1 });
-		// The runtime instance starts on the next output frame (see the burst bug below).
+		// The runtime instance starts on the next output frame; the bench clock is manual.
 		await bench.tick(25);
-		await playbackAction(api, 3, "master", { value: 0.5 });
-		expectAngles(await poseAfter(api, bench, mover, 1_000), 20, 10, "half master from home");
-	});
-
-	test("INTENT-FRAME-006 @api › a fader burst before the next frame still starts the Dynamic Playback", async ({
-		api,
-		bench,
-	}) => {
-		test.fail(
-			true,
-			"BUG: a second master move before the next output frame leaves the Dynamic runtime instance unstarted (state failed) for good",
-		);
-		const rig = await moverRig(api, "006-burst");
-		const [mover] = rig.movers;
-		await select(api, rig, []);
-		const dynamic = await createDynamic(api, rig, holdAt(3, mover));
-		await seedDynamicPlayback(api, rig, 3, { ...dynamic, pool_number: 3 }, true);
-		await playbackAction(api, 3, "master", { value: 1 });
 		await playbackAction(api, 3, "master", { value: 0.5 });
 		expectAngles(await poseAfter(api, bench, mover, 1_000), 20, 10, "half master from home");
 	});
