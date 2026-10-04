@@ -5,6 +5,8 @@ import { acceptedHeads } from "./acceptedColorReport";
 
 /** At most one report read per this interval, however often the refresh key changes. */
 export const COLOR_REPORT_MIN_INTERVAL_MILLIS = 1_000;
+/** Re-reads after a report not yet read from an accepted output frame. */
+export const COLOR_REPORT_UNACCEPTED_RETRIES = 10;
 
 /**
  * One batched accepted-frame colour report for a set of fixtures (TL-550).
@@ -12,8 +14,11 @@ export const COLOR_REPORT_MIN_INTERVAL_MILLIS = 1_000;
  * A single request covers every fixture (never one request per row). It is re-read when the
  * fixture set or `refreshKey` (for example the Programmer projection) changes, throttled to one
  * read per second. A report not read from an accepted output frame is discarded, so nothing is
- * shown at the legacy contract or before the colour has been output. Failures are passive: the
- * last accepted report stays, and no message is raised.
+ * shown at the legacy contract or before the colour has been output. Until a report from an
+ * accepted frame arrives, the read is retried once per interval, at most
+ * `COLOR_REPORT_UNACCEPTED_RETRIES` times, so an early "not yet output" does not hide the report
+ * until the next refresh. Failures are passive: the last accepted report stays, and no message is
+ * raised.
  */
 export function useAcceptedColorReport(
 	fixtureIds: readonly string[],
@@ -27,24 +32,27 @@ export function useAcceptedColorReport(
 	useEffect(() => {
 		if (!enabled || !actions || !key) return;
 		let current = true;
+		let retries = COLOR_REPORT_UNACCEPTED_RETRIES;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const retry = () => {
+			if (!current || retries <= 0) return;
+			retries -= 1;
+			timer = setTimeout(read, COLOR_REPORT_MIN_INTERVAL_MILLIS);
+		};
 		const read = () => {
 			lastRead.current = Date.now();
 			actions.colorIntentReport(key.split(",")).then(
 				(report) => {
-					if (current && acceptedHeads(report))
-						setState({ key, report });
+					if (!current) return;
+					if (acceptedHeads(report)) setState({ key, report });
+					else retry();
 				},
-				() => undefined,
+				() => retry(),
 			);
 		};
 		const wait = lastRead.current + COLOR_REPORT_MIN_INTERVAL_MILLIS - Date.now();
-		if (wait <= 0) {
-			read();
-			return () => {
-				current = false;
-			};
-		}
-		const timer = setTimeout(read, wait);
+		if (wait <= 0) read();
+		else timer = setTimeout(read, wait);
 		return () => {
 			current = false;
 			clearTimeout(timer);
