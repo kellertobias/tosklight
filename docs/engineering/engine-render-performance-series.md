@@ -1372,6 +1372,10 @@ every frame (about 2.6 MB per hard-floor frame in preparation records, 1.8 MB in
 1.5 MB in applying the forks' caches); pooling or sizing them gained about 0.1-0.2 ms in a trial
 and was not kept for this round.
 
+Round 6 (next section) moves most of the sequential remainder of the typed frame (deferred
+completion, Position composition and root fitting, program capture, static target discovery,
+frees) onto the pool; the per-target data volume is unchanged.
+
 ### Measurement identities
 
 - Baseline: `f67c84e48`, binary `8a95e4a0…`.
@@ -1387,3 +1391,218 @@ and was not kept for this round.
   `p1`-`p12`, `final`, `final2`, `final2-w{1,2,4,max}`, `final2-verify`); profiles
   `p-final2-{s2000,hf}.txt`; allocation counts `allocs-final2.txt`; the mimalloc measurement
   `mi-bench/`.
+
+## Semantic output, round 6: the sequential remainder on the pool (TL-639)
+
+Round 6 was asked to cut memory traffic per target and the sequential remainder of the typed
+frame (the Position path and the deferred completion on stress 2,000; the static resolutions and
+the render on the hard floor), to extend the compiled per-target plan, and to check the default
+worker count for smaller desks. What was built moves most of the output thread's per-target work
+onto the worker pool with the round-5 determinism rules, and removes a few whole-frame copies;
+the per-target data volume itself did not shrink (allocations per frame are within 1 % of round
+5). Every step was byte-identical to `3a19b23f8` on all 12 digest workloads, and the final binaries
+also at 1 and 18 workers (step 9 at 1, 2, 4 and 18) and with plan verification. Typed stress 2,000 and 4,000 run 26-27 %
+faster at p50 than `3a19b23f8` alternated on the same host; the typed hard floor 6 %. No typed
+deadline is met.
+
+### Gates
+
+Runner, thresholds and references as in round 5; campaign binary `b3f2418e…` with the default
+worker count (8 on this host). The host was busier than in round 5 (load average 4.7-5.6; the
+reference's single-worker typed hard floor measured 18.4 ms during the campaign against 14.3 ms at
+the start of the round), so absolute numbers are inflated by roughly a quarter; the alternated
+comparisons are like for like. Pipeline ms, medians.
+
+| Gate (existing threshold) | Round 5 | Round 6 |
+| --- | --- | --- |
+| Paired p99 regression ≤ max(1 ms, 5 %), stress 2,000 / 60 Hz | pass, -0.71 | **pass**: 6.04 → 5.08 (-0.96) |
+| Paired p99 regression, stress 4,000 / 60 Hz | pass, -2.26 | **pass**: 12.82 → 10.33 (-2.49) |
+| Paired p99 regression, hard floor 4,148 / 125 Hz | pass, -0.76 | **pass**: 5.24 → 3.65 (-1.59); 125 Hz held 5 of 5 |
+| Typed stress 2,000 / 60 Hz: rate held, 0 misses | fail, p99 43.11, 25.2 Hz | **fail**: p50 33.42, p99 36.29, 29.7 Hz |
+| Typed stress 4,000 / 60 Hz | fail, p99 92.38, 11.4 Hz | **fail**: p50 71.11, p99 100.65, 13.8 Hz |
+| Typed hard floor 4,148 / 125 Hz | fail, p99 12.32, 91.7 Hz | **fail**: p50 12.35, p99 13.55, 80.5 Hz (about 490 misses per round) |
+| TL-564 mix, 27 configurations: rate held, 0 misses | 26 pass | 25 pass (see below) |
+| No generation change or compile from motion | pass | pass |
+| Static bases: 0 Position fits, dependents 6 / 24, unchanged Colour skips solves | pass | pass |
+| Readout consumers do not multiply physical solves | pass | pass |
+
+The typed rows above are the capacity suite on the busy host. Alternated against `3a19b23f8`
+(three rounds, `before-after-typed/`):
+
+| Profile | `3a19b23f8` p50 / p99 | Round 6 p50 / p99 | Rate | RSS |
+| ---: | ---: | ---: | ---: | ---: |
+| Typed stress 2,000, 60 Hz | 45.08 / 47.55 | 33.29 / 35.74 | 22.1 → 29.8 Hz | 390 → 400 MB |
+| Typed stress 4,000, 60 Hz | 97.68 / 102.78 | 71.34 / 79.14 | 10.1 → 13.9 Hz | 670 → 760 MB |
+| Typed hard floor, 125 Hz | 12.85 / 14.28 | 12.06 / 14.15 | 76.9 → 81.9 Hz | 287 → 296 MB |
+
+At the start of the round, on a quiet host, the reference ran typed stress 2,000 at 39.2 / 41.7
+ms and the typed hard floor at 10.4 / 12.0 ms (8 workers); scaled by the alternated ratios the
+round-6 binary would be near 29 ms and 9.7 ms there. By p99 the typed tiers remain about 2.1×
+(stress 2,000) and 1.8× (hard floor, busy host) from their budgets.
+
+TL-564: the two failures are static-points with 60 Hz tracking and small-subset with 120 Hz
+tracking, both at 125 Hz output, with 3 and 1 late frames in runs whose pipeline p99 is 2.7 and
+3.6 ms. Ten alternated repeats of each and the twenty all-points-move repeats at 125 Hz
+(`repeat-125-fails/`, `repeat-125/`): `3a19b23f8` had late frames in 3 of 40 runs (4 frames),
+round 6 in 6 of 40 (8 frames); pipeline p99 medians agree within 0.1 ms. Every slow frame the benchmark
+printed after warm-up (`LIGHT_BENCHMARK_SLOW_FRAME_MS=8`) is 8-17 ms of transaction with a
+0.7-8 ms tracking component, the same signature in both binaries; as in rounds 2-5 they are attributed to host scheduling. The TL-564 rigs have about a
+hundred fixtures; of this round's sections only the Position composition (64 groups) and root
+fitting (64 roots) can engage there.
+
+### Worker scaling and the default for smaller desks
+
+Final binary, two rounds of 5 s on the busy host, pipeline p50 / p99 (`workers/`):
+
+| Workers | 1 | 2 | 4 | 6 | 8 (default) | 18 (`max`) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Typed stress 2,000 | 68.09 / 72.06 | 57.65 / 63.42 | 42.48 / 46.41 | 36.55 / 39.48 | 33.25 / 35.58 | 29.99 / 42.00 |
+| Typed hard floor | 18.13 / 20.61 | 15.25 / 17.10 | 12.81 / 14.83 | 11.88 / 13.78 | 12.03 / 13.43 | 11.98 / 13.42 |
+| Legacy stress 2,000 | 5.54 / 6.31 | 4.76 / 5.37 | 4.31 / 4.92 | 4.22 / 5.13 | 4.21 / 4.86 | 4.33 / 4.99 |
+| Legacy hard floor | 3.10 / 4.16 | 2.85 / 3.59 | 2.80 / 3.43 | 2.72 / 3.58 | 2.61 / 3.39 | 2.85 / 3.43 |
+
+Single-worker frames are not slower than `3a19b23f8` (alternated, three rounds:
+typed hard floor 18.43 → 18.12 ms, typed stress 2,000 69.12 → 68.05 ms; `w1-ab-*.txt`).
+
+The default stays `min(available_parallelism, 8)`. On this host four workers already give 87 % of
+the eight-worker hard-floor gain and 74 % of the stress-2,000 gain, and the legacy tiers saturate
+at four. On a four-core desk the default is four workers: the output thread sleeps on the
+section's latch while they run, so a section uses at most the four cores, and everything outside
+the sections stays on the output thread. That machine's own memory bandwidth and core mix decide
+the absolute numbers; this 18-core host cannot emulate it (macOS has no core affinity). If a
+four-core desk's interface stutters during typed output, `LIGHT_OUTPUT_WORKERS=3` is the
+setting to try; outputs are identical for every count.
+
+Memory boundedness, re-measured (`concurrent/`, single-worker processes side by side, p50 of
+each): typed hard floor 18.09 → 20.18 → 22.25 → 28.10 ms for 1, 2, 3 and 6 processes; legacy
+3.04 → 3.25 → 3.51 → 4.06 ms (the busy host slows the legacy tier too this time).
+
+### Equivalence
+
+Every step was compared with `3a19b23f8` by `--digest-ticks` on the 12 workloads of rounds 4-5:
+0 fixture mismatches, DMX equal on every tick, work counters equal on every tick. Step 5 and both
+final binaries were also compared at `LIGHT_OUTPUT_WORKERS` 1 and `max` (18), step 9 at 1, 2, 4
+and 18, and all three with `LIGHT_VERIFY_PLANS=1`: 12/12 each. Under `cfg(test)` every new section's threshold is two items,
+so the engine, dynamics and runtime unit suites run them.
+
+### What changed
+
+- **Deferred completion on the pool** (`light_dynamics::runtime::sampling::staged::parallel`).
+  Evaluating a typed lane reads its compiled lane, its controller's pins and Current of its own
+  target; the only write, a keyframe transition for the lane's cache, is now returned
+  (`CompiledProgrammingLane::sample_with_cache`) and kept by the frame in order
+  (`keep_transition`), so a worker never touches the lane. Lanes are cut by target shard; each
+  chunk evaluates in frame order against a fork of the sources (the round-5 forks, one group per
+  lane); the frame resolves every plan exactly as before, taking each evaluation from its chunk's
+  record and appending the fork's logs at that place, or evaluating a lane itself (and every later
+  one of its chunk) where the fork needed the Position lane.
+- **Position composition on the pool** (`physical_adapter::position::frame_worker`). One body
+  composes a Position program (and observes its rows) over the frame's observer or over a
+  worker's read-only view of it: captured programs, Current cohorts, the lane's descriptors and
+  committed continuity. The ordinary-groups section now composes the Position groups the batch
+  does not handle on the worker that owns their target; each worker records the pending cohort
+  members and the frame takes them in group order. `PositionAdapter` became `Sync` (instance cache
+  and counters behind `Mutex`es, tracking behind a read/write lock, a Current cohort's lazy fit
+  behind a `Mutex`, so it still runs once); the thread audit records it.
+- **Root fitting on the pool** (`PositionAdapter::resolve_cohort_programs_on`). A physical root's
+  fit reads its own requests, instances and accepted continuity and writes only its members'
+  resolutions; from 64 roots they fit on the pool and the frame takes results, the first error and
+  the work counters in root order.
+- **Program capture on the pool** (`frame_observer::capture_programs`). Each Position program's
+  registry is built on the pool from one shared sample list (the requested program and the
+  registry held two copies before); capture identities are drawn in program order first.
+- **Static target discovery on the pool** (`lane::static_targets`). The Position, Colour and Zoom
+  scans read only the baseline and compiled descriptors; chunks of fixtures run on the pool and the
+  frame applies the duplicate and error rules in order. A descriptor not yet compiled for this
+  generation sends the scan back to the frame.
+- **Less copying.** The frame's completed samples are moved into the published sample list, not
+  cloned (`CompletedDynamicSamples::take_samples`); emission moves each pinned expression instead
+  of cloning it and keeps an already shallow one (`into_shallow`); retained sample maps hash with
+  Fx; Position's first-pending lookup is an index, not a scan per row.
+- **Frees and sorts on the pool.** Last frame's unused compiled samples
+  (`DynamicFamilyPreparationScratch::take_retired`), the replaced visualization frame and the
+  Position observer's frame state are freed by `drop_later`; the controller and group sorts run as
+  parallel sorts of distinct keys (`light_engine::parallel::sort_unstable_by_key`).
+- **Lanes are lent per section.** Preparation and completion now borrow the lanes only for each
+  parallel section, so a controller or lane the frame prepares itself after a stop adopts through
+  unborrowed lanes. In round 5 the lanes stayed lent for the frame's replay walk as well, where a
+  frame-side Colour or Optics adoption after a stopped chunk would have found its lane borrowed.
+
+### Not built
+
+- **Smaller per-target data (item 1-2 of the brief).** Measured: `DynamicRuntimeSample` is 240
+  bytes, `FamilyCompositionSample` 192, `DynamicValueAddress` 160 (a Direct Colour address holds
+  its native identity inline, two `String`s), `DynamicSampleExpression` 136,
+  `CompiledCoupledExpression` 256. Boxing the native identity touches about 70 sites (most of
+  them tests) and does not change the stress workloads, which hold no Direct address; it was not
+  done. Allocations per frame are unchanged: the largest per-target clusters are the Position
+  forest compile in preparation (`from_position_forest` and its node, metadata and endpoint
+  lists, about 50,000 objects per stress frame), the captured Position registries (about 14,000),
+  and the Colour composition's traces and adapter scratch.
+- **Extending the compiled plan (item 4).** Target leaves are already planned (round 5's `plain`
+  forest covers authored Target components); the remaining cost of a planned forest is
+  `from_position_forest`, which rebuilds the compiled graph from the branch every frame. Reusing a
+  kept graph needs the leaf → compiled-node map round 5 identified; it was not derived. Component
+  edits over a static base (design B) were not started. No plan was added, so
+  `LIGHT_VERIFY_PLANS` covers the same forests as in round 5.
+- **Parallel emission and pinning.** Both mutate one Dynamic instance per plan, but through the
+  shared output-frame undo journal (`OutputFrameUndo`); splitting it into per-instance handles
+  was not done. Together about 4 ms of the stress-2,000 frame.
+- **Parallel static resolution.** The engine's resolver records slots in first-write order, which
+  later readers observe; a sharded offer pass would have to rebuild that order. Not done.
+- **Replaying unchanged static rows.** The hard floor composes, observes, binds and stages every
+  static Colour row every frame (about 14 ms of worker CPU per frame); replaying an unchanged
+  group's whole output needs proof that its sources, bindings and lane state are unchanged. Not
+  done.
+
+### Where the time goes now
+
+`sample` of the final binary, output thread by exclusive section, and the pool's CPU per section
+(busy host, 8 workers):
+
+- **Typed stress 2,000 (about 33 ms).** Parallel sections about 13.8 ms of wall time for about
+  98 ms of worker CPU per frame: ordinary and Position groups 41 ms, preparation 28 ms,
+  completion 11 ms, frees 8.6 ms (in the background), render resolve 4.4 ms, root fits 4.0 ms.
+  The output thread's own work is about 19.6 ms: completion's ordered apply and emission 2.8 ms,
+  frees 2.3, frame glue 2.0, pinning 1.4, native installation 1.4, preparation's ordered merge
+  1.2, static resolution 1.1, program capture remainder (tracking, roots) 1.1, render write pass
+  0.95, input assembly 0.86, source binding 0.85, fixed bases 0.67, Position staging 0.6, and
+  smaller items. The sequential part alone exceeds the 16.7 ms budget on this host; the parallel
+  part is memory-bound (a worker's chunk runs 1.5-3× slower than the same items single-threaded).
+- **Typed hard floor (about 12 ms on the busy host).** Parallel sections about 3.5 ms for about
+  23 ms of worker CPU (static Colour rows 14 ms, preparation 4.4, render resolve 3.0, static
+  scans 1.3). The output thread's own work is about 8.5 ms: static resolution 1.3, render write
+  pass 1.0, frame glue 0.8, frees 0.7, pinning 0.5, accepted Colour record 0.5, row projection
+  0.5, lane acceptance 0.4, and smaller items.
+
+### Allocation per frame
+
+| Workload | `3a19b23f8` 1 / 8 workers | Round 6, 1 worker | Round 6, 8 workers |
+| --- | ---: | ---: | ---: |
+| Typed hard floor | 54,497 / 24.5 MB; 56,189 / 35.8 MB | 54,405 / 24.5 MB | 56,645 / 37.0 MB |
+| Typed stress 2,000 | 490,401 / 118.7 MB; 500,120 / 144.2 MB | 484,887 / 118.4 MB | 503,215 / 164.4 MB |
+| Legacy hard floor | 98 / 9.6 MB; 99 / 9.6 MB | 98 / 9.6 MB | 99 / 9.6 MB |
+| Legacy stress 2,000 | 2,623 / 22.2 MB; 2,624 / 22.2 MB | 2,623 / 22.2 MB | 2,624 / 22.2 MB |
+
+The new parallel sections add their ordered records (completion evaluations, Position pending
+members) to the eight-worker bytes.
+
+### Measurement identities
+
+- Baseline: `f67c84e48`, binary `8a95e4a0…`.
+- Before and digest reference: `3a19b23f8`, binary `42f92ff0…` (round 5's final,
+  `.artifacts/tmp/tl639r6/bin/lb-ref`).
+- Campaign candidate: `3a19b23f8` plus the round-6 working tree before the per-section lane
+  lending, binary `b3f2418e…` (`.artifacts/tmp/tl639r6/bin/lb-final`); source manifest
+  `.artifacts/tmp/tl639r6/identity/final-source-manifest.json`.
+- Final tree: binary `30d8baf6…` (`lb-final2`), source manifest `final2-source-manifest.json`;
+  digest-identical to `3a19b23f8` at 1, 8 and 18 workers and with plan verification, and equal
+  to the campaign binary in alternated runs (stress 2,000 33.12 / 33.29 ms, hard floor 11.60 /
+  11.70 ms p50).
+- Evidence: `.artifacts/performance/semantic-output/tl639r6-final-20261004T021437Z/`
+  (`legacy/`, `semantic/`, `before-after-typed/`, `workers/`, `repeat-125/`,
+  `repeat-125-fails/`, `concurrent/`). Digest runs and summaries
+  `.artifacts/tmp/tl639r6/{d,l}-*.json`, `digest-*.txt` (`s1`-`s9`, `final`, `final2`, worker
+  counts, `-verify`); profiles `p-*-{s2000,hf}.txt` with `sections.py`, `mainthread.py`,
+  `workerthreads.py`; allocation counts `allocs-final.txt` and allocation sites
+  `allocsites-*.txt` (`alloc-count/`, raw return addresses resolved at exit).
