@@ -1,3 +1,4 @@
+use super::programmer_family_values::typed_family_command as typed_family;
 use super::*;
 
 fn fixture_selection(
@@ -180,6 +181,9 @@ pub(super) fn execute_fixture_programmer_command(
         return Ok(fixtures.len());
     }
     let value = &tokens[at_index + 1..];
+    if let Some(n) = typed_family(state, session, value, &fixtures, Some(&expression), timing) {
+        return n;
+    }
     if let Some(target) = aim_target(value) {
         let assignments = super::programmer_aim_command::aim_selection(state, &fixtures, target)?;
         if assignments.is_empty() {

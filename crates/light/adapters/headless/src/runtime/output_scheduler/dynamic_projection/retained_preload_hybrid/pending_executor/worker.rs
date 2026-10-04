@@ -289,10 +289,13 @@ impl Worker {
             Ok(readout) => readout,
             Err(error) => return self.gap(ticket, Some(format!("{error:?}"))),
         };
-        let positions = self
-            .shared
-            .readouts
-            .capture_accepted(identity, ticket, accepted, &exact);
+        let positions = self.shared.readouts.capture_accepted(
+            identity,
+            ticket,
+            accepted,
+            &exact,
+            super::provider::pending_colors(&accepted.value.after.sidecars),
+        );
         let summary = summarize(episode, ticket);
         let published = {
             let mut gate = self.shared.gate.lock();

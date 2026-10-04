@@ -1,21 +1,33 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { replaceProgrammingSelection } from "./bench/command-selection/programmingSelection";
 import type { ApiDriver } from "./bench/core/api";
 import type { DeskDriver } from "./bench/core/desk";
 import { expect, test } from "./bench/core/fixtures";
 import type { LightBench } from "./bench/core/lightBench";
 import { requireSemanticContract } from "./bench/core/semanticContract";
+import {
+	blurDesk,
+	enterPreloadCapture,
+	goPreload,
+	hideDesk,
+	leavePreloadCapture,
+	liveSlots,
+	normalValues,
+	preloadValues,
+	recordLaneWrites,
+	seedPreloadValue,
+	showDesk,
+} from "./bench/programmer/semanticPreloadLanes";
 import { BrowserPatch } from "./bench/show-setup/patchScenario";
 
 /**
  * docs/testing/35-focus-zoom-operator-controls.md (TL-551): the production Focus Special Dialog and
  * the Focus family encoders under the semantic programming contract.
  *
- * GATE: the production runtime reports programming contract 0
- * (`crates/light/adapters/headless/src/runtime/e2e_semantic_contract.rs`), so the family pages
- * route answers `semantic: false`. Under `npm run test:e2e` these cases skip; under
- * `npm run test:e2e-semantic` they run on the contract-1 E2E test server, where a missing semantic
- * publication fails instead of skipping.
+ * GATE: production reports programming contract 1 (TL-552), so the family pages route publishes
+ * the semantic Focus pages and these cases run under `npm run test:e2e` as well as
+ * `npm run test:e2e-semantic`. Only an older contract-0 server, which answers `semantic: false`,
+ * skips them; in the `e2e-semantic` project a missing semantic publication fails instead.
  *
  * The Beam rig is two Cameo AURO SPOT Z300: its profile declares the Beam convention from the
  * user manual (TL-637) with 10–25° selection limits, so FOCUS-ZOOM-002 to 005 run on it. The
@@ -25,16 +37,22 @@ import { BrowserPatch } from "./bench/show-setup/patchScenario";
  * Every case starts from scratch: no Zoom is programmed through the API. The first dialog Zoom
  * step adopts the displayed output's opening in degrees (TL-637 follow-up), and key steps are
  * pressed at operator pace, the next one while the previous step is still settling.
+ *
+ * FOCUS-ZOOM-006 ends a drag with a synthetic window `blur` or `visibilitychange` to hidden, and
+ * FOCUS-ZOOM-008 arms Preload through the Preload lifecycle route; both read every Programmer
+ * write the desk sends, by lane, from the request itself (`semanticPreloadLanes.ts`).
  */
 
 const GATE =
-	"semantic programming contract is not enabled on this runtime (production contract 0; run npm run test:e2e-semantic)";
+	"semantic programming contract is not enabled on this runtime (a contract-0 server; run npm run test:e2e-semantic)";
 
 const SPOT = { manufacturer: "Cameo", profile: "AURO SPOT Z300", mode: "20-Channel" } as const;
 const DLS = { manufacturer: "ROBE", profile: "Robin DLS Profile", mode: "Mode 2" } as const;
 /** Two Beam-convention spots, or one spot plus a profile without any Zoom convention. */
 const BEAM_RIG = [SPOT, SPOT] as const;
 const MIXED_RIG = [SPOT, DLS] as const;
+/** A requested 15° Beam opening, as a Preload Zoom edit authors it. */
+const BEAM_15 = { kind: "zoom", value: { opening_degrees: { kind: "value", value: 15 }, convention: "beam" } };
 
 interface FocusRig {
 	showId: string;
@@ -105,6 +123,42 @@ async function openFocusDialog(page: Page) {
 	// The controls are disabled until the lane and its requested values are loaded.
 	await expect(dialog.getByRole("slider", { name: "Focus position" })).not.toHaveAttribute("aria-disabled", "true");
 	return dialog;
+}
+
+/** Presses the focus plane at its centre and returns a mover along it (pixels to the right). */
+async function grabFocusPlane(page: Page, dialog: Locator) {
+	const box = await dialog.getByTestId("focus-position-drag").boundingBox();
+	if (!box) throw new Error("focus plane has no box");
+	const origin = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+	await page.mouse.move(origin.x, origin.y);
+	await page.mouse.down();
+	return (dx: number) => page.mouse.move(origin.x + dx, origin.y);
+}
+
+/** Presses the upper beam handle and returns a mover upwards (pixels), which widens the beam. */
+async function grabUpperHandle(page: Page, dialog: Locator) {
+	const box = await dialog.getByTestId("beam-angle-handle-upper").boundingBox();
+	if (!box) throw new Error("upper beam handle has no box");
+	const origin = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+	await page.mouse.move(origin.x, origin.y);
+	await page.mouse.down();
+	return (dy: number) => page.mouse.move(origin.x, origin.y - dy);
+}
+
+/** Moves a grabbed control through `steps` samples of `pixels` each. */
+async function sweep(move: (offset: number) => Promise<void>, from: number, steps: number, pixels: number) {
+	for (let step = 1; step <= steps; step += 1) await move(from + step * pixels);
+}
+
+/** Programs Zoom from scratch in the dialog: `steps` quick 1° keys up from the 10° limit. */
+async function stepZoomUp(page: Page, dialog: Locator, steps: number) {
+	await dialog.getByRole("slider", { name: "Beam opening angle" }).focus();
+	for (let step = 0; step < steps; step += 1) await page.keyboard.press("ArrowUp");
+}
+
+/** Lens travel of each entry, in percent. */
+function focusPercent(values: unknown[]) {
+	return values.map((value) => Math.round(((value as { value: number }).value ?? Number.NaN) * 1000) / 10);
 }
 
 test.describe("docs/testing/35-focus-zoom-operator-controls.md", () => {
@@ -189,6 +243,62 @@ test.describe("docs/testing/35-focus-zoom-operator-controls.md", () => {
 			expect((value as { kind: string; value: number }).value).toBeCloseTo(0.01, 6);
 		expect(await familyValues(api, "zoom")).toEqual([]);
 		expect(zoomEditsSent).toEqual([]);
+	});
+
+	test("FOCUS-ZOOM-006 @ui › a software Focus encoder drag ends once on window blur and sends nothing more until a new drag", async ({ api, bench, desk, page }) => {
+		const { selected } = await arrange({ api, bench, desk, page }, "006", BEAM_RIG);
+		requireSemanticContract(await semanticFocus(api, selected), GATE);
+		const finishes: string[] = [];
+		page.on("websocket", (socket) =>
+			socket.on("framesent", ({ payload }) => {
+				const text = String(payload);
+				if (text.includes('"finish_gesture"')) finishes.push(text);
+			}),
+		);
+		await desk.open(api.baseUrl);
+		await page.getByRole("button", { name: "Focus", exact: true }).click();
+		const focus = encoder(page, 1, "Focus");
+		await expect(focus).toBeVisible();
+		const box = await focus.boundingBox();
+		if (!box) throw new Error("Focus encoder has no layout box");
+		const x = box.x + box.width / 2;
+		const y = box.y + box.height / 2;
+		const focusValues = async () =>
+			(await familyValues(api, "focus")).map((value) => (value as { value: number }).value);
+
+		// Hold a drag above the dead zone: the encoder keeps stepping at its repeat rate.
+		await page.mouse.move(x, y);
+		await page.mouse.down();
+		await page.mouse.move(x, y - 60, { steps: 4 });
+		await expect.poll(async () => (await focusValues()).length).toBe(selected.length);
+		await expect(focus).toHaveAttribute("data-motion", "up");
+
+		// The desk window loses focus while the pointer is still pressed.
+		await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+		await expect(focus).not.toHaveAttribute("data-motion");
+		await expect.poll(() => finishes.length).toBe(1);
+		await page.waitForTimeout(300);
+		const settled = await programmerRevision(api);
+		const values = await focusValues();
+		// Further movement of the same pointer before release sends no change and no Finish.
+		await page.mouse.move(x, y - 120, { steps: 4 });
+		await page.waitForTimeout(500);
+		await page.mouse.up();
+		await page.waitForTimeout(400);
+		expect(await programmerRevision(api)).toBe(settled);
+		expect(await focusValues()).toEqual(values);
+		expect(finishes).toHaveLength(1);
+
+		// After returning, a new drag works normally and ends with its own single Finish.
+		expect(values[0]).toBeGreaterThan(0);
+		await page.mouse.move(x, y);
+		await page.mouse.down();
+		await page.mouse.move(x, y + 60, { steps: 4 });
+		await expect(focus).toHaveAttribute("data-motion", "down");
+		await expect.poll(async () => (await focusValues())[0]).toBeLessThan(values[0] ?? 0);
+		await page.mouse.up();
+		await expect.poll(() => finishes.length).toBe(2);
+		await expect(page.getByRole("alert")).toHaveCount(0);
 	});
 
 	test("FOCUS-ZOOM-002 @ui › Beam handles: a press without movement sends nothing, a drag widens in degrees within the selection limits", async ({ api, bench, desk, page }) => {
@@ -348,5 +458,200 @@ test.describe("docs/testing/35-focus-zoom-operator-controls.md", () => {
 			expect(await programmerRevision(api)).toBe(before + 1);
 		}
 		await expect(page.getByRole("alert")).toHaveCount(0);
+	});
+
+	for (const [end, control] of [
+		["blur", "focus"],
+		["hidden", "zoom"],
+	] as const)
+		test(`FOCUS-ZOOM-006 @ui › ${end === "blur" ? "window blur" : "a hidden desk"} ends a ${control === "focus" ? "Focus" : "Zoom"} drag once and nothing more is sent before release`, async ({ api, bench, desk, page }) => {
+			const { selected } = await arrange({ api, bench, desk, page }, `006-${end}`, BEAM_RIG);
+			requireSemanticContract(await semanticFocus(api, selected), GATE);
+			const lanes = recordLaneWrites(page);
+			await desk.open(api.baseUrl);
+			const dialog = await openFocusDialog(page);
+			if (control === "zoom") {
+				await stepZoomUp(page, dialog, 5);
+				await bench.tick(25);
+				await expect.poll(async () => zoomDegrees(await familyValues(api, "zoom"))).toEqual([15, 15]);
+				await expect(dialog.getByRole("slider", { name: "Beam opening angle" })).toHaveAttribute("aria-valuenow", "15");
+			}
+			const finishesBefore = lanes.finishes("normal", control).length;
+			const grab = control === "focus" ? grabFocusPlane : grabUpperHandle;
+
+			// Start a drag and keep the pointer pressed: it authors.
+			const move = await grab(page, dialog);
+			await sweep(move, 0, 3, 8);
+			await expect.poll(() => lanes.edits("normal", control).length).toBeGreaterThan(0);
+			const before = await familyValues(api, control);
+
+			// Switching away ends the drag: exactly one Finish, and later moves send nothing.
+			await (end === "blur" ? blurDesk(page) : hideDesk(page));
+			await expect.poll(() => lanes.finishes("normal", control).length).toBe(finishesBefore + 1);
+			await page.waitForTimeout(200);
+			const sent = lanes.writes.length;
+			const revision = await programmerRevision(api);
+			await sweep(move, 24, 5, 8);
+			await page.mouse.up();
+			await page.waitForTimeout(400);
+			expect(lanes.writes.slice(sent)).toEqual([]);
+			expect(lanes.finishes("normal", control)).toHaveLength(finishesBefore + 1);
+			expect(await programmerRevision(api)).toBe(revision);
+			expect(await familyValues(api, control)).toEqual(before);
+			expect(lanes.writes.filter((write) => write.lane === "preload")).toEqual([]);
+
+			// Back at the desk, a new drag works normally and ends with its own single Finish.
+			if (end === "hidden") await showDesk(page);
+			const again = await grab(page, dialog);
+			await sweep(again, 0, 5, 10);
+			await page.mouse.up();
+			await expect.poll(() => lanes.finishes("normal", control).length).toBe(finishesBefore + 2);
+			await expect.poll(() => programmerRevision(api)).toBeGreaterThan(revision);
+			expect(JSON.stringify(await familyValues(api, control))).not.toBe(JSON.stringify(before));
+		});
+
+	test("FOCUS-ZOOM-008 @ui › with Preload capturing, Zoom and Focus drags change only the Preload Programmer with the Programmer Fade; live output waits for Preload GO", async ({ api, bench, desk, page }) => {
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "008-preload", BEAM_RIG);
+		requireSemanticContract(await semanticFocus(api, selected), GATE);
+		await api.request("PUT", "/api/v2/configuration", { programmer_fade_millis: 2_000 });
+		const lanes = recordLaneWrites(page);
+		await enterPreloadCapture(api, showId);
+		// Production publishes no Pending (Preload) readouts yet, so the Preload Zoom starts from a
+		// requested opening rather than the displayed one (see the adoption BUG case below).
+		await seedPreloadValue(api, showId, selected, "zoom", BEAM_15);
+		await bench.tick(25);
+		const live = await liveSlots(api, 128);
+		await desk.open(api.baseUrl);
+		const dialog = await openFocusDialog(page);
+		await expect(dialog.getByRole("slider", { name: "Beam opening angle" })).toHaveAttribute("aria-valuenow", "15");
+
+		const zoom = await grabUpperHandle(page, dialog);
+		await sweep(zoom, 0, 5, 8);
+		await page.mouse.up();
+		await expect.poll(async () => zoomDegrees((await preloadValues(api, "zoom")).map((row) => row.value))[0] ?? 0).toBeGreaterThan(15);
+		const focus = await grabFocusPlane(page, dialog);
+		await sweep(focus, 0, 5, 20);
+		await page.mouse.up();
+		await expect.poll(async () => (await preloadValues(api, "focus")).length).toBe(selected.length);
+
+		// Only the Preload Programmer changed, through the Preload lane, with the Programmer Fade.
+		expect(await normalValues(api, "zoom")).toEqual([]);
+		expect(await normalValues(api, "focus")).toEqual([]);
+		expect(lanes.edits("normal")).toEqual([]);
+		expect(lanes.edits("preload", "zoom").length).toBeGreaterThan(0);
+		expect(lanes.edits("preload", "focus").length).toBeGreaterThan(0);
+		for (const entry of [...(await preloadValues(api, "zoom")), ...(await preloadValues(api, "focus"))]) {
+			expect(entry.fade).toBe(true);
+			expect(entry.fade_millis).toBe(2_000);
+		}
+		await bench.tick(100);
+		await bench.tick(3_000);
+		expect(await liveSlots(api, 128)).toEqual(live);
+
+		await goPreload(api, showId);
+		await bench.tick(100);
+		await bench.tick(3_000);
+		await expect.poll(() => liveSlots(api, 128)).not.toEqual(live);
+	});
+
+	test("FOCUS-ZOOM-008 @ui › in Preload the first Zoom step from scratch adopts the displayed opening", async ({ api, bench, desk, page }) => {
+		test.fail(
+			true,
+			"BUG: in Preload with no pending Zoom the dialog refuses every Zoom edit (Requested · unsupported): GET /api/v2/output/readouts?lane=preload answers unavailable no_accepted_preload because production never starts the Pending episode worker (pending_executor/resource.rs start_if_gated)",
+		);
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "008-adopt", BEAM_RIG);
+		requireSemanticContract(await semanticFocus(api, selected), GATE);
+		await enterPreloadCapture(api, showId);
+		await bench.tick(25);
+		await desk.open(api.baseUrl);
+		const dialog = await openFocusDialog(page);
+		await stepZoomUp(page, dialog, 5);
+		await expect
+			.poll(async () => zoomDegrees((await preloadValues(api, "zoom")).map((row) => row.value)), { timeout: 2_000 })
+			.toEqual([15, 15]);
+		await expect(dialog.getByTestId("focus-zoom-zoom-status")).not.toHaveText(/unsupported/, { timeout: 1_000 });
+		expect(await normalValues(api, "zoom")).toEqual([]);
+	});
+
+	test("FOCUS-ZOOM-008 @ui › after leaving Preload, Zoom and Focus drags change only the Normal Programmer", async ({ api, bench, desk, page }) => {
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "008-normal", BEAM_RIG);
+		requireSemanticContract(await semanticFocus(api, selected), GATE);
+		const lanes = recordLaneWrites(page);
+		await enterPreloadCapture(api, showId);
+		await leavePreloadCapture(api, showId);
+		await bench.tick(25);
+		await desk.open(api.baseUrl);
+		const dialog = await openFocusDialog(page);
+
+		await stepZoomUp(page, dialog, 5);
+		await bench.tick(25);
+		await expect.poll(async () => zoomDegrees(await normalValues(api, "zoom").then((rows) => rows.map((row) => row.value)))).toEqual([15, 15]);
+		const zoom = await grabUpperHandle(page, dialog);
+		await sweep(zoom, 0, 5, 8);
+		await page.mouse.up();
+		await expect.poll(async () => zoomDegrees(await familyValues(api, "zoom"))[0] ?? 0).toBeGreaterThan(15);
+		const focus = await grabFocusPlane(page, dialog);
+		await sweep(focus, 0, 5, 20);
+		await page.mouse.up();
+		await expect.poll(async () => (await familyValues(api, "focus")).length).toBe(selected.length);
+
+		expect(await preloadValues(api, "zoom")).toEqual([]);
+		expect(await preloadValues(api, "focus")).toEqual([]);
+		expect(lanes.writes.filter((write) => write.lane === "preload")).toEqual([]);
+		expect(lanes.edits("normal", "zoom").length).toBeGreaterThan(0);
+		expect(lanes.edits("normal", "focus").length).toBeGreaterThan(0);
+	});
+
+	test("FOCUS-ZOOM-008 @ui › a capture switch mid-drag keeps the rest of that drag on the lane it started on", async ({ api, bench, desk, page }) => {
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "008-switch", BEAM_RIG);
+		requireSemanticContract(await semanticFocus(api, selected), GATE);
+		const lanes = recordLaneWrites(page);
+		await enterPreloadCapture(api, showId);
+		await bench.tick(25);
+		await desk.open(api.baseUrl);
+		const dialog = await openFocusDialog(page);
+
+		// A Focus drag starts in Preload; Preload capture is left while the pointer is still down.
+		const focus = await grabFocusPlane(page, dialog);
+		await sweep(focus, 0, 3, 20);
+		await expect.poll(async () => (await preloadValues(api, "focus")).length).toBe(selected.length);
+		await leavePreloadCapture(api, showId);
+		await sweep(focus, 60, 4, 20);
+		await page.mouse.up();
+
+		// None of that drag reached the Normal Programmer; its one Finish is a Preload write.
+		await expect.poll(() => lanes.finishes("preload", "focus").length).toBe(1);
+		await page.waitForTimeout(300);
+		expect(lanes.writes.filter((write) => write.lane === "normal")).toEqual([]);
+		expect(await normalValues(api, "focus")).toEqual([]);
+
+		// The next drag starts on the Normal lane.
+		const next = await grabFocusPlane(page, dialog);
+		await sweep(next, 0, 3, 20);
+		await page.mouse.up();
+		await expect.poll(async () => (await normalValues(api, "focus")).length).toBe(selected.length);
+		expect(lanes.finishes("preload", "focus")).toHaveLength(1);
+	});
+
+	test("FOCUS-ZOOM-008 @ui › the rest of a drag after a capture switch still authors into Preload", async ({ api, bench, desk, page }) => {
+		test.fail(
+			true,
+			"BUG: leaving Preload capture mid-drag silently drops the rest of the drag: the pinned Preload writer refuses every later edit (programmerPreloadValues/writerCaptureAuthority.ts preconditionError) and only the Finish is sent",
+		);
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "008-rest", BEAM_RIG);
+		requireSemanticContract(await semanticFocus(api, selected), GATE);
+		await enterPreloadCapture(api, showId);
+		await bench.tick(25);
+		await desk.open(api.baseUrl);
+		const dialog = await openFocusDialog(page);
+		const focus = await grabFocusPlane(page, dialog);
+		await sweep(focus, 0, 3, 20);
+		await expect.poll(async () => (await preloadValues(api, "focus")).length).toBe(selected.length);
+		await page.waitForTimeout(200);
+		const atSwitch = focusPercent((await preloadValues(api, "focus")).map((row) => row.value))[0] ?? 0;
+		await leavePreloadCapture(api, showId);
+		await sweep(focus, 60, 4, 20);
+		await page.mouse.up();
+		await expect.poll(async () => focusPercent((await preloadValues(api, "focus")).map((row) => row.value))[0] ?? 0, { timeout: 2_000 }).toBeGreaterThan(atSwitch);
 	});
 });

@@ -119,6 +119,19 @@ impl<'a> PlaybackFrame<'a> {
         }
     }
 
+    /// The live Position crossing a captured interrupted source was held for (TL-544 G1).
+    pub(super) fn previous_pending(
+        &self,
+        attribute: &CompiledAttribute,
+    ) -> Option<&Arc<light_core::programming::PendingFamilyTransition>> {
+        match &self.previous {
+            PreviousState::Deleted(values) => values
+                .get(&(attribute.fixture_id(), attribute.attribute().clone()))
+                .and_then(|row| row.pending_transition.as_ref()),
+            PreviousState::Tracked(_) | PreviousState::Empty => None,
+        }
+    }
+
     pub(super) fn deleted_previous(
         &self,
     ) -> Option<&HashMap<AttributeAddress, PlaybackRetainedValue>> {

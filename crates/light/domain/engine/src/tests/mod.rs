@@ -523,6 +523,7 @@ mod lifecycle_dependencies;
 mod color_intent;
 mod contribution_batches;
 
+mod declared_family_starts;
 mod family_evidence;
 mod frame_addresses;
 mod frame_reuse;

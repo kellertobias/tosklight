@@ -63,7 +63,7 @@ pub(crate) use model::cue::{
 pub(crate) use model::runtime::{
     PlaybackKey, advance_chaser_steps, new_active_playback, reset_manual_transition,
 };
-pub(crate) use transition::interpolate;
+pub(crate) use transition::{interpolate, interpolate_pending};
 
 #[cfg(test)]
 mod tests;

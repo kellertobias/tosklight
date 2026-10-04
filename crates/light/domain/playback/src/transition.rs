@@ -56,6 +56,28 @@ pub(crate) fn interpolate(
     }
 }
 
+/// [`interpolate`], plus the pending pair of a live Position crossing it holds (TL-544 G1).
+/// The frame value stays the held source; the physical Position adapter moves the fade.
+pub(crate) fn interpolate_pending(
+    from: Option<&AttributeValue>,
+    from_pending: Option<&std::sync::Arc<light_core::programming::PendingFamilyTransition>>,
+    to: Option<&AttributeValue>,
+    progress: f32,
+) -> Option<light_core::programming::PendingTransitionSample> {
+    if let (Some(from), Some(to)) = (from, to)
+        && progress < 1.0
+        && let Ok((value, Some(pending))) = light_core::programming::sample_programming_transition(
+            from,
+            from_pending,
+            to,
+            progress,
+        )
+    {
+        return Some((value, Some(pending)));
+    }
+    interpolate(from, to, progress).map(|value| (value, None))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

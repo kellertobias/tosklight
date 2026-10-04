@@ -1,3 +1,4 @@
+use super::programmer_family_values::typed_family_command as typed_family;
 use super::*;
 
 pub(super) fn apply_current_selection_value(
@@ -15,6 +16,9 @@ pub(super) fn apply_current_selection_value(
         .as_ref()
         .map(light_programmer::SelectionExpression::live_group_owners)
         .unwrap_or_default();
+    if let Some(n) = typed_family(state, session, value, &current.selected, None, timing) {
+        return n;
+    }
     if value.len() == 3 && value[1] == "." {
         apply_command_preset(
             state,

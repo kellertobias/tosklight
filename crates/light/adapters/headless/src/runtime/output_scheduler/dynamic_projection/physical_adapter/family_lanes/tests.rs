@@ -706,6 +706,13 @@ fn a_passive_zoom_hold_never_holds_color_and_released_owners_are_reported_per_fa
             .release_fixture_attribute(rig.session, show.mover, &position)
     );
     rig.release(show.optics, ProgrammingOwner::Focus);
+    // TL-544 G10: a static Focus is a Focus adapter owner too (as Zoom since TL-560); remove the
+    // underlay as well so Focus is genuinely removed.
+    assert!(rig.programmers.release_fixture_attribute(
+        rig.session,
+        show.optics,
+        &ProgrammingOwner::Focus.key(),
+    ));
     let third = live.accept(&rig, &lanes);
     assert_eq!(
         released(&lanes),

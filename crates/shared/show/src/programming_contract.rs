@@ -517,7 +517,7 @@ impl crate::PortableShowTransaction {
 
     /// Stamps the programming-contract marker into this transaction when the writer runs at
     /// contract ≥ 1 and the transaction writes or deletes authored programming. Returns whether
-    /// it stamped. At contract 0 it never stamps, so production files are unchanged.
+    /// it stamped. At contract 0 it never stamps, so files written by a contract-0 runtime are unchanged.
     pub fn stamp_programming_contract(&mut self, supported: u16) -> bool {
         let stamp = writer_stamps_programming_contract(supported, self.changed_object_kinds());
         if stamp {

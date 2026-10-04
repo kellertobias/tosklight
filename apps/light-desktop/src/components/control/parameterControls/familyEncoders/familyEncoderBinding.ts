@@ -13,13 +13,14 @@ import {
 	scalarSpread,
 	scalarStep,
 } from "../../../../features/programmerValues/familyGestureFamilies";
-import type {
-	FamilyGestureCancelReason,
-	FamilyGestureHandle,
-	FamilyGestureLane,
-	FamilyGestureSession,
-	FamilyGestureSessionOptions,
-	FamilyGestureStartInput,
+import {
+	attachGestureWindowGuards,
+	type FamilyGestureCancelReason,
+	type FamilyGestureHandle,
+	type FamilyGestureLane,
+	type FamilyGestureSession,
+	type FamilyGestureSessionOptions,
+	type FamilyGestureStartInput,
 } from "../../../../features/programmerValues/familyGestureSession";
 import {
 	POSITION_TARGET_ORIGIN,
@@ -31,7 +32,13 @@ import type {
 	ProgrammerValuesHold,
 } from "../../../../api/colorAdoptionWire";
 import type { NativeColorReferenceRef } from "../../../../api/nativeColorModels";
-import { isNativeSlot, nativeOperation } from "./nativeColorSlots";
+import {
+	isNativeSlot,
+	nativeChoiceRaw,
+	nativeChoiceStep,
+	nativeDiscrete,
+	nativeEdit,
+} from "./nativeColorSlots";
 
 /**
  * Family encoder binding (TL-549/550/551 UI foundation).
@@ -42,6 +49,10 @@ import { isNativeSlot, nativeOperation } from "./nativeColorSlots";
  * encoder mode: consecutive detents on the same owner and target share one gesture (one Undo
  * group) and the gesture ends with exactly one Finish after {@link FAMILY_ENCODER_IDLE_END_MILLIS}
  * without a change. A changed lane, group or fixture set supersedes the open gesture.
+ *
+ * TL-544 G12: the same open gestures also end at once (one Finish each, same Undo group, the
+ * admitted steps kept) on an explicit release of a software drag ({@link finishGestures}), and,
+ * through {@link attachWindowGuards}, on window blur and on the document becoming hidden.
  */
 
 export const FAMILY_ENCODER_IDLE_END_MILLIS = 250;
@@ -66,7 +77,7 @@ export interface FamilyEncoderTarget {
 
 export interface FamilyEncoderBindingOptions extends FamilyGestureSessionOptions {
 	idleEndMillis?: number;
-	/** The Point slot's ordered choices; Origin only until a Point source exists (TL-549). */
+	/** The Point slot's ordered choices: Origin, then the show's 3D Points (Origin only if absent). */
 	pointChoices?(): readonly ProgrammingTargetReference[];
 	/** TL-554: the reference head every Direct (native) edit names; none refuses quietly. */
 	nativeReference?(): NativeColorReferenceRef | null;
@@ -133,6 +144,8 @@ export class FamilyEncoderBinding {
 		FamilyGestureSession<unknown>
 	>;
 	private readonly keys = new Map<Owner, string>();
+	/** TL-544 G4: the last choice sent per native channel, while the slot still shows `from`. */
+	private readonly choices = new Map<string, { from: string; to: string }>();
 	private readonly idleEndMillis: number;
 
 	constructor(private readonly options: FamilyEncoderBindingOptions) {
@@ -169,9 +182,16 @@ export class FamilyEncoderBinding {
 		return true;
 	}
 
-	/** A relative step in descriptor units (software encoder turn or hardware detent). */
+	/**
+	 * A relative step in descriptor units (software encoder turn or hardware detent). On the
+	 * Point slot one step of either size moves one choice, exactly as a detent does (TL-544 G4).
+	 */
 	step(slot: FamilyEncoderComponentSlot, delta: number, target: FamilyEncoderTarget) {
-		if (slot.edit !== "scalar" || !Number.isFinite(delta) || delta === 0) return null;
+		if (!Number.isFinite(delta) || delta === 0) return null;
+		if (slot.edit === "target_reference")
+			return this.cycleTarget(slot, delta > 0 ? 1 : -1, target);
+		if (slot.edit !== "scalar") return null;
+		if (nativeDiscrete(slot)) return this.stepChoice(slot, delta > 0 ? 1 : -1, target);
 		return this.submit(slot, scalarStep(delta), target, false);
 	}
 
@@ -210,6 +230,26 @@ export class FamilyEncoderBinding {
 		return sent;
 	}
 
+	/**
+	 * Ends every open encoder gesture now: one Finish each, in its own Undo group, keeping the
+	 * admitted steps (they are the operator's request, as at the idle end). Used for an explicit
+	 * release of a software drag and for window blur or the document becoming hidden. Returns
+	 * whether a gesture was open.
+	 */
+	finishGestures() {
+		let finished = false;
+		const sessions = [this.position, ...Object.values(this.sessions)] as {
+			active: FamilyGestureHandle<unknown> | null;
+		}[];
+		for (const session of sessions) finished = (session.active?.commit() ?? false) || finished;
+		return finished;
+	}
+
+	/** Finishes the open gestures on window blur and on the document becoming hidden. */
+	attachWindowGuards(target?: { window: Window; document: Document }) {
+		return attachGestureWindowGuards({ cancel: () => this.finishGestures() }, target);
+	}
+
 	cancel(reason: FamilyGestureCancelReason) {
 		this.position.cancel(reason);
 		for (const session of Object.values(this.sessions)) session.cancel(reason);
@@ -231,10 +271,37 @@ export class FamilyEncoderBinding {
 		const current = choices.findIndex((choice) =>
 			sameReference(target.positionTargetReference, choice),
 		);
-		const next =
-			choices[(current + direction + choices.length) % choices.length] ?? null;
+		// Without a shared current choice, up starts at the first and down at the last.
+		const index =
+			current < 0
+				? direction > 0
+					? 0
+					: choices.length - 1
+				: (current + direction + choices.length) % choices.length;
+		const next = choices[index] ?? null;
 		if (!next || (current >= 0 && choices.length === 1)) return null;
 		return this.chooseTarget(slot, next, target);
+	}
+
+	/**
+	 * TL-544 G4: one step of a discrete native function (wheel slot, macro) moves one choice in
+	 * the control's function order, as one absolute value inside that function (the core adopts
+	 * the complete recipe). Detents of one turn share a gesture; a slot that has not yet shown
+	 * the previous choice continues from it rather than repeating it.
+	 */
+	private stepChoice(
+		slot: FamilyEncoderComponentSlot,
+		direction: 1 | -1,
+		target: FamilyEncoderTarget,
+	) {
+		if (slot.component.kind !== "native_color") return null;
+		const { channel_id: channel, function_id: shown } = slot.component.component;
+		const last = this.choices.get(channel);
+		const next = nativeChoiceStep(slot, direction, last?.from === shown ? last.to : shown);
+		if (!next) return null;
+		const sent = this.submit(slot, scalarSet(nativeChoiceRaw(next)), target, false);
+		if (sent) this.choices.set(channel, { from: shown, to: next.function_id });
+		return sent;
 	}
 
 	private submit(
@@ -274,10 +341,8 @@ export class FamilyEncoderBinding {
 		if (component === "focus") return { focus: operation };
 		if (component === "zoom") return { zoom: operation };
 		if (slot.component.kind === "native_color") {
-			const native = nativeOperation(slot, operation);
-			return native
-				? { native: [{ binding: slot.component.component, operation: native }] }
-				: null;
+			const native = nativeEdit(slot, operation);
+			return native ? { native: [native] } : null;
 		}
 		const color = colorComponent(slot);
 		return color ? { components: [{ component: color, operation }] } : null;

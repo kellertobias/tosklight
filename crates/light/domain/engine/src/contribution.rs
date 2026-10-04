@@ -18,6 +18,8 @@ pub(crate) struct EngineContribution {
     address: Option<light_core::FrameAddress>,
     origin: Option<std::sync::Arc<crate::contribution_batch::ContributionOrigin>>,
     family_evidence: Option<std::sync::Arc<crate::ContributionFamilyEvidence>>,
+    /// Runtime-only live Position crossing behind the held value (TL-544 G1).
+    pending_transition: Option<std::sync::Arc<light_core::programming::PendingFamilyTransition>>,
 }
 
 #[cfg(test)]
@@ -125,6 +127,18 @@ impl<'a> ResolvedContributionIndex<'a> {
         }
     }
 
+    /// The live Position crossing behind the winning underlay, if it is still moving.
+    pub(crate) fn pending_transition(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&std::sync::Arc<light_core::programming::PendingFamilyTransition>> {
+        match self.winners.get(&(fixture_id, attribute))? {
+            IndexedContribution::Sample(_) => None,
+            IndexedContribution::Engine(contribution) => contribution.pending_transition.as_ref(),
+        }
+    }
+
     fn add(&mut self, candidate: IndexedContribution<'a>) {
         let value = candidate.value();
         let key = (value.fixture_id, &value.attribute);
@@ -151,7 +165,17 @@ impl EngineContribution {
             address: None,
             origin: None,
             family_evidence: None,
+            pending_transition: None,
         }
+    }
+
+    /// The live Position crossing behind this held value (TL-544 G1).
+    pub(crate) fn with_pending_transition(
+        mut self,
+        pending: Option<std::sync::Arc<light_core::programming::PendingFamilyTransition>>,
+    ) -> Self {
+        self.pending_transition = pending;
+        self
     }
 
     /// Say where this contribution's pair lives, when the producer knows.
@@ -196,6 +220,7 @@ impl EngineContribution {
             address: contribution.address,
             origin: None,
             family_evidence,
+            pending_transition: contribution.pending_transition,
         }
     }
 
@@ -384,6 +409,13 @@ impl ResolvedFrame {
                     .and_then(|(_, winner)| winner.family_evidence.as_ref())
             })
     }
+    pub(crate) fn pending_transition(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&std::sync::Arc<light_core::programming::PendingFamilyTransition>> {
+        self.winner(fixture, attribute)?.pending_transition.as_ref()
+    }
     /// Values this frame could not number, for one fixture.
     pub(crate) fn overflow(&self, fixture_id: FixtureId) -> &[(AttributeKey, EngineWinner)] {
         // Checked for emptiness before hashing: a show whose sources name attributes their
@@ -482,6 +514,7 @@ impl ResolvedFrame {
         winner.sequence_master = None;
         winner.origin = None;
         winner.family_evidence = None;
+        winner.pending_transition = None;
     }
 }
 
@@ -577,6 +610,7 @@ impl<'a> EngineContributionResolver<'a> {
                 candidate.address,
                 origin,
                 family_evidence,
+                candidate.pending_transition.as_ref(),
             );
         }
     }
@@ -594,6 +628,7 @@ impl<'a> EngineContributionResolver<'a> {
             address: None,
             origin: None,
             family_evidence: None,
+            pending_transition: None,
         });
     }
 
@@ -626,6 +661,7 @@ impl<'a> EngineContributionResolver<'a> {
                 self.trace_sources
                     .then(|| sample.family_evidence().cloned())
                     .flatten(),
+                None,
             );
         }
     }
@@ -642,7 +678,7 @@ impl<'a> EngineContributionResolver<'a> {
     ) {
         self.add_borrowed(
             fixture_id, attribute, value, priority, changed_at, merge_mode, None, None, None, None,
-            None,
+            None, None,
         );
     }
 
@@ -684,6 +720,9 @@ impl<'a> EngineContributionResolver<'a> {
         address: Option<light_core::FrameAddress>,
         origin: Option<std::sync::Arc<crate::contribution_batch::ContributionOrigin>>,
         family_evidence: Option<std::sync::Arc<crate::ContributionFamilyEvidence>>,
+        pending_transition: Option<
+            &std::sync::Arc<light_core::programming::PendingFamilyTransition>,
+        >,
     ) {
         // A number from this generation is trusted as it stands; anything else is a name.
         let slot = match address {
@@ -707,6 +746,7 @@ impl<'a> EngineContributionResolver<'a> {
                     winner.sequence_master = sequence_master;
                     winner.origin = origin;
                     winner.family_evidence = family_evidence;
+                    winner.pending_transition = pending_transition.cloned();
                 },
             ),
             None => self.offer_overflow(
@@ -722,6 +762,7 @@ impl<'a> EngineContributionResolver<'a> {
                     sequence_master,
                     origin,
                     family_evidence,
+                    pending_transition: pending_transition.cloned(),
                 },
             ),
         }
@@ -735,6 +776,7 @@ impl<'a> EngineContributionResolver<'a> {
             address,
             mut origin,
             family_evidence,
+            pending_transition,
         } = candidate;
         if self.trace_sources && origin.is_none() {
             origin = sequence_master.map(|master| {
@@ -764,7 +806,7 @@ impl<'a> EngineContributionResolver<'a> {
         match slot {
             Some(slot) => {
                 let level = value.normalized().unwrap_or(0.0);
-                let mut carried = Some(value);
+                let mut carried = Some((value, pending_transition));
                 self.frame.offer(
                     slot,
                     crate::Offer {
@@ -775,8 +817,9 @@ impl<'a> EngineContributionResolver<'a> {
                         normalized: level,
                     },
                     |winner| {
-                        if let Some(value) = carried.take() {
+                        if let Some((value, pending_transition)) = carried.take() {
                             winner.value = value;
+                            winner.pending_transition = pending_transition;
                         }
                         winner.sequence_master = sequence_master;
                         winner.origin = origin;
@@ -797,6 +840,7 @@ impl<'a> EngineContributionResolver<'a> {
                     sequence_master,
                     origin,
                     family_evidence,
+                    pending_transition,
                 },
             ),
         }
@@ -971,6 +1015,7 @@ mod transition_order_tests {
                     temporary: false,
                 },
                 address: None,
+                pending_transition: None,
             },
             &mut PlaybackEvidenceCache::default(),
         )

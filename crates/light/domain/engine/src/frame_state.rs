@@ -37,6 +37,8 @@ pub(crate) struct SlotWinner {
     pub(crate) origin: Option<std::sync::Arc<crate::contribution_batch::ContributionOrigin>>,
     pub(crate) family_evidence:
         Option<std::sync::Arc<crate::contribution_batch::ContributionFamilyEvidence>>,
+    /// Runtime-only live Position crossing behind the held `value` (TL-544 G1).
+    pub(crate) pending_transition: Option<std::sync::Arc<light_core::programming::PendingFamilyTransition>>,
 }
 
 impl Default for SlotWinner {
@@ -51,6 +53,7 @@ impl Default for SlotWinner {
             sequence_master: None,
             origin: None,
             family_evidence: None,
+            pending_transition: None,
         }
     }
 }
@@ -182,6 +185,7 @@ impl FrameState {
         winner.sequence_master = None;
         winner.origin = None;
         winner.family_evidence = None;
+        winner.pending_transition = None;
         build(winner);
     }
 
@@ -201,6 +205,7 @@ impl FrameState {
         winner.sequence_master = None;
         winner.origin = None;
         winner.family_evidence = None;
+        winner.pending_transition = None;
     }
 
     /// Take a slot over, optionally restamping when its value changed.

@@ -21,7 +21,8 @@
 //!   frame and committed only by `accept_frame` after the engine finalizer succeeded. Live and
 //!   each Preload branch own separate lanes; no lane reads another lane's state.
 //!
-//! Production keeps `SUPPORTED_PROGRAMMING_CONTRACT = 0`; nothing here has a production caller.
+//! Production runs the semantic programming contract (contract 1, TL-552); the Live path reaches
+//! these adapters through `output_transaction::family_frame` (TL-548 C3).
 #![allow(dead_code)]
 
 use super::programming_projection::hybrid::{
@@ -44,7 +45,7 @@ use light_engine::{
 
 pub(in crate::runtime) mod color;
 pub(in crate::runtime) mod color_router;
-// TL-548 C1: all-family Live/Preload lanes; no production caller until C3.
+// TL-548 C1: all-family Live/Preload lanes, engaged in production since C3/TL-552.
 mod counters;
 pub(in crate::runtime) mod family_lanes;
 mod lane;
@@ -57,24 +58,24 @@ mod send_audit;
 #[cfg(test)]
 pub(in crate::runtime) mod test_adapter;
 #[allow(unused_imports)]
-// TL-592 Color/UV adapter; no production caller until TL-548 wires the producer.
+// TL-592 Color/UV adapter re-exports; the family lanes use the adapter, tests use the rest.
 pub(in crate::runtime) use color::{
     AchievedColor, ColorAdapter, ColorAdapterCounters, ColorContinuity, ColorDescriptor,
     ColorHeadContinuity, ColorHeadDescriptor, ColorHeadOutcome, ColorQuality, ColorSolveWork,
 };
 #[allow(unused_imports)]
-// Consumed by the gated Preload evaluator tests until TL-548 wires it.
+// Preload lanes; some re-exports are consumed only by the Preload evaluator tests.
 pub(in crate::runtime) use lane::{
     PhysicalAdapterLane, PhysicalLaneKind, PhysicalPreloadLanes, ReleasedPhysicalOwner,
 };
 pub(in crate::runtime) use live_frame::PublishedLiveFrame;
 #[allow(unused_imports)]
-// TL-593 Media Color adapter; no production caller until TL-548 wires the producer.
+// TL-593 Media Color adapter re-exports; the family lanes use the adapter, tests use the rest.
 pub(in crate::runtime) use media_color::{
     MediaColorAdapter, MediaColorAdapterCounters, MediaColorDescriptor, MediaColorQuality,
 };
 #[allow(unused_imports)]
-// TL-558 Focus/Zoom adapter; no production caller until TL-548 wires the producer.
+// TL-558 Focus/Zoom adapter re-exports; the family lanes use the adapter, tests use the rest.
 pub(in crate::runtime) use optics::{
     OpticsAdapter, OpticsAdapterCounters, OpticsContinuity, OpticsDescriptor, OpticsLanes,
     OpticsPreloadLanes, OpticsQuality, OpticsRequested,

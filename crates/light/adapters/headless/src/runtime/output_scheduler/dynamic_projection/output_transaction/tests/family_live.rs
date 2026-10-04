@@ -25,6 +25,7 @@ mod derived_coverage;
 mod desk;
 mod fixat_without_underlay;
 mod rejection;
+mod static_values;
 
 /// Every fixture sits alone on its own universe (1..=4 and 6).
 #[derive(Clone, Copy)]

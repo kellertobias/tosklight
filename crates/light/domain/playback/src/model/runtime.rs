@@ -465,6 +465,9 @@ pub struct PlaybackContribution {
     pub source: SequenceMasterSource,
     /// Where the engine's frame keeps this pair, when the compiled cue list was told.
     pub address: Option<light_core::FrameAddress>,
+    /// Runtime-only live Position crossing behind a held `value` (TL-544 G1). The physical
+    /// Position adapter evaluates it per destination; it is never recorded or persisted.
+    pub pending_transition: Option<Arc<light_core::programming::PendingFamilyTransition>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

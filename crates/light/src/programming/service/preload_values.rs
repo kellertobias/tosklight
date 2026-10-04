@@ -129,16 +129,6 @@ impl ProgrammingService {
                 .as_mut()
                 .expect("Preload intents load a values environment");
             super::values::validate_value_intent(intent, environment)?;
-            family_gesture = self.prepare_family_gesture(
-                &action.context,
-                ports,
-                true,
-                intent,
-                environment,
-                &active_values,
-            )?;
-            // TL-594: an unresolvable displayed source holds the whole action quietly.
-            hold = environment.displayed_source_hold;
             let groups = active
                 .group_values
                 .iter()
@@ -149,6 +139,16 @@ impl ProgrammingService {
                     )
                 })
                 .collect();
+            family_gesture = self.prepare_family_gesture(
+                &action.context,
+                ports,
+                true,
+                intent,
+                environment,
+                &active_values,
+                &groups,
+            )?;
+            hold = environment.displayed_source_hold; // TL-594: an unresolved source holds.
             let normal_plan = if hold.is_some() {
                 Vec::new()
             } else if let Some((mutations, plan)) = self.plan_aligned_family_intent(

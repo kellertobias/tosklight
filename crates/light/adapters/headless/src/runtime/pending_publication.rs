@@ -1,10 +1,10 @@
 //! TL-610: immutable Pending native readouts and the Pending-episode publication gate.
 //!
-//! This is a pure prerequisite helper, not production Pending delivery. It acquires no
-//! application lock, reads no Live state, starts no evaluation and owns no notification. TL-548
-//! keeps the episode executor, lifecycle wiring, acceptance authority, locks and the
-//! output/visualization cutover. Production keeps `SUPPORTED_PROGRAMMING_CONTRACT = 0`; nothing
-//! here has a production caller yet.
+//! This is a pure helper. It acquires no application lock, reads no Live state, starts no
+//! evaluation and owns no notification. The Pending episode executor
+//! (`retained_preload_hybrid::pending_executor`) owns lifecycle wiring, acceptance authority and
+//! locks, and consumes this gate. Production runs the semantic programming contract (contract 1)
+//! since the TL-552 cutover.
 //!
 //! - [`PendingNativeReadout::prepare`] consumes only an accepted paired result and its exact
 //!   retained capture. Rows, Point poses and native ownership masks come solely from

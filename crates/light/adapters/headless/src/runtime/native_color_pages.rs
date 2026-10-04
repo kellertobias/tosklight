@@ -16,7 +16,7 @@ use super::output_scheduler::physical_adapters::color::native::{
     NATIVE_PAGE_CONTROLS, NativeColorControl, PublishedColorHead, inspect_native_values,
 };
 use super::output_scheduler::physical_adapters::color::native_seed::{
-    NativeReference, native_reference, native_source_model,
+    NativeReference, idle_native_values, native_reference, native_source_model,
 };
 use light_core::programming::{
     DirectCompatibility, DirectDestination, PROGRAMMING_CONTRACT_VERSION,
@@ -270,6 +270,8 @@ fn reference_dto(
 }
 
 /// The reference head's premaster values in the latest accepted Live frame of this generation.
+/// G5: an idle head (no Color output in that frame, nothing held) shows its profile defaults,
+/// exactly what a first native edit then adopts.
 fn reference_values(
     state: &AppState,
     snapshot: &Arc<EngineSnapshot>,
@@ -283,17 +285,22 @@ fn reference_values(
         .output
         .live_family_adapters()
         .accepted_color(frame.generation, frame.sampled_at)?;
-    let output = accepted.output(reference.target)?;
-    let values = inspect_native_values(
-        reference.head(),
-        &PublishedColorHead {
-            token: &output.token,
-            target: output.target,
-            value: &output.value,
-            writes: &output.writes,
-        },
-    )
-    .ok()?;
+    let values = match accepted.output(reference.target) {
+        Some(output) => inspect_native_values(
+            reference.head(),
+            &PublishedColorHead {
+                token: &output.token,
+                target: output.target,
+                value: &output.value,
+                writes: &output.writes,
+            },
+        )
+        .ok()?,
+        None if !accepted.held(reference.target, reference.target) => {
+            idle_native_values(reference)?
+        }
+        None => return None,
+    };
     Some(wire::NativeColorValues {
         frame: frame.identity(),
         controls: values

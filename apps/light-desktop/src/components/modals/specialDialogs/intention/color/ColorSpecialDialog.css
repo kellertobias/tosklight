@@ -32,8 +32,8 @@
 .semantic-color-modal .color-direct-candidates > button { min-height: 44px; }
 .semantic-color-modal .color-direct-overflow { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .semantic-color-modal .color-direct-choices { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px; }
-.semantic-color-modal .color-direct-choices > li { padding: 2px 6px; border: 1px solid var(--border); border-radius: 3px; }
-.semantic-color-modal .color-direct-choices > li[data-current="true"] { font-weight: 600; }
+.semantic-color-modal .color-direct-choices > li { display: flex; }
+.semantic-color-modal .color-direct-choices > li[data-current="true"] button { font-weight: 600; }
 .semantic-color-modal .color-direct-status { width: 100%; border-collapse: collapse; }
 .semantic-color-modal .color-direct-status th,
 .semantic-color-modal .color-direct-status td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--border); vertical-align: top; }

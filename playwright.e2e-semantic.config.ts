@@ -15,8 +15,12 @@ export const SEMANTIC_SPECS = [
 	/117-position-operator-controls\.spec\.ts$/,
 	/112-color-intent\.spec\.ts$/,
 	/118-focus-zoom-operator-controls\.spec\.ts$/,
+	/119-semantic-color-controls\.spec\.ts$/,
+	/120-direct-color-pages\.spec\.ts$/,
+	/121-intention-programming-frame-contract\.spec\.ts$/,
+	/125-typed-family-values\.spec\.ts$/,
 ];
-export const SEMANTIC_SCENARIOS = /\b(POSITION-CONTROLS|SEMANTIC-COLOR|DIRECT-COLOR|FOCUS-ZOOM)-\d{3}\b/;
+export const SEMANTIC_SCENARIOS = /\b(POSITION-CONTROLS|SEMANTIC-COLOR|DIRECT-COLOR|FOCUS-ZOOM|INTENT-FRAME|TYPED-FAMILY)-\d{3}\b/;
 
 export default defineConfig<BenchWorkerOptions>(base, {
 	projects: [

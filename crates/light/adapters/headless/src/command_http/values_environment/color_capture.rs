@@ -13,8 +13,12 @@
 //! Direct of that source are edited in place, every other target (including other fixture types
 //! of a mixed selection) takes the reference recipe, which the output replays exactly on
 //! compatible heads and matches best effort elsewhere. Missing pieces install nothing; the
-//! application then holds the whole action quietly (`NativeColorUnavailable`). Preload has no
-//! published Direct capture yet: only in-place edits of existing Direct values proceed there.
+//! application then holds the whole action quietly (`NativeColorUnavailable`).
+//!
+//! G5: an idle reference head (no Color sidecar in the frame, nothing held) outputs its profile
+//! defaults, so those are captured through the pinned model instead. Preload seeds from the
+//! Programmer's accepted Pending pair (its After branch), published beside the Pending Position
+//! readouts; never from the Live publication.
 use light_application::{ProgrammingDisplayedLane, ProgrammingValuesEnvironment};
 use light_core::programming::{ComponentEdit, ProgrammingOwner};
 use light_core::{AttributeValue, FixtureId};
@@ -25,7 +29,8 @@ use super::super::super::AppState;
 use crate::runtime::output_readouts::DisplayedSource;
 use crate::runtime::output_scheduler::physical_adapters::color::native::PublishedColorHead;
 use crate::runtime::output_scheduler::physical_adapters::color::native_seed::{
-    NativeReference, native_reference, native_source_model, published_native_seed,
+    NativeReference, idle_native_seed, native_reference, native_source_model, pending_native_seed,
+    published_native_seed,
 };
 use crate::runtime::visualization_frame::PublishedVisualizationFrame;
 
@@ -71,6 +76,7 @@ pub(super) fn prepare_native_color_context(
         return;
     };
     let seed = match frame.map(|frame| capture_seed(state, &snapshot, &frame, &reference)) {
+        _ if preload => pending_seed(state, session, &snapshot, &reference),
         Some(Ok(seed)) => seed,
         // The leased frame is no longer retained or no longer this generation: the surface
         // re-reads and the next sample adopts its fresh source. Latest has nothing to retry.
@@ -157,7 +163,11 @@ fn capture_seed(
         .accepted_color(frame.generation, frame.sampled_at)
         .ok_or(())?;
     let Some(output) = accepted.output(reference.target) else {
-        return Ok(None);
+        // G5: an idle head (no requested colour, nothing held) outputs its profile defaults.
+        if accepted.held(reference.target, reference.target) {
+            return Ok(None);
+        }
+        return Ok(idle_native_seed(snapshot, &reference));
     };
     Ok(published_native_seed(
         snapshot,
@@ -171,4 +181,33 @@ fn capture_seed(
         },
     )
     .ok())
+}
+
+/// G5: the Direct seed of the reference head in the Programmer's accepted Pending pair: its
+/// After-branch output, or its profile defaults when that pair gave it no Color output. None
+/// without an accepted pair of this Programmer (never the Live publication).
+fn pending_seed(
+    state: &AppState,
+    session: light_core::SessionId,
+    snapshot: &light_engine::EngineSnapshot,
+    reference: &NativeReference,
+) -> Option<AttributeValue> {
+    let source = state.output.pending_position_readouts().source()?;
+    let programmer = state.programming.get(session)?.id;
+    match source.color_output(programmer, reference.target) {
+        Some(output) => pending_native_seed(
+            snapshot,
+            reference,
+            PublishedColorHead {
+                token: &output.token,
+                target: output.target,
+                value: &output.value,
+                writes: &output.writes,
+            },
+        )
+        .ok(),
+        None => source
+            .capture(programmer, &[reference.target])
+            .and_then(|_| idle_native_seed(snapshot, reference)),
+    }
 }

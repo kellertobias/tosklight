@@ -319,6 +319,10 @@ export class BrowserProductDemo {
 		const testInfo = this.testInfo;
 		testInfo.setTimeout(RECORDING ? 2_700_000 : 300_000);
 		page.setDefaultTimeout(15_000);
+		// The product demo frame is laid out for Full HD. At the default 1280x720 test viewport its
+		// simulated hardware keypad columns overlap, so an unrecorded regression run would press
+		// the wrong keys.
+		await page.setViewportSize({ width: 1920, height: 1080 });
 		await loadCanonicalCopy(
 			api,
 			bench,
@@ -1706,8 +1710,12 @@ async function configureOutput(
 			exact: true,
 		}),
 	);
+	// Outputs is a tabbed section: the Output Engine opens first and the routes live behind their
+	// own tab.
+	await desk.click(app.getByRole("tab", { name: "Routes", exact: true }));
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.outputSurfaceHoldFrames);
 	const routes = app.getByRole("region", { name: "Output routes" });
+	await expect(routes).toBeVisible();
 	await createOutputRoute(
 		desk,
 		page,
@@ -1727,7 +1735,9 @@ async function configureOutput(
 		.toBe(9);
 	await expect(routes.locator(".output-route-list > article")).toHaveCount(9);
 	for (let universe = 1; universe <= 9; universe++)
-		await expect(routes).toContainText(`Logical ${universe} →`);
+		await expect(routes).toContainText(
+			`Logical ${universe} · Art-Net ${universe} · Art-Net Unicast`,
+		);
 	await routes
 		.locator(".output-route-list > article")
 		.last()

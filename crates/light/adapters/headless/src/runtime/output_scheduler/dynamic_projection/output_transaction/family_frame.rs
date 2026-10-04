@@ -6,9 +6,10 @@
 //! renders; the hybrid source is a frame already rendered by `finalize_live_family_frame`.
 //!
 //! **Gate.** The hybrid path runs only when [`LiveFamilyAdapters::engaged`]: the shared resource
-//! was built opted in AND the Engine supports `PROGRAMMING_CONTRACT_VERSION`. Production builds
-//! the resource with `opted_in = false` (and keeps `SUPPORTED_PROGRAMMING_CONTRACT = 0`), and the
-//! default headless test state (contract 1) is not opted in either, so neither moves implicitly.
+//! was built opted in AND the Engine supports `PROGRAMMING_CONTRACT_VERSION`. Since the TL-552
+//! cutover production builds the resource opted in
+//! (`e2e_semantic_contract::live_family_adapters_opted_in`) and reports contract 1, so the hybrid
+//! path is engaged; a contract-0 engine (the TL-560 startup harness) still takes the legacy source.
 //!
 //! **Ownership.** One `LiveFamilyAdapters` is created with the scheduler's `SharedResources` and
 //! the same `Arc` is installed on `OutputResource`, so both Live paths drive one `FamilyLanes`

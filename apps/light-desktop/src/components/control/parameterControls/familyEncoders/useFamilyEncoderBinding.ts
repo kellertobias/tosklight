@@ -5,6 +5,7 @@ import {
 	useFamilyEncodersContext,
 } from "../../../../features/familyEncoders/FamilyEncodersProvider";
 import { useFamilyReadouts } from "../../../../features/familyEncoders/useFamilyReadouts";
+import { usePatchedFixtures } from "../../../../features/patch/PatchState";
 import type { FamilyGestureWriter } from "../../../../features/programmerValues/familyGestureSession";
 import { useProgrammerPreloadValuesActions } from "../../../../features/programmerPreloadValues/ProgrammerPreloadValuesView";
 import { useProgrammerValuesActions } from "../../../../features/programmerValues/ProgrammerValuesView";
@@ -33,6 +34,11 @@ import {
 	SEMANTIC_PARAMETER_FAMILIES,
 } from "./familyEncoderLayout";
 import { colorAdoptionNotice } from "../../../../features/familyEncoders/colorAdoptionNotice";
+import {
+	type FamilyPointChoice,
+	familyPointChoices,
+	pointSlotDisplay,
+} from "./familyPointChoices";
 import { isNativeSlot } from "./nativeColorSlots";
 import {
 	type NativeColorEncoderPages,
@@ -82,6 +88,15 @@ export interface FamilyEncoderController {
 	set(index: number, value: number): void;
 	/** Ordered `[THRU]` points in descriptor units; ignored by a slot without `spread`. */
 	setRange(index: number, points: readonly number[]): void;
+	/** The Point slot's ordered choices (Origin, then the show's 3D Points). */
+	pointChoices: readonly FamilyPointChoice[];
+	/** Picks one Point choice by its value on the Point slot: one complete Target gesture. */
+	choosePoint(index: number, value: string): void;
+	/**
+	 * Explicit release of a software encoder drag: finishes the open encoder gestures now (one
+	 * Finish, same Undo group) instead of waiting for the idle end (TL-544 G12).
+	 */
+	finishGestures(): void;
 	display(index: number): FamilySlotDisplay;
 	/** Controller fields replaced while active; `{}` keeps the legacy controller byte-for-byte. */
 	overrides: Partial<
@@ -132,12 +147,13 @@ function useBindingInstance(
 	projection: ParameterProjection,
 	readouts: ReturnType<typeof useFamilyReadouts>,
 	native: NativeColorEncoderPages,
+	points: readonly FamilyPointChoice[],
 ) {
 	const normal = useProgrammerValuesActions();
 	const preload = useProgrammerPreloadValuesActions();
 	const context = useFamilyEncodersContext();
-	const latest = useRef({ normal, preload, readouts, context, native });
-	latest.current = { normal, preload, readouts, context, native };
+	const latest = useRef({ normal, preload, readouts, context, native, points });
+	latest.current = { normal, preload, readouts, context, native, points };
 	const [binding, setBinding] = useState<FamilyEncoderBinding | null>(null);
 	useEffect(() => {
 		if (!projection.active) return;
@@ -153,12 +169,16 @@ function useBindingInstance(
 				latest.current.context?.readouts.displayedSource(lane, fixtureIds) ?? null,
 			onDisplayedSourceHold: () => latest.current.readouts.reread(),
 			nativeReference: () => latest.current.native.reference(),
+			pointChoices: () => latest.current.points.map((choice) => choice.reference),
 			semanticColorAdoption: () => colorAdoptionNotice.semanticInput(),
 			onColorHold: (reason) => colorAdoptionNotice.held(reason),
 			onColorOutcome: (outcome) => colorAdoptionNotice.outcome(outcome),
 		});
+		// Window blur and a hidden document end the open encoder gestures (TL-544 G12).
+		const detachGuards = next.attachWindowGuards();
 		setBinding(next);
 		return () => {
+			detachGuards();
 			next.dispose();
 			setBinding((current) => (current === next ? null : current));
 		};
@@ -202,7 +222,9 @@ export function useFamilyEncoderBinding(
 		positionFixtures,
 		{ enabled: layout?.family === "position", consumerId: "position-encoders" },
 	);
-	const binding = useBindingInstance(projection, readouts, native);
+	const patchFixtures = usePatchedFixtures(layout?.family === "position");
+	const points = useMemo(() => familyPointChoices(patchFixtures), [patchFixtures]);
+	const binding = useBindingInstance(projection, readouts, native, points);
 	const page = layout
 		? Math.min(Math.max(pages[family] ?? 1, 1), layout.pages.length)
 		: 1;
@@ -241,12 +263,29 @@ export function useFamilyEncoderBinding(
 		set: (index, value) => {
 			withSlot(index, (slot, edit) => binding?.set(slot, value, edit));
 		},
-		setRange: (index, points) => {
-			withSlot(index, (slot, edit) => binding?.spread(slot, points, edit));
+		setRange: (index, values) => {
+			withSlot(index, (slot, edit) => binding?.spread(slot, values, edit));
+		},
+		pointChoices: points,
+		choosePoint: (index, value) => {
+			const choice = points.find((entry) => entry.value === value);
+			if (choice)
+				withSlot(index, (slot, edit) => binding?.chooseTarget(slot, choice.reference, edit));
+		},
+		finishGestures: () => {
+			binding?.finishGestures();
 		},
 		display: (index) => {
 			const slot = componentSlot(index);
 			if (isNativeSlot(slot) && slot) return native.display(slot);
+			if (slot?.edit === "target_reference") {
+				const values = projection.programmerValues as readonly ProgrammerValueEntry[];
+				const shown = pointSlotDisplay(slot, values, points);
+				const unsupported =
+					shown.source === "none" &&
+					positionSlotUnsupported(slot, { programmerValues: values, readouts: readouts.snapshot });
+				return unsupported ? { ...shown, unsupported: true } : shown;
+			}
 			return slot
 				? familySlotDisplay(slot, {
 						programmerValues: projection.programmerValues as readonly ProgrammerValueEntry[],

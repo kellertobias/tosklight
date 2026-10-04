@@ -9,6 +9,7 @@ mod programming_native;
 mod semantic_import_undo;
 mod semantic_intent;
 mod semantic_intent_store;
+mod semantic_media_color;
 mod semantic_static_import;
 mod support;
 

@@ -1,3 +1,4 @@
+use super::programmer_family_values::typed_family_command as typed_family;
 use super::*;
 
 fn percent_level(tokens: &[String]) -> Result<f32, String> {
@@ -27,6 +28,19 @@ fn execute_mixed_group_value(
 ) -> Result<usize, String> {
     let snapshot = state.output.snapshot();
     let parsed = parse_group_mixed_selection(&snapshot, address, true)?;
+    let sources = light_programmer::SelectionExpression::Sources {
+        items: parsed.sources.clone(),
+    };
+    if let Some(n) = typed_family(
+        state,
+        session,
+        value,
+        &parsed.fixtures,
+        Some(&sources),
+        timing,
+    ) {
+        return n;
+    }
     let percent = percent_level(value)?;
     state.programming.select_expression(
         session.id,
@@ -241,6 +255,10 @@ pub(super) fn execute_group_programmer_command(
             rule,
         }
     };
+    let value = &tokens[(at_index + 1).min(tokens.len())..];
+    if let Some(n) = typed_family(state, session, value, &fixtures, Some(&expression), timing) {
+        return n;
+    }
     if at_index < tokens.len() {
         let value = &tokens[at_index + 1..];
         if value.len() == 3 && value[1] == "." {

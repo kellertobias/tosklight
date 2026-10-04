@@ -18,18 +18,28 @@ use crate::runtime::tests::test_state_with_family_adapters;
 use light_core::programming::PROGRAMMING_CONTRACT_VERSION;
 use light_engine::RenderResult;
 
+/// Focus Cue record, reopen and replacement independent of Zoom.
+mod focus;
 /// Media colour through Preset, Update and live Group.
 mod media_color;
+/// Media colour Cue across replacement by another personality.
+mod media_replacement;
 /// Position Angles and Point Target through replacement by shipped profiles.
 mod position_replacement;
 /// Preload GO commit for Target, Direct, UV and Zoom.
 mod preload_go;
+/// Preload GO commit for Focus and Media colour.
+mod preload_go_focus_media;
+/// Preset recall of semantic UV and of Focus.
+mod preset_recall;
 /// Magenta/warm-white Presets and visible colour plus UV across replacement.
 mod replacement_presets;
 /// Regression: a static typed Zoom reaches the Live family frame (defect found by TL-560).
 mod static_zoom;
 /// Unpatched fixtures keep semantic programming; only DMX is suppressed.
 mod unpatched;
+/// Unpatched Target, Direct, UV, Focus, Zoom and Media colour.
+mod unpatched_families;
 
 /// One fresh desk process: an `AppState` at contract 1 with the family Live path engaged.
 pub(super) struct Desk {

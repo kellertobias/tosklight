@@ -44,8 +44,10 @@ export function FamilyEncoderSlotSurface({
 			? `${label} · Resolved`
 			: label;
 	const owner = descriptor.owner;
+	// TL-544 G4: the Point slot is a choice encoder on every surface (detent, step or picker).
+	const pointSlot = bindingSlot.edit === "target_reference";
 	const editable =
-		bindingSlot.edit === "scalar" && !unsupported && controller.canWriteValues;
+		(bindingSlot.edit === "scalar" || pointSlot) && !unsupported && controller.canWriteValues;
 	const hasScopedValue = controller.hasProgrammerValue(owner);
 	const scale = descriptor.display_scale || 1;
 	// `[THRU]` in the value pad (software, hardware modal, keypad and OSC alike) spreads this
@@ -78,7 +80,7 @@ export function FamilyEncoderSlotSurface({
 				editValue={display.value === null ? undefined : display.value * scale}
 				canRelease={hasScopedValue}
 				onEdit={
-					editable
+					editable && !pointSlot
 						? (next) => controller.familyEncoders.set(index, next / scale)
 						: undefined
 				}
@@ -90,6 +92,23 @@ export function FamilyEncoderSlotSurface({
 				}
 			/>
 		);
+	const pointPresets = pointSlot
+		? {
+				presetsTabLabel: "Points",
+				groups: [
+					{
+						label: "Target reference",
+						options: controller.familyEncoders.pointChoices.map((choice) => ({
+							value: choice.value,
+							label: choice.label,
+						})),
+					},
+				],
+				selectedValue: controller.familyEncoders.pointChoices.find(
+					(choice) => choice.label === display.text,
+				)?.value,
+			}
+		: undefined;
 	return (
 		<TouchEncoder
 			label={`Enc ${index + 1} · ${shownLabel}`}
@@ -100,6 +119,12 @@ export function FamilyEncoderSlotSurface({
 			disabled={!editable}
 			canRelease={hasScopedValue}
 			onStep={(delta) => controller.familyEncoders.step(index, delta)}
+			onDragEnd={() => controller.familyEncoders.finishGestures()}
+			touchInteraction={pointSlot ? "choices" : undefined}
+			presets={pointPresets}
+			onPresetSelect={
+				pointSlot ? (value) => controller.familyEncoders.choosePoint(index, value) : undefined
+			}
 			minimum={minimum}
 			maximum={maximum}
 			inputScale={scale}

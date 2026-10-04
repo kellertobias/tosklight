@@ -20,6 +20,7 @@ mod fit_cache;
 mod frame_observer;
 mod frame_worker;
 pub(in crate::runtime) mod native_rows;
+mod static_crossing;
 #[cfg(test)]
 pub(in crate::runtime) mod tests;
 mod tracking;

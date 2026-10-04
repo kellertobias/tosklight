@@ -259,6 +259,25 @@ pub(in crate::runtime) trait PendingPositionReadoutSource: Send + Sync {
         programmer: ProgrammerId,
         owners: &[FixtureId],
     ) -> Option<CapturedPositionReadouts>;
+
+    /// G5: `target`'s lamp Color output in the same accepted Pending pair (After branch), for
+    /// the first Direct edit in Preload. None without one; never the Live publication.
+    fn color_output(
+        &self,
+        _programmer: ProgrammerId,
+        _target: FixtureId,
+    ) -> Option<PendingColorOutput> {
+        None
+    }
+}
+
+/// G5: one lamp Color output of an accepted Pending pair, exactly as its After branch wrote it.
+#[derive(Clone, Debug)]
+pub(in crate::runtime) struct PendingColorOutput {
+    pub token: light_engine::CapturedFrameToken,
+    pub target: FixtureId,
+    pub value: AttributeValue,
+    pub writes: Vec<super::output_scheduler::physical_adapters::NativeControlWrite>,
 }
 
 /// Injected Pending readout source. Empty by default, so production Preload stays quiet until

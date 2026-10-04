@@ -12,6 +12,7 @@ import { FamilyEncoderBinding } from "../../../../control/parameterControls/fami
 import {
 	currentRaw,
 	functionFor,
+	nativeChoiceRaw,
 	nativeColorSlot,
 	nativeReferenceOf,
 } from "../../../../control/parameterControls/familyEncoders/nativeColorSlots";
@@ -24,8 +25,11 @@ export interface DirectColorControl {
 	slot: FamilyEncoderComponentSlot;
 	/** The control's current raw: the requested recipe, else the displayed premaster value. */
 	raw: number | null;
-	/** Discrete functions are shown as choices; only the current one is editable in place. */
-	choices: ReadonlyArray<{ label: string; current: boolean }>;
+	/**
+	 * The control's functions as choices (TL-544 G4): choosing one sets its first raw, a complete
+	 * recipe adoption; only the current one is adjustable in place.
+	 */
+	choices: ReadonlyArray<{ label: string; current: boolean; raw: number }>;
 }
 
 export interface DirectColorControls {
@@ -33,6 +37,10 @@ export interface DirectColorControls {
 	overflow: readonly DirectColorControl[];
 	step(control: DirectColorControl, delta: number): void;
 	set(control: DirectColorControl, value: number): void;
+	/** Ordered `[THRU]` raw points over the selection; continuous functions only (TL-544 G6). */
+	setRange(control: DirectColorControl, points: readonly number[]): void;
+	/** Explicit release of a touch drag: finishes the open Direct gesture now (TL-544 G12). */
+	finishGestures(): void;
 	/** Inert: chooses the inspected reference head; sends nothing to the Programmer. */
 	chooseReference(candidate: NativeColorReferenceCandidate): void;
 }
@@ -81,8 +89,11 @@ export function useDirectColorControls(
 			onColorOutcome: (outcome) => colorAdoptionNotice.outcome(outcome),
 			onError: () => undefined,
 		});
+		// Window blur and a hidden document end the open Direct gesture (TL-544 G12).
+		const detachGuards = created.attachWindowGuards();
 		setBinding(created);
 		return () => {
+			detachGuards();
 			created.dispose();
 			setBinding((current) => (current === created ? null : current));
 		};
@@ -102,6 +113,7 @@ export function useDirectColorControls(
 								? control.functions.map((entry) => ({
 										label: entry.label,
 										current: entry.function_id === fn.function_id,
+										raw: nativeChoiceRaw(entry),
 									}))
 								: [],
 					},
@@ -121,6 +133,13 @@ export function useDirectColorControls(
 		set(control, value) {
 			const edit = target();
 			if (edit) binding?.set(control.slot, value, edit);
+		},
+		setRange(control, points) {
+			const edit = target();
+			if (edit) binding?.spread(control.slot, points, edit);
+		},
+		finishGestures() {
+			binding?.finishGestures();
 		},
 		chooseReference(candidate) {
 			nativeColorReference.set({

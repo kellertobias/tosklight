@@ -8,13 +8,19 @@
 //! publication are never read. A reader filters the precomputed owners; the result is passive
 //! (None) for another Programmer, after the episode ended, or once the engine runs another
 //! snapshot than the pair's.
+//!
+//! G5: the same accepted pair's lamp Color outputs (After branch) are kept beside the Position
+//! readouts, so the first Direct edit in Preload seeds from the Pending output the operator saw.
 use crate::runtime::dynamic_snapshot_publication::RetainedInputCapture;
 use crate::runtime::output_scheduler::dynamic_projection::pending_publication::{
     PendingAttemptTicket, PendingEpisodeIdentity,
 };
 use crate::runtime::output_scheduler::dynamic_projection::retained_preload_hybrid::pending_episode::PendingEpisodePair;
+use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::color_router::RoutedColorQuality;
+use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::family_lanes::FamilySidecar;
 use crate::runtime::position_readout::{
-    CapturedPositionReadouts, PendingPositionReadoutSource, capture_pending_position_readouts,
+    CapturedPositionReadouts, PendingColorOutput, PendingPositionReadoutSource,
+    capture_pending_position_readouts,
 };
 use light_core::{FixtureId, ProgrammerId};
 use light_engine::{Engine, EngineSnapshot};
@@ -26,6 +32,23 @@ pub(in crate::runtime) struct AcceptedPositionReadouts {
     programmer: ProgrammerId,
     snapshot: Arc<EngineSnapshot>,
     readouts: CapturedPositionReadouts,
+    /// G5: the pair's After-branch lamp Color outputs, one per programming target.
+    colors: Vec<PendingColorOutput>,
+}
+
+/// G5: the lamp Color outputs of one accepted pair's After branch (Before is never read).
+pub(super) fn pending_colors(sidecars: &[FamilySidecar]) -> Vec<PendingColorOutput> {
+    sidecars
+        .iter()
+        .filter_map(FamilySidecar::color)
+        .filter(|color| matches!(color.quality, RoutedColorQuality::Lamp(_)))
+        .map(|color| PendingColorOutput {
+            token: color.token.clone(),
+            target: color.target,
+            value: color.value.clone(),
+            writes: color.writes.clone(),
+        })
+        .collect()
 }
 
 /// The executor's `PendingPositionReadoutSource`. Readers take only this mutex.
@@ -49,6 +72,7 @@ impl PendingEpisodeReadouts {
         ticket: PendingAttemptTicket,
         accepted: &PendingEpisodePair<S>,
         exact: &Arc<RetainedInputCapture>,
+        colors: Vec<PendingColorOutput>,
     ) -> Option<Arc<AcceptedPositionReadouts>> {
         let snapshot = exact.frame.snapshot();
         let owners: Vec<FixtureId> = snapshot
@@ -69,6 +93,7 @@ impl PendingEpisodeReadouts {
             programmer: identity.programmer,
             snapshot,
             readouts,
+            colors,
         }))
     }
 
@@ -84,6 +109,24 @@ impl PendingEpisodeReadouts {
 }
 
 impl PendingPositionReadoutSource for PendingEpisodeReadouts {
+    fn color_output(
+        &self,
+        programmer: ProgrammerId,
+        target: FixtureId,
+    ) -> Option<PendingColorOutput> {
+        let current = self.current.lock().clone()?;
+        if current.programmer != programmer
+            || !Arc::ptr_eq(&self.engine.snapshot(), &current.snapshot)
+        {
+            return None;
+        }
+        current
+            .colors
+            .iter()
+            .find(|output| output.target == target)
+            .cloned()
+    }
+
     fn capture(
         &self,
         programmer: ProgrammerId,

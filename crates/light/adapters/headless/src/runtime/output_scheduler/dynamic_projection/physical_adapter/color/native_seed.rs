@@ -159,3 +159,77 @@ pub(in crate::runtime) fn published_native_seed(
         .capture_direct(NativeColorObservation { source, values })?;
     Ok(captured.into_value())
 }
+
+/// G5: the native values an idle reference head outputs (no Color sidecar in the frame): every
+/// path control at its profile default, with the function the descriptor derives for that raw.
+/// `None` when a default lies outside every recordable function (nothing is invented).
+pub(in crate::runtime) fn idle_native_values(
+    reference: &NativeReference,
+) -> Option<Vec<light_core::NativeColorValue>> {
+    reference
+        .controls()
+        .iter()
+        .map(|control| {
+            let binding = control.function_for(control.default_raw).ok()?;
+            Some(light_core::NativeColorValue {
+                channel_id: binding.channel_id,
+                function_id: binding.function_id,
+                raw: control.default_raw,
+            })
+        })
+        .collect()
+}
+
+/// G5: the complete Direct value a first native edit on an idle head starts from: the head's
+/// profile-default output, captured once with the pinned original model.
+pub(in crate::runtime) fn idle_native_seed(
+    snapshot: &EngineSnapshot,
+    reference: &NativeReference,
+) -> Option<AttributeValue> {
+    let values = idle_native_values(reference)?;
+    snapshot
+        .native_color_sources
+        .capture_direct(NativeColorObservation {
+            source: reference.identity().clone(),
+            values,
+        })
+        .ok()
+        .map(|captured| captured.into_value())
+}
+
+/// G5: the complete Direct value a first native edit in Preload starts from: the reference
+/// head's output in the Programmer's accepted Pending (After) branch. Guarded like
+/// [`published_native_seed`], except that the output belongs to the Preload lane.
+pub(in crate::runtime) fn pending_native_seed(
+    snapshot: &EngineSnapshot,
+    reference: &NativeReference,
+    published: PublishedColorHead<'_>,
+) -> Result<AttributeValue, TransitionError> {
+    if !matches!(published.token.lane(), CapturedFrameLane::Preload { .. })
+        || published.target != reference.target
+    {
+        return Err(invalid(
+            "Pending Color output belongs to another lane or target",
+        ));
+    }
+    if !profile_head_destinations(snapshot, published.target)
+        .iter()
+        .any(|d| d.destination == reference.descriptor.root && d.head_id == reference.head_id)
+    {
+        return Err(invalid(
+            "Pending Color target does not own the reference head of this descriptor",
+        ));
+    }
+    validate_complete_writes(&reference.descriptor.footprint, published.writes)?;
+    let source = reference.identity().clone();
+    if let AttributeValue::ColorProgram(program) = published.value
+        && matches!(program.as_ref(), ColorProgram::Direct { recipe, .. } if recipe.source == source)
+    {
+        return Ok(published.value.clone());
+    }
+    let values = inspect_native_values(reference.head(), &published)?;
+    let captured = snapshot
+        .native_color_sources
+        .capture_direct(NativeColorObservation { source, values })?;
+    Ok(captured.into_value())
+}

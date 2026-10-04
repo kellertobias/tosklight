@@ -239,6 +239,16 @@ The default after `[AT]` is the intensity value. You however also can set other 
 
 Here you can also increase/ decrease: `<selection> [AT][^2] [+] 10 [DIV][+] 0 [DIV][-] 10` adds 10 to red, does not change green and subtracts 10 from blue.
 
+The values follow the first encoder page of each family, in the units that encoder shows:
+
+| Key    | Command line | Values, in encoder order |
+| ---    | ---          | ---                      |
+| `[^2]` | `COLOR`      | Red, Green, Blue, White Blend in percent |
+| `[^3]` | `POSITION`   | Pan, Tilt in degrees |
+| `[^7]` | `FOCUS`      | Focus in percent, Zoom in degrees |
+
+For example, `1 [AT][^3] 45 [DIV] 30 [ENT]` displays `#> F1 AT POSITION 45 DIV 30` and points fixture 1 to Pan 45° and Tilt 30°. Two `[DIV]` in a row show as `OFFSET`; after a family key they still separate two values, so `[AT][^2] [DIV][DIV] 100` displays `AT COLOR OFFSET 100` and sets blue. A leading `[-]` subtracts, so enter a negative angle with two minus keys: `[AT][^3] [-][-] 90` sets Pan to -90°. The value is the same Programmer edit an encoder makes: Position values are Angles, Color values are Color Intent, and a first Pan or Tilt value on a Target takes over the pose you were shown. A fixture without that family, or a Zoom without a declared beam or field convention, is left unchanged, as on the encoders. A live Group stores the value as its own, and in Preload the value goes into the pending Preload.
+
 ### Value Ranges
 
 If you want to spread values across multiple selected fixtures, you can use the `[THRU]` keyword: `<selection> [AT] 10 [THRU] 40` sets the first fixture in the selection to 10% and the last to 40% and the fixtures in between to levels between. You can also chain multiple `THRU` blocks, e.g. `<selection> [AT] 10 [THRU] 100 [THRU] 10`. This sets the outermost selected fixtures to 10% and the innermost to 100%.
@@ -246,7 +256,7 @@ If you want to spread values across multiple selected fixtures, you can use the 
 
 What's important is that every value you provide in a spread range always is taken by at least one lamp. This means that you cannot provide more values than lamps.
 
-You can also use spread ranges for other values, e.g. `<selection>[AT][^2] 100 [DIV] 0 [DIV] 0 [THRU] 0 [DIV] 100 [DIV] 0`. This lets the lamps range from red via yellow to green.
+You can also use spread ranges for other values, e.g. `<selection>[AT][^2] 100 [DIV] 0 [DIV] 0 [THRU] 0 [DIV] 100 [DIV] 0`. This lets the lamps range from red via yellow to green. Each `[THRU]` point gives the same values in the same order. A value left empty in every point stays unchanged; a value given in one point must be given in all of them, and a spread takes absolute values only, never `[+]` or `[-]`.
 
 ### Releasing Values
 

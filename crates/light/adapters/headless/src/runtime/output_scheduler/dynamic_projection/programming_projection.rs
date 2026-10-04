@@ -1,5 +1,5 @@
-//! Typed sampling over the same captured static source lane as scalar Dynamics. This adapter
-//! stays behind the production contract gate until family composition and fitting are wired.
+//! Typed sampling over the same captured static source lane as scalar Dynamics. It runs in
+//! production under the semantic programming contract (contract 1, TL-552).
 //! Missing Current is ordinary absence; an unresolved representation is a frame requirement.
 #![allow(dead_code)]
 

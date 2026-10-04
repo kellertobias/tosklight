@@ -591,10 +591,17 @@ fn edit_native(
             .ok_or_else(|| {
                 IntentError("native channel is absent from the complete recipe".into())
             })?;
-        require(
-            channel.function_id == binding.function_id,
-            "native function changes require a complete recipe adoption",
-        )?;
+        // TL-544 G4: a function change (another wheel slot or macro of the same channel) is a
+        // complete recipe adoption: only an absolute value inside the new function may select
+        // it; the channel takes that function and raw, every other channel stays exactly as it
+        // was, and the whole recipe is validated and predicted again below.
+        if channel.function_id != binding.function_id {
+            require(
+                matches!(operation, NativeColorEdit::Set(_)),
+                "native function changes require a complete recipe adoption",
+            )?;
+            channel.function_id = binding.function_id;
+        }
         let min = descriptor.raw_from.min(descriptor.raw_to);
         let max = descriptor.raw_from.max(descriptor.raw_to);
         let existing_spread = recipe

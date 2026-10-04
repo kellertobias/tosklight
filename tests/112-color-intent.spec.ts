@@ -1369,7 +1369,7 @@ function presetCard(page: Page, number: number) {
  * `npm run test:e2e` too; the gate below only skips on an older (contract 0) runtime.
  */
 const SEMANTIC_GATE =
-	"semantic programming contract is not enabled on this runtime (production contract 0; run npm run test:e2e-semantic)";
+	"semantic programming contract is not enabled on this runtime (an older contract-0 server; run npm run test:e2e-semantic)";
 
 async function semanticColorPages(api: ApiDriver, fixtureIds: readonly string[]) {
 	return api

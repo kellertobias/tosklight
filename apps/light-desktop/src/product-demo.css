@@ -423,6 +423,15 @@ body:has(.product-demo-shell) > .stacked-modal-layer > .nested-modal {
 .product-demo-programmer .numeric-pad-section {
 	grid-template-rows: repeat(6, minmax(0, 1fr));
 }
+/* The attached-desk command layout (`numericPadLayout`) has four command columns: DEL/CLR/PLAYBACK/
+   OFF over MOV/BACKSPACE/DIFF/ESC, CPY/UND/PAGE, SET/SHIFT. Two columns would push the outer keys
+   into implicit tracks that overlap the number section. */
+.product-demo-programmer .programmer-number-block {
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.product-demo-programmer .numeric-pad-command-section {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+}
 .product-demo-programmer .ui-button {
 	min-width: 0;
 	min-height: 0;

@@ -24,7 +24,7 @@ const CUE: f64 = 1.0;
 /// AURO SPOT Z300 17-Channel: U8 Zoom on channel 8, 10–25° Beam.
 const ZOOM_CHANNEL: usize = 8;
 
-fn session(id: SessionId) -> Session {
+pub(super) fn session(id: SessionId) -> Session {
     Session {
         capability: light_core::SurfaceCapability::Programming,
         id,

@@ -26,6 +26,8 @@ include!("command_http_cue_convergence_tests.rs");
 include!("command_http_speed_group_tests.rs");
 include!("live_action_http_tests.rs");
 
+#[path = "command_http_family_values_tests.rs"]
+mod family_values;
 #[path = "command_http_optics_tests.rs"]
 mod optics;
 #[path = "command_http_semantic_aim_tests.rs"]

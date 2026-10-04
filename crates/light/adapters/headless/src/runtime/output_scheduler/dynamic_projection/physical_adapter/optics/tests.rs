@@ -14,6 +14,7 @@ use light_programmer::ProgrammerRegistry;
 use std::cell::RefCell;
 
 mod continuity;
+mod derived_zoom;
 
 pub(in crate::runtime) fn zoom(degrees: f32, convention: OpeningConvention) -> AttributeValue {
     AttributeValue::Zoom(Arc::new(ZoomIntent {

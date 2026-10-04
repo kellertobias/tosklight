@@ -111,6 +111,7 @@ fn physical_fixture(base: u128) -> (PortableFixtureTestRecord, FixtureProfile) {
         });
     }
     profile.modes[0].position_physical = Some(PositionPhysicalModel {
+        kinematics: Default::default(),
         version: 1,
         revision: 1,
         bindings,

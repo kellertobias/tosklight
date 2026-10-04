@@ -63,6 +63,7 @@ fn mover() -> PatchedFixture {
         });
     }
     mode.position_physical = Some(PositionPhysicalModel {
+        kinematics: Default::default(),
         version: 1,
         revision: 1,
         bindings,

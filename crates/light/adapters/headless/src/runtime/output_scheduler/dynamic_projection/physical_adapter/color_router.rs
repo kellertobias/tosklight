@@ -30,9 +30,9 @@
 //! intensity/master/blackout and keeps no descriptor cache (the lane's generation cache is the
 //! only authority).
 //!
-//! Production keeps `SUPPORTED_PROGRAMMING_CONTRACT = 0`. Installing this adapter in Live and
-//! retained orchestration, static/dynamic producer preparation, native injection,
-//! finalizers/publication and physical/cadence acceptance belong to TL-548.
+//! Production runs the semantic programming contract (contract 1, TL-552) and installs this
+//! adapter on the Live and retained Preload family lanes (TL-548 C3). Physical/cadence acceptance
+//! remains with TL-523 and TL-553.
 use super::color::{
     AchievedColor, ColorAdapter, ColorContinuity, ColorDescriptor, ColorQuality, ColorRequest,
 };

@@ -188,7 +188,24 @@ fn the_report_names_parked_controls_and_explains_a_head_without_a_colour_model()
         Some(clock.clone()),
         PROGRAMMING_CONTRACT_VERSION,
     );
-    let (jbled, lustr) = (FixtureId::new(), FixtureId::new());
+    // G8d: Lustr HSI Plus 7 is derived (direct emitters, HSI parked). The same mode without its
+    // described Plus Seven gate stays the honest Unsupported row.
+    let mut ungated = shipped("etc--source-four-led-series-2-lustr", "HSI Plus 7");
+    ungated.modes[0].color_physical = None;
+    for channel in &mut ungated.modes[0].channels {
+        channel.functions.retain(|f| {
+            !matches!(
+                &f.behavior,
+                light_fixture::ChannelFunctionBehavior::Fixed { semantic_id, .. }
+                    if semantic_id == "plus_seven_on"
+            )
+        });
+    }
+    // A distinct profile identity, so no model is shared with the gated Lustr.
+    ungated.id = FixtureId::new();
+    light_fixture::apply_runtime_profile_compatibility(&mut ungated);
+    assert!(ungated.modes[0].color_physical.is_none());
+    let (jbled, lustr, unsupported) = (FixtureId::new(), FixtureId::new(), FixtureId::new());
     let mut fixtures = Vec::new();
     for (number, (id, profile)) in [
         (
@@ -199,6 +216,7 @@ fn the_report_names_parked_controls_and_explains_a_head_without_a_colour_model()
             lustr,
             shipped("etc--source-four-led-series-2-lustr", "HSI Plus 7"),
         ),
+        (unsupported, ungated),
     ]
     .into_iter()
     .enumerate()
@@ -218,7 +236,7 @@ fn the_report_names_parked_controls_and_explains_a_head_without_a_colour_model()
         .unwrap();
     let session = SessionId::new();
     programmers.start(session);
-    for id in [jbled, lustr] {
+    for id in [jbled, lustr, unsupported] {
         programmers.set(
             session,
             id,
@@ -246,7 +264,14 @@ fn the_report_names_parked_controls_and_explains_a_head_without_a_colour_model()
         note.contains("parked at neutral") && note.contains("CTC"),
         "{note}"
     );
-    let excluded = row(lustr);
+    let layered = row(lustr);
+    assert_eq!(layered.quality, ColorResolutionQuality::Uncalibrated);
+    let note = layered.note.as_deref().expect("the layered model is named");
+    assert!(
+        note.contains("direct emitters drive colour") && note.contains("Saturation"),
+        "{note}"
+    );
+    let excluded = row(unsupported);
     assert_eq!(excluded.quality, ColorResolutionQuality::Unsupported);
     assert!(excluded.has_target);
     let reason = excluded.note.as_deref().expect("the reason is reported");
@@ -254,6 +279,6 @@ fn the_report_names_parked_controls_and_explains_a_head_without_a_colour_model()
         reason.starts_with("No colour model:") && reason.contains("hue/saturation"),
         "{reason}"
     );
-    assert_eq!(report.heads.len(), 2);
+    assert_eq!(report.heads.len(), 3);
     std::fs::remove_dir_all(data_dir).unwrap();
 }

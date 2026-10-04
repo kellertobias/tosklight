@@ -5,10 +5,14 @@ import { FIXTURE_A, FIXTURE_B, pagesSnapshot } from "./familyEncoderTestSupport"
 import {
 	currentRaw,
 	functionFor,
+	nativeChoiceStep,
 	nativeColorSlot,
+	nativeDiscrete,
+	nativeEdit,
 	nativeEncoderPages,
 	nativeOperation,
 	nativeStep,
+	nativeValueText,
 } from "./nativeColorSlots";
 import { nativeControl, nativePages, wheelControl } from "./nativeColorTestSupport";
 
@@ -72,14 +76,39 @@ describe("Direct Color encoder slots (TL-554)", () => {
 		});
 	});
 
-	it("edits a discrete wheel only within its current function, as choices elsewhere", () => {
+	it("steps a discrete wheel through its ordered choices (TL-544 G4)", () => {
 		const wheel = wheelControl(0);
 		expect(functionFor(wheel, 15)?.label).toBe("Red");
 		expect(functionFor(wheel, null)?.label).toBe("Open");
 		const slot = nativeColorSlot(wheel, functionFor(wheel, 15)!, []);
-		expect(slot.edit).toBe("unavailable");
+		expect(slot.edit).toBe("scalar");
+		expect(nativeDiscrete(slot)).toBe(true);
+		expect(slot.descriptor.spread).toBe(false);
 		expect(slot.limits).toEqual({ min: 10, max: 19 });
 		expect(nativeStep(wheel.functions[1])).toBe(1);
+		// Ordered, wrapping choices; a pending choice continues from where it was sent.
+		expect(nativeChoiceStep(slot, 1)?.label).toBe("Blue");
+		expect(nativeChoiceStep(slot, -1)?.label).toBe("Open");
+		expect(nativeChoiceStep(slot, 1, wheel.functions[2].function_id)?.label).toBe("Open");
+		expect(nativeValueText(slot, 15)).toBe("Red");
+		// A typed value inside another function names that function (a complete adoption).
+		expect(
+			nativeEdit(slot, { kind: "set", value: { kind: "value", value: 23 } }),
+		).toEqual({
+			binding: { channel_id: wheel.channel_id, function_id: wheel.functions[2].function_id },
+			operation: { kind: "set", value: 23 },
+		});
+		expect(
+			nativeEdit(slot, { kind: "set", value: { kind: "value", value: 12 } }),
+		).toEqual({
+			binding: { channel_id: wheel.channel_id, function_id: wheel.functions[1].function_id },
+			operation: { kind: "set", value: 12 },
+		});
+		// A continuous control is not a choice control and shows its raw value.
+		const emitter = nativeColorSlot(nativeControl(0), nativeControl(0).functions[0], []);
+		expect(nativeDiscrete(emitter)).toBe(false);
+		expect(nativeChoiceStep(emitter, 1)).toBeNull();
+		expect(nativeValueText(emitter, 128)).toBe("128");
 	});
 
 	it("shows the requested Direct recipe first, then the displayed premaster value", () => {

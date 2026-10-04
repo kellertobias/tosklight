@@ -36,6 +36,23 @@ only, and can be retired once no saved configuration still uses one.
 
 Keypad input uses `/light/{desk}/programmer/{key}` with a pressed value. Digits are `digit-0` through `digit-9`; command names include `group`, `at`, `plus`, `minus`, `time`, `delay`, `link`, `shift`, `set`, `record`, `enter`, `clear`, and `backspace`. The [Command Line Reference](../10-Desk/20-Programmer-and-Cues/01-command-line.md) defines their operator semantics. A successful Link transition is published through the ordinary playback event with cause `link`, previous/current stable Cue references, and transition ordinal. Playback `effective-next-cue` feedback resolves a current Link destination unless an explicit loaded Cue overrides it.
 
+### Family values
+
+`/light/{desk}/programmer/family/{component}` sets one Color, Position or Focus value of the desk's
+current ordered selection, exactly like the same typed value on the command line. Send one number
+to set the value, or several to spread them in selection order like `[THRU]`. Numbers are in the
+encoder's units:
+
+| Component | Unit |
+| --- | --- |
+| `red`, `green`, `blue`, `white-blend` | Percent, 0 to 100 |
+| `pan`, `tilt` | Degrees; a negative number is a negative angle |
+| `focus` | Percent, 0 to 100 |
+| `zoom` | Degrees |
+
+Family values require a desk-button surface. A rejected value leaves the Programmer unchanged and
+returns `/light/{desk}/feedback/programmer/error <original-address> <message>`.
+
 Playback addresses deliberately distinguish current-page and explicit-page operation:
 
 | Address | Meaning |

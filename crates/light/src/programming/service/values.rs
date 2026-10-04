@@ -116,6 +116,7 @@ impl ProgrammingService {
                 intent,
                 values_environment,
                 &active_values,
+                &active_group_values,
             )?;
             // TL-594: an unresolvable displayed source holds the whole action quietly.
             hold = values_environment.displayed_source_hold;

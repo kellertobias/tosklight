@@ -104,6 +104,11 @@ impl<'a> StaticWinner<'a> {
     pub fn sequence_master(self) -> Option<ContributionSequenceMaster> {
         self.0.sequence_master
     }
+
+    /// The live Position crossing behind this held static value (TL-544 G1). Runtime only.
+    pub fn pending_transition(self) -> Option<&'a Arc<PendingFamilyTransition>> {
+        self.0.pending_transition.as_ref()
+    }
 }
 
 impl PreparedStaticFamilyFrame {
@@ -142,6 +147,15 @@ impl PreparedStaticFamilyFrame {
         attribute: &AttributeKey,
     ) -> Option<ContributionSequenceMaster> {
         self.winner(target, attribute)?.sequence_master
+    }
+
+    /// The live Position crossing behind the held static value (TL-544 G1). Runtime only.
+    pub fn pending_transition(
+        &self,
+        target: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&Arc<PendingFamilyTransition>> {
+        self.winner(target, attribute)?.pending_transition.as_ref()
     }
 
     /// Every query above for one target and attribute, from one lookup (TL-639 round 2).

@@ -167,11 +167,74 @@ fn hue_saturation_fixtures_render_and_a_colour_macro_is_actively_parked() {
     assert_eq!(rig.quality(0), Some(ColorResolutionQuality::Approximate));
 }
 
+/// G8d: Lustr HSI(C) Plus 7 render through their seven direct emitters, with the Plus Seven gate
+/// held activated and the layered hue/saturation engine parked at saturation 0 (hue at 0).
 #[test]
-fn an_explicitly_excluded_mode_writes_no_colour_and_has_no_colour_result() {
-    // Negative control: Lustr HSI Plus 7 layers direct emitters over its hue/saturation engine.
+fn lustr_plus_seven_renders_the_direct_emitters_with_the_hsi_engine_parked() {
     let rig = Rigged::new(vec![
         shipped("etc--source-four-led-series-2-lustr", "HSI Plus 7"),
+        shipped("etc--source-four-led-series-2-lustr", "HSIC Plus 7"),
+    ]);
+    rig.color(0, [1., 0., 0.]);
+    rig.color(1, [0., 0., 1.]);
+    let frame = rig.bench.frame();
+    assert!(frame.hybrid);
+    let dmx = |index, attribute| rig.dmx(&frame.rendered, index, attribute);
+    let direct = [
+        "color.red",
+        "color.lime",
+        "color.amber",
+        "color.green",
+        "color.cyan",
+        "color.blue",
+        "color.indigo",
+    ];
+    assert_eq!(direct.map(|a| dmx(0, a)), [255, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(direct.map(|a| dmx(1, a)), [0, 0, 0, 0, 0, 255, 0]);
+    for index in 0..2 {
+        assert_eq!(
+            [
+                dmx(index, "color.hue"),
+                dmx(index, "color.saturation"),
+                dmx(index, "fixture.plus_7_control")
+            ],
+            // 192: the middle of Plus Seven's "activated" range (130-255).
+            [0, 0, 192],
+            "{index}: HSI parked at saturation 0, Plus Seven activated"
+        );
+        // Brightness stays Intensity's; nothing programmed it.
+        assert_eq!(dmx(index, "intensity"), 0, "{index}");
+        assert_eq!(
+            rig.quality(index),
+            Some(ColorResolutionQuality::Uncalibrated),
+            "{index}"
+        );
+    }
+    // HSIC Plus 7: the colour point is parked too.
+    assert_eq!(dmx(1, "color.temperature"), 0);
+}
+
+#[test]
+fn a_layered_engine_without_an_activation_gate_writes_no_colour_and_has_no_colour_result() {
+    // Negative control: without the described Plus Seven gate, whether the direct emitters act
+    // over the hue/saturation engine is unknown, so the mode stays excluded.
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../../assets/fixture-library/etc--source-four-led-series-2-lustr.toskfixture");
+    let mut ungated = light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap();
+    ungated.modes.retain(|m| m.name == "HSI Plus 7");
+    for channel in &mut ungated.modes[0].channels {
+        channel.functions.retain(|f| {
+            !matches!(
+                &f.behavior,
+                light_fixture::ChannelFunctionBehavior::Fixed { semantic_id, .. }
+                    if semantic_id == "plus_seven_on"
+            )
+        });
+    }
+    ungated.id = FixtureId::new();
+    apply_runtime_profile_compatibility(&mut ungated);
+    let rig = Rigged::new(vec![
+        ungated,
         shipped("jb-lighting--jbled-a7", "Compressed RGB 8 Bit (C8)"),
     ]);
     assert!(rig.fixtures[0].1.modes[0].color_physical.is_none());

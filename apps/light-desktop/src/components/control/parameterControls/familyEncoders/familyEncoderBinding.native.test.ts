@@ -102,14 +102,49 @@ describe("family encoder binding: Direct (native) slots (TL-554)", () => {
 		expect(normal.finishGesture).toHaveBeenCalledOnce();
 	});
 
-	it("sends nothing without a verified reference or for a discrete wheel function", () => {
+	it("sends nothing without a verified reference", () => {
 		const unreferenced = rig(null);
 		unreferenced.binding.step(SLOT, 1, target);
 		expect(unreferenced.normal.applyIntent).not.toHaveBeenCalled();
+	});
+
+	it("steps a discrete wheel one choice per detent or step on every surface (TL-544 G4)", () => {
 		const wheel = wheelControl(4);
+		const red = nativeColorSlot(wheel, wheel.functions[1], [FIXTURE_A]);
+		const hardware = rig();
+		const software = rig();
+		// A detent of either size and a software step each move exactly one choice.
+		hardware.binding.detent(red, "right", target);
+		software.binding.step(red, red.descriptor.step, target);
+		const operations = (writer: ReturnType<typeof fakeWriter>) =>
+			sent(writer).map(
+				(edit) => (edit.operation as { edits: unknown[] }).edits[0],
+			);
+		const blue = {
+			kind: "native",
+			binding: { channel_id: wheel.channel_id, function_id: wheel.functions[2].function_id },
+			operation: { kind: "set", value: 20 },
+		};
+		expect(operations(hardware.normal)).toEqual([blue]);
+		expect(operations(software.normal)).toEqual([blue]);
+		// The slot still shows Red: the next detent continues from Blue (wrapping to Open).
+		hardware.binding.detent(red, "up", target);
+		expect(operations(hardware.normal)[1]).toEqual({
+			...blue,
+			binding: { ...blue.binding, function_id: wheel.functions[0].function_id },
+			operation: { kind: "set", value: 0 },
+		});
+		expect(new Set(sent(hardware.normal).map((edit) => edit.undoGroup)).size).toBe(1);
+		// A chosen value (value pad, Direct section choice) names its own function.
 		const { normal, binding } = rig();
-		expect(binding.detent(nativeColorSlot(wheel, wheel.functions[1], []), "up", target)).toBe(true);
-		expect(normal.applyIntent).not.toHaveBeenCalled();
+		binding.set(red, 3, target);
+		expect(operations(normal)).toEqual([
+			{
+				...blue,
+				binding: { ...blue.binding, function_id: wheel.functions[0].function_id },
+				operation: { kind: "set", value: 3 },
+			},
+		]);
 	});
 
 	it("never shares a gesture between Semantic and Direct edits; an explicit start rides along", () => {

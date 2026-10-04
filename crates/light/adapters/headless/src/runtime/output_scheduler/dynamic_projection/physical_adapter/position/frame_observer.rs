@@ -333,6 +333,16 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
                     .map(|fixture| fixture.fixture_id)
             })
             .collect();
+        // TL-544 G1: static Cue/Programmer crossings move through this capture's solved joints.
+        let crossings = super::static_crossing::static_crossings(
+            self.lane.adapter(),
+            frame,
+            rows,
+            |target| first_pending.get(&target).copied(),
+            &self.pending,
+            &self.current,
+            &self.active_programs,
+        )?;
         let programs = self
             .pending
             .iter()
@@ -341,6 +351,11 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
                     .as_ref()
                     .map(|_| (p.target, p.destinations.as_slice()))
             })
+            .chain(
+                crossings
+                    .iter()
+                    .map(|(target, destinations)| (*target, destinations.as_slice())),
+            )
             .collect::<Vec<_>>();
         let resolved = self.lane.adapter().resolve_cohort_programs_on(
             &requests,

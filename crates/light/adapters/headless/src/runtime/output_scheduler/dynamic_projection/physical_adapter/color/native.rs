@@ -42,6 +42,8 @@ pub(in crate::runtime) struct NativeColorControl {
     /// Display label only; never used for identity or compatibility.
     pub attribute: AttributeKey,
     pub raw_max: u32,
+    /// G5: the profile default raw an idle head outputs (no Color sidecar), clamped to range.
+    pub default_raw: u32,
     /// The profile declares an ultraviolet emitter on this channel (UV is independent of
     /// visible appearance and never held from an earlier frame).
     pub ultraviolet: bool,
@@ -129,6 +131,7 @@ pub(super) fn head_native(
             split: fit.split,
             attribute: channel.attribute.clone(),
             raw_max: fit.raw_max,
+            default_raw: channel.default_raw.min(fit.raw_max),
             ultraviolet,
             functions,
         });

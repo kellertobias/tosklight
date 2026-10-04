@@ -17,6 +17,7 @@ pub(crate) type Addressed = (
     Option<FrameAddress>,
     Option<Arc<crate::contribution_batch::ContributionOrigin>>,
     Option<Arc<crate::ContributionFamilyEvidence>>,
+    crate::programmer_fade::Pending,
 );
 
 /// Where one shared vector of Programmer values lives in one generation's frame.
@@ -450,6 +451,9 @@ impl ProgrammerValueResolver<'_, '_> {
         let attribute = value.attribute.clone();
         let underlay = self.underlay;
         let underlay_is_known = group_color_underlay.is_none();
+        let underlying_pending = underlay_is_known
+            .then(|| underlay?.pending_transition(fixture_id, &attribute).cloned())
+            .flatten();
         crate::programmer_fade::faded_programmer_value(
             self.transitions,
             self.default_fade_millis,
@@ -461,6 +465,7 @@ impl ProgrammerValueResolver<'_, '_> {
                     .then(|| underlay?.family_evidence(fixture_id, &attribute))
                     .flatten()
             },
+            underlying_pending,
             self.programmer_id,
             source,
             snap,
@@ -492,7 +497,7 @@ impl ProgrammerValueResolver<'_, '_> {
                         .frame_address(value.fixture_id, &value.attribute)
                 };
                 self.resolve_value(value.clone(), &context)
-                    .map(|(value, evidence)| {
+                    .map(|(value, evidence, pending)| {
                         let origin = self
                             .trace_sources
                             .then(|| context.replacement.as_ref())
@@ -505,7 +510,7 @@ impl ProgrammerValueResolver<'_, '_> {
                             });
                         let evidence = self.trace_sources.then_some(evidence).flatten();
                         (
-                            (value, address, origin, evidence),
+                            (value, address, origin, evidence, pending),
                             context.replacement.clone(),
                         )
                     })
@@ -548,7 +553,7 @@ impl ProgrammerValueResolver<'_, '_> {
                     fade_millis: scoped.fade_millis,
                     delay_millis: scoped.delay_millis,
                 };
-                if let Some((value, evidence)) = self.resolve_value(value, &context) {
+                if let Some((value, evidence, pending)) = self.resolve_value(value, &context) {
                     let origin = self
                         .trace_sources
                         .then(|| context.replacement.as_ref())
@@ -561,7 +566,7 @@ impl ProgrammerValueResolver<'_, '_> {
                         });
                     let evidence = self.trace_sources.then_some(evidence).flatten();
                     resolved.push((
-                        (value, entry.address, origin, evidence),
+                        (value, entry.address, origin, evidence, pending),
                         context.replacement.clone(),
                     ));
                 }
@@ -589,7 +594,7 @@ impl ProgrammerValueResolver<'_, '_> {
             source.transition.clone(),
         );
         self.active_transition_keys.insert(transition_key.clone());
-        let (value, evidence) = if value.fade {
+        let (value, evidence, pending) = if value.fade {
             self.resolve_programmer_fade(value, source.transition.clone())?
         } else {
             let evidence = crate::programmer_fade::track_immediate_programmer_value(
@@ -597,10 +602,10 @@ impl ProgrammerValueResolver<'_, '_> {
                 transition_key,
                 &value,
             );
-            (value, evidence)
+            (value, evidence, None)
         };
         // The sampled-replacement filter runs on the collected values (TL-639).
-        Some((value, evidence))
+        Some((value, evidence, pending))
     }
 }
 
@@ -695,11 +700,12 @@ fn arbitrate(
                     .collect(),
             )
         })
-        .map(|(value, address, origin, evidence)| {
+        .map(|(value, address, origin, evidence, pending)| {
             EngineContribution::unscaled(value)
                 .at(address)
                 .with_origin(origin)
                 .with_family_evidence(evidence)
+                .with_pending_transition(pending)
         })
         .collect()
 }
@@ -740,27 +746,27 @@ fn programmer_winners(values: Vec<Addressed>) -> Vec<Addressed> {
     // hold rather than regrown as it fills, and hashed with the desk's hasher rather than SipHash.
     let mut winners =
         rustc_hash::FxHashMap::with_capacity_and_hasher(values.len(), rustc_hash::FxBuildHasher);
-    for (value, address, origin, evidence) in values {
+    for (value, address, origin, evidence, pending) in values {
         let key = match address {
             Some(address) => WinnerKey::Address(address),
             None => WinnerKey::Name(value.fixture_id, value.attribute.clone()),
         };
         let replace = winners
             .get(&key)
-            .is_none_or(|(current, _, _, _): &Addressed| supersedes(&value, current));
+            .is_none_or(|(current, ..): &Addressed| supersedes(&value, current));
         if replace {
-            winners.insert(key, (value, address, origin, evidence));
+            winners.insert(key, (value, address, origin, evidence, pending));
         }
     }
     winners
         .into_values()
-        .map(|(mut value, address, origin, evidence)| {
+        .map(|(mut value, address, origin, evidence, pending)| {
             value.merge_mode = if value.attribute.is_intensity() {
                 MergeMode::Htp
             } else {
                 MergeMode::Ltp
             };
-            (value, address, origin, evidence)
+            (value, address, origin, evidence, pending)
         })
         .collect()
 }

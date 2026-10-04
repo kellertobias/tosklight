@@ -5,28 +5,42 @@ import type { DeskDriver } from "./bench/core/desk";
 import { expect, test } from "./bench/core/fixtures";
 import type { LightBench } from "./bench/core/lightBench";
 import { requireSemanticContract } from "./bench/core/semanticContract";
+import { batchProgrammerValues } from "./bench/programmer/programmerValues";
+import {
+	enterPreloadCapture,
+	seedPreloadValue,
+	goPreload,
+	leavePreloadCapture,
+	liveSlots,
+	normalValues,
+	preloadValues,
+	recordLaneWrites,
+} from "./bench/programmer/semanticPreloadLanes";
 import { BrowserPatch } from "./bench/show-setup/patchScenario";
 
 /**
  * docs/testing/34-position-operator-controls.md (TL-549, TL-637): the production Position encoders
  * and the modal Position Special Dialog under the semantic programming contract.
  *
- * GATE: the production runtime still reports programming contract 0
- * (`crates/light/adapters/headless/src/runtime/e2e_semantic_contract.rs`), so
- * `GET /api/v2/programming/family-encoder-pages` answers `semantic: false` and the desk keeps the
- * legacy normalized Position pages and dialog. Under `npm run test:e2e` every test below skips
- * with this reason. `npm run test:e2e-semantic` runs them on the contract-1 E2E test server,
- * where a missing semantic publication fails instead of skipping.
+ * GATE: production reports programming contract 1 (TL-552), so
+ * `GET /api/v2/programming/family-encoder-pages` publishes the semantic Position pages and every
+ * test below runs under `npm run test:e2e` as well as `npm run test:e2e-semantic`. Only an older
+ * contract-0 server, which answers `semantic: false`, skips them; in the `e2e-semantic` project a
+ * missing semantic publication fails instead of skipping.
  *
  * Every case starts from scratch: a fresh show patched from the shipped library and an empty
  * Programmer. The rig is two Cameo AURO SPOT Z300, whose profile binds Pan/Tilt to a nominal
  * Position physical graph (TL-637), so the displayed output seeds the first Position edit. The
- * unsupported case uses two Claypaky Sharpy, whose profile has no lens geometry and therefore no
- * Position physical data.
+ * unsupported case uses two GLP JDC1, whose Tilt-only head cannot form a Pan/Tilt pair and
+ * therefore gets no Position physical data.
+ *
+ * POSITION-CONTROLS-006 arms Preload capturing Programmer changes through the Preload lifecycle
+ * route and leaves it with Blind off, so the pending Preload values stay intact; the lane of every
+ * dialog write is read from the request the desk sends (`semanticPreloadLanes.ts`).
  */
 
 const GATE =
-	"semantic programming contract is not enabled on this runtime (production contract 0; run npm run test:e2e-semantic)";
+	"semantic programming contract is not enabled on this runtime (a contract-0 server; run npm run test:e2e-semantic)";
 
 const SPOT = { manufacturer: "Cameo", profile: "AURO SPOT Z300", mode: "20-Channel", footprint: 20 } as const;
 /**
@@ -183,6 +197,106 @@ async function showPositionPresets(page: Page) {
 	await settings.getByRole("button", { name: "Position", exact: true }).click();
 	await settings.getByRole("button", { name: "Close settings" }).click();
 	return pane;
+}
+
+/** Programs every selected fixture to the same Angles through the Normal Programmer. */
+async function programAngles(api: ApiDriver, showId: string, fixtureIds: string[], pan: number, tilt: number) {
+	await batchProgrammerValues(api, {
+		surface: "api",
+		showId,
+		mutations: fixtureIds.map((fixtureId) => ({
+			action: "set_fixture" as const,
+			fixtureId,
+			attribute: "position",
+			value: {
+				kind: "position",
+				value: { kind: "angles", pan_degrees: { kind: "value", value: pan }, tilt_degrees: { kind: "value", value: tilt } },
+			} as never,
+			timing: { fade: false, fadeMillis: null, delayMillis: null },
+		})),
+	});
+}
+
+const ANGLES = (pan: number, tilt: number) => ({
+	kind: "position",
+	value: { kind: "angles", pan_degrees: { kind: "value", value: pan }, tilt_degrees: { kind: "value", value: tilt } },
+});
+
+/** Every selected fixture's programmed Pan, once all of them equal `pan` (else `null`). */
+async function uniformPan(api: ApiDriver, count: number) {
+	const angles = await programmedAngles(api, count);
+	const pan = angles?.[0]?.pan;
+	return pan !== undefined && angles?.every((entry) => Math.abs(entry.pan - pan) < 1e-6) ? pan : null;
+}
+
+/**
+ * Drags the Pan circle from `fromDegrees` around the ring by `turnDegrees` (positive is
+ * clockwise) in 15° pointer samples, so the shortest-turn unwrapping never sees an ambiguous
+ * half turn. The drag starts on the ring at the handle's angle.
+ */
+async function dragPanCircle(page: Page, dialog: Locator, fromDegrees: number, turnDegrees: number) {
+	const box = await dialog.getByTestId("pan-circle").boundingBox();
+	if (!box) throw new Error("Pan circle has no box");
+	const radius = (81 / 220) * box.width;
+	const at = (degrees: number) => ({
+		x: box.x + box.width / 2 + Math.sin((degrees * Math.PI) / 180) * radius,
+		y: box.y + box.height / 2 - Math.cos((degrees * Math.PI) / 180) * radius,
+	});
+	const start = at(fromDegrees);
+	await page.mouse.move(start.x, start.y);
+	await page.mouse.down();
+	const steps = Math.round(Math.abs(turnDegrees) / 15);
+	for (let step = 1; step <= steps; step += 1) {
+		const point = at(fromDegrees + Math.sign(turnDegrees) * step * 15);
+		await page.mouse.move(point.x, point.y);
+	}
+	await page.mouse.up();
+}
+
+/** Pans the selection at full joystick deflection for a moment, then releases. */
+async function holdJoystickRight(page: Page, dialog: Locator, holdMillis: number) {
+	const box = await dialog.getByTestId("position-joystick").boundingBox();
+	if (!box) throw new Error("joystick has no box");
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width - 4, box.y + box.height / 2);
+	await page.waitForTimeout(holdMillis);
+	return {
+		release: async () => {
+			await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+			await page.mouse.up();
+		},
+	};
+}
+
+/**
+ * POSITION-CONTROLS-006 step 2: Angles 0°/0° in both Programmers, Preload capturing, then a held
+ * joystick gesture that has started authoring into Preload when Preload capture is left.
+ */
+async function holdInPreloadThenLeave(
+	{ api, bench, desk, page }: { api: ApiDriver; bench: LightBench; desk: DeskDriver; page: Page },
+	showId: string,
+	selected: string[],
+) {
+	await programAngles(api, showId, selected, 0, 0);
+	await enterPreloadCapture(api, showId);
+	await seedPreloadValue(api, showId, selected, "position", ANGLES(0, 0));
+	await bench.tick(25);
+	await desk.open(api.baseUrl);
+	const dialog = await openPositionDialog(page);
+	await expect(dialog.getByTestId("pan-circle")).toHaveAttribute("aria-valuenow", "0");
+	const held = await holdJoystickRight(page, dialog, 300);
+	await expect.poll(async () => (await preloadPans(api))[0] ?? 0).toBeGreaterThan(0);
+	await leavePreloadCapture(api, showId);
+	return { dialog, held };
+}
+
+/** Pan of every Preload Position entry that holds Angles. */
+async function preloadPans(api: ApiDriver) {
+	return (await preloadValues(api, "position")).flatMap((entry) => {
+		const value = entry.value as PositionValue;
+		return value.value.kind === "angles" ? [value.value.pan_degrees.value] : [];
+	});
 }
 
 /** A tile's `active / defined` label after the manual bench clock renders another frame. */
@@ -404,5 +518,191 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 		await expect.poll(() => tileCount(bench, up)).toContain("2 / 2");
 		await expect.poll(() => tileCount(bench, down)).toContain("0 / 2");
 		await expect(page.getByRole("alert")).toHaveCount(0);
+	});
+
+	test("POSITION-CONTROLS-002 @ui › Pan is unwrapped across turns and ±90°/Reset are exact single steps", async ({ api, bench, desk, page }) => {
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "002");
+		requireSemanticContract(await semanticPosition(api, selected), GATE);
+		await programAngles(api, showId, selected, 0, 20);
+		await desk.open(api.baseUrl);
+		let dialog = await openPositionDialog(page);
+		await expect(dialog.getByTestId("pan-circle")).toHaveAttribute("aria-valuenow", "0");
+
+		// Clockwise across 0° again and again, to +450°: the value keeps accumulating, never wraps.
+		await dragPanCircle(page, dialog, 0, 450);
+		await expect.poll(() => uniformPan(api, selected.length)).toBeCloseTo(450, 6);
+		await expect(dialog.getByTestId("pan-circle")).toHaveAttribute("aria-valuenow", "450");
+		await expect(dialog.getByLabel("Pan turns")).toHaveText("+1.25 turns");
+		for (const angles of (await programmedAngles(api, selected.length)) ?? []) expect(angles.tilt).toBeCloseTo(20, 6);
+
+		// Back the other way to −450°: still signed and unwrapped.
+		await dragPanCircle(page, dialog, 450, -900);
+		await expect.poll(() => uniformPan(api, selected.length)).toBeCloseTo(-450, 6);
+		await expect(dialog.getByTestId("pan-circle")).toHaveAttribute("aria-valuenow", "-450");
+		await expect(dialog.getByLabel("Pan turns")).toHaveText("-1.25 turns");
+
+		// +90° and −90° each move Pan by exactly 90° and each is one Undo step. The dialog is
+		// reopened after each UND: an open dialog does not follow it (see the BUG case below).
+		for (const [name, expected] of [
+			["Increase pan by 90 degrees", -360],
+			["Decrease pan by 90 degrees", -540],
+		] as const) {
+			await dialog.getByRole("button", { name }).click();
+			await expect.poll(() => uniformPan(api, selected.length)).toBeCloseTo(expected, 6);
+			await api.sendCommandKey("UND");
+			await expect.poll(() => uniformPan(api, selected.length)).toBeCloseTo(-450, 6);
+			await page.keyboard.press("Escape");
+			await expect(dialog).toBeHidden();
+			dialog = await openPositionDialog(page);
+			await expect(dialog.getByTestId("pan-circle")).toHaveAttribute("aria-valuenow", "-450");
+		}
+
+		// Reset returns Pan to 0° and keeps Tilt; a second Reset makes no programmer revision.
+		await dialog.getByRole("button", { name: "Reset pan to zero" }).click();
+		await expect.poll(() => uniformPan(api, selected.length)).toBe(0);
+		for (const angles of (await programmedAngles(api, selected.length)) ?? []) expect(angles.tilt).toBeCloseTo(20, 6);
+		await expect(dialog.getByTestId("pan-circle")).toHaveAttribute("aria-valuenow", "0");
+		const settled = await programmerRevision(api);
+		await dialog.getByRole("button", { name: "Reset pan to zero" }).click();
+		await page.waitForTimeout(400);
+		expect(await programmerRevision(api)).toBe(settled);
+		await expect(page.getByRole("alert")).toHaveCount(0);
+	});
+
+	test("POSITION-CONTROLS-002 @ui › the open dialog follows UND of its own ±90° step", async ({ api, bench, desk, page }) => {
+		test.fail(
+			true,
+			"BUG: after UND of a dialog ±90° step the open Position dialog shows the undone Pan again (stale draft; positionDraftValue re-applies it when the axis returns to its basis), so the next ±90° steps from the wrong value",
+		);
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "002-undo");
+		requireSemanticContract(await semanticPosition(api, selected), GATE);
+		await programAngles(api, showId, selected, -450, 20);
+		await desk.open(api.baseUrl);
+		const dialog = await openPositionDialog(page);
+		const circle = dialog.getByTestId("pan-circle");
+		await expect(circle).toHaveAttribute("aria-valuenow", "-450");
+		await dialog.getByRole("button", { name: "Increase pan by 90 degrees" }).click();
+		await expect.poll(() => uniformPan(api, selected.length)).toBeCloseTo(-360, 6);
+		await expect(circle).toHaveAttribute("aria-valuenow", "-360");
+		await api.sendCommandKey("UND");
+		await expect.poll(() => uniformPan(api, selected.length)).toBeCloseTo(-450, 6);
+		await expect(circle).toHaveAttribute("aria-valuenow", "-450", { timeout: 2_000 });
+		// The next step must start from the undone value: −450° + 90° = −360°, never −270°.
+		await dialog.getByRole("button", { name: "Increase pan by 90 degrees" }).click();
+		await expect.poll(() => uniformPan(api, selected.length), { timeout: 2_000 }).toBeCloseTo(-360, 6);
+	});
+
+	test("POSITION-CONTROLS-006 @ui › in Preload the held joystick authors only into Preload with the Programmer Fade; live output waits for Preload GO", async ({ api, bench, desk, page }) => {
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "006");
+		requireSemanticContract(await semanticPosition(api, selected), GATE);
+		await api.request("PUT", "/api/v2/configuration", { programmer_fade_millis: 2_000 });
+		const lanes = recordLaneWrites(page);
+		await enterPreloadCapture(api, showId);
+		// Production publishes no Pending (Preload) Position readouts yet, so the Preload lane starts
+		// from requested Angles rather than the displayed pose (see the adoption BUG case below).
+		await seedPreloadValue(api, showId, selected, "position", ANGLES(0, 0));
+		await bench.tick(25);
+		const live = await liveSlots(api, 40);
+		await desk.open(api.baseUrl);
+
+		// POSITION-CONTROLS-004 step 1 in Preload: the held joystick keeps panning, in Preload only.
+		const dialog = await openPositionDialog(page);
+		await expect(dialog.getByTestId("pan-circle")).toHaveAttribute("aria-valuenow", "0");
+		const held = await holdJoystickRight(page, dialog, 600);
+		await held.release();
+		await expect.poll(async () => (await preloadPans(api))[0] ?? 0).toBeGreaterThan(10);
+		expect(new Set(await preloadPans(api)).size).toBe(1);
+
+		// Only the Preload Programmer changed, every write went to the Preload lane, and each Preload
+		// value carries the Programmer Fade. Live output is untouched until Preload GO.
+		expect(await normalValues(api, "position")).toEqual([]);
+		expect(lanes.edits("normal")).toEqual([]);
+		expect(lanes.edits("preload", "position").length).toBeGreaterThan(1);
+		expect(lanes.finishes("preload", "position")).toHaveLength(1);
+		for (const entry of await preloadValues(api, "position")) {
+			expect(entry.fade).toBe(true);
+			expect(entry.fade_millis).toBe(2_000);
+		}
+		await bench.tick(100);
+		await bench.tick(3_000);
+		expect(await liveSlots(api, 40)).toEqual(live);
+
+		await goPreload(api, showId);
+		await bench.tick(100);
+		await bench.tick(3_000);
+		await expect.poll(() => liveSlots(api, 40)).not.toEqual(live);
+	});
+
+	test("POSITION-CONTROLS-006 @ui › in Preload the first Tilt edit adopts the displayed pose", async ({ api, bench, desk, page }) => {
+		test.fail(
+			true,
+			"BUG: in Preload with no pending Position the dialog is inert (Pan/Tilt read —, joystick unavailable): GET /api/v2/output/readouts?lane=preload answers unavailable no_accepted_preload because production never starts the Pending episode worker (pending_executor/resource.rs start_if_gated)",
+		);
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "006-adopt");
+		requireSemanticContract(await semanticPosition(api, selected), GATE);
+		const lanes = recordLaneWrites(page);
+		await enterPreloadCapture(api, showId);
+		await bench.tick(25);
+		await desk.open(api.baseUrl);
+		const dialog = await openPositionDialog(page);
+		const tilt = dialog.getByRole("slider", { name: "Tilt angle" });
+		await expect(tilt).toBeEnabled({ timeout: 2_000 });
+		await tilt.focus();
+		await page.keyboard.press("ArrowUp");
+		await expect.poll(async () => (await preloadValues(api, "position")).length, { timeout: 2_000 }).toBe(selected.length);
+		for (const entry of await preloadValues(api, "position")) {
+			const value = entry.value as PositionValue;
+			if (value.value.kind !== "angles") throw new Error("Preload Position is not Angles");
+			expect(value.value.pan_degrees.value).toBeCloseTo(SPOT_HOME_PAN, 3);
+			expect(value.value.tilt_degrees.value).toBeGreaterThan(SPOT_HOME_TILT);
+		}
+		expect(lanes.edits("normal")).toEqual([]);
+		expect(await normalValues(api, "position")).toEqual([]);
+	});
+
+	test("POSITION-CONTROLS-006 @ui › leaving Preload mid-gesture finishes that gesture in Preload; the next gesture writes to the Normal Programmer", async ({ api, bench, desk, page }) => {
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "006-switch");
+		requireSemanticContract(await semanticPosition(api, selected), GATE);
+		const lanes = recordLaneWrites(page);
+		const { dialog, held } = await holdInPreloadThenLeave({ api, bench, desk, page }, showId, selected);
+		await page.waitForTimeout(300);
+		await held.release();
+
+		// The open gesture stayed on its starting lane: its one Finish is a Preload write, and the
+		// Normal Programmer received nothing from it.
+		await expect.poll(() => lanes.finishes("preload", "position").length).toBe(1);
+		expect(lanes.edits("preload", "position").length).toBeGreaterThan(0);
+		expect(lanes.edits("normal")).toEqual([]);
+		expect(lanes.finishes("normal")).toEqual([]);
+		expect(await uniformPan(api, selected.length)).toBe(0);
+
+		// The next gesture writes to the Normal Programmer only. The dialog is reopened first: the
+		// open one keeps showing the held gesture's last local Pan (the draft BUG above).
+		const preloadAfter = JSON.stringify(await preloadValues(api, "position"));
+		await page.keyboard.press("Escape");
+		await expect(dialog).toBeHidden();
+		const normal = await openPositionDialog(page);
+		await expect(normal.getByTestId("pan-circle")).toHaveAttribute("aria-valuenow", "0");
+		await normal.getByRole("button", { name: "Increase pan by 90 degrees" }).click();
+		await expect.poll(() => uniformPan(api, selected.length)).toBeCloseTo(90, 6);
+		expect(lanes.edits("normal", "position").length).toBeGreaterThan(0);
+		expect(lanes.edits("preload", "position").every((write) => !write.body.includes('"pan_degrees":{"kind":"value","value":90}'))).toBe(true);
+		expect(JSON.stringify(await preloadValues(api, "position"))).toBe(preloadAfter);
+	});
+
+	test("POSITION-CONTROLS-006 @ui › a held gesture keeps authoring into Preload after leaving Preload capture", async ({ api, bench, desk, page }) => {
+		test.fail(
+			true,
+			"BUG: leaving Preload capture during a held joystick gesture silently drops the rest of the gesture: the pinned Preload writer refuses every later edit (programmerPreloadValues/writerCaptureAuthority.ts preconditionError) and only the Finish is sent, so Pan freezes where it was at the switch",
+		);
+		const { showId, selected } = await arrange({ api, bench, desk, page }, "006-rest");
+		requireSemanticContract(await semanticPosition(api, selected), GATE);
+		const { held } = await holdInPreloadThenLeave({ api, bench, desk, page }, showId, selected);
+		const atSwitch = (await preloadPans(api))[0] ?? 0;
+		await page.waitForTimeout(500);
+		await held.release();
+		// The joystick pans at about 120°/s: 500 ms more of the held gesture is about 60° more Pan.
+		await expect.poll(async () => (await preloadPans(api))[0] ?? 0, { timeout: 2_000 }).toBeGreaterThan(atSwitch + 20);
+		expect(await uniformPan(api, selected.length)).toBe(0);
 	});
 });

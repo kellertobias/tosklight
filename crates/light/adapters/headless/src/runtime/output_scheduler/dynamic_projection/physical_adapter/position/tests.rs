@@ -21,6 +21,7 @@ use light_fixture::*;
 use light_programmer::{DynamicProgrammerValueMutation, ProgrammerRegistry};
 
 mod continuations;
+mod cross_mode_fades;
 mod current_cohort;
 mod declared_default;
 mod derived_profiles;
@@ -108,6 +109,7 @@ pub(in crate::runtime) fn moving_head() -> FixtureProfile {
     }
     profile.modes[0].splits[0].footprint = 4;
     profile.modes[0].position_physical = Some(PositionPhysicalModel {
+        kinematics: Default::default(),
         version: 1,
         revision: 0,
         bindings,

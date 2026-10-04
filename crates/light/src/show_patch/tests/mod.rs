@@ -1861,6 +1861,7 @@ fn physical_axis_calibration_transaction_keeps_copy_scope_replay_and_stale_sourc
     let mode = &mut profile.modes[0];
     let channel:FixtureChannel=serde_json::from_value(json!({"id":Uuid::new_v4(),"head_id":mode.heads[0].id,"split":1,"fixture_attribute":"pan","attribute":"pan","resolution":"u8","default_raw":0,"highlight_raw":0,"functions":[{"id":Uuid::new_v4(),"name":"Pan","attribute":"pan","dmx_from":0,"dmx_to":255,"priority":0,"behavior":{"type":"continuous","physical_min":-720.0,"physical_max":720.0,"unit":"deg"},"angular_motion":{"kind":"absolute_position"}}]})).unwrap();
     mode.position_physical = Some(PositionPhysicalModel {
+        kinematics: Default::default(),
         version: 1,
         revision: 0,
         bindings: vec![MotionFunctionBinding {

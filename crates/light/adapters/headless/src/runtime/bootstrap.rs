@@ -698,7 +698,7 @@ fn build_app_state(
         discovery,
     };
     // TL-560: a runtime that started at contract ≥ 1 rejects legacy-programming shows on
-    // activation as well as at startup. Dormant at contract 0 (production today).
+    // activation as well as at startup (production since TL-552). Dormant at contract 0.
     state
         .active_show
         .engage_legacy_programming_gate(state.output.supported_programming_contract());

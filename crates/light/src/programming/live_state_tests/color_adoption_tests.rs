@@ -494,3 +494,86 @@ fn a_native_edit_adopts_its_captured_seed_once_and_holds_without_one() {
         );
     }
 }
+
+impl GestureDesk {
+    fn group_color_intent(
+        &self,
+        operation: ProgrammingValueOperation,
+        caller: &str,
+    ) -> ProgrammingValueIntent {
+        ProgrammingValueIntent {
+            fixture_ids: vec![],
+            group_id: Some("front".into()),
+            attribute: ProgrammingOwner::Color.key(),
+            operation,
+            undo_group: Some(caller.into()),
+            timing: Default::default(),
+            displayed_source: None,
+            color_adoption: Default::default(),
+        }
+    }
+
+    fn group_color(&self, fixture: FixtureId) -> AttributeValue {
+        let state = self.setup.registry.get(self.setup.session).unwrap();
+        let groups = if self.preload {
+            &state.preload_group_pending
+        } else {
+            &state.group_values
+        };
+        match &groups["front"][&ProgrammingOwner::Color.key()].value {
+            AttributeValue::GroupFamily(assignment) => assignment.for_member(fixture).clone(),
+            value => value.clone(),
+        }
+    }
+}
+
+/// G5: a Direct value stored on the Group itself (not per fixture) is adopted by the first
+/// semantic edit of that Group, on both lanes, exactly as a per-fixture Direct value is.
+#[test]
+fn a_group_stored_direct_value_is_adopted_by_the_first_semantic_group_edit() {
+    for preload in [false, true] {
+        let desk = GestureDesk::new(preload);
+        let dim = Xyz {
+            x: 0.11,
+            y: 0.07,
+            z: 0.02,
+        };
+        let ports = ColorPorts {
+            inner: &desk.setup.ports,
+            model: false,
+            seed: None,
+        };
+        let (hold, _, _) = desk.apply_color(
+            "store-direct",
+            desk.group_color_intent(
+                ProgrammingValueOperation::AbsoluteSet(direct(Some(dim), None, 250)),
+                "store",
+            ),
+            &ports,
+        );
+        assert_eq!(hold, None);
+        let (hold, adoption, _) = desk.apply_color(
+            "semantic",
+            desk.group_color_intent(
+                ProgrammingValueOperation::ComponentEdits(vec![white_blend(0.5)]),
+                "turn",
+            ),
+            &ports,
+        );
+        assert_eq!(hold, None, "preload={preload}");
+        let adoption = adoption.expect("the Group's Direct value is adopted once");
+        assert_eq!(adoption.fixtures.len(), desk.setup.fixtures.len());
+        assert!(
+            adoption
+                .fixtures
+                .iter()
+                .all(|fixture| fixture.start == ProgrammingColorAdoptionStart::Approximate)
+        );
+        for fixture in desk.setup.fixtures {
+            let value = desk.group_color(fixture);
+            let adopted = semantic(&value);
+            assert_eq!(adopted.base_xyz, dim, "preload={preload}");
+            assert_eq!(adopted.white_blend, 0.5);
+        }
+    }
+}

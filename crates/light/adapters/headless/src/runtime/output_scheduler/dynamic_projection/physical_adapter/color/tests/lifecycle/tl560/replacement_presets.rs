@@ -20,8 +20,8 @@ use light_core::programming::UvIntent;
 use light_programmer::{PresetAddress, PresetFamily, SelectionExpression, SelectionRule};
 use std::collections::HashMap;
 
-struct Recall<'a> {
-    show: &'a Show,
+pub(super) struct Recall<'a> {
+    pub(super) show: &'a Show,
 }
 
 impl ProgrammingPresetRecallPorts for Recall<'_> {

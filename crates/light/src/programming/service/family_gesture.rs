@@ -11,6 +11,7 @@ use std::{collections::HashMap, sync::Arc};
 
 type GestureStamp = (ProgrammerId, u64, u64, u64);
 type FixtureValues = HashMap<(FixtureId, AttributeKey), AttributeValue>;
+type GroupValues = HashMap<(String, AttributeKey), AttributeValue>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct GestureKey {
@@ -56,6 +57,7 @@ impl ProgrammingService {
         intent: &ProgrammingValueIntent,
         environment: &mut ProgrammingValuesEnvironment,
         active: &FixtureValues,
+        groups: &GroupValues,
     ) -> Result<Option<PreparedFamilyGesture>, ActionError> {
         let ProgrammingValueOperation::ComponentEdits(edits) = &intent.operation else {
             return Ok(None);
@@ -139,6 +141,7 @@ impl ProgrammingService {
                 &members,
                 environment,
                 active,
+                groups,
             )
         };
         let (Some(stamp), Some(session), Some(caller_id)) = (

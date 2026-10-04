@@ -15,6 +15,7 @@ import {
 	type NativeRequestedRaw,
 	nativeEncoderPages,
 	nativeReferenceOf,
+	nativeValueText,
 } from "./nativeColorSlots";
 
 /**
@@ -111,7 +112,8 @@ export function useNativeColorEncoderPages(
 			if (raw === null) return { value: null, text: "—", source: "none" };
 			return {
 				value: raw,
-				text: String(raw),
+				// TL-544 G4: a wheel slot or macro shows its choice.
+				text: nativeValueText(slot, raw),
 				source: requested.has(slot.component.component.channel_id)
 					? "requested"
 					: "resolved",

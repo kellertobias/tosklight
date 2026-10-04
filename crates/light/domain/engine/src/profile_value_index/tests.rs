@@ -43,6 +43,7 @@ fn contribution(
                     temporary: false,
                 },
                 address: None,
+                pending_transition: None,
             },
             &mut PlaybackEvidenceCache::default(),
         ),

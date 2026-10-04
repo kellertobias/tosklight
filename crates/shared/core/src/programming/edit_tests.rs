@@ -429,3 +429,155 @@ fn scalar_spread(component: ProgrammingComponent, points: Vec<f32>) -> Component
         operation: ScalarEdit::Set(ScalarIntent::Spread(points)),
     }
 }
+
+/// A two-function wheel channel (two discrete slots) beside an emitter.
+struct WheelSource {
+    identity: NativeColorIdentity,
+    functions: [NativeColorComponentDescriptor; 3],
+}
+impl NativeColorEditModel for WheelSource {
+    fn source(&self) -> &NativeColorIdentity {
+        &self.identity
+    }
+    fn descriptor(&self, binding: NativeColorBinding) -> Option<NativeColorComponentDescriptor> {
+        self.functions
+            .iter()
+            .copied()
+            .find(|f| f.binding == binding)
+    }
+    fn predict(&self, recipe: &NativeColorRecipe) -> Result<PortableColorEstimate, IntentError> {
+        let level = recipe.channels.iter().map(|c| c.raw).sum::<u32>() as f32 / 1000.0;
+        Ok(PortableColorEstimate {
+            model_revision: recipe.source.model_revision,
+            visible: Some(PortableVisibleColor {
+                xyz: crate::Xyz {
+                    x: level,
+                    y: level,
+                    z: level,
+                },
+                relative_output: 1.0,
+            }),
+            uv: None,
+            quality: PhysicalDataQuality::Estimated,
+            limitations: vec![],
+        })
+    }
+}
+
+/// TL-544 G4: stepping a wheel/macro to another slot changes the channel's function. The
+/// edit adopts the complete recipe: that channel takes the new function and raw, every other
+/// channel is kept exactly, and the whole recipe is predicted again. Only an absolute value
+/// inside the new function may change it; relative and spread edits stay inside a function.
+#[test]
+fn a_native_set_into_another_function_adopts_the_complete_recipe() {
+    let identity = NativeColorIdentity {
+        profile_id: Uuid::from_u128(11),
+        profile_revision: 1,
+        profile_digest: "digest".into(),
+        mode_id: Uuid::from_u128(12),
+        head_id: Uuid::from_u128(13),
+        path_id: Uuid::from_u128(14),
+        model_revision: 3,
+        native_layout_signature: "wheel".into(),
+    };
+    let wheel = Uuid::from_u128(20);
+    let emitter = Uuid::from_u128(30);
+    let function = |channel: Uuid, id: u128, from: u32, to: u32, continuous: bool| {
+        NativeColorComponentDescriptor {
+            binding: NativeColorBinding {
+                channel_id: channel,
+                function_id: Uuid::from_u128(id),
+            },
+            raw_from: from,
+            raw_to: to,
+            continuous,
+        }
+    };
+    let source = WheelSource {
+        identity: identity.clone(),
+        functions: [
+            function(wheel, 21, 0, 9, false),
+            function(wheel, 22, 10, 19, false),
+            function(emitter, 31, 0, 255, true),
+        ],
+    };
+    let base = AttributeValue::ColorProgram(Arc::new(ColorProgram::Direct {
+        recipe: NativeColorRecipe {
+            source: identity,
+            channels: vec![
+                NativeColorValue {
+                    channel_id: wheel,
+                    function_id: Uuid::from_u128(21),
+                    raw: 0,
+                },
+                NativeColorValue {
+                    channel_id: emitter,
+                    function_id: Uuid::from_u128(31),
+                    raw: 200,
+                },
+            ],
+            spreads: vec![],
+        },
+        portable: PortableColorEstimate {
+            model_revision: 3,
+            visible: None,
+            uv: None,
+            quality: PhysicalDataQuality::Unknown,
+            limitations: vec![],
+        },
+    }));
+    let context = FamilyEditContext {
+        native_model: Some(&source),
+        ..Default::default()
+    };
+    let red = source.functions[1].binding;
+    let changed = edit_family(
+        &base,
+        &[ComponentEdit::Native {
+            binding: red,
+            operation: NativeColorEdit::Set(10),
+        }],
+        &context,
+    )
+    .unwrap();
+    let AttributeValue::ColorProgram(value) = changed else {
+        panic!()
+    };
+    let ColorProgram::Direct { recipe, portable } = value.as_ref() else {
+        panic!()
+    };
+    assert_eq!(
+        (recipe.channels[0].function_id, recipe.channels[0].raw),
+        (red.function_id, 10),
+        "the wheel takes the new slot"
+    );
+    assert_eq!(
+        (recipe.channels[1].function_id, recipe.channels[1].raw),
+        (Uuid::from_u128(31), 200),
+        "every other channel is kept exactly"
+    );
+    assert_eq!(
+        portable.visible.unwrap().xyz.y,
+        0.21,
+        "the complete recipe is predicted again"
+    );
+    // Outside the new function, or relative/spread across functions: refused.
+    for operation in [
+        NativeColorEdit::Set(25),
+        NativeColorEdit::Relative(1),
+        NativeColorEdit::Spread(vec![10, 11]),
+    ] {
+        assert!(
+            edit_family(
+                &base,
+                &[ComponentEdit::Native {
+                    binding: red,
+                    operation: operation.clone(),
+                }],
+                &context
+            )
+            .is_err(),
+            "{operation:?}"
+        );
+    }
+}

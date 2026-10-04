@@ -206,3 +206,73 @@ describe("family encoder binding in the parameter controller", () => {
 		});
 	});
 });
+
+describe("family encoder gesture ends in the parameter controller (TL-544 G12, G4)", () => {
+	async function mounted() {
+		const normal = fakeWriter();
+		writers.normal = normal;
+		const mountedHook = mount(pagesSnapshot(true), "normal");
+		await waitFor(() => expect(mountedHook.hook.result.current.active).toBe(true));
+		return { normal, ...mountedHook };
+	}
+
+	it("ends an OSC detent turn at once on window blur: one Finish, same Undo group", async () => {
+		const { normal } = await mounted();
+		encode(1, "up");
+		encode(1, "up");
+		act(() => {
+			window.dispatchEvent(new Event("blur"));
+			window.dispatchEvent(new Event("blur"));
+		});
+		expect(normal.finishGesture).toHaveBeenCalledOnce();
+		const undoGroups = normal.applyIntent.mock.calls.map(
+			([input]) => (input as { undoGroup: string }).undoGroup,
+		);
+		expect(new Set(undoGroups).size).toBe(1);
+		expect(normal.finishGesture.mock.calls[0]?.[0]).toMatchObject({
+			undoGroup: undoGroups[0],
+			keepAdmittedEdits: true,
+		});
+	});
+
+	it("ends an open turn when the document becomes hidden", async () => {
+		const { normal } = await mounted();
+		encode(1, "up");
+		const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+		try {
+			act(() => {
+				document.dispatchEvent(new Event("visibilitychange"));
+			});
+		} finally {
+			hidden.mockRestore();
+		}
+		expect(normal.finishGesture).toHaveBeenCalledOnce();
+	});
+
+	it("ends a software drag on explicit release", async () => {
+		const { normal, hook } = await mounted();
+		act(() => hook.result.current.step(0, 1));
+		act(() => hook.result.current.finishGestures());
+		expect(normal.finishGesture).toHaveBeenCalledOnce();
+	});
+
+	it("steps the Point slot from the software encoder like a detent", async () => {
+		const { normal, hook } = await mounted();
+		act(() => hook.result.current.selectPage("Position", 2));
+		expect(hook.result.current.componentSlot(0)?.edit).toBe("target_reference");
+		expect(hook.result.current.pointChoices.map((choice) => choice.label)).toEqual(["Origin"]);
+		act(() => hook.result.current.step(0, 1));
+		expect(normal.applyIntent.mock.calls[0]?.[0]).toMatchObject({
+			attribute: "position",
+			operation: {
+				type: "component_edits",
+				edits: [{ kind: "target", reference: { kind: "origin" } }],
+			},
+		});
+		expect(normal.finishGesture).toHaveBeenCalledOnce();
+		act(() => hook.result.current.choosePoint(0, "origin"));
+		expect(normal.applyIntent).toHaveBeenCalledTimes(2);
+		act(() => hook.result.current.choosePoint(0, "point:unknown"));
+		expect(normal.applyIntent).toHaveBeenCalledTimes(2);
+	});
+});

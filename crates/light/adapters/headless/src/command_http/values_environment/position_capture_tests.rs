@@ -137,6 +137,7 @@ fn mover() -> PatchedFixture {
     }
     profile.modes[0].splits[0].footprint = 4;
     profile.modes[0].position_physical = Some(PositionPhysicalModel {
+        kinematics: Default::default(),
         version: 1,
         revision: 1,
         bindings,

@@ -248,6 +248,7 @@ fn retained_playback_evidence_reader_accepts_legacy_rows_and_preserves_invalid_r
                 }])
                 .unwrap(),
             )),
+            pending_transition: None,
         };
         let mut row = serde_json::to_value(row).unwrap();
         match case {
@@ -808,8 +809,8 @@ fn startup_preserves_output_when_dynamic_source_catalogue_is_missing_or_dangling
 }
 
 /// TL-558: a saved Programmer with independent typed Focus and Zoom round-trips exactly through
-/// the persisted JSON (Undo/Redo are live-session only by design and are not written). The production runtime (contract 0) keeps the
-/// original JSON in recovery instead of reinterpreting it.
+/// the persisted JSON (Undo/Redo are live-session only by design and are not written). A contract-0 runtime (production before TL-552) keeps
+/// the original JSON in recovery instead of reinterpreting it.
 #[test]
 fn typed_focus_and_zoom_programmer_round_trips_and_production_preserves_it() {
     use light_core::programming::{ProgrammingOwner, ScalarIntent, ZoomIntent};

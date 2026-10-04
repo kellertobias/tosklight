@@ -13,7 +13,6 @@ import { PositionSpecialDialog } from "../semanticPosition/PositionSpecialDialog
 import { ShapersDialog } from "../shapers";
 import { MediaPaneWindow } from "../../../../windows/MediaPaneWindow";
 import { ColorSpecialDialog } from "../intention/color/ColorSpecialDialog";
-import { SemanticSpecialDialogPlaceholder } from "./SemanticSpecialDialogPlaceholder";
 import type { LegacySpecialDialogHost } from "./useLegacySpecialDialogHost";
 
 /**
@@ -21,12 +20,13 @@ import type { LegacySpecialDialogHost } from "./useLegacySpecialDialogHost";
  *
  * `SpecialDialogsModal` resolves the open family here instead of branching inline:
  *
- * - **Legacy entries** (programming contract 0, byte-for-byte as before the split) render a body
- *   inside the shared legacy card, from the legacy host state that stays mounted with the modal.
- * - **Semantic entries** (only when the backend reports the semantic contract) render their own
- *   `ModalFrame`. Position, Color and Focus start as placeholders; family agents replace the
- *   `Component` of their entry in {@link SEMANTIC_SPECIAL_DIALOGS} (or call
- *   {@link registerSemanticSpecialDialog}) and nothing else in the modal changes.
+ * - **Legacy entries** (byte-for-byte as before the split; every family on a contract-0 backend)
+ *   render a body inside the shared legacy card, from the legacy host state that stays mounted
+ *   with the modal.
+ * - **Semantic entries** (only when the backend reports the semantic contract, as production does
+ *   since TL-552) render their own `ModalFrame`. Position, Color and Focus have their production
+ *   dialogs in {@link SEMANTIC_SPECIAL_DIALOGS}; {@link registerSemanticSpecialDialog} replaces an
+ *   entry without changing anything else in the modal.
  *
  * Families without a semantic entry keep their legacy dialog even when semantic. Return Home
  * stays in the legacy Position dialog; it is not part of the semantic modal (owner decision).
@@ -103,7 +103,7 @@ export const LEGACY_SPECIAL_DIALOGS: Readonly<
 	},
 };
 
-/** Extension point: family agents replace these placeholders with their production dialogs. */
+/** The production semantic dialogs; {@link registerSemanticSpecialDialog} can replace an entry. */
 export const SEMANTIC_SPECIAL_DIALOGS: Partial<
 	Record<SpecialParameterFamily, SemanticSpecialDialogEntry>
 > = {

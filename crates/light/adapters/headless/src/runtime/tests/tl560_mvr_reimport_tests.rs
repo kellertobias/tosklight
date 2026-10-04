@@ -359,3 +359,177 @@ async fn mvr_reimport_updates_patch_and_geometry_only_and_never_rebinds_semantic
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+/// TL-560 column "Media color", row "MVR import". A Media Server is a desk personality, not an
+/// MVR/GDTF fixture: it is patched by the desk next to the MVR rig, and Media colour is stored
+/// against its layer heads in a Color Preset, a live Group and a Cue. Re-importing the MVR rig
+/// with a changed GDTF must leave the Media Server, its layer identities and every Media colour
+/// byte-identical at its revision, and the show must still compile with the same layer heads.
+#[tokio::test]
+async fn mvr_reimport_leaves_desk_patched_media_layers_and_their_media_color_untouched() {
+    use crate::runtime::output_scheduler::physical_adapters::color::tests::warm_white;
+    use crate::runtime::output_scheduler::physical_adapters::media_color::tests::{
+        media_fixture, shipped_media_server,
+    };
+    const LAYERS: &str = "tl560-mvr-media-layers";
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let shown = preview(&app, &token, &document(540., 0.), None).await;
+    let result = apply(
+        &app,
+        &token,
+        &shown,
+        serde_json::json!({"type":"new_show","name":"TL-560 MVR media"}),
+    )
+    .await;
+    let show_id =
+        light_core::ShowId(Uuid::parse_str(result["show"]["id"].as_str().unwrap()).unwrap());
+    let bound = bindings(&document_of(&state, show_id));
+
+    let entry = state.installation.show(show_id).unwrap().unwrap();
+    let (root, layers) = (
+        light_core::FixtureId::new(),
+        [light_core::FixtureId::new(), light_core::FixtureId::new()],
+    );
+    {
+        let store = ShowStore::open(&entry.path).unwrap();
+        let profile = shipped_media_server();
+        let mut media = media_fixture(&profile, root, &layers);
+        media.fixture_number = Some(950);
+        media.universe = Some(2);
+        store
+            .insert_fixture_profile_revision(
+                &light_show::FixtureProfileRevision::from_profile(
+                    serde_json::to_value(&profile).unwrap(),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let body = light_fixture::PortablePatchedFixtureRecord::from_runtime_fixture(&media)
+            .unwrap()
+            .into_body();
+        store
+            .put_object("patched_fixture", &root.0.to_string(), &body, 0)
+            .unwrap();
+        let group = GroupDefinition {
+            id: LAYERS.into(),
+            name: "Media layers".into(),
+            fixtures: layers.to_vec(),
+            ..Default::default()
+        };
+        store
+            .put_object("group", LAYERS, &serde_json::to_value(group).unwrap(), 0)
+            .unwrap();
+        let color = ProgrammingOwner::Color.key();
+        let preset = Preset {
+            name: "TL-560 media".into(),
+            family: PresetFamily::Color,
+            number: 2,
+            values: HashMap::from([(
+                layers[1],
+                HashMap::from([(color.clone(), program(&warm_white()))]),
+            )]),
+            group_values: HashMap::from([(
+                LAYERS.to_owned(),
+                HashMap::from([(color.clone(), program(&magenta()))]),
+            )]),
+            aim_at_fixture_number: None,
+            universal_values: HashMap::new(),
+        };
+        let key = PresetAddress::new(PresetFamily::Color, 2)
+            .unwrap()
+            .storage_key();
+        store
+            .put_object("preset", &key, &serde_json::to_value(preset).unwrap(), 0)
+            .unwrap();
+        let list = Uuid::from_u128(0x560_3e);
+        store
+            .put_object(
+                "cue_list",
+                &list.to_string(),
+                &serde_json::json!({
+                    "id": list, "name": "Media", "priority": 10,
+                    "mode": "sequence", "looped": false,
+                    "cues": [{
+                        "id": Uuid::from_u128(0x560_3e1), "number": "1", "name": "Media",
+                        "changes": [light_playback::CueChange::set(
+                            layers[0], color.clone(), program(&warm_white()),
+                        )],
+                        "group_changes": [{
+                            "group_id": LAYERS, "attribute": color,
+                            "value": program(&magenta()), "automatic_restore": false,
+                        }],
+                        "fade_millis": 0, "delay_millis": 0, "trigger": {"type": "manual"}
+                    }]
+                }),
+                0,
+            )
+            .unwrap();
+    }
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(&token, show_id.0))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK, "{}", json(opened).await);
+    let media_state = |document: &light_show::PortableShowDocument| {
+        (
+            objects(document, "preset"),
+            objects(document, "group"),
+            objects(document, "cue_list"),
+            objects(document, "patched_fixture")
+                .into_iter()
+                .find(|(id, _, _)| *id == root.0.to_string())
+                .expect("the desk-patched Media Server"),
+        )
+    };
+    let before = media_state(&document_of(&state, show_id));
+
+    let shown = preview(&app, &token, &document(270., 1500.), Some(show_id)).await;
+    apply(
+        &app,
+        &token,
+        &shown,
+        serde_json::json!({"type":"existing_show","show_id":show_id.0}),
+    )
+    .await;
+    let after = document_of(&state, show_id);
+    assert_eq!(
+        bindings(&after),
+        bound,
+        "the MVR sources keep their identities"
+    );
+    assert_eq!(
+        media_state(&after),
+        before,
+        "the Media Server and every Media colour are byte-identical at their revisions"
+    );
+    let (_, snapshot) = light_application::prepare_show_candidate(&after, after.transaction())
+        .unwrap()
+        .into_parts();
+    let media = snapshot
+        .fixtures
+        .iter()
+        .find(|f| f.fixture_id == root)
+        .expect("the Media Server is still a show fixture");
+    assert_eq!(
+        media
+            .logical_heads
+            .iter()
+            .map(|head| head.fixture_id)
+            .collect::<Vec<_>>(),
+        layers,
+        "the layer heads keep their identities"
+    );
+    assert_eq!(
+        snapshot
+            .groups
+            .iter()
+            .find(|g| g.id == LAYERS)
+            .unwrap()
+            .fixtures,
+        layers
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

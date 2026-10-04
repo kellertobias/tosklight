@@ -100,6 +100,7 @@ fn moving_head() -> FixtureProfile {
     }
     profile.modes[0].splits[0].footprint = 6;
     profile.modes[0].position_physical = Some(PositionPhysicalModel {
+        kinematics: Default::default(),
         version: 1,
         revision: 0,
         bindings,

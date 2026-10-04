@@ -481,9 +481,15 @@ fn install_playback_frame(
         Arc::clone(snapshot),
         Arc::clone(profile_projections),
     ));
+    // TL-544 G2: Color, Zoom and Focus fade in from their declared defaults too.
+    let starts = crate::declared_family_starts::DeclaredFamilyStarts::new(
+        Arc::clone(&declared),
+        Arc::clone(snapshot),
+        Arc::clone(profile_projections),
+    );
     let mut playback = playback.write();
     playback.resolve_frame_addresses(&crate::FrameAddresser::new(Arc::clone(slots)));
-    playback.set_family_start(Some(Arc::clone(&declared) as _));
+    playback.set_family_start(Some(Arc::new(starts) as _));
     declared
 }
 

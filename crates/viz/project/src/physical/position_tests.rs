@@ -60,6 +60,7 @@ fn fixture() -> crate::PatchedFixture {
     }
     mode.splits[0].footprint = 2;
     mode.position_physical = Some(PositionPhysicalModel {
+        kinematics: Default::default(),
         version: 1,
         revision: 0,
         bindings,

@@ -126,6 +126,10 @@ pub struct PlaybackRetainedValue {
     pub timed: TimedValue,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub family_evidence: Option<Arc<PlaybackFamilyEvidence>>,
+    /// Runtime-only live Position crossing the captured `timed` value was held for (TL-544 G1).
+    /// An interrupted crossing continues from its live pose; a restored runtime has none.
+    #[serde(skip)]
+    pub pending_transition: Option<Arc<light_core::programming::PendingFamilyTransition>>,
 }
 
 impl<'de> Deserialize<'de> for PlaybackRetainedValue {
@@ -159,6 +163,7 @@ impl<'de> Deserialize<'de> for PlaybackRetainedValue {
         Ok(Self {
             timed: row.timed,
             family_evidence: row.family_evidence,
+            pending_transition: None,
         })
     }
 }
@@ -175,6 +180,7 @@ impl From<PlaybackContribution> for PlaybackRetainedValue {
         Self {
             timed: value.value,
             family_evidence: value.family_evidence,
+            pending_transition: value.pending_transition,
         }
     }
 }

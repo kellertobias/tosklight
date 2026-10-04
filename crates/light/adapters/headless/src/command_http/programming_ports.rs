@@ -54,6 +54,7 @@ pub(crate) struct ServerProgrammingPorts<'a> {
     session: &'a Session,
     source: &'static str,
     require_unlocked: bool,
+    persist: bool,
 }
 
 impl<'a> ServerProgrammingPorts<'a> {
@@ -68,7 +69,15 @@ impl<'a> ServerProgrammingPorts<'a> {
             session,
             source,
             require_unlocked,
+            persist: true,
         }
+    }
+
+    /// For a values action inside a staged command line: the command flow persists the
+    /// committed Programmer, so the action itself must not persist the staged copy.
+    pub(crate) const fn without_persistence(mut self) -> Self {
+        self.persist = false;
+        self
     }
 
     pub(super) const fn state(&self) -> &'a AppState {
@@ -560,6 +569,9 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
     }
 
     fn persist(&self, context: &ActionContext, operation: &'static str) -> Option<String> {
+        if !self.persist {
+            return None;
+        }
         persist_with_warning(
             self.state,
             self.session,

@@ -4,7 +4,11 @@ import type { ColorIntentReport } from "../../../../../api/client/attributeConfi
 import type { NativeColorPagesSnapshot } from "../../../../../api/nativeColorModels";
 import { colorAdoptionNotice } from "../../../../../features/familyEncoders/colorAdoptionNotice";
 import { nativeColorReference } from "../../../../../features/familyEncoders/nativeColorReference";
-import { HEAD, nativePages } from "../../../../control/parameterControls/familyEncoders/nativeColorTestSupport";
+import {
+	HEAD,
+	nativePages,
+	wheelControl,
+} from "../../../../control/parameterControls/familyEncoders/nativeColorTestSupport";
 import type { ParameterValuesMutationPort } from "../../../../control/parameterControls/parameterValueMutations";
 import { encoderAreaStore } from "../../../../control/parameterControls/useEncoderArea";
 import { CORE_COLOR_DESCRIPTORS, type ColorValueEntry } from "./colorDialogModel";
@@ -121,6 +125,46 @@ describe("Color modal: Direct section (TL-554)", () => {
 			fixtureIds: [FIXTURE_A, FIXTURE_B],
 			colorAdoption: { nativeReference: { fixtureId: FIXTURE_A, headId: HEAD } },
 			operation: { edits: [{ kind: "native", operation: { kind: "relative", value: 257 } }] },
+		});
+	});
+
+	it("selects an overflow wheel choice and steps its slots (TL-544 G4)", () => {
+		const base = nativePages(9);
+		const wheel = wheelControl(9);
+		pages.current = { ...base, overflow: [wheel] };
+		const section = mount();
+		const choices = within(section).getByRole("list", { name: "Color wheel functions" });
+		const open = within(choices).getByRole("button", { name: "Open" });
+		expect(open).toHaveAttribute("aria-pressed", "true");
+		fireEvent.click(within(choices).getByRole("button", { name: "Blue" }));
+		expect(applied).toHaveLength(1);
+		expect(applied[0]).toMatchObject({
+			colorAdoption: { nativeReference: { fixtureId: FIXTURE_A, headId: HEAD } },
+			operation: {
+				edits: [
+					{
+						kind: "native",
+						binding: {
+							channel_id: wheel.channel_id,
+							function_id: wheel.functions[2].function_id,
+						},
+						operation: { kind: "set", value: 20 },
+					},
+				],
+			},
+		});
+		// The encoder of the same control steps one choice (Open → Red), never a relative raw.
+		const control = within(section).getByRole("group", { name: "Native 1 · Color wheel" });
+		fireEvent.keyDown(control, { key: "ArrowUp" });
+		expect(applied[1]).toMatchObject({
+			operation: {
+				edits: [
+					{
+						binding: { function_id: wheel.functions[1].function_id },
+						operation: { kind: "set", value: 10 },
+					},
+				],
+			},
 		});
 	});
 

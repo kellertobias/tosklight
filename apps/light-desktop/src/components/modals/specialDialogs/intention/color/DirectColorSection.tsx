@@ -2,6 +2,8 @@ import { Button } from "@tosklight/ui";
 import { TouchEncoder } from "@tosklight/ui/encoders";
 import type { ColorIntentReport } from "../../../../../api/client/attributeConfiguration";
 import { acceptedHeads } from "../../../../../features/colorReport/acceptedColorReport";
+import { familySlotSpreads } from "../../../../control/parameterControls/familyEncoders/familyEncoderBinding";
+import { nativeValueText } from "../../../../control/parameterControls/familyEncoders/nativeColorSlots";
 import { ColorAdoptionNoticePanel } from "./ColorAdoptionNoticePanel";
 import {
 	directStatusRow,
@@ -78,10 +80,18 @@ export function DirectColorSection({
 										slot={index + 1}
 										attributeLabel={control.slot.label}
 										value={control.raw ?? control.slot.limits?.min ?? 0}
-										display={control.raw === null ? "—" : String(control.raw)}
+										display={
+											control.raw === null ? "—" : nativeValueText(control.slot, control.raw)
+										}
 										disabled={control.slot.edit !== "scalar"}
 										canRelease={false}
 										onStep={(delta) => controls.step(control, delta)}
+										onDragEnd={() => controls.finishGestures()}
+										onSetRange={
+											familySlotSpreads(control.slot)
+												? (points) => controls.setRange(control, points)
+												: undefined
+										}
 										minimum={control.slot.limits?.min ?? 0}
 										maximum={control.slot.limits?.max ?? 0}
 										inputScale={1}
@@ -93,8 +103,13 @@ export function DirectColorSection({
 									{control.choices.length > 0 && (
 										<ul className="color-direct-choices" aria-label={`${control.slot.label} functions`}>
 											{control.choices.map((choice) => (
-												<li key={choice.label} data-current={choice.current}>
-													{choice.label}
+												<li key={`${choice.label}:${choice.raw}`} data-current={choice.current}>
+													<Button
+														aria-pressed={choice.current}
+														onClick={() => controls.set(control, choice.raw)}
+													>
+														{choice.label}
+													</Button>
 												</li>
 											))}
 										</ul>

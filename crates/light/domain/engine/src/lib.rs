@@ -9,6 +9,7 @@ mod contribution;
 mod contribution_batch;
 mod controls;
 mod cue_preview;
+mod declared_family_starts;
 mod engine;
 mod fixture;
 mod frame_pool;

@@ -389,3 +389,73 @@ fn retained_preload_branches_fade_into_a_foreign_direct_recipe_independently() {
         3
     );
 }
+
+/// G5: the first Direct edit in Preload seeds from the accepted Pending pair's After branch.
+/// Its lamp Color output (Preload lane, complete footprint) captures the same Direct value the
+/// Live path would from the same writes; another target is refused. An idle head seeds from
+/// its profile defaults through the pinned model.
+#[test]
+fn a_pending_after_branch_color_output_seeds_the_first_preload_direct_edit() {
+    use crate::runtime::output_scheduler::physical_adapters::color::native::{
+        PublishedColorHead, inspect_native_values,
+    };
+    use crate::runtime::output_scheduler::physical_adapters::color::native_seed::{
+        idle_native_seed, idle_native_values, native_reference, pending_native_seed,
+    };
+    let profile = rgbwauv(Some(xyz(0.02, 0.01, 0.08)));
+    let base = semantic(intent([1., 0.5, 0.], 0.));
+    let rig = ColorRig::new(&profile, &[], &base);
+    let mut pair = rig.pair();
+    let lanes = PhysicalPreloadLanes::new(ColorAdapter::default(), ColorAdapter::default());
+    let mut evaluator = RetainedPreloadHybridEvaluator::new(
+        &rig.engine,
+        rig.key.programmer,
+        &lanes,
+        |branch, observation: HybridFamilyObservation<'_>| lanes.observe(branch, observation),
+    );
+    rig.fade_to(semantic(intent([0., 0., 1.], 0.)), 1_000);
+    rig.consume(250, &mut pair, &mut evaluator);
+    let after = &pair.last_success().unwrap().value.after;
+    let sidecar = color(after).expect("After outputs Color");
+    assert_eq!(
+        sidecar.token.lane().preload_branch(),
+        Some(PreloadBranch::AfterRelease)
+    );
+    let snapshot = rig.engine.snapshot();
+    let reference =
+        native_reference(&snapshot, &[rig.target], None, false).expect("a verified reference head");
+    let published = PublishedColorHead::from_result(sidecar);
+    let seed = pending_native_seed(&snapshot, &reference, published).unwrap();
+    let AttributeValue::ColorProgram(program) = &seed else {
+        panic!("a Color program")
+    };
+    let ColorProgram::Direct { recipe, .. } = program.as_ref() else {
+        panic!("a Direct seed")
+    };
+    assert_eq!(&recipe.source, reference.identity());
+    let sorted = |mut values: Vec<light_core::NativeColorValue>| {
+        values.sort_by_key(|value| value.channel_id);
+        values
+    };
+    assert_eq!(
+        sorted(recipe.channels.clone()),
+        sorted(inspect_native_values(reference.head(), &published).unwrap()),
+        "exactly the Pending premaster output"
+    );
+    // Another target's output is never a seed of this reference.
+    let foreign = PublishedColorHead {
+        target: FixtureId::new(),
+        ..published
+    };
+    assert!(pending_native_seed(&snapshot, &reference, foreign).is_err());
+    // An idle head: every path control at its profile default, captured with the pinned model.
+    let defaults = idle_native_values(&reference).expect("defaults inside recordable functions");
+    let AttributeValue::ColorProgram(program) = idle_native_seed(&snapshot, &reference).unwrap()
+    else {
+        panic!("a Color program")
+    };
+    let ColorProgram::Direct { recipe, .. } = program.as_ref() else {
+        panic!("a Direct seed")
+    };
+    assert_eq!(sorted(recipe.channels.clone()), sorted(defaults));
+}

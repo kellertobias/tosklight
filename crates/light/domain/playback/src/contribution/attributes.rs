@@ -30,6 +30,7 @@ impl ContributionContext<'_> {
                 sequence_master,
                 source,
                 address: None,
+                pending_transition: retained.pending_transition,
             }
         }));
     }
@@ -87,15 +88,24 @@ impl ContributionContext<'_> {
             attribute.timing(frame.target_index),
             snap,
         );
-        // A Position fading in over nothing starts from the declared default pose (TL-552). Only
-        // the frame value uses it; evidence still names the authored endpoints alone.
+        // A semantic family fading in over nothing starts from the fixture's declared default
+        // (Position TL-552; Color, Zoom and Focus TL-544 G2). Only the frame value uses it;
+        // evidence still names the authored endpoints alone.
         let declared = match (previous, target, self.family_start) {
-            (None, Some(AttributeValue::Position(_)), Some(start)) if progress < 1.0 => {
-                start.family_start(fixture_id, key)
+            (None, Some(to), Some(start)) if progress < 1.0 && fades_from_declared(key, to) => {
+                start
+                    .family_start(fixture_id, key)
+                    .filter(|from| declared_start_matches(from, to))
             }
             _ => None,
         };
-        let Some(value) = interpolate(previous.or(declared.as_ref()), target, progress) else {
+        // TL-544 G1: an interrupted crossing starts from its live pose, not its held source.
+        let Some((value, pending)) = interpolate_pending(
+            previous.or(declared.as_ref()),
+            frame.previous_pending(attribute).filter(|_| declared.is_none()),
+            target,
+            progress,
+        ) else {
             return;
         };
         let family_evidence = crate::source_evidence::family_owner(key, &value)
@@ -110,6 +120,9 @@ impl ContributionContext<'_> {
             progress >= 1.0 && target.is_some(),
             family_evidence,
         ));
+        if let Some(contribution) = values.last_mut() {
+            contribution.pending_transition = pending;
+        }
     }
 
     fn extend_deleted_attribute(
@@ -232,6 +245,7 @@ fn attribute_contribution(
         sequence_master,
         source: frame.source,
         address,
+        pending_transition: None,
     }
 }
 
@@ -276,5 +290,31 @@ fn intensity_merge_mode(cue_list: &CueList, attribute: &AttributeKey) -> MergeMo
     match cue_list.intensity_priority_mode {
         IntensityPriorityMode::Htp => MergeMode::Htp,
         IntensityPriorityMode::Ltp => MergeMode::Ltp,
+    }
+}
+
+/// The families whose fade-in from nothing starts from a declared default: Position, semantic
+/// Color, Zoom and Focus. A Direct Color keeps its hold (its native recipe has no default start).
+fn fades_from_declared(key: &AttributeKey, to: &AttributeValue) -> bool {
+    match to {
+        AttributeValue::Position(_) | AttributeValue::Zoom(_) => true,
+        AttributeValue::ColorProgram(program) => matches!(
+            program.as_ref(),
+            light_core::programming::ColorProgram::Semantic { .. }
+        ),
+        AttributeValue::Normalized(_) => key.0.as_ref() == "focus",
+        _ => false,
+    }
+}
+
+/// A start is only used when the fade can interpolate from it: same family representation, and
+/// for Zoom the same opening convention (a convention is never converted).
+fn declared_start_matches(from: &AttributeValue, to: &AttributeValue) -> bool {
+    match (from, to) {
+        (AttributeValue::Position(_), AttributeValue::Position(_))
+        | (AttributeValue::ColorProgram(_), AttributeValue::ColorProgram(_))
+        | (AttributeValue::Normalized(_), AttributeValue::Normalized(_)) => true,
+        (AttributeValue::Zoom(from), AttributeValue::Zoom(to)) => from.convention == to.convention,
+        _ => false,
     }
 }

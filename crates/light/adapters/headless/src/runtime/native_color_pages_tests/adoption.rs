@@ -95,22 +95,49 @@ async fn the_first_native_edit_adopts_the_displayed_premaster_output_once() {
     let _ = std::fs::remove_dir_all(&desk.directory);
 }
 
+/// G5: an idle head (no Color programmed, so no Color output in the frame) outputs its profile
+/// defaults. The pages show exactly those, and the first native edit adopts them once.
 #[tokio::test]
-async fn native_edits_hold_quietly_without_an_output_or_with_a_gone_lease() {
+async fn the_first_native_edit_on_an_idle_head_adopts_its_profile_defaults() {
     let desk = Desk::new().await;
-    // Nothing outputs Color yet: there is no premaster output to adopt.
     desk.publish();
-    let revision = desk.programmers.normal_values_revision();
-    let held = desk
+    let defaults: Vec<u32> = path_channels(&desk.profile)
+        .iter()
+        .map(|channel| channel.default_raw)
+        .collect();
+    let shown: Vec<u32> = desk
+        .pages("")
+        .await
+        .values
+        .expect("an idle head shows its profile defaults")
+        .controls
+        .iter()
+        .map(|value| value.raw)
+        .collect();
+    assert_eq!(shown, defaults);
+    let applied = desk
         .apply(
-            "no-output",
+            "idle",
             desk.native_edit(0, json!({"kind": "relative", "value": 5}), None),
         )
         .await;
-    assert_eq!(held["status"], "no_change");
-    assert_eq!(held["hold"], "native_color_unavailable");
-    assert_eq!(desk.programmers.normal_values_revision(), revision);
-    assert!(desk.value(desk.fixtures[0]).is_none());
+    assert_eq!(applied["status"], "changed", "{applied}");
+    assert!(applied.get("hold").is_none(), "{applied}");
+    let mut expected = defaults;
+    expected[0] += 5;
+    for fixture in &desk.fixtures[..2] {
+        assert_eq!(
+            desk.recipe(*fixture),
+            expected,
+            "seeded once from the defaults"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&desk.directory);
+}
+
+#[tokio::test]
+async fn native_edits_hold_quietly_with_a_gone_lease() {
+    let desk = Desk::new().await;
 
     // A lease the session never received holds with the re-read reason; latest is not used.
     desk.program_semantic([1.0, 1.0, 1.0]);

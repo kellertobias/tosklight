@@ -2,7 +2,9 @@ use light_core::{AttributeKey, AttributeValue, FixtureId, ProgrammerId, TimedVal
 use std::sync::Arc;
 
 type Evidence = Option<Arc<crate::ContributionFamilyEvidence>>;
-pub(crate) type ProgrammerSample = (TimedValue, Evidence);
+/// Runtime-only live Position crossing behind a held sample (TL-544 G1).
+pub(crate) type Pending = Option<Arc<light_core::programming::PendingFamilyTransition>>;
+pub(crate) type ProgrammerSample = (TimedValue, Evidence, Pending);
 
 #[derive(Clone)]
 pub(crate) struct ProgrammerTransition {
@@ -10,6 +12,9 @@ pub(crate) struct ProgrammerTransition {
     programmer_order: u64,
     from: Option<AttributeValue>,
     from_evidence: Evidence,
+    /// The still-moving crossing `from` was held for, so an interruption starts from its live
+    /// pose instead of jumping back to an obsolete source (TL-544 G1).
+    from_pending: Pending,
     target: AttributeValue,
     target_evidence: Evidence,
     blended_evidence: Evidence,
@@ -47,6 +52,7 @@ impl ProgrammerTransition {
             programmer_order: value.programmer_order,
             from,
             from_evidence,
+            from_pending: None,
             target: value.value.clone(),
             target_evidence,
             blended_evidence,
@@ -61,22 +67,43 @@ impl ProgrammerTransition {
             && self.target == value.value
     }
 
-    fn sample(&self, now: chrono::DateTime<chrono::Utc>) -> Option<(AttributeValue, Evidence)> {
+    fn sample(
+        &self,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Option<(AttributeValue, Evidence, Pending)> {
         let elapsed = (now - self.changed_at).num_milliseconds().max(0) as u64;
         if elapsed < self.delay_millis {
-            return Some((self.from.clone()?, self.from_evidence.clone()));
+            return Some((
+                self.from.clone()?,
+                self.from_evidence.clone(),
+                self.from_pending.clone(),
+            ));
         }
         let elapsed = elapsed - self.delay_millis;
         if self.duration_millis == 0 || elapsed >= self.duration_millis {
-            return Some((self.target.clone(), self.target_evidence.clone()));
+            return Some((self.target.clone(), self.target_evidence.clone(), None));
         }
         let from = self.from.as_ref()?;
         if elapsed == 0 {
-            return Some((from.clone(), self.from_evidence.clone()));
+            return Some((
+                from.clone(),
+                self.from_evidence.clone(),
+                self.from_pending.clone(),
+            ));
         }
         let progress = (elapsed as f64 / self.duration_millis as f64) as f32;
-        match light_core::programming::interpolate_programming_value(from, &self.target, progress) {
-            Ok(value) => Some((
+        match light_core::programming::sample_programming_transition(
+            from,
+            self.from_pending.as_ref(),
+            &self.target,
+            progress,
+        ) {
+            // A live Position crossing holds `from` as its frame value; the physical adapter
+            // moves it through the pending pair (TL-544 G1).
+            Ok((value, Some(pending))) => {
+                Some((value, self.from_evidence.clone(), Some(pending)))
+            }
+            Ok((value, None)) => Some((
                 value,
                 // Long durations can round to the endpoint before integer elapsed reaches
                 // duration. Follow the value evaluator without bypassing its validation.
@@ -85,11 +112,11 @@ impl ProgrammerTransition {
                 } else {
                     self.blended_evidence.clone()
                 },
+                None,
             )),
-            // Transitional behavior only: physical-frame activation must carry the unresolved
-            // endpoint pair through arbitration. It cannot reconstruct that pair from this hold.
+            // Other live requirements (Color appearance, Zoom convention) still hold the source.
             Err(light_core::programming::TransitionError::Requires(_)) => {
-                Some((from.clone(), self.from_evidence.clone()))
+                Some((from.clone(), self.from_evidence.clone(), None))
             }
             // Malformed runtime input must not become a newly invented owner.
             Err(light_core::programming::TransitionError::Invalid(_)) => None,
@@ -198,6 +225,7 @@ pub(crate) fn faded_programmer_value(
     now: chrono::DateTime<chrono::Utc>,
     underlying: Option<&AttributeValue>,
     underlying_evidence: impl FnOnce() -> Evidence,
+    underlying_pending: Pending,
     programmer_id: ProgrammerId,
     source: ProgrammerTransitionSource,
     snap: bool,
@@ -214,10 +242,10 @@ pub(crate) fn faded_programmer_value(
                     .normalized()
                     .map(|_| AttributeValue::Normalized(0.0))
             })?;
-            return Some((value, underlying_evidence()));
+            return Some((value, underlying_evidence(), underlying_pending));
         }
         let evidence = track_immediate_programmer_value(transitions, key, &value);
-        return Some((value, evidence));
+        return Some((value, evidence, None));
     }
     // Raw overrides and legacy discrete payloads historically bypass Programmer Fade.
     // Adding complete semantic owners must not turn those controls into delayed jumps.
@@ -229,16 +257,16 @@ pub(crate) fn faded_programmer_value(
             | AttributeValue::Spread(_)
     ) {
         let evidence = track_immediate_programmer_value(transitions, key, &value);
-        return Some((value, evidence));
+        return Some((value, evidence, None));
     }
     let duration = value.fade_millis.unwrap_or(default_fade_millis);
     let delay = value.delay_millis.unwrap_or(0);
     if duration == 0 && delay == 0 {
         let evidence = track_immediate_programmer_value(transitions, key, &value);
-        return Some((value, evidence));
+        return Some((value, evidence, None));
     }
     let transition = transitions.entry(key.clone()).or_insert_with(|| {
-        ProgrammerTransition::new(
+        let mut transition = ProgrammerTransition::new(
             &key,
             &value,
             // Legacy scalar entry keeps its existing zero fallback. Complete Color,
@@ -252,19 +280,25 @@ pub(crate) fn faded_programmer_value(
             underlying_evidence(),
             duration,
             delay,
-        )
+        );
+        // An underlay that is itself mid-crossing starts this fade from its live pose.
+        transition.from_pending = underlying_pending;
+        transition
     });
     if !transition.matches(&value) {
         // Sample using the OLD delay/duration before adopting the new timing. Otherwise
         // interruption jumps when the operator changes fade or delay with the destination.
-        let (from, evidence) = transition
+        let (from, evidence, pending) = transition
             .sample(value.changed_at)
-            .map_or((None, None), |(from, evidence)| (Some(from), evidence));
+            .map_or((None, None, None), |(from, evidence, pending)| {
+                (Some(from), evidence, pending)
+            });
         *transition = ProgrammerTransition::new(&key, &value, from, evidence, duration, delay);
+        transition.from_pending = pending;
     }
-    let (sample, evidence) = transition.sample(now)?;
+    let (sample, evidence, pending) = transition.sample(now)?;
     value.value = sample;
-    Some((value, evidence))
+    Some((value, evidence, pending))
 }
 
 // Keep the focused fade tests exercising the same Live mutation boundary used by the
@@ -292,10 +326,11 @@ impl crate::Engine {
             now,
             underlying,
             || None,
+            None,
             programmer_id,
             source,
             snap,
         )
-        .map(|(value, _)| value)
+        .map(|(value, _, _)| value)
     }
 }
