@@ -47,8 +47,8 @@ const SPOT_B: Optics = Optics {
     zoom_20: 128.,
 };
 
-/// `strict` also requires the profile's authored Focus curve on the wire (see the ignored BUG
-/// test); otherwise Focus is only required to reach the wire and differ between the Cues.
+/// `strict` also requires the profile's authored Focus curve on the wire; otherwise Focus is
+/// only required to reach the wire and differ between the Cues.
 fn play(show: &Show, patched: &PatchedFixture, optics: &Optics, strict: bool) {
     let f = patched.fixture_id;
     let desk = Desk::open(show.compile());
@@ -119,13 +119,11 @@ async fn recorded_focus_reopens_plays_and_survives_replacement_independent_of_zo
 }
 
 /// The operator contract (help `06-focus-and-zoom.md`): Focus is lens travel 0–100 % and means
-/// the same on every fixture type. A static Focus in the Live frame is rendered by the scalar
-/// path as a fraction of the channel function's DMX range, ignoring the profile's authored
-/// Focus curve: Wash A (100 % at raw 10 → 0 % at raw 200) gets raw 80 for 37 % instead of 130,
-/// which the Focus adapter (`optics::OpticsAdapter`, used for Dynamics and Preload hybrids)
-/// produces for the same stored value. Spot B (nominal travel) is unaffected.
+/// the same on every fixture type. A static Focus in the Live frame goes through the Focus
+/// adapter like Dynamics and Preload hybrids, so it follows the profile's authored Focus curve:
+/// Wash A (100 % at raw 10 → 0 % at raw 200) gets raw 130 for 37 %, not the scalar path's 80.
+/// Spot B (nominal travel) is unaffected.
 #[tokio::test]
-#[ignore = "BUG: static Live Focus ignores the authored Focus curve (Wash A 37 % -> raw 80, Focus adapter -> 130); family_lanes/observer.rs keeps Focus on the scalar path"]
 async fn recorded_focus_reaches_the_authored_focus_curve_on_every_profile() {
     record_and_replace(true);
 }
