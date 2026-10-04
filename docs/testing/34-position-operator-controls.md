@@ -18,8 +18,8 @@ Executable coverage:
   `npm run test:e2e` as well as `npm run test:e2e-semantic`, where a missing semantic publication
   fails instead of skipping.
 - POSITION-CONTROLS-002 drags the Pan circle to +450° and back to −450° and checks ±90° and
-  **UND** against the Programmer. An open dialog does not yet follow **UND** of its own ±90° step;
-  that case is kept as an expected failure until it is fixed.
+  **UND** against the Programmer, including an open dialog following **UND** of its own ±90° step
+  and the next step starting from the undone value.
 - POSITION-CONTROLS-006 arms Preload through the Preload lifecycle route and leaves it with Blind
   off, so the pending Preload values stay. It reads the lane of every dialog write from the request
   the desk sends. Production publishes no Preload (Pending) Position readouts yet, so step 1 runs

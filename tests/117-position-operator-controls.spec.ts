@@ -592,10 +592,6 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 	});
 
 	test("POSITION-CONTROLS-002 @ui › the open dialog follows UND of its own ±90° step", async ({ api, bench, desk, page }) => {
-		test.fail(
-			true,
-			"BUG: after UND of a dialog ±90° step the open Position dialog shows the undone Pan again (stale draft; positionDraftValue re-applies it when the axis returns to its basis), so the next ±90° steps from the wrong value",
-		);
 		const { showId, selected } = await arrange({ api, bench, desk, page }, "002-undo");
 		requireSemanticContract(await semanticPosition(api, selected), GATE);
 		await programAngles(api, showId, selected, -450, 20);

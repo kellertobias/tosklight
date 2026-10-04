@@ -107,6 +107,37 @@ describe("Position Special Dialog: rapid key and button steps", () => {
 		expect(positionDraftValue(result.current.draft, "pan", "pan@15", 15)).toBe(15);
 	});
 
+	it("Undo of a settled step back to its basis shows the model, not the old step", async () => {
+		const server = inFlightLaneWriter();
+		const { result, rerender } = mount(server);
+		const gesture: PositionGesture = { id: 1, control: "pan", source: "button", initialPan: 10, initialTilt: 0 };
+		act(() => {
+			result.current.callbacks.onGestureStart?.(gesture);
+			result.current.callbacks.onChange({ pan: 100 }, gesture);
+			result.current.callbacks.onGestureEnd?.(gesture, { changed: true });
+		});
+		await act(server.drain);
+		rerender({ pan: "pan@100" });
+		expect(positionDraftValue(result.current.draft, "pan", "pan@100", 100)).toBe(100);
+		// UND restores the Programmer to the step's basis: the dialog follows the model.
+		rerender({ pan: "pan@10" });
+		expect(positionDraftValue(result.current.draft, "pan", "pan@10", 10)).toBe(10);
+	});
+	it("Undo that lands while the step is still settling shows the model once it settles", async () => {
+		const server = inFlightLaneWriter();
+		const { result, rerender } = mount(server);
+		const gesture: PositionGesture = { id: 1, control: "pan", source: "button", initialPan: 10, initialTilt: 0 };
+		act(() => {
+			result.current.callbacks.onGestureStart?.(gesture);
+			result.current.callbacks.onChange({ pan: 100 }, gesture);
+			result.current.callbacks.onGestureEnd?.(gesture, { changed: true });
+		});
+		// The step is reflected, then undone, before its requests are all answered.
+		rerender({ pan: "pan@100" });
+		rerender({ pan: "pan@10" });
+		await act(server.drain);
+		expect(positionDraftValue(result.current.draft, "pan", "pan@10", 10)).toBe(10);
+	});
 	it("a pointer drag released behind an in-flight edit still drops its stale unsent sample", async () => {
 		const server = inFlightLaneWriter();
 		const { result } = mount(server);

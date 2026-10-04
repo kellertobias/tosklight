@@ -65,6 +65,8 @@ export interface PositionDialogDraft {
 	 * draft stays shown and the next key steps from the operator's latest request.
 	 */
 	settling?: boolean;
+	/** The model moved off `basis` after the draft closed, while it was still settling. */
+	overtaken?: boolean;
 }
 
 interface OpenGesture {
@@ -206,6 +208,19 @@ export function usePositionDialogGestures(
 		else current.handle.end();
 		setDraft((value) => (value ? { ...value, open: false } : value));
 	};
+	// A closed draft is overtaken once the model has moved off its basis (an unchanged axis
+	// carries the same value in both), even while its requests are still settling. A settled,
+	// overtaken draft is dropped, so an Undo back to that basis shows the model, not the step.
+	const keyPan = context.keys.pan;
+	const keyTilt = context.keys.tilt;
+	useEffect(() => {
+		if (!draft || draft.open) return;
+		const moved = keyPan !== draft.basis.pan || keyTilt !== draft.basis.tilt;
+		if (!draft.settling && (moved || draft.overtaken)) setDraft(null);
+		else if (draft.settling && moved && !draft.overtaken)
+			setDraft((value) => (value ? { ...value, overtaken: true } : value));
+	}, [draft, keyPan, keyTilt]);
+
 	const callbacks: GestureCallbacks = {
 		onGestureStart: (gesture) => {
 			const edit = latest.current;
