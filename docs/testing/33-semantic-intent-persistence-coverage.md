@@ -206,14 +206,10 @@ their implementation evidence is distinct from final TL-560 or human acceptance.
 - **MVR import:** by decision patch and geometry only. The re-import tests prove storage and
   binding (no rebinding, byte-identical programming), not fitted output, and they store no UV,
   Direct, Focus or Zoom object.
-- **Defect: static Focus output ignores the authored Focus curve.** A static Focus (Programmer,
-  played Cue, committed Preload) stays on the scalar path of the Live frame
-  (`family_lanes/observer.rs`), which maps Normalized Focus linearly over the function's DMX
-  range. On Wash A (100 % at raw 10 → 0 % at raw 200) 37 % is output as raw 80, while the Focus
-  adapter used for Dynamics and Preload hybrids outputs raw 130 for the same stored value. The
-  expectation is `tl560/focus.rs::recorded_focus_reaches_the_authored_focus_curve_on_every_profile`,
-  `#[ignore]`d until fixed. The other new Focus tests therefore check stored intent, played
-  values, Zoom independence and that Focus reaches the wire, not the curve value.
+- **Static Focus follows the authored Focus curve.** A static Focus (Programmer, played Cue,
+  committed Preload) goes through the Focus adapter like Dynamics and Preload hybrids: on Wash A
+  (100 % at raw 10 → 0 % at raw 200) 37 % is output as raw 130.
+  `tl560/focus.rs::recorded_focus_reaches_the_authored_focus_curve_on_every_profile` checks it.
 
 The earlier contract-coverage items are closed: Playback and Output runtime payloads and object
 Undo/Redo history are gated (`HL/show_programming_contract.rs`, tests in the legacy table above),
