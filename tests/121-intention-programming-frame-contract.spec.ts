@@ -480,10 +480,6 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		api,
 		bench,
 	}) => {
-		test.fail(
-			true,
-			'BUG: Dynamic coverage compares a semantic lane owner (`position`) with fixture parameter attributes (`pan`/`tilt`), so a running Angle Dynamic reads "0 of 2 target/lane addresses run; 2 skipped"',
-		);
 		const rig = await moverRig(api, "002-status");
 		const [mover] = rig.movers;
 		await setAngles(api, [mover], 30, 15);

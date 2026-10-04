@@ -42,7 +42,10 @@ pub(super) fn origin_target() -> AttributeValue {
 }
 
 pub(super) fn point_target(point: FixtureId) -> AttributeValue {
-    target(TargetReference::Point { point_id: point.0 }, [0.0, 0.0, 0.0])
+    target(
+        TargetReference::Point { point_id: point.0 },
+        [0.0, 0.0, 0.0],
+    )
 }
 
 pub(super) fn cue_list(cues: Vec<Cue>) -> CueList {
@@ -246,7 +249,10 @@ pub(super) fn assert_between(label: &str, a: [f64; 2], value: [f64; 2], b: [f64;
             "{label}: axis {axis} {value:?} is not moving between {a:?} and {b:?}"
         );
     }
-    assert!(moved, "{label}: the endpoints {a:?} and {b:?} do not differ");
+    assert!(
+        moved,
+        "{label}: the endpoints {a:?} and {b:?} do not differ"
+    );
 }
 
 pub(super) fn assert_near(label: &str, a: [f64; 2], b: [f64; 2]) {
@@ -333,7 +339,10 @@ fn cue_fade_between_targets_with_different_references_moves_through_world_points
     // The beam walks the straight world line between the two floor points: Pan moves
     // monotonically between its endpoints while Tilt follows the line's changing distance.
     let (low, high) = (source[0].min(end[0]), source[0].max(end[0]));
-    assert!(high - low > 10.0, "the two references aim apart: {source:?} {end:?}");
+    assert!(
+        high - low > 10.0,
+        "the two references aim apart: {source:?} {end:?}"
+    );
     for (index, sample) in mid.iter().enumerate() {
         assert!(
             sample[0] > low + 0.1 * (high - low) && sample[0] < high - 0.1 * (high - low),
