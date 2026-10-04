@@ -144,6 +144,7 @@ test.describe("docs/testing/38-typed-family-values.md", () => {
 
 	test("TYPED-FAMILY-002 @api › Position angles and Zoom degrees from the command line and the desk keypad", async ({
 		api,
+		bench,
 		page,
 		desk,
 	}) => {
@@ -152,15 +153,15 @@ test.describe("docs/testing/38-typed-family-values.md", () => {
 		await expect.poll(() => angles(api, ids[4])).toEqual({ pan: 45, tilt: -30 });
 		await accepted(api, "FIXTURE 4 AT POSITION + 15");
 		await expect.poll(() => angles(api, ids[4])).toEqual({ pan: 60, tilt: -30 });
+		// A first Zoom edit adopts the displayed opening, so the desk must have published a frame.
+		await bench.tick(0);
 		await accepted(api, "FIXTURE 4 AT FOCUS DIV 20");
 		await expect.poll(() => zoom(api, ids[4])).toBe(20);
 
 		// The desk keypad: 4 [AT] [^3] 90 [DIV] 10 [ENT] shows `F4 AT POSITION 90 DIV 10`.
 		await api.sendCommandKey("ESC");
 		for (const key of ["4", "AT"] as const) await api.sendCommandKey(key);
-		await api.sendCommandKey("SHIFT", "press");
-		await api.sendCommandKey("3");
-		await api.sendCommandKey("SHIFT", "release");
+		await api.sendShiftedCommandKey("3");
 		for (const key of ["9", "0", "DIV", "1", "0"] as const) await api.sendCommandKey(key);
 		await expect
 			.poll(async () => (await api.getCommandLine()).commandLine.text)
@@ -168,9 +169,9 @@ test.describe("docs/testing/38-typed-family-values.md", () => {
 		await api.sendCommandKey("ENT");
 		await expect.poll(() => angles(api, ids[4])).toEqual({ pan: 90, tilt: 10 });
 
-		// A Color value on a fixture without Color is not applicable: nothing changes, no error.
-		await accepted(api, "FIXTURE 4 AT COLOR 100");
-		expect((await familyValues(api)).some((value) => value.fixture_id === ids[4] && value.attribute === "color")).toBe(false);
+		// A Position value on a fixture without Position is not applicable: nothing changes, no error.
+		await accepted(api, "FIXTURE 1 AT POSITION 45");
+		expect((await familyValues(api)).some((value) => value.fixture_id === ids[1] && value.attribute === "position")).toBe(false);
 	});
 
 	test("TYPED-FAMILY-003 @api › OSC family writes and the OSC keypad share the command-line value", async ({
@@ -188,6 +189,7 @@ test.describe("docs/testing/38-typed-family-values.md", () => {
 			await hardware.send("/light/desk/programmer/family/pan", [-60.5]);
 			await hardware.send("/light/desk/programmer/family/tilt", [20]);
 			await expect.poll(() => angles(api, ids[4])).toEqual({ pan: -60.5, tilt: 20 });
+			await bench.tick(0);
 			await hardware.send("/light/desk/programmer/family/zoom", [30]);
 			await expect.poll(() => zoom(api, ids[4])).toBe(30);
 

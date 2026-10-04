@@ -39,7 +39,7 @@ Z300 (20-Channel) at 1.31.
 3. `4 [AT][^7] [DIV] 20` programs a 20° Zoom opening.
 4. On the desk keypad, `4 [AT]`, Shift+`[3]`, `90 [DIV] 10` shows `F4 AT POSITION 90 DIV 10`;
    `[ENT]` programs Pan 90°, Tilt 10°.
-5. `4 [AT][^2] 100` on a fixture without Color changes nothing and shows no error.
+5. `1 [AT][^3] 45` on fixture 1, an RGB LED without Position, changes nothing and shows no error.
 
 ## TYPED-FAMILY-003 — OSC family writes and the OSC keypad
 

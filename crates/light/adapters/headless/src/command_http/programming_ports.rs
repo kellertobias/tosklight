@@ -498,6 +498,11 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         }
         let policy = match policy {
             ExecutionPolicy::AtomicProgrammer => ExistingCommandPolicy::AtomicProgrammer,
+            // A typed family value submits Programmer value actions, which take the desk gate the
+            // compatibility caller already holds; it is a pure Programmer edit, so it stages.
+            ExecutionPolicy::Compatibility if typed_family_value_command(command) => {
+                ExistingCommandPolicy::AtomicProgrammer
+            }
             ExecutionPolicy::Compatibility => ExistingCommandPolicy::Compatibility,
         };
         match execute_existing_command(
@@ -741,4 +746,19 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
             })
             .filter(|warning| !warning.is_empty()))
     }
+}
+
+/// `… AT COLOR|POSITION|FOCUS …` with a typed value rather than a preset.
+fn typed_family_value_command(command: &str) -> bool {
+    let tokens = command
+        .split_whitespace()
+        .map(str::to_ascii_uppercase)
+        .collect::<Vec<_>>();
+    tokens
+        .iter()
+        .position(|token| token == "AT")
+        .is_some_and(|at| {
+            super::super::programmer_family_values::family_value_keyword(&tokens[at + 1..])
+                .is_some()
+        })
 }
