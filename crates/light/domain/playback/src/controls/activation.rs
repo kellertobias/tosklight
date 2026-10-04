@@ -489,6 +489,14 @@ impl PlaybackEngine {
         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return Err("playback master must be within 0-1".into());
         }
+        // A Dynamic Playback's fader is its master whatever the surface's configured mode.
+        if self.dynamic_assignment(number).is_some() {
+            return self.set_dynamic_fader_at_mutation_inner(
+                PlaybackIdentity::physical(number)?,
+                value,
+                true,
+            );
+        }
         match mode {
             PlaybackFaderMode::Temp => self.set_temp_fader_mutation(number, value),
             PlaybackFaderMode::XFade => self.set_manual_xfade_inner_mutation(number, value, true),

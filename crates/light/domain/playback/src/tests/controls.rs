@@ -876,6 +876,23 @@ fn dynamic_playback_fader_pause_speed_flash_and_restore_are_authoritative() {
 }
 
 #[test]
+fn configured_physical_fader_moves_a_dynamic_playback_master() {
+    let definition = dynamic_playback_definition(18, DynamicPlaybackFaderMode::Master, false);
+    let mut engine = PlaybackEngine::with_clock(Arc::new(light_core::ManualClock::new(Utc::now())));
+    engine.register_definition(definition.clone()).unwrap();
+
+    engine
+        .set_configured_fader_mutation(18, definition.fader, 1.0)
+        .unwrap();
+    engine
+        .set_configured_fader_mutation(18, definition.fader, 0.5)
+        .unwrap();
+    let active = &engine.active_dynamic_playbacks()[0];
+    assert!(active.enabled);
+    assert_eq!((active.fader_value, active.master), (0.5, 0.5));
+}
+
+#[test]
 fn target_bound_dynamic_runtime_is_shared_across_physical_and_virtual_assignments() {
     let first = dynamic_playback_definition(21, DynamicPlaybackFaderMode::SizeAndMaster, false);
     let mut second = first.clone();
