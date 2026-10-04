@@ -155,6 +155,38 @@ fn a_source_that_stops_holds_its_last_position_and_says_it_is_stale() {
 }
 
 #[test]
+fn a_sender_restarted_on_a_new_port_reads_as_receiving_again() {
+    let resource = resource(bound());
+    frame_at(&resource, 3, [2.0, 1.0, -4.0], 1_000);
+    resource.tick(1_000);
+    assert!(matches!(
+        resource.tick(6_000).status.health,
+        Some(PsnHealth::Stale { .. })
+    ));
+
+    // The same host comes back from another ephemeral port.
+    let mut restarted = sender();
+    restarted.set_port(sender().port() + 1);
+    let tracker = PsnTrackerData {
+        id: 3,
+        position: Some(PsnVector3 {
+            x: 3.0,
+            y: 1.0,
+            z: -4.0,
+        }),
+        ..PsnTrackerData::default()
+    };
+    for datagram in encode_data_frame(7_000 * 1_000, 1, &[tracker]) {
+        resource.observe(restarted, &datagram, 7_000);
+    }
+    let tick = resource.tick(7_000);
+
+    assert_eq!(tick.status.health, Some(PsnHealth::Receiving));
+    assert_eq!(tick.status.sources.len(), 1);
+    assert_eq!(tick.status.sources[0].source, restarted);
+}
+
+#[test]
 fn switching_the_source_off_gives_the_point_back() {
     let resource = resource(bound());
     frame_at(&resource, 3, [2.0, 1.0, -4.0], 1_000);

@@ -339,10 +339,6 @@ test.describe("docs/testing/19-tracking-with-posistagenet.md", () => {
 		bench,
 		show,
 	}) => {
-		test.fail(
-			true,
-			"BUG: after a PSN sender restarts from a new UDP source port, status.health stays `stale` (worst of all sources; the silent old source is never expired) although frames arrive",
-		);
 		const rig = await patchTrackingRig(api, show.id);
 		const { port, stream } = await listening(api, 300);
 		track(stream);

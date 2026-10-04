@@ -326,6 +326,7 @@ impl PsnResource {
             .observe(datagram, now_millis);
         if matches!(observed, PsnObservation::Frame(_)) {
             state.accepted_sequence = state.accepted_sequence.wrapping_add(1);
+            state.retire_replaced_sources(source, now_millis);
         }
     }
 
@@ -437,6 +438,29 @@ impl PsnResource {
 }
 
 impl PsnState {
+    /// A sender restarted on the same host binds a new source port. Once the old socket has gone
+    /// stale it is retired, so its silence no longer reads as the desk's PSN health; a second
+    /// sender that is still receiving, or that names another PSN system, is kept.
+    fn retire_replaced_sources(&mut self, current: SocketAddr, now_millis: u64) {
+        let stale_after = self.configuration.configuration.stale_after_millis;
+        let Some(name) = self
+            .sources
+            .get(&current)
+            .map(|tracking| tracking.system_name().map(str::to_owned))
+        else {
+            return;
+        };
+        self.sources.retain(|source, tracking| {
+            *source == current
+                || source.ip() != current.ip()
+                || matches!(
+                    tracking.health(now_millis, stale_after),
+                    PsnSourceHealth::Receiving
+                )
+                || matches!((&name, tracking.system_name()), (Some(new), Some(old)) if new != old)
+        });
+    }
+
     fn install(
         &mut self,
         show_id: Option<ShowId>,
