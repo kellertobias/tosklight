@@ -452,7 +452,11 @@ impl ProgrammerValueResolver<'_, '_> {
         let underlay = self.underlay;
         let underlay_is_known = group_color_underlay.is_none();
         let underlying_pending = underlay_is_known
-            .then(|| underlay?.pending_transition(fixture_id, &attribute).cloned())
+            .then(|| {
+                underlay?
+                    .pending_transition(fixture_id, &attribute)
+                    .cloned()
+            })
             .flatten();
         crate::programmer_fade::faded_programmer_value(
             self.transitions,

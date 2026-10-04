@@ -222,8 +222,7 @@ mod tests {
             sample_programming_transition(&angles(0.0, 0.0), None, &origin(4.0), 0.5).unwrap();
         // Interrupted toward compatible Angles: still pending because the source moves.
         let (value, second) =
-            sample_programming_transition(&held, first.as_ref(), &angles(90.0, 0.0), 0.5)
-                .unwrap();
+            sample_programming_transition(&held, first.as_ref(), &angles(90.0, 0.0), 0.5).unwrap();
         assert_eq!(value, angles(0.0, 0.0));
         let second = second.unwrap();
         assert_eq!(second.held(), &angles(0.0, 0.0));
@@ -237,9 +236,13 @@ mod tests {
             .unwrap();
         assert_eq!(resolved, angles(67.5, 0.0));
         // A source that is no longer the pending pair's held value ignores the stale chain.
-        let (value, none) =
-            sample_programming_transition(&angles(5.0, 0.0), first.as_ref(), &angles(9.0, 0.0), 0.5)
-                .unwrap();
+        let (value, none) = sample_programming_transition(
+            &angles(5.0, 0.0),
+            first.as_ref(),
+            &angles(9.0, 0.0),
+            0.5,
+        )
+        .unwrap();
         assert_eq!((value, none), (angles(7.0, 0.0), None));
     }
 

@@ -66,12 +66,8 @@ pub(crate) fn interpolate_pending(
 ) -> Option<light_core::programming::PendingTransitionSample> {
     if let (Some(from), Some(to)) = (from, to)
         && progress < 1.0
-        && let Ok((value, Some(pending))) = light_core::programming::sample_programming_transition(
-            from,
-            from_pending,
-            to,
-            progress,
-        )
+        && let Ok((value, Some(pending))) =
+            light_core::programming::sample_programming_transition(from, from_pending, to, progress)
     {
         return Some((value, Some(pending)));
     }

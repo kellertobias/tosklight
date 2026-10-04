@@ -38,7 +38,8 @@ pub(crate) struct SlotWinner {
     pub(crate) family_evidence:
         Option<std::sync::Arc<crate::contribution_batch::ContributionFamilyEvidence>>,
     /// Runtime-only live Position crossing behind the held `value` (TL-544 G1).
-    pub(crate) pending_transition: Option<std::sync::Arc<light_core::programming::PendingFamilyTransition>>,
+    pub(crate) pending_transition:
+        Option<std::sync::Arc<light_core::programming::PendingFamilyTransition>>,
 }
 
 impl Default for SlotWinner {

@@ -102,7 +102,9 @@ impl ContributionContext<'_> {
         // TL-544 G1: an interrupted crossing starts from its live pose, not its held source.
         let Some((value, pending)) = interpolate_pending(
             previous.or(declared.as_ref()),
-            frame.previous_pending(attribute).filter(|_| declared.is_none()),
+            frame
+                .previous_pending(attribute)
+                .filter(|_| declared.is_none()),
             target,
             progress,
         ) else {

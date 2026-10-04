@@ -100,9 +100,7 @@ impl ProgrammerTransition {
         ) {
             // A live Position crossing holds `from` as its frame value; the physical adapter
             // moves it through the pending pair (TL-544 G1).
-            Ok((value, Some(pending))) => {
-                Some((value, self.from_evidence.clone(), Some(pending)))
-            }
+            Ok((value, Some(pending))) => Some((value, self.from_evidence.clone(), Some(pending))),
             Ok((value, None)) => Some((
                 value,
                 // Long durations can round to the endpoint before integer elapsed reaches
