@@ -2304,7 +2304,13 @@
 	padding: 12px 16px 16px;
 }
 
-/* Virtual Intensity reads as the same row as the switches under it: name left, choice right. */
+.fixture-masters-note {
+	margin: 4px 0;
+	color: var(--muted);
+	font-size: 12px;
+}
+
+/* Virtual Intensity reads as one row: name left, choice right. */
 .fixture-masters-choice {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;

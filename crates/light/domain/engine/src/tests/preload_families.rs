@@ -19,10 +19,7 @@ impl Rig {
         let registry = ProgrammerRegistry::default();
         let session = SessionId::new();
         registry.start(session);
-        let (mut point, point_id) = schema_v2_fixture(&[
-            (X, false, false, false, false, false),
-            (Y, false, false, false, false, false),
-        ]);
+        let (mut point, point_id) = schema_v2_fixture(&[(X, false, false), (Y, false, false)]);
         point.fixture_number = None;
         point.universe = None;
         point.address = None;
@@ -197,8 +194,8 @@ fn preload_family_release_reuses_each_token_geometry_and_retains_both_observers(
     assert!(after.value(rig.mount, &AttributeKey::color()).is_none());
     assert_eq!(
         after.value(rig.point, &AttributeKey(X.into())),
-        Some(&AttributeValue::Normalized(0.8)),
-        "Current remains pre-Freeze"
+        Some(&AttributeValue::Normalized(0.6)),
+        "Freeze holds the parameter in the static baseline (2026-10-05)"
     );
     let before_geometry = engine
         .observe_static_family_geometry(&frame, &mut before)
@@ -224,7 +221,6 @@ fn preload_family_release_reuses_each_token_geometry_and_retains_both_observers(
                     origin: None,
                     family_evidence: None,
                 },
-                master: FamilyProjectionMaster::PreserveBaseline,
             },
         )
         .unwrap();

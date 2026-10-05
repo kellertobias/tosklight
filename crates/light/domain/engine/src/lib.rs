@@ -64,8 +64,7 @@ pub use preload_frame::{
 };
 pub use prepared_frame::PreparedOutputFrame;
 pub use prepared_static_family::{
-    FamilyProjectionEvidence, FamilyProjectionMaster, FamilyProjectionMetadata,
-    PreparedStaticFamilyFrame, StaticWinner,
+    FamilyProjectionEvidence, FamilyProjectionMetadata, PreparedStaticFamilyFrame, StaticWinner,
 };
 pub mod parallel;
 mod profile_blackout;
@@ -94,7 +93,7 @@ pub use contribution_batch::{
     ContributionBatch, ContributionFamilyEntry, ContributionFamilyEvidence,
     ContributionFamilyFootprint, ContributionFamilyRole, ContributionOrigin,
     ContributionProgrammerLane, ContributionReleaseCutoff, ContributionSample,
-    ContributionSequenceMaster, ContributionSourceDescriptor, ContributionSourceId,
+    ContributionSourceDescriptor, ContributionSourceId,
 };
 pub use cue_preview::{CuePreviewState, TrackedCueValue, cue_preview_state, render_fixture_slots};
 pub use engine::Engine;

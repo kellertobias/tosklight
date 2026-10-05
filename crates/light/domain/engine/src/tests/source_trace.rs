@@ -144,9 +144,8 @@ fn color_release_union_resets_consumed_uv_and_wheel_without_claiming_independent
     let mode = &mut profile.modes[0];
     let head = mode.heads[0].id;
     let uv = uuid::Uuid::new_v4();
-    mode.channels.push(calibrated_channel(
-        uv, head, "color.uv", false, false, false,
-    ));
+    mode.channels
+        .push(calibrated_channel(uv, head, "color.uv", false));
     if let ColorSystem::Additive { emitters } = &mut mode.color_systems[0].system {
         let mut emitter = emitter(
             uv,
@@ -164,7 +163,7 @@ fn color_release_union_resets_consumed_uv_and_wheel_without_claiming_independent
     for name in ["color.wheel", "color.wheel.2"] {
         let wheel = uuid::Uuid::new_v4();
         mode.channels
-            .push(calibrated_channel(wheel, head, name, false, false, false));
+            .push(calibrated_channel(wheel, head, name, false));
         mode.color_systems.push(light_fixture::HeadColorSystem {
             calibration: Default::default(),
             head_id: head,
@@ -342,18 +341,7 @@ fn source_frame_projection_keeps_the_captured_cue_master_after_live_values_chang
     let session = SessionId::new();
     registry.start(session);
     let fixture = FixtureId::new();
-    let mut patched = calibrated_visual_fixture(fixture);
-    let mut profile = patched
-        .definition
-        .profile_snapshot
-        .as_ref()
-        .unwrap()
-        .as_ref()
-        .clone();
-    for channel in &mut profile.modes[0].channels {
-        channel.reacts_to_sequence_master = true;
-    }
-    patched.definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+    let patched = calibrated_visual_fixture(fixture);
     let color = AttributeKey::color();
     let cue = test_cue_list(
         "Source frame",

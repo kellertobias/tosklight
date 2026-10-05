@@ -81,7 +81,9 @@ fn inverted_channel_mode() -> (FixtureMode, FixtureChannel) {
 
 #[test]
 fn invert_scales_semantic_ranges_before_inversion_and_preserves_exact_raw_values() {
-    let (mode, fixture_channel) = inverted_channel_mode();
+    let (mode, mut fixture_channel) = inverted_channel_mode();
+    // Scaling is the virtual intensity's (masters act on the parameters before DMX).
+    fixture_channel.reacts_to_virtual_intensity = true;
     let semantic = HashMap::from([(AttributeKey::intensity(), AttributeValue::Normalized(0.5))]);
     assert_eq!(
         mode.resolve_channel_raw(
@@ -90,7 +92,7 @@ fn invert_scales_semantic_ranges_before_inversion_and_preserves_exact_raw_values
             false,
             None,
             ChannelScales {
-                grand_master: 0.5,
+                virtual_intensity: Some(0.5),
                 ..Default::default()
             },
         ),
@@ -104,7 +106,7 @@ fn invert_scales_semantic_ranges_before_inversion_and_preserves_exact_raw_values
             false,
             None,
             ChannelScales {
-                grand_master: 0.0,
+                virtual_intensity: Some(0.0),
                 ..Default::default()
             },
         ),
@@ -178,7 +180,7 @@ fn invert_scales_semantic_ranges_before_inversion_and_preserves_exact_raw_values
             false,
             None,
             ChannelScales {
-                grand_master: 0.5,
+                virtual_intensity: Some(0.5),
                 ..Default::default()
             },
         ),

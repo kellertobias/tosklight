@@ -287,7 +287,7 @@ fn unsupported_media_control_contracts_are_declined_for_layers_and_masters() {
         for head in &source.heads {
             let supported = MediaColorHead::from_mode(source, head.id).unwrap();
             let index = supported.controls()[0].channel_index as usize;
-            for variation in 0..17 {
+            for variation in 0..14 {
                 let mut mode = source.clone();
                 let channel = &mut mode.channels[index];
                 match variation {
@@ -334,9 +334,6 @@ fn unsupported_media_control_contracts_are_declined_for_layers_and_masters() {
                         }
                     }
                     13 => channel.reacts_to_virtual_intensity = true,
-                    14 => channel.reacts_to_sequence_master = true,
-                    15 => channel.reacts_to_group_master = true,
-                    16 => channel.reacts_to_grand_master = true,
                     _ => unreachable!(),
                 }
                 assert!(

@@ -670,7 +670,9 @@ fn resolved_visualization_content(
     let ordinary = needs_ordinary_detail
         .then(|| captured_dynamics.and_then(|sources| sources.ordinary.as_ref()))
         .flatten()
-        .map(|values| values.values())
+        // The dynamic stack shows the programmed parameter: the captured frame's raw values,
+        // as the observer path's `cached_visualization_ordinary_values` (masters are output-only).
+        .map(|values| values.raw_values())
         .unwrap_or(observer_ordinary.as_ref());
     let (mut resolved, dynamic_runtime, dynamic_samples) = match authoritative_frame {
         Some(frame) => (
@@ -693,30 +695,24 @@ fn resolved_visualization_content(
             )
         }
     };
-    let mut overridden = if preload {
-        apply_preload_values(&snapshot, programmer.as_ref(), resolved.to_mut())
-    } else {
-        HashSet::new()
-    };
-    for (_, _, value) in &extra_dynamic_values {
-        if !matches!(
-            value.value,
-            light_dynamics::DynamicSemanticValue::DynamicOff { .. }
-                | light_dynamics::DynamicSemanticValue::Release
-        ) {
-            overridden.insert((value.fixture_id, value.attribute.clone()));
+    // An accepted frame's values are already the finalized output parameters. Any other
+    // resolution is raw: Preload overrides join it first, then the output-parameter stage
+    // (masters, Freeze) runs once, so an override is mastered exactly like a programmed value.
+    if let std::borrow::Cow::Owned(raw) = &mut resolved {
+        if preload {
+            apply_preload_values(&snapshot, programmer.as_ref(), raw);
         }
+        state
+            .output
+            .engine()
+            .finalize_output_values(raw, options, Some(&snapshot))
+            .map_err(|error| ApiError::internal(error.to_string()))?;
     }
     let profile_output_values = if has_preload_overrides {
         let projected = state
             .output
             .engine()
-            .profile_visualization_projection_at(
-                resolved.as_ref(),
-                options,
-                Some(&snapshot),
-                &overridden,
-            )
+            .profile_visualization_projection_at(resolved.as_ref(), options, Some(&snapshot))
             .map_err(|error| ApiError::internal(error.to_string()))?;
         visualization_wire_values(&projected.values)
     } else if let Some(frame) = authoritative_frame {

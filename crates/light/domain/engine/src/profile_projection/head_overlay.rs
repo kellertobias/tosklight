@@ -1,8 +1,8 @@
 //! The Freeze, Highlight and fitted-native state a profile head renders under.
 
 use super::{ProfileHeadInputs, look_for_role, resolved_highlight_layer};
+use crate::RenderOptions;
 use crate::native_position_projection::NativePositionInput;
-use crate::{GroupMasterIndex, RenderOptions};
 use light_core::{AttributeKey, FixtureId};
 use light_fixture::{
     FixtureChannel, FixtureMode, HighlightLook, HighlightLookCompatibility, PatchedFixture,
@@ -19,7 +19,6 @@ pub(super) struct HeadOverlayState {
     pub(super) output_highlighted: bool,
     pub(super) selected_look: Option<HighlightLook>,
     pub(super) legacy_raw_highlight: bool,
-    pub(super) group_scale: f32,
 }
 
 impl HeadOverlayState {
@@ -29,8 +28,6 @@ impl HeadOverlayState {
         owner: FixtureId,
         native_full_freeze: bool,
         options: RenderOptions,
-        group_masters: &GroupMasterIndex,
-        group_master_flashes: &HashMap<String, f32>,
         highlight_layers: &HashMap<FixtureId, HighlightOutputLayer>,
         highlight_look: &HighlightLook,
     ) -> Self {
@@ -41,9 +38,9 @@ impl HeadOverlayState {
             .then(|| fixture.freeze.targets.get(&owner))
             .flatten();
         let full_freeze = native_full_freeze || frozen.is_some_and(|target| target.full);
-        // Masters never change a frozen parameter (2026-10-05): a head whose Intensity is frozen,
-        // fully or as a family, renders past Group Master, Grand Master and Blackout. An
-        // unfrozen Intensity keeps following them, also when only its Color is frozen.
+        // Masters never change a frozen parameter (2026-10-05). They scale the level parameters
+        // before Freeze replaces them, so here only the DMX-stage Blackout and Grand Master above
+        // Highlight remain to bypass for a head whose Intensity is frozen, fully or as a family.
         let masters_held = full_freeze
             || frozen.is_some_and(|target| {
                 target
@@ -72,18 +69,12 @@ impl HeadOverlayState {
             && selected_look
                 .as_ref()
                 .is_some_and(|look| look.compatibility != HighlightLookCompatibility::Semantic);
-        let group_scale = if masters_held || output_highlighted || !fixture.group_masters_enabled {
-            1.0
-        } else {
-            group_masters.scale(owner, group_master_flashes)
-        };
         Self {
             options,
             layer,
             output_highlighted,
             selected_look,
             legacy_raw_highlight,
-            group_scale,
         }
     }
 }

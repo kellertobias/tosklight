@@ -166,13 +166,16 @@ impl<'a> TickSources<'a> {
         })
     }
 
+    /// The raw parameter (before the output-parameter masters). What a Dynamic reads here is fed
+    /// back into a resolution that is finalized once later; a finalized level would be mastered
+    /// twice. `Legacy` is already the raw resolution.
     fn value(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&AttributeValue> {
         if let Some(frame) = self.static_frame {
-            return frame.value(target, attribute);
+            return frame.raw_value(target, attribute);
         }
         match self.captured_values() {
             TickValues::Legacy(values) => values.get(&(target, attribute.clone())),
-            TickValues::Prepared(frame) => frame.value(target, attribute),
+            TickValues::Prepared(frame) => frame.raw_value(target, attribute),
         }
     }
 }
@@ -255,8 +258,9 @@ impl PreloadTickSources<'_, '_> {
 }
 
 impl DynamicTickSource for PreloadTickSources<'_, '_> {
+    /// The raw parameter, as for [`TickSources::value`].
     fn value(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&AttributeValue> {
-        self.captured_values().value(target, attribute)
+        self.captured_values().raw_value(target, attribute)
     }
 
     fn family_evidence(

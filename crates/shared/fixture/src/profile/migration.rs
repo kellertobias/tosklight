@@ -207,9 +207,6 @@ impl FixtureMode {
                     reacts_to_virtual_intensity: parameter.virtual_dimmer
                         || (has_virtual_dimmer && attribute.0.starts_with("color.")),
                     virtual_intensity_inverted: false,
-                    reacts_to_sequence_master: attribute.is_intensity(),
-                    reacts_to_group_master: attribute.is_intensity(),
-                    reacts_to_grand_master: attribute.is_intensity(),
                     behavior: ChannelBehavior::Controlled,
                     functions: vec![ChannelFunction {
                         id: stable_uuid(&format!(

@@ -596,7 +596,6 @@ fn compose_position_batch<T, S: DynamicTickSource, R>(
                             .static_token
                             .changed_at(row.target, row.owner.key_ref()),
                         evidence: light_engine::FamilyProjectionEvidence::PreserveBaseline,
-                        master: light_engine::FamilyProjectionMaster::PreserveBaseline,
                     };
                 }
                 projections.push(row);
@@ -714,7 +713,6 @@ pub(super) fn compose_owner_group<T, S: DynamicTickSource, R: HybridFrameResolve
                         .static_token
                         .changed_at(group.target, group.owner.key_ref()),
                     evidence: light_engine::FamilyProjectionEvidence::PreserveBaseline,
-                    master: light_engine::FamilyProjectionMaster::PreserveBaseline,
                 };
                 row.metadata = metadata;
             }

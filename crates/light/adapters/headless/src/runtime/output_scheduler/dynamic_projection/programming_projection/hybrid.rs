@@ -753,10 +753,7 @@ fn same_static_baseline(
         (Some(original), Some(scalar)) => (original, scalar),
         _ => return false,
     };
-    if original.value() != scalar.value()
-        || original.changed_at() != scalar.changed_at()
-        || original.sequence_master() != scalar.sequence_master()
-    {
+    if original.value() != scalar.value() || original.changed_at() != scalar.changed_at() {
         return false;
     }
     let same_stamp = |a: light_core::ProgrammerEditStamp, b: light_core::ProgrammerEditStamp| {

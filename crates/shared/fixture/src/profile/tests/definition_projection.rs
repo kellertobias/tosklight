@@ -274,8 +274,13 @@ fn projected_default_reads_the_home_value_in_canonical_space() {
         };
 
         let definition = profile.resolved_definition(mode_id).unwrap();
+        let colour = definition.heads[0]
+            .parameters
+            .iter()
+            .find(|parameter| parameter.attribute.0.as_ref() == canonical)
+            .unwrap();
         assert_eq!(
-            definition.heads[0].parameters[0].default, expected,
+            colour.default, expected,
             "{fixture_attribute} invert {invert} raw {default_raw}"
         );
     }

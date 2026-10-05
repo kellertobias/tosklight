@@ -1040,9 +1040,6 @@ fn install_patch_route_profile(state: &AppState) -> (Uuid, Uuid) {
             snap: false,
             reacts_to_virtual_intensity: false,
             virtual_intensity_inverted: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: true,
-            reacts_to_grand_master: true,
             behavior: light_fixture::ChannelBehavior::Controlled,
             functions: vec![],
         });

@@ -31,6 +31,7 @@ import {
 	cueListFixtureIds,
 	fixtureSheetIncludesFixture,
 } from "./fixtureSheetFilters";
+import { followsMasters } from "../components/setup/fixturePatch/patchModel";
 import { fixtureSheetTargets } from "./fixtureSheetTargets";
 import {
 	fixtureSheetGroupValues,
@@ -359,7 +360,7 @@ function indexLimitingGroups(
 				(mode) => mode.id === fixture.definition.mode_id,
 			) ?? fixture.definition.profile_snapshot?.modes[0];
 		const eligible = profileMode
-			? profileMode.channels.some((channel) => channel.reacts_to_group_master)
+			? profileMode.channels.some(followsMasters)
 			: fixture.definition.heads.some((head) =>
 					head.parameters.some((parameter) =>
 						parameter.attribute.toLowerCase().includes("intensity"),

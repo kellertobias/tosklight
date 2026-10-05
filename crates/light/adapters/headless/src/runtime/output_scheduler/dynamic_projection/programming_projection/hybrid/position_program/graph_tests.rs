@@ -486,7 +486,6 @@ fn graph_bridge_keeps_original_required_and_size_requests_and_retries_only_the_r
                         FamilyProjectionMetadata {
                             changed_at: None,
                             evidence: light_engine::FamilyProjectionEvidence::PreserveBaseline,
-                            master: light_engine::FamilyProjectionMaster::PreserveBaseline,
                         },
                         (),
                     ))

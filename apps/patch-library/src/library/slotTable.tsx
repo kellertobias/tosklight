@@ -1,7 +1,7 @@
 import { Button, InputModal, SwitchField } from "@tosklight/ui";
 import { useState } from "react";
 import type { AttributeDescriptor, FixtureChannel, FixtureMode } from "../wire";
-import { maxRaw } from "../sheet/fixtureProfileModel";
+import { maxRaw, withDefaultVirtualDimmerReaction } from "../sheet/fixtureProfileModel";
 import { AttributePickerModal, STATIC_ATTRIBUTE } from "./attributePicker";
 import { channelLabel, channelUnit, mappingSummary } from "./channelLabels";
 import { applyCanonicalChannelAttribute } from "./channelModel";
@@ -411,7 +411,11 @@ function SlotEditDialog({
 						attribute === STATIC_ATTRIBUTE
 							? { ...channel, behavior: "static" }
 							: {
-									...applyCanonicalChannelAttribute(channel, attribute, attributeRegistry),
+									...applyCanonicalChannelAttribute(
+										withDefaultVirtualDimmerReaction(mode, channel, attribute),
+										attribute,
+										attributeRegistry,
+									),
 									behavior: "controlled",
 								},
 					);

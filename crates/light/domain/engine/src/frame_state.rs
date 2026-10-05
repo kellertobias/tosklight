@@ -9,7 +9,6 @@ use chrono::{DateTime, Utc};
 use light_core::{AttributeValue, MergeMode};
 
 use crate::Slot;
-use crate::contribution::ApplicableSequenceMaster;
 
 /// What a candidate offers a slot, apart from the value itself.
 #[derive(Clone, Copy)]
@@ -33,13 +32,28 @@ pub(crate) struct SlotWinner {
     pub(crate) projected_changed_at: Option<Option<DateTime<Utc>>>,
     pub(crate) merge_mode: MergeMode,
     pub(crate) transition_ordinal: Option<u64>,
-    pub(crate) sequence_master: Option<ApplicableSequenceMaster>,
     pub(crate) origin: Option<std::sync::Arc<crate::contribution_batch::ContributionOrigin>>,
     pub(crate) family_evidence:
         Option<std::sync::Arc<crate::contribution_batch::ContributionFamilyEvidence>>,
     /// Runtime-only live Position crossing behind the held `value` (TL-544 G1).
     pub(crate) pending_transition:
         Option<std::sync::Arc<light_core::programming::PendingFamilyTransition>>,
+    /// What the raw resolution held before the masters changed this level: `None` when no master
+    /// touched it (`value` is raw), `Some(None)` for an unsourced level the masters filled at its
+    /// default, `Some(Some(raw))` for a mastered contribution. Freeze and family projection write
+    /// a raw value and clear it.
+    pub(crate) pre_master: Option<Option<AttributeValue>>,
+}
+
+impl SlotWinner {
+    /// The value before the output-parameter masters: the raw parameter, or the Freeze or family
+    /// value that replaced it. `None` when only the masters' default fill holds the slot.
+    pub(crate) fn raw_value(&self) -> Option<&AttributeValue> {
+        match &self.pre_master {
+            None => Some(&self.value),
+            Some(raw) => raw.as_ref(),
+        }
+    }
 }
 
 impl Default for SlotWinner {
@@ -51,10 +65,10 @@ impl Default for SlotWinner {
             projected_changed_at: None,
             merge_mode: MergeMode::Ltp,
             transition_ordinal: None,
-            sequence_master: None,
             origin: None,
             family_evidence: None,
             pending_transition: None,
+            pre_master: None,
         }
     }
 }
@@ -132,6 +146,43 @@ impl FrameState {
             .flatten()
     }
 
+    /// Scale a level value this fill resolved, keeping who decided it.
+    pub(crate) fn scale_level(&mut self, slot: Slot, factor: f32) {
+        if !self.is_current(slot) {
+            return;
+        }
+        if let Some(winner) = self.winners.get_mut(slot.index())
+            && let Some(level) = winner.value.normalized()
+        {
+            winner.pre_master.get_or_insert(Some(winner.value.clone()));
+            winner.value = AttributeValue::Normalized(level * factor);
+        }
+    }
+
+    /// Hold a level nobody contributed at its mastered profile default.
+    ///
+    /// The value has no source: no origin, no family evidence, no transition and an unknown
+    /// change time, so nothing reading the frame can mistake it for a programmed or played value.
+    pub(crate) fn fill_unsourced_level(&mut self, slot: Slot, value: AttributeValue) {
+        let index = slot.index();
+        if index >= self.winners.len() || self.stamp[index] == self.epoch {
+            return;
+        }
+        self.stamp[index] = self.epoch;
+        self.touched.push(index as u32);
+        let winner = &mut self.winners[index];
+        winner.value = value;
+        winner.priority = i16::MIN;
+        winner.changed_at = DateTime::<Utc>::MIN_UTC;
+        winner.projected_changed_at = Some(None);
+        winner.merge_mode = MergeMode::Htp;
+        winner.transition_ordinal = None;
+        winner.origin = None;
+        winner.family_evidence = None;
+        winner.pending_transition = None;
+        winner.pre_master = Some(None);
+    }
+
     /// Update one already-resolved family after composition, without offering another LTP vote.
     /// Its baseline rank stays intact; the projection explicitly chooses source/master metadata.
     pub(crate) fn project_family(
@@ -183,10 +234,10 @@ impl FrameState {
         winner.projected_changed_at = None;
         winner.merge_mode = offer.merge_mode;
         winner.transition_ordinal = offer.transition_ordinal;
-        winner.sequence_master = None;
         winner.origin = None;
         winner.family_evidence = None;
         winner.pending_transition = None;
+        winner.pre_master = None;
         build(winner);
     }
 
@@ -203,10 +254,10 @@ impl FrameState {
         }
         let winner = &mut self.winners[index];
         winner.value = value;
-        winner.sequence_master = None;
         winner.origin = None;
         winner.family_evidence = None;
         winner.pending_transition = None;
+        winner.pre_master = None;
     }
 
     /// Take a slot over, optionally restamping when its value changed.

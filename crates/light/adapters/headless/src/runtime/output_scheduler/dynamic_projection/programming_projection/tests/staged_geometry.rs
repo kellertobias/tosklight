@@ -423,7 +423,6 @@ impl Harness {
                                     origin: None,
                                     family_evidence: None,
                                 },
-                                master: light_engine::FamilyProjectionMaster::PreserveBaseline,
                             },
                             (observation.value.clone(), sources),
                         ))
@@ -625,7 +624,6 @@ fn simple_prepare(
                             origin: None,
                             family_evidence: None,
                         },
-                        master: light_engine::FamilyProjectionMaster::Remove,
                     },
                     (observation.owner, observation.value.clone(), projection),
                 ))

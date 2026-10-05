@@ -5,7 +5,8 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 struct ProjectedAssignment {
     value: TimedValue,
     source: ContributionSourceId,
-    sequence_master: Option<ContributionSequenceMaster>,
+    /// The Playback this assignment came from and its Cue master, when it came from one.
+    sequence_master: Option<(light_playback::SequenceMasterSource, f32)>,
 }
 
 /// Test-only stateful producer. Its input is the ordinary semantic assignment projection owned by
@@ -30,12 +31,16 @@ impl FakeAnimatedSource {
             sampled.fade_millis = None;
             sampled.delay_millis = None;
             match assignment.sequence_master {
-                Some(master) => ContributionSample::replacing_playback(
-                    sampled,
-                    master.source(),
-                    0,
-                    master.scale(),
-                ),
+                // A Playback producer samples its own output parameter: a level carries the
+                // Playback's Cue master before it crosses into the engine.
+                Some((source, master)) => {
+                    if sampled.attribute.is_level()
+                        && let Some(level) = sampled.value.normalized()
+                    {
+                        sampled.value = AttributeValue::Normalized(level * master);
+                    }
+                    ContributionSample::replacing_playback(sampled, source, 0)
+                }
                 None => ContributionSample::replacing(sampled, assignment.source.clone()),
             }
         }))
@@ -153,14 +158,12 @@ fn sampled_value_is_the_underlay_for_an_ordinary_programmer_fade() {
 }
 
 #[test]
-fn playback_sample_applies_its_master_to_intensity_and_non_intensity_output() {
+fn playback_sample_master_scales_intensity_but_never_a_non_level_output() {
     let started = test_time();
     let clock: SharedClock = Arc::new(ManualClock::new(started));
     let programmers = ProgrammerRegistry::with_clock(clock);
-    let (fixture, fixture_id) = schema_v2_fixture(&[
-        ("intensity", false, false, false, false, false),
-        ("tilt", false, false, true, false, false),
-    ]);
+    let (fixture, fixture_id) =
+        schema_v2_fixture(&[("intensity", false, false), ("tilt", false, false)]);
     let cue_list = test_cue_list(
         "Mastered animation",
         [AttributeKey::intensity(), AttributeKey("tilt".into())]
@@ -181,7 +184,8 @@ fn playback_sample_applies_its_master_to_intensity_and_non_intensity_output() {
         .unwrap();
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
 
-    for (master, expected_intensity, expected_tilt) in [(0.5, 0.1, 0.4), (0.0, 0.0, 0.0)] {
+    // The Cue master scales level parameters only (2026-10-05); Tilt reaches DMX unmastered.
+    for (master, expected_intensity) in [(0.5, 0.1), (0.0, 0.0)] {
         execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(master));
         let assignments = playback_assignments(&engine, started, Some(1));
         let sampled = FakeAnimatedSource::default().sample(&assignments);
@@ -200,11 +204,7 @@ fn playback_sample_applies_its_master_to_intensity_and_non_intensity_output() {
             expected_intensity,
             "Playback Intensity master",
         );
-        assert_dmx(
-            frame.universes[&1][1],
-            expected_tilt,
-            "Playback non-Intensity master",
-        );
+        assert_dmx(frame.universes[&1][1], 0.8, "Playback non-Intensity output");
     }
 }
 
@@ -213,8 +213,7 @@ fn sampled_playback_intensity_is_mastered_before_htp_arbitration() {
     let started = test_time();
     let clock: SharedClock = Arc::new(ManualClock::new(started));
     let programmers = ProgrammerRegistry::with_clock(clock);
-    let (fixture, fixture_id) =
-        schema_v2_fixture(&[("intensity", false, false, false, false, false)]);
+    let (fixture, fixture_id) = schema_v2_fixture(&[("intensity", false, false)]);
     let sampled_list = test_cue_list(
         "Sampled",
         vec![CueChange::set(
@@ -268,7 +267,7 @@ fn a_sample_replaces_only_its_independent_playback() {
     let started = test_time();
     let clock: SharedClock = Arc::new(ManualClock::new(started));
     let programmers = ProgrammerRegistry::with_clock(clock);
-    let (fixture, fixture_id) = schema_v2_fixture(&[("tilt", false, false, false, false, false)]);
+    let (fixture, fixture_id) = schema_v2_fixture(&[("tilt", false, false)]);
     let mut sampled_list = test_cue_list(
         "Sampled",
         vec![CueChange::set(
@@ -307,8 +306,8 @@ fn a_sample_replaces_only_its_independent_playback() {
         let mut value = assignment.value;
         value.value = AttributeValue::Normalized(0.1);
         value.priority = 0;
-        let master = assignment.sequence_master.unwrap();
-        ContributionSample::replacing_playback(value, master.source(), 0, master.scale())
+        let (source, _) = assignment.sequence_master.unwrap();
+        ContributionSample::replacing_playback(value, source, 0)
     }));
 
     assert_normalized(&engine.resolved_values(), fixture_id, "tilt", 0.9);
@@ -324,7 +323,7 @@ fn live_programmer_sample_does_not_replace_the_same_programmers_preload() {
     let programmers = ProgrammerRegistry::with_clock(shared_clock);
     let session = SessionId::new();
     programmers.start(session);
-    let (fixture, fixture_id) = schema_v2_fixture(&[("tilt", false, false, false, false, false)]);
+    let (fixture, fixture_id) = schema_v2_fixture(&[("tilt", false, false)]);
     programmers.set(
         session,
         fixture_id,
@@ -373,8 +372,7 @@ fn replacing_newer_live_programmer_keeps_older_preload_as_an_htp_competitor() {
     let programmers = ProgrammerRegistry::with_clock(shared_clock);
     let session = SessionId::new();
     programmers.start(session);
-    let (fixture, fixture_id) =
-        schema_v2_fixture(&[("intensity", false, false, false, false, false)]);
+    let (fixture, fixture_id) = schema_v2_fixture(&[("intensity", false, false)]);
     assert!(programmers.arm_preload(session, true));
     programmers.set(
         session,
@@ -720,10 +718,7 @@ fn playback_assignments(
         .filter(|contribution| contribution.source.playback_number == playback_number)
         .map(|contribution| ProjectedAssignment {
             source: ContributionSourceId::playback(contribution.source),
-            sequence_master: Some(ContributionSequenceMaster::new(
-                contribution.source,
-                contribution.sequence_master,
-            )),
+            sequence_master: Some((contribution.source, contribution.sequence_master)),
             value: contribution.value,
         })
         .collect()
@@ -815,10 +810,7 @@ fn normalized(value: f32) -> AttributeValue {
 }
 
 fn animated_fixture() -> (PatchedFixture, FixtureId) {
-    schema_v2_fixture(&[
-        ("intensity", false, false, false, false, false),
-        ("tilt", false, false, false, false, false),
-    ])
+    schema_v2_fixture(&[("intensity", false, false), ("tilt", false, false)])
 }
 
 fn zero_assignments(

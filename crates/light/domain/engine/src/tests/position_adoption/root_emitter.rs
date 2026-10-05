@@ -1,8 +1,8 @@
 //! A physical root may own an unheaded emitter while every DMX head is logical.
 use super::*;
 use crate::{
-    CapturedNativeRaw, FamilyProjectionEvidence, FamilyProjectionMaster, FamilyProjectionMetadata,
-    PositionNativeWrite, PreparedStaticFamilyFrame,
+    CapturedNativeRaw, FamilyProjectionEvidence, FamilyProjectionMetadata, PositionNativeWrite,
+    PreparedStaticFamilyFrame,
 };
 use light_core::programming::{PositionIntent, ProgrammingOwner};
 
@@ -46,7 +46,6 @@ fn position(frame: &mut PreparedStaticFamilyFrame, owner: FixtureId) {
             FamilyProjectionMetadata {
                 changed_at: None,
                 evidence: FamilyProjectionEvidence::PreserveBaseline,
-                master: FamilyProjectionMaster::PreserveBaseline,
             },
         )
         .unwrap();

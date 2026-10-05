@@ -3,8 +3,7 @@
 //! a literal `pan`/`tilt` channel. Synthetic profiles prove encoding semantics, not lamp motion.
 use super::*;
 use crate::{
-    CapturedNativeRaw, FamilyProjectionEvidence, FamilyProjectionMaster, FamilyProjectionMetadata,
-    PositionNativeWrite,
+    CapturedNativeRaw, FamilyProjectionEvidence, FamilyProjectionMetadata, PositionNativeWrite,
 };
 use light_core::programming::{PositionIntent, ProgrammingOwner};
 
@@ -256,10 +255,10 @@ fn explicit_raw_alias_values_keep_bypassing_installation_inversion() {
 fn unbound_aliases_are_not_guessed_while_canonical_pan_tilt_keep_legacy_inversion() {
     // No physical Position model: only literal pan/tilt names keep the legacy inversion.
     let (mut fixture, target) = schema_v2_fixture(&[
-        ("Pan", false, false, false, false, false),
-        ("tilt", false, false, false, false, false),
-        (PAN_ALIAS, false, false, false, false, false),
-        ("pan.speed", false, false, false, false, false),
+        ("Pan", false, false),
+        ("tilt", false, false),
+        (PAN_ALIAS, false, false),
+        ("pan.speed", false, false),
     ]);
     fixture.invert_pan = true;
     fixture.invert_tilt = true;
@@ -356,7 +355,6 @@ fn fitted_native_alias_words_are_not_inverted_on_inverted_copies() {
             FamilyProjectionMetadata {
                 changed_at: None,
                 evidence: FamilyProjectionEvidence::PreserveBaseline,
-                master: FamilyProjectionMaster::PreserveBaseline,
             },
         )
         .unwrap();

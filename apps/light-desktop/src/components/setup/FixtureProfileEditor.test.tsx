@@ -1448,15 +1448,9 @@ describe("FixtureProfileEditor head and channel editing", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Masters for intensity" }));
 		const masters = screen.getByRole("dialog", { name: "Masters · intensity" });
-		expect(
-			within(masters)
-				.getAllByRole("switch")
-				.map((control) => control.getAttribute("aria-label")),
-		).toEqual([
-			"React to Sequence Master",
-			"React to Group Master",
-			"React to Grand Master",
-		]);
+		// Every master scales a level parameter before DMX; there is no per-master switch.
+		expect(within(masters).queryAllByRole("switch")).toEqual([]);
+		expect(masters).toHaveTextContent("The masters scale this level before DMX.");
 		// Virtual intensity is followed, ignored, or followed the other way round.
 		const virtualIntensity = within(masters).getByRole("radiogroup", {
 			name: "React to Virtual Intensity",
@@ -1469,7 +1463,7 @@ describe("FixtureProfileEditor head and channel editing", () => {
 		fireEvent.click(within(virtualIntensity).getByRole("radio", { name: "Follow" }));
 		expect(
 			screen.getByRole("button", { name: "Masters for intensity" }),
-		).toHaveTextContent("VI · SM · GM · GR");
+		).toHaveTextContent("Level · VI");
 		fireEvent.click(within(virtualIntensity).getByRole("radio", { name: "Inverse" }));
 		expect(
 			within(virtualIntensity).getByRole("radio", { name: "Inverse" }),
@@ -1477,7 +1471,7 @@ describe("FixtureProfileEditor head and channel editing", () => {
 		fireEvent.click(within(masters).getByRole("button", { name: "Close masters" }));
 		expect(
 			screen.getByRole("button", { name: "Masters for intensity" }),
-		).toHaveTextContent("−VI · SM · GM · GR");
+		).toHaveTextContent("Level · −VI");
 
 		fireEvent.click(screen.getByRole("button", { name: "Default for intensity" }));
 		expect(

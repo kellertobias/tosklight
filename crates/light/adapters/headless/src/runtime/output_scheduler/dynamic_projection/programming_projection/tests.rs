@@ -601,7 +601,6 @@ fn complete_pair_with_live_partner(use_preset: bool, check_failed_preparation: b
                         origin: None,
                         family_evidence: None,
                     },
-                    master: light_engine::FamilyProjectionMaster::Remove,
                 },
             )
             .unwrap();

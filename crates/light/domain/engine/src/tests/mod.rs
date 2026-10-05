@@ -92,9 +92,6 @@ fn fixture() -> (PatchedFixture, FixtureId) {
             snap: false,
             reacts_to_virtual_intensity: false,
             virtual_intensity_inverted: false,
-            reacts_to_sequence_master: true,
-            reacts_to_group_master: true,
-            reacts_to_grand_master: true,
             behavior: ChannelBehavior::Controlled,
             functions: vec![ChannelFunction::continuous(
                 "intensity",
@@ -206,9 +203,7 @@ fn shared_programmer_sessions_contribute_dynamic_values_once() {
     assert_eq!(values[0].2.fixture_id, fixture);
 }
 
-fn schema_v2_fixture(
-    channels: &[(&str, bool, bool, bool, bool, bool)],
-) -> (PatchedFixture, FixtureId) {
+fn schema_v2_fixture(channels: &[(&str, bool, bool)]) -> (PatchedFixture, FixtureId) {
     let mut profile = FixtureProfile::blank();
     profile.manufacturer = "Test".into();
     profile.name = "Semantic fixture".into();
@@ -219,36 +214,31 @@ fn schema_v2_fixture(
     mode.splits[0].footprint = channels.len() as u16;
     mode.channels = channels
         .iter()
-        .map(
-            |(attribute, snap, virtual_intensity, sequence, group, grand)| FixtureChannel {
-                id: uuid::Uuid::new_v4(),
-                head_id,
-                split: 1,
-                fixture_attribute: AttributeKey((*attribute).into()),
-                attribute: AttributeKey((*attribute).into()),
-                canonical_transform: light_fixture::CanonicalTransform::Identity,
-                resolution: ChannelResolution::U8,
-                secondary_slots: vec![],
-                default_raw: 0,
-                highlight_raw: u8::MAX.into(),
-                physical_min: Some(0.0),
-                physical_max: Some(1.0),
-                unit: None,
-                invert: false,
-                snap: *snap,
-                reacts_to_virtual_intensity: *virtual_intensity,
-                virtual_intensity_inverted: false,
-                reacts_to_sequence_master: *sequence,
-                reacts_to_group_master: *group,
-                reacts_to_grand_master: *grand,
-                behavior: ChannelBehavior::Controlled,
-                functions: vec![ChannelFunction::continuous(
-                    *attribute,
-                    AttributeKey((*attribute).into()),
-                    u8::MAX.into(),
-                )],
-            },
-        )
+        .map(|(attribute, snap, virtual_intensity)| FixtureChannel {
+            id: uuid::Uuid::new_v4(),
+            head_id,
+            split: 1,
+            fixture_attribute: AttributeKey((*attribute).into()),
+            attribute: AttributeKey((*attribute).into()),
+            canonical_transform: light_fixture::CanonicalTransform::Identity,
+            resolution: ChannelResolution::U8,
+            secondary_slots: vec![],
+            default_raw: 0,
+            highlight_raw: u8::MAX.into(),
+            physical_min: Some(0.0),
+            physical_max: Some(1.0),
+            unit: None,
+            invert: false,
+            snap: *snap,
+            reacts_to_virtual_intensity: *virtual_intensity,
+            virtual_intensity_inverted: false,
+            behavior: ChannelBehavior::Controlled,
+            functions: vec![ChannelFunction::continuous(
+                *attribute,
+                AttributeKey((*attribute).into()),
+                u8::MAX.into(),
+            )],
+        })
         .collect();
     let mode_id = mode.id;
     let definition = profile.resolved_definition(mode_id).unwrap();

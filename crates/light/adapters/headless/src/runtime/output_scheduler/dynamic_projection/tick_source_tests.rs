@@ -554,3 +554,175 @@ fn static_lane_scalar_sources_equal_the_observed_resolution_and_freeze_keeps_obs
         );
     }
 }
+
+/// A scalar Dynamic reading Current feeds its value back into the resolution, which is finalized
+/// once later. Current is therefore the raw parameter: a Dynamic that holds Current under Grand
+/// Master 0.5 and Group Master 0.5 reaches DMX with one application of the masters, never two.
+#[test]
+fn current_reads_the_raw_level_so_a_current_dynamic_is_mastered_once() {
+    let fixture = FixtureId::new();
+    let definition = light_fixture::FixtureDefinition {
+        runtime_color_context: None,
+        schema_version: 1,
+        id: FixtureId::new(),
+        revision: 1,
+        manufacturer: "Test".into(),
+        device_type: "dimmer".into(),
+        name: "Dimmer".into(),
+        model: "Dimmer".into(),
+        mode: "1ch".into(),
+        footprint: 1,
+        heads: vec![light_fixture::LogicalHead {
+            index: 0,
+            name: "Main".into(),
+            shared: true,
+            parameters: vec![light_fixture::Parameter {
+                attribute: AttributeKey::intensity(),
+                components: vec![light_fixture::ChannelComponent {
+                    offset: 0,
+                    byte_order: light_fixture::ByteOrder::MsbFirst,
+                }],
+                default: 0.0,
+                virtual_dimmer: false,
+                metadata: light_fixture::ParameterMetadata::default(),
+                capabilities: vec![],
+            }],
+        }],
+        color_calibration: None,
+        physical: Default::default(),
+        model_asset: None,
+        icon_asset: None,
+        hazardous: false,
+        direct_control_protocols: Vec::new(),
+        signal_loss_policy: light_fixture::SignalLossPolicy::HoldLast,
+        safe_values: std::collections::BTreeMap::new(),
+        profile_id: None,
+        mode_id: None,
+        profile_snapshot: None,
+    }
+    .resolved_from_flat_layout()
+    .unwrap();
+    let patched = light_fixture::PatchedFixture {
+        model_scale: None,
+        scenery_options: Default::default(),
+        scenery_size_metres: None,
+        name: "Dimmer".into(),
+        layer_id: "default".into(),
+        note: None,
+        position_master: None,
+        fixture_id: fixture,
+        fixture_number: Some(1),
+        virtual_fixture_number: None,
+        definition,
+        universe: Some(1),
+        address: Some(1),
+        split_patches: Vec::new(),
+        direct_control: None,
+        internal_bindings: Default::default(),
+        location: Default::default(),
+        rotation: Default::default(),
+        logical_heads: vec![],
+        group_masters_enabled: true,
+        grand_master_enabled: true,
+        invert_pan: false,
+        invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
+        bracket_angle: 0.0,
+        shaper_angle: None,
+        installed_appearance: Default::default(),
+        move_in_black_enabled: true,
+        highlight_overrides: Default::default(),
+        freeze: Default::default(),
+        move_in_black_delay_millis: 0,
+        multipatch: vec![],
+    };
+    let programmers = ProgrammerRegistry::default();
+    let session = light_core::SessionId::new();
+    programmers.start(session);
+    programmers.set(
+        session,
+        fixture,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.8),
+    );
+    let engine = Engine::new(programmers);
+    let group_target = light_playback::PlaybackTarget::Group {
+        group_id: "front".into(),
+        initial_master: Some(0.5),
+    };
+    engine
+        .replace_snapshot(light_engine::EngineSnapshot {
+            fixtures: vec![patched].into(),
+            playbacks: vec![light_playback::PlaybackDefinition {
+                number: 1,
+                name: "Front master".into(),
+                buttons: light_playback::PlaybackDefinition::default_buttons(&group_target),
+                button_count: 3,
+                fader: light_playback::PlaybackDefinition::default_fader(&group_target),
+                has_fader: true,
+                footprint: light_playback::PlaybackFootprint::Normal,
+                go_activates: true,
+                auto_off: false,
+                xfade_millis: 0,
+                color: "#20c997".into(),
+                flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+                protect_from_swap: false,
+                presentation_icon: None,
+                presentation_image: None,
+                target: group_target,
+            }]
+            .into(),
+            groups: vec![light_programmer::GroupDefinition {
+                id: "front".into(),
+                name: "Front".into(),
+                fixtures: vec![fixture],
+                ..Default::default()
+            }]
+            .into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(engine.group_master("front"), Some(0.5));
+    let options = light_engine::RenderOptions {
+        grand_master: 0.5,
+        ..Default::default()
+    };
+    let frame = engine.prepare_output_frame(options);
+    let intensity = AttributeKey::intensity();
+
+    // Both lanes a scalar Dynamic samples from read the raw parameter, not 0.8 x 0.25.
+    let observed = TickSources::prepared(&engine, &frame, &[]);
+    assert_eq!(observed.current(fixture, &intensity), Some(0.8));
+    let static_frame = engine.prepare_static_family_frame(&frame, &[]);
+    assert_eq!(
+        static_frame.value(fixture, &intensity),
+        Some(&AttributeValue::Normalized(0.2)),
+        "the static baseline itself is the finalized output parameter"
+    );
+    let over_static = TickSources::prepared(&engine, &frame, &[]).over_static(&static_frame);
+    assert_eq!(over_static.current(fixture, &intensity), Some(0.8));
+
+    // A Dynamic holding Current, fed back as a sample above the Programmer.
+    let current = observed.current(fixture, &intensity).unwrap();
+    let sample = ContributionSample::independent(light_core::TimedValue {
+        fixture_id: fixture,
+        attribute: intensity.clone(),
+        value: AttributeValue::Normalized(current),
+        priority: 200,
+        changed_at: chrono::Utc::now(),
+        programmer_order: 0,
+        merge_mode: light_core::MergeMode::Ltp,
+        fade: false,
+        fade_millis: None,
+        delay_millis: None,
+    });
+    let rendered = engine
+        .render_prepared(&frame, &[ContributionBatch::new([sample])])
+        .unwrap();
+    assert_eq!(
+        rendered.universes[&1][0], 51,
+        "0.8 x Group Master 0.5 x Grand Master 0.5, once"
+    );
+}

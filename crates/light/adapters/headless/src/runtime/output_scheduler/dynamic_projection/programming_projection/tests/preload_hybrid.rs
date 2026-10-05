@@ -7,8 +7,8 @@ use crate::runtime::dynamic_source_origins::{
     DynamicStaticProgrammerLane,
 };
 use light_engine::{
-    FamilyProjectionEvidence, FamilyProjectionMaster, FamilyProjectionMetadata, PreloadBranch,
-    PreloadFrameState, PreparedPreloadFrame,
+    FamilyProjectionEvidence, FamilyProjectionMetadata, PreloadBranch, PreloadFrameState,
+    PreparedPreloadFrame,
 };
 
 struct CompatibleAngles;
@@ -253,7 +253,6 @@ fn prepare_in_transaction(
                         origin: None,
                         family_evidence: None,
                     },
-                    master: FamilyProjectionMaster::PreserveBaseline,
                 },
                 (observation.owner, observation.value.clone(), projection),
             ))

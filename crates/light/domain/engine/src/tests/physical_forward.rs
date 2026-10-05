@@ -250,8 +250,9 @@ fn preload_projection_matches_live_native_state_for_every_physical_copy() {
         ..Default::default()
     };
     let live = engine.render(options).unwrap();
+    // A projection is handed finalized output parameters (masters included, 2026-10-05).
     let preview = engine
-        .profile_visualization_projection(&engine.resolved_values(), options)
+        .profile_visualization_projection(live.resolved_values.values(), options)
         .unwrap();
     for (a, b) in live
         .physical

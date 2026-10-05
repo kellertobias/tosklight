@@ -365,6 +365,33 @@ impl AttributeKey {
         *self.0 == *"intensity" || self.0.ends_with(".intensity")
     }
 
+    /// A colour emitter: a channel that adds light of its own colour, so scaling it scales the
+    /// light. Subtractive flags (Cyan, Magenta, Yellow), wheels and colour-temperature controls
+    /// are not emitters.
+    pub fn is_color_emitter(&self) -> bool {
+        matches!(
+            &*self.0,
+            "color.red"
+                | "color.green"
+                | "color.blue"
+                | "color.white"
+                | "color.amber"
+                | "color.uv"
+                | "color.lime"
+                | "color.indigo"
+                | "color.mint"
+                | "color.cold_white"
+                | "color.warm_white"
+                | "color.brightness"
+        )
+    }
+
+    /// A level parameter: Intensity (also a media layer's level) and audio Volume. Every master
+    /// (Cue, Group, Grand, Blackout) scales level parameters before DMX, and nothing else.
+    pub fn is_level(&self) -> bool {
+        self.is_intensity() || *self.0 == *"volume" || self.0.ends_with(".volume")
+    }
+
     pub fn is_position(&self) -> bool {
         *self.0 == *"position"
             || *self.0 == *"pan"

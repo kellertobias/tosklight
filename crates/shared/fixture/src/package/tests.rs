@@ -235,9 +235,6 @@ fn suedbahnhof_plan_profiles_ship_with_the_explicit_venue_personalities() {
         assert!(channel.functions.is_empty());
         assert!(!channel.invert);
         assert!(!channel.reacts_to_virtual_intensity);
-        assert!(!channel.reacts_to_sequence_master);
-        assert!(!channel.reacts_to_group_master);
-        assert!(!channel.reacts_to_grand_master);
     }
     assert!(
         suedbahnhof_mode.channels[1..4]
@@ -879,9 +876,6 @@ fn shipped_auxiliary_controls_do_not_drive_the_optical_parameter() {
                     .iter()
                     .all(|function| function.attribute.0.as_ref() == auxiliary)
             );
-            assert!(!channel.reacts_to_grand_master);
-            assert!(!channel.reacts_to_sequence_master);
-            assert!(!channel.reacts_to_group_master);
             assert!(!channel.reacts_to_virtual_intensity);
             assert_eq!(
                 mode.channels
@@ -1131,7 +1125,6 @@ fn shipped_three_d_point_offers_offset_binary_position_modes_with_and_without_ro
             assert_eq!(channel.physical_max, Some(high));
             // It emits no light, so nothing about it reacts to a master.
             assert!(!channel.reacts_to_virtual_intensity);
-            assert!(!channel.reacts_to_grand_master);
         }
         // The desk encodes a normalized value as `round(n * max)`, so the centre it rests at is
         // exactly what a resting point sends, and the mode's slots are the mode's footprint.
@@ -2250,9 +2243,6 @@ fn tosklight_media_server_package_exposes_complete_multi_head_personalities() {
                 head.master_shared,
             );
             assert_eq!(intensity.highlight_raw, 255);
-            assert!(intensity.reacts_to_sequence_master);
-            assert!(intensity.reacts_to_group_master);
-            assert!(intensity.reacts_to_grand_master);
             assert_eq!(channel("volume").default_raw, 255);
             for attribute in ["media.mask.position.x", "media.mask.position.y"] {
                 assert_eq!(channel(attribute).default_raw, 32_768);

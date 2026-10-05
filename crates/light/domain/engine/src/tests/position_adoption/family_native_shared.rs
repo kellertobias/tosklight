@@ -8,10 +8,8 @@ use light_fixture::FixtureHead;
 /// Two heads; the first is master-shared and carries the only Zoom control, which the second
 /// (logical) head inherits. The root and the logical owner therefore own that one control.
 fn zoom_pair() -> (PatchedFixture, [FixtureId; 2]) {
-    let (mut fixture, _) = schema_v2_fixture(&[
-        ("zoom", false, false, false, false, false),
-        ("intensity", false, false, false, false, false),
-    ]);
+    let (mut fixture, _) =
+        schema_v2_fixture(&[("zoom", false, false), ("intensity", false, false)]);
     fixture.address = Some(60);
     redefine(&mut fixture, |profile| {
         let mode = &mut profile.modes[0];

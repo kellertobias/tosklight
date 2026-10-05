@@ -242,7 +242,6 @@ fn sampled_batches(
             contribution.value,
             contribution.source,
             contribution.transition_ordinal,
-            contribution.sequence_master,
         ));
         index += 1;
     }
@@ -289,9 +288,6 @@ fn packed_definition(footprint: u16) -> Result<light_fixture::FixtureDefinition,
                 snap: false,
                 reacts_to_virtual_intensity: false,
                 virtual_intensity_inverted: false,
-                reacts_to_sequence_master: true,
-                reacts_to_group_master: true,
-                reacts_to_grand_master: true,
                 behavior: ChannelBehavior::Controlled,
                 functions: vec![],
             })

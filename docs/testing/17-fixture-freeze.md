@@ -65,8 +65,8 @@ receiver and checked against the logical frame of the same manual-clock step.
 2. Confirm the Fixture Sheet names both families and does not show the full `FREEZE` state.
 3. Change Intensity, Color, Position, and Beam sources. Confirm only Intensity and Color retain their
    captured semantic values.
-4. Move Group Master and Grand Master and enable Blackout. Confirm none of them changes a frozen
-   parameter: the frozen Intensity holds. A family that is not frozen still follows them; with only
+4. Move a Cue master, Group Master and Grand Master and enable Blackout. Confirm none of them
+   changes a frozen parameter: the frozen Intensity holds. A family that is not frozen still follows them; with only
    Color frozen, the masters dim the fixture through its unfrozen Intensity.
 5. Repeat the same family action. Confirm those families and their retained values are removed.
 6. Apply a full Freeze over an existing partial Freeze, then remove it. Confirm no partial-family

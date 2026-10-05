@@ -13,10 +13,10 @@ struct Rig {
 
 fn rig() -> Rig {
     let (mut fixture, root) = schema_v2_fixture(&[
-        ("pan", false, false, false, false, false),
-        ("tilt", false, false, false, false, false),
-        ("beam.focus", false, false, false, false, false),
-        ("intensity", false, false, false, false, true),
+        ("pan", false, false),
+        ("tilt", false, false),
+        ("beam.focus", false, false),
+        ("intensity", false, false),
     ]);
     let mut profile = fixture
         .definition
@@ -183,8 +183,12 @@ fn position_native_normalized_u16_matches_root_and_independent_copy_output() {
             ..Default::default()
         },
     );
-    assert_eq!(mastered_root, root);
-    assert_eq!(mastered_copy, copy);
+    // Masters scale only the level parameter (2026-10-05); Pan, Tilt and the third axis keep
+    // their native words, and the native capture already carries the mastered Intensity.
+    assert_eq!(mastered_root[..3], root[..3]);
+    assert_eq!(mastered_copy[..3], copy[..3]);
+    assert_eq!(mastered_root[3], 51);
+    assert_eq!(mastered_copy[3], 51);
     assert_eq!(mastered.physical.instances[0].native_raw[3], 51);
     let (blackout_root, blackout_copy, _) = capture_instances(
         &rig,
@@ -193,8 +197,9 @@ fn position_native_normalized_u16_matches_root_and_independent_copy_output() {
             ..Default::default()
         },
     );
-    assert_eq!(blackout_root, root);
-    assert_eq!(blackout_copy, copy);
+    assert_eq!(blackout_root[..3], root[..3]);
+    assert_eq!(blackout_copy[..3], copy[..3]);
+    assert_eq!((blackout_root[3], blackout_copy[3]), (0, 0));
 }
 
 #[test]

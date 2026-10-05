@@ -14,10 +14,7 @@ const AXES: [&str; 6] = [
 ];
 
 fn point() -> PatchedFixture {
-    let channels: Vec<_> = AXES
-        .iter()
-        .map(|name| (*name, false, false, false, false, false))
-        .collect();
+    let channels: Vec<_> = AXES.iter().map(|name| (*name, false, false)).collect();
     let (mut fixture, _) = schema_v2_fixture(&channels);
     fixture.fixture_number = None;
     fixture.universe = None;
@@ -26,7 +23,7 @@ fn point() -> PatchedFixture {
 }
 
 fn mounted(point: FixtureId, x: i32) -> PatchedFixture {
-    let (mut fixture, _) = schema_v2_fixture(&[("pan", false, false, false, false, false)]);
+    let (mut fixture, _) = schema_v2_fixture(&[("pan", false, false)]);
     fixture.fixture_number = None;
     fixture.universe = None;
     fixture.address = None;

@@ -2,7 +2,6 @@
 //! Dynamic owners. Neither moving geometry nor an output calculation rewrites their intent.
 use super::programs::{destination_dynamic_rig, verify_live_native};
 use super::*;
-use light_engine::FamilyProjectionMaster;
 
 fn static_runtime() -> DynamicRuntime {
     DynamicRuntime::with_programming_contract_support(PROGRAMMING_CONTRACT_VERSION)
@@ -27,10 +26,6 @@ fn assert_static_row<'a>(
         panic!("an empty static program is the original Intent, not an invented Dynamic program");
     };
     assert_eq!(requested, intent(value).unwrap());
-    assert!(matches!(
-        &row.metadata.master,
-        FamilyProjectionMaster::PreserveBaseline
-    ));
     assert!(!row.quality.held);
     assert!(row.writes.iter().all(|write| !write.parked));
     for outcome in &row.achieved.outcomes {

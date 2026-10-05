@@ -36,9 +36,6 @@ fn channel(
         snap: false,
         reacts_to_virtual_intensity: virtual_dimmer,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: true,
-        reacts_to_group_master: true,
-        reacts_to_grand_master: true,
         behavior: ChannelBehavior::Controlled,
         functions: Vec::new(),
     }

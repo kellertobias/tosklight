@@ -159,7 +159,7 @@ pub(crate) fn application_policy_command(
             if !mode
                 .channels
                 .iter()
-                .any(|channel| channel.reacts_to_group_master)
+                .any(fixture::FixtureChannel::follows_masters)
             {
                 return Err("fixture mode has no Group Master eligible channels".into());
             }
@@ -169,7 +169,7 @@ pub(crate) fn application_policy_command(
             if !mode
                 .channels
                 .iter()
-                .any(|channel| channel.reacts_to_grand_master)
+                .any(fixture::FixtureChannel::follows_masters)
             {
                 return Err("fixture mode has no Grand Master eligible channels".into());
             }

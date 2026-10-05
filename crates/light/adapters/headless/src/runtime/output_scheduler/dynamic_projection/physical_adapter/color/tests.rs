@@ -565,24 +565,35 @@ fn retained_controls_are_parked_before_the_final_fit() {
 }
 
 #[test]
-fn intensity_masters_and_blackout_are_left_to_the_single_final_render() {
+fn level_masters_reach_the_native_intensity_and_never_the_color_writes() {
     let rig = Rig::new(&rgbw());
     let base = rig.resolve(&magenta());
     rig.set("intensity", 0.3);
-    for options in [
-        RenderOptions::default(),
-        RenderOptions {
-            grand_master: 0.25,
-            ..Default::default()
-        },
-        RenderOptions {
-            blackout: true,
-            ..Default::default()
-        },
+    // Masters scale the level parameter before DMX (2026-10-05), so the native Intensity the
+    // adapter reads already carries them; the family's own writes never do.
+    for (options, intensity) in [
+        (RenderOptions::default(), 77),
+        (
+            RenderOptions {
+                grand_master: 0.25,
+                ..Default::default()
+            },
+            19,
+        ),
+        (
+            RenderOptions {
+                blackout: true,
+                ..Default::default()
+            },
+            0,
+        ),
     ] {
         let resolved = rig.resolve_with(&magenta(), None, options).unwrap();
         resolved.verify(&magenta(), &rig.profile.borrow());
-        assert!(resolved.native[0] > 0, "{options:?}: pre-master Intensity");
+        assert_eq!(
+            resolved.native[0], intensity,
+            "{options:?}: mastered Intensity"
+        );
         assert_eq!(resolved.raws(), base.raws(), "{options:?}");
         assert_eq!(resolved.result.achieved, base.result.achieved);
     }

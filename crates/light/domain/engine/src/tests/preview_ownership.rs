@@ -18,13 +18,7 @@ fn engine(profile: FixtureProfile) -> (Engine, FixtureId) {
 fn mask(engine: &Engine, id: FixtureId, name: &str, values: &ResolvedValues) -> Vec<bool> {
     let keys = HashSet::from([(id, AttributeKey(name.into()))]);
     engine
-        .profile_preload_projection_at(
-            values,
-            Default::default(),
-            Some(&engine.snapshot()),
-            &keys,
-            &keys,
-        )
+        .profile_preload_projection_at(values, Default::default(), Some(&engine.snapshot()), &keys)
         .unwrap()
         .native_ownership
         .get(&id)
@@ -113,17 +107,10 @@ fn preview_ownership_direct_leaves_uv_and_wheel_live_while_intent_owns_its_parke
     let head = mode.heads[0].id;
     let uv = uuid::Uuid::new_v4();
     let wheel = uuid::Uuid::new_v4();
-    mode.channels.push(calibrated_channel(
-        uv, head, "color.uv", false, false, false,
-    ));
-    mode.channels.push(calibrated_channel(
-        wheel,
-        head,
-        "color.wheel",
-        false,
-        false,
-        false,
-    ));
+    mode.channels
+        .push(calibrated_channel(uv, head, "color.uv", false));
+    mode.channels
+        .push(calibrated_channel(wheel, head, "color.wheel", false));
     mode.splits[0].footprint = 6;
     if let ColorSystem::Additive { emitters } = &mut mode.color_systems[0].system {
         let mut e = emitter(

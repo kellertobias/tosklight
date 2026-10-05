@@ -28,16 +28,16 @@ pub(super) fn copy_at(fixture: &mut PatchedFixture, address: u16) -> Uuid {
 }
 
 /// Lamp RGB wash with a compiled Color path, a Zoom and a Focus control, patched at 20 and 30.
-/// Only the colour channels follow the grand master. `color_claims_zoom` lists the Zoom channel
+/// `color_claims_zoom` lists the Zoom channel
 /// as an (unmodeled) Color path control, so two families own one control.
 fn wash(color_claims_zoom: bool) -> PatchedFixture {
     let (mut fixture, _) = schema_v2_fixture(&[
-        ("intensity", false, false, false, false, false),
-        ("color.red", false, false, false, false, true),
-        ("color.green", false, false, false, false, true),
-        ("color.blue", false, false, false, false, true),
-        ("zoom", false, false, false, false, false),
-        ("focus", false, false, false, false, false),
+        ("intensity", false, false),
+        ("color.red", false, false),
+        ("color.green", false, false),
+        ("color.blue", false, false),
+        ("zoom", false, false),
+        ("focus", false, false),
     ]);
     fixture.address = Some(20);
     redefine(&mut fixture, |profile| {
@@ -105,7 +105,7 @@ fn media() -> PatchedFixture {
             "media.layer.yellow",
             "media.layer.grayscale",
         ]
-        .map(|name| (name, false, false, false, false, false)),
+        .map(|name| (name, false, false)),
     );
     fixture.address = Some(40);
     redefine(&mut fixture, |profile| {
@@ -440,7 +440,7 @@ fn two_families_claiming_one_native_control_reject_even_when_they_agree() {
 }
 
 #[test]
-fn masters_blackout_and_highlight_apply_once_after_the_native_writes() {
+fn masters_and_blackout_leave_native_colour_writes_and_highlight_replaces_them() {
     let rig = Rig::new(false);
     let render = |options: RenderOptions| {
         let (capture, mut frame) = rig.frame(options);
@@ -458,19 +458,21 @@ fn masters_blackout_and_highlight_apply_once_after_the_native_writes() {
         grand_master: 0.5,
         ..Default::default()
     });
+    // Masters scale level parameters only (2026-10-05). Colour, Zoom and Focus are not levels
+    // and do not follow the virtual intensity here, so the native writes reach DMX unchanged.
     for start in [19, 29] {
         assert_eq!(wash(&full, start)[1..], [200, 100, 50, 77, 33]);
-        // Only the grand-master colour controls scale, exactly once.
-        assert_eq!(wash(&half, start)[1..], [100, 50, 25, 77, 33]);
+        assert_eq!(wash(&half, start)[1..], [200, 100, 50, 77, 33]);
     }
     assert_eq!(&half.universes[&1][0..4], &[0x12, 0x34, 0xab, 0xcd]);
-    assert_eq!(native_raw(&half, rig.wash.fixture_id.0)[RED], 100);
+    assert_eq!(native_raw(&half, rig.wash.fixture_id.0)[RED], 200);
     let dark = render(RenderOptions {
         blackout: true,
         ..Default::default()
     });
     for start in [19, 29] {
-        assert_eq!(wash(&dark, start)[1..], [0, 0, 0, 77, 33]);
+        assert_eq!(wash(&dark, start)[0], 0, "Blackout zeroes the level");
+        assert_eq!(wash(&dark, start)[1..], [200, 100, 50, 77, 33]);
     }
     rig.engine.set_highlighted_fixtures([rig.wash.fixture_id]);
     let highlighted = render(Default::default());

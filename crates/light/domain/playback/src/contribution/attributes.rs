@@ -238,7 +238,7 @@ fn attribute_contribution(
     family_evidence: Option<Arc<PlaybackFamilyEvidence>>,
 ) -> PlaybackContribution {
     let sequence_master = frame.master_for(snap);
-    let value = apply_intensity_master(value, &attribute, sequence_master);
+    let value = apply_level_master(value, &attribute, sequence_master);
     PlaybackContribution {
         value: timed_value(frame, fixture_id, attribute, value),
         family_evidence,
@@ -251,12 +251,13 @@ fn attribute_contribution(
     }
 }
 
-fn apply_intensity_master(
+/// The Cue master scales the Cue's level parameters (Intensity, Volume) before arbitration.
+fn apply_level_master(
     value: AttributeValue,
     attribute: &AttributeKey,
     master: f32,
 ) -> AttributeValue {
-    if !attribute.is_intensity() {
+    if !attribute.is_level() {
         return value;
     }
     value

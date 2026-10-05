@@ -5,10 +5,7 @@ const X: &str = "point.position.x";
 const Y: &str = "point.position.y";
 
 fn fixtures(logical: bool) -> (PatchedFixture, PatchedFixture, FixtureId) {
-    let (mut point, root) = schema_v2_fixture(&[
-        (X, false, false, false, false, false),
-        (Y, false, false, false, false, false),
-    ]);
+    let (mut point, root) = schema_v2_fixture(&[(X, false, false), (Y, false, false)]);
     point.fixture_number = None;
     point.universe = None;
     point.address = None;
@@ -34,7 +31,7 @@ fn fixtures(logical: bool) -> (PatchedFixture, PatchedFixture, FixtureId) {
     } else {
         root
     };
-    let (mut mount, _) = schema_v2_fixture(&[("focus", false, false, false, false, false)]);
+    let (mut mount, _) = schema_v2_fixture(&[("focus", false, false)]);
     mount.fixture_number = None;
     mount.universe = None;
     mount.address = None;
@@ -201,7 +198,6 @@ fn frozen_geometry_is_cached_once_and_reused_by_final_render_after_typed_writes(
             FamilyProjectionMetadata {
                 changed_at: None,
                 evidence: FamilyProjectionEvidence::PreserveBaseline,
-                master: FamilyProjectionMaster::PreserveBaseline,
             },
         )
         .unwrap();

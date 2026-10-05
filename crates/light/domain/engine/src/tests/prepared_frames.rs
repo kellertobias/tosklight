@@ -173,8 +173,7 @@ fn prepared_output_keeps_sources_generation_clock_and_overlays_after_live_edits(
     let (mut cue_fixture, cue_id) = fixture();
     cue_fixture.fixture_number = Some(2);
     cue_fixture.address = Some(10);
-    let (mut point, point_id) =
-        schema_v2_fixture(&[("point.position.x", false, false, false, false, false)]);
+    let (mut point, point_id) = schema_v2_fixture(&[("point.position.x", false, false)]);
     point.universe = None;
     point.address = None;
     point.location.x = 1_000;
@@ -215,15 +214,16 @@ fn prepared_output_keeps_sources_generation_clock_and_overlays_after_live_edits(
     });
     let initial = engine.observe_prepared_frame(&captured, &[]);
     assert_eq!(captured.snapshot().revision, 1);
+    // Observed values are the output parameters: the captured Grand Master already scales them.
     assert_eq!(
         initial
             .values()
             .value(programmer_id, &AttributeKey::intensity()),
-        Some(&AttributeValue::Normalized(0.4))
+        Some(&AttributeValue::Normalized(0.2))
     );
     assert_eq!(
         initial.values().value(cue_id, &AttributeKey::intensity()),
-        Some(&AttributeValue::Normalized(0.8))
+        Some(&AttributeValue::Normalized(0.4))
     );
     assert_eq!(initial.points()[0].offset_metres, [50.0, 0.0, 0.0]);
 

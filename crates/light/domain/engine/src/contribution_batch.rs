@@ -115,37 +115,12 @@ impl ContributionSourceId {
     }
 }
 
-/// Playback master metadata retained after sampled Intensity has been scaled for arbitration.
-///
-/// Profile projection uses this context for non-Intensity channels which react to the same
-/// Playback master. Intensity is scaled before HTP arbitration, matching ordinary Playback values.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ContributionSequenceMaster {
-    pub(crate) source: SequenceMasterSource,
-    pub(crate) scale: f32,
-}
-
-impl ContributionSequenceMaster {
-    pub const fn new(source: SequenceMasterSource, scale: f32) -> Self {
-        Self { source, scale }
-    }
-
-    pub const fn source(self) -> SequenceMasterSource {
-        self.source
-    }
-
-    pub const fn scale(self) -> f32 {
-        self.scale
-    }
-}
-
-/// One immutable sampled semantic value plus its source-replacement and master context.
+/// One immutable sampled semantic value plus its source-replacement context.
 #[derive(Clone, Debug)]
 pub struct ContributionSample {
     value: TimedValue,
     transition_ordinal: Option<u64>,
     replacement_source: Option<ContributionSourceId>,
-    sequence_master: Option<ContributionSequenceMaster>,
     family_evidence: Option<Arc<ContributionFamilyEvidence>>,
     /// Where the producer already knows this pair lives. Read by number when it belongs to the
     /// frame's generation, otherwise looked up by name as before.
@@ -159,7 +134,6 @@ impl ContributionSample {
             value,
             transition_ordinal: None,
             replacement_source: None,
-            sequence_master: None,
             family_evidence: None,
             address: None,
         }
@@ -192,40 +166,28 @@ impl ContributionSample {
             value,
             transition_ordinal: None,
             replacement_source: Some(source),
-            sequence_master: None,
             family_evidence: None,
             address: None,
         }
     }
 
-    /// Replace one Playback assignment with an unmastered semantic sample.
+    /// Replace one Playback assignment with a semantic sample from the same Playback.
     ///
-    /// Intensity is scaled here so ordinary HTP arbitration compares effective levels. Other
-    /// attributes retain the master context for fixture-profile projection after arbitration.
+    /// The sample is the Playback's own output parameter: a level (Intensity, Volume) already
+    /// carries the Cue master, as every Playback contribution does, so HTP compares effective
+    /// levels. The master is never applied a second time here.
     pub fn replacing_playback(
-        mut value: TimedValue,
+        value: TimedValue,
         source: SequenceMasterSource,
         transition_ordinal: u64,
-        sequence_master: f32,
     ) -> Self {
-        if value.attribute.is_intensity()
-            && let Some(level) = value.value.normalized()
-        {
-            value.value = AttributeValue::Normalized(level * sequence_master);
-        }
         Self {
             value,
             transition_ordinal: Some(transition_ordinal),
             replacement_source: Some(ContributionSourceId::playback(source)),
-            sequence_master: Some(ContributionSequenceMaster::new(source, sequence_master)),
             family_evidence: None,
             address: None,
         }
-    }
-
-    pub fn with_sequence_master(mut self, source: SequenceMasterSource, scale: f32) -> Self {
-        self.sequence_master = Some(ContributionSequenceMaster::new(source, scale));
-        self
     }
 
     pub fn value(&self) -> &TimedValue {
@@ -238,10 +200,6 @@ impl ContributionSample {
 
     pub fn replacement_source(&self) -> Option<&ContributionSourceId> {
         self.replacement_source.as_ref()
-    }
-
-    pub const fn sequence_master(&self) -> Option<ContributionSequenceMaster> {
-        self.sequence_master
     }
 }
 

@@ -312,7 +312,7 @@ impl Engine {
         // mount cache persists between successful Preload frames.
         let mut continuity = input.frame.continuity.clone();
         continuity.mounts = mounts.clone();
-        let resolved = self.resolve_prepared_lane_attributes(
+        let mut resolved = self.resolve_prepared_lane_attributes(
             input.frame,
             sampled,
             &mut continuity,
@@ -324,6 +324,7 @@ impl Engine {
                 addresses,
             },
         );
+        input.frame.finalize_output_parameters(&mut resolved);
         PreparedStaticFamilyFrame {
             capture_identity: Arc::clone(&input.frame.identity),
             preload: Some(PreloadTokenIdentity::new(input, state, branch)),

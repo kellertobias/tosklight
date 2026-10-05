@@ -7,10 +7,8 @@ use light_core::FrameAddressResolver;
 #[test]
 fn playback_contributions_carry_the_current_generation_address() {
     let programmers = ProgrammerRegistry::default();
-    let (fixture, fixture_id) = schema_v2_fixture(&[
-        ("intensity", false, false, false, false, true),
-        ("tilt", false, false, false, false, false),
-    ]);
+    let (fixture, fixture_id) =
+        schema_v2_fixture(&[("intensity", false, false), ("tilt", false, false)]);
     let cue_list = test_cue_list(
         "Addressed",
         vec![
@@ -62,7 +60,7 @@ fn playback_contributions_carry_the_current_generation_address() {
     assert_eq!(frame.universes[&1][0], u8::MAX);
 
     // A repatch: a second fixture ahead of the first renumbers everything.
-    let (mut other, _) = schema_v2_fixture(&[("intensity", false, false, false, false, true)]);
+    let (mut other, _) = schema_v2_fixture(&[("intensity", false, false)]);
     other.fixture_number = Some(2);
     other.address = Some(10);
     engine

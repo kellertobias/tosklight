@@ -259,30 +259,6 @@ fn dangling_and_cyclic_attribute_aliases_and_invalid_function_defaults_fail() {
 }
 
 #[test]
-fn declared_master_policy_is_not_replaced_by_an_intensity_heuristic() {
-    for (master, group, grand) in [
-        ("None", false, false),
-        ("Group", true, false),
-        ("Grand", false, true),
-    ] {
-        let xml = fixture(&channel("1", "0/1").replace("Pan", "Dimmer").replace(
-            "<LogicalChannel ",
-            &format!("<LogicalChannel Master=\"{master}\" "),
-        ));
-        let profile = from_xml(&xml).unwrap().profile;
-        let channel = &profile.modes[0].channels[0];
-        assert_eq!(
-            (
-                channel.reacts_to_group_master,
-                channel.reacts_to_grand_master
-            ),
-            (group, grand)
-        );
-        assert!(!channel.reacts_to_sequence_master);
-    }
-}
-
-#[test]
 fn mixed_unit_focus_modes_and_duplicate_pan_channels_roundtrip_with_aliases() {
     let mut profile = from_xml(&fixture(&channel("1", "0/1").replace("Pan", "Focus1")))
         .unwrap()

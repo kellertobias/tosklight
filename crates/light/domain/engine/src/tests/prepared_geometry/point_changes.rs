@@ -15,7 +15,7 @@ fn id(value: u128) -> FixtureId {
     FixtureId(Uuid::from_u128(value))
 }
 fn point_fixture(id: FixtureId) -> PatchedFixture {
-    let channels = AXES.map(|axis| (axis, false, false, false, false, false));
+    let channels = AXES.map(|axis| (axis, false, false));
     let (mut fixture, _) = schema_v2_fixture(&channels);
     fixture.fixture_id = id;
     fixture.fixture_number = None;

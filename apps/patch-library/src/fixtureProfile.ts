@@ -230,9 +230,6 @@ export interface FixtureChannel {
 	 * anything while `reacts_to_virtual_intensity` is set; absent on profiles that predate it.
 	 */
 	virtual_intensity_inverted?: boolean;
-	reacts_to_sequence_master: boolean;
-	reacts_to_group_master: boolean;
-	reacts_to_grand_master: boolean;
 	behavior: ChannelBehavior;
 	functions: ChannelFunction[];
 }

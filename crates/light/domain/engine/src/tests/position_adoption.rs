@@ -10,10 +10,7 @@ use light_fixture::{
 use uuid::Uuid;
 
 fn mover() -> PatchedFixture {
-    let (mut fixture, _) = schema_v2_fixture(&[
-        ("pan", false, false, false, false, false),
-        ("tilt", false, false, false, false, false),
-    ]);
+    let (mut fixture, _) = schema_v2_fixture(&[("pan", false, false), ("tilt", false, false)]);
     let mut profile = fixture
         .definition
         .profile_snapshot

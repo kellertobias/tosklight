@@ -468,9 +468,6 @@ fn profile(revision: u32) -> FixtureProfile {
         snap: false,
         reacts_to_virtual_intensity: false,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: false,
-        reacts_to_group_master: false,
-        reacts_to_grand_master: false,
         behavior: ChannelBehavior::Controlled,
         functions: vec![ChannelFunction::continuous("UV", attribute, 255)],
     };

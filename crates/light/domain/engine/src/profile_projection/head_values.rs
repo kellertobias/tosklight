@@ -7,10 +7,8 @@
 //! name wins over a numbered one, the later of two unnumbered values wins), and keep only what a
 //! head writes itself: overlays, safe values, a requested colour's channels.
 use crate::ProfileValueIndex;
-use crate::contribution::ApplicableSequenceMaster;
 use crate::profile_value_index::HeadRead;
 use light_core::{AttributeKey, AttributeValue, FixtureId};
-use rustc_hash::FxHashMap;
 
 /// A head's own writes, by name; `None` removes the frame's value of that name.
 ///
@@ -146,34 +144,6 @@ impl<'v, 'a> HeadValueView<'v, 'a> {
                 .map(|(attribute, _)| attribute.clone()),
         );
         keys
-    }
-}
-
-/// The sequence masters of one head: the frame's row of its fixture, plus the masters a
-/// requested colour hands on to the channels it writes.
-pub(crate) struct HeadMasterView<'v, 'a> {
-    base: (&'v ProfileValueIndex<'a>, HeadRead<'a>),
-    local: FxHashMap<AttributeKey, ApplicableSequenceMaster>,
-}
-
-impl<'v, 'a> HeadMasterView<'v, 'a> {
-    pub(crate) fn over(values: &'v ProfileValueIndex<'a>, owner: FixtureId) -> Self {
-        Self {
-            base: (values, values.head_read(owner)),
-            local: FxHashMap::default(),
-        }
-    }
-
-    pub(crate) fn get(&self, attribute: &AttributeKey) -> Option<ApplicableSequenceMaster> {
-        self.local.get(attribute).copied().or_else(|| {
-            self.base
-                .0
-                .head_sequence_master(self.base.1.owner, attribute)
-        })
-    }
-
-    pub(crate) fn insert(&mut self, attribute: AttributeKey, master: ApplicableSequenceMaster) {
-        self.local.insert(attribute, master);
     }
 }
 

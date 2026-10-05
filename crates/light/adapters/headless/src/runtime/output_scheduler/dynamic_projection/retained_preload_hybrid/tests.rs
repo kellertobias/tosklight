@@ -11,7 +11,7 @@ use crate::runtime::preload::retained_history::{
 };
 use light_core::{ManualClock, SessionId, programming::*};
 use light_dynamics::*;
-use light_engine::{FamilyProjectionEvidence, FamilyProjectionMaster};
+use light_engine::FamilyProjectionEvidence;
 use light_programmer::ProgrammerRegistry;
 use std::{
     cell::{Cell, RefCell},
@@ -121,7 +121,6 @@ fn observe(
                 origin: None,
                 family_evidence: None,
             },
-            master: FamilyProjectionMaster::PreserveBaseline,
         },
         Evidence {
             target: observation.target,

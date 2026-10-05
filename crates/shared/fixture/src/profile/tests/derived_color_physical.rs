@@ -222,9 +222,6 @@ fn wheel_profile(names: &[&str]) -> FixtureProfile {
     wheel.fixture_attribute = AttributeKey("color.wheel.1".into());
     wheel.attribute = wheel.fixture_attribute.clone();
     wheel.secondary_slots.clear();
-    wheel.reacts_to_sequence_master = false;
-    wheel.reacts_to_group_master = false;
-    wheel.reacts_to_grand_master = false;
     wheel.default_raw = 0;
     wheel.functions = names
         .iter()

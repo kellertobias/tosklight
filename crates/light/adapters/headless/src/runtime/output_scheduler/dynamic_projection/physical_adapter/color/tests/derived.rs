@@ -97,9 +97,6 @@ fn measured_wheel() -> FixtureProfile {
     wheel.id = Uuid::new_v4();
     wheel.fixture_attribute = AttributeKey("color.wheel.1".into());
     wheel.attribute = wheel.fixture_attribute.clone();
-    wheel.reacts_to_sequence_master = false;
-    wheel.reacts_to_group_master = false;
-    wheel.reacts_to_grand_master = false;
     let names = [
         ("open", [1., 1., 1.]),
         ("red", [1., 0., 0.]),

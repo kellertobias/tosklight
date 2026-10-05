@@ -220,9 +220,6 @@ function channelFromByte(mode: FixtureMode, owner: FixtureChannel): FixtureChann
 		snap: owner.snap,
 		reacts_to_virtual_intensity: owner.reacts_to_virtual_intensity,
 		virtual_intensity_inverted: owner.virtual_intensity_inverted ?? false,
-		reacts_to_sequence_master: owner.reacts_to_sequence_master,
-		reacts_to_group_master: owner.reacts_to_group_master,
-		reacts_to_grand_master: owner.reacts_to_grand_master,
 		default_raw: 0,
 		highlight_raw: 0,
 	};

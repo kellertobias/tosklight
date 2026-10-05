@@ -303,9 +303,6 @@ fn verify_live_rendered_native(
 fn actual_live_native_position_preserves_unrelated_channels_and_grand_master_overlay() {
     let mut profile = moving_head();
     let mode = &mut profile.modes[0];
-    for axis in &mut mode.channels {
-        axis.reacts_to_grand_master = false;
-    }
     let head = mode.heads[0].id;
     for (slot, attribute, raw) in [(5, "beam.focus", 77), (6, "intensity", 204)] {
         let mut control = channel(head, attribute, slot);
@@ -357,8 +354,9 @@ fn actual_live_native_position_preserves_unrelated_channels_and_grand_master_ove
     );
     assert_eq!(
         &published.rendered.physical.instances[0].native_raw[2..],
-        &[39, 102],
-        "unrelated Focus and Intensity still receive the captured Grand Master once"
+        &[77, 102],
+        "unrelated Focus keeps its default; the unprogrammed Intensity is its default under the \
+         captured Grand Master once (2026-10-05)"
     );
     verify_live_rendered_native(&rig, &capture, &published);
 }

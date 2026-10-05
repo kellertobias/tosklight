@@ -49,6 +49,10 @@ pub(crate) struct ProfileHeadPlan {
     pub(crate) head_id: Uuid,
     pub(crate) channel_indices: Box<[usize]>,
     pub(crate) intensity_channel_indices: Box<[usize]>,
+    /// The head's Intensity parameter default (canonical), what its virtual intensity is while no
+    /// Intensity value is resolved: the same default the output-parameter stage masters for an
+    /// unprogrammed level. The abstract virtual dimmer defaults to full.
+    pub(crate) intensity_default: f32,
     splits: Box<[u16]>,
     /// Cold Pan/Tilt role of every attribute that selects a Position-bound channel function of
     /// this head. Empty without a validated physical Position model; canonical names then apply.
@@ -274,11 +278,27 @@ fn compile_heads(
             channel_indices: std::mem::take(&mut channels[head_index]).into_boxed_slice(),
             intensity_channel_indices: std::mem::take(&mut intensity_channels[head_index])
                 .into_boxed_slice(),
+            intensity_default: intensity_default(fixture, head_index),
             splits: std::mem::take(&mut splits[head_index]).into_boxed_slice(),
             axis_roles: Box::default(),
         })
         .collect();
     Ok(heads)
+}
+
+/// The Intensity parameter default the resolved definition declares for one head, or full when it
+/// declares none.
+fn intensity_default(fixture: &PatchedFixture, head_index: usize) -> f32 {
+    fixture
+        .definition
+        .heads
+        .get(head_index)
+        .and_then(|head| {
+            head.parameters
+                .iter()
+                .find(|parameter| parameter.attribute.is_intensity())
+        })
+        .map_or(1.0, |parameter| parameter.default.clamp(0.0, 1.0))
 }
 
 /// The channels each owner's attribute reaches, for native ownership of previewed values.

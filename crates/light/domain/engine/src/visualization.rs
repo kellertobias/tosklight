@@ -103,7 +103,7 @@ impl Engine {
     ) -> crate::FrameValues {
         let mut resolved =
             self.resolve_prepared_lane_attributes(frame, sampled, continuity, true, lane);
-        crate::render::apply_fixture_freezes(&frame.generation.snapshot().fixtures, &mut resolved);
+        frame.finalize_output_parameters(&mut resolved);
         resolved.named_values()
     }
 
@@ -114,8 +114,9 @@ impl Engine {
         continuity: &mut crate::OutputContinuityState,
         lane: crate::resolution::ProgrammerLaneInputs<'_>,
     ) -> ObservedSourceFrame {
-        let resolved =
+        let mut resolved =
             self.resolve_prepared_lane_attributes(frame, sampled, continuity, true, lane);
+        frame.finalize_output_parameters(&mut resolved);
         self.observe_resolved_prepared_frame(frame, resolved, continuity, None, Default::default())
     }
 
@@ -167,7 +168,6 @@ impl Engine {
         self.profile_frozen_frame_projection(
             &frame.generation,
             &frame.values,
-            &Default::default(),
             options,
             previewed,
             Some(&frame.overlays),
@@ -247,13 +247,19 @@ impl Engine {
         }
         Ok(destination)
     }
-    /// Returns the same merged abstract attributes that feed DMX rendering. Consumers such as
-    /// visualizers can use this without attempting to reverse fixture-specific DMX encoding.
+    /// The raw resolution: every source merged by ordinary arbitration, BEFORE the output-parameter
+    /// stage. No master scales a level here and no Freeze holds anything, which is what relative
+    /// command-line edits and programming surfaces read.
+    ///
+    /// Anything that stands for output (visualization, projection, a preview of the lamp) must
+    /// first pass these, with any temporary overrides applied on top, through
+    /// [`Self::finalize_output_values`].
     pub fn resolved_values(&self) -> crate::ResolvedValues {
         self.resolved_values_with_contribution_batches(&[])
     }
 
-    /// Resolve externally sampled values through ordinary semantic arbitration without rendering.
+    /// The raw resolution (see [`Self::resolved_values`]) with externally sampled values merged
+    /// through ordinary semantic arbitration, without rendering.
     pub fn resolved_values_with_contribution_batches(
         &self,
         sampled: &[ContributionBatch],
@@ -267,10 +273,46 @@ impl Engine {
             .clone()
     }
 
+    /// Apply the output-parameter stage to a raw resolution assembled by name, exactly as a render
+    /// does: masters on the level parameters (an unprogrammed level at its mastered profile
+    /// default), then Freeze. Temporary overrides such as Preload belong in `values` before this
+    /// call, never on top of already finalized values.
+    ///
+    /// `expected` must be the generation the raw values were resolved against, when known.
+    pub fn finalize_output_values(
+        &self,
+        values: &mut crate::ResolvedValues,
+        options: RenderOptions,
+        expected: Option<&std::sync::Arc<crate::EngineSnapshot>>,
+    ) -> Result<(), EngineError> {
+        let generation = self.generation.load_full();
+        if expected
+            .is_some_and(|snapshot| !std::sync::Arc::ptr_eq(snapshot, &generation.snapshot_arc()))
+        {
+            return Err(EngineError::Invalid(
+                "output parameters generation changed during finalization".into(),
+            ));
+        }
+        let mut resolved = crate::ResolvedAttributes {
+            values: std::mem::take(values),
+            ..Default::default()
+        };
+        crate::render::finalize_output_parameters(
+            &generation,
+            options,
+            &self.group_master_flashes.read(),
+            &mut resolved,
+        );
+        *values = resolved.values;
+        Ok(())
+    }
+
     /// Project schema-v2 profile heads through the same channel-resolution path used for DMX.
     /// The returned intensity and XYZ color therefore include Highlight/Blackout, calibrated
-    /// gamut clipping, response curves, virtual intensity, and applicable masters exactly once.
-    /// `values` may include temporary visualization-only overrides such as Preload.
+    /// gamut clipping, response curves and virtual intensity exactly once. `values` are finalized
+    /// output parameters (a rendered frame's values, or a raw resolution with any temporary
+    /// overrides such as Preload passed through [`Self::finalize_output_values`]): the masters
+    /// already scale their levels and are not applied again here.
     pub fn profile_visualization_values(
         &self,
         values: &crate::ResolvedValues,
@@ -287,12 +329,7 @@ impl Engine {
         values: &crate::ResolvedValues,
         options: RenderOptions,
     ) -> Result<ProfileVisualizationProjection, EngineError> {
-        self.profile_visualization_projection_at(
-            values,
-            options,
-            None,
-            &std::collections::HashSet::new(),
-        )
+        self.profile_visualization_projection_at(values, options, None)
     }
 
     /// The expected snapshot must be the exact generation used to compose observational values.
@@ -301,18 +338,12 @@ impl Engine {
         values: &crate::ResolvedValues,
         options: RenderOptions,
         expected: Option<&std::sync::Arc<crate::EngineSnapshot>>,
-        overridden: &std::collections::HashSet<(light_core::FixtureId, light_core::AttributeKey)>,
     ) -> Result<ProfileVisualizationProjection, EngineError> {
-        self.profile_preload_projection_at(
-            values,
-            options,
-            expected,
-            overridden,
-            &Default::default(),
-        )
+        self.profile_preload_projection_at(values, options, expected, &Default::default())
     }
 
-    /// Preview ownership includes Off/Release, while `overridden` only removes active masters.
+    /// Preview ownership includes Off/Release. `values` are already finalized output parameters
+    /// (masters included); only Freeze is re-applied here.
     /// Channel aliases are compiled; Color ownership records actual resolver writes, so Direct
     /// never claims unrelated wheels or UV and same-value Intent edits retain their ownership.
     pub fn profile_preload_projection_at(
@@ -320,7 +351,6 @@ impl Engine {
         values: &crate::ResolvedValues,
         options: RenderOptions,
         expected: Option<&std::sync::Arc<crate::EngineSnapshot>>,
-        overridden: &std::collections::HashSet<(light_core::FixtureId, AttributeKey)>,
         previewed: &std::collections::HashSet<(light_core::FixtureId, AttributeKey)>,
     ) -> Result<ProfileVisualizationProjection, EngineError> {
         let generation = self.generation.load_full();
@@ -334,35 +364,17 @@ impl Engine {
         let snapshot = generation.snapshot();
         let effective_preview = unfrozen_preview(snapshot, previewed);
         let previewed = &effective_preview;
-        let mut resolved = self.resolved_attributes_at(&generation, self.clock.now(), &[]);
-        // A dense resolution intentionally leaves the named map empty. Read the actual frame
-        // before replacing it, and carry its masters explicitly into the map-based projection.
-        let original = resolved.named_values();
-        for (key, value) in values {
-            if !overridden.contains(key) && original.value(key.0, &key.1) == Some(value) {
-                if let Some(master) = original.frame().and_then(|frame| {
-                    frame
-                        .slots()
-                        .slot(key.0, &key.1)
-                        .and_then(|slot| frame.sequence_master(slot))
-                }) {
-                    resolved.sequence_masters.insert(key.clone(), master);
-                }
-            } else {
-                resolved.sequence_masters.remove(key);
-            }
-        }
-        resolved.values.clone_from(values);
-        // These values were assembled elsewhere and replace the frame wholesale, so the frame is
-        // released rather than read: it no longer describes what is being projected.
-        resolved.frame = None;
+        // These values were assembled elsewhere, already finalized (masters included), and stand
+        // in for a resolved frame wholesale. Only Freeze is re-applied.
+        let mut resolved = crate::ResolvedAttributes {
+            values: values.clone(),
+            ..Default::default()
+        };
         crate::render::apply_fixture_freezes(&snapshot.fixtures, &mut resolved);
-        let sequence_masters = std::mem::take(&mut resolved.sequence_masters);
         let named_values = resolved.named_values();
         self.profile_frozen_frame_projection(
             &generation,
             &named_values,
-            &sequence_masters,
             options,
             previewed,
             None,
@@ -375,10 +387,6 @@ impl Engine {
         &self,
         generation: &crate::RuntimeGeneration,
         named_values: &crate::FrameValues,
-        sequence_masters: &rustc_hash::FxHashMap<
-            (light_core::FixtureId, AttributeKey),
-            crate::contribution::ApplicableSequenceMaster,
-        >,
         options: RenderOptions,
         previewed: &std::collections::HashSet<(light_core::FixtureId, AttributeKey)>,
         captured: Option<&crate::prepared_frame::CapturedOutputOverlays>,
@@ -391,12 +399,8 @@ impl Engine {
         });
         let effective_preview = unfrozen_preview(snapshot, previewed);
         let previewed = &effective_preview;
-        let profile_values = crate::ProfileValueIndex::new(
-            named_values,
-            sequence_masters,
-            generation.channel_slots(),
-        );
-        let group_masters = generation.group_masters();
+        let profile_values =
+            crate::ProfileValueIndex::new(named_values, generation.channel_slots());
         let fresh;
         let overlays = match captured {
             Some(overlays) => overlays,
@@ -405,7 +409,6 @@ impl Engine {
                 &fresh
             }
         };
-        let group_master_flashes = &overlays.flashes;
         let highlight_layers = &overlays.highlights;
         let highlight_look = &overlays.highlight_look;
         let options = RenderOptions {
@@ -434,8 +437,6 @@ impl Engine {
                 None,
                 &profile_values,
                 options,
-                group_masters,
-                &group_master_flashes,
                 &highlight_layers,
                 &highlight_look,
                 patched_axis_inversion(profile, fixture.invert_pan, fixture.invert_tilt),
@@ -467,8 +468,6 @@ impl Engine {
                     None,
                     &profile_values,
                     options,
-                    group_masters,
-                    &group_master_flashes,
                     &highlight_layers,
                     &highlight_look,
                     patched_axis_inversion(profile, copy.invert_pan, copy.invert_tilt),

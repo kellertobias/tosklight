@@ -5,9 +5,9 @@ use std::collections::HashSet;
 #[test]
 fn semantic_highlight_applies_only_authored_identification_attributes() {
     let (mut fixture, fixture_id) = schema_v2_fixture(&[
-        ("intensity", false, false, false, false, false),
-        ("shutter", true, false, false, false, false),
-        ("gobo", true, false, false, false, false),
+        ("intensity", false, false),
+        ("shutter", true, false),
+        ("gobo", true, false),
     ]);
     let mode = &mut fixture
         .definition
@@ -63,8 +63,7 @@ fn semantic_highlight_applies_only_authored_identification_attributes() {
 
 #[test]
 fn semantic_highlight_does_not_guess_an_unauthored_shutter_open_value() {
-    let (mut fixture, fixture_id) =
-        schema_v2_fixture(&[("shutter", true, false, false, false, false)]);
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[("shutter", true, false)]);
     let channel = &mut fixture
         .definition
         .profile_snapshot
@@ -97,8 +96,7 @@ fn semantic_highlight_does_not_guess_an_unauthored_shutter_open_value() {
 
 #[test]
 fn unsupported_semantic_highlight_color_leaves_the_fixture_value_unchanged() {
-    let (mut fixture, fixture_id) =
-        schema_v2_fixture(&[("color.wheel.1", true, false, false, false, false)]);
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[("color.wheel.1", true, false)]);
     let channel = &mut fixture
         .definition
         .profile_snapshot
@@ -168,9 +166,6 @@ fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
             snap: false,
             reacts_to_virtual_intensity: false,
             virtual_intensity_inverted: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: attribute == "intensity",
-            reacts_to_grand_master: attribute == "intensity",
             behavior: ChannelBehavior::Controlled,
             functions: vec![ChannelFunction::continuous(
                 attribute,
@@ -293,8 +288,7 @@ fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
 
 #[test]
 fn fixture_without_intensity_uses_its_configured_non_intensity_highlight_look() {
-    let (mut fixture, fixture_id) =
-        schema_v2_fixture(&[("shutter", false, false, false, false, false)]);
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[("shutter", false, false)]);
     let mode = &mut fixture
         .definition
         .profile_snapshot
@@ -363,9 +357,6 @@ fn selected_logical_head_highlights_independently_while_parent_identifies_all_he
             snap: false,
             reacts_to_virtual_intensity: false,
             virtual_intensity_inverted: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: false,
-            reacts_to_grand_master: false,
             behavior: ChannelBehavior::Controlled,
             functions: vec![ChannelFunction::continuous(
                 "Dimmer",
@@ -451,8 +442,7 @@ fn selected_logical_head_highlights_independently_while_parent_identifies_all_he
 
 #[test]
 fn hazardous_blackout_safe_raw_value_wins_over_non_intensity_highlight() {
-    let (mut fixture, fixture_id) =
-        schema_v2_fixture(&[("control.reset", false, false, false, false, false)]);
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[("control.reset", false, false)]);
     fixture.definition.hazardous = true;
     fixture
         .definition
@@ -497,10 +487,8 @@ fn hazardous_blackout_safe_raw_value_wins_over_non_intensity_highlight() {
 
 #[test]
 fn high_low_and_explicit_attribute_suppression_are_temporary_and_exact() {
-    let (mut fixture, fixture_id) = schema_v2_fixture(&[
-        ("intensity", false, false, false, false, false),
-        ("shutter", true, false, false, false, false),
-    ]);
+    let (mut fixture, fixture_id) =
+        schema_v2_fixture(&[("intensity", false, false), ("shutter", true, false)]);
     let mode = &mut fixture
         .definition
         .profile_snapshot

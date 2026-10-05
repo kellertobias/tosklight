@@ -18,6 +18,7 @@ import { blankFixtureProfile, cloneProfile } from "./defaults";
 import { blankGeometry } from "./geometry";
 import { maxRaw } from "./rawValues";
 import { uuid } from "./utilities";
+import { headHasVirtualDimmer } from "./virtualDimmer";
 
 function channelFunctions(
 	parameter: FixtureDefinition["heads"][number]["parameters"][number],
@@ -109,9 +110,6 @@ function channelsFromDefinition(
 			invert,
 			snap: false,
 			reacts_to_virtual_intensity: parameter.virtual_dimmer,
-			reacts_to_sequence_master: /intensity/.test(parameter.attribute),
-			reacts_to_group_master: /intensity/.test(parameter.attribute),
-			reacts_to_grand_master: /intensity/.test(parameter.attribute),
 			behavior: "controlled",
 			functions: channelFunctions(parameter, maximum, projection.attribute),
 		};
@@ -376,9 +374,9 @@ export function fixtureDefinitionFromProfileMode(
 }
 
 /**
- * A head whose channels react to virtual intensity but that has no physical intensity channel
- * (e.g. an RGB head whose intensity is derived) exposes the abstract virtual-dimmer intensity
- * parameter the operator controls, matching the server's resolved definition projection.
+ * A light-emitting head without an Intensity channel (e.g. an RGB head) exposes the abstract
+ * virtual-dimmer Intensity the operator controls, matching the server's resolved definition
+ * projection.
  */
 function headParameters(
 	mode: FixtureMode,
@@ -391,13 +389,10 @@ function headParameters(
 	const parameters = channels.map((channel) =>
 		channelDefinition(channel, primary),
 	);
-	const reactsToVirtual = channels.some(
-		(channel) => channel.reacts_to_virtual_intensity,
-	);
 	const hasIntensity = parameters.some(
 		(parameter) => parameter.attribute === "intensity",
 	);
-	if (reactsToVirtual && !hasIntensity) {
+	if (!hasIntensity && headHasVirtualDimmer(mode, headId)) {
 		parameters.unshift({
 			attribute: "intensity",
 			components: [],

@@ -172,7 +172,7 @@ fn consider_runtime_samples(
                 let value = cue_controls
                     .get(&sample.controller_id)
                     .map_or(value, |control| {
-                        if attribute.is_intensity() {
+                        if attribute.is_level() {
                             value * control.sequence_master
                         } else {
                             value
@@ -182,7 +182,7 @@ fn consider_runtime_samples(
                     playback_controls
                         .get(&sample.controller_id)
                         .map_or(value, |control| {
-                            if attribute.is_intensity() {
+                            if attribute.is_level() {
                                 value * control.master
                             } else if control.crossfade_non_intensity {
                                 sources
@@ -196,7 +196,7 @@ fn consider_runtime_samples(
                     .get(&sample.controller_id)
                     .is_some_and(|control| {
                         control.master == 0.0
-                            && !attribute.is_intensity()
+                            && !attribute.is_level()
                             && !control.crossfade_non_intensity
                     })
                 {
@@ -333,7 +333,7 @@ fn consider_cue_rows(
             &stored.attribute,
             addresser.frame_address(stored.fixture_id, &stored.attribute),
             DynamicCandidate {
-                value: if stored.attribute.is_intensity() {
+                value: if stored.attribute.is_level() {
                     value.normalized().map_or(value.clone(), |value| {
                         AttributeValue::Normalized(value * stored.sequence_master)
                     })

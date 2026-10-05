@@ -32,8 +32,6 @@ pub(crate) struct ProjectionInputs<'a> {
     pub position_native: &'a crate::native_position_projection::NativePositionProjection,
     pub values: &'a crate::ProfileValueIndex<'a>,
     pub options: crate::RenderOptions,
-    pub group_masters: &'a crate::GroupMasterIndex,
-    pub group_master_flashes: &'a HashMap<String, f32>,
     pub highlight_layers:
         &'a HashMap<light_core::FixtureId, light_programmer::HighlightOutputLayer>,
     pub highlight_look: &'a light_fixture::HighlightLook,
@@ -230,8 +228,6 @@ fn project_fixture(
                 None,
                 inputs.values,
                 inputs.options,
-                inputs.group_masters,
-                inputs.group_master_flashes,
                 inputs.highlight_layers,
                 inputs.highlight_look,
                 inversion,

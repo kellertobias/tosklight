@@ -80,11 +80,16 @@ async fn accepted_untraced_frame_never_resamples_to_fill_missing_dynamic_evidenc
         );
         assert!((snapshot["grand_master"].as_f64().unwrap() - 0.6).abs() < 1e-6);
         assert_eq!(snapshot["dynamic_stack"], serde_json::json!([]));
+        // Values are the output parameters: the captured Grand Master already scales the level
+        // (0.25 x 0.6, 2026-10-05).
         assert!(
             snapshot["values"].as_array().unwrap().iter().any(|value| {
                 value["fixture_id"] == fixture.0.to_string()
                     && value["attribute"] == "intensity"
-                    && value["value"] == serde_json::json!({"kind":"normalized", "value":0.25})
+                    && value["value"]["kind"] == "normalized"
+                    && value["value"]["value"]
+                        .as_f64()
+                        .is_some_and(|level| (level - 0.15).abs() < 1e-6)
             }),
             "accepted value must survive without a Dynamic sidecar: {snapshot}"
         );

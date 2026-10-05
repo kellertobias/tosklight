@@ -37,6 +37,7 @@ pub(in crate::runtime) struct FrameDynamicSources {
     pub(in crate::runtime) cue_values: Arc<[light_playback::ActiveCueDynamicValue]>,
     /// Present only when sampling already evaluated the captured ordinary source. Publishing
     /// source evidence must never trigger another resolution merely to fill an observer cache.
+    /// Holds the finalized frame; the programmed parameters are read through `raw_values`.
     pub(in crate::runtime) ordinary: Option<light_engine::FrameValues>,
 }
 

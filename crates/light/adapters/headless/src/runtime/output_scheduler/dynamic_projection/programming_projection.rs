@@ -31,8 +31,9 @@ use fork::{NativeCurrent, SourceTransaction};
 use memo::{Log, Memo};
 use static_rows::{KeptProjection, StaticFamilyRows};
 
-/// Typed Current reads the immutable pre-Freeze baseline retained for final rendering. Keep
-/// this separate from legacy TickSources: scalar Current historically observes Freeze.
+/// Typed Current reads the immutable static baseline retained for final rendering, as raw
+/// parameters: before the output-parameter masters, which the resolution these values feed
+/// applies once later.
 struct PreparedFamilySources<'a>(&'a light_engine::PreparedStaticFamilyFrame);
 
 impl light_dynamics::ScalarSourceResolver for PreparedFamilySources<'_> {
@@ -48,7 +49,7 @@ impl light_dynamics::ScalarSourceResolver for PreparedFamilySources<'_> {
 
 impl DynamicTickSource for PreparedFamilySources<'_> {
     fn value(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&AttributeValue> {
-        self.0.value(target, attribute)
+        self.0.raw_value(target, attribute)
     }
 
     fn family_evidence(

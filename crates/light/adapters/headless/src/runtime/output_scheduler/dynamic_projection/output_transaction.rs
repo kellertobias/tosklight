@@ -21,6 +21,8 @@ pub(in crate::runtime) struct CommittedDynamicOutput<T> {
     /// Newly accepted sampling history associated with this exact input frame. A path that
     /// skips sampling must not relabel an older history anchor with a later capture.
     pub sample_boundary: Option<light_dynamics::DynamicSampleBoundary>,
+    /// The captured ordinary resolution (finalized). Readers showing the programmed parameter
+    /// use `raw_values`/`raw_value`.
     pub ordinary: Option<light_engine::FrameValues>,
 }
 

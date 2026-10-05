@@ -33,14 +33,13 @@ fn focus_engine() -> (
     (engine, registry, session, fixture, clock)
 }
 
-fn unknown(master: FamilyProjectionMaster) -> FamilyProjectionMetadata {
+fn unknown() -> FamilyProjectionMetadata {
     FamilyProjectionMetadata {
         changed_at: None,
         evidence: FamilyProjectionEvidence::Replace {
             origin: None,
             family_evidence: None,
         },
-        master,
     }
 }
 
@@ -114,7 +113,7 @@ fn queued_family_does_not_change_current_or_compete_against_a_newer_static_edit(
         fixture,
         ProgrammingOwner::Focus,
         AttributeValue::Normalized(0.4),
-        unknown(FamilyProjectionMaster::Remove),
+        unknown(),
     )
     .unwrap();
     assert_eq!(
@@ -157,7 +156,7 @@ fn queued_family_does_not_change_current_or_compete_against_a_newer_static_edit(
 }
 
 #[test]
-fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
+fn dense_and_overflow_keep_explicit_evidence_and_output_time() {
     let (engine, _, _, fixture, _) = focus_engine();
     let capture = engine.prepare_output_frame(Default::default());
     let focus = AttributeKey("focus".into());
@@ -177,7 +176,7 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
             .frame_address(unnumbered, &position)
             .is_none()
     );
-    let master = ContributionSequenceMaster::new(source(), 0.5);
+    let playback = source();
     let position_value = AttributeValue::Position(Arc::new(PositionIntent::angles(20.0, -10.0)));
     let stamp = light_core::ProgrammerEditStamp {
         changed_at: capture.sampled_at(),
@@ -185,7 +184,7 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
     };
     let supplied = Arc::new(ContributionFamilyEvidence::new(vec![
         ContributionFamilyEntry::new(
-            ContributionSourceId::playback(master.source()),
+            ContributionSourceId::playback(playback),
             stamp,
             ContributionFamilyFootprint::Component(
                 light_core::programming::ProgrammingComponent::Pan,
@@ -210,9 +209,8 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
                 AttributeValue::Normalized(0.8),
                 capture.sampled_at(),
             ),
-            master.source(),
+            playback,
             8,
-            master.scale(),
         ),
         ContributionSample::replacing_playback(
             sample(
@@ -221,9 +219,8 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
                 position_value.clone(),
                 capture.sampled_at(),
             ),
-            master.source(),
+            playback,
             8,
-            master.scale(),
         )
         .with_family_evidence(supplied),
     ]);
@@ -237,9 +234,6 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
             .unwrap()
             .clone(),
     );
-    for (target, key) in [(fixture, &focus), (unnumbered, &position)] {
-        assert_eq!(lane.sequence_master(target, key), Some(master));
-    }
     let output_at = capture.sampled_at() - ChronoDuration::seconds(1);
     lane.project_family(
         fixture,
@@ -248,11 +242,9 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
         FamilyProjectionMetadata {
             changed_at: Some(output_at),
             evidence: FamilyProjectionEvidence::PreserveBaseline,
-            master: FamilyProjectionMaster::PreserveBaseline,
         },
     )
     .unwrap();
-    let replacement_master = ContributionSequenceMaster::new(source(), 0.25);
     lane.project_family(
         unnumbered,
         ProgrammingOwner::Position,
@@ -263,7 +255,6 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
                 origin: Some(origin),
                 family_evidence: Some(Arc::clone(&evidence)),
             },
-            master: FamilyProjectionMaster::Replace(replacement_master),
         },
     )
     .unwrap();
@@ -274,24 +265,6 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
     assert_eq!(values.value(unnumbered, &position), Some(&position_value));
     assert_eq!(values.changed_at(fixture, &focus), Some(output_at));
     assert_eq!(values.changed_at(unnumbered, &position), Some(output_at));
-    assert_eq!(
-        values
-            .frame()
-            .unwrap()
-            .winner(fixture, &focus)
-            .unwrap()
-            .sequence_master,
-        Some(master)
-    );
-    assert_eq!(
-        values
-            .frame()
-            .unwrap()
-            .winner(unnumbered, &position)
-            .unwrap()
-            .sequence_master,
-        Some(replacement_master)
-    );
     assert!(Arc::ptr_eq(
         values
             .contribution_family_evidence(unnumbered, &position)
@@ -305,9 +278,10 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
     );
     assert!(values.contribution_origin(fixture, &focus).is_some());
     assert!(!values.materialised_by_name());
+    // The Cue master scales level parameters only; Focus reaches DMX as projected.
     assert!(
-        (i16::from(output.universes[&1][0]) - 77).abs() <= 1,
-        "sequence master must scale 0.6 once"
+        (i16::from(output.universes[&1][0]) - 153).abs() <= 1,
+        "a Cue master never scales a non-level parameter"
     );
     let mut lane = engine.prepare_static_family_frame(&capture, &[samples]);
     for (target, owner, value) in [
@@ -318,13 +292,8 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
         ),
         (unnumbered, ProgrammingOwner::Position, position_value),
     ] {
-        lane.project_family(
-            target,
-            owner,
-            value,
-            unknown(FamilyProjectionMaster::Remove),
-        )
-        .unwrap();
+        lane.project_family(target, owner, value, unknown())
+            .unwrap();
     }
     let output = engine.render_static_family_frame(&capture, lane).unwrap();
     for (target, key) in [(fixture, &focus), (unnumbered, &position)] {
@@ -334,7 +303,6 @@ fn dense_and_overflow_keep_explicit_master_evidence_and_output_time() {
             .unwrap()
             .winner(target, key)
             .unwrap();
-        assert!(winner.sequence_master.is_none());
         assert!(winner.origin.is_none());
         assert!(winner.family_evidence.is_none());
         assert!(output.resolved_values.changed_at(target, key).is_none());
@@ -354,13 +322,8 @@ fn invalid_family_metadata_and_duplicate_outputs_do_not_replace_a_queued_result(
         AttributeValue::Position(Arc::new(PositionIntent::angles(1.0, 2.0))),
     ] {
         assert!(
-            lane.project_family(
-                fixture,
-                ProgrammingOwner::Focus,
-                value,
-                unknown(FamilyProjectionMaster::Remove)
-            )
-            .is_err()
+            lane.project_family(fixture, ProgrammingOwner::Focus, value, unknown())
+                .is_err()
         );
     }
     assert!(
@@ -368,18 +331,7 @@ fn invalid_family_metadata_and_duplicate_outputs_do_not_replace_a_queued_result(
             FixtureId::new(),
             ProgrammingOwner::Focus,
             AttributeValue::Normalized(0.5),
-            unknown(FamilyProjectionMaster::Remove)
-        )
-        .is_err()
-    );
-    assert!(
-        lane.project_family(
-            fixture,
-            ProgrammingOwner::Focus,
-            AttributeValue::Normalized(0.5),
-            unknown(FamilyProjectionMaster::Replace(
-                ContributionSequenceMaster::new(source(), f32::NAN)
-            ))
+            unknown()
         )
         .is_err()
     );
@@ -387,7 +339,7 @@ fn invalid_family_metadata_and_duplicate_outputs_do_not_replace_a_queued_result(
         fixture,
         ProgrammingOwner::Focus,
         AttributeValue::Normalized(0.3),
-        unknown(FamilyProjectionMaster::Remove),
+        unknown(),
     )
     .unwrap();
     assert!(
@@ -395,7 +347,7 @@ fn invalid_family_metadata_and_duplicate_outputs_do_not_replace_a_queued_result(
             fixture,
             ProgrammingOwner::Focus,
             AttributeValue::Normalized(0.9),
-            unknown(FamilyProjectionMaster::Remove)
+            unknown()
         )
         .is_err()
     );
@@ -440,7 +392,6 @@ fn freeze_holds_the_baseline_and_wins_over_composition_and_clears_projected_sour
         FamilyProjectionMetadata {
             changed_at: None,
             evidence: FamilyProjectionEvidence::PreserveBaseline,
-            master: FamilyProjectionMaster::PreserveBaseline,
         },
     )
     .unwrap();

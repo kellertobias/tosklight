@@ -103,7 +103,7 @@ pub(super) fn fully_controlled_dynamic_playbacks_from<'a>(
         .filter_map(|(identity, target_samples)| {
             (!target_samples.is_empty()
                 && target_samples.iter().all(|(sample, control)| {
-                    let dynamic_value = if sample.attribute.is_intensity() {
+                    let dynamic_value = if sample.attribute.is_level() {
                         sample.value * control.master
                     } else {
                         sample.value

@@ -597,26 +597,37 @@ fn a_channel_carrying_both_families_publishes_the_conflict_and_writes_nothing() 
 }
 
 #[test]
-fn intensity_masters_and_blackout_are_left_to_the_single_final_render() {
+fn level_masters_reach_the_native_intensity_and_never_the_zoom_writes() {
     let rig = Rig::new(&wash_a());
     let base = rig.zoom(&field(20.));
     rig.set("intensity", 0.3);
-    for options in [
-        RenderOptions::default(),
-        RenderOptions {
-            grand_master: 0.25,
-            ..Default::default()
-        },
-        RenderOptions {
-            blackout: true,
-            ..Default::default()
-        },
+    // Masters scale the level parameter before DMX (2026-10-05), so the native Intensity the
+    // adapter reads already carries them; the Zoom writes never do.
+    for (options, intensity) in [
+        (RenderOptions::default(), 77),
+        (
+            RenderOptions {
+                grand_master: 0.25,
+                ..Default::default()
+            },
+            19,
+        ),
+        (
+            RenderOptions {
+                blackout: true,
+                ..Default::default()
+            },
+            0,
+        ),
     ] {
         let resolved = rig
             .resolve_with(ProgrammingOwner::Zoom, &field(20.), None, options)
             .unwrap();
         resolved.verify(&field(20.), &rig.profile.borrow());
-        assert!(resolved.native[0] > 0, "{options:?}: pre-master Intensity");
+        assert_eq!(
+            resolved.native[0], intensity,
+            "{options:?}: mastered Intensity"
+        );
         assert_eq!(resolved.result.writes, base.result.writes, "{options:?}");
         assert_eq!(resolved.result.achieved, base.result.achieved);
     }

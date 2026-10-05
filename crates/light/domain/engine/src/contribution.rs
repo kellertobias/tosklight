@@ -1,18 +1,18 @@
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, MergeMode, TimedValue};
-use light_playback::{AutomaticPlaybackTransition, PlaybackContribution};
+use light_playback::{AutomaticPlaybackTransition, PlaybackContribution, SequenceMasterSource};
 use rustc_hash::FxHashMap;
 use std::collections::{HashMap, hash_map::Entry};
 
 mod playback_evidence;
 pub(crate) use playback_evidence::PlaybackEvidenceCache;
 
-pub(crate) type ApplicableSequenceMaster = crate::ContributionSequenceMaster;
-
 pub(crate) struct EngineContribution {
     value: TimedValue,
     transition_ordinal: Option<u64>,
-    sequence_master: Option<ApplicableSequenceMaster>,
+    /// The Playback this value came from, for source replacement and tracing. None for every
+    /// other source.
+    playback_source: Option<SequenceMasterSource>,
     /// Where the producer already knows this pair lives; read by number when it belongs to the
     /// frame's generation, by name otherwise.
     address: Option<light_core::FrameAddress>,
@@ -28,17 +28,13 @@ impl EngineContribution {
         &self.value
     }
 
-    pub(crate) fn applicable_sequence_master(&self) -> Option<ApplicableSequenceMaster> {
-        self.sequence_master
-    }
-
     /// Every field, for tests comparing two contribution lists in order.
     pub(crate) fn describe(&self) -> String {
         format!(
             "{:?} {:?} {:?} {:?} {:?} {:?}",
             self.value,
             self.transition_ordinal,
-            self.sequence_master,
+            self.playback_source,
             self.address,
             self.origin,
             self.family_evidence
@@ -161,7 +157,7 @@ impl EngineContribution {
         Self {
             value,
             transition_ordinal: None,
-            sequence_master: None,
+            playback_source: None,
             address: None,
             origin: None,
             family_evidence: None,
@@ -213,10 +209,7 @@ impl EngineContribution {
         Self {
             value: contribution.value,
             transition_ordinal: Some(contribution.transition_ordinal),
-            sequence_master: Some(ApplicableSequenceMaster::new(
-                contribution.source,
-                contribution.sequence_master,
-            )),
+            playback_source: Some(contribution.source),
             address: contribution.address,
             origin: None,
             family_evidence,
@@ -233,20 +226,17 @@ impl EngineContribution {
     }
 
     pub(crate) fn replaced_by(&self, sampled: &[crate::ContributionBatch]) -> bool {
-        self.sequence_master.is_some_and(|master| {
+        self.playback_source.is_some_and(|source| {
             crate::replaces_source(
                 sampled,
-                &crate::ContributionSourceId::playback(master.source()),
+                &crate::ContributionSourceId::playback(source),
                 &self.value,
             )
         })
     }
 
-    pub(crate) fn playback_value(
-        &self,
-    ) -> Option<(light_playback::SequenceMasterSource, &TimedValue)> {
-        self.sequence_master
-            .map(|master| (master.source(), &self.value))
+    pub(crate) fn playback_value(&self) -> Option<(SequenceMasterSource, &TimedValue)> {
+        self.playback_source.map(|source| (source, &self.value))
     }
 }
 
@@ -257,7 +247,6 @@ pub(crate) struct ResolvedAttributes {
     /// the boundary, once, if anyone asks.
     pub(crate) values: ResolvedValues,
     pub(crate) changed_at: ResolvedChangedAt,
-    pub(crate) sequence_masters: FxHashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
     pub(crate) automatic_playback_transitions: Vec<AutomaticPlaybackTransition>,
     /// The frame these values were resolved into, kept so the render can read by slot rather than
     /// by name. Absent for callers that assemble a projection from maps they were handed.
@@ -279,6 +268,45 @@ impl ResolvedAttributes {
         }
     }
 
+    /// Master every level value (Intensity, Volume) by `factor(owner, fixture_index)`, on the
+    /// dense frame and on the map path alike.
+    ///
+    /// A level nobody contributed is its profile default, so where its factor is not full it is
+    /// held at default × factor, with no source. A full factor leaves the frame untouched.
+    pub(crate) fn scale_levels(
+        &mut self,
+        slots: &crate::SlotTable,
+        factor: &mut impl FnMut(FixtureId, Option<u32>) -> f32,
+    ) {
+        if let Some(frame) = self.frame.as_mut() {
+            frame.scale_levels(&mut *factor);
+            return;
+        }
+        for ((owner, attribute), value) in &mut self.values {
+            if attribute.is_level()
+                && let Some(level) = value.normalized()
+            {
+                *value = AttributeValue::Normalized(level * factor(*owner, None));
+            }
+        }
+        // The map path has no epochs: an unsourced level is simply a missing name.
+        for level in slots.level_slots() {
+            let Some(default) = level.default else {
+                continue;
+            };
+            let (owner, attribute) = slots.pair(level.slot);
+            let key = (owner, attribute.clone());
+            if self.values.contains_key(&key) {
+                continue;
+            }
+            let scale = factor(owner, Some(level.root));
+            if scale != 1.0 {
+                self.values
+                    .insert(key, AttributeValue::Normalized(default * scale));
+            }
+        }
+    }
+
     /// Take an attribute over after arbitration, as a Freeze and a Group colour do.
     ///
     /// Writes the frame and the maps together. Anything that changed only one of them would leave
@@ -290,9 +318,6 @@ impl ResolvedAttributes {
         value: AttributeValue,
         changed_at: Option<DateTime<Utc>>,
     ) {
-        // The holder of an attribute after an override is the override, so an underlying Cue
-        // master must not go on scaling what it no longer decides. `force` clears it on the dense
-        // path; the map path removes it here.
         if let Some(frame) = self.frame.as_mut() {
             if let Some(slot) = frame.slots().slot(fixture_id, attribute) {
                 frame.force_at(slot, value, changed_at);
@@ -305,7 +330,6 @@ impl ResolvedAttributes {
         if let Some(changed_at) = changed_at {
             self.changed_at.insert(key.clone(), changed_at);
         }
-        self.sequence_masters.remove(&key);
         self.values.insert(key, value);
     }
 }
@@ -450,7 +474,15 @@ impl ResolvedFrame {
         self.state.as_ref()?.get(slot).map(|winner| &winner.value)
     }
 
-    /// The sequence master scaling a slot, if the winning source carried one.
+    /// The raw parameter holding a pair, before the output-parameter masters (Freeze included).
+    pub(crate) fn raw_value(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&AttributeValue> {
+        self.winner(fixture, attribute)?.raw_value()
+    }
+
     /// When the value holding a slot last changed.
     pub(crate) fn changed_at(&self, slot: crate::Slot) -> Option<DateTime<Utc>> {
         self.state.as_ref()?.get(slot)?.output_changed_at()
@@ -468,15 +500,46 @@ impl ResolvedFrame {
             .map_or(0, crate::FrameState::occupied_len)
     }
 
-    pub(crate) fn sequence_master(&self, slot: crate::Slot) -> Option<ApplicableSequenceMaster> {
-        self.state
-            .as_ref()?
-            .get(slot)
-            .and_then(|winner| winner.sequence_master)
-    }
-
     pub(crate) fn slots(&self) -> &crate::SlotTable {
         &self.slots
+    }
+
+    /// Master every level value (Intensity, Volume) by its fixture's factor, keeping who decided
+    /// it, and hold an unsourced level at its mastered profile default. `factor(owner, index)`.
+    ///
+    /// The unnumbered overflow only ever holds contributed values: every level a definition
+    /// declares is numbered, so an unsourced level always has a slot.
+    pub(crate) fn scale_levels(&mut self, mut factor: impl FnMut(FixtureId, Option<u32>) -> f32) {
+        if let Some(state) = self.state.as_mut() {
+            for level in self.slots.level_slots() {
+                let (owner, _) = self.slots.pair(level.slot);
+                let scale = factor(owner, Some(level.root));
+                if scale == 1.0 {
+                    continue;
+                }
+                if state.get(level.slot).is_some() {
+                    state.scale_level(level.slot, scale);
+                } else if let Some(default) = level.default {
+                    state.fill_unsourced_level(
+                        level.slot,
+                        AttributeValue::Normalized(default * scale),
+                    );
+                }
+            }
+        }
+        for (owner, values) in &mut self.overflow {
+            for (attribute, winner) in values.iter_mut() {
+                if attribute.is_level()
+                    && let Some(level) = winner.value.normalized()
+                {
+                    let scale = factor(*owner, None);
+                    if scale != 1.0 {
+                        winner.pre_master.get_or_insert(Some(winner.value.clone()));
+                        winner.value = AttributeValue::Normalized(level * scale);
+                    }
+                }
+            }
+        }
     }
 
     /// Write a value into a slot whatever holds it, as a Freeze does.
@@ -511,10 +574,10 @@ impl ResolvedFrame {
             winner.changed_at = changed_at;
             winner.projected_changed_at = None;
         }
-        winner.sequence_master = None;
         winner.origin = None;
         winner.family_evidence = None;
         winner.pending_transition = None;
+        winner.pre_master = None;
     }
 }
 
@@ -583,9 +646,9 @@ impl<'a> EngineContributionResolver<'a> {
             let value = &candidate.value;
             let origin = if self.trace_sources {
                 candidate.origin.clone().or_else(|| {
-                    candidate.sequence_master.map(|master| {
+                    candidate.playback_source.map(|source| {
                         crate::contribution_batch::ContributionOrigin::with_transition_ordinal(
-                            crate::ContributionSourceId::playback(master.source()),
+                            crate::ContributionSourceId::playback(source),
                             value,
                             candidate.transition_ordinal,
                         )
@@ -606,7 +669,6 @@ impl<'a> EngineContributionResolver<'a> {
                 value.changed_at,
                 value.merge_mode,
                 candidate.transition_ordinal,
-                candidate.sequence_master,
                 candidate.address,
                 origin,
                 family_evidence,
@@ -624,7 +686,7 @@ impl<'a> EngineContributionResolver<'a> {
         self.add(EngineContribution {
             value,
             transition_ordinal: Some(transition_ordinal),
-            sequence_master: None,
+            playback_source: None,
             address: None,
             origin: None,
             family_evidence: None,
@@ -646,7 +708,6 @@ impl<'a> EngineContributionResolver<'a> {
                 value.changed_at,
                 value.merge_mode,
                 sample.transition_ordinal(),
-                sample.sequence_master(),
                 sample.address(),
                 self.trace_sources
                     .then(|| sample.replacement_source())
@@ -678,7 +739,7 @@ impl<'a> EngineContributionResolver<'a> {
     ) {
         self.add_borrowed(
             fixture_id, attribute, value, priority, changed_at, merge_mode, None, None, None, None,
-            None, None,
+            None,
         );
     }
 
@@ -716,7 +777,6 @@ impl<'a> EngineContributionResolver<'a> {
         changed_at: DateTime<Utc>,
         merge_mode: MergeMode,
         transition_ordinal: Option<u64>,
-        sequence_master: Option<ApplicableSequenceMaster>,
         address: Option<light_core::FrameAddress>,
         origin: Option<std::sync::Arc<crate::contribution_batch::ContributionOrigin>>,
         family_evidence: Option<std::sync::Arc<crate::ContributionFamilyEvidence>>,
@@ -743,7 +803,6 @@ impl<'a> EngineContributionResolver<'a> {
                 },
                 |winner| {
                     winner.value = value.clone();
-                    winner.sequence_master = sequence_master;
                     winner.origin = origin;
                     winner.family_evidence = family_evidence;
                     winner.pending_transition = pending_transition.cloned();
@@ -759,10 +818,10 @@ impl<'a> EngineContributionResolver<'a> {
                     projected_changed_at: None,
                     merge_mode,
                     transition_ordinal,
-                    sequence_master,
                     origin,
                     family_evidence,
                     pending_transition: pending_transition.cloned(),
+                    pre_master: None,
                 },
             ),
         }
@@ -772,16 +831,16 @@ impl<'a> EngineContributionResolver<'a> {
         let EngineContribution {
             value,
             transition_ordinal,
-            sequence_master,
+            playback_source,
             address,
             mut origin,
             family_evidence,
             pending_transition,
         } = candidate;
         if self.trace_sources && origin.is_none() {
-            origin = sequence_master.map(|master| {
+            origin = playback_source.map(|source| {
                 crate::contribution_batch::ContributionOrigin::with_transition_ordinal(
-                    crate::ContributionSourceId::playback(master.source()),
+                    crate::ContributionSourceId::playback(source),
                     &value,
                     transition_ordinal,
                 )
@@ -821,7 +880,6 @@ impl<'a> EngineContributionResolver<'a> {
                             winner.value = value;
                             winner.pending_transition = pending_transition;
                         }
-                        winner.sequence_master = sequence_master;
                         winner.origin = origin;
                         winner.family_evidence = family_evidence;
                     },
@@ -837,10 +895,10 @@ impl<'a> EngineContributionResolver<'a> {
                     projected_changed_at: None,
                     merge_mode,
                     transition_ordinal,
-                    sequence_master,
                     origin,
                     family_evidence,
                     pending_transition,
+                    pre_master: None,
                 },
             ),
         }

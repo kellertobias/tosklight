@@ -60,7 +60,6 @@ fn metadata() -> FamilyProjectionMetadata {
     FamilyProjectionMetadata {
         changed_at: None,
         evidence: light_engine::FamilyProjectionEvidence::PreserveBaseline,
-        master: light_engine::FamilyProjectionMaster::PreserveBaseline,
     }
 }
 struct NoModels;

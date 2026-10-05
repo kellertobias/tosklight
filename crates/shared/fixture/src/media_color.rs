@@ -208,9 +208,6 @@ impl MediaColorHead {
                 || channel.resolution != ChannelResolution::U8
                 || channel.behavior != ChannelBehavior::Controlled
                 || channel.reacts_to_virtual_intensity
-                || channel.reacts_to_sequence_master
-                || channel.reacts_to_group_master
-                || channel.reacts_to_grand_master
             {
                 return None;
             }

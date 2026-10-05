@@ -60,36 +60,31 @@ pub(super) async fn dmx_snapshot(
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        let mut resolved = if extra.is_empty() {
-            source.values.values().clone()
-        } else {
-            state
-                .output
-                .visualization_dynamic_projection(&extra, true)
-                .0
-        };
-        let mut affected =
+        // Preload overrides join the raw resolution, never the accepted frame's finalized
+        // values; the output-parameter stage (masters, Freeze) then runs once over the result.
+        let mut resolved = state
+            .output
+            .visualization_dynamic_projection(&extra, true)
+            .0;
+        let mut previewed =
             operator_api::apply_preload_values(&snapshot, programmer.as_ref(), &mut resolved);
-        let mut previewed = affected.clone();
-        // DynamicAddressValue already carries each authoritative target and attribute. Never
-        // infer ownership by comparing samples taken at different instants.
+        // DynamicAddressValue already carries each authoritative target and attribute, including
+        // Off/Release. Never infer ownership by comparing samples taken at different instants.
         for (_, _, value) in &extra {
             previewed.insert((value.fixture_id, value.attribute.clone()));
-            if !matches!(
-                value.value,
-                light_dynamics::DynamicSemanticValue::DynamicOff { .. }
-                    | light_dynamics::DynamicSemanticValue::Release
-            ) {
-                affected.insert((value.fixture_id, value.attribute.clone()));
-            }
         }
-        if let Ok(projected) = state.output.engine().profile_preload_projection_at(
-            &resolved,
-            source.options,
-            Some(&snapshot),
-            &affected,
-            &previewed,
-        ) && Arc::ptr_eq(&snapshot, &state.output.snapshot())
+        if state
+            .output
+            .engine()
+            .finalize_output_values(&mut resolved, source.options, Some(&snapshot))
+            .is_ok()
+            && let Ok(projected) = state.output.engine().profile_preload_projection_at(
+                &resolved,
+                source.options,
+                Some(&snapshot),
+                &previewed,
+            )
+            && Arc::ptr_eq(&snapshot, &state.output.snapshot())
         {
             let mut lane = native_lane(
                 &source,

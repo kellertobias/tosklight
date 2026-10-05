@@ -305,8 +305,7 @@ fn render_retains_one_generation_across_concurrent_installation() {
 #[test]
 fn point_pose_and_output_retain_the_captured_generation() {
     let engine = Arc::new(Engine::new(ProgrammerRegistry::default()));
-    let (mut point, point_id) =
-        schema_v2_fixture(&[("point.position.x", false, false, false, false, false)]);
+    let (mut point, point_id) = schema_v2_fixture(&[("point.position.x", false, false)]);
     point.location.x = 1_000;
     engine
         .replace_snapshot(EngineSnapshot {
@@ -359,7 +358,7 @@ fn point_pose_and_output_retain_the_captured_generation() {
 #[test]
 fn point_index_reuses_fixture_shape_across_nonfixture_replacement() {
     let engine = Engine::new(ProgrammerRegistry::default());
-    let (point, _) = schema_v2_fixture(&[("point.position.x", false, false, false, false, false)]);
+    let (point, _) = schema_v2_fixture(&[("point.position.x", false, false)]);
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![point].into(),

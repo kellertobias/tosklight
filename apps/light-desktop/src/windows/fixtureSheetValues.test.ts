@@ -124,9 +124,6 @@ function fixture(): PatchedFixture {
 								invert: false,
 								snap: true,
 								reacts_to_virtual_intensity: false,
-								reacts_to_sequence_master: false,
-								reacts_to_group_master: false,
-								reacts_to_grand_master: false,
 								behavior: "controlled",
 								functions: [
 									{

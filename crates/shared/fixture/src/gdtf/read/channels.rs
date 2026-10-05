@@ -87,7 +87,7 @@ pub(super) fn mode(
             None | Some("None") => default,
             Some(value) => dmx::value(value, resolution)?,
         };
-        let (snap, master) = logical_snap_and_master(logical, &channel_name, diagnostics)?;
+        let snap = logical_snap(logical, &channel_name)?;
         if canonical.0.starts_with("gdtf.") {
             diagnostic(
                 diagnostics,
@@ -116,9 +116,6 @@ pub(super) fn mode(
             snap,
             reacts_to_virtual_intensity: false,
             virtual_intensity_inverted: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: master == "Group",
-            reacts_to_grand_master: master == "Grand",
             behavior: channel_behavior(attribute_name, logical),
             functions,
         };
@@ -130,6 +127,8 @@ pub(super) fn mode(
         footprints,
     };
     finish_slot_allocation(&mut mode, name, slots, diagnostics)?;
+    // GDTF has no virtual dimmer: a head without a Dimmer gets one, followed by its emitters.
+    mode.default_virtual_dimmer_reactions();
     Ok(mode)
 }
 
@@ -158,12 +157,9 @@ fn channel_placement(channel: &Node, channel_name: &str) -> Result<(u16, Vec<u16
     Ok((split, offsets))
 }
 
-/// Read the LogicalChannel Snap flag and Master binding, reporting the desk-master scope.
-fn logical_snap_and_master<'a>(
-    logical: &'a Node,
-    channel_name: &str,
-    diagnostics: &mut Vec<GdtfImportDiagnostic>,
-) -> Result<(bool, &'a str), ProfileError> {
+/// Read the LogicalChannel Snap flag. Its Master binding is validated but carries no desk
+/// meaning: every desk master scales the level parameters (Intensity, Volume) before DMX.
+fn logical_snap(logical: &Node, channel_name: &str) -> Result<bool, ProfileError> {
     let snap = match logical.attr("Snap").unwrap_or("No") {
         "Yes" | "On" => true,
         "No" | "Off" => false,
@@ -179,16 +175,7 @@ fn logical_snap_and_master<'a>(
             "channel {channel_name}: invalid Master {master:?}"
         )));
     }
-    if master != "None" {
-        diagnostic(
-            diagnostics,
-            channel_name,
-            format!(
-                "GDTF Master={master} enables the corresponding desk master only; sequence-master policy must be configured separately."
-            ),
-        );
-    }
-    Ok((snap, master))
+    Ok(snap)
 }
 
 /// Source slot bookkeeping collected while reading a mode's DMXChannels.
@@ -305,9 +292,6 @@ fn gap(mode_id: Uuid, head_id: Uuid, split: u16, slot: u16) -> FixtureChannel {
         snap: true,
         reacts_to_virtual_intensity: false,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: false,
-        reacts_to_group_master: false,
-        reacts_to_grand_master: false,
         behavior: ChannelBehavior::Static,
         functions: Vec::new(),
     }

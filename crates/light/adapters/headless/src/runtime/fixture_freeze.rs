@@ -179,10 +179,8 @@ fn apply_selected(
 }
 
 struct FreezeCapturedOutput {
+    /// Finalized output parameters (masters applied, Freeze held) of the captured frame.
     values: light_engine::FrameValues,
-    /// Group Master × Grand Master (0 under Blackout) per owner at the captured frame: a frozen
-    /// Intensity is held after them.
-    intensity_masters: HashMap<FixtureId, f32>,
     native: HashMap<FixtureId, FrozenPositionOutput>,
     /// Alias clearing is command-time only; no channel search or hashing occurs at frame rate.
     position_aliases: HashMap<FixtureId, HashSet<AttributeKey>>,
@@ -217,30 +215,6 @@ fn root_owners(snapshot: &light_engine::EngineSnapshot) -> HashSet<FixtureId> {
         .iter()
         .filter(|fixture| root_owns_channels(fixture))
         .map(|fixture| fixture.fixture_id)
-        .collect()
-}
-
-/// Group Master × Grand Master (0 under Blackout) per fixture and logical head under `options`.
-fn intensity_masters(
-    state: &AppState,
-    snapshot: &light_engine::EngineSnapshot,
-    options: light_engine::RenderOptions,
-) -> HashMap<FixtureId, f32> {
-    let engine = state.output.engine();
-    snapshot
-        .fixtures
-        .iter()
-        .flat_map(|fixture| {
-            std::iter::once(fixture.fixture_id)
-                .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
-                .map(move |owner| (fixture, owner))
-        })
-        .map(|(fixture, owner)| {
-            (
-                owner,
-                engine.intensity_master_scale(fixture, owner, options),
-            )
-        })
         .collect()
 }
 
@@ -382,31 +356,27 @@ fn prepare_freeze_capture(
     }
     // Existing non-physical/legacy capture remains available before a scheduler publication.
     // A new compiled Position hold above never reaches this fallback without an accepted frame.
-    let (values, options) = if let Some(frame) = accepted {
-        (frame.values.clone(), frame.options)
+    let values = if let Some(frame) = accepted {
+        frame.values.clone()
     } else if need_values {
-        let options = state.output.render_options();
         let rendered = state
             .output
             .engine()
-            .render(options)
+            .render(state.output.render_options())
             .map_err(|error| ApiError::bad_request(error.to_string()))?;
-        (rendered.resolved_values.clone(), options)
+        rendered.resolved_values.clone()
     } else {
         // Removal/idempotent commands need no physical sample. Reuse only an immutable empty
         // observation for the scalar carrier; no clocks, fitting or new output are requested.
         return Ok(Some(FreezeCapturedOutput {
             values: light_engine::FrameValues::empty(),
-            intensity_masters: HashMap::new(),
             native,
             position_aliases,
             root_owners,
         }));
     };
-    let intensity_masters = intensity_masters(state, &engine_snapshot, options);
     Ok(Some(FreezeCapturedOutput {
         values,
-        intensity_masters,
         native,
         position_aliases,
         root_owners,
@@ -731,7 +701,8 @@ fn captured_values(
     // Freeze holds the lamp's parameters before they become DMX (2026-10-05). Only resolved
     // parameters are captured, never visualization values (a virtual-dimmer lamp's visual
     // "intensity" is its colour's luminance, and visual colour channels are an approximation).
-    // Intensity is held as it was after the masters, which never change it afterwards.
+    // The captured values are finalized parameters, so a level is held as it was after the
+    // masters, which never change it afterwards.
     captured
         .values
         .iter()
@@ -740,20 +711,7 @@ fn captured_values(
                 && families
                     .is_none_or(|families| families.iter().any(|family| family.accepts(attribute)))
         })
-        .map(|((_, attribute), value)| {
-            let value = match (attribute.is_intensity(), value) {
-                (true, AttributeValue::Normalized(level)) => AttributeValue::Normalized(
-                    level
-                        * captured
-                            .intensity_masters
-                            .get(&fixture_id)
-                            .copied()
-                            .unwrap_or(1.0),
-                ),
-                _ => value.clone(),
-            };
-            (attribute.clone(), value)
-        })
+        .map(|((_, attribute), value)| (attribute.clone(), value.clone()))
         .collect()
 }
 

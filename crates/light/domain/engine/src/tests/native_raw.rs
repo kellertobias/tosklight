@@ -51,7 +51,7 @@ fn read(engine: &Engine, capture: &PreparedOutputFrame, target: FixtureId) -> Ve
 }
 
 #[test]
-fn native_raw_is_the_pre_master_scalar_baseline_of_the_destination_mode() {
+fn native_raw_is_the_mastered_parameter_baseline_before_virtual_intensity() {
     let (engine, id, _) = engine(false);
     let capture = engine.prepare_output_frame(Default::default());
     let raw = read(&engine, &capture, id);
@@ -61,25 +61,28 @@ fn native_raw_is_the_pre_master_scalar_baseline_of_the_destination_mode() {
     assert_eq!(raw, dmx.iter().map(|v| u32::from(*v)).collect::<Vec<_>>());
     assert_eq!(raw, [128, 204, 51, 255]);
 
-    // Masters, blackout and virtual intensity never reach the pre-master values.
+    // Masters scale the level parameter before DMX (2026-10-05), so the native baseline carries
+    // them on Intensity only. Virtual intensity never reaches it: Red follows only in the render.
     let (engine, id, _) = engine_with_reacting_red();
-    for options in [
-        RenderOptions::default(),
-        RenderOptions {
-            grand_master: 0.25,
-            ..Default::default()
-        },
-        RenderOptions {
-            blackout: true,
-            ..Default::default()
-        },
+    for (options, expected) in [
+        (RenderOptions::default(), [128, 204, 51, 255]),
+        (
+            RenderOptions {
+                grand_master: 0.25,
+                ..Default::default()
+            },
+            [32, 204, 51, 255],
+        ),
+        (
+            RenderOptions {
+                blackout: true,
+                ..Default::default()
+            },
+            [0, 204, 51, 255],
+        ),
     ] {
         let capture = engine.prepare_output_frame(options);
-        assert_eq!(
-            read(&engine, &capture, id),
-            [128, 204, 51, 255],
-            "{options:?}"
-        );
+        assert_eq!(read(&engine, &capture, id), expected, "{options:?}");
     }
     let rendered = engine.render(Default::default()).unwrap();
     assert_eq!(

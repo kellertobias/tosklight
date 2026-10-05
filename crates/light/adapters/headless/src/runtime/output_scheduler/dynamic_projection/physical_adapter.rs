@@ -39,8 +39,8 @@ use light_dynamics::{
     DynamicRuntimeError, DynamicValueAddress, FamilyControlContribution, FamilyExpressionOperation,
 };
 use light_engine::{
-    CapturedFrameToken, EngineSnapshot, FamilyProjectionEvidence, FamilyProjectionMaster,
-    FamilyProjectionMetadata, PreparedFrameGeometry, PreparedOutputFrame,
+    CapturedFrameToken, EngineSnapshot, FamilyProjectionEvidence, FamilyProjectionMetadata,
+    PreparedFrameGeometry, PreparedOutputFrame,
 };
 
 pub(in crate::runtime) mod color;
@@ -268,7 +268,6 @@ pub(in crate::runtime) trait PhysicalFamilyAdapter {
                 origin: None,
                 family_evidence: None,
             },
-            master: FamilyProjectionMaster::PreserveBaseline,
         }
     }
 }

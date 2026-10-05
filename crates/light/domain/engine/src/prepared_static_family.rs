@@ -7,11 +7,11 @@ use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, programming::*};
 
 use crate::{
-    ContributionBatch, ContributionFamilyEvidence, ContributionOrigin, ContributionSequenceMaster,
-    Engine, EngineError, OutputContinuityState, PreparedOutputFrame, RenderResult,
+    ContributionBatch, ContributionFamilyEvidence, ContributionOrigin, Engine, EngineError,
+    OutputContinuityState, PreparedOutputFrame, RenderResult,
 };
 
-/// Source metadata is independent of the family value and its output master. Mixed provenance
+/// Source metadata is independent of the family value. Mixed provenance
 /// which the adapter retains separately must use an explicit unknown replacement here.
 #[derive(Clone, Debug)]
 pub enum FamilyProjectionEvidence {
@@ -22,25 +22,18 @@ pub enum FamilyProjectionEvidence {
     },
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum FamilyProjectionMaster {
-    PreserveBaseline,
-    Replace(ContributionSequenceMaster),
-    Remove,
-}
-
 #[derive(Clone, Debug)]
 pub struct FamilyProjectionMetadata {
     /// The producer's actual output change time, if known. None reports an unknown timestamp;
     /// it does not borrow the static source's edit time or manufacture an arbitration vote.
     pub changed_at: Option<DateTime<Utc>>,
     pub evidence: FamilyProjectionEvidence,
-    pub master: FamilyProjectionMaster,
 }
 
 impl FamilyProjectionMetadata {
     pub(crate) fn apply(self, winner: &mut crate::SlotWinner, value: AttributeValue) {
         winner.value = value;
+        winner.pre_master = None;
         winner.projected_changed_at = Some(self.changed_at);
         if let FamilyProjectionEvidence::Replace {
             origin,
@@ -49,11 +42,6 @@ impl FamilyProjectionMetadata {
         {
             winner.origin = origin;
             winner.family_evidence = family_evidence;
-        }
-        match self.master {
-            FamilyProjectionMaster::PreserveBaseline => {}
-            FamilyProjectionMaster::Replace(master) => winner.sequence_master = Some(master),
-            FamilyProjectionMaster::Remove => winner.sequence_master = None,
         }
     }
 }
@@ -101,10 +89,6 @@ impl<'a> StaticWinner<'a> {
         self.0.family_evidence.as_ref()
     }
 
-    pub fn sequence_master(self) -> Option<ContributionSequenceMaster> {
-        self.0.sequence_master
-    }
-
     /// The live Position crossing behind this held static value (TL-544 G1). Runtime only.
     pub fn pending_transition(self) -> Option<&'a Arc<PendingFamilyTransition>> {
         self.0.pending_transition.as_ref()
@@ -118,6 +102,17 @@ impl PreparedStaticFamilyFrame {
 
     pub fn value(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&AttributeValue> {
         self.winner(target, attribute).map(|winner| &winner.value)
+    }
+
+    /// The raw parameter of the static baseline, before the output-parameter masters (Freeze
+    /// included). A Dynamic reading Current feeds its result back into a resolution that is
+    /// finalized once later, so it must read this rather than [`Self::value`].
+    pub fn raw_value(
+        &self,
+        target: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&AttributeValue> {
+        self.winner(target, attribute)?.raw_value()
     }
 
     pub fn changed_at(&self, target: FixtureId, attribute: &AttributeKey) -> Option<DateTime<Utc>> {
@@ -139,14 +134,6 @@ impl PreparedStaticFamilyFrame {
         attribute: &AttributeKey,
     ) -> Option<&Arc<ContributionFamilyEvidence>> {
         self.winner(target, attribute)?.family_evidence.as_ref()
-    }
-
-    pub fn sequence_master(
-        &self,
-        target: FixtureId,
-        attribute: &AttributeKey,
-    ) -> Option<ContributionSequenceMaster> {
-        self.winner(target, attribute)?.sequence_master
     }
 
     /// The live Position crossing behind the held static value (TL-544 G1). Runtime only.
@@ -190,13 +177,6 @@ impl PreparedStaticFamilyFrame {
         }
         ProgrammingFieldScope::for_value(owner, &value)
             .map_err(|error| EngineError::Invalid(error.to_string()))?;
-        if let FamilyProjectionMaster::Replace(master) = metadata.master
-            && (!master.scale().is_finite() || !(0.0..=1.0).contains(&master.scale()))
-        {
-            return Err(invalid(
-                "family projection master must be finite and within 0-1",
-            ));
-        }
         if let FamilyProjectionEvidence::Replace {
             family_evidence: Some(evidence),
             ..
@@ -278,17 +258,12 @@ impl Engine {
         let mut resolved = crate::timed(crate::RenderPhase::ResolveTotal, || {
             self.resolve_prepared_attributes(capture, sampled, &mut continuity, trace_sources)
         });
-        // Freeze holds the lamp's parameters before they become DMX (2026-10-05): family adapters
-        // (Color, Zoom, Focus) read this baseline, so a frozen owner's adapter renders its frozen
-        // value. Reapplying the Freeze in the final projection is idempotent.
-        if !capture.freezes_nothing() {
-            crate::timed(crate::RenderPhase::FixtureFreezes, || {
-                crate::render::apply_fixture_freezes(
-                    &capture.generation.snapshot().fixtures,
-                    &mut resolved,
-                )
-            });
-        }
+        // The output parameters (2026-10-05): masters on the level parameters, then Freeze.
+        // Family adapters (Color, Zoom, Focus) read this baseline, so a frozen owner's adapter
+        // renders its frozen value. Reapplying the Freeze in the final projection is idempotent.
+        crate::timed(crate::RenderPhase::FixtureFreezes, || {
+            capture.finalize_output_parameters(&mut resolved)
+        });
         PreparedStaticFamilyFrame {
             capture_identity: Arc::clone(&capture.identity),
             preload: None,

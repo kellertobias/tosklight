@@ -367,8 +367,7 @@ function dimmer(fixtureId: string, number: number) {
         canonical_transform: "identity", resolution: "u8", secondary_slots: [],
         default_raw: 0, highlight_raw: 255, physical_min: 0, physical_max: 1,
         unit: null, invert: false, snap: false, reacts_to_virtual_intensity: false,
-        reacts_to_sequence_master: true, reacts_to_group_master: true,
-        reacts_to_grand_master: true, behavior: "controlled", functions: [],
+        behavior: "controlled", functions: [],
       }],
     }],
   };

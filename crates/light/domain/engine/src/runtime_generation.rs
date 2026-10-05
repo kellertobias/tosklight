@@ -624,6 +624,11 @@ impl GroupMasterIndex {
         index
     }
 
+    /// No Group Master is assigned to any fixture.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.fixtures.is_empty()
+    }
+
     pub(crate) fn scale(&self, fixture_id: FixtureId, flashes: &HashMap<String, f32>) -> f32 {
         // A show with no Group Master assigned asks this for every head of every frame.
         if self.fixtures.is_empty() {

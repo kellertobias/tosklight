@@ -296,7 +296,6 @@ fn captured_stage_replays_changed_prefix_repeats_ready_and_never_observes_parent
                         FamilyProjectionMetadata {
                             changed_at: None,
                             evidence: light_engine::FamilyProjectionEvidence::PreserveBaseline,
-                            master: light_engine::FamilyProjectionMaster::PreserveBaseline,
                         },
                         (),
                     ))

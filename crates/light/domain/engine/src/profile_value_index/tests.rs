@@ -51,39 +51,8 @@ fn contribution(
     }
 }
 
-/// What the removed per-head master map held: numbered masters, then unnumbered ones over them.
-fn master_map(
-    index: &ProfileValueIndex<'_>,
-    fixture: FixtureId,
-) -> FxHashMap<AttributeKey, ApplicableSequenceMaster> {
-    let mut masters = FxHashMap::default();
-    match index {
-        ProfileValueIndex::Dense { frame, .. } => {
-            for slot in frame.slots().fixture_slots(fixture) {
-                if let Some(master) = frame.sequence_master(*slot) {
-                    masters.insert(frame.slots().attribute_key(*slot).clone(), master);
-                }
-            }
-            for (attribute, winner) in frame.overflow(fixture) {
-                if let Some(master) = winner.sequence_master {
-                    masters.insert(attribute.clone(), master);
-                }
-            }
-        }
-        ProfileValueIndex::Scanned {
-            sequence_masters, ..
-        } => {
-            for (attribute, master) in sequence_masters.get(&fixture).into_iter().flatten() {
-                masters.insert((*attribute).clone(), *master);
-            }
-        }
-    }
-    masters
-}
-
 fn assert_like_the_maps(index: &ProfileValueIndex<'_>, fixture: FixtureId) {
     let values = index.values(fixture);
-    let masters = master_map(index, fixture);
     for name in [
         "intensity",
         "pan",
@@ -98,11 +67,6 @@ fn assert_like_the_maps(index: &ProfileValueIndex<'_>, fixture: FixtureId) {
             index.head_value(fixture, &attribute),
             values.get(&attribute),
             "value of {name}"
-        );
-        assert_eq!(
-            index.head_sequence_master(fixture, &attribute),
-            masters.get(&attribute).copied(),
-            "master of {name}"
         );
     }
     let mut keys = Vec::new();
@@ -132,26 +96,18 @@ fn head_lookups_answer_like_the_head_maps_they_replaced() {
     resolver.extend(contributions());
     let resolved = resolver.finish();
     let frame = crate::FrameValues::from_frame(resolved.frame.expect("a dense frame"));
-    let no_masters = FxHashMap::default();
-    let dense = ProfileValueIndex::new(&frame, &no_masters, &channels);
+    let dense = ProfileValueIndex::new(&frame, &channels);
     assert!(matches!(dense, ProfileValueIndex::Dense { .. }));
     assert_like_the_maps(&dense, fixture_id);
 
     // The same values handed over by name.
     let mut by_name = crate::ResolvedValues::default();
-    let mut masters = FxHashMap::default();
     for value in contributions() {
         let (fixture, attribute) = (value.fixture_id(), value.attribute().clone());
-        by_name.insert(
-            (fixture, attribute.clone()),
-            value.timed_value().value.clone(),
-        );
-        if let Some(master) = value.applicable_sequence_master() {
-            masters.insert((fixture, attribute), master);
-        }
+        by_name.insert((fixture, attribute), value.timed_value().value.clone());
     }
     let named = crate::FrameValues::from_maps(by_name, Default::default());
-    let scanned = ProfileValueIndex::new(&named, &masters, &channels);
+    let scanned = ProfileValueIndex::new(&named, &channels);
     assert!(matches!(scanned, ProfileValueIndex::Scanned { .. }));
     assert_like_the_maps(&scanned, fixture_id);
 }

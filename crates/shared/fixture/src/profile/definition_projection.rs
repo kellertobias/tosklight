@@ -172,21 +172,13 @@ fn logical_heads(
                 .filter(|channel| channel.head_id == head.id)
                 .map(|channel| parameter(channel, primary_slots, patch_policy))
                 .collect::<Vec<_>>();
-            // A head whose channels react to virtual intensity but that has no physical intensity
-            // channel (e.g. an RGB head whose intensity is derived) needs the abstract
-            // virtual-dimmer intensity parameter the operator controls. This reverses the
-            // legacy->profile migration, which drops that abstract intensity and instead marks the
-            // colour channels reacts_to_virtual_intensity; the resolved definition restores it so
-            // programmer surfaces expose the derived intensity. A channel reacting inversely still
-            // reacts, and needs the same intensity to react to.
-            let reacts_to_virtual = mode
-                .channels
-                .iter()
-                .any(|channel| channel.head_id == head.id && channel.reacts_to_virtual_intensity);
+            // A light-emitting head without an Intensity channel (e.g. an RGB head) has a virtual
+            // dimmer: the abstract Intensity the operator programs and the masters scale, which
+            // reaches the light through the channels following it, directly or inversely.
             let has_intensity = parameters
                 .iter()
                 .any(|parameter| parameter.attribute.is_intensity());
-            if reacts_to_virtual && !has_intensity {
+            if !has_intensity && mode.head_has_virtual_dimmer(head.id) {
                 parameters.insert(0, abstract_virtual_dimmer_intensity());
             }
             LogicalHead {

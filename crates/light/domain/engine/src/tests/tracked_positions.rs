@@ -7,17 +7,17 @@
 use super::*;
 
 fn tracked_point() -> (PatchedFixture, FixtureId) {
-    schema_v2_fixture(&[("point.position.x", false, false, false, false, false)])
+    schema_v2_fixture(&[("point.position.x", false, false)])
 }
 
 fn nonshared_point() -> (PatchedFixture, FixtureId, FixtureId) {
     let (mut fixture, root) = schema_v2_fixture(&[
-        ("point.position.x", false, false, false, false, false),
-        ("point.position.y", false, false, false, false, false),
-        ("point.position.z", false, false, false, false, false),
-        ("point.rotation.x", false, false, false, false, false),
-        ("point.rotation.y", false, false, false, false, false),
-        ("point.rotation.z", false, false, false, false, false),
+        ("point.position.x", false, false),
+        ("point.position.y", false, false),
+        ("point.position.z", false, false),
+        ("point.rotation.x", false, false),
+        ("point.rotation.y", false, false),
+        ("point.rotation.z", false, false),
     ]);
     let mut profile = fixture
         .definition

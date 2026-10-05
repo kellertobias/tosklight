@@ -28,6 +28,7 @@ mod resolution_plan;
 mod runtime_compatibility;
 mod source_gdtf;
 mod validation;
+mod virtual_dimmer;
 mod wheel_color;
 
 pub use channel_model::*;

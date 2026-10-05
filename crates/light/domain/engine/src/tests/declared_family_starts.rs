@@ -58,12 +58,12 @@ fn continuous(
 /// Focus 0 → 100 %. `modeled` false leaves Zoom without a convention and Color without a model.
 fn wash(modeled: bool) -> PatchedFixture {
     let (mut fixture, _) = schema_v2_fixture(&[
-        ("intensity", false, false, false, false, false),
-        ("color.red", false, false, false, false, true),
-        ("color.green", false, false, false, false, true),
-        ("color.blue", false, false, false, false, true),
-        ("zoom", false, false, false, false, false),
-        ("focus", false, false, false, false, false),
+        ("intensity", false, false),
+        ("color.red", false, false),
+        ("color.green", false, false),
+        ("color.blue", false, false),
+        ("zoom", false, false),
+        ("focus", false, false),
     ]);
     redefine(&mut fixture, |profile| {
         let mode = &mut profile.modes[0];

@@ -425,7 +425,6 @@ fn playback_samples_keep_origin_ordinals_and_explicit_evidence_ordinals_independ
         sampled(fixture, "focus", at, 1).value().clone(),
         source,
         91,
-        1.0,
     );
     let unknown = engine.observe_source_frame(&[ContributionBatch::new([sample.clone()])]);
     assert_eq!(

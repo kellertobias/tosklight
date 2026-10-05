@@ -191,9 +191,12 @@ impl FixtureLibrary {
         let digest = crate::fixture_profile_content_digest(&value)
             .map_err(|error| FixtureError::Invalid(error.to_string()))?;
         let transaction = self.conn.unchecked_transaction()?;
-        if let Some(existing) = self.profile_revision_document(profile.id, profile.revision)? {
-            let existing_digest = crate::fixture_profile_content_digest(&existing)
-                .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+        // The stored revision is compared as this schema reads it, the same way the incoming
+        // profile was read: a field the schema no longer has is not a content difference.
+        if let Some(existing) = self.profile(profile.id, profile.revision)? {
+            let existing_digest =
+                crate::fixture_profile_content_digest(&serde_json::to_value(existing)?)
+                    .map_err(|error| FixtureError::Invalid(error.to_string()))?;
             if existing_digest != digest {
                 return Err(FixtureError::Invalid(format!(
                     "immutable profile {} revision {} already has different contents",

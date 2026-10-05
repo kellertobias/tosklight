@@ -39,9 +39,6 @@ fn channel(head: Uuid, name: &str, slot: u16) -> FixtureChannel {
         snap: false,
         reacts_to_virtual_intensity: false,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: true,
-        reacts_to_group_master: true,
-        reacts_to_grand_master: false,
         behavior: ChannelBehavior::Controlled,
         functions: vec![ChannelFunction::continuous(name, attribute, 65535)],
     }
@@ -81,7 +78,6 @@ fn profile(logical: bool, aliases: bool) -> FixtureProfile {
         channel.highlight_raw = 65535;
         channel.physical_min = None;
         channel.physical_max = None;
-        channel.reacts_to_grand_master = false;
         channel.functions = vec![ChannelFunction::continuous(
             attribute,
             channel.attribute.clone(),

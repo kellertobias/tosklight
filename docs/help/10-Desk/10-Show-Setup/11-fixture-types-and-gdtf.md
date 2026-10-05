@@ -260,10 +260,18 @@ row has these columns:
   attribute — with the channel's functions as a table underneath. A function's behavior-specific
   values, such as a fixed value's label or angular motion, open under its row with **Details**.
 - **Invert** and **Snap** switch the channel's inversion and whether it jumps instead of fading.
-- **Masters** opens **React to Virtual Intensity** — **Ignore**, **Follow**, or **Inverse** — and
-  the switches for **React to Sequence Master**, **React to Group Master**, and **React to Grand
-  Master**. **Inverse** makes the channel full while the virtual intensity is at zero and gone at
-  full, for a slot that must do the opposite of the dimmer. The table shows it as *−VI*.
+- **Masters** shows how the masters reach the channel. Every master — Cue, Group, Grand, and
+  Blackout — scales a fixture's level parameters (Intensity, Volume) before they become DMX, so a
+  level channel follows them on its own; the table shows it as *Level*. Any other channel follows
+  them only through **React to Virtual Intensity**: **Ignore**, **Follow**, or **Inverse**. Every
+  light-emitting head without an Intensity channel — an RGB PAR, each cell of a pixel bar — has a
+  virtual dimmer: an Intensity you program, record and master like a physical one. Its colour
+  emitters (Red, Green, Blue, White, Amber, UV, Lime and the like) start on **Follow** when the
+  channel is created or imported, so they dim with it; on a head with a physical dimmer they start
+  on **Ignore**, because the dimmer already dims them. Cyan, Magenta and Yellow flags start on
+  **Ignore**. **Inverse** makes the channel full while the virtual intensity is at zero and gone at
+  full, for a slot that must do the opposite of the dimmer. The table shows these as *VI* and
+  *−VI*. A Cue that stores no Intensity for such a head does not dim it from its fader.
 
 The table is the tab's only scrolling area: it scrolls up, down, and sideways under a fixed column
 header, while the mode editor's title bar and split headers stay in place. In a channel's

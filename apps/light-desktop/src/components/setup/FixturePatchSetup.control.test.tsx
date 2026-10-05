@@ -209,24 +209,18 @@ function policyFixture(): PatchedFixture {
 			id: "intensity-channel",
 			fixture_attribute: "intensity",
 			attribute: "intensity",
-			reacts_to_group_master: true,
-			reacts_to_grand_master: true,
 		},
 		{
 			...base,
 			id: "pan-channel",
 			fixture_attribute: "pan",
 			attribute: "pan",
-			reacts_to_group_master: false,
-			reacts_to_grand_master: false,
 		},
 		{
 			...base,
 			id: "tilt-channel",
 			fixture_attribute: "tilt",
 			attribute: "tilt",
-			reacts_to_group_master: false,
-			reacts_to_grand_master: false,
 		},
 	];
 	fixture.group_masters_enabled = true;
@@ -2403,9 +2397,6 @@ describe("Position Reference column", () => {
 			invert: false,
 			snap: false,
 			reacts_to_virtual_intensity: false,
-			reacts_to_sequence_master: false,
-			reacts_to_group_master: false,
-			reacts_to_grand_master: false,
 			behavior: "controlled",
 			functions: [],
 		}));

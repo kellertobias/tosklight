@@ -236,9 +236,6 @@ fn a_media_head_is_never_lamp_fitted_even_when_a_lamp_color_model_exists() {
         };
         channel.fixture_attribute = AttributeKey(native.into());
         channel.reacts_to_virtual_intensity = false;
-        channel.reacts_to_sequence_master = false;
-        channel.reacts_to_group_master = false;
-        channel.reacts_to_grand_master = false;
         channel.functions[0].behavior = light_fixture::ChannelFunctionBehavior::Continuous {
             physical_min: 0.0,
             physical_max: 255.0,
@@ -372,16 +369,24 @@ fn intensity_alpha_masters_and_blackout_stay_independent_of_media_color() {
         AttributeKey("intensity".into()),
         AttributeValue::Normalized(0.6),
     );
-    for options in [
-        RenderOptions::default(),
-        RenderOptions {
-            grand_master: 0.25,
-            ..Default::default()
-        },
-        RenderOptions {
-            blackout: true,
-            ..Default::default()
-        },
+    // The layer dimmer is a level: masters scale it before DMX (2026-10-05). The Media colour
+    // writes stay independent of them.
+    for (options, dimmer) in [
+        (RenderOptions::default(), 153),
+        (
+            RenderOptions {
+                grand_master: 0.25,
+                ..Default::default()
+            },
+            38,
+        ),
+        (
+            RenderOptions {
+                blackout: true,
+                ..Default::default()
+            },
+            0,
+        ),
     ] {
         let resolved = rig
             .resolve_with(rig.layers[0], &program(&request), options)
@@ -389,7 +394,11 @@ fn intensity_alpha_masters_and_blackout_stay_independent_of_media_color() {
         let raws = |r: &Resolved| r.result.writes.iter().map(|w| w.raw).collect::<Vec<_>>();
         assert_eq!(raws(&resolved), raws(&base), "{options:?}");
         assert_eq!(resolved.result.achieved, base.result.achieved);
-        assert_eq!(rig.dmx(&resolved)[LAYER_DIMMER], 153, "pre-master dimmer");
+        assert_eq!(
+            rig.dmx(&resolved)[LAYER_DIMMER],
+            dimmer,
+            "{options:?}: mastered dimmer"
+        );
     }
     // relativeOutput dims the tint linearly, White Blend and dimmer are untouched.
     assert_eq!(base.result.quality.derived.white_blend, Some(0.25));

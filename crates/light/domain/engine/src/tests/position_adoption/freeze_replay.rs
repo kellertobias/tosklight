@@ -248,9 +248,9 @@ fn native_freeze_keeps_motor_pose_while_tracked_mount_moves() {
     let mut fixture = mover();
     let root = fixture.fixture_id;
     let (mut point, point_id) = schema_v2_fixture(&[
-        ("point.position.x", false, false, false, false, false),
-        ("point.position.y", false, false, false, false, false),
-        ("point.position.z", false, false, false, false, false),
+        ("point.position.x", false, false),
+        ("point.position.y", false, false),
+        ("point.position.z", false, false),
     ]);
     point.fixture_number = None;
     point.universe = None;

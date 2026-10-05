@@ -52,6 +52,16 @@ impl PreparedOutputFrame {
             .iter()
             .all(|fixture| fixture.freeze.is_empty())
     }
+    /// Masters on the level parameters, then Freeze, with this capture's masters and flashes.
+    pub(crate) fn finalize_output_parameters(&self, resolved: &mut crate::ResolvedAttributes) {
+        crate::render::finalize_output_parameters(
+            &self.generation,
+            self.overlays.options,
+            &self.overlays.flashes,
+            resolved,
+        );
+    }
+
     pub fn sampled_at(&self) -> DateTime<Utc> {
         self.sampled_at
     }
@@ -234,33 +244,6 @@ impl Engine {
             continuity,
             scratch: Arc::clone(&self.scratch),
         }
-    }
-
-    /// The Group Master × Grand Master (0 under Blackout) the engine applies to the Intensity
-    /// parameter of `owner`, a head or fixture of `root`, under `options`. A Freeze captures the
-    /// parameter after these masters, which then never change it.
-    pub fn intensity_master_scale(
-        &self,
-        root: &light_fixture::PatchedFixture,
-        owner: FixtureId,
-        options: RenderOptions,
-    ) -> f32 {
-        let grand = if options.blackout {
-            0.0
-        } else if root.grand_master_enabled {
-            options.grand_master.clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
-        let group = if root.group_masters_enabled {
-            self.generation
-                .load()
-                .group_masters()
-                .scale(owner, &self.group_master_flashes.read())
-        } else {
-            1.0
-        };
-        grand * group
     }
 
     pub(crate) fn capture_output_overlays(&self, options: RenderOptions) -> CapturedOutputOverlays {
