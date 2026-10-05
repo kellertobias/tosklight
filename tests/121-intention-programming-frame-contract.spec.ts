@@ -450,33 +450,51 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		expect(runtime.instances, "no Dynamic was activated").toEqual([]);
 	});
 
-	test("INTENT-FRAME-002 @api › starting a Dynamic with nothing selected leaves the Programmer untouched", async ({
+	test("INTENT-FRAME-002 @api › a targetless Dynamic with nothing selected selects its capable fixtures first, then starts on them", async ({
 		api,
 		bench,
 	}) => {
-		test.fail(
-			true,
-			"OPEN: a targetless Dynamic started with nothing selected falls back to every fixture in the show (crates/light/src/dynamics/helpers.rs resolve_targets), so the Programmer changes; product decision pending",
-		);
-		const rig = await moverRig(api, "002-no-selection-dynamic");
+		// Two movers and an RGB lamp without Pan/Tilt: only the movers can run a Pan sweep.
+		const rig = await arrangeRig(api, "002-no-selection-dynamic", [
+			{ number: 1, address: "1.1", ...SPOT },
+			{ number: 2, address: "1.21", ...SPOT },
+			{ number: 3, address: "1.41", ...RGB },
+		]);
+		const movers = [rig.ids[1], rig.ids[2]];
+		await requireSemanticFamilies(api, movers);
 		const sweep = await createDynamic(api, rig, PAN_SWEEP);
 		await select(api, rig, []);
 		const revision = await programmerRevision(api);
-		await api.request(
-			"POST",
-			`/api/v2/dynamics/${sweep.id}/start`,
-			{
-				request_id: crypto.randomUUID(),
-				targets: [],
-				overrides: { size: 1, speed_multiplier: { numerator: 1, denominator: 1 }, phase_offset_degrees: 0 },
-				timing: {},
-			},
-			true,
-			undefined,
-			{ showId: rig.showId },
-		);
+		const press = () =>
+			api.request<{ started: boolean; targets: string[] }>(
+				"POST",
+				`/api/v2/dynamics/${sweep.id}/start`,
+				{
+					request_id: crypto.randomUUID(),
+					targets: [],
+					overrides: { size: 1, speed_multiplier: { numerator: 1, denominator: 1 }, phase_offset_degrees: 0 },
+					timing: {},
+				},
+				true,
+				undefined,
+				{ showId: rig.showId },
+			);
+		const selected = async () =>
+			(await api.request<Array<{ selected: string[] }>>("GET", "/api/v2/programmers"))[0]?.selected ?? [];
+
+		// First press: the capable fixtures are selected and nothing starts.
+		const first = await press();
+		expect(first.started).toBe(false);
+		expect([...first.targets].sort()).toEqual([...movers].sort());
+		await expect.poll(async () => [...(await selected())].sort()).toEqual([...movers].sort());
 		await bench.tick(25);
-		expect(await programmerRevision(api)).toBe(revision);
+		expect(await programmerRevision(api), "no Programmer value was written").toBe(revision);
+
+		// Second press: the Dynamic starts on that selection.
+		const second = await press();
+		expect(second.started).toBe(true);
+		expect([...second.targets].sort()).toEqual([...movers].sort());
+		await expect.poll(() => programmerRevision(api)).toBeGreaterThan(revision);
 	});
 
 	test("INTENT-FRAME-002 @api › the Dynamic status does not report running semantic Angle lanes as skipped", async ({

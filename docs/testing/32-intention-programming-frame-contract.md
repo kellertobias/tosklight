@@ -23,9 +23,9 @@ operator, native Stage or capacity acceptance.
   Angle Dynamic as a complete pair while Intensity continues and the Target reference is kept; a
   static Target holds its last aim; edits, FixAT and a Preset recall with nothing selected leave the
   Programmer unchanged (Undo history is not yet asserted). Steps 4–5 (Resume clocks across
-  save/reopen, an unavailable original Direct model) are Rust-only. One test is an expected failure
-  pending a product decision: a targetless Dynamic started with nothing selected falls back to
-  every fixture in the show, so the Programmer changes.
+  save/reopen, an unavailable original Direct model) are Rust-only. A targetless Dynamic started with
+  nothing selected first selects only its capable fixtures (two movers, not the RGB lamp) without
+  writing a Programmer value, and starts on that selection at the second press.
 - **INTENT-FRAME-003**: Playwright covers steps 1–4 and the record comparison of step 6: magenta with
   UV and a warm white survive RGB → RGBW → CMY replacement through Presets and a Group Cue, White is
   never retained, the wheel head reports its quality and unsupported UV passively, and a Direct

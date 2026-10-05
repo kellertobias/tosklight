@@ -207,7 +207,9 @@ selection, or Shift-click to edit it; use **SET** followed by a Playback to assi
 shows **Lanes**, **Phase**, and **Speed** for attribute curves, target spreading, and BPM/Speed
 Group control. **Take Selection** stores a target (a single Group stays live; other selections are
 frozen); a stored target takes precedence over any active selection. **Clear Selection** removes
-it. Use a Stage pane for Live or Follow Preload visualization.
+it. A Dynamic without a stored target never runs on every fixture by itself: with nothing
+selected, the first tap selects every fixture that can run it (a fixture with a channel one of
+its lanes drives) and starts nothing; the second tap starts it on that selection. Use a Stage pane for Live or Follow Preload visualization.
 
 **Pane configuration:** only common size and removal controls.
 

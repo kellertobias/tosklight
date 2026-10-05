@@ -52,6 +52,21 @@ impl ProgrammingLaneConfiguration {
 }
 
 impl DynamicLane {
+    /// Whether this lane drives a native channel of `attribute`: a legacy scalar lane its own
+    /// attribute, a semantic Position lane Pan and Tilt, a semantic Color lane any colour
+    /// channel. Focus and Zoom owners name their channel attribute.
+    pub fn drives_attribute(&self, attribute: &AttributeKey) -> bool {
+        let owner = self.output_owner();
+        if owner == *attribute {
+            return true;
+        }
+        match &*owner.0 {
+            "position" => matches!(&*attribute.0, "pan" | "tilt"),
+            "color" => attribute.0.starts_with("color."),
+            _ => false,
+        }
+    }
+
     pub fn output_owner(&self) -> AttributeKey {
         match &self.body {
             DynamicLaneBody::LegacyScalar(body) => body.attribute.clone(),

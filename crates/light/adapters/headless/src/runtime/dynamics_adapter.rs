@@ -71,6 +71,11 @@ impl DynamicsPorts for ServerDynamicsPorts<'_> {
         self.state.output.supported_programming_contract()
     }
 
+    fn selection_changed(&self) {
+        // Like a Group playback selecting its members: callers persist the Programmer.
+        super::reconcile_highlight_selection(self.state, self.session, "dynamic_capable_selection");
+    }
+
     fn authorize(&self, context: &ActionContext) -> Result<(), ActionError> {
         if context.desk_id != self.session.desk.id || context.session_id != Some(self.session.id.0)
         {

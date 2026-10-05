@@ -547,23 +547,6 @@ pub(in crate::runtime) struct DynamicTargetLaneCoverage {
     pub(in crate::runtime) total_address_count: usize,
 }
 
-/// Whether a lane owned by `owner` drives a native channel of `attribute`: a legacy scalar lane
-/// its own attribute, a semantic Position lane Pan and Tilt, a semantic Color lane any colour
-/// channel. Focus and Zoom owners name their channel attribute.
-fn lane_drives_attribute(
-    owner: &light_core::AttributeKey,
-    attribute: &light_core::AttributeKey,
-) -> bool {
-    if owner == attribute {
-        return true;
-    }
-    match &*owner.0 {
-        "position" => matches!(&*attribute.0, "pan" | "tilt"),
-        "color" => attribute.0.starts_with("color."),
-        _ => false,
-    }
-}
-
 pub(in crate::runtime) fn dynamic_target_lane_coverage(
     snapshot: &EngineSnapshot,
     definition: &light_dynamics::DynamicDefinition,
@@ -606,9 +589,7 @@ pub(in crate::runtime) fn dynamic_target_lane_coverage(
                     .iter()
                     .filter(|head| head_index.is_none_or(|index| head.index == index))
                     .flat_map(|head| &head.parameters)
-                    .any(|parameter| {
-                        lane_drives_attribute(&lane.output_owner(), &parameter.attribute)
-                    })
+                    .any(|parameter| lane.drives_attribute(&parameter.attribute))
             })
             .count();
         coverage.supported_address_count += supported;

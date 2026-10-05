@@ -339,3 +339,34 @@ fn pending_off_resolves_existing_link_without_mutating_live_runtime() {
         DynamicSemanticValue::DynamicOff { instance_link, .. } if instance_link == link));
     assert!(effective_programmer_dynamic_controllers(&state).is_empty());
 }
+
+#[test]
+fn targetless_start_with_nothing_selected_never_falls_back_to_every_fixture() {
+    let (registry, session, context) = desk();
+    let service = DynamicsService::new(registry.clone());
+    let ports = Ports::default();
+    let command = DynamicStartCommand {
+        dynamic_id: definition().id,
+        targets: Vec::new(),
+        overrides: DynamicInstanceOverrides {
+            size: 1.0,
+            speed_multiplier: light_dynamics::Rational::ONE,
+            phase_offset_degrees: 0.0,
+        },
+        timing: Default::default(),
+        undo_group: None,
+    };
+    // The test show has no fixture with an Intensity channel: nothing is capable.
+    let error = service
+        .start(&context, command.clone(), &ports)
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(ports.starts.lock().is_empty());
+    assert!(registry.selection(session).unwrap().selected.is_empty());
+    assert!(
+        service
+            .off_matching(&context, command, &ports)
+            .unwrap()
+            .is_none()
+    );
+}

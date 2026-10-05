@@ -405,15 +405,3 @@ fn projection_fixture(
     }))
     .unwrap()
 }
-
-#[test]
-fn semantic_lanes_count_their_family_channels_as_supported() {
-    let key = |name: &str| light_core::AttributeKey(name.into());
-    assert!(lane_drives_attribute(&key("position"), &key("pan")));
-    assert!(lane_drives_attribute(&key("position"), &key("tilt")));
-    assert!(lane_drives_attribute(&key("color"), &key("color.red")));
-    assert!(lane_drives_attribute(&key("zoom"), &key("zoom")));
-    assert!(lane_drives_attribute(&key("pan"), &key("pan")));
-    assert!(!lane_drives_attribute(&key("position"), &key("intensity")));
-    assert!(!lane_drives_attribute(&key("color"), &key("intensity")));
-}

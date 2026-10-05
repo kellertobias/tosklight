@@ -188,6 +188,9 @@ pub trait DynamicsPorts: Send + Sync {
         ))
     }
     fn now_millis(&self) -> u64;
+    /// The Dynamics service changed the selection (a targetless Dynamic started with nothing
+    /// selected selects every capable fixture); the adapter reconciles its selection followers.
+    fn selection_changed(&self) {}
     /// Off authors its source edit first. The next captured frame decides whether to mute a
     /// retained underlying On or retire an absent source; a response lookup must not stop it.
     fn runtime_controller_instance(&self, controller_id: Uuid) -> Option<Uuid>;
@@ -241,6 +244,15 @@ impl DynamicsService {
             return Ok(outcome);
         }
         let snapshot = ports.snapshot();
+        if let Some(outcome) = self.select_capable(identity.session, &snapshot, &command, ports)? {
+            self.remember(
+                context,
+                identity.session,
+                replay_action,
+                DynamicsReplayOutcome::Start(outcome.clone()),
+            );
+            return Ok(outcome);
+        }
         let (definition, targets, inherited_spatial_mapping) = definition_and_targets(
             context,
             ports,
@@ -333,6 +345,15 @@ impl DynamicsService {
             return Ok(outcome);
         }
         let snapshot = ports.snapshot();
+        if let Some(outcome) = self.select_capable(identity.session, &snapshot, &command, ports)? {
+            self.remember(
+                context,
+                identity.session,
+                replay_action,
+                DynamicsReplayOutcome::Start(outcome.clone()),
+            );
+            return Ok(outcome);
+        }
         let (definition, targets, inherited_spatial_mapping) = definition_and_targets(
             context,
             ports,
@@ -383,6 +404,22 @@ impl DynamicsService {
             return Ok(outcome);
         }
         let snapshot = ports.snapshot();
+        // Nothing selected for a targetless Dynamic: nothing it could be running on to switch off.
+        if helpers::nothing_to_target(
+            &self.programmers,
+            identity.session,
+            &snapshot,
+            command.dynamic_id,
+            &command.targets,
+        )? {
+            self.remember(
+                context,
+                identity.session,
+                replay_action,
+                DynamicsReplayOutcome::OptionalStart(None),
+            );
+            return Ok(None);
+        }
         let (definition, targets, _) = definition_and_targets(
             context,
             ports,
@@ -446,6 +483,35 @@ impl DynamicsService {
             DynamicsReplayOutcome::OptionalStart(outcome.clone()),
         );
         Ok(outcome)
+    }
+
+    /// First press of a targetless Dynamic with nothing selected: select every capable fixture
+    /// and start nothing. The second press starts it on that selection.
+    fn select_capable(
+        &self,
+        session: SessionId,
+        snapshot: &EngineSnapshot,
+        command: &DynamicStartCommand,
+        ports: &dyn DynamicsPorts,
+    ) -> Result<Option<DynamicStartOutcome>, ActionError> {
+        if !helpers::nothing_to_target(
+            &self.programmers,
+            session,
+            snapshot,
+            command.dynamic_id,
+            &command.targets,
+        )? {
+            return Ok(None);
+        }
+        let capable = helpers::capable_fixtures(snapshot, command.dynamic_id)?;
+        self.programmers.select(session, capable.iter().copied());
+        ports.selection_changed();
+        Ok(Some(DynamicStartOutcome {
+            runtime_instance_id: Uuid::nil(),
+            controller_id: Uuid::nil(),
+            targets: capable,
+            started: false,
+        }))
     }
 
     fn start_resolved(

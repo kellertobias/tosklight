@@ -156,6 +156,58 @@ pub(super) fn definition(
         .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "Dynamic does not exist"))
 }
 
+/// A targetless Dynamic, no explicit targets and nothing selected: it has nothing to run on.
+pub(super) fn nothing_to_target(
+    programmers: &ProgrammerRegistry,
+    session: SessionId,
+    snapshot: &EngineSnapshot,
+    dynamic_id: Uuid,
+    explicit: &[FixtureId],
+) -> Result<bool, ActionError> {
+    let definition = definition(snapshot, dynamic_id)?;
+    Ok(
+        matches!(definition.target_binding, DynamicTargetBinding::Targetless)
+            && explicit.is_empty()
+            && programmers
+                .selection(session)
+                .is_none_or(|selection| selection.selected.is_empty()),
+    )
+}
+
+/// The fixtures such a Dynamic selects instead of starting: every fixture with a channel one of
+/// its lanes drives. Refused when no fixture in the show can run it.
+pub(super) fn capable_fixtures(
+    snapshot: &EngineSnapshot,
+    dynamic_id: Uuid,
+) -> Result<Vec<FixtureId>, ActionError> {
+    let definition = definition(snapshot, dynamic_id)?;
+    let capable = snapshot
+        .fixtures
+        .iter()
+        .filter(|fixture| {
+            fixture
+                .definition
+                .heads
+                .iter()
+                .flat_map(|head| &head.parameters)
+                .any(|parameter| {
+                    definition
+                        .lanes
+                        .iter()
+                        .any(|lane| lane.drives_attribute(&parameter.attribute))
+                })
+        })
+        .map(|fixture| fixture.fixture_id)
+        .collect::<Vec<_>>();
+    if capable.is_empty() {
+        return Err(ActionError::new(
+            ActionErrorKind::Invalid,
+            "no fixture in the show can run this Dynamic",
+        ));
+    }
+    Ok(capable)
+}
+
 pub(super) fn definition_and_targets<'a>(
     context: &ActionContext,
     ports: &dyn DynamicsPorts,
@@ -237,18 +289,15 @@ pub(super) fn resolve_targets(
         }
         return Ok((targets, inherited_spatial_mapping));
     }
+    // A targetless Dynamic never falls back to every fixture: with nothing selected the start
+    // paths select the capable fixtures first (`capable_selection`).
     let targets = if !explicit.is_empty() {
         explicit.to_vec()
-    } else if let Some(selection) = programmers.selection(session)
-        && !selection.selected.is_empty()
-    {
-        selection.selected
     } else {
-        snapshot
-            .fixtures
-            .iter()
-            .map(|fixture| fixture.fixture_id)
-            .collect()
+        programmers
+            .selection(session)
+            .map(|selection| selection.selected)
+            .unwrap_or_default()
     };
     if targets.is_empty() {
         return Err(ActionError::new(
