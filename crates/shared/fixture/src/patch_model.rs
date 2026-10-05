@@ -338,7 +338,15 @@ impl FreezeFamily {
 
         let class = light_core::attribute_descriptor(attribute).family;
         match self {
-            Self::Intensity => attribute.is_intensity() || class == AttributeClass::Intensity,
+            // Shutter and Strobe are Intensity, as in the attribute registry (2026-10-05).
+            Self::Intensity => {
+                attribute.is_intensity()
+                    || class == AttributeClass::Intensity
+                    || attribute
+                        .0
+                        .split('.')
+                        .any(|part| matches!(part, "shutter" | "strobe"))
+            }
             Self::Color => {
                 class == AttributeClass::Color
                     || *attribute.0 == *"color"

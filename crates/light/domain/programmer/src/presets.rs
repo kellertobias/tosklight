@@ -57,6 +57,10 @@ impl PresetFamily {
                     || *attribute.0 == *"dimmer"
                     || attribute.0.ends_with(".dimmer")
                     || class == AttributeClass::Intensity
+                    || attribute
+                        .0
+                        .split('.')
+                        .any(|part| matches!(part, "shutter" | "strobe"))
             }
             Self::Color => {
                 class == AttributeClass::Color
@@ -72,16 +76,7 @@ impl PresetFamily {
                 ) || attribute.0.split('.').any(|part| {
                     matches!(
                         part,
-                        "beam"
-                            | "focus"
-                            | "zoom"
-                            | "iris"
-                            | "gobo"
-                            | "prism"
-                            | "frost"
-                            | "shaper"
-                            | "shutter"
-                            | "strobe"
+                        "beam" | "focus" | "zoom" | "iris" | "gobo" | "prism" | "frost" | "shaper"
                     )
                 })
             }
@@ -293,10 +288,15 @@ impl Preset {
         self.universal_values = HashMap::from([(color, value)]);
     }
 
-    pub fn store(&mut self, incoming: Preset, mode: PresetStoreMode) {
+    pub fn store(&mut self, mut incoming: Preset, mode: PresetStoreMode) {
         if !incoming.name.is_empty() {
-            self.name = incoming.name;
+            self.name = incoming.name.clone();
         }
+        // Only the incoming values are filtered by family. Values an existing Preset of the same
+        // family already holds stay, even when a later family rule no longer files them there
+        // (Shutter/Strobe moved from Beam to Intensity on 2026-10-05).
+        let family_changed = self.family != incoming.family;
+        incoming.retain_family_attributes();
         self.family = incoming.family;
         match mode {
             PresetStoreMode::Overwrite => {
@@ -328,6 +328,8 @@ impl Preset {
                 }
             }
         }
-        self.retain_family_attributes();
+        if family_changed {
+            self.retain_family_attributes();
+        }
     }
 }

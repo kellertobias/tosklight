@@ -187,6 +187,56 @@ fn preset_store_modes_are_explicit() {
 }
 
 #[test]
+fn shutter_is_intensity_and_an_old_beam_preset_keeps_its_stored_shutter_on_merge() {
+    let fixture = FixtureId::new();
+    let key = |name: &str| AttributeKey(name.into());
+    assert!(PresetFamily::Intensity.accepts(&key("shutter")));
+    assert!(PresetFamily::Intensity.accepts(&key("strobe")));
+    assert!(!PresetFamily::Beam.accepts(&key("shutter")));
+    assert!(PresetFamily::Beam.accepts(&key("zoom")));
+    // A Beam Preset recorded before Shutter moved to Intensity.
+    let mut preset = Preset {
+        name: "Old beam".into(),
+        family: PresetFamily::Beam,
+        number: 1,
+        values: HashMap::from([(
+            fixture,
+            HashMap::from([(key("shutter"), AttributeValue::Normalized(0.5))]),
+        )]),
+        group_values: HashMap::new(),
+        aim_at_fixture_number: None,
+        universal_values: Default::default(),
+    };
+    preset.store(
+        Preset {
+            name: String::new(),
+            family: PresetFamily::Beam,
+            number: 1,
+            values: HashMap::from([(
+                fixture,
+                HashMap::from([
+                    (key("iris"), AttributeValue::Normalized(0.3)),
+                    (key("shutter"), AttributeValue::Normalized(0.9)),
+                ]),
+            )]),
+            group_values: HashMap::new(),
+            aim_at_fixture_number: None,
+            universal_values: Default::default(),
+        },
+        PresetStoreMode::Merge,
+    );
+    // The incoming Shutter is no Beam value; the stored one stays, the incoming Iris merges.
+    assert_eq!(
+        preset.values[&fixture][&key("shutter")],
+        AttributeValue::Normalized(0.5)
+    );
+    assert_eq!(
+        preset.values[&fixture][&key("iris")],
+        AttributeValue::Normalized(0.3)
+    );
+}
+
+#[test]
 fn preset_addresses_use_pool_local_numbers() {
     let color = PresetAddress::new(PresetFamily::Color, 1).unwrap();
     let position = PresetAddress::new(PresetFamily::Position, 1).unwrap();

@@ -25,7 +25,8 @@ import { BrowserPatch } from "../show-setup/patchScenario";
  * Universe 1 layout (Art-Net to the bench receiver and the logical frame):
  * - U1.1 Dimmer 1 (Programmer), U1.2 Dimmer 2 (Cue), U1.3 Dimmer 3 (Dynamic)
  * - U1.101-125 ROBE Robin 600X LEDWash Mode 6, Fixture 101: Pan 101/102, Tilt 103/104, zone 1-3
- *   RGBW 107-118, Shutter 123, Intensity 124/125 (Pan, Tilt, Shutter and Intensity on the Master)
+ *   RGBW 107-118, Zoom 121/122, Shutter 123, Intensity 124/125 (all on the Master). Shutter belongs
+ *   to the Intensity family (2026-10-05); Zoom is the Beam source.
  * - U1.201-206 Cameo ROOT PAR 6 virtual-dimmer mode, Fixture 201: R G B W A UV
  */
 export const FREEZE_GROUP = "10";
@@ -135,7 +136,7 @@ export async function arrangeFreezeRig(
 	await setIntensity(api, show.id, par.fixture_id, 0.8);
 	await programColor(api, [...washHeads, par.fixture_id], 120);
 	await programAngles(api, show.id, wash.fixture_id, 30, 20);
-	await setShutter(api, show.id, wash.fixture_id, 0.2);
+	await setZoom(api, show.id, wash.fixture_id, 20);
 
 	// Cue contribution: Dimmer 2 from a running Cue List.
 	const cueListId = await createCueList(
@@ -218,7 +219,7 @@ export async function changeEverySource(
 	await setIntensity(api, rig.showId, rig.par, 0.3);
 	await programColor(api, [...rig.washHeads, rig.par], 240);
 	await programAngles(api, rig.showId, rig.wash, -60, -20);
-	await setShutter(api, rig.showId, rig.wash, 0.9);
+	await setZoom(api, rig.showId, rig.wash, 40);
 	await poolAction(api, rig.cuePlayback, "go");
 	await setGroupMaster(api, rig.groupMasterPlayback, 0.3);
 	await setGlobalMaster(api, { grand_master: 0.4, blackout: true });
@@ -242,19 +243,22 @@ export async function setIntensity(
 	});
 }
 
-/** Beam source: the wash Master's Shutter (U1.123). */
-export async function setShutter(
+/** Beam source: the wash Master's Zoom (U1.121/122), a semantic opening in degrees. */
+export async function setZoom(
 	api: ApiDriver,
 	showId: string,
 	fixtureId: string,
-	value: number,
+	degrees: number,
 ) {
 	await setProgrammerFixtureValue(api, {
 		surface: "api",
 		showId,
 		fixtureId,
-		attribute: "shutter",
-		value: { kind: "normalized", value },
+		attribute: "zoom",
+		value: {
+			kind: "zoom",
+			value: { opening_degrees: { kind: "value", value: degrees }, convention: "beam" },
+		} as never,
 		timing: IMMEDIATE,
 	});
 }

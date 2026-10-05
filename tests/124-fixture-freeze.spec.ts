@@ -24,7 +24,7 @@ import {
 	programAngles,
 	programColor,
 	programmerIntensities,
-	setShutter,
+	setZoom,
 	setGlobalMaster,
 	setGroupMaster,
 	setIntensity,
@@ -75,7 +75,7 @@ async function changeSourcesOnly(
 	await setIntensity(api, rig.showId, rig.par, 0.3);
 	await programColor(api, [...rig.washHeads, rig.par], 240);
 	await programAngles(api, rig.showId, rig.wash, -60, -20);
-	await setShutter(api, rig.showId, rig.wash, 0.9);
+	await setZoom(api, rig.showId, rig.wash, 40);
 	await poolAction(api, rig.cuePlayback, "go");
 	await bench.tick(1_300);
 }
@@ -112,9 +112,10 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 
 		await expect
 			.poll(async () => Object.keys(await freezeTargets(api)).length)
-			.toBe(3 + 3 + 1);
+			// Three dimmers, the wash root (its Master channels) and its three heads, the PAR.
+			.toBe(3 + 1 + 3 + 1);
 		const targets = await freezeTargets(api);
-		for (const fixtureId of [...rig.dimmers, ...rig.washHeads, rig.par])
+		for (const fixtureId of [...rig.dimmers, rig.wash, ...rig.washHeads, rig.par])
 			expect(targets[fixtureId], fixtureId).toEqual({
 				full: true,
 				families: [],
@@ -129,9 +130,8 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 			"Par 201",
 		])
 			await expect(sheet.status(name), name).toHaveText("❄ FREEZE");
-		await expect(sheet.status("Wash 101 · Master")).toHaveText(
-			"❄ FREEZE INSIDE",
-		);
+		// The wash's own Master channels (Pan, Tilt, Shutter, Intensity) are frozen with its heads.
+		await expect(sheet.status("Wash 101 · Master")).toHaveText("❄ FREEZE");
 		await expect(sheet.status("Dimmer 4")).toHaveCount(0);
 		// The Programmer and Cue dimmers keep the exact pre-Freeze frame. The Dynamic dimmer's capture
 		// is compared from the first frozen frame: with the desk UI attached it was seen to sample a
@@ -183,10 +183,6 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 		page,
 		show,
 	}) => {
-		test.fail(
-			true,
-			"BUG: Freeze on a multi-head root stores targets only for its logical heads, so the Master's Pan/Tilt/Intensity (U1.101-104, U1.124-125) keep following the Programmer, masters and Blackout",
-		);
 		const rig = await arrangeFreezeRig({ api, bench, desk, page, show });
 		const captured = slots(await outputFrame(bench, 0), WASH_MASTER_SLOTS);
 		await fullFreezeGroup(api);
@@ -259,7 +255,8 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 
 		await expect
 			.poll(async () => Object.keys(await freezeTargets(api)).length)
-			.toBe(3 + 3 + 1);
+			// Three dimmers, the wash root (its Master channels) and its three heads, the PAR.
+			.toBe(3 + 1 + 3 + 1);
 		for (const target of Object.values(await freezeTargets(api)))
 			expect(target).toEqual({ full: false, families: ["color", "intensity"] });
 		for (const name of ["Dimmer 1", "Wash 101 · zone 1", "Par 201"])
@@ -274,7 +271,7 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 			[...rig.dimmers, ...rig.washHeads, rig.par],
 			["intensity", "color"],
 		);
-		const frozenPosition = slots(frozenFrame, [101, 102, 103, 104, 123]);
+		const frozenPosition = slots(frozenFrame, [101, 102, 103, 104, 121]);
 
 		// Change Intensity, Color, Position and Beam sources while the masters stay put.
 		await changeSourcesOnly(api, bench, rig);
@@ -290,8 +287,8 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 		expect(slots(changed, DIMMER_SLOTS)).toEqual(
 			slots(frozenFrame, DIMMER_SLOTS),
 		);
-		// Position (Pan/Tilt) and Beam (Shutter) are not frozen and follow the Programmer.
-		const live = slots(changed, [101, 102, 103, 104, 123]);
+		// Position (Pan/Tilt) and Beam (Zoom) are not frozen and follow the Programmer.
+		const live = slots(changed, [101, 102, 103, 104, 121]);
 		expect(live.slice(0, 4), "Position follows").not.toEqual(
 			frozenPosition.slice(0, 4),
 		);
@@ -321,7 +318,7 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 		await api.executeCommandLine(`FREEZE GROUP ${FREEZE_GROUP} INTENSITY COLOR`);
 		await expect
 			.poll(async () => Object.keys(await freezeTargets(api)).length)
-			.toBe(7);
+			.toBe(3 + 1 + 3 + 1);
 		const held = slots(await outputFrame(bench, 0), [1]);
 		await setIntensity(api, rig.showId, rig.dimmers[0], 0.1);
 		expect(slots(await outputFrame(bench, 0), [1])).toEqual(held);
@@ -334,6 +331,8 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 		await toggleFamilies(api, ["intensity"]);
 		for (const target of Object.values(await freezeTargets(api)))
 			expect(target).toEqual({ full: false, families: ["intensity"] });
+		// The wash Master's Position is captured from an accepted frame after the patch change.
+		await bench.tick(25);
 		await fullFreezeGroup(api);
 		for (const target of Object.values(await freezeTargets(api)))
 			expect(target).toEqual({ full: true, families: [] });

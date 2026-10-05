@@ -34,8 +34,10 @@ export function presetFamilyAcceptsAttribute(family: PresetFamily, attribute: st
   if (family === "Mixed") return true;
   const normalized = attribute.toLowerCase();
   const parts = normalized.split(".");
-  if (family === "Intensity") return parts.includes("intensity") || parts.includes("dimmer");
+  // Shutter and Strobe belong to Intensity (2026-10-05), as in the attribute registry.
+  if (family === "Intensity")
+    return ["intensity", "dimmer", "shutter", "strobe"].some((part) => parts.includes(part));
   if (family === "Color") return normalized === "color" || parts.includes("color");
   if (family === "Position") return parts.includes("pan") || parts.includes("tilt") || parts.includes("position");
-  return parts.some((part) => ["beam", "focus", "zoom", "iris", "gobo", "prism", "frost", "shaper", "shutter", "strobe"].includes(part));
+  return parts.some((part) => ["beam", "focus", "zoom", "iris", "gobo", "prism", "frost", "shaper"].includes(part));
 }

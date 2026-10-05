@@ -184,6 +184,8 @@ struct FreezeCapturedOutput {
     native: HashMap<FixtureId, FrozenPositionOutput>,
     /// Alias clearing is command-time only; no channel search or hashing occurs at frame rate.
     position_aliases: HashMap<FixtureId, HashSet<AttributeKey>>,
+    /// Multi-head roots with Master channels of their own, frozen with their heads.
+    root_owners: HashSet<FixtureId>,
 }
 
 fn quiet_outcome(patch_revision: u64) -> FixtureFreezeActionOutcome {
@@ -194,6 +196,18 @@ fn quiet_outcome(patch_revision: u64) -> FixtureFreezeActionOutcome {
     }
 }
 
+/// Whether a multi-head root owns channels of its own: a profile head (such as the Master head)
+/// that none of its logical heads stands for.
+fn root_owns_channels(root: &light_fixture::PatchedFixture) -> bool {
+    root.definition.heads.iter().any(|head| {
+        !head.parameters.is_empty()
+            && !root
+                .logical_heads
+                .iter()
+                .any(|logical| logical.head_index == head.index)
+    })
+}
+
 fn prepare_freeze_capture(
     state: &AppState,
     patch: &light_application::PatchSnapshot,
@@ -202,6 +216,12 @@ fn prepare_freeze_capture(
     operation: FixtureFreezeOperation,
 ) -> Result<Option<FreezeCapturedOutput>, ApiError> {
     let engine_snapshot = state.output.snapshot();
+    let root_owners = engine_snapshot
+        .fixtures
+        .iter()
+        .filter(|fixture| root_owns_channels(fixture))
+        .map(|fixture| fixture.fixture_id)
+        .collect::<HashSet<_>>();
     let accepted = state.output.latest_visualization_frame().filter(|frame| {
         Arc::ptr_eq(&engine_snapshot, &frame.source_snapshot)
             && frame.scope.show_id == Some(patch.show_id.0)
@@ -213,6 +233,10 @@ fn prepare_freeze_capture(
         let mut owners = HashSet::new();
         for &owner in selected {
             if owner == root.patch.fixture_id && !root.patch.logical_heads.is_empty() {
+                // A root with its own Master channels (Pan, Tilt, Intensity) is frozen too.
+                if root_owners.contains(&owner) {
+                    owners.insert(owner);
+                }
                 owners.extend(root.patch.logical_heads.iter().map(|head| head.fixture_id));
             } else if owner == root.patch.fixture_id
                 || root
@@ -223,6 +247,18 @@ fn prepare_freeze_capture(
             {
                 owners.insert(owner);
             }
+        }
+        // Every logical head selected (a Group or range expands the root to them) is the whole
+        // fixture: a root with Master channels of its own is frozen with them.
+        if root_owners.contains(&root.patch.fixture_id)
+            && !root.patch.logical_heads.is_empty()
+            && root
+                .patch
+                .logical_heads
+                .iter()
+                .all(|head| owners.contains(&head.fixture_id))
+        {
+            owners.insert(root.patch.fixture_id);
         }
         for owner in owners {
             let previous = root.patch.freeze.targets.get(&owner);
@@ -327,6 +363,7 @@ fn prepare_freeze_capture(
             visual: None,
             native,
             position_aliases,
+            root_owners,
         }));
     };
     Ok(Some(FreezeCapturedOutput {
@@ -334,6 +371,7 @@ fn prepare_freeze_capture(
         visual,
         native,
         position_aliases,
+        root_owners,
     }))
 }
 
@@ -400,10 +438,13 @@ fn freeze_command(
             .filter(|fixture_id| valid.contains(fixture_id))
             .flat_map(|fixture_id| {
                 if fixture_id == root.patch.fixture_id && !root.patch.logical_heads.is_empty() {
-                    root.patch
-                        .logical_heads
-                        .iter()
-                        .map(|head| head.fixture_id)
+                    // A root with its own Master channels (Pan, Tilt, Intensity) is frozen too.
+                    captured
+                        .root_owners
+                        .contains(&fixture_id)
+                        .then_some(fixture_id)
+                        .into_iter()
+                        .chain(root.patch.logical_heads.iter().map(|head| head.fixture_id))
                         .collect::<Vec<_>>()
                 } else {
                     vec![fixture_id]
@@ -414,13 +455,33 @@ fn freeze_command(
             })
             .flatten()
             .collect::<Vec<_>>();
+        let mut selected = selected;
+        if captured.root_owners.contains(&root.patch.fixture_id)
+            && !selected.contains(&root.patch.fixture_id)
+            && !root.patch.logical_heads.is_empty()
+            && root
+                .patch
+                .logical_heads
+                .iter()
+                .all(|head| selected.contains(&head.fixture_id))
+        {
+            selected.insert(0, root.patch.fixture_id);
+        }
         if selected.is_empty() {
             continue;
         }
         let mut freeze = root.patch.freeze.clone();
         previous.insert(root.patch.fixture_id, freeze.clone());
+        // A root frozen with its heads is one fixture, already counted through its heads.
+        let heads_selected = root
+            .patch
+            .logical_heads
+            .iter()
+            .any(|head| selected.contains(&head.fixture_id));
         for fixture_id in selected {
-            affected.insert(fixture_id);
+            if fixture_id != root.patch.fixture_id || !heads_selected {
+                affected.insert(fixture_id);
+            }
             apply_target(&mut freeze, fixture_id, &families, captured, operation);
         }
         updates.push(PatchFixtureUpdateIntent {

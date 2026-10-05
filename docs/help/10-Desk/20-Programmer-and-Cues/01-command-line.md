@@ -533,7 +533,7 @@ Freeze captures the resolved output of a fixture or attribute family and keeps i
 
 Press `[^CLR]`, enter a Fixture or Group selection, and press `[ENT]` to apply a full Freeze. A Group resolves to its current fixtures; Freeze is stored on those targets, not on the Group object. Removing Freeze immediately reveals the current underlying state without rewriting it.
 
-Press `[^CLR][^CLR]` to enter **UNFREEZE**, then enter the selection and press `[ENT]`. To Freeze or Unfreeze only specific attribute families, add the corresponding second-layer family keys before `[ENT]`: `[^1]` Intensity, `[^2]` Color, `[^3]` Position, and `[^4]` Beam.
+Press `[^CLR][^CLR]` to enter **UNFREEZE**, then enter the selection and press `[ENT]`. To Freeze or Unfreeze only specific attribute families, add the corresponding second-layer family keys before `[ENT]`: `[^1]` Intensity, `[^2]` Color, `[^3]` Position, and `[^4]` Beam. A multi-head fixture's own Master channels are frozen together with its heads, and Shutter and Strobe belong to Intensity.
 
 The Fixture Sheet marks a full Freeze as `❄ FREEZE`. A partial Freeze shows the same marker together with its frozen family names. `[UND]` restores the state from before the most recent Freeze or Unfreeze action; Freeze has no separate Redo action.
 

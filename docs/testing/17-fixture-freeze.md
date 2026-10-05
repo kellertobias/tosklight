@@ -17,14 +17,14 @@ under a Group Master and the Grand Master below Full. Physical output is read fr
 receiver and checked against the logical frame of the same manual-clock step.
 
 - Full Freeze, steps 1–5: `FREEZE-FULL-001` drives the touch keypad (`[^CLR]`, `[GRP] 1 0`,
-  `[ENT]`; `[^CLR][^CLR]` for Unfreeze), checks the Fixture Sheet `❄ FREEZE` / `❄ FREEZE INSIDE`
-  markers, held DMX and visualization through every source, both masters and Blackout, and that
-  Unfreeze reveals the untouched Programmer and Cue. Known defects are kept as expected failures:
-  `FREEZE-FULL-002` (multi-head Master Pan/Tilt/Intensity not held), `FREEZE-FULL-003` (physical
+  `[ENT]`; `[^CLR][^CLR]` for Unfreeze), checks the Fixture Sheet `❄ FREEZE` markers (the wash's Master row included), held DMX and visualization through every source, both masters and Blackout, and that
+  Unfreeze reveals the untouched Programmer and Cue. `FREEZE-FULL-002` holds a multi-head fixture's Master Pan/Tilt/Intensity
+  output. Known defects are kept as expected failures: `FREEZE-FULL-003` (physical
   colour of semantic-colour fixtures not held) and `FREEZE-FULL-004` (the Freeze itself changes a
   virtual-dimmer colour fixture's output).
 - Partial Freeze, steps 1–6: `FREEZE-PARTIAL-001` (keypad `[^1][^2]` grammar, family labels,
-  retained Intensity/Colour semantic values, Position and Beam follow, masters and Blackout
+  retained Intensity/Colour semantic values, Position and Beam (the wash's Zoom) follow; Shutter is
+  Intensity, masters and Blackout
   followed) and `FREEZE-PARTIAL-002` (repeating the family live action removes it; full over
   partial restores no partial metadata). Step 5 uses the Toggle family live action; repeating the
   explicit `FREEZE … INTENSITY COLOR` command line is idempotent. `FREEZE-PARTIAL-003` is an expected
@@ -47,7 +47,9 @@ receiver and checked against the logical frame of the same manual-clock step.
 2. Establish visible Programmer, Cue, Dynamic, and direct-control contributions, with Group Master
    and Grand Master below Full and Blackout off.
 3. Press **SHIFT + CLEAR**, enter the Group selection, and press **ENTER**. Confirm the Fixture Sheet shows `❄ FREEZE` on each resolved fixture or
-   head, with `INSIDE` on a master-only row where applicable.
+   head. A multi-head fixture's Master row shows `❄ FREEZE` too, because its own Master channels
+   (Pan, Tilt, Shutter, Intensity) are frozen with its heads; `INSIDE` marks a Master row only when
+   some of its heads alone are frozen.
 4. Change every contributing source, move Group Master and Grand Master, and enable Blackout.
    Confirm the frozen physical and visualization output remains exactly at the captured frame.
 5. Hold **SHIFT**, press **CLEAR** twice, release **SHIFT**, enter the same selection, and press
