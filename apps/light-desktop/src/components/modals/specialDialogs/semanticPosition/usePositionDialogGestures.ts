@@ -53,7 +53,14 @@ export interface PositionDialogEditContext {
 
 export type PositionDialogSessionOptions = Pick<
 	FamilyGestureSessionOptions,
-	"writerFor" | "displayedSource" | "onDisplayedSourceHold" | "onError" | "createId" | "timers"
+	| "writerFor"
+	| "displayedSource"
+	| "onDisplayedSourceHold"
+	| "onError"
+	| "createId"
+	| "timers"
+	| "currentLane"
+	| "laneTiming"
 >;
 
 export interface PositionDialogDraft {
@@ -118,6 +125,8 @@ function useSession(options: PositionDialogSessionOptions) {
 				latest.current.displayedSource?.(lane, fixtureIds) ?? null,
 			onDisplayedSourceHold: (lane) => latest.current.onDisplayedSourceHold?.(lane),
 			onError: (error) => latest.current.onError?.(error),
+			currentLane: () => latest.current.currentLane?.() ?? null,
+			laneTiming: (lane) => latest.current.laneTiming?.(lane) ?? null,
 			...(options.createId ? { createId: options.createId } : {}),
 			...(options.timers ? { timers: options.timers } : {}),
 		});

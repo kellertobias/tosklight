@@ -16,8 +16,11 @@ import type { DisplayedSource } from "./displayedSource";
  * its edit builder, which turns one surface-level change sample into ordered generated
  * `ProgrammingComponentEdit`s. The session owns at most one open gesture. Each gesture:
  *
- * - pins the writer of the lane it started on (Normal or Preload) until it ends, so a lane
- *   switch mid-gesture never moves the gesture's edits or its Finish to the other writer;
+ * - pins the writer of the lane it started on (Normal or Preload). Preload changes are atomic
+ *   (2026-10-05): when Preload capture ends while a Preload gesture is still going, that gesture
+ *   finishes on Preload with what it already sent (its edits and Finish never move), and the
+ *   rest of the operator's motion continues as a new gesture on the Normal Programmer (fresh
+ *   Undo group, Normal timing and displayed source). The surface keeps its one handle;
  * - mints a fresh Undo group, which is also the backend `caller_id`, so two gestures never
  *   coalesce into one Undo step;
  * - submits only `component_edits` for the family attribute, tagged with that Undo group;
@@ -55,6 +58,8 @@ export type FamilyGestureEndReason =
 	| "release"
 	| "commit"
 	| "idle"
+	/** Preload capture ended mid-gesture; the motion continues on the Normal lane. */
+	| "lane-switch"
 	| FamilyGestureCancelReason;
 
 export interface FamilyGestureIntentInput {
@@ -126,6 +131,14 @@ export interface FamilyGestureSessionOptions {
 	onHold?(lane: FamilyGestureLane, reason: ProgrammerValuesHold): void;
 	/** TL-554: the outcome of every edit, for surfaces that report an adoption once. */
 	onOutcome?(lane: FamilyGestureLane, outcome: unknown): void;
+	/**
+	 * The lane a new edit goes to now. When it reports `normal` while a Preload gesture is open,
+	 * the gesture's further motion continues on the Normal Programmer. Without it gestures keep
+	 * their start lane.
+	 */
+	currentLane?(): FamilyGestureLane | null | undefined;
+	/** The timing a gesture continued on `lane` uses (for example Normal without Programmer Fade). */
+	laneTiming?(lane: FamilyGestureLane): ProgrammerValueTiming | null | undefined;
 }
 
 export interface FamilyGestureStartInput {
@@ -207,6 +220,8 @@ interface FamilyGestureSessionContext {
 	released(gesture: object): void;
 	held(lane: FamilyGestureLane, reason: ProgrammerValuesHold): void;
 	outcome(lane: FamilyGestureLane, outcome: unknown): void;
+	/** A Normal-lane gesture continuing `gesture` once Preload capture ended, else `null`. */
+	continuation(gesture: FamilyGesture<never, FamilyGestureStartInput>): FamilyGesture<never, FamilyGestureStartInput> | null;
 }
 
 function holdOf(outcome: unknown): ProgrammerValuesHold | null {
@@ -223,6 +238,8 @@ class FamilyGesture<TChange, TStart extends FamilyGestureStartInput>
 	private producerStops: (() => void)[] = [];
 	private idleTimer: unknown = null;
 	private reason: FamilyGestureEndReason | null = null;
+	/** The Normal-lane gesture that continues this one after a lane switch. */
+	private successor: FamilyGesture<TChange, TStart> | null = null;
 
 	constructor(
 		readonly undoGroup: string,
@@ -239,24 +256,37 @@ class FamilyGesture<TChange, TStart extends FamilyGestureStartInput>
 		this.armIdle();
 	}
 
-	get lane() {
-		return this.input.lane;
+	get lane(): FamilyGestureLane {
+		return this.successor?.lane ?? this.input.lane;
+	}
+
+	/** The start input, for a continuation on another lane. */
+	get startInput(): TStart {
+		return this.input;
 	}
 
 	get attribute() {
 		return this.family.attribute;
 	}
 
-	get isOpen() {
-		return this.reason === null;
+	get isOpen(): boolean {
+		return this.successor ? this.successor.isOpen : this.reason === null;
 	}
 
-	get endReason() {
-		return this.reason;
+	get endReason(): FamilyGestureEndReason | null {
+		return this.successor ? this.successor.endReason : this.reason;
 	}
 
-	change(change: TChange) {
+	change(change: TChange): Promise<unknown> | null {
+		if (this.successor) return this.successor.change(change);
 		if (!this.isOpen) return null;
+		const next = this.session.continuation(
+			this as unknown as FamilyGesture<never, FamilyGestureStartInput>,
+		) as unknown as FamilyGesture<TChange, TStart> | null;
+		if (next) {
+			this.handOff(next);
+			return next.change(change);
+		}
 		let edits: ProgrammingComponentEdit[];
 		try {
 			edits = this.family.buildEdits(change, this.input);
@@ -295,19 +325,52 @@ class FamilyGesture<TChange, TStart extends FamilyGestureStartInput>
 			});
 	}
 
-	end() {
-		return this.stop("release");
+	end(): boolean {
+		return this.successor ? this.successor.end() : this.stop("release");
 	}
 
-	commit() {
-		return this.stop("commit");
+	commit(): boolean {
+		return this.successor ? this.successor.commit() : this.stop("commit");
 	}
 
-	cancel(reason: FamilyGestureCancelReason) {
-		return this.stop(reason);
+	cancel(reason: FamilyGestureCancelReason): boolean {
+		return this.successor ? this.successor.cancel(reason) : this.stop(reason);
 	}
 
-	addProducerStop(stop: () => void) {
+	/**
+	 * Preload capture ended: finish this gesture on its Preload writer keeping what it already
+	 * sent, and move the producer (the running motion) to the Normal-lane `next`.
+	 */
+	private handOff(next: FamilyGesture<TChange, TStart>) {
+		this.successor = next;
+		this.reason = "lane-switch";
+		this.clearIdle();
+		next.adoptProducerStops(this.producerStops);
+		this.producerStops = [];
+		let finish: Promise<unknown>;
+		try {
+			finish = this.writer.finishGesture({
+				requestId: this.session.createId(),
+				attribute: this.attribute,
+				undoGroup: this.undoGroup,
+				keepAdmittedEdits: true,
+			});
+		} catch (error) {
+			finish = Promise.reject(error);
+		}
+		finish.then(this.resolveFinished, (error: unknown) => {
+			this.session.report(error);
+			this.resolveFinished(null);
+		});
+	}
+
+	/** Takes over a running producer from the Preload gesture this one continues. */
+	adoptProducerStops(stops: (() => void)[]) {
+		this.producerStops.push(...stops);
+	}
+
+	addProducerStop(stop: () => void): () => void {
+		if (this.successor) return this.successor.addProducerStop(stop);
 		if (!this.isOpen) {
 			this.runProducerStop(stop);
 			return () => undefined;
@@ -322,7 +385,8 @@ class FamilyGesture<TChange, TStart extends FamilyGestureStartInput>
 	 * The single terminal path: producer stop, then (motion ends and cancels) drop unsent rows,
 	 * then one Finish. A discrete step's end (`commit`, `idle`) keeps its admitted edits.
 	 */
-	stop(reason: FamilyGestureEndReason) {
+	stop(reason: FamilyGestureEndReason): boolean {
+		if (this.successor) return this.successor.stop(reason);
 		if (!this.isOpen) return false;
 		this.reason = reason;
 		this.clearIdle();
@@ -406,7 +470,39 @@ export class FamilyGestureSession<
 				options.onHold?.(lane, reason);
 			},
 			outcome: (lane, outcome) => options.onOutcome?.(lane, outcome),
+			continuation: (gesture) => this.continuation(gesture),
 		};
+	}
+
+	/** A Normal-lane gesture continuing a Preload `gesture` whose capture has ended. */
+	private continuation(
+		gesture: FamilyGesture<never, FamilyGestureStartInput>,
+	): FamilyGesture<never, FamilyGestureStartInput> | null {
+		if (this.disposed || gesture.lane !== "preload") return null;
+		if (this.options.currentLane?.() !== "normal") return null;
+		const writer = this.options.writerFor("normal");
+		if (!writer) return null;
+		const { stopProducer: _producer, ...rest } = gesture.startInput;
+		const input = {
+			...rest,
+			lane: "normal" as const,
+			timing: this.options.laneTiming?.("normal") ?? rest.timing,
+		} as TStart;
+		const displayed =
+			this.options.displayedSource?.(
+				"normal",
+				input.displayedFixtureIds ?? input.fixtureIds,
+			) ?? null;
+		const next = new FamilyGesture<TChange, TStart>(
+			this.context.createId(),
+			this.family,
+			writer,
+			input,
+			this.context,
+			displayed?.lane === "normal" ? displayed : null,
+		);
+		this.current = next;
+		return next as unknown as FamilyGesture<never, FamilyGestureStartInput>;
 	}
 
 	/** The family attribute every gesture of this session authors and finishes. */

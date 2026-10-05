@@ -131,6 +131,9 @@ export function usePositionSpecialDialog(
 				context?.readouts.displayedSource(edited, fixtureIds) ?? null,
 			onDisplayedSourceHold: () => readouts.reread(),
 			onError: (error) => console.warn("Position Special Dialog edit refused", error),
+			// Leaving Preload mid-gesture continues the motion on the Normal Programmer.
+			currentLane: () => lane,
+			laneTiming: (next) => (next === "normal" ? immediateParameterTiming() : null),
 		},
 	);
 	return {

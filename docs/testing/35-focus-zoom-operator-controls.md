@@ -22,10 +22,9 @@ The root Playwright spec `tests/118-focus-zoom-operator-controls.spec.ts` covers
 - FOCUS-ZOOM-008 arms Preload through the Preload lifecycle route and leaves it with Blind off,
   and reads the lane of every write from the request. The Preload drags start from a requested Preload
   Zoom; the first Zoom step from scratch in Preload opens the dialog before the Pending lane has
-  published and ticks frames until the dialog reads it. Step 3 is covered: no write of the
-  switched drag reaches the Normal Programmer, its Finish stays on Preload, and the next drag is
-  Normal. The rest of the drag after the switch is not sent yet; that case is also an expected
-  failure.
+  published and ticks frames until the dialog reads it. Step 3 is covered: the drag's Preload
+  part ends with one Preload Finish and keeps its value, the rest of the drag continues on the
+  Normal Programmer with its own Finish, and the next drag is Normal too.
 
 - FOCUS-ZOOM-002 to 005 use two Cameo AURO SPOT Z300. Its profile declares the Beam convention from
   the user manual (TL-637), with 10–25° selection limits.
@@ -127,8 +126,9 @@ hardware-connected layout.
    - Live output is untouched until **Preload GO**.
    - The changes use Programmer Fade.
 2. Leave Preload and repeat. Only the normal Programmer changes.
-3. Switch the capture mode in the middle of a drag. The rest of that drag stays on the lane it
-   started on.
+3. Leave Preload in the middle of a drag. Preload changes are atomic: the part before the switch
+   stays in Preload, and the rest of the still-held drag continues on the Normal Programmer as its
+   own Undo step. Preload no longer changes.
 
 ## FOCUS-ZOOM-009 — Encoder page order and parity
 

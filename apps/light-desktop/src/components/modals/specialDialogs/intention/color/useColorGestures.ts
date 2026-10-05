@@ -1,3 +1,4 @@
+import { immediateParameterTiming } from "../../../../control/parameterControls/parameterValueMutations";
 import { useEffect, useRef, useState } from "react";
 import { colorAdoptionNotice } from "../../../../../features/familyEncoders/colorAdoptionNotice";
 import { useFamilyEncodersContext } from "../../../../../features/familyEncoders/FamilyEncodersProvider";
@@ -68,6 +69,9 @@ export function useColorGestures(
 				) ?? null,
 			onDisplayedSourceHold: () => latest.current.onDisplayedSourceHold(),
 			// TL-554: the explicit-start notice and the reported adoption.
+			// Leaving Preload mid-gesture continues the motion on the Normal Programmer.
+			currentLane: () => latest.current.lane.lane,
+			laneTiming: (name) => (name === "normal" ? immediateParameterTiming() : null),
 			onHold: (_lane, reason) => colorAdoptionNotice.held(reason),
 			onOutcome: (_lane, outcome) => colorAdoptionNotice.outcome(outcome),
 			// Writer and transport failures surface through the lane writer's own error

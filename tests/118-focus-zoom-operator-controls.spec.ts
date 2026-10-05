@@ -630,7 +630,7 @@ test.describe("docs/testing/35-focus-zoom-operator-controls.md", () => {
 		expect(lanes.edits("normal", "focus").length).toBeGreaterThan(0);
 	});
 
-	test("FOCUS-ZOOM-008 @ui › a capture switch mid-drag keeps the rest of that drag on the lane it started on", async ({ api, bench, desk, page }) => {
+	test("FOCUS-ZOOM-008 @ui › a capture switch mid-drag finishes the Preload part; the rest of the drag continues on the Normal Programmer", async ({ api, bench, desk, page }) => {
 		const { showId, selected } = await arrange({ api, bench, desk, page }, "008-switch", BEAM_RIG);
 		requireSemanticContract(await semanticFocus(api, selected), GATE);
 		const lanes = recordLaneWrites(page);
@@ -643,43 +643,24 @@ test.describe("docs/testing/35-focus-zoom-operator-controls.md", () => {
 		const focus = await grabFocusPlane(page, dialog);
 		await sweep(focus, 0, 3, 20);
 		await expect.poll(async () => (await preloadValues(api, "focus")).length).toBe(selected.length);
-		await leavePreloadCapture(api, showId);
-		await sweep(focus, 60, 4, 20);
-		await page.mouse.up();
-
-		// None of that drag reached the Normal Programmer; its one Finish is a Preload write.
-		await expect.poll(() => lanes.finishes("preload", "focus").length).toBe(1);
-		await page.waitForTimeout(300);
-		expect(lanes.writes.filter((write) => write.lane === "normal")).toEqual([]);
-		expect(await normalValues(api, "focus")).toEqual([]);
-
-		// The next drag starts on the Normal lane.
-		const next = await grabFocusPlane(page, dialog);
-		await sweep(next, 0, 3, 20);
-		await page.mouse.up();
-		await expect.poll(async () => (await normalValues(api, "focus")).length).toBe(selected.length);
-		expect(lanes.finishes("preload", "focus")).toHaveLength(1);
-	});
-
-	test("FOCUS-ZOOM-008 @ui › the rest of a drag after a capture switch still authors into Preload", async ({ api, bench, desk, page }) => {
-		test.fail(
-			true,
-			"BUG: leaving Preload capture mid-drag silently drops the rest of the drag: the pinned Preload writer refuses every later edit (programmerPreloadValues/writerCaptureAuthority.ts preconditionError) and only the Finish is sent",
-		);
-		const { showId, selected } = await arrange({ api, bench, desk, page }, "008-rest", BEAM_RIG);
-		requireSemanticContract(await semanticFocus(api, selected), GATE);
-		await enterPreloadCapture(api, showId);
-		await bench.tick(25);
-		await desk.open(api.baseUrl);
-		const dialog = await openFocusDialog(page);
-		const focus = await grabFocusPlane(page, dialog);
-		await sweep(focus, 0, 3, 20);
-		await expect.poll(async () => (await preloadValues(api, "focus")).length).toBe(selected.length);
 		await page.waitForTimeout(200);
 		const atSwitch = focusPercent((await preloadValues(api, "focus")).map((row) => row.value))[0] ?? 0;
 		await leavePreloadCapture(api, showId);
 		await sweep(focus, 60, 4, 20);
 		await page.mouse.up();
-		await expect.poll(async () => focusPercent((await preloadValues(api, "focus")).map((row) => row.value))[0] ?? 0, { timeout: 2_000 }).toBeGreaterThan(atSwitch);
+
+		// Preload changes are atomic (2026-10-05): the Preload part ends with one Finish and keeps
+		// its value; the rest of the drag is a Normal-lane gesture with its own Finish.
+		await expect.poll(() => lanes.finishes("preload", "focus").length).toBe(1);
+		await expect.poll(() => lanes.finishes("normal", "focus").length).toBe(1);
+		await expect.poll(async () => (await normalValues(api, "focus")).length).toBe(selected.length);
+		expect(focusPercent((await preloadValues(api, "focus")).map((row) => row.value))[0] ?? 0).toBeCloseTo(atSwitch, 0);
+
+		// The next drag starts on the Normal lane too.
+		const next = await grabFocusPlane(page, dialog);
+		await sweep(next, 0, 3, 20);
+		await page.mouse.up();
+		await expect.poll(() => lanes.finishes("normal", "focus").length).toBe(2);
+		expect(lanes.finishes("preload", "focus")).toHaveLength(1);
 	});
 });

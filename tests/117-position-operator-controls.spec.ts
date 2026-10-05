@@ -680,49 +680,40 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 		expect(await normalValues(api, "position")).toEqual([]);
 	});
 
-	test("POSITION-CONTROLS-006 @ui › leaving Preload mid-gesture finishes that gesture in Preload; the next gesture writes to the Normal Programmer", async ({ api, bench, desk, page }) => {
+	test("POSITION-CONTROLS-006 @ui › leaving Preload mid-gesture finishes the Preload part; the rest of the held gesture continues on the Normal Programmer", async ({ api, bench, desk, page }) => {
 		const { showId, selected } = await arrange({ api, bench, desk, page }, "006-switch");
 		requireSemanticContract(await semanticPosition(api, selected), GATE);
 		const lanes = recordLaneWrites(page);
 		const { dialog, held } = await holdInPreloadThenLeave({ api, bench, desk, page }, showId, selected);
-		await page.waitForTimeout(300);
+		await page.waitForTimeout(500);
 		await held.release();
 
-		// The open gesture stayed on its starting lane: its one Finish is a Preload write, and the
-		// Normal Programmer received nothing from it.
+		// Preload changes are atomic (2026-10-05): the gesture's Preload part ends with one Finish
+		// keeping what it sent; the rest of the same held motion is a Normal-lane gesture.
 		await expect.poll(() => lanes.finishes("preload", "position").length).toBe(1);
 		expect(lanes.edits("preload", "position").length).toBeGreaterThan(0);
-		expect(lanes.edits("normal")).toEqual([]);
-		expect(lanes.finishes("normal")).toEqual([]);
-		expect(await uniformPan(api, selected.length)).toBe(0);
-
-		// The next gesture writes to the Normal Programmer only. The dialog is reopened first: the
-		// open one keeps showing the held gesture's last local Pan (the draft BUG above).
-		const preloadAfter = JSON.stringify(await preloadValues(api, "position"));
-		await page.keyboard.press("Escape");
-		await expect(dialog).toBeHidden();
-		const normal = await openPositionDialog(page);
-		await expect(normal.getByTestId("pan-circle")).toHaveAttribute("aria-valuenow", "0");
-		await normal.getByRole("button", { name: "Increase pan by 90 degrees" }).click();
-		await expect.poll(() => uniformPan(api, selected.length)).toBeCloseTo(90, 6);
+		await expect.poll(() => lanes.finishes("normal", "position").length).toBe(1);
 		expect(lanes.edits("normal", "position").length).toBeGreaterThan(0);
-		expect(lanes.edits("preload", "position").every((write) => !write.body.includes('"pan_degrees":{"kind":"value","value":90}'))).toBe(true);
+		await expect.poll(() => uniformPan(api, selected.length)).toBeGreaterThan(5);
+
+		// The next gesture also writes to the Normal Programmer only; Preload stays as it was.
+		const preloadAfter = JSON.stringify(await preloadValues(api, "position"));
+		const before = (await uniformPan(api, selected.length)) ?? 0;
+		await dialog.getByRole("button", { name: "Increase pan by 90 degrees" }).click();
+		await expect.poll(() => uniformPan(api, selected.length)).toBeCloseTo(before + 90, 6);
 		expect(JSON.stringify(await preloadValues(api, "position"))).toBe(preloadAfter);
 	});
 
-	test("POSITION-CONTROLS-006 @ui › a held gesture keeps authoring into Preload after leaving Preload capture", async ({ api, bench, desk, page }) => {
-		test.fail(
-			true,
-			"BUG: leaving Preload capture during a held joystick gesture silently drops the rest of the gesture: the pinned Preload writer refuses every later edit (programmerPreloadValues/writerCaptureAuthority.ts preconditionError) and only the Finish is sent, so Pan freezes where it was at the switch",
-		);
+	test("POSITION-CONTROLS-006 @ui › a held gesture no longer changes Preload after leaving Preload capture", async ({ api, bench, desk, page }) => {
 		const { showId, selected } = await arrange({ api, bench, desk, page }, "006-rest");
 		requireSemanticContract(await semanticPosition(api, selected), GATE);
 		const { held } = await holdInPreloadThenLeave({ api, bench, desk, page }, showId, selected);
+		await page.waitForTimeout(200);
 		const atSwitch = (await preloadPans(api))[0] ?? 0;
 		await page.waitForTimeout(500);
 		await held.release();
-		// The joystick pans at about 120°/s: 500 ms more of the held gesture is about 60° more Pan.
-		await expect.poll(async () => (await preloadPans(api))[0] ?? 0, { timeout: 2_000 }).toBeGreaterThan(atSwitch + 20);
-		expect(await uniformPan(api, selected.length)).toBe(0);
+		// The joystick pans at about 120°/s: the 500 ms after the switch move the Normal Pan.
+		await expect.poll(async () => (await uniformPan(api, selected.length)) ?? 0, { timeout: 2_000 }).toBeGreaterThan(20);
+		expect((await preloadPans(api))[0] ?? 0).toBeCloseTo(atSwitch, 0);
 	});
 });

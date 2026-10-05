@@ -1,3 +1,5 @@
+import { useProgrammerCaptureModeView } from "../../../../features/programmerCaptureMode/ProgrammerCaptureModeView";
+import { capturesProgrammerWrites } from "../../../../features/programmerCaptureMode/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FamilyEncoderComponentSlot } from "../../../../api/familyEncoderModels";
 import {
@@ -152,8 +154,9 @@ function useBindingInstance(
 	const normal = useProgrammerValuesActions();
 	const preload = useProgrammerPreloadValuesActions();
 	const context = useFamilyEncodersContext();
-	const latest = useRef({ normal, preload, readouts, context, native, points });
-	latest.current = { normal, preload, readouts, context, native, points };
+	const captureMode = useProgrammerCaptureModeView(true);
+	const latest = useRef({ normal, preload, readouts, context, native, points, captureMode });
+	latest.current = { normal, preload, readouts, context, native, points, captureMode };
 	const [binding, setBinding] = useState<FamilyEncoderBinding | null>(null);
 	useEffect(() => {
 		if (!projection.active) return;
@@ -168,6 +171,12 @@ function useBindingInstance(
 			displayedSource: (lane, fixtureIds) =>
 				latest.current.context?.readouts.displayedSource(lane, fixtureIds) ?? null,
 			onDisplayedSourceHold: () => latest.current.readouts.reread(),
+			// Leaving Preload mid-turn continues the turn on the Normal Programmer.
+			currentLane: () => {
+				const mode = latest.current.captureMode;
+				return mode ? (capturesProgrammerWrites(mode) ? "preload" : "normal") : null;
+			},
+			laneTiming: (lane) => (lane === "normal" ? immediateParameterTiming() : null),
 			nativeReference: () => latest.current.native.reference(),
 			pointChoices: () => latest.current.points.map((choice) => choice.reference),
 			semanticColorAdoption: () => colorAdoptionNotice.semanticInput(),

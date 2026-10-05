@@ -1,3 +1,4 @@
+import { immediateParameterTiming } from "../../../control/parameterControls/parameterValueMutations";
 import { useEffect, useRef, useState } from "react";
 import type { FamilyEncoderComponentSlot } from "../../../../api/familyEncoderModels";
 import type { ProgrammerValueTiming } from "../../../../features/programmerValues/contracts";
@@ -83,6 +84,10 @@ function useSessions(environment: FocusZoomGestureEnvironment) {
 			onDisplayedSourceHold: (lane: FamilyGestureLane) =>
 				latest.current.onDisplayedSourceHold?.(lane),
 			onError: (error: Error) => latest.current.onError?.(error),
+			// Leaving Preload mid-drag continues the drag on the Normal Programmer.
+			currentLane: () => latest.current.lane,
+			laneTiming: (lane: FamilyGestureLane) =>
+				lane === "normal" ? immediateParameterTiming() : null,
 		};
 		const next: Sessions = {
 			focus: createFocusGestureSession(options),

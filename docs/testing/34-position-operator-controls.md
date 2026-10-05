@@ -24,9 +24,9 @@ Executable coverage:
   off, so the pending Preload values stay. It reads the lane of every dialog write from the request
   the desk sends. Step 1 runs the held joystick from requested Preload Angles. The adoption of the
   displayed pose in Preload (POSITION-CONTROLS-005 step 4) opens the dialog before the Pending
-  lane has published and ticks frames until the dialog reads it. Step 2 is covered: the open
-  gesture's Finish stays on Preload, and the next gesture writes to the Normal Programmer. The
-  rest of the held motion after the switch is not sent yet; that case is also an expected failure.
+  lane has published and ticks frames until the dialog reads it. Step 2 is covered: the gesture's
+  Preload part ends with one Preload Finish, the rest of the held motion continues on the Normal
+  Programmer with its own Finish, Preload no longer changes, and the next gesture is Normal too.
 - POSITION-CONTROLS-005 has no Playwright case yet.
 - Every case starts from scratch: a fresh show patched from the shipped library and an empty
   Programmer. The rig is two Cameo AURO SPOT Z300, whose profile carries a nominal Position physical
@@ -120,8 +120,10 @@ hardware-connected layout.
 
 1. Repeat POSITION-CONTROLS-004 step 1 and POSITION-CONTROLS-005 step 4 in Preload. Verify that the
    edits author into Preload with the Programmer Fade, and that live output is unchanged.
-2. Leave Preload in the middle of a held gesture. Verify that the open gesture still finishes in
-   Preload. The next gesture writes to the Normal programmer.
+2. Leave Preload in the middle of a held gesture. Preload changes are atomic: verify that the part of
+   the gesture before the switch stays in Preload (one Undo step there) and that the rest of the
+   still-held motion continues on the Normal Programmer as its own Undo step, without the Programmer
+   Fade. Preload no longer changes. The next gesture writes to the Normal Programmer.
 
 ## POSITION-CONTROLS-007 — The first edit from scratch adopts the displayed output
 
