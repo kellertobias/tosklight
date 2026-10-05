@@ -198,10 +198,6 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 		page,
 		show,
 	}) => {
-		test.fail(
-			true,
-			"BUG: after Freeze the visualization keeps the captured colour but the physical colour channels (Robin zones U1.107-118, ROOT PAR U1.201-206) follow the live Programmer colour",
-		);
 		const rig = await arrangeFreezeRig({ api, bench, desk, page, show });
 		const colored = [...rig.washHeads, rig.par];
 		const colorSlots = [...WASH_HEAD_COLOR_SLOTS, ...PAR_SLOTS];

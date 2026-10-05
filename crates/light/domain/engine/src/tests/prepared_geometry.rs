@@ -187,9 +187,11 @@ fn frozen_geometry_is_cached_once_and_reused_by_final_render_after_typed_writes(
             .point([0.0; 3])[0],
         42.0,
     );
+    // Freeze holds parameters before DMX (2026-10-05): the baseline already holds the frozen
+    // value, so family adapters render it.
     assert_eq!(
         token.value(owner, &AttributeKey(X.into())),
-        Some(&AttributeValue::Normalized(0.55))
+        Some(&AttributeValue::Normalized(0.7))
     );
     token
         .project_family(

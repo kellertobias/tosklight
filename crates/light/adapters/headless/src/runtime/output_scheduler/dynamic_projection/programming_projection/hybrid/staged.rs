@@ -375,6 +375,28 @@ pub(super) struct CohortView<'a, 't, S, R> {
     pub control: &'a EndpointControl<'a>,
 }
 
+/// The (target, owner) pairs a Fixture Freeze holds for the Color, Zoom and Focus adapters.
+/// Position keeps its own frozen native words.
+fn frozen_family_owners(
+    snapshot: &light_engine::EngineSnapshot,
+) -> FxHashSet<(FixtureId, ProgrammingOwner)> {
+    use light_fixture::FreezeFamily;
+    let mut frozen = FxHashSet::default();
+    for fixture in snapshot.fixtures.iter() {
+        for (owner, target) in &fixture.freeze.targets {
+            let holds = |family| target.full || target.families.contains(&family);
+            if holds(FreezeFamily::Color) {
+                frozen.insert((*owner, ProgrammingOwner::Color));
+            }
+            if holds(FreezeFamily::Beam) {
+                frozen.insert((*owner, ProgrammingOwner::Zoom));
+                frozen.insert((*owner, ProgrammingOwner::Focus));
+            }
+        }
+    }
+    frozen
+}
+
 /// Composes every family group of one pinned cohort: the Position batch first, then each
 /// remaining owner. Returns the requirements that held owners back and the composed rows.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
@@ -396,6 +418,9 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
         .static_program_targets(view.frame, view.static_token)
         .map_err(invalid)?;
     assemble_captured_family_inputs(prepared, fixed, families, pool);
+    if !view.frame.capture.freezes_nothing() {
+        families.hold_frozen(&frozen_family_owners(&view.frame.capture.snapshot()));
+    }
     let (groups, static_only) = families.with_static_targets(&static_targets);
     // TL-596: membership is asked once per group and batch row; a slice scan made the cohort
     // quadratic in its static-only targets (thousands at full-rig size).

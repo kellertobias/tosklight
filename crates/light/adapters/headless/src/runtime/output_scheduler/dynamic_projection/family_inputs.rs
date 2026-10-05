@@ -57,6 +57,20 @@ impl CapturedFamilyInputScratch {
         }
     }
 
+    /// A Fixture Freeze holds these owners' parameters: no Dynamic or Fixed mask drives them, so
+    /// their group stays and renders the (frozen) static baseline.
+    pub fn hold_frozen(&mut self, frozen: &rustc_hash::FxHashSet<(FixtureId, ProgrammingOwner)>) {
+        if frozen.is_empty() {
+            return;
+        }
+        for entry in &mut self.groups {
+            if frozen.contains(&(entry.group.target, entry.group.owner)) {
+                entry.group.samples.clear();
+                entry.requirements.clear();
+            }
+        }
+    }
+
     /// Add only genuinely static owners. A requirement-only Dynamic group remains a
     /// requirement; it must never be silently replaced by its underlying static value.
     pub fn with_static_targets(

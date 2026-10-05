@@ -409,7 +409,7 @@ fn invalid_family_metadata_and_duplicate_outputs_do_not_replace_a_queued_result(
 }
 
 #[test]
-fn freeze_is_applied_after_composition_and_clears_projected_sources() {
+fn freeze_holds_the_baseline_and_wins_over_composition_and_clears_projected_sources() {
     let (engine, _, _, fixture, _) = focus_engine();
     let key = AttributeKey("focus".into());
     let mut snapshot = (*engine.snapshot()).clone();
@@ -427,9 +427,11 @@ fn freeze_is_applied_after_composition_and_clears_projected_sources() {
     engine.replace_snapshot(snapshot).unwrap();
     let capture = engine.prepare_output_frame(Default::default());
     let mut lane = engine.prepare_static_family_frame(&capture, &[]);
+    // Freeze holds parameters before DMX (2026-10-05): the baseline already holds the frozen
+    // value, so a family adapter renders it.
     assert_eq!(
         lane.value(fixture, &key),
-        Some(&AttributeValue::Normalized(0.2))
+        Some(&AttributeValue::Normalized(0.9))
     );
     lane.project_family(
         fixture,

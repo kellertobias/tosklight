@@ -19,8 +19,9 @@ receiver and checked against the logical frame of the same manual-clock step.
 - Full Freeze, steps 1–5: `FREEZE-FULL-001` drives the touch keypad (`[^CLR]`, `[GRP] 1 0`,
   `[ENT]`; `[^CLR][^CLR]` for Unfreeze), checks the Fixture Sheet `❄ FREEZE` markers (the wash's Master row included), held DMX and visualization through every source, both masters and Blackout, and that
   Unfreeze reveals the untouched Programmer and Cue. `FREEZE-FULL-002` holds a multi-head fixture's Master Pan/Tilt/Intensity
-  output. Known defects are kept as expected failures: `FREEZE-FULL-003` (physical
-  colour of semantic-colour fixtures not held) and `FREEZE-FULL-004` (the Freeze itself changes a
+  output. `FREEZE-FULL-003` holds the physical colour of semantic-colour heads and
+  fixtures: Freeze holds parameters before DMX, so the Color adapter renders the frozen colour and
+  no Dynamic drives it. A known defect is kept as an expected failure: `FREEZE-FULL-004` (the Freeze itself changes a
   virtual-dimmer colour fixture's output).
 - Partial Freeze, steps 1–6: `FREEZE-PARTIAL-001` (keypad `[^1][^2]` grammar, family labels,
   retained Intensity/Colour semantic values, Position and Beam (the wash's Zoom) follow; Shutter is

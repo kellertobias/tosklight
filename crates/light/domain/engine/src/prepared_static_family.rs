@@ -275,9 +275,20 @@ impl Engine {
         trace_sources: bool,
     ) -> PreparedStaticFamilyFrame {
         let mut continuity = capture.continuity.clone();
-        let resolved = crate::timed(crate::RenderPhase::ResolveTotal, || {
+        let mut resolved = crate::timed(crate::RenderPhase::ResolveTotal, || {
             self.resolve_prepared_attributes(capture, sampled, &mut continuity, trace_sources)
         });
+        // Freeze holds the lamp's parameters before they become DMX (2026-10-05): family adapters
+        // (Color, Zoom, Focus) read this baseline, so a frozen owner's adapter renders its frozen
+        // value. Reapplying the Freeze in the final projection is idempotent.
+        if !capture.freezes_nothing() {
+            crate::timed(crate::RenderPhase::FixtureFreezes, || {
+                crate::render::apply_fixture_freezes(
+                    &capture.generation.snapshot().fixtures,
+                    &mut resolved,
+                )
+            });
+        }
         PreparedStaticFamilyFrame {
             capture_identity: Arc::clone(&capture.identity),
             preload: None,
