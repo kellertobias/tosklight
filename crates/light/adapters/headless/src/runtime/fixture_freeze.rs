@@ -180,7 +180,9 @@ fn apply_selected(
 
 struct FreezeCapturedOutput {
     values: light_engine::FrameValues,
-    visual: Option<Arc<light_engine::Pooled<light_engine::ResolvedValues>>>,
+    /// Group Master × Grand Master (0 under Blackout) per owner at the captured frame: a frozen
+    /// Intensity is held after them.
+    intensity_masters: HashMap<FixtureId, f32>,
     native: HashMap<FixtureId, FrozenPositionOutput>,
     /// Alias clearing is command-time only; no channel search or hashing occurs at frame rate.
     position_aliases: HashMap<FixtureId, HashSet<AttributeKey>>,
@@ -340,35 +342,46 @@ fn prepare_freeze_capture(
     }
     // Existing non-physical/legacy capture remains available before a scheduler publication.
     // A new compiled Position hold above never reaches this fallback without an accepted frame.
-    let (values, visual) = if let Some(frame) = accepted {
-        (
-            frame.values.clone(),
-            Some(Arc::clone(&frame.profile_visualization_values)),
-        )
+    let (values, options) = if let Some(frame) = accepted {
+        (frame.values.clone(), frame.options)
     } else if need_values {
+        let options = state.output.render_options();
         let rendered = state
             .output
             .engine()
-            .render(state.output.render_options())
+            .render(options)
             .map_err(|error| ApiError::bad_request(error.to_string()))?;
-        (
-            rendered.resolved_values.clone(),
-            Some(Arc::clone(&rendered.profile_visualization_values)),
-        )
+        (rendered.resolved_values.clone(), options)
     } else {
         // Removal/idempotent commands need no physical sample. Reuse only an immutable empty
         // observation for the scalar carrier; no clocks, fitting or new output are requested.
         return Ok(Some(FreezeCapturedOutput {
             values: light_engine::FrameValues::empty(),
-            visual: None,
+            intensity_masters: HashMap::new(),
             native,
             position_aliases,
             root_owners,
         }));
     };
+    let engine = state.output.engine();
+    let intensity_masters = engine_snapshot
+        .fixtures
+        .iter()
+        .flat_map(|fixture| {
+            std::iter::once(fixture.fixture_id)
+                .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
+                .map(move |owner| (fixture, owner))
+        })
+        .map(|(fixture, owner)| {
+            (
+                owner,
+                engine.intensity_master_scale(fixture, owner, options),
+            )
+        })
+        .collect();
     Ok(Some(FreezeCapturedOutput {
         values,
-        visual,
+        intensity_masters,
         native,
         position_aliases,
         root_owners,
@@ -690,22 +703,32 @@ fn captured_values(
     fixture_id: FixtureId,
     families: Option<&[FreezeFamily]>,
 ) -> HashMap<AttributeKey, AttributeValue> {
+    // Freeze holds the lamp's parameters before they become DMX (2026-10-05). Only resolved
+    // parameters are captured, never visualization values (a virtual-dimmer lamp's visual
+    // "intensity" is its colour's luminance, and visual colour channels are an approximation).
+    // Intensity is held as it was after the masters, which never change it afterwards.
     captured
         .values
         .iter()
-        .chain(
-            captured
-                .visual
-                .as_deref()
-                .into_iter()
-                .flat_map(|values| values.iter()),
-        )
         .filter(|((owner, attribute), _)| {
             *owner == fixture_id
                 && families
                     .is_none_or(|families| families.iter().any(|family| family.accepts(attribute)))
         })
-        .map(|((_, attribute), value)| (attribute.clone(), value.clone()))
+        .map(|((_, attribute), value)| {
+            let value = match (attribute.is_intensity(), value) {
+                (true, AttributeValue::Normalized(level)) => AttributeValue::Normalized(
+                    level
+                        * captured
+                            .intensity_masters
+                            .get(&fixture_id)
+                            .copied()
+                            .unwrap_or(1.0),
+                ),
+                _ => value.clone(),
+            };
+            (attribute.clone(), value)
+        })
         .collect()
 }
 

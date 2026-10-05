@@ -529,7 +529,7 @@ The full Dynamic editor, target ordering, phases, lanes, speed behavior, and the
 
 ## Freezing Fixtures and Fixture Attributes
 
-Freeze captures the resolved output of a fixture or attribute family and keeps it unchanged while later programmer, Cue, Dynamic, direct-control, Group Master, Grand Master, and Blackout values change underneath it.
+Freeze captures the parameters of a fixture or attribute family as the lamp has them, before they are calculated to DMX, and keeps them unchanged while later programmer, Cue, Dynamic, direct-control, Group Master, Grand Master, and Blackout values change underneath it. Masters work on parameters and never change a frozen one, in a full or a partial Freeze. A parameter that is not frozen still follows them: with only Color frozen, Group Master, Grand Master and Blackout still dim the fixture through its unfrozen Intensity. A lamp without a dimmer channel (virtual dimmer) follows the masters through its colour emitters.
 
 Press `[^CLR]`, enter a Fixture or Group selection, and press `[ENT]` to apply a full Freeze. A Group resolves to its current fixtures; Freeze is stored on those targets, not on the Group object. Removing Freeze immediately reveals the current underlying state without rewriting it.
 

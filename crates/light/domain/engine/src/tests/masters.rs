@@ -101,7 +101,7 @@ fn grand_master_and_blackout_affect_intensity() {
 }
 
 #[test]
-fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
+fn partial_intensity_freeze_is_not_changed_by_group_grand_master_or_blackout() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
     programmers.start(session);
@@ -141,6 +141,8 @@ fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
         })
         .unwrap();
 
+    // Masters never change a frozen parameter (2026-10-05): 0.8 stays 0.8 under a 50 % Group
+    // Master and a 50 % Grand Master.
     assert_eq!(
         engine
             .render(RenderOptions {
@@ -149,7 +151,7 @@ fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
             })
             .unwrap()
             .universes[&1][0],
-        51
+        204
     );
     programmers.set(
         session,
@@ -165,7 +167,8 @@ fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
             })
             .unwrap()
             .universes[&1][0],
-        0
+        204,
+        "Blackout does not change a frozen Intensity either"
     );
 }
 

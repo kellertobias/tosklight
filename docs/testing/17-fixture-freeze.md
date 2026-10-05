@@ -21,15 +21,16 @@ receiver and checked against the logical frame of the same manual-clock step.
   Unfreeze reveals the untouched Programmer and Cue. `FREEZE-FULL-002` holds a multi-head fixture's Master Pan/Tilt/Intensity
   output. `FREEZE-FULL-003` holds the physical colour of semantic-colour heads and
   fixtures: Freeze holds parameters before DMX, so the Color adapter renders the frozen colour and
-  no Dynamic drives it. A known defect is kept as an expected failure: `FREEZE-FULL-004` (the Freeze itself changes a
-  virtual-dimmer colour fixture's output).
+  no Dynamic drives it. `FREEZE-FULL-004` checks that applying the Freeze does not change a
+  virtual-dimmer colour fixture's output.
 - Partial Freeze, steps 1–6: `FREEZE-PARTIAL-001` (keypad `[^1][^2]` grammar, family labels,
   retained Intensity/Colour semantic values, Position and Beam (the wash's Zoom) follow; Shutter is
-  Intensity, masters and Blackout
-  followed) and `FREEZE-PARTIAL-002` (repeating the family live action removes it; full over
+  Intensity; no master or Blackout changes the frozen Intensity) and `FREEZE-PARTIAL-002` (repeating the family live action removes it; full over
   partial restores no partial metadata). Step 5 uses the Toggle family live action; repeating the
-  explicit `FREEZE … INTENSITY COLOR` command line is idempotent. `FREEZE-PARTIAL-003` is an expected
-  failure for the defect that Group and Grand Master apply twice to a partial Intensity Freeze.
+  explicit `FREEZE … INTENSITY COLOR` command line is idempotent. `FREEZE-PARTIAL-003` checks that a
+  partial Intensity Freeze holds the parameter after the masters, so applying it changes nothing;
+  `FREEZE-PARTIAL-004` that with only Color frozen the unfrozen Intensity, and with it the masters,
+  still dims the frozen colour.
 - Persistence and parity: `FREEZE-PERSISTENCE-001` (steps 1–2, saved show file reopened and an
   unrelated Show Patch edit), `FREEZE-PERSISTENCE-002` (step 3, touch keypad, OSC and attached
   hardware each produce the same stored Freeze and exactly one Patch revision per action),
@@ -64,8 +65,9 @@ receiver and checked against the logical frame of the same manual-clock step.
 2. Confirm the Fixture Sheet names both families and does not show the full `FREEZE` state.
 3. Change Intensity, Color, Position, and Beam sources. Confirm only Intensity and Color retain their
    captured semantic values.
-4. Move Group Master and Grand Master and enable Blackout. Confirm partial Freeze output follows all
-   three masters.
+4. Move Group Master and Grand Master and enable Blackout. Confirm none of them changes a frozen
+   parameter: the frozen Intensity holds. A family that is not frozen still follows them; with only
+   Color frozen, the masters dim the fixture through its unfrozen Intensity.
 5. Repeat the same family action. Confirm those families and their retained values are removed.
 6. Apply a full Freeze over an existing partial Freeze, then remove it. Confirm no partial-family
    metadata is restored.

@@ -236,6 +236,33 @@ impl Engine {
         }
     }
 
+    /// The Group Master × Grand Master (0 under Blackout) the engine applies to the Intensity
+    /// parameter of `owner`, a head or fixture of `root`, under `options`. A Freeze captures the
+    /// parameter after these masters, which then never change it.
+    pub fn intensity_master_scale(
+        &self,
+        root: &light_fixture::PatchedFixture,
+        owner: FixtureId,
+        options: RenderOptions,
+    ) -> f32 {
+        let grand = if options.blackout {
+            0.0
+        } else if root.grand_master_enabled {
+            options.grand_master.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let group = if root.group_masters_enabled {
+            self.generation
+                .load()
+                .group_masters()
+                .scale(owner, &self.group_master_flashes.read())
+        } else {
+            1.0
+        };
+        grand * group
+    }
+
     pub(crate) fn capture_output_overlays(&self, options: RenderOptions) -> CapturedOutputOverlays {
         CapturedOutputOverlays {
             options: RenderOptions {

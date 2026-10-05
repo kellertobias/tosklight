@@ -220,16 +220,12 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 		page,
 		show,
 	}) => {
-		test.fail(
-			true,
-			"BUG: Freeze on a virtual-dimmer colour fixture captures its visualization luminance as Intensity, so the ROOT PAR output drops at the Freeze (U1.202 204 -> 146 for 80 % green)",
-		);
 		await arrangeFreezeRig({ api, bench, desk, page, show });
 		const before = slots(await outputFrame(bench, 0), PAR_SLOTS);
 		await fullFreezeGroup(api);
 		expect(slots(await outputFrame(bench, 0), PAR_SLOTS)).toEqual(before);
 	});
-	test("FREEZE-PARTIAL-001 @ui › keypad Intensity + Color Freeze retains only those families and follows Group Master, Grand Master and Blackout", async ({
+	test("FREEZE-PARTIAL-001 @ui › keypad Intensity + Color Freeze retains only those families, and no master changes them", async ({
 		api,
 		bench,
 		desk,
@@ -290,17 +286,16 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 		);
 		expect(live[4], "Beam follows").not.toBe(frozenPosition[4]);
 
-		// The partial Freeze still follows all three masters, in proportion to their levels.
-		const [heldOutput] = slots(changed, [1]);
-		expect(heldOutput).toBeGreaterThan(20);
+		// Masters never change a frozen parameter (2026-10-05): the frozen Intensity holds
+		// through Group Master, Grand Master and Blackout.
+		const held = slots(changed, DIMMER_SLOTS);
+		expect(held[0]).toBeGreaterThan(20);
 		await setGroupMaster(api, rig.groupMasterPlayback, 0.4);
-		const [afterGroupMaster] = slots(await outputFrame(bench, 0), [1]);
-		expectDmxNear(afterGroupMaster, heldOutput * (0.4 / 0.8));
+		expect(slots(await outputFrame(bench, 0), DIMMER_SLOTS)).toEqual(held);
 		await setGlobalMaster(api, { grand_master: 0.45 });
-		const [afterGrandMaster] = slots(await outputFrame(bench, 0), [1]);
-		expectDmxNear(afterGrandMaster, heldOutput * (0.4 / 0.8) * (0.45 / 0.9));
+		expect(slots(await outputFrame(bench, 0), DIMMER_SLOTS)).toEqual(held);
 		await setGlobalMaster(api, { blackout: true });
-		expect(slots(await outputFrame(bench, 0), DIMMER_SLOTS)).toEqual([0, 0, 0]);
+		expect(slots(await outputFrame(bench, 0), DIMMER_SLOTS)).toEqual(held);
 	});
 
 	test("FREEZE-PARTIAL-002 @api › repeating the family action removes it, and a full Freeze over a partial one restores no partial metadata", async ({
@@ -338,17 +333,13 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 			"removing the full Freeze restores no partial-family metadata",
 		).toEqual({});
 	});
-	test("FREEZE-PARTIAL-003 @api › a partial Intensity Freeze retains the pre-master semantic value, so the output does not change when it is applied", async ({
+	test("FREEZE-PARTIAL-003 @api › a partial Intensity Freeze holds the parameter after the masters, so the output does not change when it is applied", async ({
 		api,
 		bench,
 		desk,
 		page,
 		show,
 	}) => {
-		test.fail(
-			true,
-			"BUG: partial Freeze captures the post-master output as its semantic Intensity, so Group Master and Grand Master apply twice (Dimmer 1 drops 110 -> 79 at the Freeze: 60 % x 80 % x 90 % retained as 43 %)",
-		);
 		const rig = await arrangeFreezeRig({ api, bench, desk, page, show });
 		const before = slots(await outputFrame(bench, 0), [1]);
 		expectDmxNear(before[0], 255 * 0.6 * 0.8 * 0.9);
@@ -357,8 +348,28 @@ test.describe("docs/testing/17-fixture-freeze.md", () => {
 		expect(
 			await visualizationValues(api, [rig.dimmers[0]], ["intensity"]),
 		).toEqual({
-			[`${rig.dimmers[0]}/intensity`]: { kind: "normalized", value: expect.closeTo(0.6, 5) },
+			[`${rig.dimmers[0]}/intensity`]: { kind: "normalized", value: expect.closeTo(0.6 * 0.8 * 0.9, 4) },
 		});
+	});
+
+	test("FREEZE-PARTIAL-004 @api › with only Color frozen, the unfrozen Intensity still dims the frozen colour with the masters", async ({
+		api,
+		bench,
+		desk,
+		page,
+		show,
+	}) => {
+		const rig = await arrangeFreezeRig({ api, bench, desk, page, show });
+		// ROOT PAR in its virtual-dimmer mode: Group Master 80 % and Grand Master 90 % reach the
+		// colour through the virtual Intensity.
+		const [, green] = slots(await outputFrame(bench, 0), PAR_SLOTS);
+		expectDmxNear(green, 255 * 0.8 * 0.8 * 0.9);
+		await api.executeCommandLine("FREEZE 201 COLOR");
+		void rig;
+		await bench.tick(25);
+		expect(slots(await outputFrame(bench, 0), PAR_SLOTS)[1]).toBe(green);
+		await setGlobalMaster(api, { grand_master: 0.45 });
+		expectDmxNear(slots(await outputFrame(bench, 0), PAR_SLOTS)[1], 255 * 0.8 * 0.8 * 0.45);
 	});
 	test("FREEZE-PERSISTENCE-001 @ui › saved and reopened shows keep full and partial Freeze, also after an unrelated Show Patch edit", async ({
 		api,

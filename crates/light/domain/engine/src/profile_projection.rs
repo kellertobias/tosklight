@@ -427,13 +427,28 @@ fn resolve_head_without_overlays(
                     })
                     .map(|master| master.scale)
                     .unwrap_or(1.0);
+                let grand = grand_master(fixture, options);
+                // Masters work on the lamp's parameters before DMX (2026-10-05): a channel dimmed
+                // only through the virtual intensity (a virtual-dimmer emitter) gets the Group and
+                // Grand Master through it; a channel that reacts to a master directly keeps that.
+                let mastered_intensity = virtual_intensity
+                    * if channel.reacts_to_group_master {
+                        1.0
+                    } else {
+                        group_scale
+                    }
+                    * if channel.reacts_to_grand_master {
+                        1.0
+                    } else {
+                        grand
+                    };
                 ChannelScales {
                     // An intensity channel is the virtual intensity's source, not a reader of it.
                     virtual_intensity: (!active.is_some_and(|active| active.is_intensity))
-                        .then_some(virtual_intensity),
+                        .then_some(mastered_intensity),
                     sequence_master,
                     group_master: group_scale,
-                    grand_master: grand_master(fixture, options),
+                    grand_master: grand,
                 }
             },
         );
@@ -913,14 +928,29 @@ fn resolve_channels(
                     |attribute| inputs.sequence_master(attribute),
                     intensity_master,
                 );
+                let group = context.inputs.group_scale;
+                let grand = grand_master(context.fixture, context.options);
+                // Masters work on parameters before DMX: a native emitter dimmed only through
+                // the virtual intensity gets the Group and Grand Master through it.
+                let mastered = context.virtual_intensity
+                    * if channel.reacts_to_group_master {
+                        1.0
+                    } else {
+                        group
+                    }
+                    * if channel.reacts_to_grand_master {
+                        1.0
+                    } else {
+                        grand
+                    };
                 // An intensity channel is the virtual intensity's source, not a reader of it.
-                let channel_intensity = (!active.is_some_and(AttributeKey::is_intensity))
-                    .then_some(context.virtual_intensity);
+                let channel_intensity =
+                    (!active.is_some_and(AttributeKey::is_intensity)).then_some(mastered);
                 ChannelScales {
                     virtual_intensity: channel_intensity,
                     sequence_master,
-                    group_master: context.inputs.group_scale,
-                    grand_master: grand_master(context.fixture, context.options),
+                    group_master: group,
+                    grand_master: grand,
                 }
             },
         );

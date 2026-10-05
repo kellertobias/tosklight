@@ -37,14 +37,20 @@ impl HeadOverlayState {
         // Nothing frozen, nothing highlighted and nothing flashing is the ordinary state of a
         // desk, so each of these asks whether there is anything to look up before hashing this
         // head's identity.
-        let full_freeze = native_full_freeze
-            || !fixture.freeze.targets.is_empty()
-                && fixture
-                    .freeze
-                    .targets
-                    .get(&owner)
-                    .is_some_and(|target| target.full);
-        let options = if full_freeze {
+        let frozen = (!fixture.freeze.targets.is_empty())
+            .then(|| fixture.freeze.targets.get(&owner))
+            .flatten();
+        let full_freeze = native_full_freeze || frozen.is_some_and(|target| target.full);
+        // Masters never change a frozen parameter (2026-10-05): a head whose Intensity is frozen,
+        // fully or as a family, renders past Group Master, Grand Master and Blackout. An
+        // unfrozen Intensity keeps following them, also when only its Color is frozen.
+        let masters_held = full_freeze
+            || frozen.is_some_and(|target| {
+                target
+                    .families
+                    .contains(&light_fixture::FreezeFamily::Intensity)
+            });
+        let options = if masters_held {
             RenderOptions {
                 grand_master: 1.0,
                 blackout: false,
@@ -66,7 +72,7 @@ impl HeadOverlayState {
             && selected_look
                 .as_ref()
                 .is_some_and(|look| look.compatibility != HighlightLookCompatibility::Semantic);
-        let group_scale = if full_freeze || output_highlighted || !fixture.group_masters_enabled {
+        let group_scale = if masters_held || output_highlighted || !fixture.group_masters_enabled {
             1.0
         } else {
             group_masters.scale(owner, group_master_flashes)
