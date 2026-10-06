@@ -15,9 +15,15 @@ pub(super) struct PositionForestCompilation {
 
 impl PositionForestCompilation {
     pub(super) fn new(forest_len: usize) -> Self {
-        let nodes = vec![Node::Underlay];
-        let position_node_origins = vec![None];
-        let leaf_sources: Vec<Arc<[CoupledComponentEndpoint]>> = vec![Arc::from([])];
+        // Sized for one graph node per forest node (TL-639 round 7); a Whole branch reserves its
+        // imported nodes.
+        let mut nodes = Vec::with_capacity(forest_len + 1);
+        nodes.push(Node::Underlay);
+        let mut position_node_origins = Vec::with_capacity(forest_len + 1);
+        position_node_origins.push(None);
+        let mut leaf_sources: Vec<Arc<[CoupledComponentEndpoint]>> =
+            Vec::with_capacity(forest_len + 1);
+        leaf_sources.push(Arc::from([]));
         let mapped = Vec::with_capacity(forest_len);
         let wholes = Vec::new();
         let cohort_members = Vec::new();
@@ -130,6 +136,11 @@ impl PositionForestCompilation {
             compile(&tape, root, None, &mut Vec::new())?;
         let offset = self.nodes.len() - 1;
         let remap = |id: usize| if id == 0 { 0 } else { id + offset };
+        // The branch's own node is already counted; its other imported nodes are not.
+        let extra = imported.len().saturating_sub(2);
+        self.nodes.reserve(extra);
+        self.position_node_origins.reserve(extra);
+        self.leaf_sources.reserve(extra);
         self.wholes.push(PositionForestWholeLineage {
             forest_node,
             lane_id: *lane_id,

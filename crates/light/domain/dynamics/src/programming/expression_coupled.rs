@@ -215,7 +215,8 @@ fn collect_base_endpoints(
     let mut endpoints: Vec<CoupledBaseEndpoint> = vec![];
     let mut origins = Vec::<Vec<usize>>::new();
     let mut visited = vec![false; nodes.len()];
-    let mut pending = vec![root];
+    let mut pending = Vec::with_capacity(nodes.len());
+    pending.push(root);
     while let Some(id) = pending.pop() {
         if std::mem::replace(&mut visited[id], true) {
             continue;
