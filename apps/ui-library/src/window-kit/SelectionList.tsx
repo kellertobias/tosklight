@@ -5,6 +5,8 @@ import { WindowScrollArea } from "./WindowKit";
 export interface SelectionListOption {
 	value: string;
 	label: ReactNode;
+	/** The option's accessible name when its visible label is composed (a number and a name). */
+	ariaLabel?: string;
 	description?: ReactNode;
 	disabled?: boolean;
 	tone?: "default" | "danger";
@@ -34,6 +36,7 @@ export function SelectionList({
 						variant={option.tone === "danger" ? "danger" : "secondary"}
 						role="radio"
 						aria-checked={option.value === value}
+						aria-label={option.ariaLabel}
 						active={option.value === value}
 						disabled={option.disabled}
 						key={option.value}

@@ -169,6 +169,7 @@ function playbackTargetColumn(
 		value = draft.target.cue_list_id;
 		options = cueLists.map((cue) => ({
 			value: cue.id,
+			ariaLabel: `${cue.number} ${cue.name}`,
 			label: <NumberedObjectLabel number={cue.number} name={cue.name} />,
 		}));
 		onChange = (cue_list_id) =>
@@ -177,15 +178,19 @@ function playbackTargetColumn(
 		const assignment = draft.target.assignment;
 		label = "Dynamic options";
 		value = assignment.dynamic_id ?? undefined;
-		options = dynamics.map((dynamic) => ({
-			value: dynamic.id,
-			label: (
-				<NumberedObjectLabel
-					number={dynamic.body.pool_number}
-					name={`${dynamic.body.name}${dynamic.body.target_binding.type === "targetless" ? " · targetless" : ""}`}
-				/>
-			),
-		}));
+		options = dynamics.map((dynamic) => {
+				const name = `${dynamic.body.name}${dynamic.body.target_binding.type === "targetless" ? " · targetless" : ""}`;
+				return {
+					value: dynamic.id,
+					ariaLabel: `${dynamic.body.pool_number} ${name}`,
+					label: (
+						<NumberedObjectLabel
+							number={dynamic.body.pool_number}
+							name={name}
+						/>
+					),
+				};
+			});
 		onChange = (dynamicId) => {
 			const dynamic = dynamics.find((candidate) => candidate.id === dynamicId);
 			if (!dynamic) return;
@@ -212,6 +217,7 @@ function playbackTargetColumn(
 		value = target.group_id;
 		options = groups.map((group, index) => ({
 			value: group.id,
+			ariaLabel: `${index + 1} ${group.body.name ?? group.id}`,
 			label: (
 				<NumberedObjectLabel
 					number={index + 1}
@@ -415,10 +421,7 @@ function NumberedObjectLabel({
 	name: string;
 }) {
 	return (
-		<span
-			className="playback-numbered-object-label"
-			aria-label={`${number} ${name}`}
-		>
+		<span className="playback-numbered-object-label">
 			<span className="playback-numbered-object-number">{number}</span>
 			<span>{name}</span>
 		</span>
