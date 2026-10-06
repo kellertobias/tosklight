@@ -30,6 +30,10 @@ Executable coverage:
   read from the layers' DMX greyscale and tint and from the preview card, with layer and Master
   Intensity unchanged; and the Fixture Sheet triangle, its single batched report request, the
   absence of any message or focus move, and tap and Enter opening the **Details** tab.
+- The same spec carries SEMANTIC-COLOR-007 at 1600×1000 in the software-only layout: the existing
+  `tests/fixtures/default-stage.show`, the packaged Default (`assets/demo.show`) and the Clean
+  Built-in Default loaded through **New Show**; the page-1 readouts, one Red detent and a programmed
+  blue. Vitest: `…/familyEncoders/colorSlotDisplay.test.ts`.
 - All of these run under `npm run test:e2e`, because production reports programming contract 1;
   `npm run test:e2e-semantic` runs them on the contract-1 E2E test server, where a missing semantic
   publication fails instead of skipping.
@@ -121,3 +125,16 @@ hardware-connected layout.
    output keeps changing.
 3. Tap the triangle (or press Enter on it). Verify the full Color modal opens on its **Details**
    tab with that fixture's row marked and the selection is unchanged.
+
+## SEMANTIC-COLOR-007 — Readouts in existing and shipped shows
+
+1. Open an existing Default Stage Show saved by an earlier build, then the Default show, then
+   **New Show → Load Clean Built-in Default**. In each, select colour fixtures that hold no colour
+   (for example an RGBW PAR, a JBLED A7 and a Robin DLS) and open the **Color** encoders.
+2. Verify page 1 reads **Red**, **Green**, **Blue** and **White Blend** with the open-white start
+   every first edit uses: `100%`, `100%`, `100%`, `0%`. No control reads a dash.
+3. Turn **Red** one detent down. Verify the encoder reads the requested value and the other
+   controls keep theirs.
+4. Program blue. Verify Red and Green read `0%` (black and zero are values) and Blue `100%`. A
+   selection whose fixtures differ reads **Mixed**; a fixture holding a Direct colour reads
+   **Direct** until a page 1 or 2 edit adopts it.

@@ -34,6 +34,13 @@ import {
 } from "./bench/color/directColorRig";
 import { expect, test } from "./bench/core/fixtures";
 import { requireSemanticContract } from "./bench/core/semanticContract";
+import {
+	directColorPage,
+	encoderReadings,
+	loadShippedShow,
+	selectNumbers,
+	type ShippedShow,
+} from "./bench/color/shippedColorShows";
 
 /**
  * docs/testing/37-direct-color-pages.md (TL-554), DIRECT-COLOR-002 to 006. DIRECT-COLOR-001
@@ -527,6 +534,58 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 		);
 		expect(applied.status, JSON.stringify(applied)).toBe("changed");
 		expect((await colorOf(api, a1))?.recipe?.channels.find((channel) => channel.channel_id === red.channel_id)?.raw).toBe(254);
+	});
+	test("DIRECT-COLOR-007 @ui › the existing, Default and Clean Built-in Default shows name Direct controls by their registry labels and show their values", async ({
+		api,
+		bench,
+		desk,
+		page,
+	}) => {
+		test.setTimeout(180_000);
+		await desk.open(api.baseUrl);
+		const rigs: Array<[ShippedShow, number, string[]]> = [
+			["existing", 401, ["Red", "Green", "Blue", "White"]],
+			["default", 301, ["Red", "Green", "Blue", "White"]],
+			["default", 101, ["Color Wheel 1", "Red", "Green", "Blue", "White", "Color Temperature"]],
+			["clean", 201, ["Red", "Green", "Blue", "Color Temperature", "Color Wheel 1"]],
+		];
+		let loaded: { which: ShippedShow; id: string } | null = null;
+		for (const [which, number, labels] of rigs) {
+			if (loaded?.which !== which) loaded = { which, id: (await loadShippedShow(api, page, which)).id };
+			const [id] = await selectNumbers(api, loaded.id, [number]);
+			await bench.tick(25);
+			await directColorPage(page, number);
+			// Each native encoder names its control and the reference head; the idle head shows its
+			// profile defaults as native values (a wheel its slot's name), never a dash.
+			const named = new RegExp(`^Enc \\d+ · (.+) · ${number}(?: · Resolved)?$`);
+			await expect
+				.poll(async () =>
+					(await encoderReadings(page)).flatMap((reading) => {
+						const label = named.exec(reading.name)?.[1];
+						return label && reading.value && reading.value !== "—" ? [label] : [];
+					}),
+				{ message: `${which} ${number}: Direct labels with values` })
+				.toEqual(labels);
+			const shown = await encoderReadings(page);
+			expect(shown.every((reading) => !/\bcolor\./.test(reading.name)), JSON.stringify(shown)).toBe(true);
+			if (which !== "default" || number !== 301) continue;
+			// One detent down on Red adopts the shown recipe; the encoder reads the requested value.
+			const red = shown.find((reading) => named.exec(reading.name)?.[1] === "Red");
+			if (!red) throw new Error("no Red encoder");
+			const slot = Number(/^Enc (\d+)/.exec(red.name)?.[1]);
+			const before = Number(red.value);
+			// A detent on an output that has moved on since the read is held and re-read (006).
+			await expect
+				.poll(async () => {
+					if ((await colorOf(api, id))?.kind === "direct") return "direct";
+					await bench.tick(25);
+					await detent(encoder(page, slot), -1);
+					return (await colorOf(api, id))?.kind;
+				})
+				.toBe("direct");
+			await expect(encoder(page, slot)).toHaveAccessibleName(`Enc ${slot} · Red · ${number}`);
+			await expect(encoder(page, slot).locator(".touch-encoder-value")).toHaveText(String(before - 1));
+		}
 	});
 });
 

@@ -47,6 +47,11 @@ Executable coverage:
     detent applies. The browser's own re-read after the hold is covered by Vitest
     (`features/familyEncoders/useFamilyReadouts.test.tsx`,
     `features/programmerValues/familyGestureSession.displayedSource.test.ts`).
+  - DIRECT-COLOR-007: in the browser at 1600×1000, on the existing
+    `tests/fixtures/default-stage.show`, the packaged Default and the Clean Built-in Default loaded
+    through **New Show**, with the desk's own Easy presentation. The labels come from the attribute
+    registry (Rust: `native_color_pages_tests/pages.rs`); the re-read of values that are not yet
+    available is covered by Vitest (`features/familyEncoders/useNativeColorPages.test.tsx`).
 
 Physical colour, UV and wheel evidence is manual (TL-523). Record the build, the desk mode, the
 viewport and the fixtures with every manual run.
@@ -123,3 +128,15 @@ viewport and the fixtures with every manual run.
    reference recipe: every control at its default, the turned control moved by one detent.
 2. Turn a native encoder after the displayed output has moved on. Verify the first detent is held,
    the desk re-reads, and the next detent applies.
+
+## DIRECT-COLOR-007 — Readable labels and values in existing and shipped shows
+
+1. Open an existing Default Stage Show saved by an earlier build, then the Default show, then
+   **New Show → Load Clean Built-in Default**. In each, select one colour fixture that holds no
+   colour and page the Color encoders to its Direct controls.
+2. Verify every Direct encoder is named by the attribute's label and the reference head — `Red ·
+   301`, `Color Wheel 1 · 101`, `Color Temperature · 201` — never by an identifier such as
+   `color.red`, and shows its value: a native number, or a wheel's slot name. No control reads a
+   dash, also right after the show was loaded.
+3. Turn **Red** one detent down. Verify the head now holds a Direct recipe and the encoder reads the
+   requested value, one native step below the value it showed.

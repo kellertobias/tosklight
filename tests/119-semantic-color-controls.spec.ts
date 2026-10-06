@@ -29,6 +29,13 @@ import { expect, test } from "./bench/core/fixtures";
 import type { LightBench } from "./bench/core/lightBench";
 import { requireSemanticContract } from "./bench/core/semanticContract";
 import { fixture } from "./bench/output/fixtureDmxContract";
+import { colorOf, detent, encoder, pageColorTo, programSemantic, SEMANTIC_BLUE } from "./bench/color/directColorRig";
+import {
+	encoderReadings,
+	loadShippedShow,
+	selectNumbers,
+	type ShippedShow,
+} from "./bench/color/shippedColorShows";
 
 /**
  * docs/testing/36-semantic-color-controls.md (TL-550): the full Color modal, Media layers and the
@@ -392,6 +399,54 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 				{ timeout: 6_000 },
 			)
 			.toBe(1);
+	});
+	test("SEMANTIC-COLOR-007 @ui › the existing, Default and Clean Built-in Default shows read labelled semantic Color values, never a dash", async ({
+		api,
+		bench,
+		desk,
+		page,
+	}) => {
+		test.setTimeout(180_000);
+		await page.setViewportSize({ width: 1600, height: 1000 });
+		await desk.open(api.baseUrl);
+		const rigs: Array<[ShippedShow, number[]]> = [
+			["existing", [401, 201]],
+			["clean", [301, 201, 101]],
+			// Last: the Programmer keeps its values across a show load.
+			["default", [301, 201, 101]],
+		];
+		const value = (slot: number) => encoder(page, slot).locator(".touch-encoder-value");
+		for (const [which, numbers] of rigs) {
+			const show = await loadShippedShow(api, page, which);
+			const ids = await selectNumbers(api, show.id, numbers);
+			await bench.tick(25);
+			await pageColorTo(page, 1);
+			// Nothing holds a colour: every control reads the open-white start a first edit uses.
+			await expect
+				.poll(() => encoderReadings(page), { message: `${which}: page 1 readouts` })
+				.toEqual([
+					{ name: "Enc 1 · Red", value: "100%" },
+					{ name: "Enc 2 · Green", value: "100%" },
+					{ name: "Enc 3 · Blue", value: "100%" },
+					{ name: "Enc 4 · White Blend", value: "0%" },
+				]);
+			if (which !== "default") continue;
+			// One detent down on Red edits open white; the encoder reads the requested value.
+			await detent(encoder(page, 1), -1);
+			await expect.poll(async () => (await colorOf(api, ids[0]))?.kind).toBe("semantic");
+			const red = (await colorOf(api, ids[0]))?.intent.recipe.rgb[0] as number;
+			expect(red).toBeLessThan(1);
+			await expect(value(1)).toHaveText(/^\d+(\.\d+)?%$/);
+			await expect
+				.poll(async () => Math.abs(Number.parseFloat((await value(1).textContent()) ?? "") - red * 100))
+				.toBeLessThan(0.05);
+			await expect(value(2)).toHaveText("100%");
+			// Black and zero are real values, never unknown ones.
+			await programSemantic(api, ids, SEMANTIC_BLUE);
+			await expect(value(1)).toHaveText("0%");
+			await expect(value(2)).toHaveText("0%");
+			await expect(value(3)).toHaveText("100%");
+		}
 	});
 });
 
