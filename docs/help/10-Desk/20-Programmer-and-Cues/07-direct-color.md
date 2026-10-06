@@ -4,7 +4,7 @@ Direct colour programs a fixture's own colour controls — its emitters, CMY fla
 
 This page describes Direct colour inside a [Color Intent](05-color-intent.md) show. It is not the show-wide *Direct* colour model, which keeps the older per-channel colour controls.
 
-Direct colour lives on Color encoder pages 3 and 4 and in the Direct color section of the full Color dialog. Pages 1 and 2 stay the ordinary [Color Intent](05-color-intent.md) controls.
+Direct colour lives on Color encoder pages 3 and 4 and in the Direct color section on the **Details** tab of the full Color dialog. Pages 1 and 2 stay the ordinary [Color Intent](05-color-intent.md) controls.
 
 ## The reference head
 

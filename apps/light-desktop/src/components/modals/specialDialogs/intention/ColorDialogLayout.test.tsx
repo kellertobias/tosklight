@@ -101,20 +101,33 @@ describe("ColorDialogLayout compact pages", () => {
 	});
 });
 
+const details = (dialog: HTMLElement, name = "Details") =>
+	fireEvent.click(within(dialog).getByRole("tab", { name }));
+
 describe("ColorDialogLayout full modal", () => {
-	it("uses the standard ModalFrame with all controls and the passive approximation", async () => {
+	it("uses the standard ModalFrame with a Color tab for the selection and a Details tab for the rest", async () => {
 		const onClose = vi.fn();
-		render(<ColorDialogLayout {...props({ expanded: true, onClose })} />);
+		render(<ColorDialogLayout {...props({ expanded: true, onClose, native: <div data-testid="slot-native" /> })} />);
 		const dialog = await screen.findByRole("dialog", { name: "Color Special Dialog" });
 		expect(dialog).toHaveAttribute("aria-modal", "true");
 		expect(dialog.closest(".ui-modal-stack-layer")).toHaveClass("color-dialog-layer");
-		expect(dialog.querySelector(".ui-modal-titlebar")).toHaveTextContent("Color");
+		const tabs = within(dialog).getByRole("tablist", { name: "Color dialog tabs" });
+		expect(within(tabs).getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Color", "Details"]);
+		expect(within(tabs).getByRole("tab", { name: "Color" })).toHaveAttribute("aria-selected", "true");
+		// The Color tab is the selection alone.
 		const body = within(dialog).getByTestId("editor-page");
 		const controls = within(dialog).getByTestId("full-color-editor");
-		const approximation = within(dialog).getByRole("region", { name: "Color approximation" });
 		expect(controls).toContainElement(screen.getByTestId("slot-expanded"));
+		expect([...body.children]).toEqual([controls]);
+		expect(within(dialog).queryByRole("region", { name: "Color approximation" })).toBeNull();
+		// Details holds the approximation and Direct color, in that order, and nothing of the selection.
+		details(dialog);
+		const approximation = within(dialog).getByRole("region", { name: "Color approximation" });
+		const direct = within(dialog).getByRole("region", { name: "Direct color" });
 		expect(approximation).toContainElement(screen.getByTestId("slot-approximation"));
-		expect([...body.children]).toEqual([controls, approximation]);
+		expect(direct).toContainElement(screen.getByTestId("slot-native"));
+		expect([...within(dialog).getByTestId("editor-page").children]).toEqual([approximation, direct]);
+		expect(screen.queryByTestId("slot-expanded")).toBeNull();
 		expect(within(dialog).queryByRole("button", { name: "Expand" })).toBeNull();
 		expect(within(dialog).queryByRole("button", { name: /^Switch to/ })).toBeNull();
 		expect(screen.queryByTestId("slot-picker")).toBeNull();
@@ -128,25 +141,44 @@ describe("ColorDialogLayout full modal", () => {
 		const dialog = await screen.findByRole("dialog", { name: "Color Special Dialog" });
 		expect(dialog).toHaveAttribute("aria-modal", "true");
 		expect(within(dialog).getByTestId("slot-expanded")).toBeInTheDocument();
+		details(dialog);
 		expect(within(dialog).getByTestId("slot-approximation")).toBeInTheDocument();
 	});
 
-	it("titles Media color and shows the supplied preview instead of an approximation", async () => {
+	it("titles Media color and shows the supplied preview on a Preview tab instead of an approximation", async () => {
 		render(<ColorDialogLayout {...props({ expanded: true, mediaPreview: <div data-testid="slot-media" /> })} />);
 		const dialog = await screen.findByRole("dialog", { name: "Color Special Dialog" });
 		expect(dialog.querySelector(".ui-modal-titlebar")).toHaveTextContent("Media color");
+		details(dialog, "Preview");
 		expect(within(dialog).getByRole("region", { name: "Media preview" })).toContainElement(screen.getByTestId("slot-media"));
 		expect(within(dialog).queryByRole("region", { name: "Color approximation" })).toBeNull();
+	});
+
+	it("shows no tabs when there is nothing beside the selection", async () => {
+		render(<ColorDialogLayout {...props({ expanded: true, approximation: undefined })} />);
+		const dialog = await screen.findByRole("dialog", { name: "Color Special Dialog" });
+		expect(within(dialog).queryByRole("tablist")).toBeNull();
+		expect(within(dialog).getByTestId("slot-expanded")).toBeInTheDocument();
+	});
+
+	it("reopens on the Color tab", async () => {
+		const { rerender } = render(<ColorDialogLayout {...props({ expanded: true })} />);
+		details(await screen.findByRole("dialog", { name: "Color Special Dialog" }));
+		rerender(<ColorDialogLayout {...props({ expanded: false })} />);
+		rerender(<ColorDialogLayout {...props({ expanded: true })} />);
+		const dialog = await screen.findByRole("dialog", { name: "Color Special Dialog" });
+		expect(within(dialog).getByRole("tab", { name: "Color" })).toHaveAttribute("aria-selected", "true");
 	});
 
 	it("keeps approximation changes passive: no focus steal, alert or announcement", async () => {
 		const { rerender } = render(<ColorDialogLayout {...props({ expanded: true })} />);
 		const dialog = await screen.findByRole("dialog", { name: "Color Special Dialog" });
-		const hue = within(dialog).getByLabelText("Hue");
+		details(dialog);
+		const tab = within(dialog).getByRole("tab", { name: "Details" });
 		await act(() => new Promise(resolve => requestAnimationFrame(resolve)));
-		hue.focus();
+		tab.focus();
 		rerender(<ColorDialogLayout {...props({ expanded: true, approximation: <div data-testid="slot-approximation">Wheel approximates Dark blue</div> })} />);
-		expect(hue).toHaveFocus();
+		expect(tab).toHaveFocus();
 		expect(screen.getByTestId("slot-approximation")).toHaveTextContent("Dark blue");
 		expect(document.querySelector("[role=alert], [role=status], [aria-live]")).toBeNull();
 	});
@@ -182,6 +214,7 @@ describe("ColorDialogLayout controlled content", () => {
 		expect(dialog).toHaveAttribute("aria-modal", "true");
 		expect(within(dialog).getByLabelText("White Blend")).toHaveValue("99");
 		expect(within(dialog).getByLabelText("Temperature")).toHaveValue("19900");
+		details(dialog);
 		expect(within(dialog).getByLabelText("Request")).toHaveTextContent("99% · 19900 K");
 		fireEvent.click(within(dialog).getByRole("button", { name: "Close Special Dialog" }));
 		// Compact again: the page the operator left is preserved.
@@ -219,6 +252,8 @@ describe("ColorDialogLayout geometry", () => {
 		expect(getComputedStyle(dialog).padding).toBe("0px");
 		expect(getComputedStyle(dialog).display).toBe("flex");
 		expect(getComputedStyle(dialog).flexDirection).toBe("column");
+		expect(getComputedStyle(within(dialog).getByTestId("editor-page")).overflow).toBe("auto");
+		details(dialog);
 		expect(getComputedStyle(within(dialog).getByTestId("editor-page")).overflow).toBe("auto");
 	});
 });

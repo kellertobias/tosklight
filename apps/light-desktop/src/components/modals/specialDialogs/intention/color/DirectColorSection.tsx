@@ -38,8 +38,16 @@ export function DirectColorSection({
 		? []
 		: fixtureIds.flatMap((id) => {
 				const text = replayPreviewText(pages, id);
+				// Named like every other row. A fixture without a verified native layout is no
+				// reference candidate, but the colour report still names it.
 				const candidate = pages?.candidates.find((entry) => entry.fixture_id === id);
-				return text ? [{ id, name: candidate ? headName(candidate) : id, text }] : [];
+				const reported = report?.heads.find((head) => head.fixture_id === id);
+				const name = candidate
+					? headName(candidate)
+					: reported
+						? headName({ ...reported, head_name: "" })
+						: id;
+				return text ? [{ id, name, text }] : [];
 			});
 	return (
 		<div className="color-direct" data-testid="color-direct">

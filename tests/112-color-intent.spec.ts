@@ -310,7 +310,7 @@ test.describe("docs/testing/26-color-intent.md", () => {
 
 		await desk.open(api.baseUrl);
 		let dialog = await openColorDialog(page);
-		let results = colorResults(dialog);
+		let results = await colorResults(dialog);
 		for (const number of [1, 2, 3, 4] as const)
 			await expect(
 				resultRow(results, show.ids[number]).locator('td[data-quality="uncalibrated"]'),
@@ -330,11 +330,11 @@ test.describe("docs/testing/26-color-intent.md", () => {
 			})
 			.toEqual(["uncalibrated", "unsupported"]);
 		dialog = await openColorDialog(page);
-		await expect(resultRow(colorResults(dialog), show.ids[1])).toContainText(
+		await expect(resultRow(await colorResults(dialog), show.ids[1])).toContainText(
 			"UV unavailable on this fixture",
 		);
 		await expect(
-			resultRow(colorResults(dialog), show.ids[1]).locator('td[data-quality="uncalibrated"]'),
+			resultRow(await colorResults(dialog), show.ids[1]).locator('td[data-quality="uncalibrated"]'),
 		).toBeVisible();
 		await closeDialog(dialog);
 
@@ -358,7 +358,7 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		]);
 		expect((await universe(bench)).slice(50, 54)).toEqual([255, 255, 0, 0]);
 		dialog = await openColorDialog(page);
-		results = colorResults(dialog);
+		results = await colorResults(dialog);
 		await expect(
 			results.getByText("Every selected fixture shows this colour exactly."),
 		).toBeVisible();
@@ -377,7 +377,7 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		expect(cyan.delta_uv).toBeGreaterThan(0.004);
 		dialog = await openColorDialog(page);
 		await expect(
-			resultRow(colorResults(dialog), measuredId).locator('td[data-quality="out_of_gamut"]'),
+			resultRow(await colorResults(dialog), measuredId).locator('td[data-quality="out_of_gamut"]'),
 		).toHaveText(
 			`Out of gamut Shows the nearest colour it can · Δu′v′ ${cyan.delta_uv?.toFixed(4)}`,
 		);
@@ -414,7 +414,7 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		).toBe(true);
 		dialog = await openColorDialog(page);
 		await expect(
-			resultRow(colorResults(dialog), wheelId).locator('td[data-quality="wheel_limited"]'),
+			resultRow(await colorResults(dialog), wheelId).locator('td[data-quality="wheel_limited"]'),
 		).toContainText(/^Wheel-limited Uses the nearest wheel slot/);
 		await closeDialog(dialog);
 	});
@@ -1317,8 +1317,13 @@ async function openColorDialog(page: Page, title = "Color"): Promise<Locator> {
 	return dialog;
 }
 
-/** The per-fixture approximation of the full Color modal (accepted-frame report rows). */
-function colorResults(dialog: Locator) {
+/**
+ * The per-fixture approximation of the full Color modal (accepted-frame report rows), on its
+ * Details tab.
+ */
+async function colorResults(dialog: Locator) {
+	const details = dialog.getByRole("tab", { name: "Details", exact: true });
+	if ((await details.getAttribute("aria-selected")) !== "true") await details.click();
 	return dialog.getByTestId("color-approximation");
 }
 

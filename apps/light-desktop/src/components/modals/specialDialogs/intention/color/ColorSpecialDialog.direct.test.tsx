@@ -59,6 +59,7 @@ function mount() {
 	render(
 		<ColorSpecialDialog family="Color" selectedFixtureIds={[FIXTURE_A, FIXTURE_B]} close={vi.fn()} />,
 	);
+	fireEvent.click(screen.getByRole("tab", { name: "Details" }));
 	return screen.getByRole("region", { name: "Direct color" });
 }
 
@@ -106,6 +107,22 @@ describe("Color modal: Direct section (TL-554)", () => {
 		expect(status).toHaveTextContent("Replays exactly");
 		expect(status).toHaveTextContent("Best-effort match");
 		expect(section.querySelector("[role=alert], [role=status], [aria-live]")).toBeNull();
+	});
+
+	it("names a fixture without a verified native layout from the colour report, never by its id", () => {
+		const snapshot = nativePages(10);
+		pages.current = {
+			...snapshot,
+			candidates: snapshot.candidates.filter((entry) => entry.fixture_id === FIXTURE_A),
+		};
+		report.current = {
+			heads: [
+				{ fixture_id: FIXTURE_B, fixture_number: 202, fixture_name: "ROOT PAR", owner_id: FIXTURE_B, head_name: "Main", has_target: true, quality: "approximate", engine: null, delta_uv: 0.01, calibration_revision: null, uv: null },
+			],
+		} as unknown as ColorIntentReport;
+		const status = within(mount()).getByTestId("color-direct-status");
+		expect(status).toHaveTextContent("202 · ROOT PAR");
+		expect(status).not.toHaveTextContent(FIXTURE_B);
 	});
 
 	it("choosing a reference head for inspection reads pages and never writes", () => {
@@ -202,6 +219,8 @@ describe("Color modal: Direct section (TL-554)", () => {
 	it("holds for an explicit start quietly and sends the chosen start with the next edit", async () => {
 		outcome = { status: "no_change", hold: "explicit_color_start_required" };
 		mount();
+		// The edit is made on the Color tab, and the notice is shown there.
+		fireEvent.click(screen.getByRole("tab", { name: "Color" }));
 		const fader = () => {
 			const input = screen.getByRole("slider", { name: "White Blend" });
 			vi.spyOn(input, "getBoundingClientRect").mockReturnValue({

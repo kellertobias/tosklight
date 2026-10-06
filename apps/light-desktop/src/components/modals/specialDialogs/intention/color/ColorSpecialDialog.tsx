@@ -12,7 +12,7 @@ import {
 	useEncoderAreaBudget,
 } from "../../../../control/parameterControls/useEncoderArea";
 import type { SemanticSpecialDialogProps } from "../../registry/specialDialogRegistry";
-import { ColorDialogLayout, type ColorDialogPage } from "../ColorDialogLayout";
+import { ColorDialogLayout, type ColorDialogPage, type ColorDialogTab } from "../ColorDialogLayout";
 import type { ValueRange } from "../HorizontalRangeFader";
 import { ColorAdoptionNoticePanel } from "./ColorAdoptionNoticePanel";
 import { ColorApproximation } from "./ColorApproximation";
@@ -104,11 +104,14 @@ export function ColorSpecialDialog({ selectedFixtureIds, close }: SemanticSpecia
 	const [page, setPage] = useState<ColorDialogPage>("mix");
 	const [expanded, setExpanded] = useState(false);
 	const [focusFixtureId, setFocusFixtureId] = useState<string | null>(null);
+	// The full modal opens on the colour selection; a request to inspect a fixture opens Details.
+	const [tab, setTab] = useState<ColorDialogTab>("color");
 	const details = useColorDetailsRequest();
 	useEffect(() => {
 		if (!details) return;
 		setExpanded(true);
 		setFocusFixtureId(details.fixtureId);
+		setTab("details");
 		colorDetailsRequests.clear();
 	}, [details]);
 	const cycle = useRef(budget.cycle);
@@ -118,6 +121,12 @@ export function ColorSpecialDialog({ selectedFixtureIds, close }: SemanticSpecia
 		setPage((current) => (current === "mix" ? "white" : "mix"));
 	}, [budget.cycle]);
 	const modal = expanded || !budget.fits;
+	// Closing the full modal returns it to the colour selection for next time.
+	const wasModal = useRef(modal);
+	useEffect(() => {
+		if (wasModal.current && !modal) setTab("color");
+		wasModal.current = modal;
+	}, [modal]);
 	useEffect(() => {
 		if (modal) return;
 		encoderAreaStore.claim(COLOR_INLINE_OWNER);
@@ -169,6 +178,8 @@ export function ColorSpecialDialog({ selectedFixtureIds, close }: SemanticSpecia
 			expanded={expanded}
 			onPage={setPage}
 			onExpand={() => setExpanded(true)}
+			tab={tab}
+			onTab={setTab}
 			onClose={close}
 			compactPicker={controls.plane}
 			whiteBlend={
@@ -178,7 +189,13 @@ export function ColorSpecialDialog({ selectedFixtureIds, close }: SemanticSpecia
 				</>
 			}
 			whiteBalance={controls.whiteBalance}
-			expandedControls={controls.ring}
+			expandedControls={
+				<>
+					{controls.ring}
+					{/* An edit on this tab may hold for an explicit start; say so where it was made. */}
+					<ColorAdoptionNoticePanel />
+				</>
+			}
 			approximation={
 				<ColorApproximation
 					requested={shown.preview}

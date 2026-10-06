@@ -512,6 +512,15 @@ export async function openColorDialog(page: Page): Promise<Locator> {
 	return dialog;
 }
 
+/** Opens the full Color modal on its Details tab, where Direct color lives. */
+export async function openDirectColor(page: Page): Promise<Locator> {
+	const dialog = await openColorDialog(page);
+	const details = dialog.getByRole("tab", { name: "Details", exact: true });
+	await details.click();
+	await expect(details).toHaveAttribute("aria-selected", "true");
+	return dialog;
+}
+
 export async function closeDialog(dialog: Locator) {
 	const close = dialog.getByRole("button", { name: "Close modal", exact: true });
 	if (await close.count()) await close.click();

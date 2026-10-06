@@ -70,7 +70,8 @@ viewport and the fixtures with every manual run.
 
 ## DIRECT-COLOR-002 — Reference head and overflow in the full Color dialog
 
-1. Select a fixture with more than eight native colour controls and press **Expand**.
+1. Select a fixture with more than eight native colour controls, press **Expand** and open the
+   **Details** tab.
 2. Verify **Direct color** shows `Reference: <number> · <name> · <head>` and every control beyond
    pages 3/4 as a touch encoder; wheel and macro functions are listed as choices, the current one
    marked.
@@ -83,10 +84,11 @@ viewport and the fixtures with every manual run.
 
 ## DIRECT-COLOR-003 — Exact replay versus best-effort match, passively
 
-1. After DIRECT-COLOR-001 step 4, open the full Color dialog.
+1. After DIRECT-COLOR-001 step 4, open the full Color dialog on its **Details** tab.
 2. Verify the Direct rows read **Native replay** for A1 and A2 and **Best-effort match** with
    *different fixture type* for B; UV is described separately; an exact native replay never reads
-   as an exact colour (the approximation shows the measured match).
+   as an exact colour (the approximation shows the measured match). Every row names its fixture by
+   number and name, also a fixture without a verified native layout, never by an internal id.
 3. Program a Direct recipe whose appearance is unknown on B. Verify **Native only · appearance
    unknown**: B keeps its visible colour, nothing white is invented, UV parks off when unknown.
 4. Verify no toast, alert, focus move or modal appears at any point.

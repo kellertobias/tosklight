@@ -338,6 +338,13 @@ export async function openFullColorModal(page: Page, title = "Color"): Promise<L
 	return layer;
 }
 
+/** Shows one tab of the full modal: Color (the selection) or Details / Preview (everything else). */
+export async function colorDialogTab(layer: Locator, name: "Color" | "Details" | "Preview") {
+	const tab = layer.getByRole("tab", { name, exact: true });
+	await tab.click();
+	await expect(tab).toHaveAttribute("aria-selected", "true");
+}
+
 export async function closeColorModal(layer: Locator) {
 	await layer.getByRole("button", { name: "Close Special Dialog", exact: true }).click();
 	await expect(layer).toBeHidden();

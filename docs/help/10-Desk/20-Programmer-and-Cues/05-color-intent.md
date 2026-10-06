@@ -80,9 +80,14 @@ screen size — **Special Dialog** opens the compact dialog in place of the enco
   first. Pressing **Special Dialog** again also switches between the two pages.
 - Tapping the active **Color** tab returns to the encoders on the page they were on.
 
-Where the area is smaller, and after **Expand**, the dialog opens as the full **Color** window: a large
-hue ring with **Saturation**, **White Blend**, **Temperature** and **Duv** beside it, and the
-per-fixture results below.
+Where the area is smaller, and after **Expand**, the dialog opens as the full **Color** window with two
+tabs in its title bar:
+
+- **Color** is the colour selection: a large hue ring with **Saturation**, **White Blend**,
+  **Temperature** and **Duv** beside it. The window always opens on this tab.
+- **Details** shows how the rig shows that colour: the per-fixture results and **Direct color**. It
+  scrolls when it is longer than the window. Tapping a Fixture Sheet colour triangle opens the window
+  straight on this tab, at that fixture.
 
 To spread a range, hold **Shift** (the desk key, the on-screen **SHIFT** or the attached hardware) and
 touch the first value, then the last. The first touch only marks endpoint 1; the range is written
@@ -96,7 +101,8 @@ to one value; every other range stays.
 
 A selection of Media Server layers uses the same dialog titled **Media color**. The picker sets the
 layer's tint and **White Blend** turns the picture towards greyscale under that tint; the second
-page shows a preview instead of Temperature and Duv. Layer and Master Intensity stay on the
+page shows a preview instead of Temperature and Duv, and the full window's second tab is **Preview**
+instead of **Details**. Layer and Master Intensity stay on the
 Intensity controls. A selection that mixes lamps and Media layers uses the lamp dialog.
 
 ## How a fixture shows the colour

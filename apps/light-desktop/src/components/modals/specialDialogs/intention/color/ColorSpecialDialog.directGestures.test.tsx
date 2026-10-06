@@ -58,6 +58,7 @@ function mount() {
 	render(
 		<ColorSpecialDialog family="Color" selectedFixtureIds={[FIXTURE_A, FIXTURE_B]} close={vi.fn()} />,
 	);
+	fireEvent.click(screen.getByRole("tab", { name: "Details" }));
 	return screen.getByRole("region", { name: "Direct color" });
 }
 

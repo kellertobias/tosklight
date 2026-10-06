@@ -15,6 +15,7 @@ vi.mock("../../../../../state/AppContext", () => ({
 	useApp: () => ({ state: { shiftArmed: app.shiftArmed }, dispatch: app.dispatch }),
 }));
 vi.mock("./useColorDialogLane", () => ({ useColorDialogLane: () => lane.current }));
+import { colorDetailsRequests } from "../../../../../features/colorReport/useAcceptedColorReport";
 vi.mock("../../../../../features/colorReport/useAcceptedColorReport", async (original) => ({
 	...(await original<typeof import("../../../../../features/colorReport/useAcceptedColorReport")>()),
 	useAcceptedColorReport: () => report.current,
@@ -125,14 +126,28 @@ describe("semantic Color dialog: placement by the measured encoder area", () => 
 		const modal = screen.getByRole("dialog", { name: "Color Special Dialog" });
 		expect(area.contains(modal)).toBe(false);
 		expect(modal.closest(".ui-modal-stack-layer")).not.toBeNull();
-		expect(screen.getByText("Color", { selector: "h2, h1, .ui-modal-title, [class*=title] *" })).toBeInTheDocument();
+		expect(modal.querySelector(".ui-modal-titlebar")).toHaveTextContent("Color");
+		expect(within(modal).getByRole("tab", { name: "Color" })).toHaveAttribute("aria-selected", "true");
 		expect(screen.getByRole("slider", { name: "Hue" })).toBeInTheDocument();
 		expect(screen.getByRole("slider", { name: "Saturation" })).toBeInTheDocument();
 		expect(screen.getByRole("slider", { name: "White Blend" })).toBeInTheDocument();
 		expect(screen.getByRole("slider", { name: "Temperature" })).toBeInTheDocument();
 		expect(screen.getByRole("slider", { name: "Duv" })).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("tab", { name: "Details" }));
 		expect(screen.getByRole("region", { name: "Color approximation" })).toBeInTheDocument();
 		expect(encoderAreaStore.get().inline).toBeNull();
+	});
+
+	it("opens on Details when asked to inspect a fixture, also when the request opens the dialog", () => {
+		measure(900, 260);
+		// The Fixture Sheet triangle asks before the dialog exists.
+		act(() => colorDetailsRequests.request("a"));
+		render(<ColorSpecialDialog family="Color" selectedFixtureIds={["a"]} close={vi.fn()} />);
+		const modal = screen.getByRole("dialog", { name: "Color Special Dialog" });
+		expect(within(modal).getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
+		expect(screen.getByRole("region", { name: "Color approximation" })).toBeInTheDocument();
+		expect(screen.queryByRole("slider", { name: "Hue" })).toBeNull();
+		fireEvent.click(within(modal).getByRole("button", { name: "Close Special Dialog" }));
 	});
 
 	it("switches from compact to the modal when the area shrinks, and back", () => {
@@ -286,6 +301,7 @@ describe("semantic Color dialog: SHIFT ranges", () => {
 		tap(ring, ...point(350));
 		tap(ring, ...point(10), {}, 2);
 		expect(edits(normal)).toEqual([spread("hue", [350, 10])]);
+		fireEvent.click(screen.getByRole("tab", { name: "Details" }));
 		const strip = screen.getByTestId("color-requested-range");
 		const stops = strip.style.background.match(/rgb\([^)]*\)/g) ?? [];
 		expect(stops).toHaveLength(7);
@@ -335,6 +351,7 @@ describe("semantic Color dialog: readouts, approximation and Media", () => {
 		render(<ColorSpecialDialog family="Color" selectedFixtureIds={["a", "b"]} close={vi.fn()} />);
 		expect(fader("White Blend")).toHaveAttribute("aria-valuenow", "25");
 		expect(fader("Temperature")).toHaveAttribute("aria-valuenow", "3200");
+		fireEvent.click(screen.getByRole("tab", { name: "Details" }));
 		const approximation = screen.getByRole("region", { name: "Color approximation" });
 		expect(within(approximation).getByText(/Requested · UV 50%/)).toBeInTheDocument();
 		const rows = within(approximation).getAllByRole("row").slice(1);

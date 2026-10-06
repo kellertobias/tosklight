@@ -5,6 +5,7 @@ import {
 	approximationRow,
 	channelBytes,
 	closeColorModal,
+	colorDialogTab,
 	colorEdits,
 	colorModalLayer,
 	createColorIntentShow,
@@ -46,7 +47,7 @@ const WIDE = { width: 1496, height: 761 };
 const MAGENTA = { hue: 300, saturation: 1 };
 
 test.describe("docs/testing/36-semantic-color-controls.md", () => {
-	test("SEMANTIC-COLOR-002 @ui › full modal: hue ring with every fader beside it and the per-fixture approximation of a mixed rig", async ({
+	test("SEMANTIC-COLOR-002 @ui › full modal: a Color tab with the hue ring and every fader, a Details tab with the per-fixture approximation of a mixed rig", async ({
 		api,
 		bench,
 		desk,
@@ -62,7 +63,11 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 		await expect(frame).toBeVisible();
 		await expect(layer.getByRole("button", { name: "Close Special Dialog", exact: true })).toBeVisible();
 
-		// A large hue ring (about 340 px) with Saturation, White Blend, Temperature and Duv beside it.
+		// The Color tab is the selection: a large hue ring (about 340 px) with Saturation, White
+		// Blend, Temperature and Duv beside it, and nothing else.
+		await colorDialogTab(layer, "Color");
+		await expect(approximation(layer)).toHaveCount(0);
+		await expect(layer.getByRole("region", { name: "Direct color" })).toHaveCount(0);
 		const ring = await box(layer.getByRole("slider", { name: "Hue" }));
 		expect(ring.width).toBeGreaterThanOrEqual(300);
 		expect(ring.width).toBeLessThanOrEqual(400);
@@ -74,18 +79,15 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 			expect(fader.y + fader.height).toBeLessThanOrEqual(ring.y + ring.height + 1);
 		}
 
-		// The per-fixture approximation sits below and is readable without scrolling at 1496×761.
-		const results = approximation(layer);
-		await expect(results.locator("tbody tr")).toHaveCount(3);
-		const table = await box(results);
-		expect(table.y).toBeGreaterThan(ring.y + ring.height);
 		const outer = await box(frame);
 		expect(outer.y).toBeGreaterThanOrEqual(0);
 		expect(outer.y + outer.height).toBeLessThanOrEqual(WIDE.height);
-		const body = layer.getByTestId("editor-page");
-		expect(await body.evaluate((element) => element.scrollTop)).toBe(0);
-		const visibleBody = await box(body);
-		expect(table.y + table.height).toBeLessThanOrEqual(visibleBody.y + visibleBody.height);
+
+		// The Details tab holds the per-fixture approximation, then Direct color.
+		await colorDialogTab(layer, "Details");
+		await expect(layer.getByRole("slider", { name: "Hue" })).toHaveCount(0);
+		const results = approximation(layer);
+		await expect(results.locator("tbody tr")).toHaveCount(3);
 
 		// The requested swatch once.
 		const swatch = results.getByTestId("color-requested-swatch");
@@ -155,7 +157,10 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 		}
 		const layer = colorModalLayer(page);
 		await expect(layer.getByRole("heading", { level: 2, name: "Media color", exact: true })).toBeVisible();
+		await colorDialogTab(layer, "Preview");
 		await expect(layer.getByRole("region", { name: "Media preview" })).toBeVisible();
+		await expect(layer.getByTestId("color-approximation")).toHaveCount(0);
+		await colorDialogTab(layer, "Color");
 		await expect(layer.getByRole("slider", { name: "Temperature" })).toHaveCount(0);
 		await expect(layer.getByRole("slider", { name: "Duv" })).toHaveCount(0);
 		await expect(layer.getByTestId("color-approximation")).toHaveCount(0);
@@ -173,7 +178,9 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 			await expect(layer.getByLabel("White Blend value")).toHaveText(`${percent}%`);
 			await expectLayers(api, bench, { grayscale, tint: [0, 0, 0] });
 			await expectMediaIntensity(api, bench, levels);
+			await colorDialogTab(layer, "Preview");
 			chroma.push(await previewChroma(layer));
+			await colorDialogTab(layer, "Color");
 		}
 		expect(chroma[0]).toBeGreaterThan(chroma[1]);
 		expect(chroma[1]).toBeGreaterThan(chroma[2]);
@@ -184,7 +191,9 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 		await keyTo(page, layer.getByRole("slider", { name: "Saturation", exact: true }), "End");
 		// The Media personality's tint channels are inverted: raw 0 keeps that primary in full.
 		await expectLayers(api, bench, { grayscale: [255, 255], tint: [0, 255, 255] });
+		await colorDialogTab(layer, "Preview");
 		const red = await previewPixels(layer);
+		await colorDialogTab(layer, "Color");
 		expect(red.every(([, green, blue]) => green === 0 && blue === 0)).toBe(true);
 		expect(red.some(([level]) => level > 0)).toBe(true);
 		for (const percent of [50, 0]) {
@@ -300,23 +309,31 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 		await closeColorModal(layer);
 	});
 
-	test("SEMANTIC-COLOR-002 @ui › the full modal has no vertical overflow at 1496×761", async ({
+	test("SEMANTIC-COLOR-002 @ui › at 1496×761 the Color tab needs no scrolling and the Details tab scrolls", async ({
 		api,
 		bench,
 		desk,
 		page,
 	}) => {
-		test.fail(
-			true,
-			"BUG: at 1496×761 the full Color modal body overflows vertically by about 170 px and scrolls: the TL-554 Direct color section sits below the approximation",
-		);
 		test.setTimeout(60_000);
 		await arrangeMixedRig({ api, bench, desk, page });
 		await desk.open(api.baseUrl);
 		const layer = await openModalWithReport(page, bench, 3);
 		const body = layer.getByTestId("editor-page");
-		const overflow = await body.evaluate((element) => element.scrollHeight - element.clientHeight);
-		expect(overflow).toBeLessThanOrEqual(0);
+		const overflow = () => body.evaluate((element) => element.scrollHeight - element.clientHeight);
+		// The Color tab shows the whole selection without scrolling.
+		await colorDialogTab(layer, "Color");
+		expect(await overflow()).toBeLessThanOrEqual(0);
+		// The Details tab scrolls within the modal, and the modal stays inside the window.
+		await colorDialogTab(layer, "Details");
+		await expect(layer.getByRole("region", { name: "Direct color" })).toBeAttached();
+		expect(await body.evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
+		const frame = await box(layer.getByRole("dialog", { name: "Color Special Dialog" }));
+		expect(frame.y + frame.height).toBeLessThanOrEqual(WIDE.height);
+		if ((await overflow()) > 0) {
+			await body.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+			await expect(layer.getByRole("region", { name: "Direct color" })).toBeInViewport();
+		}
 	});
 
 	test("SEMANTIC-COLOR-006 @ui › the triangle sits beside the fixture's shown Color value", async ({
@@ -458,11 +475,13 @@ async function openFixtureSheet(desk: DeskDriver, page: Page, baseUrl: string) {
  * reads the report when it opens; a read that lands before the frame is accepted is reopened
  * (see the SEMANTIC-COLOR-006 retry BUG below).
  */
+/** Opens the full modal on its Details tab once the approximation lists `rows` heads. */
 async function openModalWithReport(page: Page, bench: LightBench, rows: number) {
 	let layer = await openFullColorModal(page);
 	for (let attempt = 0; attempt < 5; attempt += 1) {
 		await bench.tick(25);
 		try {
+			await colorDialogTab(layer, "Details");
 			await expect(approximation(layer).locator("tbody tr")).toHaveCount(rows, { timeout: 2_500 });
 			return layer;
 		} catch {
@@ -470,6 +489,7 @@ async function openModalWithReport(page: Page, bench: LightBench, rows: number) 
 			layer = await openFullColorModal(page);
 		}
 	}
+	await colorDialogTab(layer, "Details");
 	await expect(approximation(layer).locator("tbody tr")).toHaveCount(rows);
 	return layer;
 }

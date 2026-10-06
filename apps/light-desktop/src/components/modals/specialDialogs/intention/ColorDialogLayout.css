@@ -11,13 +11,16 @@
 .color-dialog-compact .color-dialog-buttons .ui-button { min-height: 40px; flex: 1; padding-inline: 10px; white-space: nowrap; }
 .color-dialog-compact .color-dialog-compact-page:not([data-page="mix"]) .color-dialog-buttons { flex-direction: column; }
 
-/* Full standard modal: title bar flush with the frame, controls above the passive approximation. */
+/* Full standard modal: title bar flush with the frame and carrying the Color | Details tabs. The
+   Color tab is the selection itself; the Details tab scrolls through approximation and Direct. */
 .color-dialog-layer { padding: 12px; }
 .color-dialog-layer.ui-modal-stack-layer > .color-dialog-modal[role="dialog"] { padding: 0; max-height: calc(100dvh - 24px); width: min(1060px, calc(100vw - 24px)); display: flex; flex-direction: column; }
 .color-dialog-modal > .ui-modal-titlebar { margin: 0; padding: 0; border-radius: 5px 5px 0 0; flex-shrink: 0; }
 .color-dialog-modal .color-dialog-modal-body { display: grid; gap: 18px; padding: 16px 22px; overflow: auto; min-height: 0; }
 .color-dialog-modal .color-dialog-controls { min-width: 0; width: 100%; }
-.color-dialog-modal .color-dialog-approximation { display: grid; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+.color-dialog-modal .color-dialog-modal-body[data-tab="details"] { align-content: start; overscroll-behavior: contain; }
+.color-dialog-modal .color-dialog-approximation { display: grid; gap: 10px; }
+.color-dialog-modal .color-dialog-native { border-top: 1px solid var(--border); padding-top: 14px; }
 .color-dialog-modal .color-dialog-approximation h3 { margin: 0; font-size: 13px; font-weight: 600; }
 .color-dialog-modal .color-dialog-media-preview { height: 220px; min-width: 0; }
 @media (max-width: 650px) { .color-dialog-modal .color-dialog-modal-body { padding: 14px; } }

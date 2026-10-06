@@ -16,6 +16,7 @@ import {
 	nativeEdit,
 	nativePages,
 	openColorDialog,
+	openDirectColor,
 	pageColorTo,
 	programmerRevision,
 	programSemantic,
@@ -84,7 +85,7 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 
 		// Step 1-2: Expand; the reference head is clearly identified and every overflow control is
 		// a touch encoder, with the wheel and macro functions listed as choices.
-		const dialog = await openColorDialog(page);
+		const dialog = await openDirectColor(page);
 		const direct = dialog.getByTestId("color-direct");
 		await expect(direct.getByTestId("color-direct-reference")).toHaveText("Reference: 201 · Overflow X1 · Main");
 		const overflow = direct.getByTestId("color-direct-overflow");
@@ -168,7 +169,7 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 		// the wheel's encoder then moves exactly one choice, in profile order.
 		const wheelControl = pages.overflow[2];
 		const before = await colorOf(api, x1);
-		const reopened = await openColorDialog(page);
+		const reopened = await openDirectColor(page);
 		const choices = reopened
 			.getByTestId("color-direct-overflow")
 			.getByRole("list", { name: "color.wheel.1 functions" });
@@ -225,7 +226,7 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 
 		// Step 1-2: the dialog reads Native replay / Best-effort match; UV has its own wording.
 		await desk.open(api.baseUrl);
-		const dialog = await openColorDialog(page);
+		const dialog = await openDirectColor(page);
 		const focused = await focusedElement(page);
 		const status = dialog.getByTestId("color-direct-status");
 		const row = (name: string) => status.getByRole("row").filter({ has: page.getByRole("rowheader", { name: new RegExp(`· ${name}\\b`) }) });

@@ -1,9 +1,15 @@
 import { Button, ModalFrame } from "@tosklight/ui";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import "./ColorDialogLayout.css";
 
 /** Compact page one holds the 2D picker and White Blend; page two holds White balance or Media preview. */
 export type ColorDialogPage = "mix" | "white";
+
+/**
+ * The full modal's tabs: Color is the colour selection itself (picker and every fader); Details
+ * holds everything about how the rig shows it (approximation, Direct color), or the Media preview.
+ */
+export type ColorDialogTab = "color" | "details";
 
 export interface ColorDialogLayoutProps {
 	/** The compact encoder-area budget is available. When false, the full modal is shown instead. */
@@ -23,12 +29,15 @@ export interface ColorDialogLayoutProps {
 	whiteBalance: ReactNode;
 	/** Modal: supplied large picker with every color fader. */
 	expandedControls: ReactNode;
-	/** Modal: supplied passive per-fixture approximation. */
+	/** Modal, Details tab: supplied passive per-fixture approximation. */
 	approximation?: ReactNode;
-	/** Modal (TL-554): supplied Direct section (reference head, overflow, Direct status). */
+	/** Modal, Details tab (TL-554): supplied Direct section (reference head, overflow, Direct status). */
 	native?: ReactNode;
-	/** Media: replaces White balance on page two and the approximation in the modal. */
+	/** Media: replaces White balance on page two and the Details tab (as Preview) in the modal. */
 	mediaPreview?: ReactNode;
+	/** Controlled full-modal tab. Without it the modal keeps its own, opening on Color each time. */
+	tab?: ColorDialogTab;
+	onTab?(tab: ColorDialogTab): void;
 	/** Extra classes for the compact surface, the modal dialog and the modal layer. */
 	compactClassName?: string;
 	modalClassName?: string;
@@ -44,9 +53,15 @@ const join = (...names: (string | undefined)[]) => names.filter(Boolean).join(" 
 export function ColorDialogLayout({
 	fits, page, expanded, onPage, onExpand, onClose,
 	compactPicker, whiteBlend, whiteBalance, expandedControls, approximation, native, mediaPreview,
-	compactClassName, modalClassName, layerClassName,
+	tab: controlledTab, onTab, compactClassName, modalClassName, layerClassName,
 }: ColorDialogLayoutProps) {
 	const modal = expanded || !fits;
+	// Uncontrolled, every time the full modal opens it starts on the colour selection.
+	const [ownTab, setOwnTab] = useState<ColorDialogTab>("color");
+	const wasModal = useRef(modal);
+	useEffect(() => { if (wasModal.current && !modal) setOwnTab("color"); wasModal.current = modal; }, [modal]);
+	const tab = controlledTab ?? ownTab;
+	const setTab = (next: ColorDialogTab) => (onTab ? onTab(next) : setOwnTab(next));
 	const media = mediaPreview !== undefined && mediaPreview !== null;
 	const compact = useRef<HTMLElement>(null);
 	const nextPage: ColorDialogPage = page === "mix" ? "white" : "mix";
@@ -63,14 +78,26 @@ export function ColorDialogLayout({
 	useEffect(() => {
 		if (!modal) compact.current?.querySelector<HTMLElement>('[role="application"], [role="slider"], input, button')?.focus();
 	}, [modal, page]);
+	const details = media
+		? <section className="color-dialog-media-preview" aria-label="Media preview">{mediaPreview}</section>
+		: <>
+			{approximation !== undefined && <section className="color-dialog-approximation" aria-label="Color approximation"><h3>Color approximation</h3>{approximation}</section>}
+			{native !== undefined && native !== null && <section className="color-dialog-native" aria-label="Direct color"><h3>Direct color</h3>{native}</section>}
+		</>;
+	const hasDetails = media || approximation !== undefined || (native !== undefined && native !== null);
+	const shownTab = hasDetails ? tab : "color";
 	if (modal) return <ModalFrame title={media ? "Media color" : "Color"} ariaLabel="Color Special Dialog"
 		closeLabel="Close Special Dialog" onClose={onClose} className={join("color-dialog-layer", layerClassName)}
-		dialogClassName={join("color-dialog-modal", modalClassName)}>
-		<div className="color-dialog-modal-body" data-testid="editor-page">
-			<section className="color-dialog-controls" aria-label="Color controls" data-testid="full-color-editor">{expandedControls}</section>
-			{media ? <section className="color-dialog-media-preview" aria-label="Media preview">{mediaPreview}</section>
-				: approximation !== undefined && <section className="color-dialog-approximation" aria-label="Color approximation"><h3>Color approximation</h3>{approximation}</section>}
-			{!media && native !== undefined && native !== null && <section className="color-dialog-native" aria-label="Direct color"><h3>Direct color</h3>{native}</section>}
+		dialogClassName={join("color-dialog-modal", modalClassName)}
+		groups={hasDetails ? [{
+			id: "color-dialog-tabs", kind: "tabs", ariaLabel: "Color dialog tabs", activeId: shownTab,
+			onActiveChange: (next) => setTab(next as ColorDialogTab),
+			actions: [{ id: "color", label: "Color" }, { id: "details", label: media ? "Preview" : "Details" }],
+		}] : undefined}>
+		<div className="color-dialog-modal-body" data-tab={shownTab} data-testid="editor-page">
+			{shownTab === "color"
+				? <section className="color-dialog-controls" aria-label="Color controls" data-testid="full-color-editor">{expandedControls}</section>
+				: details}
 		</div>
 	</ModalFrame>;
 	const shown = page === "mix" ? "mix" : media ? "preview" : "white";

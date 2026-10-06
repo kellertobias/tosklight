@@ -23,14 +23,13 @@ Executable coverage:
   drag) and the attached hardware Shift (two touches), its Undo and a cancelled first endpoint.
 - The root Playwright spec `tests/112-color-intent.spec.ts` carries SEMANTIC-COLOR-001 and 004.
 - The root Playwright spec `tests/119-semantic-color-controls.spec.ts` carries SEMANTIC-COLOR-002,
-  005 and 006 at 1496×761 in the software-only layout: the full modal's frame, hue ring, faders and
-  approximation of a JBLED A7 / ROOT PAR 6 / wheel-only rig (the wheel profile carries measured
+  005 and 006 at 1496×761 in the software-only layout: the full modal's frame and its **Color** and
+  **Details** tabs, the hue ring and faders without scrolling, and the scrolling approximation and
+  Direct color of a JBLED A7 / ROOT PAR 6 / wheel-only rig (the wheel profile carries measured
   slots, because an uncalibrated head never shows a Δu′v′); the Media color dialog with White Blend
   read from the layers' DMX greyscale and tint and from the preview card, with layer and Master
   Intensity unchanged; and the Fixture Sheet triangle, its single batched report request, the
-  absence of any message or focus move, and tap and Enter opening the details. One known defect is
-  kept as an expected failure there: the full modal overflows vertically at 1496×761 because of the
-  Direct color section.
+  absence of any message or focus move, and tap and Enter opening the **Details** tab.
 - All of these run under `npm run test:e2e`, because production reports programming contract 1;
   `npm run test:e2e-semantic` runs them on the contract-1 E2E test server, where a missing semantic
   publication fails instead of skipping.
@@ -66,11 +65,15 @@ hardware-connected layout.
 ## SEMANTIC-COLOR-002 — Full modal
 
 1. Press **Expand**, or open the dialog where the compact budget does not fit.
-2. Verify the standard modal frame titled **Color** with its close button, a large hue ring
-   (about 340 px), **Saturation**, **White Blend**, **Temperature** and **Duv** together beside it,
-   and the per-fixture approximation below, without vertical overflow at 1496×761.
-3. With a mixed JBLED A7 / ROOT PAR 6 / wheel-only selection programmed magenta and output once,
-   verify the approximation shows the requested swatch once, one row per head from the output that
+2. Verify the standard modal frame titled **Color** with its close button and two tabs in the
+   title bar, **Color** and **Details**, opening on **Color**.
+3. Verify the **Color** tab is the colour selection alone: a large hue ring (about 340 px) with
+   **Saturation**, **White Blend**, **Temperature** and **Duv** together beside it, without vertical
+   overflow at 1496×761.
+4. Verify the **Details** tab holds the per-fixture approximation, then **Direct color**, and
+   scrolls inside the modal when it is taller than the window.
+5. With a mixed JBLED A7 / ROOT PAR 6 / wheel-only selection programmed magenta and output once,
+   verify the **Details** approximation shows the requested swatch once, one row per head from the output that
    was sent, the visible match with Δu′v′, and UV in its own column: **UV applied**, **UV limited by
    the emitter** or **UV unavailable on this fixture**. A fixture without a programmed colour is
    not listed.
@@ -102,7 +105,8 @@ hardware-connected layout.
 ## SEMANTIC-COLOR-005 — Media layers
 
 1. Select two Media Server layers and open **Color → Special Dialog**. Verify the dialog is titled
-   **Media color** and page 2 is **Preview** instead of Temperature and Duv.
+   **Media color** and page 2 is **Preview** instead of Temperature and Duv. In the full modal the
+   second tab is **Preview** instead of **Details**.
 2. Set White Blend to 0%, 50% and 100%. Verify the picture desaturates progressively while the
    tint remains; a 100% red tint gives a red picture; a neutral picture needs the tint at full
    red, green and blue.
@@ -115,5 +119,5 @@ hardware-connected layout.
    beside its Color value, from one report request for the rows on screen.
 2. Verify no toast, banner, sound, alert or live region appears and focus does not move while the
    output keeps changing.
-3. Tap the triangle (or press Enter on it). Verify the full Color modal opens on that fixture's
-   details and the selection is unchanged.
+3. Tap the triangle (or press Enter on it). Verify the full Color modal opens on its **Details**
+   tab with that fixture's row marked and the selection is unchanged.
