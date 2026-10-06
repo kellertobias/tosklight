@@ -91,6 +91,13 @@ pub struct OutputOwnerReadout {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub requested: Option<ProgrammingPreloadAttributeValue>,
+    /// TL-657: the typed Color the same frame resolves for the owner (a running Cue or Playback,
+    /// or the Programmer): exactly the colour a first semantic Color edit starts from when the
+    /// Programmer holds none. Absent when the frame gives the owner no colour; the open-white
+    /// start then applies. Presentation is client-side.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub color: Option<ProgrammingPreloadAttributeValue>,
     pub position: OutputPositionReadout,
 }
 
@@ -150,6 +157,7 @@ mod tests {
             owners: vec![OutputOwnerReadout {
                 fixture_id: Uuid::nil(),
                 requested: None,
+                color: None,
                 position: OutputPositionReadout {
                     available: true,
                     commands: vec![OutputPositionCommandReadout {

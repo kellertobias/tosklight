@@ -33,6 +33,9 @@ pub(crate) struct CapturedPositionOwner {
     /// optics model in the profile's convention. None when neither is known: never a percentage
     /// reinterpreted as degrees.
     pub(crate) zoom: Option<AttributeValue>,
+    /// TL-657: the Color the SAME frame resolves for the owner, the colour a first semantic
+    /// Color edit starts from while the Programmer holds none. None: no colour in the frame.
+    pub(crate) color: Option<AttributeValue>,
 }
 impl CapturedPositionOwner {
     pub(crate) fn common_angles(&self) -> Option<JointAngles> {
@@ -91,6 +94,9 @@ fn requested_owners(
                 values.value(readout.owner, &ProgrammingOwner::Zoom.key()),
                 measured,
             ),
+            color: values
+                .value(readout.owner, &ProgrammingOwner::Color.key())
+                .cloned(),
             readout,
         })
         .collect()
@@ -306,3 +312,7 @@ impl PendingPositionReadoutSlot {
 #[cfg(test)]
 #[path = "position_readout/pending_tests.rs"]
 mod pending_tests;
+
+#[cfg(test)]
+#[path = "position_readout/color_seed_tests.rs"]
+mod color_seed_tests;

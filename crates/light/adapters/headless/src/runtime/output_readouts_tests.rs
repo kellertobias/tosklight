@@ -158,6 +158,7 @@ fn pending(
                         owner: *owner,
                         requested: None,
                         zoom: None,
+                        color: None,
                         readout: PositionCommandedOwnerReadout {
                             owner: *owner,
                             commands: None,

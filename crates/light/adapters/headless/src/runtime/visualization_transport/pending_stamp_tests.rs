@@ -78,6 +78,7 @@ impl PendingPositionReadoutSource for TicketSource {
                 owner: self.owner,
                 requested: None,
                 zoom: None,
+                color: None,
                 readout,
             }],
         })

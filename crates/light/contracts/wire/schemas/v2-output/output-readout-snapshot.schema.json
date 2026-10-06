@@ -116,6 +116,17 @@
     "OutputOwnerReadout": {
       "type": "object",
       "properties": {
+        "color": {
+          "description": "TL-657: the typed Color the same frame resolves for the owner (a running Cue or Playback,\nor the Programmer): exactly the colour a first semantic Color edit starts from when the\nProgrammer holds none. Absent when the frame gives the owner no colour; the open-white\nstart then applies. Presentation is client-side.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammingPreloadAttributeValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "fixture_id": {
           "type": "string",
           "format": "uuid"

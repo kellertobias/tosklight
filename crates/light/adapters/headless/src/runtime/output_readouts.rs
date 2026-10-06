@@ -386,6 +386,10 @@ pub(in crate::runtime) fn readout_snapshot(
                     .requested
                     .as_ref()
                     .map(super::command_http::preload_attribute_value_wire),
+                color: owner
+                    .color
+                    .as_ref()
+                    .map(super::command_http::preload_attribute_value_wire),
                 position: wire::OutputPositionReadout {
                     available: owner.readout.commands.is_some(),
                     commands: owner

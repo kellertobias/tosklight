@@ -1883,7 +1883,14 @@ export type OutputOwnerReadout = { fixture_id: string,
 /**
  * The typed requested Position intent of the same frame. Presentation is client-side.
  */
-requested?: ProgrammingPreloadAttributeValue | null, position: OutputPositionReadout, };
+requested?: ProgrammingPreloadAttributeValue | null,
+/**
+ * TL-657: the typed Color the same frame resolves for the owner (a running Cue or Playback,
+ * or the Programmer): exactly the colour a first semantic Color edit starts from when the
+ * Programmer holds none. Absent when the frame gives the owner no colour; the open-white
+ * start then applies. Presentation is client-side.
+ */
+color?: ProgrammingPreloadAttributeValue | null, position: OutputPositionReadout, };
 export type OutputReadoutSnapshot = { lane: VisualizationLane, scope: VisualizationScope, frame?: OutputFrameIdentity | null,
 /**
  * Opaque, session-scoped lease of exactly this source. Absent when unavailable.
