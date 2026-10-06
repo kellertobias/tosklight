@@ -278,13 +278,17 @@ export class ShowObjectsStore {
 		const changed =
 			!responseEventObserved &&
 			applyPendingSettlement(this.authoritative, operation, settlement);
+		// An optimistic body leaves the projection even when the authoritative object is
+		// unchanged: an event that arrived before the response already installed the server's
+		// version, which may differ from the optimistic one (a server-normalized Dynamic).
+		const reproject = changed || operation.body != null;
 		this.publish(
 			{
 				showRevision: Math.max(this.snapshot.showRevision ?? 0, showRevision),
 				status: "ready",
 				error: null,
 			},
-			changed ? projectedCollection(operation.kind) : NO_COLLECTIONS,
+			reproject ? projectedCollection(operation.kind) : NO_COLLECTIONS,
 		);
 		return true;
 	}
