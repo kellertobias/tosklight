@@ -62,6 +62,9 @@ impl ProgrammerRegistry {
         }
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
+        // TL-641: a large Live gesture is indexed and applied before the write lock, so output
+        // capture is not held off while thousands of rows are rebuilt.
+        let prepared = self.prepare_indexed_gesture(mutations);
         let mut states = self.state.write();
         let Some(state) = states.as_mut() else {
             return false;
@@ -73,15 +76,16 @@ impl ProgrammerRegistry {
             &state.dynamic_values
         };
         // A Live gesture over many targets uses the indexed path. Preload interleaves its
-        // released-colour bookkeeping with every row, so it stays row by row.
-        let mut indexed = (!preload
-            && mutations
-                .len()
-                .saturating_mul(values.len() + mutations.len())
-                >= batch::INDEXED_PAIRS)
-            .then(|| batch::DynamicValueIndex::new(values));
+        // released-colour bookkeeping with every row, so it stays row by row. A gesture prepared
+        // against rows that changed since is applied again, here.
+        let indexed = (!preload && indexed_gesture(values, mutations)).then(|| match prepared {
+            Some((source, rows)) if Arc::ptr_eq(&source, values) => rows,
+            _ => batch::apply_indexed(values, mutations, |fixture_id, attribute, value| {
+                new_row(self, fixture_id, attribute, value)
+            }),
+        });
         let changes = match &indexed {
-            Some(index) => mutations.iter().any(|mutation| index.changes(mutation)),
+            Some(rows) => rows.is_some(),
             None => mutations
                 .iter()
                 .any(|mutation| mutation_changes(values, mutation)),
@@ -102,21 +106,10 @@ impl ProgrammerRegistry {
             state.checkpoint();
         }
         state.active_value_undo_group = undo_group.map(|group| (preload, group.to_owned()));
-        let row_by_row = match indexed.take() {
+        let row_by_row = match indexed.flatten() {
             None => mutations,
-            Some(mut index) => {
-                for mutation in mutations {
-                    index.remove(mutation);
-                    if let DynamicProgrammerValueMutation::Set {
-                        fixture_id,
-                        attribute,
-                        value,
-                    } = mutation
-                    {
-                        index.push(new_row(self, *fixture_id, attribute, value));
-                    }
-                }
-                *Arc::make_mut(&mut state.dynamic_values) = index.into_values();
+            Some(rows) => {
+                state.dynamic_values = Arc::new(rows);
                 &[]
             }
         };
@@ -352,6 +345,45 @@ fn apply_mutation(
     });
     if let DynamicProgrammerValueMutation::Set { value, .. } = mutation {
         values.push(new_row(registry, fixture_id, attribute, value));
+    }
+}
+
+/// Whether a Live gesture over `values` takes the indexed path.
+fn indexed_gesture(
+    values: &[DynamicAddressValue],
+    mutations: &[DynamicProgrammerValueMutation],
+) -> bool {
+    mutations
+        .len()
+        .saturating_mul(values.len() + mutations.len())
+        >= batch::INDEXED_PAIRS
+}
+
+/// The rows the stored ones become, or `None` when nothing changes.
+type PreparedRows = Option<Vec<DynamicAddressValue>>;
+
+impl ProgrammerRegistry {
+    /// Apply an indexed Live gesture to a snapshot of the stored rows under a read lock only.
+    /// The caller holds the mutation gate and commits the rows if the snapshot is still current.
+    fn prepare_indexed_gesture(
+        &self,
+        mutations: &[DynamicProgrammerValueMutation],
+    ) -> Option<(Arc<Vec<DynamicAddressValue>>, PreparedRows)> {
+        let source = {
+            let states = self.state.read();
+            let state = states.as_ref()?;
+            if state.blind && state.preload_capture_programmer {
+                return None;
+            }
+            Arc::clone(&state.dynamic_values)
+        };
+        if !indexed_gesture(&source, mutations) {
+            return None;
+        }
+        let rows = batch::apply_indexed(&source, mutations, |fixture_id, attribute, value| {
+            new_row(self, fixture_id, attribute, value)
+        });
+        Some((source, rows))
     }
 }
 

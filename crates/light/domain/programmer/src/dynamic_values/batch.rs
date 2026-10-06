@@ -9,8 +9,33 @@
 use super::DynamicProgrammerValueMutation;
 use light_core::{AttributeKey, FixtureId};
 use light_dynamics::{DynamicAddressValue, DynamicSemanticValue, DynamicTrackKey};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use uuid::Uuid;
+
+/// Apply `mutations` to `values` (the row-by-row `mutation_changes`, `retain` and push), or
+/// `None` when no mutation changes them. `new_row` stamps each appended row.
+pub(super) fn apply_indexed(
+    values: &[DynamicAddressValue],
+    mutations: &[DynamicProgrammerValueMutation],
+    mut new_row: impl FnMut(FixtureId, &AttributeKey, &DynamicSemanticValue) -> DynamicAddressValue,
+) -> Option<Vec<DynamicAddressValue>> {
+    let mut index = DynamicValueIndex::new(values);
+    if !mutations.iter().any(|mutation| index.changes(mutation)) {
+        return None;
+    }
+    for mutation in mutations {
+        index.remove(mutation);
+        if let DynamicProgrammerValueMutation::Set {
+            fixture_id,
+            attribute,
+            value,
+        } = mutation
+        {
+            index.push(new_row(*fixture_id, attribute, value));
+        }
+    }
+    Some(index.into_values())
+}
 
 /// Below this many mutation/row pairs (rows stored and appended) the row-by-row path is cheaper.
 pub(super) const INDEXED_PAIRS: usize = 4_096;

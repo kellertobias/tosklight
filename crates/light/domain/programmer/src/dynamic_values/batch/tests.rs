@@ -187,6 +187,15 @@ fn indexed_gesture_leaves_the_rows_and_change_answer_of_the_row_by_row_path() {
         }
         let mut expected = stored.clone();
         let mut expected_order = order;
+        // TL-641: the whole-gesture helper the registry prepares outside its write lock.
+        let mut stamped = order;
+        let applied = apply_indexed(&stored, &gesture, |fixture_id, attribute, value| {
+            stamped += 1;
+            row(fixture_id, attribute, value, stamped)
+        });
+        let changes = gesture
+            .iter()
+            .any(|mutation| mutation_changes(&stored, mutation));
         let mut index = DynamicValueIndex::new(&stored);
         for mutation in &gesture {
             row_by_row(&mut expected, mutation, &mut expected_order);
@@ -201,7 +210,13 @@ fn indexed_gesture_leaves_the_rows_and_change_answer_of_the_row_by_row_path() {
                 index.push(row(*fixture_id, attribute, value, order));
             }
         }
-        assert_eq!(index.into_values(), expected, "case {case}");
+        let values = index.into_values();
+        assert_eq!(
+            applied,
+            changes.then(|| values.clone()),
+            "case {case}: whole-gesture helper"
+        );
+        assert_eq!(values, expected, "case {case}");
     }
 }
 
