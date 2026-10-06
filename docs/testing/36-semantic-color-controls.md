@@ -34,6 +34,10 @@ Executable coverage:
   `tests/fixtures/default-stage.show`, the packaged Default (`assets/demo.show`) and the Clean
   Built-in Default loaded through **New Show**; the page-1 readouts, one Red detent and a programmed
   blue. Vitest: `…/familyEncoders/colorSlotDisplay.test.ts`.
+- The same spec carries SEMANTIC-COLOR-008 at 1600×1000 in the software-only layout: two Generic RGB
+  LEDs with a red, a red/blue and a black Cue on Playbacks 1–3, the page-1 readouts and the full
+  modal's Hue, Saturation and White Blend with an empty Programmer, and one Red detent. Vitest:
+  `…/familyEncoders/colorSlotDisplay.test.ts`; Cargo: `position_readout::color_seed_tests`.
 - All of these run under `npm run test:e2e`, because production reports programming contract 1;
   `npm run test:e2e-semantic` runs them on the contract-1 E2E test server, where a missing semantic
   publication fails instead of skipping.
@@ -138,3 +142,19 @@ hardware-connected layout.
 4. Program blue. Verify Red and Green read `0%` (black and zero are values) and Blue `100%`. A
    selection whose fixtures differ reads **Mixed**; a fixture holding a Direct colour reads
    **Direct** until a page 1 or 2 edit adopts it.
+
+## SEMANTIC-COLOR-008 — Readouts of a running Cue or Playback colour
+
+1. Program two RGB fixtures red and record the Cue; record a second Cue with one fixture red and
+   the other blue, and a third with both black. Clear the Programmer.
+2. Run the red Cue, select both fixtures and open the **Color** encoders. Verify page 1 reads
+   **Red** `100%`, **Green** `0%`, **Blue** `0%`, **White Blend** `0%` — the Cue's colour, not the
+   open-white start — while the Programmer stays empty.
+3. Open the Color special dialog. Verify it shows the same colour: Hue 0°, Saturation 100%, White
+   Blend 0%.
+4. Turn **Red** one detent down. Verify the Programmer holds the Cue's red slightly reduced, with
+   Green and Blue still 0: the first edit started from the Cue's colour.
+5. Clear the Programmer and run the red/blue Cue instead. Verify Red and Blue read **Mixed** and
+   Green `0%`. Run the black Cue instead: every control reads `0%`, never a dash or open white.
+6. Release every Cue. Verify the readouts return to the open-white start (`100%`, `100%`, `100%`,
+   `0%`).

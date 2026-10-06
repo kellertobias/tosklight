@@ -29,7 +29,18 @@ import { expect, test } from "./bench/core/fixtures";
 import type { LightBench } from "./bench/core/lightBench";
 import { requireSemanticContract } from "./bench/core/semanticContract";
 import { fixture } from "./bench/output/fixtureDmxContract";
-import { colorOf, detent, encoder, pageColorTo, programSemantic, SEMANTIC_BLUE } from "./bench/color/directColorRig";
+import {
+	colorOf,
+	detent,
+	encoder,
+	pageColorTo,
+	programSemantic,
+	SEMANTIC_BLUE,
+	SEMANTIC_RED,
+} from "./bench/color/directColorRig";
+import { playbackAction } from "./bench/dynamics/intentFrameOutput";
+import { recordPlayback } from "./bench/dynamics/intentFrameScenario";
+import { clearProgrammerValues } from "./bench/programmer/programmerValues";
 import {
 	encoderReadings,
 	loadShippedShow,
@@ -448,6 +459,66 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 			await expect(value(3)).toHaveText("100%");
 		}
 	});
+	test("SEMANTIC-COLOR-008 @ui › a running Cue's colour reads on the Color encoders and in the dialog, and the first edit starts from it", async ({
+		api,
+		bench,
+		desk,
+		page,
+	}) => {
+		test.setTimeout(120_000);
+		await page.setViewportSize({ width: 1600, height: 1000 });
+		const { show, ids } = await arrangeCueColors({ api, bench, desk, page });
+		await desk.open(api.baseUrl);
+		// Cues fade in and out on the manual bench clock: each read advances it half a second.
+		const readings = async () => {
+			await bench.tick(500);
+			return (await encoderReadings(page)).map((reading) => reading.value);
+		};
+
+		// 1. Cue red, the Programmer empty: the colour the lamps show, never the open-white start.
+		await playbackAction(api, 1, "go");
+		await selectFixtures(api, show.id, ids);
+		await pageColorTo(page, 1);
+		await expect.poll(readings, { message: "red Cue" }).toEqual(["100%", "0%", "0%", "0%"]);
+		expect(await programmerValues(api)).toEqual([]);
+
+		// 2. The Color Special Dialog starts from the same colour: red, fully saturated.
+		const layer = await openFullColorModal(page);
+		await colorDialogTab(layer, "Color");
+		await expect(layer.getByRole("slider", { name: "Saturation", exact: true })).toHaveAttribute(
+			"aria-valuetext",
+			"100%",
+		);
+		await expect(layer.getByRole("slider", { name: "Hue" })).toHaveAttribute("aria-valuetext", "0 degrees");
+		await expect(layer.getByRole("slider", { name: "White Blend", exact: true })).toHaveAttribute(
+			"aria-valuetext",
+			"0%",
+		);
+		await closeColorModal(layer);
+
+		// 3. One Red detent down edits the Cue's red, not open white: Green and Blue stay 0.
+		await pageColorTo(page, 1);
+		await detent(encoder(page, 1), -1);
+		await expect.poll(async () => (await colorOf(api, ids[0]))?.kind).toBe("semantic");
+		const rgb = (await colorOf(api, ids[0]))?.intent.recipe.rgb as number[];
+		expect(rgb[0]).toBeLessThan(1);
+		expect(rgb[0]).toBeGreaterThan(0.9);
+		expect([rgb[1], rgb[2]]).toEqual([0, 0]);
+		await expect(encoder(page, 2).locator(".touch-encoder-value")).toHaveText("0%");
+		await clearProgrammerValues(api, { surface: "api", showId: show.id });
+		await playbackAction(api, 1, "off");
+
+		// 4. Differing Cue colours across the selection read Mixed; black stays 0%.
+		await playbackAction(api, 2, "go");
+		await expect.poll(readings, { message: "red and blue Cue" }).toEqual(["Mixed", "0%", "Mixed", "0%"]);
+		await playbackAction(api, 2, "off");
+		await playbackAction(api, 3, "go");
+		await expect.poll(readings, { message: "black Cue" }).toEqual(["0%", "0%", "0%", "0%"]);
+		await playbackAction(api, 3, "off");
+
+		// 5. Nothing gives the fixtures a colour any more: the open-white start again.
+		await expect.poll(readings, { message: "no colour" }).toEqual(["100%", "100%", "100%", "0%"]);
+	});
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -461,6 +532,45 @@ interface Bench {
 	bench: LightBench;
 	desk: DeskDriver;
 	page: Page;
+}
+
+const SEMANTIC_BLACK = {
+	kind: "color_program",
+	value: {
+		kind: "semantic",
+		intent: {
+			...SEMANTIC_RED.value.intent,
+			base_xyz: { x: 0, y: 0, z: 0 },
+			recipe: { ...SEMANTIC_RED.value.intent.recipe, rgb: [0, 0, 0] },
+		},
+	},
+};
+
+/**
+ * SEMANTIC-COLOR-008 rig: two RGB LEDs at full Intensity and three Cues, each on its own
+ * Playback: 1 both red, 2 one red and one blue, 3 both black. The Programmer ends empty.
+ */
+async function arrangeCueColors({ api, desk, page }: Bench) {
+	const show = await createColorIntentShow(api, page, desk, "Cue colour", [
+		{ number: 1, name: "RGB 1", manufacturer: "Generic", profile: "RGB LED", mode: "RGB virtual dimmer", address: "1.1" },
+		{ number: 2, name: "RGB 2", manufacturer: "Generic", profile: "RGB LED", mode: "RGB virtual dimmer", address: "1.11" },
+	]);
+	const ids = [show.ids[1], show.ids[2]];
+	requireSemanticContract(await semanticPagesPublished(api, ids), SEMANTIC_COLOR_GATE);
+	await selectFixtures(api, show.id, ids);
+	const cues: Array<[number, unknown, unknown]> = [
+		[1, SEMANTIC_RED, SEMANTIC_RED],
+		[2, SEMANTIC_RED, SEMANTIC_BLUE],
+		[3, SEMANTIC_BLACK, SEMANTIC_BLACK],
+	];
+	for (const [playback, first, second] of cues) {
+		await setIntensity(api, ids, 1);
+		await programSemantic(api, [ids[0]], first);
+		await programSemantic(api, [ids[1]], second);
+		await recordPlayback(api, playback);
+		await clearProgrammerValues(api, { surface: "api", showId: show.id });
+	}
+	return { show, ids };
 }
 
 /**

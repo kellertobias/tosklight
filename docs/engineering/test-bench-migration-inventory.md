@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **383 root cases across 117 files**.
+Default catalog: **384 root cases across 117 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -123,6 +123,7 @@ Default catalog: **383 root cases across 117 files**.
 | 119-semantic-color-controls.spec.ts | SEMANTIC-COLOR-006 @ui › the triangle sits beside the fixture's shown Color value | docs/testing/36-semantic-color-controls.md | @ui | semantic-color-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 119-semantic-color-controls.spec.ts | SEMANTIC-COLOR-006 @ui › the triangle appears once the output is accepted, without a Programmer change | docs/testing/36-semantic-color-controls.md | @ui | semantic-color-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 119-semantic-color-controls.spec.ts | SEMANTIC-COLOR-007 @ui › the existing, Default and Clean Built-in Default shows read labelled semantic Color values, never a dash | docs/testing/36-semantic-color-controls.md | @ui | semantic-color-controls | standard failure evidence | parallel | pending-semantic-migration |
+| 119-semantic-color-controls.spec.ts | SEMANTIC-COLOR-008 @ui › a running Cue's colour reads on the Color encoders and in the dialog, and the first edit starts from it | docs/testing/36-semantic-color-controls.md | @ui | semantic-color-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 120-direct-color-pages.spec.ts | DIRECT-COLOR-002 @ui › the full Color dialog names the reference head, lists the overflow and follows a new reference inertly | docs/testing/37-direct-color-pages.md | @ui | direct-color-pages | standard failure evidence | parallel | pending-semantic-migration |
 | 120-direct-color-pages.spec.ts | DIRECT-COLOR-003 @ui › Native replay versus Best-effort match, and Native only for an unknown appearance, all passive | docs/testing/37-direct-color-pages.md | @ui | direct-color-pages | standard failure evidence | parallel | pending-semantic-migration |
 | 120-direct-color-pages.spec.ts | DIRECT-COLOR-004 @ui › the first semantic edit of a Direct value starts from its appearance, else from an explicit start | docs/testing/37-direct-color-pages.md | @ui | direct-color-pages | standard failure evidence | parallel | pending-semantic-migration |
