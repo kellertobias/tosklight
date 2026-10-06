@@ -311,8 +311,9 @@ describe("overall demo show patch builder", () => {
 		expect(
 			[acl, ...acl.multipatch].map((fixture) => fixture.location.x),
 		).toEqual([-2000, -1429, -857, -286, 286, 857, 1429, 2000]);
+		// THRU runs from the first value to the last, so "21 THRU -21" descends.
 		expect(
 			[acl, ...acl.multipatch].map((fixture) => fixture.rotation.y),
-		).toEqual([-21, -15, -9, -3, 3, 9, 15, 21]);
+		).toEqual([21, 15, 9, 3, -3, -9, -15, -21]);
 	});
 });
