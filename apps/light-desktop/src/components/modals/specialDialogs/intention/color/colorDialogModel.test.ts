@@ -14,6 +14,7 @@ import {
 	isPendingEndpoint,
 	mediaPreviewPixel,
 	requestedColorValues,
+	withShownHue,
 } from "./colorDialogModel";
 
 const D = CORE_COLOR_DESCRIPTORS;
@@ -255,5 +256,37 @@ describe("Media preview (presentation of the shared tint and White Blend)", () =
 		expect(neutralOut.map((value) => Number(value.toFixed(6)))).toEqual([1, 1, 1]);
 		const short = mediaPreviewPixel(white, [1, 1, 0.9], 0);
 		expect(short[2]).toBeLessThan(1);
+	});
+});
+
+describe("withShownHue", () => {
+	const white = requestedColorValues([semantic("a", { rgb: [1, 1, 1] })], ["a"], D);
+	const red = requestedColorValues([semantic("a", { rgb: [1, 0, 0] })], ["a"], D);
+
+	it("gives a colourless request the hue the dialog shows when Saturation gives it colour", () => {
+		expect(white.saturation).toBe(0);
+		expect(withShownHue([{ control: "saturation", value: 100 }], white, 54)).toEqual([
+			{ control: "hue", value: 54 },
+			{ control: "saturation", value: 100 },
+		]);
+		// Nothing programmed yet is colourless open white as well.
+		expect(
+			withShownHue([{ control: "saturation", value: 100 }], requestedColorValues([], ["a"], D), 54),
+		).toEqual([
+			{ control: "hue", value: 54 },
+			{ control: "saturation", value: 100 },
+		]);
+	});
+
+	it("leaves a coloured request, an explicit hue and every other control alone", () => {
+		const saturation = [{ control: "saturation" as const, value: 40 }];
+		expect(withShownHue(saturation, red, 54)).toBe(saturation);
+		const both = [
+			{ control: "hue" as const, value: 120 },
+			{ control: "saturation" as const, value: 100 },
+		];
+		expect(withShownHue(both, white, 54)).toBe(both);
+		const blend = [{ control: "white_blend" as const, value: 50 }];
+		expect(withShownHue(blend, white, 54)).toBe(blend);
 	});
 });

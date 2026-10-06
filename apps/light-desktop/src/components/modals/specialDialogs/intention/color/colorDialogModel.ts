@@ -384,6 +384,30 @@ export function colorComponentChange(
 	};
 }
 
+type ControlEdit = { control: ColorDialogControl; value: number; range?: ValueRange };
+
+/**
+ * A colourless request has no hue of its own, so the dialog keeps showing the hue the operator
+ * last touched. Giving that colour saturation must give it that hue: a Saturation edit from a
+ * colourless request carries the shown hue in the same change, or the Programmer would colour
+ * it from the request's own hue (red) while the dialog shows another.
+ */
+export function withShownHue(
+	edits: readonly ControlEdit[],
+	requested: ColorDialogValues,
+	shownHue: number,
+): readonly ControlEdit[] {
+	const colourless = requested.saturation === 0 && !requested.ranges.saturation;
+	if (
+		!colourless ||
+		requested.ranges.hue ||
+		edits.some((entry) => entry.control === "hue") ||
+		!edits.some((entry) => entry.control === "saturation")
+	)
+		return edits;
+	return [{ control: "hue", value: shownHue }, ...edits];
+}
+
 /**
  * A shifted contact without an anchor only marks the pending first endpoint: it is shown, not
  * written. Writing starts with the completed `[first, last]` range.

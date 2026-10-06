@@ -24,6 +24,7 @@ import {
 	colorComponentChange,
 	isPendingEndpoint,
 	requestedColorValues,
+	withShownHue,
 } from "./colorDialogModel";
 import { useColorDialogLane } from "./useColorDialogLane";
 import { useColorGestures } from "./useColorGestures";
@@ -145,7 +146,7 @@ export function ColorSpecialDialog({ selectedFixtureIds, close }: SemanticSpecia
 		if (pending) return;
 		gestures.change(
 			gesture,
-			edits.map((entry) =>
+			withShownHue(edits, requested, shown.hue).map((entry) =>
 				colorComponentChange(entry.control, entry.value, entry.range, lane.descriptors),
 			),
 		);
