@@ -173,6 +173,72 @@ fn partial_intensity_freeze_is_not_changed_by_group_grand_master_or_blackout() {
 }
 
 #[test]
+fn held_parameters_show_a_freeze_as_held_and_never_apply_a_master() {
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session);
+    let (unfrozen, logical) = fixture();
+    let mut frozen = unfrozen.clone();
+    frozen.freeze = FixtureFreezeState {
+        targets: HashMap::from([(
+            logical,
+            FrozenFixtureTarget {
+                position_native: None,
+                full: false,
+                families: vec![FreezeFamily::Intensity],
+                values: HashMap::from([(
+                    AttributeKey::intensity(),
+                    AttributeValue::Normalized(0.8),
+                )]),
+            },
+        )]),
+    };
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.1),
+    );
+    let engine = Engine::new(programmers.clone());
+    let install = |fixture: PatchedFixture| {
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture].into(),
+                playbacks: vec![group_playback(1, "front", 0.5)].into(),
+                groups: vec![GroupDefinition {
+                    id: "front".into(),
+                    fixtures: vec![logical],
+                    ..Default::default()
+                }]
+                .into(),
+                ..Default::default()
+            })
+            .unwrap();
+    };
+    let intensity =
+        |values: &crate::ResolvedValues| values.get(&(logical, AttributeKey::intensity())).cloned();
+
+    // The Fixture Sheet shows what the lamp holds: the frozen parameter, not the Programmer
+    // value underneath it, which the raw resolution keeps for relative command-line edits.
+    install(frozen);
+    assert_eq!(
+        intensity(&engine.held_parameter_values()),
+        Some(AttributeValue::Normalized(0.8))
+    );
+    assert_eq!(
+        intensity(&engine.resolved_values()),
+        Some(AttributeValue::Normalized(0.1))
+    );
+
+    // Masters are output-only: the 50 % Group Master scales DMX, not the shown parameter.
+    install(unfrozen);
+    assert_eq!(
+        intensity(&engine.held_parameter_values()),
+        Some(AttributeValue::Normalized(0.1))
+    );
+}
+
+#[test]
 fn full_freeze_bypasses_every_master_and_resumes_underlying_state_when_removed() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();

@@ -603,7 +603,7 @@ impl OutputResource {
         {
             return Arc::clone(&cached.values);
         }
-        let values = Arc::new(self.engine.resolved_values());
+        let values = Arc::new(self.engine.held_parameter_values());
         *cached = Some(CachedVisualizationOrdinary {
             snapshot,
             captured_at: std::time::Instant::now(),

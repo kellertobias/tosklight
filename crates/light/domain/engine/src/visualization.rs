@@ -258,6 +258,24 @@ impl Engine {
         self.resolved_values_with_contribution_batches(&[])
     }
 
+    /// The parameters as the desk shows them on its programming surfaces (Fixture Sheet, Dynamic
+    /// stack): the raw resolution with every Freeze holding its captured parameters, and no master
+    /// applied, since masters are output-only. A frozen parameter is shown as held, because that
+    /// is what the lamp is doing; its captured value already contains the masters of its moment.
+    pub fn held_parameter_values(&self) -> crate::ResolvedValues {
+        let generation = self.generation.load_full();
+        let mut resolved = crate::ResolvedAttributes {
+            values: self
+                .resolved_attributes_at(&generation, self.clock.now(), &[])
+                .named_values()
+                .values()
+                .clone(),
+            ..Default::default()
+        };
+        crate::render::apply_fixture_freezes(&generation.snapshot().fixtures, &mut resolved);
+        resolved.values
+    }
+
     /// The raw resolution (see [`Self::resolved_values`]) with externally sampled values merged
     /// through ordinary semantic arbitration, without rendering.
     pub fn resolved_values_with_contribution_batches(

@@ -670,8 +670,9 @@ fn resolved_visualization_content(
     let ordinary = needs_ordinary_detail
         .then(|| captured_dynamics.and_then(|sources| sources.ordinary.as_ref()))
         .flatten()
-        // The dynamic stack shows the programmed parameter: the captured frame's raw values,
-        // as the observer path's `cached_visualization_ordinary_values` (masters are output-only).
+        // The dynamic stack shows the held parameter: the captured frame's raw values, which keep
+        // every Freeze, as the observer path's `cached_visualization_ordinary_values` (masters
+        // are output-only).
         .map(|values| values.raw_values())
         .unwrap_or(observer_ordinary.as_ref());
     let (mut resolved, dynamic_runtime, dynamic_samples) = match authoritative_frame {
