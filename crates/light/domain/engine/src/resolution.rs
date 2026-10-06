@@ -131,16 +131,20 @@ impl Engine {
         let pool = self.output_pool();
         crate::timed(crate::RenderPhase::ContributionMerge, || match programmer {
             crate::programmer_resolution::ProgrammerContributions::Shared(programmer) => {
-                let samples = if has_samples {
-                    sampled_values(sampled).collect::<Vec<_>>()
-                } else {
-                    Vec::new()
-                };
+                let bound = lane.playback.contributions.len()
+                    + programmer.len()
+                    + sampled
+                        .iter()
+                        .map(|batch| batch.samples().len())
+                        .sum::<usize>();
                 resolver.offer_borrowed_on(
-                    pool.as_deref(),
-                    &playback().collect::<Vec<_>>(),
-                    &programmer.iter().collect::<Vec<_>>(),
-                    &samples,
+                    (pool.as_deref(), &self.offer_scratch),
+                    (
+                        playback(),
+                        &programmer,
+                        sampled_values(sampled).filter(|_| has_samples),
+                    ),
+                    bound,
                 );
             }
             programmer @ crate::programmer_resolution::ProgrammerContributions::Owned(_) => {

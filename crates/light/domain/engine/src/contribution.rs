@@ -8,6 +8,7 @@ mod offered_origin;
 mod parallel_offers;
 mod playback_evidence;
 pub(crate) use offered_origin::OfferedOrigin;
+pub(crate) use parallel_offers::OfferScratch;
 pub(crate) use playback_evidence::PlaybackEvidenceCache;
 
 pub(crate) struct EngineContribution {

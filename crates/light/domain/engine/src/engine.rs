@@ -72,6 +72,9 @@ pub struct Engine {
     output_workers: AtomicUsize,
     /// Per-chunk resolved fixture outputs of a parallel render, kept between frames.
     pub(crate) render_chunks: Mutex<crate::render_fixtures::RenderChunks>,
+    /// The ranges and first-write lists of a parallel resolution's offers, kept between frames
+    /// (TL-639 round 7).
+    pub(crate) offer_scratch: Mutex<crate::contribution::OfferScratch>,
     /// The output worker pool, built for the current worker count on first use.
     output_pool: Mutex<Option<Arc<crate::parallel::OutputPool>>>,
 }
@@ -174,6 +177,7 @@ impl Engine {
             clock,
             output_workers: AtomicUsize::new(crate::parallel::default_output_workers()),
             render_chunks: Mutex::default(),
+            offer_scratch: Mutex::default(),
             output_pool: Mutex::default(),
         }
     }

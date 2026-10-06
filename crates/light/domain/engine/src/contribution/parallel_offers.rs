@@ -15,6 +15,16 @@ use crate::parallel::OutputPool;
 /// Below this many offers a resolution offers on the caller (two in tests).
 const MIN_PARALLEL_OFFERS: usize = if cfg!(test) { 2 } else { 4096 };
 
+/// The room a parallel resolution's offers need, kept between frames.
+#[derive(Default)]
+pub(crate) struct OfferScratch {
+    /// Per slot range: each numbered offer's position and slot.
+    ranges: Vec<Vec<(u32, crate::Slot)>>,
+    /// Per slot range: its first writes.
+    touched: Vec<Vec<(u32, u32)>>,
+    by_position: Vec<u32>,
+}
+
 /// One offer of a resolution.
 #[derive(Clone, Copy)]
 enum Offered<'a> {
@@ -23,34 +33,54 @@ enum Offered<'a> {
 }
 
 impl EngineContributionResolver<'_> {
-    /// Offer `playback`, then `programmer`, then `samples` (borrowed throughout), on `pool`
-    /// when there are enough offers; the same frame as the single-threaded calls.
-    pub(crate) fn offer_borrowed_on(
+    /// Offer `playback`, then `programmer`, then `samples` (borrowed throughout; at most
+    /// `bound` offers), on `pool` when there are enough; the same frame as the single-threaded
+    /// calls.
+    pub(crate) fn offer_borrowed_on<'x, 'p: 'x, 'q: 'x, 's: 'x>(
         &mut self,
-        pool: Option<&OutputPool>,
-        playback: &[&EngineContribution],
-        programmer: &[&EngineContribution],
-        samples: &[&crate::ContributionSample],
+        (pool, scratch): (Option<&OutputPool>, &parking_lot::Mutex<OfferScratch>),
+        (playback, programmer, samples): (
+            impl Iterator<Item = &'p EngineContribution>,
+            &'q [EngineContribution],
+            impl Iterator<Item = &'s crate::ContributionSample>,
+        ),
+        bound: usize,
     ) {
-        let offers = playback.len() + programmer.len() + samples.len();
-        let Some(pool) = pool.filter(|pool| pool.workers() > 1 && offers >= MIN_PARALLEL_OFFERS)
-        else {
-            self.extend_borrowed_contributions(playback.iter().copied());
-            self.extend_borrowed_contributions(programmer.iter().copied());
-            self.extend_borrowed_samples(samples.iter().copied());
+        // Never from a pool thread: a resolution there is a lazily observed source answering a
+        // parallel section (a Freeze's captured values for pinning), and a nested section could
+        // take up another of that section's items, which would wait on this very resolution.
+        let Some(pool) = pool.filter(|pool| {
+            pool.workers() > 1
+                && bound >= MIN_PARALLEL_OFFERS
+                && rayon::current_thread_index().is_none()
+        }) else {
+            self.extend_borrowed_contributions(playback);
+            self.extend_borrowed_contributions(programmer);
+            self.extend_borrowed_samples(samples);
             return;
         };
+        // Another thread's resolution holding the kept room never makes this one wait.
+        let mut kept = scratch.try_lock();
+        let mut fresh = OfferScratch::default();
+        let scratch = kept.as_deref_mut().unwrap_or(&mut fresh);
+        // The closures shorten each list's lifetime to the frame's; the variants alone cannot.
+        #[allow(clippy::redundant_closure)]
         let items = playback
-            .iter()
-            .chain(programmer)
-            .map(|candidate| Offered::Contribution(candidate))
-            .chain(samples.iter().map(|sample| Offered::Sample(sample)));
+            .map(|candidate| Offered::<'x>::Contribution(candidate))
+            .chain(
+                programmer
+                    .iter()
+                    .map(|candidate| Offered::<'x>::Contribution(candidate)),
+            )
+            .chain(samples.map(|sample| Offered::<'x>::Sample(sample)))
+            .collect::<Vec<_>>();
+        let offers = items.len();
         let plan = self.frame.shard_plan(pool.workers() * 4);
         let capacity = self.frame.capacity();
-        let mut ranges = (0..plan.count())
-            .map(|_| Vec::with_capacity(offers / plan.count() + offers / plan.count() / 4 + 16))
-            .collect::<Vec<Vec<(u32, crate::Slot, Offered<'_>)>>>();
-        for (position, item) in items.enumerate() {
+        let ranges = &mut scratch.ranges;
+        ranges.resize_with(plan.count(), Vec::new);
+        ranges.iter_mut().for_each(Vec::clear);
+        for (position, &item) in items.iter().enumerate() {
             let (fixture_id, attribute, address) = match item {
                 Offered::Contribution(candidate) => (
                     candidate.value.fixture_id,
@@ -66,7 +96,7 @@ impl EngineContributionResolver<'_> {
             match self.slot_for(fixture_id, attribute, address) {
                 // A slot beyond the frame is ignored, as a single offer ignores it.
                 Some(slot) if slot.index() < capacity => {
-                    ranges[plan.shard_of(slot)].push((position as u32, slot, item));
+                    ranges[plan.shard_of(slot)].push((position as u32, slot));
                 }
                 Some(_) => {}
                 None => match item {
@@ -82,22 +112,24 @@ impl EngineContributionResolver<'_> {
         let trace = self.trace_sources;
         let shards = self
             .frame
-            .shards(plan)
+            .shards(plan, &mut scratch.touched)
             .into_iter()
             .map(parking_lot::Mutex::new)
             .collect::<Vec<_>>();
-        let mut scratch = vec![(); pool.workers()];
-        crate::parallel::run_ordered(Some(pool), &mut scratch, shards.len(), |_, range| {
+        let (items, ranges) = (&items, &scratch.ranges);
+        let mut workers = vec![(); pool.workers()];
+        crate::parallel::run_ordered(Some(pool), &mut workers, shards.len(), |_, range| {
             let mut shard = shards[range].lock();
-            for &(position, slot, item) in &ranges[range] {
-                offer_in(&mut shard, trace, position, slot, item);
+            for &(position, slot) in &ranges[range] {
+                offer_in(&mut shard, trace, position, slot, items[position as usize]);
             }
         });
-        let touched = shards
-            .into_iter()
-            .map(|shard| shard.into_inner().into_touched())
-            .collect::<Vec<_>>();
-        self.frame.merge_touched(offers, &touched);
+        for (kept, shard) in scratch.touched.iter_mut().zip(shards) {
+            *kept = shard.into_inner().into_touched();
+        }
+        self.frame
+            .merge_touched(offers, &scratch.touched, &mut scratch.by_position);
+        scratch.touched.iter_mut().for_each(Vec::clear);
     }
 }
 
@@ -340,15 +372,32 @@ mod tests {
             single.extend_borrowed_samples(&samples);
             let mut ranged = resolver(trace);
             ranged.offer_borrowed_on(
-                Some(&pool),
-                &playback.iter().collect::<Vec<_>>(),
-                &programmer.iter().collect::<Vec<_>>(),
-                &samples.iter().collect::<Vec<_>>(),
+                (Some(&pool), &parking_lot::Mutex::default()),
+                (playback.iter(), &programmer, samples.iter()),
+                playback.len() + programmer.len() + samples.len(),
             );
             assert_eq!(rows(&ranged), rows(&single), "tracing {trace}");
             assert!(
                 !single.overflow.is_empty(),
                 "unnumbered names reach the overflow"
+            );
+            // From a pool thread (a lazily observed source answering a parallel section) the
+            // offers stay on that thread, with the same frame.
+            let nested = parking_lot::Mutex::new(resolver(trace));
+            light_dynamics::InstanceWorkers::run_indexed(&pool, 2, &|index| {
+                assert!(rayon::current_thread_index().is_some());
+                if index == 0 {
+                    nested.lock().offer_borrowed_on(
+                        (Some(&pool), &parking_lot::Mutex::default()),
+                        (playback.iter(), &programmer, samples.iter()),
+                        playback.len() + programmer.len() + samples.len(),
+                    );
+                }
+            });
+            assert_eq!(
+                rows(&nested.into_inner()),
+                rows(&single),
+                "nested, tracing {trace}"
             );
         }
     }

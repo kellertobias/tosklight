@@ -46,8 +46,14 @@ impl FrameState {
         }
     }
 
-    /// The ranges of `plan`, in slot order, for one phase.
-    pub(crate) fn shards(&mut self, plan: ShardPlan) -> Vec<FrameShard<'_>> {
+    /// The ranges of `plan`, in slot order, for one phase; each records its first writes into
+    /// one of `touched` (emptied, kept for their room).
+    pub(crate) fn shards(
+        &mut self,
+        plan: ShardPlan,
+        touched: &mut Vec<Vec<(u32, u32)>>,
+    ) -> Vec<FrameShard<'_>> {
+        touched.resize_with(plan.count, Vec::new);
         let epoch = self.epoch;
         let mut shards = Vec::with_capacity(plan.count);
         let mut stamp = self.stamp.as_mut_slice();
@@ -62,7 +68,7 @@ impl FrameState {
                 epoch,
                 stamp: range_stamp,
                 winners: range_winners,
-                touched: Vec::new(),
+                touched: std::mem::take(&mut touched[shards.len()]),
             });
             (stamp, winners) = (rest_stamp, rest_winners);
             start += size;
@@ -71,15 +77,22 @@ impl FrameState {
     }
 
     /// Append the first writes of one phase of `offers` offers, recorded by its ranges, in
-    /// offer order. Each offer writes at most one slot first, so the positions are distinct.
-    pub(crate) fn merge_touched(&mut self, offers: usize, touched: &[Vec<(u32, u32)>]) {
+    /// offer order (`by_position` is room for the merge). Each offer writes at most one slot
+    /// first, so the positions are distinct.
+    pub(crate) fn merge_touched(
+        &mut self,
+        offers: usize,
+        touched: &[Vec<(u32, u32)>],
+        by_position: &mut Vec<u32>,
+    ) {
         const NONE: u32 = u32::MAX;
-        let mut by_position = vec![NONE; offers];
+        by_position.clear();
+        by_position.resize(offers, NONE);
         for &(position, index) in touched.iter().flatten() {
             by_position[position as usize] = index;
         }
         self.touched
-            .extend(by_position.into_iter().filter(|index| *index != NONE));
+            .extend(by_position.iter().copied().filter(|index| *index != NONE));
     }
 }
 
