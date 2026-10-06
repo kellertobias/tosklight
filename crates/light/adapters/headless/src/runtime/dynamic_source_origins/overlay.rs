@@ -274,6 +274,36 @@ pub(super) fn forget_static_evidence_in(
     }
 }
 
+/// TL-641: a random version-4 UUID for a new occurrence without a system entropy call per id.
+///
+/// Starting a Dynamic on thousands of targets binds tens of thousands of sources in its first
+/// frame, and `Uuid::new_v4` asks the operating system for entropy for every one of them. Each
+/// thread seeds a SplitMix64 stream from one `Uuid::new_v4` instead; the ids stay random,
+/// unpredictable between processes and v4-shaped, and `bind_in` still rejects a collision.
+fn random_occurrence_uuid() -> Uuid {
+    use std::cell::Cell;
+    thread_local! {
+        static STATE: Cell<Option<u64>> = const { Cell::new(None) };
+    }
+    fn split_mix(state: &mut u64) -> u64 {
+        *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut mixed = *state;
+        mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        mixed ^ (mixed >> 31)
+    }
+    STATE.with(|cell| {
+        let mut state = cell
+            .get()
+            .unwrap_or_else(|| Uuid::new_v4().as_u64_pair().0 ^ Uuid::new_v4().as_u64_pair().1);
+        let high = split_mix(&mut state);
+        let low = split_mix(&mut state);
+        cell.set(Some(state));
+        uuid::Builder::from_random_bytes(((u128::from(high) << 64) | u128::from(low)).to_be_bytes())
+            .into_uuid()
+    })
+}
+
 pub(super) fn bind_in(
     store: &mut (impl OriginsStore + ?Sized),
     binding: DynamicSourceBinding,
@@ -292,7 +322,7 @@ pub(super) fn bind_in(
         }
     }
     let id = loop {
-        let candidate = DynamicSourceOccurrenceId::new(Uuid::new_v4())?;
+        let candidate = DynamicSourceOccurrenceId::new(random_occurrence_uuid())?;
         if store.record(candidate).is_none() {
             break candidate;
         }
@@ -321,4 +351,29 @@ pub(in crate::runtime) fn unbind_in(
     store.remove_binding(binding);
     forget_static_evidence_in(store, binding);
     true
+}
+
+#[cfg(test)]
+mod random_id_tests {
+    use super::random_occurrence_uuid;
+    use std::collections::HashSet;
+
+    #[test]
+    fn occurrence_ids_are_distinct_random_v4_uuids_on_every_thread() {
+        let ids = (0..4)
+            .map(|_| {
+                std::thread::spawn(|| {
+                    (0..10_000)
+                        .map(|_| random_occurrence_uuid())
+                        .collect::<Vec<_>>()
+                })
+            })
+            .flat_map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>();
+        assert!(
+            ids.iter()
+                .all(|id| id.get_version_num() == 4 && id.get_variant() == uuid::Variant::RFC4122)
+        );
+        assert_eq!(ids.iter().collect::<HashSet<_>>().len(), ids.len());
+    }
 }
