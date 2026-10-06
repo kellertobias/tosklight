@@ -241,3 +241,30 @@ fn actual_reconciliation_refreshes_group_targets_without_restarting_the_source()
         before.instances[0].started_at_millis
     );
 }
+
+/// TL-641: one row's selection resolved once per lane and re-keyed per target equals resolving
+/// it for that target, for per-target and Live Group definitions alike.
+#[test]
+fn a_lane_selection_rekeyed_to_another_target_equals_its_own_resolution() {
+    let targets = [FixtureId::new(), FixtureId::new()];
+    for live_group in [false, true] {
+        let definition = definition(&["pan", "tilt", "focus"], live_group);
+        let (_, _, value) = row(&definition, targets[0], 0, 1);
+        let DynamicSemanticValue::DynamicOn { dynamic, .. } = &value.value else {
+            unreachable!()
+        };
+        for lane in &definition.lanes {
+            let resolved = |target| {
+                DynamicLaneSelection::for_recorded_values(
+                    dynamic,
+                    &definition,
+                    &[(target, lane.id)],
+                )
+            };
+            assert_eq!(
+                retarget(resolved(targets[0]), targets[1]),
+                resolved(targets[1])
+            );
+        }
+    }
+}

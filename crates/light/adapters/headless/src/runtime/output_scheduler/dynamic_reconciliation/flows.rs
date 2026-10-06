@@ -563,6 +563,18 @@ fn programmer_controller_plan<'a>(
     }
     let mut desired = HashMap::<Uuid, DesiredProgrammerController>::new();
     let mut off = HashMap::<Uuid, light_dynamics::DynamicValueTiming>::new();
+    // TL-641: a name-based UUID per row is a SHA-1 each; a large start shares a few links.
+    let mut controller_ids = rustc_hash::FxHashMap::<(Uuid, Uuid), Uuid>::default();
+    let mut controller_id = |programmer_id: Uuid, instance_link: Uuid| {
+        *controller_ids
+            .entry((programmer_id, instance_link))
+            .or_insert_with(|| {
+                light_dynamics::programmer_dynamic_controller_id(
+                    light_core::ProgrammerId(programmer_id),
+                    instance_link,
+                )
+            })
+    };
     for (programmer_id, (priority, rows)) in by_programmer {
         let mut effective = light_dynamics::merge_dynamic_address_values(rows.iter().copied());
         let covered_links = effective
@@ -603,10 +615,7 @@ fn programmer_controller_plan<'a>(
                     timing,
                     lane_id,
                 } => {
-                    let controller_id = light_dynamics::programmer_dynamic_controller_id(
-                        light_core::ProgrammerId(programmer_id),
-                        *instance_link,
-                    );
+                    let controller_id = controller_id(programmer_id, *instance_link);
                     let controller = desired.entry(controller_id).or_insert_with(|| {
                         DesiredProgrammerController {
                             programmer_id,
@@ -644,10 +653,7 @@ fn programmer_controller_plan<'a>(
                     instance_link,
                     timing,
                 } => {
-                    let controller_id = light_dynamics::programmer_dynamic_controller_id(
-                        light_core::ProgrammerId(programmer_id),
-                        *instance_link,
-                    );
+                    let controller_id = controller_id(programmer_id, *instance_link);
                     off.entry(controller_id).or_insert(*timing);
                 }
                 light_dynamics::DynamicSemanticValue::Static { .. }

@@ -96,20 +96,25 @@ fn planned_rows<T>(
     is_later: impl Fn(&T, &T) -> bool,
 ) -> Vec<(FixtureId, Uuid, usize)> {
     source_rows.sort_by_key(|source| source.captured_index);
+    // TL-641: a single row's selection depends on its target only as the one `PerTarget` key,
+    // so it is resolved once per lane and re-keyed for every other target of a large start.
+    let mut by_lane = rustc_hash::FxHashMap::<Uuid, DynamicLaneSelection>::default();
     let sources = source_rows
         .into_iter()
         .map(|source| {
             let lane_id = source.lane_id;
             let target = source.target;
-            (
-                source,
-                lane_id,
-                DynamicLaneSelection::for_recorded_values(
-                    reference,
-                    definition,
-                    &[(target, lane_id)],
-                ),
-            )
+            let selection = by_lane
+                .entry(lane_id)
+                .or_insert_with(|| {
+                    DynamicLaneSelection::for_recorded_values(
+                        reference,
+                        definition,
+                        &[(target, lane_id)],
+                    )
+                })
+                .clone();
+            (source, lane_id, retarget(selection, target))
         })
         .collect::<Vec<_>>();
     let mut output = Vec::new();
@@ -162,6 +167,16 @@ fn planned_rows<T>(
         }
     }
     output
+}
+
+/// The one-row selection of another target with the same lane.
+fn retarget(mut selection: DynamicLaneSelection, target: FixtureId) -> DynamicLaneSelection {
+    if let DynamicLaneSelection::PerTarget { targets } = &mut selection {
+        for selected in targets {
+            selected.target = target;
+        }
+    }
+    selection
 }
 
 type SourceSelection<'a, T> = (LaneSource<'a, T>, Uuid, DynamicLaneSelection);
