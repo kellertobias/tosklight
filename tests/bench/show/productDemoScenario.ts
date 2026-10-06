@@ -2146,7 +2146,7 @@ async function buildPresetSetup(
 		},
 	] as const) {
 		await clearProgrammer(desk, keypad, api);
-		await selectPresetGroupShortcut(desk, presets, "Beam Show");
+		await selectPresetGroupShortcut(desk, api, presets, "Beam Show");
 		await desk.setDemoAction(
 			`Program the ${position.name} Position preset${position.name === "Fan" ? " with a THRU spread" : " with direct Pan and Tilt values"}.`,
 		);
@@ -2163,8 +2163,11 @@ async function buildPresetSetup(
 		"Create the first Color preset as absolute encoder values while Highlight shows the result.",
 	);
 	await desk.click(presetPaneControl(presets, "Color"));
-	await selectPresetGroupShortcut(desk, presets, "Beam Show");
+	await selectPresetGroupShortcut(desk, api, presets, "Beam Show");
+	// A first Color edit starts from open white: Red alone stays white, so Green and Blue go to 0.
 	await setEncoderValue(desk, demo, "Color", "Red", ["1", "0", "0"]);
+	await setEncoderValue(desk, demo, "Color", "Green", ["0"]);
+	await setEncoderValue(desk, demo, "Color", "Blue", ["0"]);
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(presetTile(presets, "2.1"));
 
@@ -2172,7 +2175,7 @@ async function buildPresetSetup(
 	await desk.setDemoAction(
 		"Create the second Color preset with the graphical Color Special Dialog.",
 	);
-	await selectPresetGroupShortcut(desk, presets, "Beam Show");
+	await selectPresetGroupShortcut(desk, api, presets, "Beam Show");
 	await desk.click(
 		demo
 			.locator(".product-demo-application .parameter-controls")
@@ -2269,17 +2272,26 @@ async function showPresetGroupShortcuts(page: Page, presets: Locator) {
 	await expect(shortcuts).toBeVisible();
 }
 
+/**
+ * A single press of a Group shortcut selects the live Group once the double-press window (which
+ * would select it frozen) has passed, so the demo waits until the tile shows the Group selected
+ * and the desk's Programmer holds the live Group before it programs anything.
+ */
 async function selectPresetGroupShortcut(
 	desk: DeskDriver,
+	api: ApiDriver,
 	presets: Locator,
 	name: string,
 ) {
-	await desk.click(
-		presets
-			.locator(".group-strip .group-card")
-			.getByText(name, { exact: true })
-			.first(),
-	);
+	const card = presets
+		.locator(".group-strip .group-card")
+		.filter({ has: presets.page().getByText(name, { exact: true }) })
+		.first();
+	await desk.click(card.getByText(name, { exact: true }));
+	await expect(card).toHaveAttribute("aria-pressed", "true");
+	await expect
+		.poll(async () => JSON.stringify((await programmer(api)).selection_expression))
+		.toContain('"live_group"');
 }
 
 async function buildCueProgramming(
@@ -2337,7 +2349,7 @@ async function buildCueProgramming(
 			width: 10,
 			height: 9,
 		},
-		{ cueListSource: "follow-selection", showCueSidebar: true },
+		{ cueListSource: "follow-selection" },
 	);
 	await configuration.apply();
 	await fixtureSheet.expect.visible();
@@ -2475,6 +2487,19 @@ async function recordVisibleCuelist({
 		.locator(`.cuelist-card[data-pool-slot-id="${number}"]`)
 		.first();
 	await desk.click(poolCard);
+	// The placeholder Cuelist holds one empty Cue, so Record asks Add, Merge, or Overwrite: the
+	// look replaces that placeholder Cue.
+	const recordChoice = page.getByRole("dialog", { name: "Record Cue choice" });
+	const resolveRecordChoice = async () => {
+		if (await recordChoice.isVisible())
+			await desk.click(
+				recordChoice.getByRole("button", { name: "Overwrite Cue", exact: true }),
+			);
+	};
+	await recordChoice
+		.waitFor({ state: "visible", timeout: 1_500 })
+		.catch(() => undefined);
+	await resolveRecordChoice();
 	const recordedCueListId = async () => {
 		const target = await playbackTarget(api, showId, number);
 		if (target?.type !== "cue_list") return null;
@@ -2489,7 +2514,13 @@ async function recordVisibleCuelist({
 			: null;
 	};
 	await page.waitForTimeout(500);
-	if ((await recordedCueListId()) === null) await poolCard.click();
+	if ((await recordedCueListId()) === null) {
+		await poolCard.click();
+		await recordChoice
+			.waitFor({ state: "visible", timeout: 1_500 })
+			.catch(() => undefined);
+		await resolveRecordChoice();
+	}
 	await expect.poll(recordedCueListId).not.toBeNull();
 	if ((await record.getAttribute("aria-pressed")) === "true")
 		await desk.click(record);
@@ -2623,7 +2654,7 @@ async function demonstrateBuskingAndPreload(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
 	);
-	await openGroups(desk, keypad);
+	await openGroups(desk, app, keypad);
 	await desk.click(groupTile(app, 11));
 	await demoPause(
 		demo.page(),
@@ -3302,9 +3333,33 @@ async function ensureStagePane3d(desk: DeskDriver, app: Locator) {
 	return stage;
 }
 
-async function openGroups(desk: DeskDriver, keypad: Locator) {
-	await desk.click(keypad.getByRole("button", { name: "SHIFT", exact: true }));
-	await desk.click(keypad.getByRole("button", { name: "1", exact: true }));
+/**
+ * The Groups built-in is on the Shift layer of the Built-ins dock (`[^1]` is the Intensity Preset
+ * built-in). On touch SHIFT toggles, so it is pressed again to release it.
+ */
+async function openGroups(desk: DeskDriver, app: Locator, keypad: Locator) {
+	const toggle = app.getByRole("button", {
+		name: "Desktops / Built-ins",
+		exact: true,
+	});
+	if ((await toggle.getAttribute("data-dock-mode")) === "desks")
+		await desk.click(toggle);
+	const shift = keypad.getByRole("button", { name: "SHIFT", exact: true });
+	await desk.click(shift);
+	await desk.click(
+		app
+			.getByRole("navigation", { name: "Shift Built-ins", exact: true })
+			.getByRole("button", { name: "Groups", exact: true }),
+	);
+	if (
+		await app
+			.getByRole("navigation", { name: "Shift Built-ins", exact: true })
+			.isVisible()
+	)
+		await desk.click(shift);
+	await expect(
+		app.getByRole("navigation", { name: "Built-ins", exact: true }),
+	).toBeVisible();
 }
 
 async function selectLiveGroupThroughPool(
@@ -3313,7 +3368,7 @@ async function selectLiveGroupThroughPool(
 	keypad: Locator,
 	groupNumber: number,
 ) {
-	await openGroups(desk, keypad);
+	await openGroups(desk, app, keypad);
 	const tile = groupTile(app, groupNumber);
 	if (
 		!(await tile.evaluate((element) => element.classList.contains("selected")))
@@ -3392,13 +3447,25 @@ async function chooseDynamicAttribute(
 	const chooser = page.getByRole("dialog", { name: "Select lane attribute" });
 	await expect(chooser).toBeVisible();
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsChoiceHoldFrames);
-	await desk.click(
-		chooser.getByRole("button", {
-			name: attribute,
-			exact: true,
-		}),
-	);
+	// The chooser lists attribute groups first; the attribute sits inside its group.
+	const choice = chooser.getByRole("button", { name: attribute, exact: true });
+	if (!(await choice.isVisible())) {
+		await desk.click(
+			chooser.getByRole("button", {
+				name: DYNAMIC_ATTRIBUTE_GROUPS[attribute] ?? attribute.toLowerCase(),
+				exact: true,
+			}),
+		);
+		await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsChoiceHoldFrames);
+	}
+	await desk.click(choice);
 }
+
+const DYNAMIC_ATTRIBUTE_GROUPS: Record<string, string> = {
+	Pan: "position",
+	Tilt: "position",
+	Intensity: "intensity",
+};
 
 async function chooseDynamicCurve(
 	desk: DeskDriver,
