@@ -584,3 +584,76 @@ fn a_kept_native_installation_is_the_full_installation() {
     );
     assert_ne!(fresh_kept, full);
 }
+
+/// TL-639 round 7: an installation checked and placed by physical instance on the pool is the
+/// single pass's: the same rows in the same map order, or the same first rejection, for
+/// grouped, interleaved, duplicated, foreign, incomplete and conflicting collections.
+#[test]
+fn an_installation_on_the_pool_is_the_single_pass_installation() {
+    let rig = Rig::new(false);
+    let shared = Rig::new(true);
+    let pool = crate::parallel::OutputPool::new(4).expect("a pool of four");
+    let mode = &rig.wash.definition.profile_snapshot.as_ref().unwrap().modes[0];
+    let grouped = rig.all();
+    let interleaved = grouped
+        .iter()
+        .step_by(2)
+        .rev()
+        .chain(grouped.iter().skip(1).step_by(2))
+        .copied()
+        .collect::<Vec<_>>();
+    let mut duplicated = interleaved.clone();
+    duplicated.push(interleaved[3]);
+    let mut outside = grouped.clone();
+    for write in outside.iter_mut().filter(|w| w.channel_index == RED as u32) {
+        write.channel_index = 0;
+        write.channel_id = mode.channels[0].id;
+        write.function_id = Some(mode.channels[0].functions[0].id);
+    }
+    let copy = rig.wash.multipatch[0].id;
+    let mut root_only = grouped.clone();
+    root_only.retain(|w| !(w.owner == ProgrammingOwner::Color && w.instance_id == copy));
+    let mut raw = interleaved.clone();
+    raw[5].raw = u32::MAX;
+    let install =
+        |rig: &Rig, writes: &[FamilyNativeWrite], pool: Option<&crate::parallel::OutputPool>| {
+            let (capture, mut frame) = rig.frame(Default::default());
+            frame
+                .project_family_native_on(&capture, &capture.frame_token(), writes, pool)
+                .map(|()| format!("{:?}", frame.position_native.instances))
+                .map_err(|error| error.to_string())
+        };
+    for writes in [
+        &grouped,
+        &interleaved,
+        &duplicated,
+        &outside,
+        &root_only,
+        &raw,
+    ] {
+        assert_eq!(
+            install(&rig, writes, Some(&pool)),
+            install(&rig, writes, None)
+        );
+    }
+    assert!(install(&rig, &grouped, Some(&pool)).is_ok());
+    assert!(install(&rig, &duplicated, None).is_err());
+    let color = family_writes(
+        &shared.wash,
+        shared.wash.fixture_id,
+        ProgrammingOwner::Color,
+        &[COLOR[0], COLOR[1], COLOR[2], (ZOOM, 77)],
+    );
+    let zoom = family_writes(
+        &shared.wash,
+        shared.wash.fixture_id,
+        ProgrammingOwner::Zoom,
+        &[(ZOOM, 77)],
+    );
+    let both = [color, zoom].concat();
+    assert_eq!(
+        install(&shared, &both, Some(&pool)),
+        install(&shared, &both, None)
+    );
+    assert!(install(&shared, &both, None).is_err());
+}

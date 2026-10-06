@@ -29,6 +29,7 @@ pub(super) fn project_family_native_rows(
         Vec<light_engine::FamilyNativeWrite>,
         light_engine::FamilyNativeMemo,
     ),
+    pool: Option<&light_engine::parallel::OutputPool>,
 ) -> Result<(), TransitionError> {
     if rows
         .iter()
@@ -54,7 +55,7 @@ pub(super) fn project_family_native_rows(
             })
     }));
     let result = token
-        .project_family_native_kept(capture, frame_token, writes, memo)
+        .project_family_native_kept_on(capture, frame_token, writes, memo, pool)
         .map_err(|error| invalid(&error.to_string()));
     writes.clear();
     result

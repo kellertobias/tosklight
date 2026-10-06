@@ -22,6 +22,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
 use uuid::Uuid;
 
+mod parallel;
+
 /// One fitted native control write of one physical family owner on a physical root or copy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FamilyNativeWrite {
@@ -91,6 +93,18 @@ impl PreparedStaticFamilyFrame {
         token: &CapturedFrameToken,
         writes: &[FamilyNativeWrite],
     ) -> Result<(), EngineError> {
+        self.project_family_native_on(capture, token, writes, None)
+    }
+
+    /// [`Self::project_family_native`], the writes validated and installed on `pool` when there
+    /// are many (TL-639 round 7): the same installation or the same first rejection.
+    pub fn project_family_native_on(
+        &mut self,
+        capture: &PreparedOutputFrame,
+        token: &CapturedFrameToken,
+        writes: &[FamilyNativeWrite],
+        pool: Option<&crate::parallel::OutputPool>,
+    ) -> Result<(), EngineError> {
         if !Arc::ptr_eq(&self.capture_identity, &capture.identity) {
             return Err(EngineError::StalePreparedFrame);
         }
@@ -104,6 +118,10 @@ impl PreparedStaticFamilyFrame {
         }
         if !self.position_native.instances.is_empty() {
             return Err(invalid("native family projection is already installed"));
+        }
+        if let Some(pool) = parallel::pool_for(pool, writes.len()) {
+            self.position_native = self.install_in_parallel(capture, writes, pool)?;
+            return Ok(());
         }
         let mut candidate = NativePositionProjection::default();
         // Sized up front: each write is checked once, and owners arrive in runs.
@@ -166,6 +184,18 @@ impl PreparedStaticFamilyFrame {
         writes: &mut Vec<FamilyNativeWrite>,
         memo: &mut FamilyNativeMemo,
     ) -> Result<(), EngineError> {
+        self.project_family_native_kept_on(capture, token, writes, memo, None)
+    }
+
+    /// [`Self::project_family_native_kept`] with a fresh installation on `pool`.
+    pub fn project_family_native_kept_on(
+        &mut self,
+        capture: &PreparedOutputFrame,
+        token: &CapturedFrameToken,
+        writes: &mut Vec<FamilyNativeWrite>,
+        memo: &mut FamilyNativeMemo,
+        pool: Option<&crate::parallel::OutputPool>,
+    ) -> Result<(), EngineError> {
         let generation = capture.generation.identity();
         let kept = memo.generation == Some(generation)
             && !writes.is_empty()
@@ -175,11 +205,16 @@ impl PreparedStaticFamilyFrame {
             && token.generation() == capture.generation()
             && self.position_native.instances.is_empty();
         if !kept {
-            self.project_family_native(capture, token, writes)?;
+            self.project_family_native_on(capture, token, writes, pool)?;
             if !writes.is_empty() {
                 memo.generation = Some(generation);
                 std::mem::swap(&mut memo.writes, writes);
-                memo.projection = self.position_native.clone();
+                // TL-639 round 7: the replaced installation is freed off the frame's thread.
+                let replaced =
+                    std::mem::replace(&mut memo.projection, self.position_native.clone());
+                if let Some(pool) = pool {
+                    pool.drop_later(replaced);
+                }
             }
             return Ok(());
         }
@@ -329,14 +364,25 @@ fn install(
     write: &FamilyNativeWrite,
     destination: &Destination,
 ) -> Result<(), EngineError> {
+    install_in(Arc::make_mut(&mut candidate.instances), write, destination).map(drop)
+}
+
+/// [`install`] into an instance map; `Ok(true)` when the write added its instance.
+fn install_in(
+    instances: &mut FxHashMap<Uuid, NativePositionInstance>,
+    write: &FamilyNativeWrite,
+    destination: &Destination,
+) -> Result<bool, EngineError> {
     let index = write.channel_index as usize;
-    let row = Arc::make_mut(&mut candidate.instances)
-        .entry(write.instance_id)
-        .or_insert_with(|| NativePositionInstance {
+    let mut added = false;
+    let row = instances.entry(write.instance_id).or_insert_with(|| {
+        added = true;
+        NativePositionInstance {
             root: destination.root,
             channels: vec![None; destination.channels].into_boxed_slice(),
             claims: Vec::new(),
-        });
+        }
+    });
     let input = NativePositionInput {
         value: AttributeValue::RawDmxExact(write.raw),
         function_id: write.function_id,
@@ -362,7 +408,7 @@ fn install(
         None => row.channels[index] = Some(input),
     }
     row.claims.push((write.target, write.owner, index));
-    Ok(())
+    Ok(added)
 }
 
 /// Every addressed `(target, family)` writes its complete footprint on every physical instance.

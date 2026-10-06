@@ -50,12 +50,14 @@ impl HybridFrameObserver<FamilySidecar> for FamilyFrameObserver<'_> {
         token: &mut light_engine::PreparedStaticFamilyFrame,
         sidecars: &[FamilySidecar],
     ) -> Result<(), TransitionError> {
+        // TL-639 round 7: a fresh installation is checked and placed on the frame's pool.
         project_family_native_rows(
             capture,
             frame_token,
             token,
             sidecars,
             &mut self.lanes.native.borrow_mut(),
+            self.position.pool.as_deref(),
         )
     }
 
