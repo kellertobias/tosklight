@@ -203,9 +203,43 @@ impl FrameState {
     /// `build` is only called when the candidate actually wins, so a losing contribution costs a
     /// comparison rather than a clone.
     pub(crate) fn offer(&mut self, slot: Slot, offer: Offer, build: impl FnOnce(&mut SlotWinner)) {
+        if let Some(winner) = self.win(slot, offer) {
+            winner.origin = None;
+            winner.family_evidence = None;
+            build(winner);
+        }
+    }
+
+    /// [`Self::offer`] with a traced origin and family evidence (TL-639 round 7): a winning
+    /// offer whose origin or evidence the slot already holds (from this fill or the last) keeps
+    /// it, any other takes its own. Nothing is built or counted for a losing offer.
+    pub(crate) fn offer_with_origin(
+        &mut self,
+        slot: Slot,
+        offer: Offer,
+        (origin, evidence): (
+            crate::contribution::OfferedOrigin<'_>,
+            Option<&std::sync::Arc<crate::ContributionFamilyEvidence>>,
+        ),
+        build: impl FnOnce(&mut SlotWinner),
+    ) {
+        if let Some(winner) = self.win(slot, offer) {
+            winner.origin = origin.resolve(winner.origin.take());
+            winner.family_evidence = match (winner.family_evidence.take(), evidence) {
+                (Some(held), Some(offered)) if std::sync::Arc::ptr_eq(&held, offered) => Some(held),
+                (_, offered) => offered.cloned(),
+            };
+            build(winner);
+        }
+    }
+
+    /// Arbitrate `offer` against the slot's holder; when it wins, stamp the slot and return its
+    /// winner with every field but the value, the origin and the evidence reset for the
+    /// candidate.
+    fn win(&mut self, slot: Slot, offer: Offer) -> Option<&mut SlotWinner> {
         let index = slot.index();
         if index >= self.winners.len() {
-            return;
+            return None;
         }
         if self.stamp[index] == self.epoch {
             let current = &self.winners[index];
@@ -222,7 +256,7 @@ impl FrameState {
                 )
             };
             if !wins {
-                return;
+                return None;
             }
         } else {
             self.stamp[index] = self.epoch;
@@ -234,11 +268,9 @@ impl FrameState {
         winner.projected_changed_at = None;
         winner.merge_mode = offer.merge_mode;
         winner.transition_ordinal = offer.transition_ordinal;
-        winner.origin = None;
-        winner.family_evidence = None;
         winner.pending_transition = None;
         winner.pre_master = None;
-        build(winner);
+        Some(winner)
     }
 
     /// Write a value into a slot regardless of what holds it, as a Freeze does when it takes the
@@ -327,6 +359,82 @@ mod tests {
             },
             |winner| winner.value = value,
         );
+    }
+
+    /// TL-639 round 7: a traced offer keeps the origin and evidence its slot already holds when
+    /// they describe the same contribution, across fills and within one; a losing offer builds
+    /// nothing; anything else holds exactly what an eager build would have.
+    #[test]
+    fn traced_offers_keep_an_equal_origin_and_evidence_and_build_only_for_a_winner() {
+        use crate::contribution::OfferedOrigin;
+        use crate::contribution_batch::ContributionSourceId;
+        use std::borrow::Cow;
+        let source = ContributionSourceId::programmer_transient(
+            light_core::ProgrammerId(uuid::Uuid::from_u128(1)),
+            "a",
+        );
+        let evidence = std::sync::Arc::new(crate::ContributionFamilyEvidence::new(Vec::new()));
+        let timed = |at: i64| light_core::TimedValue {
+            fixture_id: light_core::FixtureId(uuid::Uuid::from_u128(2)),
+            attribute: light_core::AttributeKey("pan".into()),
+            value: AttributeValue::Normalized(0.5),
+            priority: 0,
+            changed_at: DateTime::from_timestamp(at, 0).unwrap(),
+            programmer_order: 0,
+            merge_mode: MergeMode::Ltp,
+            fade: false,
+            fade_millis: None,
+            delay_millis: None,
+        };
+        let traced = |state: &mut FrameState, value: &light_core::TimedValue| {
+            state.offer_with_origin(
+                Slot::from_index(0),
+                Offer {
+                    priority: 0,
+                    changed_at: value.changed_at,
+                    merge_mode: MergeMode::Ltp,
+                    transition_ordinal: None,
+                    normalized: 0.5,
+                },
+                (
+                    OfferedOrigin::Built {
+                        source: Cow::Borrowed(&source),
+                        value,
+                        transition_ordinal: None,
+                    },
+                    Some(&evidence),
+                ),
+                |winner| winner.value = value.value.clone(),
+            )
+        };
+        let held = |state: &FrameState| {
+            let winner = state.get(Slot::from_index(0)).unwrap();
+            (
+                winner.origin.clone().unwrap(),
+                winner.family_evidence.clone().unwrap(),
+            )
+        };
+        let mut state = state();
+        state.begin();
+        traced(&mut state, &timed(10));
+        let (first, first_evidence) = held(&state);
+        assert!(std::sync::Arc::ptr_eq(&first_evidence, &evidence));
+        // An earlier (losing) offer changes nothing; the next fill keeps both allocations.
+        traced(&mut state, &timed(5));
+        assert!(std::sync::Arc::ptr_eq(&held(&state).0, &first));
+        state.begin();
+        traced(&mut state, &timed(10));
+        assert!(std::sync::Arc::ptr_eq(&held(&state).0, &first));
+        // A later edit wins with its own origin, equal to an eager build.
+        let later = timed(20);
+        traced(&mut state, &later);
+        let (origin, _) = held(&state);
+        assert!(!std::sync::Arc::ptr_eq(&origin, &first));
+        assert!(origin.describes(&source, &later, None));
+        // A plain offer clears both, as before.
+        offer(&mut state, 0, 0.9, 0, 30);
+        let winner = state.get(Slot::from_index(0)).unwrap();
+        assert!(winner.origin.is_none() && winner.family_evidence.is_none());
     }
 
     #[test]

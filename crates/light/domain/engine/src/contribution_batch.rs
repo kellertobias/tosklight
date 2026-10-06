@@ -397,6 +397,18 @@ impl ContributionOrigin {
     pub const fn transition_ordinal(&self) -> Option<u64> {
         self.transition_ordinal
     }
+    /// Whether this origin is the one `with_transition_ordinal(source, value, ordinal)` builds.
+    pub(crate) fn describes(
+        &self,
+        source: &ContributionSourceId,
+        value: &TimedValue,
+        transition_ordinal: Option<u64>,
+    ) -> bool {
+        self.source == *source
+            && self.stamp.changed_at == value.changed_at
+            && self.stamp.programmer_order == value.programmer_order
+            && self.transition_ordinal == transition_ordinal
+    }
     pub(crate) fn new(source: ContributionSourceId, value: &TimedValue) -> Arc<Self> {
         Self::with_transition_ordinal(source, value, None)
     }

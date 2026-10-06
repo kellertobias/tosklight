@@ -104,12 +104,8 @@ impl light_dynamics::InstanceWorkers for OutputPool {
             (0..count).for_each(run);
             return;
         }
-        self.pool.install(|| {
-            (0..count)
-                .into_par_iter()
-                .with_max_len(1)
-                .for_each(run)
-        });
+        self.pool
+            .install(|| (0..count).into_par_iter().with_max_len(1).for_each(run));
     }
 }
 

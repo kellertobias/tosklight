@@ -4,7 +4,9 @@ use light_playback::{AutomaticPlaybackTransition, PlaybackContribution, Sequence
 use rustc_hash::FxHashMap;
 use std::collections::{HashMap, hash_map::Entry};
 
+mod offered_origin;
 mod playback_evidence;
+pub(crate) use offered_origin::OfferedOrigin;
 pub(crate) use playback_evidence::PlaybackEvidenceCache;
 
 pub(crate) struct EngineContribution {
@@ -644,22 +646,19 @@ impl<'a> EngineContributionResolver<'a> {
     ) {
         for candidate in values {
             let value = &candidate.value;
-            let origin = if self.trace_sources {
-                candidate.origin.clone().or_else(|| {
-                    candidate.playback_source.map(|source| {
-                        crate::contribution_batch::ContributionOrigin::with_transition_ordinal(
-                            crate::ContributionSourceId::playback(source),
-                            value,
-                            candidate.transition_ordinal,
-                        )
-                    })
-                })
-            } else {
-                None
+            let origin = match (&candidate.origin, candidate.playback_source) {
+                _ if !self.trace_sources => OfferedOrigin::None,
+                (Some(origin), _) => OfferedOrigin::Shared(origin),
+                (None, Some(source)) => OfferedOrigin::Built {
+                    source: std::borrow::Cow::Owned(crate::ContributionSourceId::playback(source)),
+                    value,
+                    transition_ordinal: candidate.transition_ordinal,
+                },
+                (None, None) => OfferedOrigin::None,
             };
             let family_evidence = self
                 .trace_sources
-                .then(|| candidate.family_evidence.clone())
+                .then_some(candidate.family_evidence.as_ref())
                 .flatten();
             self.add_borrowed(
                 value.fixture_id,
@@ -709,18 +708,16 @@ impl<'a> EngineContributionResolver<'a> {
                 value.merge_mode,
                 sample.transition_ordinal(),
                 sample.address(),
+                match sample.replacement_source() {
+                    Some(source) if self.trace_sources => OfferedOrigin::Built {
+                        source: std::borrow::Cow::Borrowed(source),
+                        value,
+                        transition_ordinal: sample.transition_ordinal(),
+                    },
+                    _ => OfferedOrigin::None,
+                },
                 self.trace_sources
-                    .then(|| sample.replacement_source())
-                    .flatten()
-                    .map(|source| {
-                        crate::contribution_batch::ContributionOrigin::with_transition_ordinal(
-                            source.clone(),
-                            value,
-                            sample.transition_ordinal(),
-                        )
-                    }),
-                self.trace_sources
-                    .then(|| sample.family_evidence().cloned())
+                    .then(|| sample.family_evidence())
                     .flatten(),
                 None,
             );
@@ -738,7 +735,16 @@ impl<'a> EngineContributionResolver<'a> {
         merge_mode: MergeMode,
     ) {
         self.add_borrowed(
-            fixture_id, attribute, value, priority, changed_at, merge_mode, None, None, None, None,
+            fixture_id,
+            attribute,
+            value,
+            priority,
+            changed_at,
+            merge_mode,
+            None,
+            None,
+            OfferedOrigin::None,
+            None,
             None,
         );
     }
@@ -778,8 +784,8 @@ impl<'a> EngineContributionResolver<'a> {
         merge_mode: MergeMode,
         transition_ordinal: Option<u64>,
         address: Option<light_core::FrameAddress>,
-        origin: Option<std::sync::Arc<crate::contribution_batch::ContributionOrigin>>,
-        family_evidence: Option<std::sync::Arc<crate::ContributionFamilyEvidence>>,
+        origin: OfferedOrigin<'_>,
+        family_evidence: Option<&std::sync::Arc<crate::ContributionFamilyEvidence>>,
         pending_transition: Option<
             &std::sync::Arc<light_core::programming::PendingFamilyTransition>,
         >,
@@ -792,7 +798,7 @@ impl<'a> EngineContributionResolver<'a> {
             _ => self.slots.slot(fixture_id, attribute),
         };
         match slot {
-            Some(slot) => self.frame.offer(
+            Some(slot) => self.frame.offer_with_origin(
                 slot,
                 crate::Offer {
                     priority,
@@ -801,10 +807,9 @@ impl<'a> EngineContributionResolver<'a> {
                     transition_ordinal,
                     normalized: value.normalized().unwrap_or(0.0),
                 },
+                (origin, family_evidence),
                 |winner| {
                     winner.value = value.clone();
-                    winner.origin = origin;
-                    winner.family_evidence = family_evidence;
                     winner.pending_transition = pending_transition.cloned();
                 },
             ),
@@ -818,8 +823,8 @@ impl<'a> EngineContributionResolver<'a> {
                     projected_changed_at: None,
                     merge_mode,
                     transition_ordinal,
-                    origin,
-                    family_evidence,
+                    origin: origin.resolve(None),
+                    family_evidence: family_evidence.cloned(),
                     pending_transition: pending_transition.cloned(),
                     pre_master: None,
                 },
