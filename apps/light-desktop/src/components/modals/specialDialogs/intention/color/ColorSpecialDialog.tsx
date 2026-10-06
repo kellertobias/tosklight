@@ -140,7 +140,11 @@ export function ColorSpecialDialog({ selectedFixtureIds, close }: SemanticSpecia
 	);
 	const { shown, record } = useColorDraft(requested, gestures.settling);
 	const media = lane.variant === "media";
+	// With nothing selected the dialog changes nothing (docs/help 06-programming-windows): no edit
+	// is sent, and the controls do not pretend to hold the touched colour either.
+	const hasTargets = lane.colorFixtureIds.length > 0 || Boolean(lane.groupId);
 	const edit: ColorControlEdit = (edits, gesture) => {
+		if (!hasTargets) return;
 		const pending = edits.every((entry) => isPendingEndpoint(gesture.shifted, entry.range));
 		record(edits, pending);
 		if (pending) return;

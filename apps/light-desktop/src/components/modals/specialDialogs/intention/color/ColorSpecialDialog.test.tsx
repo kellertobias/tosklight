@@ -210,15 +210,18 @@ describe("semantic Color dialog: edits through the Color family gesture session"
 		expect(preload.finish).toHaveLength(1);
 	});
 
-	it("is a quiet no-op with nothing selected: no request, no Finish, no notice", () => {
+	it("is a quiet no-op with nothing selected: no request, no Finish, no notice, no shown change", () => {
 		setLane({ fixtureIds: [], colorFixtureIds: [] });
 		const notices = vi.fn();
 		window.addEventListener("light:desk-notice", notices);
 		measure(900, 260);
 		render(<ColorSpecialDialog family="Color" selectedFixtureIds={[]} close={vi.fn()} />);
+		const whiteBlend = fader("White Blend").getAttribute("aria-valuenow");
 		tap(sized(fader("White Blend"), 100), 70);
 		tap(sized(screen.getByTestId("color-picker"), 360, 100), 120, 40);
 		window.removeEventListener("light:desk-notice", notices);
+		// The dialog changes nothing, its own controls included: no touched colour is shown.
+		expect(fader("White Blend")).toHaveAttribute("aria-valuenow", whiteBlend);
 		expect(normal.apply).toEqual([]);
 		expect(normal.finish).toEqual([]);
 		expect(notices).not.toHaveBeenCalled();
