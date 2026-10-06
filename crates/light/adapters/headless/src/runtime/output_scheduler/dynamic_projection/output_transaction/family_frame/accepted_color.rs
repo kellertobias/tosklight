@@ -61,8 +61,9 @@ pub(in crate::runtime) struct PublishedColorOutput {
     pub target: FixtureId,
     /// The composed family value the frame resolved.
     pub value: AttributeValue,
-    /// Every native write of the target's complete footprint (premaster raw values).
-    pub writes: Vec<NativeControlWrite>,
+    /// Every native write of the target's complete footprint (premaster raw values). Shared
+    /// with the previous accepted frame's output of the target while equal (TL-639 round 7).
+    pub writes: Arc<[NativeControlWrite]>,
 }
 
 /// One lamp head's UV result: the fitter's status and whether the drive range limited it.
@@ -84,7 +85,9 @@ fn lamp_uv(quality: &ColorQuality) -> Option<AcceptedColorUv> {
 pub(in crate::runtime) struct AcceptedColorFrame {
     pub generation: u64,
     pub sampled_at: DateTime<Utc>,
-    pub heads: Vec<AcceptedColorHead>,
+    /// Shared with the previous accepted frame while equal (TL-639 round 7): a held look
+    /// retains one list, not one per retained frame.
+    pub heads: Arc<[AcceptedColorHead]>,
     /// TL-554: the lamp Color outputs of this frame, one per programming target.
     pub outputs: Vec<PublishedColorOutput>,
     /// TL-552: Color targets this frame composed but held without a sidecar (for example a
@@ -231,13 +234,29 @@ impl AcceptedColorFrames {
         for result in &results {
             rows(result, &mut heads);
         }
+        let previous = self.frames.lock().back().cloned();
+        let heads = match &previous {
+            Some(previous) if *previous.heads == *heads => Arc::clone(&previous.heads),
+            _ => Arc::from(heads),
+        };
+        // The previous frame's write list of the output at the same place, if it is the same
+        // target's and equal.
+        let previous_writes = |index: usize, target: FixtureId, writes: &[NativeControlWrite]| {
+            previous
+                .as_ref()
+                .and_then(|previous| previous.outputs.get(index))
+                .filter(|output| output.target == target && *output.writes == *writes)
+                .map(|output| Arc::clone(&output.writes))
+        };
         let mut outputs = Vec::with_capacity(output_count);
         // Without a pool everything left is freed here, as it always was.
         let collect = pool.is_some();
         let mut garbage = Garbage {
             color: Vec::with_capacity(if collect { output_count } else { 0 }),
             other: Vec::new(),
+            writes: Vec::new(),
         };
+        let mut outputs_seen = 0;
         outputs.extend(results.into_iter().filter_map(|sidecar| match sidecar {
             FamilySidecar::Color(color) if matches!(color.quality, RoutedColorQuality::Lamp(_)) => {
                 let PhysicalHeadResult {
@@ -257,6 +276,16 @@ impl AcceptedColorFrames {
                         .color
                         .push((requested, achieved, quality, provenance, metadata));
                 }
+                let writes = match previous_writes(outputs_seen, target, &writes) {
+                    Some(kept) => {
+                        if collect {
+                            garbage.writes.push(writes);
+                        }
+                        kept
+                    }
+                    None => Arc::from(writes),
+                };
+                outputs_seen += 1;
                 Some(PublishedColorOutput {
                     token,
                     target,
@@ -271,8 +300,7 @@ impl AcceptedColorFrames {
                 None
             }
         }));
-        // TL-639: a retained frame keeps only what it holds (no-ops when sized exactly).
-        heads.shrink_to_fit();
+        // TL-639: a retained frame keeps only what it holds (a no-op when sized exactly).
         outputs.shrink_to_fit();
         let frame = Arc::new(AcceptedColorFrame {
             generation: token.generation(),
@@ -330,4 +358,6 @@ struct Garbage {
         FamilyProjectionMetadata,
     )>,
     other: Vec<FamilySidecar>,
+    /// Write lists replaced by the previous frame's equal ones.
+    writes: Vec<Vec<NativeControlWrite>>,
 }

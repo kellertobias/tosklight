@@ -106,6 +106,23 @@ fn the_accepted_frame_report_reads_published_color_results_and_invents_no_white(
         })
     );
 
+    // TL-639 round 7: the next frame of the held look shares the recorded lists, unchanged.
+    clock.advance_millis(25);
+    render_and_publish(&state);
+    let next = state.output.latest_visualization_frame().unwrap();
+    let held = state
+        .output
+        .live_family_adapters()
+        .accepted_color(next.generation, next.sampled_at)
+        .expect("the next frame's Color results");
+    assert_ne!(next.sampled_at, published.sampled_at);
+    assert!(Arc::ptr_eq(&held.heads, &accepted.heads));
+    assert_eq!(held.outputs.len(), accepted.outputs.len());
+    for (output, previous) in held.outputs.iter().zip(&accepted.outputs) {
+        assert!(Arc::ptr_eq(&output.writes, &previous.writes));
+        assert_eq!(output.token.sampled_at(), next.sampled_at);
+    }
+
     // No active requested colour, no row: nothing is reported against an invented white.
     let legacy = state.output.engine().color_intent_report(None).unwrap();
     assert!(
