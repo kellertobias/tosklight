@@ -342,6 +342,7 @@ function interactionSnapshot(deskId = DESK_ID) {
 		cursor: { sequence: 18 },
 		projection: {
 			desk_id: deskId,
+			alignment: { mode: "off", fixture_count: 0, binding: null, revision: 0 },
 			command_line: {
 				text: "",
 				target: "FIXTURE",

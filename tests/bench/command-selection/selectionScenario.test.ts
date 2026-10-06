@@ -226,6 +226,7 @@ function interactionSnapshot(options: HarnessOptions) {
 		cursor: { sequence: 2 },
 		projection: {
 			desk_id: DESK_ID,
+			alignment: { mode: "off", fixture_count: 0, binding: null, revision: 0 },
 			command_line: {
 				text: "",
 				target: "FIXTURE",
