@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PLANNED_DEMO_FIXTURES } from "../../support/plannedDemoManifest";
 import { installPlannedDemoPresets } from "../../support/plannedDemoPresets";
-import { semanticAngles } from "../../support/plannedDemoSemantic";
+import { semanticAngles, semanticColor } from "../../support/plannedDemoSemantic";
 
 describe("Plan 76 preset library", () => {
 	it("defines the exact 13 Color, 7 Position, and 10 Beam presets", async () => {
@@ -55,6 +55,13 @@ describe("Plan 76 preset library", () => {
 		expect(
 			writes.find((write) => write.body.name === "Tungsten White")?.body,
 		).toMatchObject({ icon: "●", color: "#ff9e52" });
+		// Colour presets are universal: one shared colour, no per-fixture values.
+		for (const write of writes.filter((write) => write.body.family === "Color")) {
+			expect(write.body.values).toEqual({});
+			expect(write.body.universal_values).toEqual({
+				color: semanticColor(write.body.name),
+			});
+		}
 		expect(
 			writes.find((write) => write.body.name === "Blind")?.body.values[
 				"fixture-101"

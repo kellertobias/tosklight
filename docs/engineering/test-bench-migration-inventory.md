@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **374 root cases across 115 files**.
+Default catalog: **375 root cases across 115 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -326,6 +326,7 @@ Default catalog: **374 root cases across 115 files**.
 | 76-demo-show-generation.spec.ts | DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo show | repository contract | @api | demo-show-generation | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 76-interactive-large-tier.spec.ts | PLAN76-LARGE-001 @ui @benchmark › keeps Fixture Sheet, Programmer, and output live beside the exact 1,000-instance Stage tier | repository contract | @ui @benchmark | interactive-large-tier | standard failure evidence | parallel | pending-semantic-migration |
 | 76-packaged-demo-asset.spec.ts | OVERALL-DEMO-PACKAGED @api › shipped canonical demo retains the Desk and PreViz contract | repository contract | @api | packaged-demo-asset | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 76-packaged-demo-asset.spec.ts | OVERALL-DEMO-PACKAGED @api › the shipped demo's universal Colour presets recall on any fixture type | repository contract | @api | packaged-demo-asset | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 77-programmer-action-latency.spec.ts | PERF-PROGRAMMER-001 @bench @ui @performance @programmer › programmer actions acknowledge and reach their first output frame within the output-tick budget | repository contract | @bench @ui @performance @programmer | programmer-action-latency | standard failure evidence | parallel | migrated-semantic-world |
 | 78-missing-fixture-selection.spec.ts | FIXTURE-SELECTION-005 @ui › missing fixture IDs are skipped and Fixture Thru selects every existing fixture | repository contract | @ui | missing-fixture-selection | standard failure evidence | parallel | pending-semantic-migration |
 | 78-missing-fixture-selection.spec.ts | TL-164 @ui › a rejected THRU/PLUS entry cannot poison later Preload work | repository contract | @ui | missing-fixture-selection | standard failure evidence | parallel | pending-semantic-migration |

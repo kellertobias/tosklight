@@ -337,6 +337,11 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 	expect(
 		presets.find((preset) => preset.body.name === "Tungsten White"),
 	).toBeDefined();
+	// Colour presets are universal: one shared colour for any selected fixture.
+	for (const preset of presets.filter((preset) => preset.body.family === "Color")) {
+		expect(Object.keys(preset.body.universal_values ?? {})).toEqual(["color"]);
+		expect(preset.body.values ?? {}).toEqual({});
+	}
 
 	const topology = generatedShow.topology;
 	expect(topology.cuelists).toHaveLength(8);

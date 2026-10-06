@@ -1,8 +1,5 @@
 import type { ApiDriver } from "../bench/core/api";
-import {
-	plannedDemoFamilyNumbers,
-	plannedDemoRoleNumbers,
-} from "./plannedDemoManifest";
+import { plannedDemoFamilyNumbers } from "./plannedDemoManifest";
 import { putPlannedDemoObject } from "./plannedDemoObjects";
 import { semanticAngles, semanticColor } from "./plannedDemoSemantic";
 
@@ -70,25 +67,18 @@ export async function installPlannedDemoPresets(
 				: [[fixture.fixture_number, targetIds(fixture)] as const],
 		),
 	);
-	const colorTargets = targets(byNumber, [
-		...plannedDemoFamilyNumbers("profile"),
-		...plannedDemoFamilyNumbers("wash"),
-		...plannedDemoFamilyNumbers("led"),
-		...plannedDemoRoleNumbers("Sunstrips"),
-	]);
 	const movingTargets = targets(byNumber, [
 		...plannedDemoFamilyNumbers("profile"),
 		...plannedDemoFamilyNumbers("wash"),
 	]);
 	const profileTargets = targets(byNumber, plannedDemoFamilyNumbers("profile"));
+	// Colour presets are universal (owner decision 2026-10-04): one shared colour that recall
+	// applies to every selected fixture, named or not. This is the form recording a Preset with
+	// one whole colour on every fixture stores (`Preset::consolidate_universal_color`).
 	for (const [index, [name, red, green, blue]] of COLORS.entries()) {
 		await putPlannedDemoObject(api, showId, "preset", `2.${index + 1}`, {
-			...presetWithFixtureValues(
-				index + 1,
-				name,
-				"Color",
-				uniform(colorTargets, { color: semanticColor(name) }),
-			),
+			...presetWithFixtureValues(index + 1, name, "Color", {}),
+			universal_values: { color: semanticColor(name) },
 			icon: "●",
 			color: rgbHex(red, green, blue),
 		});

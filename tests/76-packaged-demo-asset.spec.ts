@@ -1,9 +1,12 @@
 import fs from "node:fs/promises";
+import { programmerValues, selectFixtures } from "./bench/color/semanticColorScenario";
 import { expect, test } from "./bench/core/fixtures";
+import { recallPreset } from "./bench/groups-presets/presetRecall";
 import {
 	PLANNED_DEMO_BENCHMARK_ASSIGNMENTS,
 	startPlannedDemoBenchmarkLook,
 } from "./support/plannedDemoBenchmark";
+import { plannedDemoFamilyNumbers } from "./support/plannedDemoManifest";
 
 test("OVERALL-DEMO-PACKAGED @api › shipped canonical demo retains the Desk and PreViz contract", async ({
 	api,
@@ -108,4 +111,61 @@ test("OVERALL-DEMO-PACKAGED @api › shipped canonical demo retains the Desk and
 					Number(projection.runtime?.size) > 0,
 		),
 	).toBe(true);
+});
+
+test("OVERALL-DEMO-PACKAGED @api › the shipped demo's universal Colour presets recall on any fixture type", async ({
+	api,
+}) => {
+	const bytes = await fs.readFile(
+		new URL("../assets/demo.show", import.meta.url),
+	);
+	const show = await api.createShow<{ id: string }>({
+		name: `canonical-demo-presets-${crypto.randomUUID()}`,
+		data_base64: bytes.toString("base64"),
+		overwrite: false,
+	});
+	await api.openShow(show.id, { transition: "hold_current" });
+	const patch = await api.patch();
+	const byNumber = new Map(
+		patch.fixtures.flatMap((fixture) =>
+			fixture.fixture_number == null ? [] : [[fixture.fixture_number, fixture]],
+		),
+	);
+	// A universal preset names no fixture. One fixture of each colour family, plus the Robin
+	// LEDBeam 150 (451), which per-fixture demo presets never named.
+	const selected = [
+		...(["led", "wash", "profile"] as const).map(
+			(family) => plannedDemoFamilyNumbers(family)[0],
+		),
+		451,
+	].map((number) => {
+		const fixture = byNumber.get(number);
+		if (!fixture) throw new Error(`no demo fixture ${number}`);
+		return fixture;
+	});
+	await selectFixtures(
+		api,
+		show.id,
+		selected.map((fixture) => fixture.fixture_id),
+	);
+	await recallPreset(api, {
+		surface: "api",
+		showId: show.id,
+		preset: { objectId: "2.1", family: "Color", number: 1 },
+	});
+	const colored = new Set(
+		(await programmerValues(api))
+			.filter((value) => value.attribute === "color")
+			.map((value) => value.fixture_id),
+	);
+	for (const fixture of selected) {
+		const owners = [
+			fixture.fixture_id,
+			...(fixture.logical_heads ?? []).map((head) => head.fixture_id),
+		];
+		expect(
+			owners.some((owner) => colored.has(owner)),
+			`${fixture.name} receives the Red preset`,
+		).toBe(true);
+	}
 });
