@@ -82,10 +82,11 @@ impl NativeColorSourceRevision {
             result.unavailable = Some(error.to_string());
             return result;
         }
+        // A mode without an authored model compiles the derived one its identity names.
         for mode in profile
             .modes
             .iter()
-            .filter(|mode| mode.color_physical.is_some())
+            .filter(|mode| profile.native_color_source(mode.id).is_some())
         {
             let sources = match CompiledNativeColorEditModel::compile_mode(&profile, mode.id) {
                 Ok(sources) => sources

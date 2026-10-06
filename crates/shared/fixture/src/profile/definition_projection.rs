@@ -41,7 +41,7 @@ impl FixtureProfile {
         };
         let snapshot = self.snapshot_for(mode, snapshot_scope);
         let mut definition = build_definition(self, mode, &primary_slots, snapshot);
-        if mode.color_physical.is_some() {
+        if self.native_color_source(mode_id).is_some() {
             definition.runtime_color_context = Some(std::sync::Arc::new(
                 crate::ColorCalibrationContext::new(self, mode_id)
                     .map_err(ProfileError::Invalid)?,

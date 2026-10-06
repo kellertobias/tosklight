@@ -8,7 +8,7 @@ use light_core::Xyz;
 pub use light_core::{NativeColorBinding, NativeColorIdentity, NativeColorValue};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::{borrow::Cow, collections::HashSet};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -484,19 +484,44 @@ impl FixtureProfile {
             .ok_or_else(|| invalid("native color head path is missing"))
     }
 
+    /// The profile a mode's native Color identity and model are read from.
+    ///
+    /// A mode that authors its physical Color model is read from this profile itself. A mode
+    /// without one is read from its runtime projection
+    /// ([`super::apply_runtime_profile_compatibility`]), which derives the nominal model the desk
+    /// outputs through. The identity then names that projection, so a Direct capture on one
+    /// fixture replays exactly on another fixture of the same stored profile and mode. The
+    /// projection is idempotent: reading an already projected profile names the same source.
+    /// `None` when the mode has no colour path at all.
+    pub fn native_color_source(&self, mode_id: Uuid) -> Option<Cow<'_, FixtureProfile>> {
+        let mode = self.mode(mode_id)?;
+        if mode.color_physical.is_some() {
+            return Some(Cow::Borrowed(self));
+        }
+        let mut projection = self.clone();
+        super::apply_runtime_profile_compatibility(&mut projection);
+        projection.mode(mode_id)?.color_physical.as_ref()?;
+        Some(Cow::Owned(projection))
+    }
+
     /// Derive these once from the complete immutable profile before compact runtime projection.
     pub fn native_color_identities(
         &self,
         mode_id: Uuid,
     ) -> Result<Vec<NativeColorIdentity>, ProfileError> {
         self.validate()?;
-        let mode = self
-            .mode(mode_id)
+        self.mode(mode_id)
             .ok_or_else(|| invalid("native color mode is missing"))?;
-        let model = mode
-            .color_physical
-            .as_ref()
-            .ok_or_else(|| invalid("native color identity requires an explicit physical path"))?;
+        let source = self
+            .native_color_source(mode_id)
+            .ok_or_else(|| invalid("native color identity requires a physical path"))?;
+        if let Cow::Owned(projection) = source {
+            return projection.native_color_identities(mode_id);
+        }
+        let model = self
+            .mode(mode_id)
+            .and_then(|mode| mode.color_physical.as_ref())
+            .expect("an authored physical path");
         let bytes =
             serde_json::to_vec(&serde_json::to_value(self).map_err(|e| invalid(&e.to_string()))?)
                 .map_err(|e| invalid(&e.to_string()))?;

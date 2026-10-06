@@ -561,6 +561,70 @@ mod direct_capture {
     }
 
     #[test]
+    fn a_derived_colour_model_is_a_native_source_that_replays_exactly_on_its_own_layout() {
+        // G7a: a mode without an authored physical model is captured and replayed through the
+        // derived model the desk outputs through, never only through the portable estimate.
+        let samples = direct_color_samples();
+        let derived = |profile: &FixtureProfile| {
+            let mut profile = profile.clone();
+            profile.modes[0].color_physical = None;
+            assert!(
+                profile.modes[0].derived_color_physical().is_some(),
+                "the sample's colour channels derive a model"
+            );
+            profile
+        };
+        let source = derived(&samples.source);
+        let compatible = derived(&samples.compatible);
+        let lookalike = derived(&samples.lookalike);
+        let catalogue =
+            NativeColorSourceCatalog::from_revisions([&source, &compatible, &lookalike].map(entry))
+                .unwrap();
+        let projection = source
+            .native_color_source(source.modes[0].id)
+            .unwrap()
+            .into_owned();
+        // The identity names the runtime projection, also when read from that projection.
+        assert_eq!(sample_identity(&source), sample_identity(&projection));
+        let program = catalogue
+            .capture_direct(sample_observation(&projection, [9, 999, 0, 0]))
+            .expect("a derived model's source is retained and captures")
+            .program()
+            .clone();
+        let plan = |destination: &FixtureProfile| {
+            catalogue
+                .plan_direct_replay(&program, Some(&sample_identity(destination)))
+                .unwrap()
+        };
+        assert!(matches!(plan(&compatible), DirectReplay::Exact { .. }));
+        let DirectReplay::Fallback { compatibility, .. } = plan(&lookalike) else {
+            panic!("a different source falls back")
+        };
+        assert_eq!(
+            compatibility,
+            DirectCompatibility::Incompatible(DirectIncompatibility::DifferentSource)
+        );
+
+        // Reopen: a show retains the stored profile JSON, without the derived model. The
+        // catalogue compiled from it again names and resolves the same derived source.
+        let retained = serde_json::to_value(&source).unwrap();
+        assert!(retained["modes"][0]["color_physical"].is_null());
+        let reopened =
+            NativeColorSourceCatalog::from_revisions([NativeColorSourceCatalog::compile_revision(
+                key(&source, "reopened"),
+                None,
+                || serde_json::from_value(retained).map_err(|error| error.to_string()),
+            )])
+            .unwrap();
+        assert!(matches!(
+            reopened
+                .resolve_capability(&sample_identity(&source))
+                .unwrap(),
+            light_dynamics::NativeColorModelCapability::Available(_)
+        ));
+    }
+
+    #[test]
     fn catalogue_replay_plans_compatible_incompatible_and_unknown_destinations() {
         let samples = direct_color_samples();
         let catalogue = NativeColorSourceCatalog::from_revisions(

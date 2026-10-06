@@ -13,6 +13,7 @@ Pages 3 and 4 show the controls of one **reference head**, named on every native
 - By default the reference head is the first head in the selection order whose colour layout the desk has verified.
 - In the full Color dialog, touch another head under *Reference head* to inspect that head instead. The choice belongs to this desk window only; it is not stored in the show.
 - When no selected head has a verified colour layout, pages 3 and 4 are absent and the dialog says so quietly. Pages 1 and 2 keep working.
+- A fixture type whose profile authors no colour model, such as a Generic RGB LED, uses the uncalibrated colour layout the desk derives from its colour channels. Its Direct colour works the same way, and it replays exactly on another fixture of the same type and mode.
 
 Each control shows its current value as a native number at the control's full width (8, 16, 24 or 32 bit). A detent moves 1/255 of the control's range; a coarse turn moves ten times as much, and a typed value is exact. A colour wheel or macro shows its slots as choices, and the encoder shows the active slot's name. Turning it moves one choice per detent, in the order the fixture lists them, whatever the turn size; the value pad and a choice in the Direct color section jump straight to a slot. Changing slot keeps every other control of the recipe exactly as it was. Only a slot with a continuous range (for example a wheel rotation) can be adjusted in place.
 

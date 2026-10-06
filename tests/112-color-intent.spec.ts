@@ -272,7 +272,7 @@ test.describe("docs/testing/26-color-intent.md", () => {
 		const show = await createRiggedShow(api, page, desk, "Intent", "intent");
 		await select(api, show, RIG.map((rig) => show.ids[rig.number]));
 		await desk.open(api.baseUrl);
-		await page.getByRole("button", { name: "Color", exact: true }).first().click();
+		await page.getByRole("button", { name: COLOR_TAB }).first().click();
 		await expect(
 			page.getByRole("group", {
 				name: /^Enc \d+ · color (red|green|blue|white|amber|cyan|magenta|yellow|wheel|hue|saturation|tint)/,
@@ -1298,8 +1298,11 @@ async function chooseOption(
  * lamp and the Media variant share the dialog's accessible name; the full modal's visible title
  * (**Color** or **Media color**) tells them apart.
  */
+/** The encoder area's Color tab; it counts its pages once Direct pages 3/4 exist (G7a). */
+const COLOR_TAB = /^Color( \d+ of \d+)?$/;
+
 async function openColorDialog(page: Page, title = "Color"): Promise<Locator> {
-	await page.getByRole("button", { name: "Color", exact: true }).first().click();
+	await page.getByRole("button", { name: COLOR_TAB }).first().click();
 	await page
 		.getByRole("button", { name: "Special Dialog", exact: true })
 		.click();
@@ -1406,7 +1409,7 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 		await select(api, show, rgb);
 		await desk.open(api.baseUrl);
 		const revision = await programmerValuesRevision(api);
-		await page.getByRole("button", { name: "Color", exact: true }).first().click();
+		await page.getByRole("button", { name: COLOR_TAB }).first().click();
 		const area = page.locator(".parameter-surfaces").first();
 		const box = await area.boundingBox();
 		if (!box) throw new Error("the lower encoder area has no box");
@@ -1417,7 +1420,7 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 			await expect(area.getByRole("dialog", { name: "Color Special Dialog" })).toBeVisible();
 			await expect(dialog.getByRole("slider", { name: "White Blend" })).toBeVisible();
 			await expect(dialog.getByRole("button")).toHaveText(["White balance", "Expand"]);
-			await page.getByRole("button", { name: "Color", exact: true }).first().click();
+			await page.getByRole("button", { name: COLOR_TAB }).first().click();
 			await expect(dialog).toBeHidden();
 			await expect(area.getByRole("group").first()).toBeVisible();
 		} else {

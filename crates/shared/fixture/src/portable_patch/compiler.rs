@@ -258,7 +258,7 @@ fn validate_resolved_profile(
     let color_contexts = profile
         .modes
         .iter()
-        .filter(|m| m.color_physical.is_some())
+        .filter(|m| profile.native_color_source(m.id).is_some())
         .map(|m| {
             crate::ColorCalibrationContext::new(&profile, m.id)
                 .map(|context| (m.id, std::sync::Arc::new(context)))

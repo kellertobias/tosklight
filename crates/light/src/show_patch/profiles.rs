@@ -126,10 +126,30 @@ impl ResolvedMode {
             .iter()
             .map(split_projection)
             .collect::<Result<_, _>>()?;
-        let color_context = if mode.get("color_physical").is_some_and(|v| !v.is_null()) {
+        // A mode with a colour path has a Color context, authored or derived at runtime. Only a
+        // mode with an authored model or colour channels can have one, so only then is the full
+        // profile decoded.
+        let authored = mode.get("color_physical").is_some_and(|v| !v.is_null());
+        let has_colour_channel =
+            mode.get("channels")
+                .and_then(Value::as_array)
+                .is_some_and(|channels| {
+                    channels.iter().any(|channel| {
+                        ["attribute", "fixture_attribute"].iter().any(|field| {
+                            channel[field]
+                                .as_str()
+                                .is_some_and(|attribute| attribute.starts_with("color"))
+                        })
+                    })
+                });
+        let color_context = if authored || has_colour_channel {
             let full: light_fixture::FixtureProfile =
                 serde_json::from_value(profile.clone()).map_err(|e| invalid(e.to_string()))?;
-            Some(light_fixture::ColorCalibrationContext::new(&full, mode_id).map_err(invalid)?)
+            full.native_color_source(mode_id)
+                .is_some()
+                .then(|| light_fixture::ColorCalibrationContext::new(&full, mode_id))
+                .transpose()
+                .map_err(invalid)?
         } else {
             None
         };

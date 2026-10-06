@@ -158,9 +158,19 @@ fn a_referenced_generic_led_compiles_with_the_derived_uncalibrated_color_model()
             .iter()
             .all(|e| e.provenance.quality == crate::PhysicalDataQuality::Unknown)
     );
-    // Derived data is never an authored calibration context, and the stored revision is
-    // untouched.
-    assert!(compiled.definition.runtime_color_context.is_none());
+    // The derived model is the mode's native Color source (G7a): its context names the same
+    // identities the stored profile derives, so Direct capture and replay work on it. The stored
+    // revision is untouched.
+    let context = compiled
+        .definition
+        .runtime_color_context
+        .as_deref()
+        .expect("a derived Color model has a native Color context");
+    assert_eq!(
+        context.identities(),
+        profile.native_color_identities(mode_id).unwrap()
+    );
+    assert!(context.mode().color_physical.is_some());
     assert_eq!(
         fixture_profile_content_digest(&json!(profile)).unwrap(),
         digest

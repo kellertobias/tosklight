@@ -220,8 +220,12 @@ impl ColorCalibrationContext {
         let identities = profile
             .native_color_identities(mode_id)
             .map_err(|e| e.to_string())?;
+        // A derived model's context holds the derived mode, as its identities name it.
+        let source = profile
+            .native_color_source(mode_id)
+            .ok_or("native Color source is missing")?;
         Ok(Self {
-            mode: profile.mode(mode_id).unwrap().clone(),
+            mode: source.mode(mode_id).unwrap().clone(),
             identities,
         })
     }

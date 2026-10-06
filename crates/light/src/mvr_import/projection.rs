@@ -85,7 +85,7 @@ pub(super) fn project_fixture(
             mode_id: mode.id,
             name: mode.name.clone(),
             splits: mode.splits.clone(),
-            native_color_identities: if mode.color_physical.is_some() {
+            native_color_identities: if snapshot.native_color_source(mode.id).is_some() {
                 snapshot.native_color_identities(mode.id).map_err(invalid)?
             } else {
                 vec![]

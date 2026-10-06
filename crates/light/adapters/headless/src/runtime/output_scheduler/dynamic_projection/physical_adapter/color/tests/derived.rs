@@ -34,14 +34,22 @@ fn report(rig: &Rig, rgb: [f32; 3]) -> (Vec<u32>, ColorResolutionQuality) {
 }
 
 #[test]
-fn without_the_derived_model_a_generic_led_has_no_colour_destination() {
-    // The gap this fallback closes: the authored package alone gives the adapter nothing.
+fn a_runtime_profile_without_the_derived_model_its_colour_source_names_is_refused() {
+    // The authored package has no physical Color model; its native Color source is the derived
+    // one (G7a). A runtime profile that lost that model is refused, not silently colourless.
     let mut profile = package("generic--rgb-led");
     profile
         .modes
         .retain(|m| m.name == "DRGB 8-bit dimmer first");
+    assert!(profile.modes[0].color_physical.is_none());
     let fixture = profiles::patched(&profile, FixtureId::new(), 1);
-    assert!(compile_fitting(&fixture, None).unwrap().is_none());
+    let error = compile_fitting(&fixture, None).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("differs from its authoritative source"),
+        "{error}"
+    );
 }
 
 #[test]

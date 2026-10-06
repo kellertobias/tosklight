@@ -27,7 +27,8 @@ export class BrowserAttachedEncoders {
 			) => {
 				await hardware.send(`/light/${alias}/nav`, [value]);
 				await expect(
-					this.page.getByRole("button", { name: family, exact: true }),
+					// A family tab counts its pages when it has more than one (e.g. Direct Color).
+					this.page.getByRole("button", { name: new RegExp(`^${family}( \\d+ of \\d+)?$`) }),
 				).toHaveClass(/active/);
 			};
 			for (const family of [

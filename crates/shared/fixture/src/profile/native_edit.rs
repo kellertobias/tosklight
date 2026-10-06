@@ -56,9 +56,13 @@ impl CompiledNativeColorEditModel {
                 "native edit model requires its exact original profile identity",
             ));
         }
+        // A derived model is read from the same projection its identity names.
+        let profile = profile
+            .native_color_source(source.mode_id)
+            .expect("verified source mode");
         let mode = profile.mode(source.mode_id).expect("verified source mode");
         super::forward::validate_native_domains(mode)?;
-        let forward = CompiledColorForward::compile(profile, mode.id, None)
+        let forward = CompiledColorForward::compile(&profile, mode.id, None)
             .map_err(|error| error.to_string())
             .and_then(|model| model.ok_or_else(|| "native source has no optical prediction".into()))
             .and_then(|model| {
@@ -77,9 +81,13 @@ impl CompiledNativeColorEditModel {
         mode_id: uuid::Uuid,
     ) -> Result<Vec<(NativeColorIdentity, Result<Self, ProfileError>)>, ProfileError> {
         let identities = profile.native_color_identities(mode_id)?;
+        // A derived model is read from the same projection its identities name.
+        let profile = profile
+            .native_color_source(mode_id)
+            .expect("verified source mode");
         let mode = profile.mode(mode_id).expect("verified source mode");
         super::forward::validate_native_domains(mode)?;
-        let forward = CompiledColorForward::compile(profile, mode_id, None)
+        let forward = CompiledColorForward::compile(&profile, mode_id, None)
             .map_err(|error| error.to_string())
             .and_then(|model| {
                 model.ok_or_else(|| "native source has no optical prediction".into())

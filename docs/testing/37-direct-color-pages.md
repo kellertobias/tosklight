@@ -92,6 +92,9 @@ viewport and the fixtures with every manual run.
 3. Program a Direct recipe whose appearance is unknown on B. Verify **Native only · appearance
    unknown**: B keeps its visible colour, nothing white is invented, UV parks off when unknown.
 4. Verify no toast, alert, focus move or modal appears at any point.
+5. Repeat steps 1–2 with two Generic RGB LEDs of the same mode, a profile without an authored
+   colour model. Verify the Direct rows read **Native replay**: the derived colour layout is the
+   native source, so a Direct value captured on one replays exactly on the other.
 
 ## DIRECT-COLOR-004 — First semantic edit of a Direct value
 
