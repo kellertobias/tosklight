@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **379 root cases across 117 files**.
+Default catalog: **381 root cases across 117 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -100,6 +100,8 @@ Default catalog: **379 root cases across 117 files**.
 | 117-position-operator-controls.spec.ts | POSITION-CONTROLS-006 @ui › in Preload the first Tilt edit adopts the displayed pose | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 117-position-operator-controls.spec.ts | POSITION-CONTROLS-006 @ui › leaving Preload mid-gesture finishes the Preload part; the rest of the held gesture continues on the Normal Programmer | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 117-position-operator-controls.spec.ts | POSITION-CONTROLS-006 @ui › a held gesture no longer changes Preload after leaving Preload capture | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
+| 117-position-operator-controls.spec.ts | POSITION-CONTROLS-010 @ui › Point and X/Y/Z gestures on a group update its Target, read in metres, and Pan/Tilt read their range From Point | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
+| 117-position-operator-controls.spec.ts | POSITION-CONTROLS-011 @ui › a degree-based Dynamic circles about the XYZ-resolved aim and follows the base Target | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 118-focus-zoom-operator-controls.spec.ts | FOCUS-ZOOM-001 @ui › the Special Dialog opens directly as a modal and closing it sends nothing | docs/testing/35-focus-zoom-operator-controls.md | @ui | focus-zoom-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 118-focus-zoom-operator-controls.spec.ts | FOCUS-ZOOM-007 @ui › an unknown Zoom convention stays quiet in the dialog while Focus still works | docs/testing/35-focus-zoom-operator-controls.md | @ui | focus-zoom-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 118-focus-zoom-operator-controls.spec.ts | FOCUS-ZOOM-009 @ui › Focus, Zoom page order; hardware encode/N moves Focus 1% and never sends an unknown-convention Zoom | docs/testing/35-focus-zoom-operator-controls.md | @ui | focus-zoom-operator-controls | standard failure evidence | parallel | pending-semantic-migration |

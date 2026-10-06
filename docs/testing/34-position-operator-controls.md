@@ -2,7 +2,8 @@
 
 ## Purpose and status
 
-These scenarios are the acceptance contract for TL-549. They cover the production Position
+These scenarios are the acceptance contract for TL-549, refined by TL-652 (readouts, ranges, target
+provenance and Angle Dynamics about a Target). They cover the production Position
 encoders and the modal Position Special Dialog under the fixture-independent programming contract.
 Pan and Tilt are angles in degrees, Pan is unwrapped, and X, Y and Z are Target offsets in metres.
 
@@ -14,7 +15,7 @@ Executable coverage:
 - The Storybook mockup spec `fixture-abstraction-mockup.spec.ts` covers geometry and held-joystick
   behaviour on the shared `PositionDialog`.
 - The root Playwright spec `tests/117-position-operator-controls.spec.ts` covers POSITION-CONTROLS-001,
-  002, 003, 004, 006, 007, 008 and 009. Production reports programming contract 1, so it runs under
+  002, 003, 004, 006, 007, 008, 009, 010 and 011. Production reports programming contract 1, so it runs under
   `npm run test:e2e` as well as `npm run test:e2e-semantic`, where a missing semantic publication
   fails instead of skipping.
 - POSITION-CONTROLS-002 drags the Pan circle to +450° and back to −450° and checks ±90° and
@@ -27,7 +28,18 @@ Executable coverage:
   lane has published and ticks frames until the dialog reads it. Step 2 is covered: the gesture's
   Preload part ends with one Preload Finish, the rest of the held motion continues on the Normal
   Programmer with its own Finish, Preload no longer changes, and the next gesture is Normal too.
-- POSITION-CONTROLS-005 has no Playwright case yet.
+- POSITION-CONTROLS-005 has no Playwright case yet. Its provenance and range wording is covered by
+  POSITION-CONTROLS-010 and by Vitest in `familyEncoders/positionReadouts.test.ts`.
+- POSITION-CONTROLS-010 and 011 use two AURO SPOTs 4 m apart on a truss 6 m upstage, the second one
+  unpatched, and a 3D Point downstage centre. Both movers are stored as Group 1 and the group is
+  selected, so the Programmer holds Position as one group value. Every Target edit is a software
+  encoder gesture: a Point step or a keyboard step on X or Z. POSITION-CONTROLS-011 starts the Angle
+  Dynamic through the Dynamics start route, the same request the Dynamic pool sends. Its Pan/Tilt
+  Middle/Amplitude lanes about Current are the ones the Dynamics editor authors (BENCH-DYNAMIC-EDITOR-001,
+  `tests/127-dynamic-editor-position-circle.spec.ts`). The Rust test
+  `actual_live_angle_current_follows_a_changed_base_target_while_the_dynamic_runs`
+  (`…/physical_adapter/position/tests/numeric.rs`) checks the same frame-by-frame Current at the
+  runtime boundary.
 - Every case starts from scratch: a fresh show patched from the shipped library and an empty
   Programmer. The rig is two Cameo AURO SPOT Z300, whose profile carries a nominal Position physical
   graph (TL-637), so the displayed output seeds the first Position edit. POSITION-CONTROLS-008 uses
@@ -112,9 +124,13 @@ hardware-connected layout.
 4. Drag Tilt by a few degrees. Verify that the first edit switches the selection to Angles,
    starting exactly from the displayed pose, and that Pan keeps its displayed value. Only one
    Angle activation is sent for the whole gesture.
-5. With a mixed selection whose resolved angles differ, verify that the readout says **Mixed** (on
-   the encoders) or **Relative** (in the dialog). A dialog edit moves every fixture by the same
-   amount and keeps their differences; nothing is averaged.
+5. With a selection whose resolved angles differ, verify that the encoders show their real range,
+   lowest first (for example `-31.2°...12°`), never **Mixed** or an average. The dialog says
+   **Relative** with the Target provenance. A dialog edit moves every fixture by the same amount and
+   keeps their differences.
+6. While Target is active, verify that Pan and Tilt are marked **From XYZ** (Origin), **From Point**
+   (one 3D Point) or **From Target** (different references) instead of **Resolved**, on the
+   encoders, the hardware encoder display and in the dialog.
 
 ## POSITION-CONTROLS-006 — Normal and Preload lanes
 
@@ -162,6 +178,34 @@ hardware-connected layout.
    pose and mechanical limits never deactivate it, and it keeps counting while the pane stays open.
 4. Touch Position 2. Verify that Position 1 returns to `0 / 2` and Position 2 reads `2 / 2`.
 
+## POSITION-CONTROLS-010 — Point and X/Y/Z on a group: Target readouts and From Point ranges
+
+1. Patch two moving heads at different positions and a 3D Point, then unpatch one head. Store both
+   heads as a group, select the group and open the **Position** tab.
+2. Verify that Point, X, Y and Z read **—** before any Target is active.
+3. Step the Point encoder once. Verify that the group now holds Target at the Origin and Point
+   reads **Origin**. Step again. Verify that the group aims at the 3D Point and Point shows its
+   name.
+4. Step X up three times and Z down twice. Verify that the group's Target keeps the Point reference
+   and holds X 0.3 m, Y 0 m, Z −0.2 m. The encoders read `0.3 m`, `0 m` and `-0.2 m`, not **—**,
+   including for the unpatched head.
+5. Verify that Pan and Tilt are marked **From Point**. Pan shows the real range of the two heads'
+   commanded Pan, `min...max`, matching the published output readouts, and never **Mixed**.
+6. Open the dialog. Verify that its caption names **From Point** too.
+
+## POSITION-CONTROLS-011 — A degree-based Dynamic circles about the XYZ-resolved aim
+
+1. With the group from POSITION-CONTROLS-010 aimed at the 3D Point, read the commanded aim of the
+   patched head.
+2. Start an Angle Dynamic whose Pan and Tilt lanes swing about **Current** (Sinus and Cosinus, as the
+   Dynamics editor builds a circle). Verify that the head moves. The centre of its motion, the mean
+   of two frames half a cycle apart, equals the Target's aim. The Programmer still holds the Target
+   at the Point; it was not replaced by Angles.
+3. Step X up ten times (1 m) while the Dynamic runs. Verify that the Target keeps its Point and the
+   head keeps circling. The centre of the circle moves with the Target.
+4. Release the Dynamic. Verify that the head rests exactly on the centre it circled last, the
+   Target's current aim.
+
 ## POSITION-HOME-001 — Return Home
 
 Executable: `tests/65-semantic-special-dialogs-and-hardware-selection.spec.ts` (Default Stage) and
@@ -190,7 +234,8 @@ hardware encoder modal); Vitest in `familyEncoders/FamilyEncoderSlotSurface.spre
 1. Select five moving heads in order. On encoder 1 (Pan) type `270 THRU −270 THRU 270` in the
    value modal, from the screen, the attached hardware modal and the keypad.
 2. Verify that one request spreads Pan over the ordered selection: 270°, 0°, −270°, 0°, 270°, each
-   head keeping its own Tilt, and that the encoder reads **Mixed**. One **UND** undoes it.
+   head keeping its own Tilt, and that the encoder reads the range `-270°...270°`. One **UND**
+   undoes it.
 3. Repeat with a group selected. Verify that the group is addressed and its members follow their
    stored order.
 

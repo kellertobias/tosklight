@@ -257,6 +257,93 @@ fn actual_live_numeric_current_keyframes_preserve_direction_and_independent_conf
     }
 }
 
+/// TL-652: an Angle Dynamic over a Target keeps that Target as its live base. Changing the base
+/// Target while the Dynamic runs moves the Current the lane works about on the next frame; the
+/// Target is never baked into a one-time Angle pose.
+#[test]
+fn actual_live_angle_current_follows_a_changed_base_target_while_the_dynamic_runs() {
+    let (rig, _) = destination_dynamic_rig();
+    let base = target(TargetReference::Origin, [4., 8., 1.]);
+    let address = DynamicValueAddress {
+        representation: DynamicFamilyRepresentation::Angles,
+        component: Some(ProgrammingComponent::Pan),
+    };
+    let mut definition = position_definition(
+        address,
+        [
+            DynamicValue::Scalar(LITERAL as f32),
+            DynamicValue::Scalar(LITERAL as f32),
+        ],
+    );
+    let DynamicLaneBody::Programming(body) = &mut definition.lanes[0].body else {
+        unreachable!()
+    };
+    let ProgrammingLaneConfiguration::Keyframes(config) = &mut body.configuration else {
+        unreachable!()
+    };
+    config.points[0].source = DynamicValueSource::Current;
+    let mut runtime = start_position_dynamic_sized(&rig, &base, &definition, None, 1.);
+    let lane = PhysicalAdapterLane::live(PositionAdapter::default());
+    let mut origins = DynamicSourceOrigins::default();
+    let mut scratch = HybridFrameScratch::default();
+    // Pan runs from Current (0) to the literal (0.5) over a 1000 ms cycle; Tilt follows Current.
+    let expected = |current: &[(FixtureId, [f64; 2])], fraction: f64| {
+        current
+            .iter()
+            .map(|&(destination, axes)| {
+                (
+                    destination,
+                    [axes[0] + fraction * (LITERAL - axes[0]), axes[1]],
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    live_frame(&rig, &lane, &mut runtime, &mut origins, &mut scratch);
+    let accepted = lane
+        .continuity(rig.root, ProgrammingOwner::Position)
+        .unwrap();
+    let before = current_axes(&rig, &base, Some(&accepted));
+    rig.clock.advance_millis(50);
+    let (capture, output) = live_frame(&rig, &lane, &mut runtime, &mut origins, &mut scratch);
+    let started = runtime.snapshot().instances[0].started_at_millis;
+    assert_eq!(
+        capture.sampled_at().timestamp_millis() as u64 - started,
+        125
+    );
+    assert_pairs(&output, &base, &expected(&before, 0.25), "original Target");
+
+    // The operator moves the base Target (an X offset edit) while the Dynamic keeps running.
+    let moved = target(TargetReference::Origin, [1., 8., 1.]);
+    rig.programmers.set(
+        rig.session,
+        rig.root,
+        ProgrammingOwner::Position.key(),
+        moved.clone(),
+    );
+    let accepted = lane
+        .continuity(rig.root, ProgrammingOwner::Position)
+        .unwrap();
+    let after = current_axes(&rig, &moved, Some(&accepted));
+    rig.clock.advance_millis(75);
+    let (capture, output) = live_frame(&rig, &lane, &mut runtime, &mut origins, &mut scratch);
+    assert_eq!(
+        capture.sampled_at().timestamp_millis() as u64 - started,
+        250
+    );
+    assert_pairs(&output, &moved, &expected(&after, 0.5), "moved Target");
+    for ((_, old), (_, new)) in before.iter().zip(&after) {
+        assert!(
+            (old[0] - new[0]).abs() > 1. || (old[1] - new[1]).abs() > 1.,
+            "the moved Target must solve to a different Current: {old:?} vs {new:?}"
+        );
+    }
+    assert_eq!(
+        runtime.snapshot().instances.len(),
+        1,
+        "the base change keeps the running instance and its phase"
+    );
+}
+
 #[derive(Clone, Copy, Debug)]
 enum Wave {
     MiddleAmplitude,

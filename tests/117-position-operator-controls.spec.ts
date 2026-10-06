@@ -1,10 +1,18 @@
 import type { Locator, Page } from "@playwright/test";
-import { replaceProgrammingSelection } from "./bench/command-selection/programmingSelection";
+import { replaceProgrammingSelection, selectProgrammingGroup } from "./bench/command-selection/programmingSelection";
 import type { ApiDriver } from "./bench/core/api";
 import type { DeskDriver } from "./bench/core/desk";
 import { expect, test } from "./bench/core/fixtures";
 import type { LightBench } from "./bench/core/lightBench";
 import { requireSemanticContract } from "./bench/core/semanticContract";
+import { dynamicDefinition, poseAfter, readouts as positionReadouts } from "./bench/dynamics/intentFrameOutput";
+import {
+	arrangeRig,
+	fixtureInput,
+	POINT,
+	patchFixtures,
+	type IntentRig,
+} from "./bench/dynamics/intentFrameScenario";
 import { batchProgrammerValues } from "./bench/programmer/programmerValues";
 import {
 	enterPreloadCapture,
@@ -324,6 +332,145 @@ async function preloadPans(api: ApiDriver) {
 async function tileCount(bench: LightBench, tile: Locator) {
 	await bench.tick(25);
 	return (await tile.innerText()).replace(/\s+/gu, " ");
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// TL-652: a group-held Point/XYZ Target, its readouts, and an Angle Dynamic about its aim
+
+const AIM_GROUP = "1";
+
+/**
+ * Two movers on a truss 6 m upstage, 4 m apart, and a 3D Point downstage centre: a Target at the
+ * Point solves to clearly different Pan angles per mover. Mover 2 is unpatched: it stays in the
+ * show, the group and the readouts (TL-652 acceptance 1). Both are stored as Group 1 and the
+ * group is selected, so the Programmer holds Position as one group value.
+ */
+async function aimRig(
+	{ api, bench }: { api: ApiDriver; bench: LightBench },
+	label: string,
+): Promise<{ rig: IntentRig; movers: string[]; point: string }> {
+	const truss = (x: number) => ({ x, y: 6_000, z: 0 });
+	const rig = await arrangeRig(api, `POSITION-CONTROLS ${label}`, [
+		{ number: 1, address: "1.1", location: truss(-2_000), ...SPOT },
+		{ number: 2, address: "1.21", location: truss(2_000), ...SPOT },
+		{ number: 901, address: "2.1", location: { x: 0, y: 0, z: 2_000 }, ...POINT },
+	]);
+	const movers = [rig.ids[1], rig.ids[2]];
+	const unpatched = await fixtureInput(api, movers[1], { number: 2, address: "1.21", location: truss(2_000), ...SPOT });
+	await patchFixtures(api, [{ ...unpatched, split_patches: [{ split: 1, universe: null, address: null }] }]);
+	await api.seedShowObject(rig.showId, "group", AIM_GROUP, {
+		id: AIM_GROUP,
+		name: "Movers",
+		fixtures: movers,
+		color: null,
+		icon: "◇",
+		derived_from: null,
+		frozen_from: null,
+		programming: {},
+	});
+	await selectProgrammingGroup(api, {
+		surface: "api",
+		showId: rig.showId,
+		groupId: AIM_GROUP,
+		frozen: false,
+		rule: { type: "all" },
+	});
+	await bench.tick(25);
+	return { rig, movers, point: rig.ids[901] };
+}
+
+/** The software encoder whose label starts `name` (`Enc N · name…`), on whichever page holds it. */
+async function encoderNamed(page: Page, name: string) {
+	const locator = page.getByRole("group", { name: new RegExp(`^Enc \\d+ · ${name}( · .+)?$`) });
+	if (!(await locator.isVisible())) await positionFamily(page).click();
+	await expect(locator).toBeVisible();
+	return locator;
+}
+
+/** The value text an encoder shows, whitespace removed (a range reads `min...max`). */
+async function encoderText(locator: Locator) {
+	return (await locator.locator(".touch-encoder-value").innerText()).replace(/\s+/gu, "");
+}
+
+/** The selected group's programmed Position value. */
+async function groupPosition(api: ApiDriver) {
+	const snapshot = await api.request<{
+		projection: { group_values?: Array<{ group_id: string; attribute: string; value: PositionValue }> };
+	}>("GET", "/api/v2/programmer/values/snapshot");
+	return (snapshot.projection.group_values ?? []).find(
+		(entry) => entry.group_id === AIM_GROUP && entry.attribute === "position",
+	)?.value.value;
+}
+
+/** Steps one software encoder by `detents` fine steps with the keyboard, as an operator does. */
+async function turn(page: Page, locator: Locator, detents: number) {
+	await locator.focus();
+	for (let detent = 0; detent < Math.abs(detents); detent += 1)
+		await page.keyboard.press(detents > 0 ? "ArrowUp" : "ArrowDown");
+}
+
+/** Reads `min...max` (or one value) of degree text such as `-31.2°...12°`. */
+function degreeRange(text: string) {
+	const values = text.split("...").map((part) => Number(part.replace("°", "")));
+	return { min: Math.min(...values), max: Math.max(...values) };
+}
+
+/** A Pan/Tilt circle about Current, in degrees, as the Dynamics editor authors it (TL-648). */
+function circleAboutCurrent(pool: number, cycleMillis: number, pan: number, tilt: number) {
+	const definition = dynamicDefinition({ pool, name: "Circle about aim", cycle: { millis: cycleMillis }, lanes: [] });
+	const lane = (component: "pan" | "tilt", amplitude: number, waveform: "sinus" | "cosinus") => ({
+		id: crypto.randomUUID(),
+		speed_multiplier: { numerator: 1, denominator: 1 },
+		width: 1,
+		random_group_id: null,
+		phase: null,
+		programming: {
+			address: { representation: { kind: "angles" }, component: { kind: component } },
+			configuration: {
+				mode: "middle_amplitude",
+				configuration: {
+					middle: { kind: "current" },
+					amplitude: { kind: "scalar", value: amplitude },
+					function: waveform,
+					size: 1,
+					pwm: { attack: 0, on: 0.5, decay: 0, off: 0.5, attack_interpolation: "linear", decay_interpolation: "linear" },
+					invert_waveform: false,
+				},
+			},
+		},
+	});
+	return { ...definition, lanes: [lane("pan", pan, "sinus"), lane("tilt", tilt, "cosinus")] };
+}
+
+async function dynamicAction(api: ApiDriver, rig: IntentRig, id: string, action: "start" | "toggle") {
+	return api.request<{ started: boolean }>(
+		"POST",
+		`/api/v2/dynamics/${encodeURIComponent(id)}/${action}`,
+		{
+			request_id: crypto.randomUUID(),
+			targets: [],
+			overrides: { size: 1, speed_multiplier: { numerator: 1, denominator: 1 }, phase_offset_degrees: 0 },
+			timing: {},
+		},
+		true,
+		undefined,
+		{ showId: rig.showId },
+	);
+}
+
+/**
+ * The centre of a periodic Angle Dynamic: two frames half a cycle apart sit symmetrically about
+ * it for any phase, so their mean is the centre and their difference shows that it moves.
+ */
+async function circleCentre(api: ApiDriver, bench: LightBench, mover: string, cycleMillis: number) {
+	const first = await poseAfter(api, bench, mover, 25);
+	const second = await poseAfter(api, bench, mover, cycleMillis / 2);
+	return {
+		pan: (first.pan + second.pan) / 2,
+		tilt: (first.tilt + second.tilt) / 2,
+		swing: Math.hypot(first.pan - second.pan, first.tilt - second.tilt),
+	};
 }
 
 test.describe("docs/testing/34-position-operator-controls.md", () => {
@@ -715,5 +862,113 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 		// The joystick pans at about 120°/s: the 500 ms after the switch move the Normal Pan.
 		await expect.poll(async () => (await uniformPan(api, selected.length)) ?? 0, { timeout: 2_000 }).toBeGreaterThan(20);
 		expect((await preloadPans(api))[0] ?? 0).toBeCloseTo(atSwitch, 0);
+	});
+	test("POSITION-CONTROLS-010 @ui › Point and X/Y/Z gestures on a group update its Target, read in metres, and Pan/Tilt read their range From Point", async ({ api, bench, desk, page }) => {
+		const { rig, movers, point } = await aimRig({ api, bench }, "010");
+		requireSemanticContract(await semanticPosition(api, movers), GATE);
+		await desk.open(api.baseUrl);
+		await positionFamily(page).click();
+		const pointEncoder = await encoderNamed(page, "Point");
+		await expect(pointEncoder).toHaveAccessibleName(/· Point$/);
+		expect(await encoderText(pointEncoder)).toBe("—");
+
+		// Point: the first step activates Target at the Origin, the next at the 3D Point.
+		await pointEncoder.getByRole("button", { name: /^Next Enc \d+ · Point value$/ }).click();
+		await expect.poll(() => groupPosition(api)).toMatchObject({ kind: "target", reference: { kind: "origin" } });
+		await expect.poll(() => encoderText(pointEncoder)).toBe("Origin");
+		await pointEncoder.getByRole("button", { name: /^Next Enc \d+ · Point value$/ }).click();
+		await expect
+			.poll(() => groupPosition(api))
+			.toMatchObject({ kind: "target", reference: { kind: "point", point_id: point } });
+		await expect.poll(() => encoderText(pointEncoder)).not.toMatch(/^(—|Origin|Mixed)$/u);
+
+		// X/Y/Z: each detent changes only the group's offset; the Point reference is kept.
+		const x = await encoderNamed(page, "X");
+		const z = await encoderNamed(page, "Z");
+		expect(await encoderText(x)).toBe("0m");
+		await turn(page, x, 3);
+		await turn(page, z, -2);
+		await expect
+			.poll(async () => {
+				const value = await groupPosition(api);
+				return value?.kind === "target" ? value.offset_metres.map((axis) => (axis as { value: number }).value) : null;
+			})
+			.toEqual([expect.closeTo(0.3, 6), 0, expect.closeTo(-0.2, 6)]);
+		expect(await groupPosition(api)).toMatchObject({ reference: { kind: "point", point_id: point } });
+		await expect.poll(() => encoderText(x)).toBe("0.3m");
+		await expect.poll(() => encoderText(z)).toBe("-0.2m");
+		expect(await encoderText(await encoderNamed(page, "Y"))).toBe("0m");
+
+		// Pan/Tilt: the resolved angles of both movers (one unpatched), as their real range, From Point.
+		await bench.tick(25);
+		const poses = (await positionReadouts(api, movers)).poses;
+		for (const mover of movers) expect(poses[mover]?.available, "both movers have a commanded pose").toBe(true);
+		const pan = await encoderNamed(page, "Pan");
+		await expect(pan).toHaveAccessibleName(/^Enc \d+ · Pan · From Point$/u);
+		await expect(await encoderNamed(page, "Tilt")).toHaveAccessibleName(/^Enc \d+ · Tilt · From Point$/u);
+		const pans = movers.map((mover) => poses[mover]?.pan ?? Number.NaN);
+		await expect.poll(() => encoderText(pan)).toContain("...");
+		const shown = degreeRange(await encoderText(pan));
+		expect(Math.abs(shown.min - Math.min(...pans)), `${JSON.stringify(shown)} vs ${pans}`).toBeLessThan(0.51);
+		expect(Math.abs(shown.max - Math.max(...pans)), `${JSON.stringify(shown)} vs ${pans}`).toBeLessThan(0.51);
+		expect(await encoderText(pan)).not.toContain("Mixed");
+
+		// The Special Dialog names the same provenance.
+		const dialog = await openPositionDialog(page);
+		await expect(dialog.getByTestId("pan-value-caption")).toHaveText(/From Point/u);
+		await page.keyboard.press("Escape");
+		expect(rig.showId).toBeTruthy();
+	});
+
+	test("POSITION-CONTROLS-011 @ui › a degree-based Dynamic circles about the XYZ-resolved aim and follows the base Target", async ({ api, bench, desk, page }) => {
+		const { rig, movers, point } = await aimRig({ api, bench }, "011");
+		requireSemanticContract(await semanticPosition(api, movers), GATE);
+		const [mover] = movers;
+		await desk.open(api.baseUrl);
+		await positionFamily(page).click();
+		const pointEncoder = await encoderNamed(page, "Point");
+		for (const expected of ["origin", "point"]) {
+			await pointEncoder.getByRole("button", { name: /^Next Enc \d+ · Point value$/ }).click();
+			await expect.poll(async () => (await groupPosition(api))?.kind === "target" && (await groupPosition(api) as { reference: { kind: string } }).reference.kind).toBe(expected);
+		}
+		const aimed = await poseAfter(api, bench, mover, 25);
+
+		const cycle = 2_000;
+		const created = await api.request<{ object: { body: { id: string } } }>(
+			"POST",
+			"/api/v2/dynamics/create",
+			{ request_id: crypto.randomUUID(), definition: circleAboutCurrent(3, cycle, 20, 10) },
+			true,
+			undefined,
+			{ showId: rig.showId },
+		);
+		const dynamic = created.object.body.id;
+		expect((await dynamicAction(api, rig, dynamic, "start")).started).toBe(true);
+
+		// The circle runs about the resolved aim of the Target; the Programmer keeps the Target.
+		const before = await circleCentre(api, bench, mover, cycle);
+		expect(before.swing, "the circle moves").toBeGreaterThan(10);
+		expect(Math.abs(before.pan - aimed.pan), `centre Pan ${before.pan} vs aim ${aimed.pan}`).toBeLessThan(0.05);
+		expect(Math.abs(before.tilt - aimed.tilt), `centre Tilt ${before.tilt} vs aim ${aimed.tilt}`).toBeLessThan(0.05);
+		expect(await groupPosition(api)).toMatchObject({ kind: "target", reference: { kind: "point", point_id: point } });
+
+		// Moving the base Target with the X encoder moves the circle's centre with it.
+		await turn(page, await encoderNamed(page, "X"), 10);
+		await expect
+			.poll(async () => {
+				const value = await groupPosition(api);
+				return value?.kind === "target" ? (value.offset_metres[0] as { value: number }).value : null;
+			})
+			.toBeCloseTo(1, 6);
+		const after = await circleCentre(api, bench, mover, cycle);
+		expect(after.swing, "the circle still moves").toBeGreaterThan(10);
+		expect(Math.hypot(after.pan - before.pan, after.tilt - before.tilt), "the centre follows the Target").toBeGreaterThan(1);
+		expect(await groupPosition(api)).toMatchObject({ kind: "target", reference: { kind: "point", point_id: point } });
+
+		// Releasing the Dynamic reveals the Target's own aim: exactly the centre it circled.
+		expect((await dynamicAction(api, rig, dynamic, "toggle")).started).toBe(false);
+		const released = await poseAfter(api, bench, mover, 25);
+		expect(Math.abs(released.pan - after.pan), `released Pan ${released.pan} vs centre ${after.pan}`).toBeLessThan(0.05);
+		expect(Math.abs(released.tilt - after.tilt), `released Tilt ${released.tilt} vs centre ${after.tilt}`).toBeLessThan(0.05);
 	});
 });
