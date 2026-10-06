@@ -6,7 +6,10 @@ import {
 	useFamilyEncoderPages,
 	useFamilyEncodersContext,
 } from "../../../../features/familyEncoders/FamilyEncodersProvider";
-import { useFamilyReadouts } from "../../../../features/familyEncoders/useFamilyReadouts";
+import {
+	type FamilyReadouts,
+	useFamilyReadouts,
+} from "../../../../features/familyEncoders/useFamilyReadouts";
 import { usePatchedFixtures } from "../../../../features/patch/PatchState";
 import type { FamilyGestureWriter } from "../../../../features/programmerValues/familyGestureSession";
 import { useProgrammerPreloadValuesActions } from "../../../../features/programmerPreloadValues/ProgrammerPreloadValuesView";
@@ -217,12 +220,16 @@ function programmedValues(
 	});
 }
 
-/** TL-653: the Programmer values a semantic Color slot reads (fixture and selected group). */
-function colorValues(projection: ParameterProjection) {
+/**
+ * TL-653: the Programmer values a semantic Color slot reads (fixture and selected group), and
+ * TL-657: the displayed frame's Color for fixtures the Programmer holds none for.
+ */
+function colorValues(projection: ParameterProjection, readouts: FamilyReadouts) {
 	return {
 		programmerValues: projection.programmerValues as readonly ProgrammerValueEntry[],
 		groupValues: projection.groupProgrammerValues as readonly ColorGroupValueEntry[],
 		groupId: projection.selectedGroupId,
+		readouts: readouts.snapshot,
 	};
 }
 
@@ -259,6 +266,12 @@ export function useFamilyEncoderBinding(
 		projection.programmerValuesRoute ?? "normal",
 		positionFixtures,
 		{ enabled: layout?.family === "position", consumerId: "position-encoders" },
+	);
+	// TL-657: the Color encoders read the displayed frame's Color (a running Cue or Playback).
+	const colorReadouts = useFamilyReadouts(
+		projection.programmerValuesRoute ?? "normal",
+		layouts.get("Color")?.group.fixture_ids ?? EMPTY,
+		{ enabled: layout?.family === "color", consumerId: "color-encoders" },
 	);
 	const patchFixtures = usePatchedFixtures(layout?.family === "position");
 	const points = useMemo(() => familyPointChoices(patchFixtures), [patchFixtures]);
@@ -325,7 +338,7 @@ export function useFamilyEncoderBinding(
 		display: (index) => {
 			const slot = componentSlot(index);
 			if (isNativeSlot(slot) && slot) return native.display(slot);
-			const color = slot && colorSlotDisplay(slot, colorValues(projection));
+			const color = slot && colorSlotDisplay(slot, colorValues(projection, colorReadouts));
 			if (color) return color;
 			if (slot?.edit === "target_reference") {
 				const shown = pointSlotDisplay(

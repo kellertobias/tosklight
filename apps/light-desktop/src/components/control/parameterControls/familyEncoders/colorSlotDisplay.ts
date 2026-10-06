@@ -1,5 +1,6 @@
 import type {
 	FamilyEncoderComponentSlot,
+	OutputReadoutSnapshot,
 	ProgrammingAttributeValue,
 	ProgrammingColorComponent,
 	ProgrammingScalarIntent,
@@ -17,9 +18,11 @@ import {
  * - A fixture's Programmer Color value is read through the TL-619 presentation helper; with a
  *   group selected, the group's Color value stands for every member that holds no newer value of
  *   its own (LTP, as the Programmer resolves it).
- * - A fixture that holds no Color reads the start every first Color edit uses: open white, the
- *   semantic default intent and the colour the fixture shows at rest. It never reads as a dash,
- *   and black or zero stay real values.
+ * - A fixture the Programmer holds no Color for reads the Color its displayed frame resolves
+ *   (TL-657: a running Cue or Playback), exactly the colour a first semantic Color edit starts
+ *   from. Only a fixture whose output holds no colour reads the open-white start: the semantic
+ *   default intent and the colour the fixture shows at rest. It never reads as a dash, and black
+ *   or zero stay real values.
  * - A fixture holding a Direct colour reads `Direct`: its semantic value is known only once a
  *   page 1/2 edit adopts it. Differing values read Mixed.
  */
@@ -84,6 +87,37 @@ function heldColor(
 }
 
 /**
+ * TL-657: adds the displayed frame's Color for every fixture of `fixtureIds` that `entries`
+ * holds no Color for, so a Cue or Playback colour reads as the start a first edit adopts.
+ */
+export function withFrameColors<T extends ProgrammerValueEntry>(
+	entries: readonly T[],
+	readouts: OutputReadoutSnapshot | null | undefined,
+	fixtureIds: readonly string[],
+): readonly (T | ProgrammerValueEntry)[] {
+	const added = frameColors(readouts, fixtureIds, (id) =>
+		entries.some((entry) => entry.attribute === COLOR && entry.fixtureId === id),
+	);
+	return added.length ? [...entries, ...added] : entries;
+}
+
+function frameColors(
+	readouts: OutputReadoutSnapshot | null | undefined,
+	fixtureIds: readonly string[],
+	held: (fixtureId: string) => boolean,
+): ProgrammerValueEntry[] {
+	if (!readouts?.owners.length || readouts.unavailable) return [];
+	const added: ProgrammerValueEntry[] = [];
+	for (const fixtureId of fixtureIds) {
+		if (held(fixtureId)) continue;
+		const color = readouts.owners.find((owner) => owner.fixture_id === fixtureId)?.color;
+		if (color?.kind === "color_program")
+			added.push({ fixtureId, attribute: COLOR, value: color });
+	}
+	return added;
+}
+
+/**
  * The reading of a semantic Color component over the slot's fixtures; `null` when `slot` is not
  * a semantic Color component (Wheels, Direct and other families keep their own readouts).
  */
@@ -93,6 +127,8 @@ export function colorSlotDisplay(
 		programmerValues: readonly OrderedEntry[];
 		groupValues?: readonly ColorGroupValueEntry[];
 		groupId?: string | null;
+		/** The displayed frame's readouts of the slot's fixtures (TL-657), when read. */
+		readouts?: OutputReadoutSnapshot | null;
 	},
 ): ColorSlotDisplay | null {
 	const component = slot.component;
@@ -103,6 +139,8 @@ export function colorSlotDisplay(
 			)
 		: undefined;
 	const held = heldColor(slot.fixture_ids, input.programmerValues, group);
+	for (const entry of frameColors(input.readouts, slot.fixture_ids, (id) => held.has(id)))
+		held.set(entry.fixtureId, entry.value);
 	const start = OPEN_WHITE_START[component.component];
 	const intents: ProgrammingScalarIntent[] = [];
 	let direct = 0;

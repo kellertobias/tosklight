@@ -11,6 +11,7 @@ import {
 	encoderAreaStore,
 	useEncoderAreaBudget,
 } from "../../../../control/parameterControls/useEncoderArea";
+import { withFrameColors } from "../../../../control/parameterControls/familyEncoders/colorSlotDisplay";
 import type { SemanticSpecialDialogProps } from "../../registry/specialDialogRegistry";
 import { ColorDialogLayout, type ColorDialogPage, type ColorDialogTab } from "../ColorDialogLayout";
 import type { ValueRange } from "../HorizontalRangeFader";
@@ -91,7 +92,7 @@ function useColorDraft(requested: ColorDialogValues, settling: boolean) {
  * Production semantic Color Special Dialog (TL-550). Compact inside the measured lower encoder
  * area when it fits (≥ 680×210), the full shared `ModalFrame` otherwise or when expanded. Edits
  * run through one Color `FamilyGestureSession` on the lane the gesture started on; readouts are
- * the requested values; the approximation comes from the accepted-frame colour report.
+ * the requested values, else the displayed frame's Color (TL-657); the approximation comes from the accepted-frame colour report.
  */
 export function ColorSpecialDialog({ selectedFixtureIds, close }: SemanticSpecialDialogProps) {
 	const { state } = useApp();
@@ -133,8 +134,10 @@ export function ColorSpecialDialog({ selectedFixtureIds, close }: SemanticSpecia
 		encoderAreaStore.claim(COLOR_INLINE_OWNER);
 		return () => encoderAreaStore.release(COLOR_INLINE_OWNER);
 	}, [modal]);
+	// TL-657: fixtures the Programmer holds no Color for read their displayed frame's Color (a
+	// running Cue or Playback), the start a first edit adopts, exactly as the Color encoders do.
 	const requested = requestedColorValues(
-		lane.values,
+		withFrameColors(lane.values, readouts.snapshot, lane.colorFixtureIds),
 		lane.colorFixtureIds,
 		lane.descriptors,
 	);

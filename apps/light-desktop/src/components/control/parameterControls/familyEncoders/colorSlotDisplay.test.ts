@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ProgrammingAttributeValue } from "../../../../api/familyEncoderModels";
-import { colorSlotDisplay, DIRECT_COLOR_LABEL } from "./colorSlotDisplay";
+import type {
+	OutputReadoutSnapshot,
+	ProgrammingAttributeValue,
+} from "../../../../api/familyEncoderModels";
+import { colorSlotDisplay, DIRECT_COLOR_LABEL, withFrameColors } from "./colorSlotDisplay";
 import type { ProgrammerValueEntry } from "./familyEncoderDisplay";
 import { componentSlot, FIXTURE_A, FIXTURE_B, PAN, RED, WHEEL } from "./familyEncoderTestSupport";
 
@@ -111,5 +114,87 @@ describe("semantic Color encoder readouts (TL-653)", () => {
 	it("leaves Wheels and other families to their own readouts", () => {
 		expect(colorSlotDisplay(WHEEL, { programmerValues: [] })).toBeNull();
 		expect(colorSlotDisplay(PAN, { programmerValues: [] })).toBeNull();
+	});
+});
+
+/** A displayed-frame readout whose owners resolve `colors` (absent: no colour in the frame). */
+function frame(colors: Record<string, ProgrammingAttributeValue | undefined>): OutputReadoutSnapshot {
+	return {
+		lane: "normal",
+		scope: { show_id: null },
+		lease: 3,
+		revision: 1,
+		owners: Object.entries(colors).map(([fixture_id, color]) => ({
+			fixture_id,
+			...(color ? { color } : {}),
+			position: { available: false, commands: [] },
+		})),
+	} as OutputReadoutSnapshot;
+}
+
+describe("semantic Color encoder readouts of a running Cue or Playback (TL-657)", () => {
+	it("reads the frame's colour, not the open-white start, while the Programmer is empty", () => {
+		const readouts = frame({ [FIXTURE_A]: semantic([1, 0, 0]), [FIXTURE_B]: semantic([1, 0, 0]) });
+		const input = { programmerValues: [], readouts };
+		expect(colorSlotDisplay(RED, input)).toEqual({ value: 1, text: "100%", source: "requested" });
+		expect(colorSlotDisplay(GREEN, input)).toEqual({ value: 0, text: "0%", source: "requested" });
+		expect(colorSlotDisplay(TEMPERATURE, input)).toMatchObject({ text: "3200 K" });
+	});
+
+	it("keeps black at 0% and reads differing frame colours Mixed", () => {
+		const black = frame({ [FIXTURE_A]: semantic([0, 0, 0]), [FIXTURE_B]: semantic([0, 0, 0]) });
+		expect(colorSlotDisplay(RED, { programmerValues: [], readouts: black })).toEqual({
+			value: 0,
+			text: "0%",
+			source: "requested",
+		});
+		const differing = frame({ [FIXTURE_A]: semantic([1, 0, 0]), [FIXTURE_B]: semantic([0, 0, 1]) });
+		expect(colorSlotDisplay(RED, { programmerValues: [], readouts: differing })).toMatchObject({
+			value: null,
+			text: "Mixed",
+		});
+	});
+
+	it("reads the start only for a fixture whose frame holds no colour", () => {
+		const partial = frame({ [FIXTURE_A]: semantic([0, 0, 1]), [FIXTURE_B]: undefined });
+		expect(colorSlotDisplay(RED, { programmerValues: [], readouts: partial })).toMatchObject({
+			value: null,
+			text: "Mixed",
+		});
+		const none = frame({ [FIXTURE_A]: undefined, [FIXTURE_B]: undefined });
+		expect(colorSlotDisplay(RED, { programmerValues: [], readouts: none })).toMatchObject({
+			value: 1,
+			start: true,
+		});
+	});
+
+	it("lets the Programmer and the selected group win over the frame", () => {
+		const readouts = frame({ [FIXTURE_A]: semantic([1, 0, 0]), [FIXTURE_B]: semantic([1, 0, 0]) });
+		const programmed = [held(FIXTURE_A, semantic([0, 1, 0])), held(FIXTURE_B, semantic([0, 1, 0]))];
+		expect(colorSlotDisplay(RED, { programmerValues: programmed, readouts })).toMatchObject({
+			value: 0,
+			text: "0%",
+		});
+		const groupValues = [{ groupId: "front", attribute: "color", value: semantic([0, 0, 1]) }];
+		expect(
+			colorSlotDisplay(RED, { programmerValues: [], groupValues, groupId: "front", readouts }),
+		).toMatchObject({ value: 0, text: "0%" });
+	});
+
+	it("reads Direct for a frame Direct colour", () => {
+		const readouts = frame({ [FIXTURE_A]: DIRECT, [FIXTURE_B]: DIRECT });
+		expect(colorSlotDisplay(RED, { programmerValues: [], readouts })).toMatchObject({
+			text: DIRECT_COLOR_LABEL,
+		});
+	});
+
+	it("adds frame colours only for fixtures without a Programmer Color", () => {
+		const readouts = frame({ [FIXTURE_A]: semantic([1, 0, 0]), [FIXTURE_B]: semantic([0, 0, 1]) });
+		const entries = [held(FIXTURE_A, semantic([0, 1, 0]))];
+		expect(withFrameColors(entries, readouts, [FIXTURE_A, FIXTURE_B])).toEqual([
+			entries[0],
+			{ fixtureId: FIXTURE_B, attribute: "color", value: semantic([0, 0, 1]) },
+		]);
+		expect(withFrameColors(entries, null, [FIXTURE_A, FIXTURE_B])).toBe(entries);
 	});
 });

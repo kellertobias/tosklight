@@ -41,8 +41,10 @@ In a Color Intent show the Color special dialog programs one colour for the whol
 selected fixture receives the same colour, including fixtures that cannot show it; they stay
 selected and the desk describes what they achieve (see below).
 
-- **A first edit starts from open white.** On a fixture that holds no colour yet, the first Color
-  encoder turn or picker touch edits open white, the colour the fixture shows at rest.
+- **A first edit starts from the colour the fixture shows.** When the Programmer holds no colour
+  for a fixture, the first Color encoder turn or picker touch edits the colour its output holds —
+  for example the colour of a running Cue or Playback. Only a fixture whose output holds no colour
+  starts from open white, the colour it shows at rest.
 - **Intensity sets the level.** The colour is only the colour: it has no level of its own, and each
   fixture shows it as brightly as its colour engine allows before its dimmer.
 - **White Blend mixes towards white.** At 0% the colour is shown as picked, at 50% it is half way to
@@ -67,10 +69,13 @@ changes programmed colour:
 - **Easy with Amber and UV** — adds a second page with Amber and UV.
 - **Advanced** — adds a second page with Temperature, Duv and the colour wheels.
 
-Each Color encoder shows the selection's programmed value. A fixture that holds no colour yet
-shows open white — Red, Green and Blue at 100%, White Blend at 0%, 6500 K — the colour its first
-edit starts from. Selected fixtures with different values show **Mixed**, and a fixture that holds a
-Direct colour shows **Direct** until an edit on page 1 or 2 turns it back into a Color Intent.
+Each Color encoder shows the selection's programmed value. A fixture the Programmer holds no colour
+for shows the colour its output holds, such as the colour of a running Cue or Playback; only a
+fixture whose output holds no colour shows open white — Red, Green and Blue at 100%, White Blend at
+0%, 6500 K. Either way the encoder shows the colour the fixture's first edit starts from, and the
+Color special dialog starts from the same values. Black is a colour: a Cue that holds black reads
+0%. Selected fixtures with different values show **Mixed**, and a fixture that holds a Direct
+colour shows **Direct** until an edit on page 1 or 2 turns it back into a Color Intent.
 
 Pages 3 and 4 hold the reference head's own colour controls; see [Direct Color](07-direct-color.md).
 
