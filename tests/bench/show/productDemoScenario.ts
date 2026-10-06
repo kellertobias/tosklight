@@ -2659,8 +2659,11 @@ async function demonstrateBuskingAndPreload(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
 	);
-	await openGroups(desk, app, keypad);
-	await desk.click(groupTile(app, 11));
+	// A single Group press selects the live Group once its double-press window has passed.
+	await selectLiveGroupThroughPool(desk, app, keypad, 11);
+	await expect
+		.poll(async () => (await programmer(api)).selected)
+		.toEqual(preparedLook.washFixtureIds);
 	await demoPause(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
@@ -2706,7 +2709,7 @@ async function demonstrateBuskingAndPreload(
 	if (!fanOut)
 		throw new Error("The Busking Preload look requires Position 3.4 Fan Out");
 	const beamPositionValues = presetFixtureValues(
-		fanOut.body.values,
+		fanOut.body,
 		preparedLook.beamFixtureIds,
 		new Set(["position"]),
 	);
@@ -2750,6 +2753,9 @@ async function demonstrateBuskingAndPreload(
 				beamColorValues,
 			),
 	);
+	// The Preload look is published with the next rendered frame, and the bench clock renders a
+	// frame only when it advances.
+	await bench.tick(0);
 	await expect
 		.poll(async () =>
 			valuesMatch(
@@ -2837,6 +2843,9 @@ async function demonstrateBuskingAndPreload(
 		]),
 	);
 	await setProgrammerFixtureValues(api, finalIntensityValues);
+	// The edit follows the two-second Programmer Fade, and the bench clock renders only when it
+	// advances.
+	await bench.tick(PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis);
 	await expect
 		.poll(async () =>
 			numbersMatch(
@@ -2879,7 +2888,9 @@ async function demonstrateBuskingAndPreload(
 		.toBe(true);
 	await expect
 		.poll(async () =>
-			valuesMatch(
+			// Fan Out stores no value for the Robin LEDBeam 150 that joined Beam Audience
+			// (b84c3ab5e); they keep their own Position, so only the stored fixtures are compared.
+			valuesInclude(
 				await visualizationAttributeLook(
 					api,
 					preparedLook.beamFixtureIds,
@@ -2939,8 +2950,8 @@ async function expectedPreloadColorLook(api: ApiDriver, showId: string) {
 		beamFixtureIds: beamFixtures,
 		fixtureIds: [...washFixtures, ...beamFixtures],
 		values: {
-			...presetFixtureValues(darkBlue.body.values, washFixtures, color),
-			...presetFixtureValues(yellow.body.values, beamFixtures, color),
+			...presetFixtureValues(darkBlue.body, washFixtures, color),
+			...presetFixtureValues(yellow.body, beamFixtures, color),
 		},
 	};
 }
@@ -3011,15 +3022,25 @@ function valuesForFixtures(values: SemanticLook, fixtureIds: readonly string[]) 
 	);
 }
 
-/** `${fixture}:${attribute}` → the stored value, for the given semantic owners. */
+/**
+ * `${fixture}:${attribute}` → the value recalling the Preset gives each fixture, for the given
+ * semantic owners: its universal value, overridden by the fixture's own stored value. The demo's
+ * Colour presets are universal (e7ce37658), so they name no fixture.
+ */
 function presetFixtureValues(
-	values: Record<string, Record<string, any>>,
+	preset: {
+		values?: Record<string, Record<string, any>>;
+		universal_values?: Record<string, any>;
+	},
 	fixtureIds: readonly string[],
 	attributes: ReadonlySet<string>,
 ): SemanticLook {
 	return Object.fromEntries(
 		fixtureIds.flatMap((fixtureId) =>
-			Object.entries(values[fixtureId] ?? {}).flatMap(([attribute, value]) =>
+			Object.entries({
+				...(preset.universal_values ?? {}),
+				...(preset.values?.[fixtureId] ?? {}),
+			}).flatMap(([attribute, value]) =>
 				attributes.has(attribute) && value ? [[`${fixtureId}:${attribute}`, value]] : [],
 			),
 		),
@@ -3051,6 +3072,13 @@ function valuesMatch(actual: SemanticLook, expected: SemanticLook) {
 	return (
 		Object.keys(actual).length === keys.length &&
 		keys.every((key) => key in actual && sameValue(actual[key], expected[key]))
+	);
+}
+
+/** Every expected value is present and equal; other keys may hold anything. */
+function valuesInclude(actual: SemanticLook, expected: SemanticLook) {
+	return Object.keys(expected).every(
+		(key) => key in actual && sameValue(actual[key], expected[key]),
 	);
 }
 
