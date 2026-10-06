@@ -128,9 +128,19 @@ pub struct DeferredTypedSampling<'frame> {
 
 impl<'frame> DeferredTypedSampling<'frame> {
     pub fn complete(
-        self,
+        mut self,
         sources: &dyn DynamicValueSourceResolver,
     ) -> Result<CompletedDynamicSamples<'frame>, DynamicRuntimeError> {
+        // TL-639 round 7: without typed lanes nothing is evaluated against `sources`, and the
+        // instances apply and emit on the workers.
+        if let Some(workers) = self
+            .workers
+            .filter(|_| self.instance_parallel_without_typed())
+        {
+            let evaluated = (0..self.plans.len()).map(|_| Vec::new()).collect();
+            self.complete_instances_in_parallel(evaluated, workers)?;
+            return Ok(self.finish());
+        }
         for plan in self.plans.iter_mut() {
             let instance = self
                 .runtime

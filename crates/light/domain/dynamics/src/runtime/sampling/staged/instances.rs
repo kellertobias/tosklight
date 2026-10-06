@@ -219,6 +219,20 @@ fn lend_instances(
 }
 
 impl DeferredTypedSampling<'_> {
+    /// Whether the plans have no typed lane to evaluate and enough lanes to complete on the
+    /// workers.
+    pub(super) fn instance_parallel_without_typed(&self) -> bool {
+        self.plans.len() > 1
+            && self.typed_lane_count() == 0
+            && self
+                .plans
+                .iter()
+                .flat_map(|plan| &plan.controllers)
+                .map(|work| work.lanes.len())
+                .sum::<usize>()
+                >= MIN_PARALLEL_PIN_LANES
+    }
+
     /// Apply every plan's evaluations (`evaluated[plan]`, in the order `resolve_deferred` asks
     /// for them) and emit its samples, the plans on `workers`; then append the samples and
     /// requirements in plan order. Every typed lane must have its evaluation.

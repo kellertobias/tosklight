@@ -107,19 +107,22 @@ fn random_lane() -> (DynamicLane, DynamicRandomGroup) {
     (lane, group)
 }
 
-/// Three Dynamics (Keyframes with Current and a typed Focus lane, a Random lane, and one the
-/// caller pauses and resumes under JoinSyncNow), built once so two runtimes share lane ids.
-fn definitions() -> Vec<DynamicDefinition> {
+/// Three Dynamics (Keyframes with Current, a Random lane, and one the caller pauses and
+/// resumes under JoinSyncNow; with `typed`, the first and last add a typed Focus lane), built
+/// once so two runtimes share lane ids.
+fn definitions(typed: bool) -> Vec<DynamicDefinition> {
     let mut keyframes = definition(lane());
     keyframes.id = Uuid::from_u128(11);
-    keyframes.lanes.push(focus_lane());
     let (random_lane, group) = random_lane();
     let mut random = definition(random_lane);
     random.id = Uuid::from_u128(12);
     random.random_groups.push(group);
     let mut held = definition(lane());
     held.id = Uuid::from_u128(13);
-    held.lanes.push(focus_lane());
+    if typed {
+        keyframes.lanes.push(focus_lane());
+        held.lanes.push(focus_lane());
+    }
     vec![keyframes, random, held]
 }
 
@@ -162,7 +165,8 @@ fn complete<'frame>(
     fail: bool,
 ) -> Result<(CompletedDynamicSamples<'frame>, Frame), DynamicRuntimeError> {
     let scalar = scalar.to_vec();
-    let completed = if workers {
+    // Without typed lanes the plain completion applies on the scratch's workers.
+    let completed = if workers && deferred.typed_lane_count() > 0 {
         deferred.complete_in_parallel(typed, &mut InlineWorkers(typed))?
     } else {
         deferred.complete(typed)?
@@ -215,9 +219,19 @@ fn frame(
 
 #[test]
 fn instances_pinned_and_completed_on_workers_equal_the_single_threaded_frame() {
-    let definitions = definitions();
-    let (mut single, held, control) = runtime(&definitions);
-    let (mut parallel, ..) = runtime(&definitions);
+    for typed in [true, false] {
+        compare_frames(&definitions(typed));
+    }
+    // Both sections ran on the threads: three instances pinned and completed per frame.
+    assert_eq!(
+        RUN.load(std::sync::atomic::Ordering::Relaxed),
+        2 * (0..2400).step_by(37).count() * 6
+    );
+}
+
+fn compare_frames(definitions: &[DynamicDefinition]) {
+    let (mut single, held, control) = runtime(definitions);
+    let (mut parallel, ..) = runtime(definitions);
     let mut single_scratch = DynamicSamplingScratch::default();
     let mut parallel_scratch = DynamicSamplingScratch::default();
     for at in (0..2400).step_by(37) {
@@ -249,9 +263,4 @@ fn instances_pinned_and_completed_on_workers_equal_the_single_threaded_frame() {
         }
         assert_eq!(parallel.snapshot(), single.snapshot(), "frame {at} runtime");
     }
-    // Both sections ran on the threads: three instances pinned and completed per frame.
-    assert_eq!(
-        RUN.load(std::sync::atomic::Ordering::Relaxed),
-        (0..2400).step_by(37).count() * 6
-    );
 }
