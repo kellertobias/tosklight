@@ -1587,6 +1587,10 @@ so the engine, dynamics and runtime unit suites run them.
 The new parallel sections add their ordered records (completion evaluations, Position pending
 members) to the eight-worker bytes.
 
+Round 7 (next section) moves pinning, the ordered completion, the static resolution's offers and
+the native installation onto the pool, and removes some per-frame copies; the typed deadlines are
+still missed.
+
 ### Measurement identities
 
 - Baseline: `f67c84e48`, binary `8a95e4a0…`.
@@ -1606,3 +1610,257 @@ members) to the eight-worker bytes.
   counts, `-verify`); profiles `p-*-{s2000,hf}.txt` with `sections.py`, `mainthread.py`,
   `workerthreads.py`; allocation counts `allocs-final.txt` and allocation sites
   `allocsites-*.txt` (`alloc-count/`, raw return addresses resolved at exit).
+
+## Semantic output, round 7: the remaining sequential frame on the pool (TL-639)
+
+Round 7 was asked to compile typed semantic frames once per patch so the typed tiers meet their
+deadlines, starting from round 6's roadmap: a kept compiled Position graph, parallel emission and
+pinning, replay of unchanged static Colour rows, a parallel static resolution, and memory. Measured
+by payoff, what was built is mostly the sequential remainder: pinning and the ordered completion
+per Dynamic instance on the pool (with the output-frame undo journal lent per instance), the static
+resolution's offers by slot range, the native installation by physical instance, and a set of
+copies and contended counts removed. The kept Position graph and the static-row replay were not
+built (reasons below). Every step was byte-identical to the round's start head `dc289b3a7` on all
+12 digest workloads; the final binary also at 1, 2, 4 and 18 workers and with plan verification.
+Alternated against `dc289b3a7`, typed stress 2,000 runs 14 % faster at p50, stress 4,000 17 % and
+the typed hard floor 12 %; the hard floor's resident memory falls by a fifth. No typed deadline is
+met: the hard floor is about 1.1× its 8 ms budget at p50, stress 2,000 1.6×.
+
+The reference is the round's start head, not round 6's commit: `dc289b3a7` is round 6
+(`54d285e2e`) plus the product work merged since (typed family lanes, Direct derived models, Freeze
+and Masters changes), which moved the typed frame; on a quiet host at the start of the round it ran
+typed stress 2,000 at 29.6 / 31.5 ms and the typed hard floor at 10.0 / 10.7 ms (p50 / p99).
+
+### Gates
+
+Runner, thresholds and references as in round 6; campaign binary `b374c295…` with the default worker
+count (8). The host was shared during the campaign: the user's ToskLight desk (a debug
+`light-headless`, about half a core) ran from the same worktree, another worktree compiled the
+desktop app shortly before, and the load average rose from 5 to 28 near the end (see
+`host-*.txt`); absolute numbers are inflated, the alternated comparisons are like for like.
+Pipeline ms, medians.
+
+| Gate (existing threshold) | Round 6 | Round 7 |
+| --- | --- | --- |
+| Paired p99 regression ≤ max(1 ms, 5 %), stress 2,000 / 60 Hz | pass, -0.96 | **pass**: 6.23 → 5.68 (-0.55) |
+| Paired p99 regression, stress 4,000 / 60 Hz | pass, -2.49 | **pass**: 11.75 → 9.17 (-2.58) |
+| Paired p99 regression, hard floor 4,148 / 125 Hz | pass, -1.59 | **pass**: 5.04 → 3.71 (-1.34); 125 Hz held 5 of 5 |
+| Typed stress 2,000 / 60 Hz: rate held, 0 misses | fail, p99 36.29, 29.7 Hz | **fail**: p50 26.68, p99 28.67, 37.3 Hz |
+| Typed stress 4,000 / 60 Hz | fail, p99 100.65, 13.8 Hz | **fail**: p50 55.54, p99 57.54, 18.0 Hz |
+| Typed hard floor 4,148 / 125 Hz | fail, p99 13.55, 80.5 Hz | **fail**: p50 9.08, p99 10.22, 108.7 Hz (about 650 misses per round) |
+| TL-564 mix, 27 configurations: rate held, 0 misses | 25 pass | 26 pass (see below) |
+| No generation change or compile from motion | pass | pass |
+| Static bases: 0 Position fits, dependents 6 / 24, unchanged Colour skips solves | pass | pass |
+| Readout consumers do not multiply physical solves | pass | pass |
+
+The first campaign of this round (binary `a987f795…`, the final code without the last fix below, on
+a quieter host, `tl639r7-final-20261006T200405Z`) measured the same gates: paired p99 5.63 → 5.24,
+10.20 → 7.98 and 3.98 → 3.52; typed p50 / p99 25.25 / 26.50, 53.63 / 54.87 and 8.75 / 9.05 ms; TL-564
+27 of 27.
+
+TL-564: the one failure is static-points with 120 Hz tracking at 60 Hz output, one late frame in a
+run whose pipeline p99 is 6.2 ms, logged while the load average was rising. Ten alternated repeats of
+that configuration on a calmer host (`repeat-fail/`): `dc289b3a7` and round 7 had no late frame in
+any of their 20 runs (pipeline p99 medians 5.83 and 5.69 ms). The twenty 125 Hz all-points-move
+repeats (`repeat-125/`) had no late frame either. As in rounds 2-6 the isolated late frame is
+attributed to host scheduling.
+
+Typed tiers, `dc289b3a7` alternated with this build, three rounds (`before-after-typed/`):
+
+| Profile | `dc289b3a7` p50 / p99 | Round 7 p50 / p99 | Rate | RSS |
+| ---: | ---: | ---: | ---: | ---: |
+| Typed stress 2,000, 60 Hz | 31.84 / 33.33 | 27.35 / 28.39 | 31.2 → 36.4 Hz | 413 → 425 MB |
+| Typed stress 4,000, 60 Hz | 67.98 / 69.79 | 56.73 / 58.22 | 14.6 → 17.5 Hz | 757 → 793 MB |
+| Typed hard floor, 125 Hz | 10.85 / 11.81 | 9.52 / 10.40 | 91.4 → 104.3 Hz | 308 → 242 MB |
+
+In the quieter first campaign: 29.04 / 29.91 → 25.60 / 26.54, 63.65 / 68.89 → 54.13 / 55.48 and
+9.80 / 10.29 → 8.67 / 8.94 ms. By p99 on the quieter host the typed tiers remain about 1.6×
+(stress 2,000) and 1.1× (hard floor) from their budgets.
+
+### Worker scaling
+
+Final binary, three rounds of 5 s, pipeline p50 / p99 (`workers/`, busy host):
+
+| Workers | 1 | 2 | 4 | 6 | 8 (default) | 18 (`max`) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Typed stress 2,000 | 64.96 / 67.92 | 53.44 / 55.03 | 36.34 / 38.84 | 29.79 / 32.30 | 27.34 / 28.67 | 25.03 / 31.61 |
+| Typed hard floor | 15.69 / 17.08 | 13.28 / 15.54 | 10.27 / 12.69 | 9.72 / 11.11 | 9.56 / 10.59 | 10.36 / 11.72 |
+| Legacy stress 2,000 | 5.67 / 6.57 | 5.05 / 5.72 | 4.86 / 5.53 | 4.75 / 5.43 | 4.43 / 5.62 | 4.82 / 5.33 |
+| Legacy hard floor | 3.34 / 4.08 | 3.14 / 3.72 | 2.98 / 3.74 | 3.06 / 3.79 | 2.92 / 3.66 | 3.11 / 3.63 |
+
+The hard floor is now slower with 18 workers than with 8: its new sections are short, and handing
+them to the efficiency cores costs more than they save. The default stays `min(available
+parallelism, 8)`. Single-worker frames are not slower than `dc289b3a7` (alternated, three rounds of
+4 s: typed hard floor 14.47 → 14.03 ms, typed stress 2,000 62.56 → 60.80 ms; `w1-ab-*.txt`). Memory
+boundedness is unchanged (first campaign, single-worker processes side by side, p50 of each: typed
+hard floor 13.80 → 17.22 → 19.49 → 26.20 ms for 1, 2, 3 and 6 processes; the second campaign's
+`concurrent/` ran during the load spike and is not used).
+
+### Equivalence
+
+Every step was compared with `dc289b3a7` by `--digest-ticks` on the 12 workloads of rounds 4-6:
+0 fixture mismatches, DMX equal on every tick, work counters equal on every tick (the digests hash
+every accepted Colour head and output too). The final binary was also compared at
+`LIGHT_OUTPUT_WORKERS` 1, 2, 4 and `max` (18) and with `LIGHT_VERIFY_PLANS=1`: 12/12 each. New
+focused tests compare each parallel path with the single-threaded one under `cfg(test)` thresholds
+of two items:
+
+- `instances_pinned_and_completed_on_workers_equal_the_single_threaded_frame` (light-dynamics):
+  three instances (Keyframes with Current and a typed lane, a Random lane, a JoinSyncNow instance
+  paused and resumed) pinned and completed on threads started in reverse order, frames with and
+  without typed lanes, every fifth frame failing after completion: samples in order and the runtime
+  snapshot equal the single-threaded runtime every frame, and a failed frame restores the same
+  runtime.
+- `offers_by_slot_range_resolve_the_single_threaded_fill` (light-engine): winners, first-write
+  order, traced origins and evidence, and the overflow, with and without tracing, also from a pool
+  thread; `traced_offers_keep_an_equal_origin_and_evidence_and_build_only_for_a_winner` and
+  `a_held_origin_is_kept_only_while_it_describes_the_offer` for the kept origins.
+- `an_installation_on_the_pool_is_the_single_pass_installation` (light-engine): grouped,
+  interleaved, duplicated, foreign, incomplete, out-of-range and conflicting write collections give
+  the same installation (map order included) or the same first rejection.
+- `legacy_leaves_pass_through_as_the_owner_split_would_produce_them` (light-dynamics) and an
+  extended `the_accepted_frame_report_reads_published_color_results_and_invents_no_white`
+  (consecutive accepted frames of a held look share their recorded lists).
+
+Nothing in this round is kept across frames that a patch change, show switch, Freeze, Preload branch
+or source edit would have to invalidate: the kept values are an origin or evidence a slot already
+holds (compared by content or identity at every offer), the previous accepted frame's equal lists
+(compared element by element at every record), and buffers.
+
+### What changed
+
+Payoffs are alternated p50 medians against the previous step (three or four rounds of 4 s).
+
+- **Pinning and the ordered completion per instance on the pool** (`4b4e9ac97`, `878229e91`;
+  `runtime/sampling/staged/instances.rs`, `transaction.rs`). Pinning an instance and completing it
+  (keyframe caches, held and last samples, emission) read only frame-immutable sources and write only
+  that instance. The output-frame undo journal is lent per instance (`OutputFrameUndo::lend`,
+  `InstanceUndo`, both behind the `SamplingJournal` trait), the instances run on the pool
+  (`InstanceWorkers`, implemented by the engine's `OutputPool`), and journals, samples and
+  requirements are taken back in instance order. Every instance's frame is prepared in order before
+  any is pinned. The completion goes parallel only when every typed lane was evaluated by a worker
+  (or there is none), so no lane is ever evaluated against the frame's sources off the frame's
+  thread. Pinning needs shareable sources (`sample_all_programming_staged_shared`). Stress 2,000
+  29.70 → 27.99 ms, hard floor 9.90 → 9.63 ms.
+- **Traced origins built only for a winner** (`f33bbc4af`; `contribution/offered_origin.rs`,
+  `frame_state.rs`). A tracing resolver allocated every offer's origin eagerly and replaced every
+  slot's origin and evidence each frame; a winning offer now keeps the origin (by content) and the
+  evidence (by allocation) its slot already holds. With the retired preparation output below: hard
+  floor 9.58 → 9.34 ms, stress 2,000 27.95 → 27.29 ms.
+- **Preparation output retired whole; legacy leaves passed through** (`20fa8edbc`). Last frame's
+  groups and legacy fragments move out with their storage and are freed on the pool; a new group
+  takes its controller's samples with their buffer; a legacy scalar leaf becomes its legacy fragment
+  without the owner split's four copies (the hard floor's Intensity Dynamics). Hard floor 9.32 →
+  8.99 ms.
+- **The resolution's offers on the pool by slot range** (`8d7c95ab0`, `1b20759a3`;
+  `contribution/parallel_offers.rs`, `frame_state/shards.rs`). With the Programmer's kept winners,
+  the Playback contributions, those winners and the sampled values are offered in one section: the
+  frame finds every offer's slot in order (unnumbered pairs still reach the overflow map at once),
+  groups the numbered offers by contiguous slot range, and each range takes its offers in their
+  original order on a pool thread; the ranges' first writes are merged back by offer position, so
+  the fill's first-write order (`FrameState::occupied`) is the single-threaded one. A changed
+  Programmer's owned winners are offered in turn. A resolution on a pool thread offers in turn: a
+  Freeze's captured values are observed lazily, so with instances pinned on the pool a resolution
+  can run inside a parallel section, and a nested section could take up another item of that section
+  that waits on this resolution. The ranges and merge buffers are kept in the engine. Stress 2,000
+  27.16 → 26.34 ms, hard floor 8.91 → 8.71 ms, legacy tiers unchanged.
+- **A fresh native installation on the pool** (`7e6b69c19`; `native_family_projection/parallel.rs`).
+  Validation and placement of an animated frame's fitted native writes depend only on a write, its
+  run's owner and earlier writes of the same physical instance, so the writes are cut by instance;
+  the earliest rejection over all chunks is the single pass's, and without one the rows, targets and
+  counts are merged in the single pass's creation order, so map order and the completeness check
+  are unchanged. The replaced installation is freed on the pool. Stress 2,000 26.58 → 26.38 ms.
+- **Completion records sized once** (`d2d30cc18`). The typed-lane records were regrown, and each
+  lane's compiled program found by a SipHash lookup per target. Stress 2,000 26.18 → 25.73 ms.
+- **Position forest graph sized once** (`05954c891`). The compiled graph's lists grew from one entry;
+  `from_position_forest` takes 15 % less worker CPU, below the noise in wall time.
+- **Borrowed canonical keys on the workers' paths** (`6465bbca6`). Static-row binding and baseline
+  guards, Angle validation, numeric Angle Current, emission's address check and pinning's Current
+  reads cloned the process-wide canonical owner or lane keys; with eight workers every clone and
+  drop contended on one count. Stress 2,000 25.84 → 25.55 ms, hard floor 8.73 → 8.62 ms.
+- **Memory: the accepted Colour ring shares a held look** (`41d86c04e`). The ring of 32 accepted
+  frames kept a full copy of each frame's head list and every output's write list (about 80 MB of the
+  hard floor's heap); a frame shares the previous frame's head list, and an output the previous
+  frame's write list of the same target, while they are equal. Typed hard floor RSS 314 → 228 MB
+  (two runs each), timing unchanged. Compiled Colour fitters were already shared between identical
+  instances (`CompiledModelInterner`, an earlier TL-639 change), so item 5's first candidate was not the cause.
+- Built, measured, reverted: the cohort's per-group scans (`programs`, protected Current, eligible
+  Position groups) on the pool: stress 2,000 -0.18 ms, hard floor +0.16 ms.
+
+### Not built
+
+- **A kept compiled Position graph (item 1).** The Position forest bundle is now 44 % of the
+  preparation section's worker CPU on stress 2,000 (`from_position_forest` 21 %, the plain forest
+  16 %, of which the joint tape import of numeric programs with operation origins is a third). Every
+  animated frame changes the values inside the graph (the numeric programs, the captured Current,
+  the Whole leaf, the lineage tape), so reuse needs the leaf → compiled-node map to rebind them into
+  a kept graph, plus a proof that the tape import's operation-object check holds for the rebound
+  programs; neither was derived. The lineage fields `compiled_nodes` and `tape_to_compiled` are never
+  read outside tests, so a lazily built lineage is the cheaper first step. Expected payoff at most
+  about 1 ms of stress 2,000's preparation section.
+- **Replaying unchanged static Colour rows (item 3).** The hard floor's static Colour rows are its
+  largest section (1.7 ms wall, 7 ms of worker CPU per frame). A kept row already replays its
+  composition, observation fields and fit; what each row still pays is the proof itself: the key
+  channels read from the scalar token (the fit's replay key), the static-evidence binding that keeps
+  the source record alive, the baseline guard and the staging. A cheaper frame-level proof would
+  need the static token's Colour channels to be known unchanged, which needs a Playback "contributions
+  unchanged" signal (the Playback engine rebuilds its contributions every frame) and the scalar
+  samples' owner footprint; neither exists.
+- **Item 4** was built for the offers; the resolution's remainder (Programmer state capture, the
+  Playback list) stays on the frame's thread. Parallel offers help stress 2,000 more than the hard
+  floor, whose 17,000 offers per resolution are too few to pay for a section.
+- **Legacy stress 4,000 physical projection (item 5)** was not needed: every legacy gate improved.
+
+### Where the time goes now
+
+`sample` of the final binary on a quiet host (8 workers), output thread by section (a parallel
+section counts its wall time), and the pool's CPU per frame:
+
+- **Typed stress 2,000 (about 25.6 ms).** Ordinary and Position groups 5.4 ms (26 ms of worker CPU),
+  preparation 4.5 (17 ms; the Position forest bundle 44 % of it), completion 2.5 (its ordered merge
+  of fork logs and the instance section), Position program preparation 1.5, render 1.4, cohort glue
+  1.3 (per-group static lookups and guards), Position root fits 1.2, native installation 1.1 (the
+  write list's construction about a quarter of it), frees 0.9, input assembly 0.8, the two static
+  resolutions 1.3, source binding 0.7, accepted Colour record 0.5, static scans 0.4. Frees on the pool
+  6 ms of worker CPU.
+- **Typed hard floor (about 8.7 ms).** Static Colour rows 1.7 ms (7 ms of worker CPU), render 1.2
+  (the write pass 0.7: DMX encoding hashes its universe maps with SipHash, 0.25 ms; the queued family
+  projections 0.25), static resolutions 0.9, preparation 0.5, accepted Colour record 0.5, cohort glue
+  0.5, playback resolution 0.4, static scans 0.3, lane acceptance 0.3, row projection 0.3, pinning
+  0.3, Position programs 0.3, native installation 0.3, frees 0.2.
+
+### Allocation per frame
+
+Counting allocator (`alloc-count/`, and `alloc-count-ref/` built from an archive of `dc289b3a7`),
+objects and bytes per frame:
+
+| Workload | `dc289b3a7` 1 / 8 workers | Round 7, 1 worker | Round 7, 8 workers |
+| --- | ---: | ---: | ---: |
+| Typed hard floor | 54,404 / 22.8 MB; 56,647 / 34.7 MB | 45,074 / 22.7 MB | 47,356 / 35.9 MB |
+| Typed stress 2,000 | 484,291 / 117.8 MB; 503,441 / 163.8 MB | 479,218 / 120.3 MB | 499,150 / 177.8 MB |
+| Legacy hard floor | 97 / 7.7 MB; 98 / 7.7 MB | 97 / 7.7 MB | 106 / 8.2 MB |
+| Legacy stress 2,000 | 2,624 / 20.6 MB; 2,625 / 20.6 MB | 2,624 / 20.6 MB | 2,634 / 21.5 MB |
+
+The hard floor allocates 17 % fewer objects (the legacy leaves' copies). The eight-worker bytes grow
+with the new sections' per-instance and per-chunk records (stress 2,000 +14 MB per frame: the
+instances' sample and requirement runs, the native installation's chunk maps, the retired
+preparation buffers); the object counts do not. Resident memory: typed hard floor 289-308 → 242-260 MB
+(the two campaigns), stress 2,000 and 4,000 unchanged within run-to-run spread (395-413 → 419-425 MB,
+737-757 → 793-828 MB; single runs vary by ±40 MB).
+
+### Measurement identities
+
+- Baseline (legacy gates): `f67c84e48`, binary `8a95e4a0…`.
+- Before and digest reference: the round's start head `dc289b3a7`, binary `eae82653…`
+  (`.artifacts/tmp/tl639r7/bin/lb-ref`).
+- Final: `1b20759a3`, binary `b374c295…` (`lb-final4`, campaign copy `lb-final`),
+  `--release --locked --no-default-features`; source manifest
+  `.artifacts/tmp/tl639r7/identity/final4-source-manifest.json`.
+- First campaign: `6465bbca6`, binary `a987f795…` (`lb-final1`, manifest
+  `final1-source-manifest.json`).
+- Evidence: `.artifacts/performance/semantic-output/tl639r7-final-20261006T221603Z/` (`legacy/`,
+  `semantic/`, `before-after-typed/`, `workers/`, `repeat-125/`, `repeat-fail/`) and the first
+  campaign `tl639r7-final-20261006T200405Z/` (also `workers3/`, `concurrent/`). Digest runs and
+  summaries `.artifacts/tmp/tl639r7/{d,l}-*.json`, `digest-*.txt` (per step `a1`-`g1`, `final`-`final4`,
+  worker counts, `-verify`); profiles `p-*-{s2000,hf}.txt` with `sections-wall.py`, `secitems.py`,
+  `callers.py`; allocation counts `allocs-final*.txt`; alternated single-worker runs `w1-ab-*.txt`.
