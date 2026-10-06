@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap;
 use std::collections::{HashMap, hash_map::Entry};
 
 mod offered_origin;
+mod parallel_offers;
 mod playback_evidence;
 pub(crate) use offered_origin::OfferedOrigin;
 pub(crate) use playback_evidence::PlaybackEvidenceCache;
@@ -646,20 +647,8 @@ impl<'a> EngineContributionResolver<'a> {
     ) {
         for candidate in values {
             let value = &candidate.value;
-            let origin = match (&candidate.origin, candidate.playback_source) {
-                _ if !self.trace_sources => OfferedOrigin::None,
-                (Some(origin), _) => OfferedOrigin::Shared(origin),
-                (None, Some(source)) => OfferedOrigin::Built {
-                    source: std::borrow::Cow::Owned(crate::ContributionSourceId::playback(source)),
-                    value,
-                    transition_ordinal: candidate.transition_ordinal,
-                },
-                (None, None) => OfferedOrigin::None,
-            };
-            let family_evidence = self
-                .trace_sources
-                .then_some(candidate.family_evidence.as_ref())
-                .flatten();
+            let (origin, family_evidence) =
+                parallel_offers::contribution_trace(self.trace_sources, candidate);
             self.add_borrowed(
                 value.fixture_id,
                 &value.attribute,
@@ -699,6 +688,8 @@ impl<'a> EngineContributionResolver<'a> {
     ) {
         for sample in samples {
             let value = sample.value();
+            let (origin, family_evidence) =
+                parallel_offers::sample_trace(self.trace_sources, sample);
             self.add_borrowed(
                 value.fixture_id,
                 &value.attribute,
@@ -708,17 +699,8 @@ impl<'a> EngineContributionResolver<'a> {
                 value.merge_mode,
                 sample.transition_ordinal(),
                 sample.address(),
-                match sample.replacement_source() {
-                    Some(source) if self.trace_sources => OfferedOrigin::Built {
-                        source: std::borrow::Cow::Borrowed(source),
-                        value,
-                        transition_ordinal: sample.transition_ordinal(),
-                    },
-                    _ => OfferedOrigin::None,
-                },
-                self.trace_sources
-                    .then(|| sample.family_evidence())
-                    .flatten(),
+                origin,
+                family_evidence,
                 None,
             );
         }
@@ -790,14 +772,7 @@ impl<'a> EngineContributionResolver<'a> {
             &std::sync::Arc<light_core::programming::PendingFamilyTransition>,
         >,
     ) {
-        // A number from this generation is trusted as it stands; anything else is a name.
-        let slot = match address {
-            Some(address) if address.generation == self.slots.generation() => {
-                Some(crate::Slot::from_index(address.slot as usize))
-            }
-            _ => self.slots.slot(fixture_id, attribute),
-        };
-        match slot {
+        match self.slot_for(fixture_id, attribute, address) {
             Some(slot) => self.frame.offer_with_origin(
                 slot,
                 crate::Offer {
@@ -906,6 +881,22 @@ impl<'a> EngineContributionResolver<'a> {
                     pre_master: None,
                 },
             ),
+        }
+    }
+
+    /// A pair's slot: a number from this generation is trusted as it stands; anything else is
+    /// a name.
+    fn slot_for(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+        address: Option<light_core::FrameAddress>,
+    ) -> Option<crate::Slot> {
+        match address {
+            Some(address) if address.generation == self.slots.generation() => {
+                Some(crate::Slot::from_index(address.slot as usize))
+            }
+            _ => self.slots.slot(fixture_id, attribute),
         }
     }
 

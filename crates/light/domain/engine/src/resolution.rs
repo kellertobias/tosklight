@@ -126,11 +126,29 @@ impl Engine {
         if trace_sources {
             resolver = resolver.tracing_sources();
         }
-        crate::timed(crate::RenderPhase::ContributionMerge, || {
-            resolver.extend_borrowed_contributions(playback());
-            programmer.offer_to(&mut resolver);
-            if has_samples {
-                resolver.extend_borrowed_samples(sampled_values(sampled));
+        // TL-639 round 7: with the Programmer's kept winners, every offer goes to the output
+        // pool by slot range; a changed Programmer's owned winners are offered in turn.
+        let pool = self.output_pool();
+        crate::timed(crate::RenderPhase::ContributionMerge, || match programmer {
+            crate::programmer_resolution::ProgrammerContributions::Shared(programmer) => {
+                let samples = if has_samples {
+                    sampled_values(sampled).collect::<Vec<_>>()
+                } else {
+                    Vec::new()
+                };
+                resolver.offer_borrowed_on(
+                    pool.as_deref(),
+                    &playback().collect::<Vec<_>>(),
+                    &programmer.iter().collect::<Vec<_>>(),
+                    &samples,
+                );
+            }
+            programmer @ crate::programmer_resolution::ProgrammerContributions::Owned(_) => {
+                resolver.extend_borrowed_contributions(playback());
+                programmer.offer_to(&mut resolver);
+                if has_samples {
+                    resolver.extend_borrowed_samples(sampled_values(sampled));
+                }
             }
         });
         crate::timed(crate::RenderPhase::GroupContributions, || {

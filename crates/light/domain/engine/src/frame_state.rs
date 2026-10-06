@@ -10,6 +10,9 @@ use light_core::{AttributeValue, MergeMode};
 
 use crate::Slot;
 
+mod shards;
+pub(crate) use shards::FrameShard;
+
 /// What a candidate offers a slot, apart from the value itself.
 #[derive(Clone, Copy)]
 pub(crate) struct Offer {
@@ -224,11 +227,7 @@ impl FrameState {
         build: impl FnOnce(&mut SlotWinner),
     ) {
         if let Some(winner) = self.win(slot, offer) {
-            winner.origin = origin.resolve(winner.origin.take());
-            winner.family_evidence = match (winner.family_evidence.take(), evidence) {
-                (Some(held), Some(offered)) if std::sync::Arc::ptr_eq(&held, offered) => Some(held),
-                (_, offered) => offered.cloned(),
-            };
+            take_traced(winner, (origin, evidence));
             build(winner);
         }
     }
@@ -241,36 +240,16 @@ impl FrameState {
         if index >= self.winners.len() {
             return None;
         }
-        if self.stamp[index] == self.epoch {
-            let current = &self.winners[index];
-            let wins = if offer.priority != current.priority {
-                offer.priority > current.priority
-            } else if offer.merge_mode == MergeMode::Htp {
-                offer.normalized > current.value.normalized().unwrap_or(0.0)
-            } else {
-                ltp_wins(
-                    offer.changed_at,
-                    offer.transition_ordinal,
-                    current.changed_at,
-                    current.transition_ordinal,
-                )
-            };
-            if !wins {
-                return None;
-            }
-        } else {
-            self.stamp[index] = self.epoch;
+        let first = arbitrate(
+            self.epoch,
+            &mut self.stamp[index],
+            &mut self.winners[index],
+            offer,
+        )?;
+        if first {
             self.touched.push(index as u32);
         }
-        let winner = &mut self.winners[index];
-        winner.priority = offer.priority;
-        winner.changed_at = offer.changed_at;
-        winner.projected_changed_at = None;
-        winner.merge_mode = offer.merge_mode;
-        winner.transition_ordinal = offer.transition_ordinal;
-        winner.pending_transition = None;
-        winner.pre_master = None;
-        Some(winner)
+        Some(&mut self.winners[index])
     }
 
     /// Write a value into a slot regardless of what holds it, as a Freeze does when it takes the
@@ -322,6 +301,55 @@ impl FrameState {
     pub(crate) fn occupied_len(&self) -> usize {
         self.touched.len()
     }
+}
+
+/// Arbitrate `offer` against a slot's holder in fill `epoch`. `Some(first)` when the offer
+/// wins (`first`: it is the slot's first write this fill), with the slot stamped and its winner
+/// reset for the candidate except the value, the origin and the evidence.
+fn arbitrate(epoch: u32, stamp: &mut u32, winner: &mut SlotWinner, offer: Offer) -> Option<bool> {
+    let first = *stamp != epoch;
+    if !first {
+        let wins = if offer.priority != winner.priority {
+            offer.priority > winner.priority
+        } else if offer.merge_mode == MergeMode::Htp {
+            offer.normalized > winner.value.normalized().unwrap_or(0.0)
+        } else {
+            ltp_wins(
+                offer.changed_at,
+                offer.transition_ordinal,
+                winner.changed_at,
+                winner.transition_ordinal,
+            )
+        };
+        if !wins {
+            return None;
+        }
+    }
+    *stamp = epoch;
+    winner.priority = offer.priority;
+    winner.changed_at = offer.changed_at;
+    winner.projected_changed_at = None;
+    winner.merge_mode = offer.merge_mode;
+    winner.transition_ordinal = offer.transition_ordinal;
+    winner.pending_transition = None;
+    winner.pre_master = None;
+    Some(first)
+}
+
+/// A traced winner's origin and evidence: kept when the slot already holds them (see
+/// [`FrameState::offer_with_origin`]), otherwise the offer's own.
+fn take_traced(
+    winner: &mut SlotWinner,
+    (origin, evidence): (
+        crate::contribution::OfferedOrigin<'_>,
+        Option<&std::sync::Arc<crate::ContributionFamilyEvidence>>,
+    ),
+) {
+    winner.origin = origin.resolve(winner.origin.take());
+    winner.family_evidence = match (winner.family_evidence.take(), evidence) {
+        (Some(held), Some(offered)) if std::sync::Arc::ptr_eq(&held, offered) => Some(held),
+        (_, offered) => offered.cloned(),
+    };
 }
 
 fn ltp_wins(
