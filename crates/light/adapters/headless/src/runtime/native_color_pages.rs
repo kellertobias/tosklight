@@ -66,10 +66,12 @@ pub(super) fn native_color_pages(
         pages.unavailable = Some(wire::NativeColorPagesUnavailable::NoVerifiedHead);
         return pages;
     };
+    let attributes = state.attributes.snapshot();
+    let custom = &attributes.configuration.custom_attributes;
     let controls: Vec<_> = reference
         .controls()
         .iter()
-        .map(|control| control_descriptor(&snapshot, &reference, control))
+        .map(|control| control_descriptor(custom, &snapshot, &reference, control))
         .collect();
     let split = controls.len().min(NATIVE_PAGE_CONTROLS);
     pages.pages = controls[..split]
@@ -206,6 +208,7 @@ fn previews(
 }
 
 fn control_descriptor(
+    custom: &[light_core::CustomAttributeDescriptor],
     snapshot: &EngineSnapshot,
     reference: &NativeReference,
     control: &NativeColorControl,
@@ -231,9 +234,10 @@ fn control_descriptor(
     wire::NativeColorControlDescriptor {
         id: format!("native.{}", control.channel_id),
         channel_id: control.channel_id,
-        label: channel.map_or_else(
-            || control.attribute.0.to_string(),
-            |channel| channel.fixture_attribute.0.to_string(),
+        label: control_label(
+            custom,
+            channel.map_or(&control.attribute, |channel| &channel.fixture_attribute),
+            &control.attribute,
         ),
         raw_max: control.raw_max,
         resolution: wire::native_resolution(control.raw_max),
@@ -250,6 +254,31 @@ fn control_descriptor(
             })
             .collect(),
     }
+}
+
+/// TL-653: the operator label of a native control from the attribute registry (`Red`,
+/// `Color Wheel 1`), never the raw identifier. The fixture's own attribute names the control; a
+/// manufacturer attribute the registry does not know takes its canonical attribute's label. A
+/// custom attribute takes the label the desk configured for it, else its identifier.
+pub(super) fn control_label(
+    custom: &[light_core::CustomAttributeDescriptor],
+    fixture_attribute: &light_core::AttributeKey,
+    canonical: &light_core::AttributeKey,
+) -> String {
+    let known = |key: &light_core::AttributeKey| {
+        let descriptor = light_core::attribute_descriptor(key);
+        if descriptor.built_in {
+            return Some(descriptor.label.to_string());
+        }
+        custom
+            .iter()
+            .find(|descriptor| &descriptor.id == key)
+            .map(|descriptor| descriptor.label.clone())
+            .filter(|label| !label.trim().is_empty())
+    };
+    known(fixture_attribute)
+        .or_else(|| known(canonical))
+        .unwrap_or_else(|| fixture_attribute.0.to_string())
 }
 
 fn reference_dto(

@@ -32,6 +32,12 @@ async fn native_pages_publish_full_width_descriptors_of_a_clearly_identified_ref
         assert_eq!(control.id, format!("native.{}", channel.id));
         assert_eq!(control.functions[0].function_id, channel.functions[0].id);
     }
+    // TL-653: controls carry the attribute registry's operator labels, never raw identifiers.
+    let labels: Vec<_> = controls
+        .iter()
+        .map(|control| control.label.as_str())
+        .collect();
+    assert_eq!(labels, ["Red", "Green", "Blue", "White"]);
     let maxima: Vec<_> = controls.iter().map(|control| control.raw_max).collect();
     assert_eq!(maxima, [255, 65_535, 16_777_215, u32::MAX]);
     let widths: Vec<_> = controls.iter().map(|control| control.resolution).collect();
@@ -193,4 +199,39 @@ async fn the_native_pages_route_is_authenticated_show_guarded_and_quiet_without_
     let idle = desk.pages("").await;
     assert!(idle.reference.is_some() && idle.values.is_none());
     let _ = std::fs::remove_dir_all(&desk.directory);
+}
+
+#[test]
+fn native_control_labels_come_from_the_attribute_registry() {
+    use light_core::{AttributeKey, CustomAttributeDescriptor};
+    let key = |id: &str| AttributeKey(id.into());
+    let custom = [CustomAttributeDescriptor {
+        id: key("fixture.color_scene"),
+        label: "Color Scene".into(),
+        value_type: light_core::AttributeValueType::Continuous,
+        display_unit: None,
+        physical_unit: None,
+        normalized_bounds: None,
+        domain_bounds: None,
+        cyclic: false,
+        recordable: true,
+        lifecycle: Default::default(),
+    }];
+    let label = |own: &str, canonical: &str| {
+        crate::runtime::native_color_pages::control_label(&custom, &key(own), &key(canonical))
+    };
+    assert_eq!(label("color.red", "color.red"), "Red");
+    assert_eq!(label("color.wheel.1", "color.wheel.1"), "Color Wheel 1");
+    assert_eq!(
+        label("color.temperature", "color.temperature"),
+        "Color Temperature"
+    );
+    // A manufacturer attribute takes its canonical attribute's label.
+    assert_eq!(label("vendor.red_led", "color.red"), "Red");
+    // A configured custom attribute takes its configured label; an unknown one keeps its id.
+    assert_eq!(
+        label("fixture.color_scene", "fixture.color_scene"),
+        "Color Scene"
+    );
+    assert_eq!(label("vendor.mystery", "vendor.mystery"), "vendor.mystery");
 }

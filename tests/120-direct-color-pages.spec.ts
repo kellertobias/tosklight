@@ -75,12 +75,12 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 		// Eleven native controls: eight on pages 3/4, three beyond them (the overflow).
 		const pages = await nativePages(api, selection);
 		expect(pages.pages.flatMap((entry) => entry.controls).filter(Boolean)).toHaveLength(8);
-		expect(pages.overflow.map((control) => control.label)).toEqual(["color.white", "fixture.color_scene", "color.wheel.1"]);
+		expect(pages.overflow.map((control) => control.label)).toEqual(["White", "Color Scene", "Color Wheel 1"]);
 
 		const sent = recordColorActions(page);
 		await desk.open(api.baseUrl);
 		await pageColorTo(page, 3);
-		await expect(encoder(page, 1)).toHaveAccessibleName(/^Enc 1 · color\.temperature · 201\b/);
+		await expect(encoder(page, 1)).toHaveAccessibleName(/^Enc 1 · Color Temperature · 201\b/);
 		const revision = await programmerRevision(api);
 
 		// Step 1-2: Expand; the reference head is clearly identified and every overflow control is
@@ -91,12 +91,12 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 		const overflow = direct.getByTestId("color-direct-overflow");
 		await expect(overflow.getByRole("group")).toHaveCount(3);
 		expect(await overflow.getByRole("group").evaluateAll((groups) => groups.map((group) => group.getAttribute("aria-label")))).toEqual([
-			"Native 1 · color.white",
-			"Native 2 · fixture.color_scene",
-			"Native 3 · color.wheel.1",
+			"Native 1 · White",
+			"Native 2 · Color Scene",
+			"Native 3 · Color Wheel 1",
 		]);
-		await expect(overflow.getByRole("list", { name: "fixture.color_scene functions" }).getByRole("listitem")).toHaveText(["Color Scene"]);
-		const wheel = overflow.getByRole("list", { name: "color.wheel.1 functions" }).getByRole("listitem");
+		await expect(overflow.getByRole("list", { name: "Color Scene functions" }).getByRole("listitem")).toHaveText(["Color Scene"]);
+		const wheel = overflow.getByRole("list", { name: "Color Wheel 1 functions" }).getByRole("listitem");
 		await expect(wheel).toHaveCount(13);
 		await expect(wheel.first()).toHaveText("Open");
 		await expect(wheel.nth(1)).toHaveText("Deep Red");
@@ -118,11 +118,11 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 		const white = pages.overflow[0];
 		const red = pages.pages[0].controls[1];
 		if (!reference || !red) throw new Error("the reference head has no Red control");
-		await detent(overflow.getByRole("group", { name: "Native 1 · color.white" }), -1);
+		await detent(overflow.getByRole("group", { name: "Native 1 · White" }), -1);
 		await expect.poll(() => sent.length).toBe(1);
 		await closeDialog(dialog);
 		await expect(colorFamily(page)).toHaveAccessibleName("Color 3 of 4");
-		await expect(encoder(page, 2)).toHaveAccessibleName(/^Enc 2 · color\.red · 202\b/);
+		await expect(encoder(page, 2)).toHaveAccessibleName(/^Enc 2 · Red · 202\b/);
 		await detent(encoder(page, 2), 1);
 		await expect.poll(() => sent.length).toBe(2);
 		const [fromOverflow, fromPage] = sent.map(directEditOf);
@@ -172,7 +172,7 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 		const reopened = await openDirectColor(page);
 		const choices = reopened
 			.getByTestId("color-direct-overflow")
-			.getByRole("list", { name: "color.wheel.1 functions" });
+			.getByRole("list", { name: "Color Wheel 1 functions" });
 		await choices.getByRole("button", { name: "Deep Red", exact: true }).click();
 		await expect.poll(() => sent.length).toBe(3);
 		const deepRed = wheelControl.functions[1];
@@ -188,7 +188,7 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 		const others = (value: typeof after) =>
 			byChannel((value?.recipe?.channels ?? []).filter((entry) => entry.channel_id !== wheelControl.channel_id));
 		expect(others(after), "every other control is kept").toEqual(others(before));
-		await detent(reopened.getByTestId("color-direct-overflow").getByRole("group", { name: "Native 3 · color.wheel.1" }), 1);
+		await detent(reopened.getByTestId("color-direct-overflow").getByRole("group", { name: "Native 3 · Color Wheel 1" }), 1);
 		await expect.poll(() => sent.length).toBe(4);
 		expect(directEditOf(sent[3]).operation.edits[0].binding.function_id).toBe(wheelControl.functions[2].function_id);
 		await closeDialog(reopened);
@@ -385,7 +385,7 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 			await expect.poll(() => hardwareConnected(api)).toBe(true);
 			await pageColorTo(page, 3);
 			await expect(page.locator(".hardware-encoder-display")).toHaveCount(6);
-			await expect(page.getByLabel(/^Encoder 2: color\.green · 101\b/)).toBeVisible();
+			await expect(page.getByLabel(/^Encoder 2: Green · 101\b/)).toBeVisible();
 			const revision = await programmerRevision(api);
 			await hardware.send("/light/desk/encode/2", ["up"]);
 			await expect.poll(() => programmerRevision(api)).toBeGreaterThan(revision);
@@ -398,7 +398,7 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 		// The same software encoder (software-only layout, page 3, Enc 2), one detent.
 		await expect.poll(() => hardwareConnected(api)).toBe(false);
 		await expect(colorFamily(page)).toHaveAccessibleName(/^Color 3 of \d+$/);
-		await expect(encoder(page, 2)).toHaveAccessibleName(/^Enc 2 · color\.green · 101\b/);
+		await expect(encoder(page, 2)).toHaveAccessibleName(/^Enc 2 · Green · 101\b/);
 		await detent(encoder(page, 2), 1);
 		await expect.poll(() => sent.length).toBe(2);
 		const [fromHardware, fromSoftware] = sent.map(directEditOf);
@@ -463,7 +463,7 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 		const sent = recordColorActions(page);
 		await desk.open(api.baseUrl);
 		await pageColorTo(page, 3);
-		await expect(encoder(page, 1)).toHaveAccessibleName(/^Enc 1 · color\.red · 101\b/);
+		await expect(encoder(page, 1)).toHaveAccessibleName(/^Enc 1 · Red · 101\b/);
 		// G5: an idle head shows its profile defaults, and the first detent adopts exactly those.
 		const pages = await nativePages(api, [a1, a2]);
 		const red = pages.pages[0].controls[0];
