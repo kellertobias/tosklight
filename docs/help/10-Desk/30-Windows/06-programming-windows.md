@@ -71,13 +71,20 @@ Current, and adding Tilt adds a Pan lane. To animate that partner, select it and
 function, or add the axis yourself with **+ Add Lane**, which replaces the partner. For a circle:
 add Pan, add Tilt, select the Tilt lane and choose **Cosinus**.
 
+**Current** is the fixture's Position before the Dynamic, read again on every frame. When the
+fixtures aim at a Target (Point or X/Y/Z), Current is the Pan and Tilt that aim at it, so the circle
+runs around the Target. The Programmer keeps the Target: move the Point or edit X, Y or Z while the
+Dynamic runs, and the circle's centre follows. Releasing the Dynamic shows the Target's own aim.
+If the Target cannot be reached, for example because its Point was deleted, the Dynamic holds its
+Pan and Tilt instead of guessing.
+
 Within one Dynamic, the Red, Green, Blue and Amber recipe lanes and the Hue and Saturation lanes
 are two different ways of writing the base colour; a Dynamic uses one of them. White Blend,
 Temperature and UV combine with either.
 
 ## Return Position fixtures home
 
-Open **Position → Special Dialog** and press **Return Home** below the Aim joystick to return the current ordered selection to its home pose: **Pan 0°** and **Tilt 0°**, the centre of each fixture's travel, where its Position physical data points the beam. Every selected head with Position goes home, including a selection that reads **Mixed**, and a Target is replaced by those angles. Fixtures without Position are skipped. A selected group is addressed as that group. With no selection, or when the selected fixtures are **Unsupported** (see below), Return Home is disabled and never addresses every moving light in the show.
+Open **Position → Special Dialog** and press **Return Home** below the Aim joystick to return the current ordered selection to its home pose: **Pan 0°** and **Tilt 0°**, the centre of each fixture's travel, where its Position physical data points the beam. Every selected head with Position goes home, including a selection whose angles differ, and a Target is replaced by those angles. Fixtures without Position are skipped. A selected group is addressed as that group. With no selection, or when the selected fixtures are **Unsupported** (see below), Return Home is disabled and never addresses every moving light in the show.
 
 Return Home is one normal programmer gesture. It follows Programmer Fade and the current Blind, Preview, or Preload mode, and one **UND** restores the preceding programmer values. Record or Update the result when it should become show data. Return Home itself does not edit fixture profiles or save values into a Cue or Preset.
 
@@ -85,7 +92,9 @@ Return Home is one normal programmer gesture. It follows Programmer Fade and the
 
 Position programs fixture-independent angles and targets instead of raw Pan and Tilt channel levels. A show that still holds Pan and Tilt as channel percentages is not opened; see [Shows programmed before fixture-independent programming](../10-Show-Setup/05-users-sessions-and-recovery.md#shows-programmed-before-fixture-independent-programming).
 
-**Encoders.** Position has two encoder pages. Page 1 holds **Pan** and **Tilt** in degrees; page 2 holds **Point**, **X**, **Y** and **Z**, with the offsets in metres. Press the **Position** family button again to switch pages. Switching pages only changes what the encoders show; it never activates Angle or Target and sends nothing. Software encoders, the keyboard, attached hardware and OSC `encode/N` controls all make the same edit: up and down move one step (1° or 0.1 m), and the coarse direction moves ten. Typing a range such as `270 [THRU] −270 [THRU] 270` in an encoder's value modal spreads that angle or offset over the ordered selection, exactly as an intensity range does; the encoder then reads **Mixed**.
+**Encoders.** Position has two encoder pages. Page 1 holds **Pan** and **Tilt** in degrees; page 2 holds **Point**, **X**, **Y** and **Z**, with the offsets in metres. Press the **Position** family button again to switch pages. Switching pages only changes what the encoders show; it never activates Angle or Target and sends nothing. Software encoders, the keyboard, attached hardware and OSC `encode/N` controls all make the same edit: up and down move one step (1° or 0.1 m), and the coarse direction moves ten. Typing a range such as `270 [THRU] −270 [THRU] 270` in an encoder's value modal spreads that angle or offset over the ordered selection, exactly as an intensity range does; the encoder then shows the range, for example `-270°...270°`.
+
+**Readouts.** **Point** shows the active Target reference: **Origin** or the 3D Point's name. **X**, **Y** and **Z** show the Target offsets in metres, for example `0.3 m`. At the Origin these are stage coordinates; at a Point they are relative to the Point. The values update with every encoder step, on screen and on an attached hardware desk. They read the same whether you selected fixtures or a group, and whether the fixtures are patched or not. When the Programmer holds no Position but a Cue or Preset aims at a Target, the encoders show that Target. Before any Target is active, Point, X, Y and Z read **—**. When the selected fixtures hold different numbers, the encoder shows the lowest and highest, for example `-12.5°...31°`.
 
 Angle and Target are exclusive. Turning Point, X, Y or Z while the selection holds Angles, or has no semantic Position value yet, activates Target at the Origin, or at the chosen Point, and applies that offset in the same edit. Turning Pan or Tilt while Target is active switches back to Angles.
 
@@ -101,7 +110,15 @@ The modal has no Point or X/Y/Z controls; use encoder page 2 for those. **Return
 - **Aim joystick.** Hold the joystick away from its centre to keep Pan and Tilt moving, even without moving the pointer. Movement near the centre is gentle: there is a small dead zone, then speed rises with the square of the deflection, up to full speed at the edge. Arrow keys on the focused joystick move it the same way until released.
 - **Stopping.** Movement stops immediately when you return to the centre, release, or when the pointer is cancelled or lost. It also stops when the desk window loses focus or is hidden, when you close the dialog, or when an angle reaches its limit.
 
-**Resolved values.** While Target is active, Pan and Tilt in the dialog and on encoder page 1 show the resolved commanded angles of the output you see, marked **Resolved**. Watching them changes nothing. The first real Pan, Tilt or joystick edit takes over that exact displayed pose once, then applies the edit. It never takes a newer pose that you had not seen. When the selected fixtures disagree, the angle reads **Mixed**. The dialog then marks the values **Relative** and moves every fixture by the same amount, keeping their differences.
+**Resolved values.** While Target is active, Pan and Tilt in the dialog and on encoder page 1 show the commanded angles of the output you see. They are marked with where they come from:
+
+- **From XYZ** when the selection aims at the Origin with X/Y/Z offsets;
+- **From Point** when it aims at one 3D Point;
+- **From Target** when the fixtures aim at different Points, or some at a Point and some at the Origin.
+
+Without a Target, read-back angles are marked **Resolved**, for example before the first Position edit. Watching them changes nothing. The first real Pan, Tilt or joystick edit takes over that exact displayed pose once, then applies the edit. It never takes a newer pose that you had not seen.
+
+When the selected fixtures point differently, the encoder shows the range of their angles, lowest first, for example `-31.2°...12°`. Nothing is averaged. The dialog then marks the values **Relative**, with the Target they come from, and moves every fixture by the same amount, keeping their differences.
 
 Each press-and-release, key step or button press is one gesture and one **UND** step. The gesture follows the current mode: Normal programmer edits apply immediately, and Preload edits use Programmer Fade. A selected group is addressed as that group.
 

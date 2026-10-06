@@ -43,6 +43,11 @@ import {
 } from "./familyPointChoices";
 import { isNativeSlot } from "./nativeColorSlots";
 import {
+	type ProgrammerGroupValueEntry,
+	selectionPositionEntries,
+	withFrameRequests,
+} from "./positionReadouts";
+import {
 	type NativeColorEncoderPages,
 	useNativeColorEncoderPages,
 } from "./useNativeColorEncoderPages";
@@ -195,16 +200,30 @@ function useBindingInstance(
 	return binding;
 }
 
+/**
+ * TL-652: the Programmer's values with the selected group's Position projected onto the
+ * Position slot's fixtures, so a group-held Target reads and edits like a fixture-held one.
+ */
+function programmedValues(
+	projection: ParameterProjection,
+	positionFixtures: readonly string[],
+): readonly ProgrammerValueEntry[] {
+	return selectionPositionEntries({
+		fixtureValues: projection.programmerValues as readonly ProgrammerValueEntry[],
+		groupValues: projection.groupProgrammerValues as readonly ProgrammerGroupValueEntry[],
+		groupId: projection.selectedGroupId,
+		fixtureIds: positionFixtures,
+	});
+}
+
 function editTarget(
 	projection: ParameterProjection,
+	values: readonly ProgrammerValueEntry[],
 	positionFixtures: readonly string[],
 ): FamilyEncoderTarget | null {
 	const lane = projection.programmerValuesRoute;
 	if (!lane || !projection.programmerValuesReady) return null;
-	const position = positionSelectionState(
-		projection.programmerValues as readonly ProgrammerValueEntry[],
-		positionFixtures,
-	);
+	const position = positionSelectionState(values, positionFixtures);
 	return {
 		lane,
 		groupId: projection.selectedGroupId,
@@ -240,7 +259,16 @@ export function useFamilyEncoderBinding(
 	const slots = layout ? familyLayoutSlots(layout, page) : null;
 	const componentSlot = (index: number) =>
 		slots?.componentSlots[index]?.slot ?? null;
-	const target = () => editTarget(projection, positionFixtures);
+	const values = useMemo(
+		() => programmedValues(projection, positionFixtures),
+		[
+			projection.programmerValues,
+			projection.groupProgrammerValues,
+			projection.selectedGroupId,
+			positionFixtures,
+		],
+	);
+	const target = () => editTarget(projection, values, positionFixtures);
 	const withSlot = (
 		index: number,
 		run: (slot: FamilyEncoderComponentSlot, target: FamilyEncoderTarget) => void,
@@ -249,7 +277,7 @@ export function useFamilyEncoderBinding(
 		const edit = target();
 		if (!slot || !edit || !binding) return Boolean(slot);
 		const positionUnsupported = positionSlotUnsupported(slot, {
-			programmerValues: projection.programmerValues as readonly ProgrammerValueEntry[],
+			programmerValues: values,
 			readouts: readouts.snapshot,
 		});
 		run(slot, positionUnsupported ? { ...edit, positionUnsupported } : edit);
@@ -288,18 +316,18 @@ export function useFamilyEncoderBinding(
 			const slot = componentSlot(index);
 			if (isNativeSlot(slot) && slot) return native.display(slot);
 			if (slot?.edit === "target_reference") {
-				const values = projection.programmerValues as readonly ProgrammerValueEntry[];
-				const shown = pointSlotDisplay(slot, values, points);
+				const shown = pointSlotDisplay(
+					slot,
+					withFrameRequests(values, readouts.snapshot, slot.fixture_ids),
+					points,
+				);
 				const unsupported =
 					shown.source === "none" &&
 					positionSlotUnsupported(slot, { programmerValues: values, readouts: readouts.snapshot });
 				return unsupported ? { ...shown, unsupported: true } : shown;
 			}
 			return slot
-				? familySlotDisplay(slot, {
-						programmerValues: projection.programmerValues as readonly ProgrammerValueEntry[],
-						readouts: readouts.snapshot,
-					})
+				? familySlotDisplay(slot, { programmerValues: values, readouts: readouts.snapshot })
 				: { value: null, text: "—", source: "none" };
 		},
 		overrides:

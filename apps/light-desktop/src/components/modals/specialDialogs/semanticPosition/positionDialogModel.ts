@@ -23,8 +23,11 @@ import type {
  *   exists, the angles are the resolved commanded angles of the displayed output (TL-594
  *   readouts) and are captioned `Resolved`. While Angles are active the requested angles are
  *   shown: a Preload readout is read once per claim and would otherwise go stale under edits.
- * - **Mixed.** A selection whose copies diverge reads Mixed in the encoders. Nothing is averaged
- *   or guessed: the dialog then edits that axis relatively, from a virtual zero (`Relative`).
+ * - **Ranges.** A selection whose copies diverge reads its minimum...maximum in the encoders
+ *   (TL-652). Nothing is averaged or guessed: the dialog then edits that axis relatively, from a
+ *   virtual zero (`Relative`).
+ * - **Provenance.** Angles resolved from a Target are captioned with it (`From XYZ`, `From
+ *   Point`, `From Target`) instead of `Resolved` (TL-652).
  * - **Unavailable.** Without a slot, a readout or a requested value the axis is inert (`NaN`).
  * - **Unsupported (TL-637).** When the displayed output reports no pose for any fixture and
  *   nothing is requested, the profiles have no Position physical data: the axes stay inert, the
@@ -60,6 +63,8 @@ export interface PositionAxisModel {
 	/** Degrees in absolute mode, the virtual zero in relative mode, NaN when unavailable. */
 	value: number;
 	source: "resolved" | "requested" | "none";
+	/** TL-652: the Target the resolved angles come from, e.g. From XYZ. */
+	provenance?: string;
 	limits: { min: number; max: number };
 	step: number;
 	keyStep: number;
@@ -118,11 +123,13 @@ export function positionAxisModel(
 	const limits = finiteLimits(slot, axis);
 	const step = slot.descriptor.fine_step > 0 ? slot.descriptor.fine_step : slot.descriptor.step;
 	const keyStep = slot.descriptor.step > 0 ? slot.descriptor.step : step;
+	const provenance = display.provenance ? { provenance: display.provenance } : {};
 	if (display.value !== null)
 		return {
 			mode: "absolute",
 			value: display.value,
 			source: display.source,
+			...provenance,
 			limits: {
 				min: Math.min(limits.min, display.value),
 				max: Math.max(limits.max, display.value),
@@ -131,7 +138,7 @@ export function positionAxisModel(
 			keyStep,
 		};
 	if (display.source !== "none")
-		return { mode: "relative", value: 0, source: display.source, limits, step, keyStep };
+		return { mode: "relative", value: 0, source: display.source, ...provenance, limits, step, keyStep };
 	return {
 		mode: "unavailable",
 		value: Number.NaN,
@@ -150,15 +157,18 @@ export function positionDialogUnsupported(pan: PositionAxisModel, tilt: Position
 
 /**
  * The caption shown with the values: `Unsupported` without Position physical data, `Relative`
- * for a Mixed axis, else `Resolved` when read back.
+ * for an axis whose fixtures differ (with the Target provenance, TL-652), else `Resolved` — or
+ * the Target provenance such as `From XYZ` — when read back.
  */
 export function positionValueCaption(
 	pan: PositionAxisModel,
 	tilt: PositionAxisModel,
 ): string | undefined {
 	if (positionDialogUnsupported(pan, tilt)) return UNSUPPORTED_CAPTION;
-	if (pan.mode === "relative" || tilt.mode === "relative") return RELATIVE_CAPTION;
-	if (pan.source === "resolved" || tilt.source === "resolved") return RESOLVED_CAPTION;
+	const provenance = pan.provenance ?? tilt.provenance;
+	if (pan.mode === "relative" || tilt.mode === "relative")
+		return provenance ? `${RELATIVE_CAPTION} · ${provenance}` : RELATIVE_CAPTION;
+	if (pan.source === "resolved" || tilt.source === "resolved") return provenance ?? RESOLVED_CAPTION;
 	return undefined;
 }
 

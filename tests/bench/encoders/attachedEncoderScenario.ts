@@ -105,9 +105,9 @@ export class BrowserAttachedEncoders {
 			fixtures: [101, 102, 103, 104, 105],
 			attribute: "position",
 			values: [270, 0, -270, 0, 270],
-			// A semantic readout never summarises differing requests as a range or an average:
-			// the selection reads Mixed (TL-619 presentation, docs/testing/34 POSITION-CONTROLS-005).
-			display: "Mixed",
+			// Differing requested angles read as their real range, never an average or a bare
+			// Mixed (TL-652, docs/testing/34 POSITION-CONTROLS-005 and PROG-002).
+			display: "-270°...270°",
 		});
 	}
 

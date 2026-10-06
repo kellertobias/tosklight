@@ -44,12 +44,22 @@ const angles = (fixtureId: string) => ({
 	value: { kind: "position", value: { kind: "angles", pan_degrees: { kind: "value", value: 10 }, tilt_degrees: { kind: "value", value: 20 } } },
 });
 
-function projection(route: "normal" | "preload", programmerValues: unknown[]): ParameterProjection {
+const POINT_ID = "33333333-3333-4333-8333-333333333333";
+/** A group-held Target at a Point: one group value, no fixture values (TL-652). */
+const groupTarget = {
+	groupId: "7",
+	attribute: "position",
+	programmerOrder: 4,
+	value: { kind: "position", value: { kind: "target", reference: { kind: "point", point_id: POINT_ID }, offset_metres: [{ kind: "value", value: 0.5 }, { kind: "value", value: 0 }, { kind: "value", value: -1 }] } },
+};
+
+function projection(route: "normal" | "preload", programmerValues: unknown[], group?: typeof groupTarget): ParameterProjection {
 	return {
 		active: true,
 		selectedFixtureIds: [FIXTURE_A, FIXTURE_B],
 		selectedFixtures: [],
-		selectedGroupId: null,
+		selectedGroupId: group?.groupId ?? null,
+		groupProgrammerValues: group ? [group] : [],
 		supportedFixtureIdsByAttribute: new Map([["pan", [FIXTURE_A, FIXTURE_B]], ["tilt", [FIXTURE_A, FIXTURE_B]]]),
 		encoderGroups: [],
 		encoderPage: 1,
@@ -88,13 +98,13 @@ function context(lane: "normal" | "preload", available = true): FamilyEncodersCo
 	};
 }
 
-async function mount(route: "normal" | "preload", values: unknown[], available = true) {
+async function mount(route: "normal" | "preload", values: unknown[], available = true, group?: typeof groupTarget) {
 	const legacy = vi.fn(async () => null as unknown);
 	const value = context(route, available);
 	const wrapper = ({ children }: { children: ReactNode }) => (
 		<FamilyEncodersContextProvider value={value}>{children}</FamilyEncodersContextProvider>
 	);
-	const view = projection(route, values);
+	const view = projection(route, values, group);
 	const hook = renderHook(
 		() => {
 			const familyEncoders = useFamilyEncoderBinding(view, "Position");
@@ -193,6 +203,21 @@ describe("Position encoders under the semantic contract", () => {
 		]);
 	});
 
+	it("reads and edits a group-held Point Target: provenance, offsets and an X detent that keeps the Point (TL-652)", async () => {
+		const normal = fakeWriter();
+		writers.normal = normal;
+		const { hook } = await mount("normal", [], true, groupTarget);
+		await waitFor(() => expect(hook.result.current.display(0)).toMatchObject({ value: 45, source: "resolved", provenance: "From Point" }));
+		act(() => hook.result.current.selectPage("Position", 2));
+		expect(hook.result.current.display(1)).toMatchObject({ text: "0.5 m", source: "requested" });
+		expect(hook.result.current.display(3)).toMatchObject({ text: "-1 m", source: "requested" });
+		hardware("encode/2", "up");
+		// The group is addressed and only the offset changes: the Point reference is not reset.
+		expect(sent(normal)[0]?.operation.edits).toEqual([
+			{ kind: "scalar", component: { kind: "target_x" }, operation: { kind: "relative", value: 0.1 } },
+		]);
+	});
+
 	it("routes Preload encoder detents to the Preload writer with the Preload lease", async () => {
 		const normal = fakeWriter();
 		const preload = fakeWriter();
@@ -207,8 +232,8 @@ describe("Position encoders under the semantic contract", () => {
 		});
 	});
 
-	it.each([false, true])("labels resolved Pan as Resolved and requested values plainly (hardware %s)", (hardwareConnected) => {
-		const controller = (source: "resolved" | "requested") =>
+	it.each([false, true])("labels resolved Pan as Resolved, From XYZ for a Target, and requested values plainly (hardware %s)", (hardwareConnected) => {
+		const controller = (source: "resolved" | "requested", provenance?: string) =>
 			({
 				hardwareConnected,
 				canWriteValues: true,
@@ -216,13 +241,15 @@ describe("Position encoders under the semantic contract", () => {
 				releaseParameter: async () => undefined,
 				familyEncoders: {
 					componentSlot: () => ({ ...PAN, label: "Pan" }),
-					display: () => ({ value: 45, text: "45.0°", source }),
+					display: () => ({ value: 45, text: "45.0°", source, provenance }),
 					step: () => undefined,
 					set: () => undefined,
 				},
 			}) as unknown as ParameterController;
 		const view = render(<FamilyEncoderSlotSurface controller={controller("resolved")} index={0} />);
 		expect(screen.getAllByText(/Pan · Resolved/).length).toBeGreaterThan(0);
+		view.rerender(<FamilyEncoderSlotSurface controller={controller("resolved", "From XYZ")} index={0} />);
+		expect(screen.getAllByText(/Pan · From XYZ/).length).toBeGreaterThan(0);
 		view.rerender(<FamilyEncoderSlotSurface controller={controller("requested")} index={0} />);
 		expect(screen.queryByText(/Resolved/)).toBeNull();
 	});

@@ -11,13 +11,21 @@ import {
 	presentNumber,
 	presentScalarSelection,
 } from "../familyValuePresentation";
+import {
+	positionTargetProvenance,
+	presentNumericRange,
+	scalarValues,
+	withFrameRequests,
+} from "./positionReadouts";
 
 /**
  * Encoder readouts of semantic slots (TL-549/550/551 UI foundation).
  *
  * - Pan/Tilt read the resolved commanded angles of the displayed source (TL-594 readouts) and
- *   say so; divergent copies read Mixed, never an average. Without a readout they fall back to
- *   the requested Angles, labelled requested.
+ *   say so, naming a Target as their provenance (TL-652: From XYZ / From Point); divergent
+ *   copies read their real minimum...maximum, never an average. Without a readout they fall
+ *   back to the requested Angles, labelled requested.
+ * - Position components without a Programmer value read the displayed frame's request (TL-652).
  * - Every other component reads its requested value through the TL-619 presentation helper.
  * - Nothing here refits, normalizes or guesses; an unknown value reads as an em dash.
  */
@@ -33,6 +41,8 @@ export interface FamilySlotDisplay {
 	value: number | null;
 	text: string;
 	source: "resolved" | "requested" | "none";
+	/** TL-652: why resolved angles read as they do, e.g. From XYZ; absent means Resolved. */
+	provenance?: string;
 	/**
 	 * TL-637: set only on a Position slot whose fixtures have no Position physical data, so
 	 * nothing can seed an edit. The encoder and dialog show a quiet unsupported state instead.
@@ -114,6 +124,7 @@ export function requestedSlotIntents(
 function resolvedAngles(
 	slot: FamilyEncoderComponentSlot,
 	readouts: OutputReadoutSnapshot | null,
+	programmerValues: readonly ProgrammerValueEntry[],
 ): FamilySlotDisplay | null {
 	const axis = slot.component.kind;
 	if ((axis !== "pan" && axis !== "tilt") || !readouts) return null;
@@ -122,20 +133,36 @@ function resolvedAngles(
 		return owner?.position.available ? [owner.position] : [];
 	});
 	if (!owners.length) return null;
-	const values = owners.map((position) =>
-		position.common
-			? axis === "pan"
-				? position.common.pan_degrees
-				: position.common.tilt_degrees
-			: null,
+	const pick = (angles: { pan_degrees: number; tilt_degrees: number }) =>
+		axis === "pan" ? angles.pan_degrees : angles.tilt_degrees;
+	// A divergent owner contributes every copy's commanded angle to the range.
+	const values = owners.flatMap((position) =>
+		position.common ? [pick(position.common)] : position.commands.map(pick),
 	);
+	const provenance = positionTargetProvenance(
+		withFrameRequests(programmerValues, readouts, slot.fixture_ids),
+		slot.fixture_ids,
+	);
+	const tagged = provenance ? { provenance } : {};
 	const first = values[0];
-	if (first == null || values.some((value) => value !== first))
-		return { value: null, text: MIXED_LABEL, source: "resolved" };
+	const shared =
+		first !== undefined &&
+		owners.every((position) => position.common) &&
+		values.every((value) => value === first);
+	if (shared)
+		return {
+			value: first,
+			text: presentNumber(first, slot.descriptor).text,
+			source: "resolved",
+			...tagged,
+		};
+	// An owner that reports neither a common pose nor its copies cannot bound the range.
+	const complete = owners.every((position) => position.common || position.commands.length);
 	return {
-		value: first,
-		text: presentNumber(first, slot.descriptor).text,
+		value: null,
+		text: (complete && presentNumericRange(values, slot.descriptor)) || MIXED_LABEL,
 		source: "resolved",
+		...tagged,
 	};
 }
 
@@ -173,14 +200,23 @@ export function familySlotDisplay(
 		readouts: OutputReadoutSnapshot | null;
 	},
 ): FamilySlotDisplay {
-	const resolved = resolvedAngles(slot, input.readouts);
+	const resolved = resolvedAngles(slot, input.readouts, input.programmerValues);
 	if (resolved) return resolved;
-	const presented = presentScalarSelection(
-		requestedSlotIntents(slot, input.programmerValues),
-		slot.descriptor,
+	const position = slot.descriptor.owner === "position";
+	const intents = requestedSlotIntents(
+		slot,
+		position
+			? withFrameRequests(input.programmerValues, input.readouts, slot.fixture_ids)
+			: input.programmerValues,
 	);
+	const presented = presentScalarSelection(intents, slot.descriptor);
 	if (!presented)
 		return positionSlotUnsupported(slot, input) ? { ...NONE, unsupported: true } : NONE;
+	if (presented.kind === "mixed" && position) {
+		const values = scalarValues(intents);
+		const range = values ? presentNumericRange(values, slot.descriptor) : null;
+		if (range) return { value: null, text: range, source: "requested" };
+	}
 	return {
 		value:
 			presented.kind === "value" ? presented.value.requested : null,

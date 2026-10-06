@@ -161,8 +161,9 @@ describe("production Position Special Dialog", () => {
 		const { close, pan, joystick } = await mount();
 		expect(pan).toHaveAttribute("aria-valuenow", "30");
 		expect(screen.getByRole("slider", { name: "Tilt angle" })).toHaveAttribute("aria-valuenow", "10");
-		expect(screen.getByTestId("pan-value-caption")).toHaveTextContent("Resolved");
-		expect(screen.getByTestId("tilt-value-caption")).toHaveTextContent("Resolved");
+		// TL-652: angles resolved from an Origin Target name their provenance.
+		expect(screen.getByTestId("pan-value-caption")).toHaveTextContent("From XYZ");
+		expect(screen.getByTestId("tilt-value-caption")).toHaveTextContent("From XYZ");
 		pan.focus(); joystick.focus();
 		fireEvent.click(screen.getByRole("button", { name: "Close Position Special Dialog" }));
 		expect(close).toHaveBeenCalled();

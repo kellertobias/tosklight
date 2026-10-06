@@ -32,6 +32,7 @@ export function FamilyEncoderSlotSurface({
 	const { descriptor, limits, label } = bindingSlot;
 	const display = controller.familyEncoders.display(index);
 	// TL-549: angles read back from the displayed output say so; requested values stay unlabelled.
+	// TL-652: angles resolved from a Target name it instead (From XYZ / From Point).
 	// TL-551: a Zoom without a published convention is shown quietly and never edited.
 	// TL-637: so is a Position slot whose fixtures have no Position physical data.
 	const unsupported = familySlotUnsupported(bindingSlot) || display.unsupported === true;
@@ -41,7 +42,7 @@ export function FamilyEncoderSlotSurface({
 		: startNeeded
 			? `${label} · ${COLOR_START_NEEDED_LABEL}`
 			: display.source === "resolved"
-			? `${label} · Resolved`
+			? `${label} · ${display.provenance ?? "Resolved"}`
 			: label;
 	const owner = descriptor.owner;
 	// TL-544 G4: the Point slot is a choice encoder on every surface (detent, step or picker).

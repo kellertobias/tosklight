@@ -15,6 +15,10 @@ import {
 	positionSelectionState,
 	type ProgrammerValueEntry,
 } from "../../../control/parameterControls/familyEncoders/familyEncoderDisplay";
+import {
+	type ProgrammerGroupValueEntry,
+	selectionPositionEntries,
+} from "../../../control/parameterControls/familyEncoders/positionReadouts";
 import { familyGestureWriter } from "../../../control/parameterControls/familyEncoders/useFamilyEncoderBinding";
 import {
 	immediateParameterTiming,
@@ -47,6 +51,7 @@ import {
 
 const EMPTY: readonly string[] = [];
 const EMPTY_VALUES: readonly ProgrammerValueEntry[] = [];
+const EMPTY_GROUP_VALUES: readonly ProgrammerGroupValueEntry[] = [];
 
 function useLaneValues(fixtureIds: readonly string[], groupId: string | null) {
 	const captureMode = useProgrammerCaptureModeView(true);
@@ -65,6 +70,7 @@ function useLaneValues(fixtureIds: readonly string[], groupId: string | null) {
 	return {
 		lane: captureMode && view?.ready ? (preload ? "preload" : "normal") : null,
 		values: (view?.fixtureValues ?? EMPTY_VALUES) as readonly ProgrammerValueEntry[],
+		groupValues: (view?.groupValues ?? EMPTY_GROUP_VALUES) as readonly ProgrammerGroupValueEntry[],
 	} as const;
 }
 
@@ -88,11 +94,16 @@ export function usePositionSpecialDialog(
 ): Omit<PositionDialogProps, "onClose"> {
 	const selection = useProgrammingSelectionView(true);
 	const groupId = selectedGroupId(selection);
-	const { lane, values } = useLaneValues(selectedFixtureIds, groupId);
+	const { lane, values: fixtureValues, groupValues } = useLaneValues(selectedFixtureIds, groupId);
 	const group = positionFamilyGroup(useFamilyEncoderPages(selectedFixtureIds, true));
 	const panSlot = positionAxisSlot(group, "pan");
 	const tiltSlot = positionAxisSlot(group, "tilt");
 	const fixtureIds = panSlot?.fixture_ids ?? tiltSlot?.fixture_ids ?? EMPTY;
+	// TL-652: a group-held Position reads and edits like a fixture-held one.
+	const values = useMemo(
+		() => selectionPositionEntries({ fixtureValues, groupValues, groupId, fixtureIds }),
+		[fixtureValues, groupValues, groupId, fixtureIds],
+	);
 	const readouts = useFamilyReadouts(lane ?? "normal", fixtureIds, {
 		enabled: lane !== null,
 		consumerId: "position-special-dialog",
