@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **376 root cases across 116 files**.
+Default catalog: **378 root cases across 117 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -194,6 +194,8 @@ Default catalog: **376 root cases across 116 files**.
 | 125-typed-family-values.spec.ts | TYPED-FAMILY-002 @api › Position angles and Zoom degrees from the command line and the desk keypad | docs/testing/38-typed-family-values.md | @api | typed-family-values | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 125-typed-family-values.spec.ts | TYPED-FAMILY-003 @api › OSC family writes and the OSC keypad share the command-line value | docs/testing/38-typed-family-values.md | @api | typed-family-values | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 126-color-dialog-live-group.spec.ts | @ui › hue then Saturation on a live Group programs the Group's colour with the shown hue, and Record stores it | repository contract | @ui | color-dialog-live-group | standard failure evidence | parallel | pending-semantic-migration |
+| 127-dynamic-editor-position-circle.spec.ts | BENCH-DYNAMIC-EDITOR-001 @bench @ui › a two-axis Circle built by touch in the Dynamics editor stores typed Angle lanes in degrees and moves the movers | repository contract | @bench @ui | dynamic-editor-position-circle | standard failure evidence | parallel | migrated-semantic-world |
+| 127-dynamic-editor-position-circle.spec.ts | BENCH-DYNAMIC-EDITOR-002 @bench @ui › Color and Zoom lanes chosen in the Dynamics editor are stored as semantic family lanes in their own units | repository contract | @bench @ui | dynamic-editor-position-circle | standard failure evidence | parallel | migrated-semantic-world |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 19-manual-review-software-corrections.spec.ts | POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize | docs/testing/10-desk-lock-and-operator-ui.md | @ui | manual-review-software-corrections | standard failure evidence | parallel | pending-semantic-migration |

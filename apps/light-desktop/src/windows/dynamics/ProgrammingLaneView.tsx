@@ -42,8 +42,10 @@ export function ProgrammingLaneRow({
 	);
 }
 
-/** Inspection for retained typed definitions while the feature-specific composer is staged.
- * No scalar curve or percentage controls are allowed to reinterpret a complete intent. */
+/** Inspection for a typed lane the curve composer cannot express: a whole-family keyframe lane
+ * or a native Direct colour lane. Component lanes (Pan, Tilt, Zoom, Color components) are
+ * composed in their descriptor units instead (see `editableLane`); no scalar curve or percentage
+ * control may reinterpret a complete intent. */
 export function ProgrammingLaneView({
 	dynamic,
 	lane,
@@ -71,7 +73,7 @@ export function ProgrammingLaneView({
 			<section className="dynamic-lane-bottom-editor" aria-label="Intent lane">
 				<strong>{dynamicLaneLabel(lane)}</strong>
 				<span>{dynamicLaneMode(lane).replaceAll("_", " ")}</span>
-				<p>Intent curve editing and preview are not available in this build.</p>
+				<p>The curve composer edits Pan, Tilt, Zoom and Color component lanes; this lane holds whole values.</p>
 			</section>
 		</div>
 	);

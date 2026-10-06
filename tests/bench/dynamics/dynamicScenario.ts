@@ -1,6 +1,8 @@
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { presetStorageKey } from "../../../apps/light-desktop/src/presetFamilies";
 import type { ApiDriver } from "../core/api";
+import type { DeskDriver } from "../core/desk";
+import { BrowserDynamicEditor } from "./dynamicEditorScenario";
 import type { PresetFamily } from "../groups-presets/presetScenario";
 
 /** A keyframe's value: a fixed level, or what a stored Preset holds for each fixture. */
@@ -40,10 +42,24 @@ export interface DynamicHandle {
  * targetless, and applying it starts it on whatever the Programmer has selected at that moment.
  */
 export class BrowserDynamics {
+	private readonly touchEditor: BrowserDynamicEditor | undefined;
+
 	constructor(
 		private readonly api: ApiDriver,
 		private readonly activeShowId: () => string,
-	) {}
+		surface?: { page: Page; desk: DeskDriver },
+	) {
+		this.touchEditor =
+			surface &&
+			new BrowserDynamicEditor(api, surface.page, surface.desk, activeShowId);
+	}
+
+	/** The Dynamics window's editor, driven by touch on the browser desk. */
+	get editor(): BrowserDynamicEditor {
+		if (!this.touchEditor)
+			throw new Error("The Dynamics editor needs a browser desk");
+		return this.touchEditor;
+	}
 
 	/** Creates a targetless Dynamic: it names no Group and no fixtures of its own. */
 	async create(intent: DynamicIntent): Promise<DynamicHandle> {

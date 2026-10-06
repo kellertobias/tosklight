@@ -1,8 +1,11 @@
+import { type ScalarDynamicLane } from "../../features/dynamics/laneModel";
 import {
-	type ScalarDynamicLane,
-	isScalarDynamicLane,
-	isScalarDynamicRandomGroup,
-} from "../../features/dynamics/laneModel";
+	dynamicLaneDomain,
+	editableLane,
+	editableRandomRange,
+	graphLane,
+} from "../../features/dynamics/editableLane";
+import { laneGraphFraction } from "../../features/dynamics/laneDomain";
 import { Button, MultiValueToggle } from "@tosklight/ui";
 import { type CSSProperties, useMemo } from "react";
 import type {
@@ -60,7 +63,7 @@ export function DynamicSelectionPreview({
 		[dynamic.body.phase, previewPositions],
 	);
 	const hasIntentLanes = dynamic.body.lanes.some(
-		(lane) => !isScalarDynamicLane(lane),
+		(lane) => !editableLane(lane),
 	);
 	return (
 		<aside
@@ -307,8 +310,28 @@ function dynamicPreviewValues(
 	phase: number,
 ) {
 	const values = new Map<string, number>();
-	for (const lane of dynamic.lanes.filter(isScalarDynamicLane))
-		values.set(lane.attribute, lanePreviewValue(lane, dynamic, phase));
+	// Every lane previews on its own graph range: an Angle over the nominal travel, a level 0–1.
+	for (const lane of dynamic.lanes) {
+		const editable = editableLane(lane);
+		const domain = dynamicLaneDomain(lane);
+		if (!editable || !domain) continue;
+		const graph = graphLane(editable, domain);
+		const random = dynamic.random_groups.find(
+			(group) => group.id === editable.random_group_id,
+		);
+		const range = random ? editableRandomRange(random, domain.key) : {};
+		const fraction = (source: DynamicScalarSourceProjection | undefined) =>
+			source?.type === "value"
+				? laneGraphFraction(domain, source.value)
+				: undefined;
+		values.set(
+			previewAttribute(editable.attribute),
+			lanePreviewValue(graph, phase, {
+				low: fraction(range.low) ?? 0,
+				high: fraction(range.high) ?? 1,
+			}),
+		);
+	}
 	const hasColor = [...values.keys()].some((attribute) =>
 		attribute.startsWith("color."),
 	);
@@ -322,10 +345,17 @@ function dynamicPreviewValues(
 	};
 }
 
+/** The preview channel a lane key moves: Angles drive the dot's Pan/Tilt offset. */
+function previewAttribute(key: string) {
+	if (key === "position.pan") return "pan";
+	if (key === "position.tilt") return "tilt";
+	return key;
+}
+
 function lanePreviewValue(
 	lane: ScalarDynamicLane,
-	dynamic: DynamicDefinitionProjection,
 	phase: number,
+	random: { low: number; high: number },
 ) {
 	const intervalPhase = moduloOne(phase * rationalValue(lane.speed_multiplier));
 	const functionName =
@@ -339,12 +369,7 @@ function lanePreviewValue(
 	if (lane.mode === "keyframes")
 		return keyframePreviewValue(lane.keyframes.points, position);
 	if (lane.mode === "random") {
-		const group = dynamic.random_groups
-			.filter(isScalarDynamicRandomGroup)
-			.find((candidate) => candidate.id === lane.random_group_id);
-		if (!group) return 0;
-		const low = scalarSourceCurveValue(group.low);
-		const high = scalarSourceCurveValue(group.high);
+		const { low, high } = random;
 		return previewHash(lane.id, Math.floor(position * 1_000_000)) % 2
 			? high
 			: low;

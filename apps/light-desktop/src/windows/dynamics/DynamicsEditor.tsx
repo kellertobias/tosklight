@@ -1,7 +1,5 @@
-import {
-	type ScalarDynamicLane,
-	type ScalarDynamicRandomGroup,
-} from "../../features/dynamics/laneModel";
+import { type ScalarDynamicLane } from "../../features/dynamics/laneModel";
+import { createDynamicLane } from "../../features/dynamics/editableLane";
 import { Button } from "@tosklight/ui";
 import { ModalFrame } from "@tosklight/ui/modals";
 import {
@@ -17,7 +15,6 @@ import type {
 	DynamicLaneModeProjection,
 	DynamicLaneProjection,
 	DynamicPhaseOrderingProjection,
-	DynamicRandomGroupProjection,
 	DynamicRuntimeSnapshotProjection,
 	DynamicScalarSourceProjection,
 	DynamicSpatialMappingOverrideProjection,
@@ -42,7 +39,6 @@ export type DynamicEditorView = "curves" | "projection" | "phase" | "speed";
 
 export const sourceCurrent: DynamicScalarSourceProjection = { type: "current" };
 const sourceZero: DynamicScalarSourceProjection = { type: "value", value: 0 };
-const sourceFull: DynamicScalarSourceProjection = { type: "value", value: 1 };
 export const curveComposerMethods = [
 	{ value: "keyframes", label: "Keyframes" },
 	{ value: "max_min", label: "Max / min" },
@@ -706,10 +702,7 @@ export function createDefaultDynamicDefinition(
 	poolNumber: number,
 	attribute: string,
 	ids: { definition?: string; lane?: string } = {},
-): Omit<DynamicDefinitionProjection, "lanes" | "random_groups"> & {
-	lanes: ScalarDynamicLane[];
-	random_groups: ScalarDynamicRandomGroup[];
-} {
+): DynamicDefinitionProjection {
 	return {
 		id: ids.definition ?? crypto.randomUUID(),
 		pool_number: poolNumber,
@@ -741,74 +734,15 @@ export function createDefaultDynamicDefinition(
 	};
 }
 
+/**
+ * A new lane for a lane-chooser key. Pan, Tilt, Zoom and Color components are typed family lanes
+ * in their descriptor units (programming contract 1); other attributes are scalar 0–1 lanes.
+ */
 export function createDefaultDynamicLane(
 	attribute: string,
 	id: string = crypto.randomUUID(),
-): ScalarDynamicLane {
-	return {
-		id,
-		attribute,
-		mode: "max_min",
-		keyframes: {
-			points: [
-				{
-					position: 0,
-					source: sourceZero,
-					interpolation: "ease_in_out",
-				},
-				{
-					position: 0.5,
-					source: sourceFull,
-					interpolation: "ease_in_out",
-				},
-			],
-			size: 1,
-		},
-		max_min: {
-			minimum: sourceZero,
-			maximum: sourceFull,
-			function: "sinus",
-			size: 1,
-			pwm: defaultPwm(),
-		},
-		middle_amplitude: {
-			middle: { type: "value", value: 0.5 },
-			amplitude: 0.5,
-			function: "sinus",
-			size: 1,
-			pwm: defaultPwm(),
-		},
-		speed_multiplier: { numerator: 1, denominator: 1 },
-		width: 1,
-		random_group_id: null,
-		phase: null,
-	};
-}
-
-function defaultPwm() {
-	return {
-		attack: 0,
-		on: 0.5,
-		decay: 0,
-		off: 0.5,
-		attack_interpolation: "linear" as const,
-		decay_interpolation: "linear" as const,
-	};
-}
-
-export function defaultRandomGroup(): ScalarDynamicRandomGroup {
-	return {
-		id: crypto.randomUUID(),
-		seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 0,
-		low: sourceZero,
-		high: sourceFull,
-		decision_interval_millis: 250,
-		start_probability: 0.25,
-		mean_duration_millis: 500,
-		duration_spread_millis: 100,
-		attack_ratio: 0.1,
-		decay_ratio: 0.1,
-	};
+): DynamicLaneProjection {
+	return createDynamicLane(attribute, id);
 }
 
 export function largestKeyframeGapMidpoint(

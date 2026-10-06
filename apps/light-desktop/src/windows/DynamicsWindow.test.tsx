@@ -13,6 +13,12 @@ import {
 	createDefaultDynamicLane,
 	DynamicsWindow,
 } from "./DynamicsWindow";
+import type { DynamicLaneProjection } from "./../api/types";
+import {
+	commitEditableLane,
+	editableLane,
+} from "../features/dynamics/editableLane";
+import type { ScalarDynamicLane } from "../features/dynamics/laneModel";
 import { lanePreview } from "./dynamics/DynamicsEditor";
 
 let dynamics: Array<Record<string, unknown>> = [];
@@ -142,6 +148,15 @@ function TestShiftLatch() {
 	);
 }
 
+/** A Pan lane is a typed Angle lane in degrees under programming contract 1 (TL-648). */
+const PAN_ANGLE_LANE = expect.objectContaining({
+	address: { representation: { kind: "angles" }, component: { kind: "pan" } },
+});
+
+function scalar(lane: DynamicLaneProjection) {
+	return lane as ScalarDynamicLane;
+}
+
 function dynamicObject({
 	multipleLanes = false,
 	mode,
@@ -153,8 +168,9 @@ function dynamicObject({
 		definition: "dynamic-1",
 		lane: "lane-1",
 	});
-	if (mode) body.lanes[0].mode = mode;
-	if (multipleLanes) body.lanes.push(createDefaultDynamicLane("pan", "lane-2"));
+	if (mode) scalar(body.lanes[0]).mode = mode;
+	if (multipleLanes)
+		body.lanes.push(createDefaultDynamicLane("position.pan", "lane-2"));
 	return {
 		kind: "dynamic",
 		id: "dynamic-1",
@@ -658,7 +674,7 @@ describe("DynamicsWindow", () => {
 				3,
 				expect.objectContaining({
 					type: "add_lane",
-					lane: expect.objectContaining({ attribute: "pan" }),
+					lane: expect.objectContaining({ programming: PAN_ANGLE_LANE }),
 				}),
 				undefined,
 			),
@@ -729,7 +745,7 @@ describe("DynamicsWindow", () => {
 				3,
 				expect.objectContaining({
 					type: "add_lane",
-					lane: expect.objectContaining({ attribute: "pan" }),
+					lane: expect.objectContaining({ programming: PAN_ANGLE_LANE }),
 				}),
 				undefined,
 			),
@@ -834,7 +850,10 @@ describe("DynamicsWindow", () => {
 
 	it("keeps keyframe pointer interaction isolated from lane background selection", () => {
 		const object = dynamicObject({ multipleLanes: true, mode: "keyframes" });
-		object.body.lanes[1].mode = "keyframes";
+		object.body.lanes[1] = commitEditableLane(
+			{ ...scalar(editableLane(object.body.lanes[1])!), mode: "keyframes" },
+			object.body.lanes[1],
+		);
 		dynamics = [object];
 		renderWindow();
 		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
@@ -1048,7 +1067,7 @@ describe("DynamicsWindow", () => {
 
 	it("deletes the selected non-closing keyframe", async () => {
 		const object = dynamicObject({ mode: "keyframes" });
-		const lane = object.body.lanes[0];
+		const lane = scalar(object.body.lanes[0]);
 		lane.keyframes.points.push({
 			...lane.keyframes.points[1],
 			position: 0.75,
@@ -1201,7 +1220,7 @@ describe("DynamicsWindow", () => {
 				expect.objectContaining({
 					type: "replace_lane",
 					lane_id: "lane-1",
-					lane: expect.objectContaining({ attribute: "pan" }),
+					lane: expect.objectContaining({ programming: PAN_ANGLE_LANE }),
 				}),
 				undefined,
 			),
@@ -1210,7 +1229,7 @@ describe("DynamicsWindow", () => {
 });
 
 it("mirrors a migrated middle-amplitude waveform in the curve preview", () => {
-	const lane = createDefaultDynamicLane("intensity", "lane-preview");
+	const lane = scalar(createDefaultDynamicLane("intensity", "lane-preview"));
 	lane.mode = "middle_amplitude";
 	lane.middle_amplitude.middle = { type: "value", value: 0.5 };
 	lane.middle_amplitude.amplitude = 0.25;

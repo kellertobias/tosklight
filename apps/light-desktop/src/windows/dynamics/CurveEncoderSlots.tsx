@@ -1,8 +1,15 @@
+import { type ScalarDynamicLane } from "../../features/dynamics/laneModel";
 import {
-	type ScalarDynamicLane,
-	isScalarDynamicLane,
-	isScalarDynamicRandomGroup,
-} from "../../features/dynamics/laneModel";
+	commitEditableLane,
+	dynamicLaneDomain,
+	editableLane,
+	editableRandomRange,
+} from "../../features/dynamics/editableLane";
+import {
+	type DynamicLaneDomain,
+	formatLaneValue,
+	laneDomainForKey,
+} from "../../features/dynamics/laneDomain";
 import type { DynamicLaneProjection } from "../../api/types";
 import {
 	Button,
@@ -84,7 +91,6 @@ import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/Speed
 import { useApp } from "../../state/AppContext";
 import {
 	clamp,
-	defaultRandomGroup,
 	keyframeName,
 	laneShapeLabel,
 	primaryInterpolationIndex,
@@ -101,6 +107,7 @@ type PresetObject = ShowObject<"preset">;
 
 function curveSlotFactories(
 	lane: ScalarDynamicLane | undefined,
+	domain: DynamicLaneDomain,
 	onLaneChange: (
 		update: (lane: ScalarDynamicLane) => ScalarDynamicLane,
 		mutationGroup?: string,
@@ -132,22 +139,25 @@ function curveSlotFactories(
 	): DynamicEncoderSlot => ({
 		id,
 		label,
-		display: scalarSourceEncoderDisplay(source),
-		value: scalarSourceEncoderValue(source),
-		minimum: 0,
-		maximum: 1,
-		inputScale: 100,
-		fineStep: 0.01,
-		coarseStep: 0.1,
+		display: scalarSourceEncoderDisplay(source, domain),
+		value: scalarSourceEncoderValue(source, domain),
+		minimum: domain.minimum,
+		maximum: domain.maximum,
+		inputScale: domain.inputScale,
+		fineStep: domain.fineStep,
+		coarseStep: domain.coarseStep,
 		disabled,
 		presets: source
-			? scalarSourcePresetChoices(presets, lane?.attribute ?? "", source)
+			? scalarSourcePresetChoices(presets, domain.presetKey, source)
 			: undefined,
 		apply: (value, group) =>
 			onLaneChange(
 				(item) =>
 					normalizePwmLane(
-						replace(item, { type: "value", value: clamp(value, 0, 1) }),
+						replace(item, {
+							type: "value",
+							value: clamp(value, domain.minimum, domain.maximum),
+						}),
 					),
 				group,
 			),
@@ -215,7 +225,7 @@ function keyframeCurveSlots({
 	lane: ScalarDynamicLane | undefined;
 	keyframeIndex: number;
 	onKeyframeIndex(index: number): void;
-	onLaneChange: Parameters<typeof curveSlotFactories>[1];
+	onLaneChange: Parameters<typeof curveSlotFactories>[2];
 	disabled: boolean;
 	sourceSlot: ReturnType<typeof curveSlotFactories>["sourceSlot"];
 	widthSlot: DynamicEncoderSlot;
@@ -333,6 +343,7 @@ function keyframeCurveSlots({
 
 function scalarCurveEditorEncoderSlots(
 	lane: ScalarDynamicLane | undefined,
+	domain: DynamicLaneDomain,
 	dynamic: DynamicDefinitionProjection,
 	keyframeIndex: number,
 	onKeyframeIndex: (index: number) => void,
@@ -343,7 +354,7 @@ function scalarCurveEditorEncoderSlots(
 	presets: readonly PresetObject[],
 ): DynamicEncoderSlot[] {
 	const { disabled, unassigned, sourceSlot, speedSlot, widthSlot } =
-		curveSlotFactories(lane, onLaneChange, presets);
+		curveSlotFactories(lane, domain, onLaneChange, presets);
 	if (!lane || lane.mode === "keyframes")
 		return keyframeCurveSlots({
 			lane,
@@ -369,20 +380,20 @@ function scalarCurveEditorEncoderSlots(
 			{
 				id: "amplitude",
 				label: "Amplitude",
-				display: `${Math.round(lane.middle_amplitude.amplitude * 100)}%`,
+				display: formatLaneValue(domain, lane.middle_amplitude.amplitude),
 				value: lane.middle_amplitude.amplitude,
 				minimum: 0,
-				maximum: 1,
-				inputScale: 100,
-				fineStep: 0.01,
-				coarseStep: 0.1,
+				maximum: domain.maximum - domain.minimum,
+				inputScale: domain.inputScale,
+				fineStep: domain.fineStep,
+				coarseStep: domain.coarseStep,
 				apply: (value, group) =>
 					onLaneChange(
 						(item) => ({
 							...item,
 							middle_amplitude: {
 								...item.middle_amplitude,
-								amplitude: clamp(value, 0, 1),
+								amplitude: clamp(value, 0, domain.maximum - domain.minimum),
 							},
 						}),
 						group,
@@ -391,7 +402,7 @@ function scalarCurveEditorEncoderSlots(
 		];
 		return lane.middle_amplitude.function === "pwm"
 			? [
-					...middleAmplitudePwmValueSlots(lane, onLaneChange),
+					...middleAmplitudePwmValueSlots(lane, domain, onLaneChange),
 					...pwmEncoderSlots(lane, onLaneChange),
 					speedSlot,
 				]
@@ -404,16 +415,17 @@ function scalarCurveEditorEncoderSlots(
 				];
 	}
 	if (lane.mode === "random") {
-		const group = dynamic.random_groups
-			.filter(isScalarDynamicRandomGroup)
-			.find((candidate) => candidate.id === lane.random_group_id);
+		const group = dynamic.random_groups.find(
+			(candidate) => candidate.id === lane.random_group_id,
+		);
+		const range = group ? editableRandomRange(group, domain.key) : {};
 		return [
 			{
-				...sourceSlot("random-low", "Low", group?.low, (item) => item),
+				...sourceSlot("random-low", "Low", range.low, (item) => item),
 				disabled: true,
 			},
 			{
-				...sourceSlot("random-high", "High", group?.high, (item) => item),
+				...sourceSlot("random-high", "High", range.high, (item) => item),
 				disabled: true,
 			},
 			unassigned("random-unassigned-1"),
@@ -445,46 +457,57 @@ function scalarCurveEditorEncoderSlots(
 
 function middleAmplitudePwmValueSlots(
 	lane: ScalarDynamicLane,
+	domain: DynamicLaneDomain,
 	onLaneChange: (
 		update: (lane: ScalarDynamicLane) => ScalarDynamicLane,
 		mutationGroup?: string,
 	) => Promise<void>,
 ): DynamicEncoderSlot[] {
-	const middle = scalarSourceEncoderValue(lane.middle_amplitude.middle);
-	const top = clamp(middle + lane.middle_amplitude.amplitude, 0, 1);
-	const bottom = clamp(middle - lane.middle_amplitude.amplitude, 0, 1);
+	const { minimum, maximum } = domain;
+	const middle = scalarSourceEncoderValue(lane.middle_amplitude.middle, domain);
+	const top = clamp(middle + lane.middle_amplitude.amplitude, minimum, maximum);
+	const bottom = clamp(
+		middle - lane.middle_amplitude.amplitude,
+		minimum,
+		maximum,
+	);
 	const slot = (
 		field: "top" | "bottom",
 		value: number,
 	): DynamicEncoderSlot => ({
 		id: `pwm-${field}`,
 		label: field === "top" ? "Top" : "Bottom",
-		display: `${Math.round(value * 100)}%`,
+		display: formatLaneValue(domain, value),
 		value,
-		minimum: 0,
-		maximum: 1,
-		inputScale: 100,
-		fineStep: 0.01,
-		coarseStep: 0.1,
+		minimum,
+		maximum,
+		inputScale: domain.inputScale,
+		fineStep: domain.fineStep,
+		coarseStep: domain.coarseStep,
 		apply: (nextValue, group) =>
 			onLaneChange((item) => {
 				const currentMiddle = scalarSourceEncoderValue(
 					item.middle_amplitude.middle,
+					domain,
 				);
 				const currentTop = clamp(
 					currentMiddle + item.middle_amplitude.amplitude,
-					0,
-					1,
+					minimum,
+					maximum,
 				);
 				const currentBottom = clamp(
 					currentMiddle - item.middle_amplitude.amplitude,
-					0,
-					1,
+					minimum,
+					maximum,
 				);
 				const nextTop =
-					field === "top" ? clamp(nextValue, currentBottom, 1) : currentTop;
+					field === "top"
+						? clamp(nextValue, currentBottom, maximum)
+						: currentTop;
 				const nextBottom =
-					field === "bottom" ? clamp(nextValue, 0, currentTop) : currentBottom;
+					field === "bottom"
+						? clamp(nextValue, minimum, currentTop)
+						: currentBottom;
 				return normalizePwmLane({
 					...item,
 					middle_amplitude: {
@@ -596,19 +619,23 @@ function setLanePwmValue(
 			};
 }
 
+/** A source's encoder position; Current and Preset sit at the middle of the domain. */
 function scalarSourceEncoderValue(
 	source: DynamicScalarSourceProjection | undefined,
+	domain: DynamicLaneDomain,
 ) {
-	return source?.type === "value" ? source.value : 0;
+	if (source?.type === "value") return source.value;
+	return domain.address ? (domain.minimum + domain.maximum) / 2 : 0;
 }
 
 export function scalarSourceEncoderDisplay(
 	source: DynamicScalarSourceProjection | undefined,
+	domain: DynamicLaneDomain = laneDomainForKey("intensity"),
 ) {
 	if (!source) return "—";
 	if (source.type === "current") return "Current";
 	if (source.type === "preset") return "Preset";
-	return `${Math.round(source.value * 100)}%`;
+	return formatLaneValue(domain, source.value);
 }
 
 function scalarSourcePresetChoices(
@@ -796,7 +823,9 @@ export function curveEditorEncoderSlots(
 	) => Promise<void>,
 	presets: readonly PresetObject[],
 ): DynamicEncoderSlot[] {
-	if (lane && !isScalarDynamicLane(lane))
+	const editable = lane ? editableLane(lane) : undefined;
+	const domain = lane ? dynamicLaneDomain(lane) : laneDomainForKey("intensity");
+	if (lane && (!editable || !domain))
 		return [
 			...Array.from(
 				{ length: 4 },
@@ -851,15 +880,16 @@ export function curveEditorEncoderSlots(
 			},
 		];
 	return scalarCurveEditorEncoderSlots(
-		lane,
+		editable ?? undefined,
+		domain ?? laneDomainForKey("intensity"),
 		dynamic,
 		keyframeIndex,
 		onKeyframeIndex,
 		(update, group) =>
-			onLaneChange(
-				(current) => (isScalarDynamicLane(current) ? update(current) : current),
-				group,
-			),
+			onLaneChange((current) => {
+				const view = editableLane(current);
+				return view ? commitEditableLane(update(view), current) : current;
+			}, group),
 		presets,
 	);
 }

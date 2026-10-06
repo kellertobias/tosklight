@@ -267,6 +267,7 @@ export class BrowserScenarioWorld {
 		this.dynamic = new BrowserDynamics(
 			api,
 			() => this.show.contractIdentity().workingId,
+			{ page, desk },
 		);
 		this.demo = new BrowserProductDemo(page, desk, bench, api, testInfo);
 		this.record = new BrowserRecording(

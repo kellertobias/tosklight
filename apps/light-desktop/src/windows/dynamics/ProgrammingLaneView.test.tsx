@@ -73,44 +73,58 @@ describe("typed Dynamic inspection and scalar edit boundaries", () => {
 		expect(screen.queryByRole("img")).toBeNull();
 	});
 
-	it("keeps typed intent exact when common encoders edit speed and width", async () => {
+	it("edits a typed Pan Angle lane in degrees and keeps its typed shape", async () => {
 		let current: DynamicLaneProjection = typed();
-		const intent = structuredClone(current.programming);
 		const onChange = async (
 			update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
 		) => {
 			current = update(current);
 		};
-		const slots = curveEditorEncoderSlots(
-			current,
-			definition(),
-			0,
-			() => {},
-			onChange,
-			[],
-		);
-		expect(slots.slice(0, 4).every((slot) => slot.disabled)).toBe(true);
-		await slots[4].apply(0.5, "width");
-		await slots[5].apply(2, "speed");
+		const slots = () =>
+			curveEditorEncoderSlots(current, definition(), 0, () => {}, onChange, []);
+		expect(slots().map((slot) => [slot.label, slot.display])).toEqual([
+			["Middle", "Current"],
+			["Amplitude", "720°"],
+			["Unassigned", "—"],
+			["Unassigned", "—"],
+			["Curve width", "100%"],
+			["Speed", "1/1"],
+		]);
+		expect(slots()[1]).toMatchObject({ inputScale: 1, fineStep: 1 });
+		await slots()[1].apply(90, "amplitude");
+		await slots()[4].apply(0.5, "width");
+		await slots()[5].apply(2, "speed");
 		expect(current).toMatchObject({
 			width: 0.5,
 			speed_multiplier: { numerator: 2, denominator: 1 },
-			programming: intent,
+			programming: {
+				address: typed().programming.address,
+				configuration: {
+					mode: "middle_amplitude",
+					configuration: {
+						middle: { kind: "current" },
+						amplitude: { kind: "scalar", value: 90 },
+						function: "sinus",
+					},
+				},
+			},
 		});
 		expect("attribute" in current).toBe(false);
+		expect(slots()[1].display).toBe("90°");
 	});
 
 	it("a stale scalar encoder cannot add scalar fields to a replacement intent lane", async () => {
 		const current = typed();
+		let replaced: DynamicLaneProjection | null = null;
 		const onChange = vi.fn(
 			async (
 				update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
 			) => {
-				expect(update(current)).toBe(current);
+				replaced = update(current);
 			},
 		);
 		const slots = curveEditorEncoderSlots(
-			createDefaultDynamicLane("pan"),
+			createDefaultDynamicLane("intensity"),
 			definition(),
 			0,
 			() => {},
@@ -119,6 +133,7 @@ describe("typed Dynamic inspection and scalar edit boundaries", () => {
 		);
 		await slots[0].apply(0.75, "gesture");
 		expect(onChange).toHaveBeenCalledTimes(1);
-		expect(current.programming.configuration.mode).toBe("middle_amplitude");
+		expect(replaced).not.toHaveProperty("attribute");
+		expect(replaced).toMatchObject({ programming: current.programming });
 	});
 });

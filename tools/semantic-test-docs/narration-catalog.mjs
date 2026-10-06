@@ -189,6 +189,17 @@ const supportedCallPaths = new Set([
 	"dynamic.apply",
 	"dynamic.create",
 	"dynamic.expect.targetless",
+	"dynamic.editor.addLane",
+	"dynamic.editor.chooseCurve",
+	"dynamic.editor.create",
+	"dynamic.editor.expect.encoder",
+	"dynamic.editor.expect.laneConfiguration",
+	"dynamic.editor.expect.lanes",
+	"dynamic.editor.expect.noError",
+	"dynamic.editor.selectLane",
+	"dynamic.editor.setEncoder",
+	"dynamic.editor.takeSelectionAndClose",
+	"dynamic.editor.toggle",
 	"group.expectStaleApiRecordRejected",
 	"group.expect.empty",
 	"group.expect.fixtures",
@@ -462,6 +473,48 @@ const supportedCallPaths = new Set([
 ]);
 
 const exactNarrations = new Map([
+	[
+		"dynamic.editor.create",
+		([pool, lane]) =>
+			`Tap empty Dynamics tile ${pool} and choose the lane ${lane} in the lane chooser.`,
+	],
+	[
+		"dynamic.editor.addLane",
+		([, lane]) => `Tap + Add Lane and choose the lane ${lane}.`,
+	],
+	[
+		"dynamic.editor.selectLane",
+		([index, label]) => `Select lane ${index}, ${label}, in the Dynamics editor.`,
+	],
+	[
+		"dynamic.editor.chooseCurve",
+		([curve]) => `Choose the ${curve} curve function for the selected lane.`,
+	],
+	[
+		"dynamic.editor.setEncoder",
+		([label, value]) => `Enter ${value} on the ${label} lane encoder's value modal.`,
+	],
+	[
+		"dynamic.editor.expect.encoder",
+		([label, display]) => `The ${label} lane encoder reads ${display}.`,
+	],
+	[
+		"dynamic.editor.expect.lanes",
+		([dynamic, lanes]) => `${dynamic} stores the lanes ${lanes}.`,
+	],
+	[
+		"dynamic.editor.expect.noError",
+		() => "The Dynamics editor shows no error.",
+	],
+	[
+		"dynamic.editor.takeSelectionAndClose",
+		() =>
+			"In Dynamic Settings › Targets tap Take Selection, then go back to the pool.",
+	],
+	[
+		"dynamic.editor.toggle",
+		([dynamic]) => `Tap the pool tile of ${dynamic} to toggle it.`,
+	],
 	[
 		"app.open",
 		([target]) =>

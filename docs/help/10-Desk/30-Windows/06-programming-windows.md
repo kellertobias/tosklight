@@ -50,6 +50,31 @@ Targets that no longer exist are skipped and reported without substituting anoth
 empty Preset slot remains inactive unless a recording workflow is armed. Record/Store, Update, and
 Set keep priority over this selection shortcut.
 
+## Dynamic lanes
+
+Each lane of a Dynamic animates one attribute. Tap an empty Dynamics tile, or **+ Add Lane** in the
+editor, to open the lane chooser: it lists attribute groups first, and the attributes sit inside
+their group.
+
+Position, Color and Zoom lanes are fixture-independent, like every other Position, Color and Zoom
+value: **Pan** and **Tilt** animate Angles in degrees, **Zoom** the beam opening in degrees, and
+the Color group offers **Red**, **Green**, **Blue** and **Amber** recipe components, **Hue** in
+degrees, **Saturation**, **White Blend**, **Temperature** in kelvin and **UV**. The same Dynamic
+therefore runs on any mover or colour mixing system. Other attributes, such as Intensity or Focus,
+run between 0 and 100 %. The lane encoders, keyframe values and curves show each lane in its own
+units, so a Pan amplitude reads `45°`, not a percentage; enter a value in those units on the
+encoder's value modal.
+
+A new Pan or Tilt lane swings around **Current** on a Sinus: 45° for Pan, 30° for Tilt. Every
+Angle Dynamic moves Pan and Tilt together, so adding Pan also adds a **Tilt** lane that follows
+Current, and adding Tilt adds a Pan lane. To animate that partner, select it and choose a curve
+function, or add the axis yourself with **+ Add Lane**, which replaces the partner. For a circle:
+add Pan, add Tilt, select the Tilt lane and choose **Cosinus**.
+
+Within one Dynamic, the Red, Green, Blue and Amber recipe lanes and the Hue and Saturation lanes
+are two different ways of writing the base colour; a Dynamic uses one of them. White Blend,
+Temperature and UV combine with either.
+
 ## Return Position fixtures home
 
 Open **Position → Special Dialog** and press **Return Home** below the Aim joystick to return the current ordered selection to its home pose: **Pan 0°** and **Tilt 0°**, the centre of each fixture's travel, where its Position physical data points the beam. Every selected head with Position goes home, including a selection that reads **Mixed**, and a Target is replaced by those angles. Fixtures without Position are skipped. A selected group is addressed as that group. With no selection, or when the selected fixtures are **Unsupported** (see below), Return Home is disabled and never addresses every moving light in the show.

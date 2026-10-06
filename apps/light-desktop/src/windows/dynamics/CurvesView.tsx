@@ -1,7 +1,15 @@
 import {
+	type ProgrammingDynamicLane,
 	type ScalarDynamicLane,
-	isScalarDynamicLane,
 } from "../../features/dynamics/laneModel";
+import {
+	commitEditableLane,
+	createRandomGroup,
+	dynamicLaneDomain,
+	editableLane,
+	randomGroupFits,
+} from "../../features/dynamics/editableLane";
+import type { DynamicLaneDomain } from "../../features/dynamics/laneDomain";
 import type { DynamicLaneProjection } from "../../api/types";
 import { ProgrammingLaneView } from "./ProgrammingLaneView";
 import {
@@ -86,7 +94,6 @@ import { useStageLayout } from "../stageWindow/useStageLayout";
 import {
 	clamp,
 	curveComposerMethods,
-	defaultRandomGroup,
 	keyframeName,
 	keyframePreviewPercent,
 	keyframePreviewTop,
@@ -110,6 +117,7 @@ type DynamicObject = ShowObject<"dynamic">;
 function ScalarCurvesView({
 	dynamic,
 	lane,
+	domain,
 	selectedLanes,
 	shiftArmed,
 	attributes,
@@ -122,7 +130,9 @@ function ScalarCurvesView({
 	onMutate,
 }: {
 	dynamic: DynamicObject;
+	/** The primary lane in its descriptor units (see `editableLane`). */
 	lane: ScalarDynamicLane;
+	domain: DynamicLaneDomain;
 	selectedLanes: ReadonlySet<string>;
 	shiftArmed: boolean;
 	attributes: readonly { id: string; label: string; family: string }[];
@@ -156,11 +166,11 @@ function ScalarCurvesView({
 			return;
 		}
 		let groupId = lane.random_group_id;
-		if (
-			!groupId ||
-			!dynamic.body.random_groups.some((group) => group.id === groupId)
-		) {
-			const group = defaultRandomGroup();
+		const linked = dynamic.body.random_groups.find(
+			(group) => group.id === groupId,
+		);
+		if (!groupId || !linked || !randomGroupFits(linked, domain)) {
+			const group = createRandomGroup(domain);
 			await onMutate(dynamic, { type: "add_random_group", group });
 			groupId = group.id;
 		}
@@ -182,8 +192,12 @@ function ScalarCurvesView({
 			void setMode("random");
 			return;
 		}
+		// From Keyframes a periodic function takes the domain's own method: an Angle swings
+		// around Current, a level runs between Bottom and Top.
 		const method =
-			displayedMethod === "middle_amplitude" ? "middle_amplitude" : "max_min";
+			displayedMethod === "keyframes"
+				? domain.defaults.method
+				: displayedMethod;
 		void onReplace(
 			normalizePwmLane(
 				method === "middle_amplitude"
@@ -204,9 +218,7 @@ function ScalarCurvesView({
 		);
 	};
 	const attributeLane = attributeLaneId
-		? dynamic.body.lanes
-				.filter(isScalarDynamicLane)
-				.find((candidate) => candidate.id === attributeLaneId)
+		? dynamic.body.lanes.find((candidate) => candidate.id === attributeLaneId)
 		: undefined;
 	const keyframeIndex = Math.min(
 		primaryKeyframeIndex,
@@ -223,6 +235,7 @@ function ScalarCurvesView({
 		<CurvesViewSurface
 			dynamic={dynamic}
 			lane={lane}
+			domain={domain}
 			selectedLanes={selectedLanes}
 			shiftArmed={shiftArmed}
 			attributes={attributes}
@@ -282,15 +295,19 @@ function createMoveKeyframeAction(
 		const points = candidate.keyframes.points.map((point, pointIndex) =>
 			pointIndex === index ? { ...point, position } : point,
 		);
+		const original = dynamic.body.lanes.find(
+			(lane) => lane.id === candidate.id,
+		);
+		if (!original) return;
 		void onMutate(
 			dynamic,
 			{
 				type: "replace_lane",
 				lane_id: candidate.id,
-				lane: {
-					...candidate,
-					keyframes: { ...candidate.keyframes, points },
-				},
+				lane: commitEditableLane(
+					{ ...candidate, keyframes: { ...candidate.keyframes, points } },
+					original,
+				),
 			},
 			mutationGroup,
 		);
@@ -328,18 +345,37 @@ export function deleteKeyframeFromLane(
 	};
 }
 
-type CurvesViewProps = Omit<Parameters<typeof ScalarCurvesView>[0], "lane"> & {
+type CurvesViewProps = Omit<
+	Parameters<typeof ScalarCurvesView>[0],
+	"lane" | "domain" | "onReplace"
+> & {
 	lane: DynamicLaneProjection;
+	onReplace(next: DynamicLaneProjection): Promise<void>;
 };
+
+/**
+ * Lanes view. Scalar and typed family lanes are composed alike in their descriptor units; only a
+ * lane the composer cannot express (a whole-family or native-colour lane) is inspection-only.
+ */
 export function CurvesView(props: CurvesViewProps) {
-	return isScalarDynamicLane(props.lane) ? (
-		<ScalarCurvesView {...props} lane={props.lane} />
-	) : (
-		<ProgrammingLaneView
-			dynamic={props.dynamic.body}
-			lane={props.lane}
-			selectedLanes={props.selectedLanes}
-			onSelect={props.onSelect}
+	const editable = editableLane(props.lane);
+	const domain = dynamicLaneDomain(props.lane);
+	if (!editable || !domain)
+		return (
+			<ProgrammingLaneView
+				dynamic={props.dynamic.body}
+				lane={props.lane as ProgrammingDynamicLane}
+				selectedLanes={props.selectedLanes}
+				onSelect={props.onSelect}
+			/>
+		);
+	const original = props.lane;
+	return (
+		<ScalarCurvesView
+			{...props}
+			lane={editable}
+			domain={domain}
+			onReplace={(next) => props.onReplace(commitEditableLane(next, original))}
 		/>
 	);
 }

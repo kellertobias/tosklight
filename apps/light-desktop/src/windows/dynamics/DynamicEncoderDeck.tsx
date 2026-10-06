@@ -86,7 +86,6 @@ import { useStageLayout } from "../stageWindow/useStageLayout";
 import type { DynamicEditorView } from "./DynamicsEditor";
 import {
 	clamp,
-	defaultRandomGroup,
 	isSpatialOrdering,
 	keyframeName,
 	laneShapeLabel,
