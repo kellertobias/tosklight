@@ -2035,11 +2035,16 @@ async function buildDynamicsSetup(
 	);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	await chooseDynamicAttribute(desk, page, "Tilt");
+	// Pan arrives with a Tilt partner following Current; the added Tilt lane replaces it once
+	// the desk has stored the pair, so the editor settles on two lanes.
+	await expect(
+		app.getByRole("list", { name: "Dynamic lanes" }).getByRole("listitem"),
+	).toHaveCount(2);
 	await desk.click(app.getByRole("button", { name: /^Select lane 2, Tilt$/ }));
 	await chooseDynamicCurve(desk, page, app, "Cosinus");
 	await configureDynamicThroughTouch(desk, page, app, "Beam Show Circle");
 	await desk.click(
-		app.getByRole("button", { name: "← Back to Pool", exact: true }),
+		app.getByRole("button", { name: "← Dynamics", exact: true }),
 	);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 
@@ -2055,7 +2060,7 @@ async function buildDynamicsSetup(
 	await chooseDynamicCurve(desk, page, app, "PWM");
 	await configureDynamicThroughTouch(desk, page, app, "Beam Show PWM");
 	await desk.click(
-		app.getByRole("button", { name: "← Back to Pool", exact: true }),
+		app.getByRole("button", { name: "← Dynamics", exact: true }),
 	);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	const visibleDynamicIds = await dynamicIdentities(api, showId, [1, 19]);
@@ -3645,7 +3650,7 @@ async function assignVirtualDynamic(
 	);
 	await desk.click(
 		modal.getByRole("radio", {
-			name: new RegExp(`^Dynamic ${poolNumber} · ${escapeRegex(name)}`),
+			name: new RegExp(`^${poolNumber} ${escapeRegex(name)}`),
 		}),
 	);
 	await demoPause(
