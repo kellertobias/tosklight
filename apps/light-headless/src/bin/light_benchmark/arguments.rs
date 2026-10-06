@@ -241,12 +241,16 @@ impl Arguments {
                 "--headless-stress-fixtures" => {
                     let value = parse_bounded_u64(
                         &required_value(&mut arguments, &argument)?,
-                        2_000,
+                        1_000,
                         4_000,
                         "headless stress fixtures",
                     )? as usize;
-                    if value != 2_000 && value != 4_000 {
-                        return Err("headless stress fixtures must be exactly 2000 or 4000".into());
+                    if !crate::light_benchmark::headless_stress_show::SUPPORTED_FIXTURE_COUNTS
+                        .contains(&value)
+                    {
+                        return Err(
+                            "headless stress fixtures must be exactly 1000, 2000 or 4000".into(),
+                        );
                     }
                     parsed.headless_stress_fixtures = Some(value);
                 }
@@ -276,6 +280,9 @@ impl Arguments {
         parsed
             .semantic
             .validate(parsed.sustained_show || parsed.headless_stress_fixtures.is_some())?;
+        if parsed.semantic.start_latency && parsed.headless_stress_fixtures.is_none() {
+            return Err("--start-latency needs --headless-stress-fixtures".into());
+        }
         Ok(ParseOutcome::Run(parsed))
     }
 
@@ -299,7 +306,7 @@ impl Arguments {
           --universes N                Override the profile universe count (1-512)\n\
           --rate-hz N                  Scheduled output target, 1-240\n\
           --sustained-show             Use the mixed-fixture sustained benchmark show\n\
-          --headless-stress-fixtures N Run the informational mixed-mode headless tier (2000 or 4000)\n\
+          --headless-stress-fixtures N Run the informational mixed-mode headless tier (1000, 2000 or 4000)\n\
           --fixture-package-dir PATH   Fixture packages used by shipped-mode workloads\n\
           --mutation-gate              Run the large-show incremental mutation gate\n\
           --patch-gate                 Run the real persisted Patch transaction gate\n\
@@ -443,6 +450,34 @@ mod tests {
         let arguments = parsed(&["--headless-stress-fixtures", "2000"]);
         assert_eq!(arguments.headless_stress_fixtures, Some(2_000));
         assert!(Arguments::parse(["--headless-stress-fixtures".into(), "3000".into(),]).is_err());
+        assert_eq!(
+            parsed(&["--headless-stress-fixtures", "1000"]).headless_stress_fixtures,
+            Some(1_000)
+        );
+        assert!(Arguments::parse(["--headless-stress-fixtures".into(), "999".into()]).is_err());
+        let probe = parsed(&[
+            "--headless-stress-fixtures",
+            "1000",
+            "--semantic",
+            "--start-latency",
+        ]);
+        assert!(probe.semantic.start_latency);
+        assert!(
+            Arguments::parse([
+                "--semantic".into(),
+                "--sustained-show".into(),
+                "--start-latency".into()
+            ])
+            .is_err()
+        );
+        assert!(
+            Arguments::parse([
+                "--headless-stress-fixtures".into(),
+                "1000".into(),
+                "--start-latency".into()
+            ])
+            .is_err()
+        );
         assert!(
             Arguments::parse([
                 "--sustained-show".into(),

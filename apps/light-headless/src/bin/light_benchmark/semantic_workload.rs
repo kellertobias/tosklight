@@ -166,6 +166,7 @@ pub(super) fn build(
             bench,
             tracking,
             description,
+            pending_start: None,
         }),
     })
 }

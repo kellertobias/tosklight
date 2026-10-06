@@ -281,6 +281,7 @@ pub fn build(
                 bench,
                 tracking: None,
                 description,
+                pending_start: None,
             })
         }
         _ => None,

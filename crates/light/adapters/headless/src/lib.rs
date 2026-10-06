@@ -13,6 +13,7 @@ pub use runtime::run;
 pub mod output_benchmark {
     pub use crate::runtime::{
         LiveOutputBench, LiveOutputFrame, LiveOutputWork, ReadoutConsumerReport, ReadoutConsumers,
+        StartPathPhases,
     };
 }
 

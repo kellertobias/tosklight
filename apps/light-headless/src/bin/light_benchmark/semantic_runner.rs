@@ -18,6 +18,15 @@ pub struct LiveScenario {
     pub bench: LiveOutputBench,
     pub tracking: Option<TrackingFeed>,
     pub description: LiveWorkloadDescription,
+    /// TL-641: the Dynamic `--start-latency` starts itself; `None` when the build started them.
+    pub pending_start: Option<PendingStart>,
+}
+
+/// One Start Now gesture the probe performs on a running Live lane.
+pub struct PendingStart {
+    pub session: light_core::SessionId,
+    pub definition: light_dynamics::DynamicDefinition,
+    pub targets: Vec<light_core::FixtureId>,
 }
 
 #[derive(Clone, Debug, Serialize)]

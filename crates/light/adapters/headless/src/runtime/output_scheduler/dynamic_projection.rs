@@ -502,6 +502,7 @@ fn sample_captured_dynamic_inputs_with_context<T>(
 
     // Reconciliation runs before sampling, so a bool transport request has no input-dependent
     // failure. A misplaced call after a provisional sample is still rejected transactionally.
+    let reconciliation_started = std::time::Instant::now();
     dynamics.apply_recorded_control(light_dynamics::TimedDynamicControl {
         at_millis: now_millis,
         control: light_dynamics::DynamicControl::GlobalPause(inputs.playback_paused),
@@ -539,6 +540,7 @@ fn sample_captured_dynamic_inputs_with_context<T>(
         |assignment| playback_assignments.push(assignment),
     );
     let cue_controls = cue_dynamic_output_controls(inputs.cue_values);
+    super::start_path_timing::reconciled_since(reconciliation_started);
     let (mut samples, context) = sample(
         dynamics,
         now_millis,

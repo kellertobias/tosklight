@@ -3,6 +3,7 @@ use super::*;
 
 mod cue;
 mod programmer_sources;
+use crate::runtime::output_scheduler::start_path_timing::controller_construction as construction;
 pub(super) use cue::reconcile_cue_dynamics_observed;
 pub(in crate::runtime::output_scheduler) use programmer_sources::ReconciledSourceAssignment;
 use programmer_sources::planned_source_rows;
@@ -752,34 +753,37 @@ fn reconcile_programmer_controller(
                 now_millis,
             ),
         );
-        let selection_applied = observer
-            .observe(
-                &context,
-                Operation::LaneSelection,
-                controls::lanes(
-                    dynamics,
-                    instance_id,
-                    controller_id,
-                    lane_selection,
-                    now_millis,
-                ),
-            )
-            .is_some();
-        let targets_applied = observer
-            .observe(
-                &context,
-                Operation::Targets,
-                dynamics.reconcile_instance_targets_recorded(
-                    instance_id,
-                    light_dynamics::DynamicTargetScope {
-                        ordered_targets: targets,
-                    },
-                    lookup.snapshot.dynamic_stage_positions.as_ref(),
-                    inherited_spatial_mapping.as_ref(),
-                    now_millis,
-                ),
-            )
-            .is_some();
+        let (selection_applied, targets_applied) = construction(|| {
+            let selection_applied = observer
+                .observe(
+                    &context,
+                    Operation::LaneSelection,
+                    controls::lanes(
+                        dynamics,
+                        instance_id,
+                        controller_id,
+                        lane_selection,
+                        now_millis,
+                    ),
+                )
+                .is_some();
+            let targets_applied = observer
+                .observe(
+                    &context,
+                    Operation::Targets,
+                    dynamics.reconcile_instance_targets_recorded(
+                        instance_id,
+                        light_dynamics::DynamicTargetScope {
+                            ordered_targets: targets,
+                        },
+                        lookup.snapshot.dynamic_stage_positions.as_ref(),
+                        inherited_spatial_mapping.as_ref(),
+                        now_millis,
+                    ),
+                )
+                .is_some();
+            (selection_applied, targets_applied)
+        });
         observer.observe(
             &context,
             Operation::Controller,
@@ -809,33 +813,37 @@ fn reconcile_programmer_controller(
         return;
     }
     let scope_was_empty = targets.is_empty();
-    let started = controls::start(
-        dynamics,
-        now_millis,
-        programmer_start_request(
-            controller_id,
-            desired,
-            &definition,
-            targets,
-            inherited_spatial_mapping,
-            lookup,
+    let started = construction(|| {
+        controls::start(
+            dynamics,
             now_millis,
-        ),
-    );
+            programmer_start_request(
+                controller_id,
+                desired,
+                &definition,
+                targets,
+                inherited_spatial_mapping,
+                lookup,
+                now_millis,
+            ),
+        )
+    });
     if let Some(instance_id) = observer.started(&context, scope_was_empty, started) {
-        let selection_applied = observer
-            .observe(
-                &context,
-                Operation::LaneSelection,
-                controls::lanes(
-                    dynamics,
-                    instance_id,
-                    controller_id,
-                    lane_selection,
-                    now_millis,
-                ),
-            )
-            .is_some();
+        let selection_applied = construction(|| {
+            observer
+                .observe(
+                    &context,
+                    Operation::LaneSelection,
+                    controls::lanes(
+                        dynamics,
+                        instance_id,
+                        controller_id,
+                        lane_selection,
+                        now_millis,
+                    ),
+                )
+                .is_some()
+        });
         apply_programmer_output_gate(dynamics, observer, &context, now_millis, off);
         if selection_applied {
             emit_programmer_sources(emit, source_rows, instance_id, controller_id);

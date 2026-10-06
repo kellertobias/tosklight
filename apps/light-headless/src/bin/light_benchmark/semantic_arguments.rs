@@ -49,6 +49,9 @@ pub struct SemanticArguments {
     /// `--output-workers N|max` (TL-639 round 5): threads the engine splits a frame's
     /// independent per-fixture work over; unset keeps the engine default.
     pub output_workers: Option<usize>,
+    /// `--start-latency` (TL-641): measure one Start Now Dynamic gesture on every fixture of a
+    /// running headless-stress Live lane instead of the timed report.
+    pub start_latency: bool,
 }
 
 impl Default for SemanticArguments {
@@ -66,6 +69,7 @@ impl Default for SemanticArguments {
             digest_ticks: None,
             digest_lifecycle: false,
             output_workers: None,
+            start_latency: false,
         }
     }
 }
@@ -121,6 +125,7 @@ impl SemanticArguments {
                 self.digest_ticks = Some(bounded(&value()?, 1, 100_000, "digest ticks")?)
             }
             "--digest-lifecycle" => self.digest_lifecycle = true,
+            "--start-latency" => self.start_latency = true,
             "--output-workers" => {
                 let value = value()?;
                 self.output_workers = Some(
@@ -158,6 +163,9 @@ impl SemanticArguments {
         if self.digest_lifecycle && self.digest_ticks.is_none() {
             return Err("--digest-lifecycle needs --digest-ticks".into());
         }
+        if self.start_latency && (!self.typed_lanes || self.digest_ticks.is_some()) {
+            return Err("--start-latency needs --semantic and no --digest-ticks".into());
+        }
         if self.static_bases_only && self.workload_dir.is_none() {
             return Err("--static-bases-only needs a --semantic-workload".into());
         }
@@ -179,7 +187,8 @@ impl SemanticArguments {
   --rig-height-mm N            Height of the workload's fixture grid (default 9000)\n\
   --digest-ticks N             Print per-tick output digests of N unpaced ticks (build equivalence)\n\
   --digest-lifecycle           Apply fades, FixAT, Freeze and a Preload GO during a digest run\n\
-  --output-workers N|max       Output worker threads per frame (default: the engine's)\n";
+  --output-workers N|max       Output worker threads per frame (default: the engine's)\n\
+  --start-latency              Time one Start Now Dynamic on every headless-stress fixture\n";
 }
 
 fn bounded(value: &str, min: u64, max: u64, label: &str) -> Result<u64, String> {

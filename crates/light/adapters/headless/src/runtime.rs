@@ -37,6 +37,7 @@ mod output_readouts_api;
 mod output_scheduler;
 pub use output_scheduler::{
     LiveOutputBench, LiveOutputFrame, LiveOutputWork, ReadoutConsumerReport, ReadoutConsumers,
+    StartPathPhases,
 };
 mod playback_service;
 mod playback_telemetry;

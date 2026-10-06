@@ -428,6 +428,7 @@ fn semantic_build(
         crate::light_benchmark::semantic_programming::SemanticBuild {
             rate_hz: config.rate_hz,
             publish: arguments.semantic.publish,
+            defer_starts: arguments.semantic.start_latency,
         },
     )
 }

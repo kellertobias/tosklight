@@ -39,6 +39,16 @@ fn main() {
         println!("{digest}");
         return;
     }
+    if arguments.semantic.start_latency {
+        let report = light_benchmark::start_latency(&arguments).unwrap_or_else(|error| {
+            exit_with_error(&error, 1);
+        });
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("start-latency report is serializable")
+        );
+        return;
+    }
     let report = light_benchmark::run(&arguments).unwrap_or_else(|error| {
         exit_with_error(&error, 1);
     });

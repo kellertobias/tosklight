@@ -57,9 +57,11 @@ pub use live_output_bench::{
     LiveOutputBench, LiveOutputFrame, LiveOutputWork, ReadoutConsumerReport, ReadoutConsumers,
 };
 mod restored_dynamic_candidate;
+mod start_path_timing;
 pub(in crate::runtime) use restored_dynamic_candidate::{
     RestoredDynamicCandidate, prepare_restored_dynamic_candidate,
 };
+pub use start_path_timing::StartPathPhases;
 
 pub(in crate::runtime) use cold_preset_materialization::{
     materialize_cold_preset_dependencies, materialize_pending_preset_dependencies,

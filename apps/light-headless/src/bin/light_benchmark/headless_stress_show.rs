@@ -8,10 +8,10 @@ use crate::light_benchmark::{
 };
 use crate::light_benchmark::{
     semantic_programming::{
-        SEMANTIC_LANE_ATTRIBUTES, SemanticBuild, live_bench, set_semantic_bases, start_dynamics,
-        stress_starts,
+        DynamicStart, SEMANTIC_LANE_ATTRIBUTES, SemanticBuild, live_bench, set_semantic_bases,
+        start_dynamics, stress_starts,
     },
-    semantic_runner::{LiveScenario, LiveWorkloadDescription},
+    semantic_runner::{LiveScenario, LiveWorkloadDescription, PendingStart},
     semantic_workload::OMITTED,
 };
 use light_core::{AttributeKey, AttributeValue, FixtureId, ManualClock, SessionId};
@@ -19,7 +19,7 @@ use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PoolPlaybackAc
 use light_programmer::ProgrammerRegistry;
 use std::{net::SocketAddr, path::Path, sync::Arc};
 
-pub(super) const SUPPORTED_FIXTURE_COUNTS: [usize; 2] = [2_000, 4_000];
+pub(super) const SUPPORTED_FIXTURE_COUNTS: [usize; 3] = [1_000, 2_000, 4_000];
 const BASE_MANIFEST: [StressTemplate; 5] = [
     StressTemplate::Dls,
     StressTemplate::LedWash,
@@ -27,6 +27,10 @@ const BASE_MANIFEST: [StressTemplate; 5] = [
     StressTemplate::LedBeam,
     StressTemplate::Dimmer,
 ];
+
+/// The Keyframes variant, whose default activation is Start Now (the PWM variant joins its
+/// Speed Group). Its phase spread moves most targets off their base on the first sample.
+const PROBE_VARIANT: usize = 0;
 
 #[derive(Clone, Copy)]
 enum StressTemplate {
@@ -163,40 +167,17 @@ pub(super) fn build(
         }),
     );
     let (dynamic, live) = match (semantic, starts) {
-        (Some(options), Some(starts)) => {
-            set_semantic_bases(&programmers, session, &layout.dynamic_targets)?;
-            start_dynamics(&programmers, session, &starts)?;
-            let description = LiveWorkloadDescription {
-                kind: "headless_stress_typed_lanes",
-                typed_lane_attributes: SEMANTIC_LANE_ATTRIBUTES
-                    .iter()
-                    .map(|lane| (*lane).to_owned())
-                    .collect(),
-                semantic_base_targets: layout.dynamic_targets.len(),
-                started_dynamics: starts.len(),
-                animated_targets: layout.dynamic_targets.len(),
-                manifest_sha256: None,
-                workload_id: None,
-                expected_dirty_targets: None,
-                expected_moving_points: None,
-                harness_rig_height_mm: None,
-                omitted_from_live_transaction: OMITTED,
-            };
-            let bench = live_bench(
-                Arc::clone(&engine),
-                starts.into_iter().map(|start| start.definition),
-                options.rate_hz,
-                options.publish,
-            )?;
-            (
-                None,
-                Some(LiveScenario {
-                    bench,
-                    tracking: None,
-                    description,
-                }),
-            )
-        }
+        (Some(options), Some(starts)) => (
+            None,
+            Some(semantic_live(
+                &engine,
+                &programmers,
+                session,
+                options,
+                starts,
+                (&layout.dynamic_targets, &layout.static_fixture_ids),
+            )?),
+        ),
         _ => (
             Some(BenchmarkDynamic::production(
                 &layout.dynamic_targets,
@@ -245,21 +226,91 @@ pub(super) fn build(
     })
 }
 
+/// The typed-lane Live lane: semantic bases, then the Dynamics started (or left to the probe).
+fn semantic_live(
+    engine: &Arc<Engine>,
+    programmers: &ProgrammerRegistry,
+    session: SessionId,
+    options: SemanticBuild,
+    starts: Vec<DynamicStart>,
+    (dynamic_targets, static_fixture_ids): (&[FixtureId], &[FixtureId]),
+) -> Result<LiveScenario, String> {
+    set_semantic_bases(programmers, session, dynamic_targets)?;
+    let pending_start = if options.defer_starts {
+        Some(probe_start(
+            session,
+            &starts,
+            dynamic_targets,
+            static_fixture_ids,
+        ))
+    } else {
+        start_dynamics(programmers, session, &starts)?;
+        None
+    };
+    let description = LiveWorkloadDescription {
+        kind: "headless_stress_typed_lanes",
+        typed_lane_attributes: SEMANTIC_LANE_ATTRIBUTES
+            .iter()
+            .map(|lane| (*lane).to_owned())
+            .collect(),
+        semantic_base_targets: dynamic_targets.len(),
+        started_dynamics: starts.len(),
+        animated_targets: dynamic_targets.len(),
+        manifest_sha256: None,
+        workload_id: None,
+        expected_dirty_targets: None,
+        expected_moving_points: None,
+        harness_rig_height_mm: None,
+        omitted_from_live_transaction: OMITTED,
+    };
+    let bench = live_bench(
+        Arc::clone(engine),
+        starts.into_iter().map(|start| start.definition),
+        options.rate_hz,
+        options.publish,
+    )?;
+    Ok(LiveScenario {
+        bench,
+        tracking: None,
+        description,
+        pending_start,
+    })
+}
+
+/// TL-641: the start-latency probe starts one Dynamic itself, on every fixture and head.
+fn probe_start(
+    session: SessionId,
+    starts: &[DynamicStart],
+    dynamic_targets: &[FixtureId],
+    static_fixture_ids: &[FixtureId],
+) -> PendingStart {
+    PendingStart {
+        session,
+        definition: starts[PROBE_VARIANT].definition.clone(),
+        targets: dynamic_targets
+            .iter()
+            .chain(static_fixture_ids)
+            .copied()
+            .collect(),
+    }
+}
+
 fn prepare_layout(
     fixture_count: usize,
     package_dir: &Path,
     semantic: bool,
 ) -> Result<StressLayout, String> {
     if !SUPPORTED_FIXTURE_COUNTS.contains(&fixture_count) {
-        return Err("headless stress fixtures must be exactly 2000 or 4000".into());
+        return Err("headless stress fixtures must be exactly 1000, 2000 or 4000".into());
     }
-    let scale = fixture_count / 2_000;
+    // The 2,000-fixture manifest, halved or doubled; every base quantity is even.
+    let quantity = |kind: StressTemplate| kind.base_quantity() * fixture_count / 2_000;
     let templates = Templates::load(package_dir, semantic)?;
     let mut placements = Vec::with_capacity(fixture_count);
     let mut universe_slots = Vec::<u16>::new();
     for kind in BASE_MANIFEST {
         let template = templates.get(kind);
-        for _ in 0..kind.base_quantity() * scale {
+        for _ in 0..quantity(kind) {
             let footprint = template.footprint();
             let universe_index = universe_slots
                 .iter()
@@ -313,7 +364,7 @@ fn prepare_layout(
         .collect();
     let entries = BASE_MANIFEST
         .iter()
-        .map(|kind| templates.get(*kind).inventory(kind.base_quantity() * scale))
+        .map(|kind| templates.get(*kind).inventory(quantity(*kind)))
         .collect::<Vec<_>>();
     let total_slots = entries.iter().map(|entry| entry.dmx_slots).sum();
     Ok(StressLayout {
@@ -349,6 +400,7 @@ mod tests {
             Some(SemanticBuild {
                 rate_hz: 60,
                 publish: true,
+                defer_starts: false,
             }),
         )
         .unwrap();

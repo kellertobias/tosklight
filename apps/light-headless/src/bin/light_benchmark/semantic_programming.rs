@@ -245,6 +245,8 @@ pub(super) fn live_bench(
 pub(super) struct SemanticBuild {
     pub rate_hz: u16,
     pub publish: bool,
+    /// TL-641 `--start-latency`: leave the Dynamics unstarted for the probe to start.
+    pub defer_starts: bool,
 }
 
 /// The legacy headless-stress Dynamics with typed lanes, each started on its own partition.

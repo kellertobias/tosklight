@@ -38,6 +38,11 @@ pub struct LiveOutputFrame {
     /// `dynamic_output_frame`: Dynamics reconciliation and sampling, family preparation and
     /// physical solves, the engine's final render and lane acceptance.
     pub transaction: Duration,
+    /// TL-641: the part of `transaction` spent reconciling captured Dynamic sources, and the
+    /// controller construction inside that reconciliation.
+    pub start_path: super::StartPathPhases,
+    /// Dynamic samples this frame committed; the first frame of a started Dynamic has some.
+    pub dynamic_samples: usize,
     /// Building the published frame and storing it in the visualization hub.
     pub publication: Duration,
     /// Cumulative Live adapter work after this frame.
@@ -135,6 +140,21 @@ impl LiveOutputBench {
         Ok(())
     }
 
+    /// TL-641: start a runtime controller the way the desk's Dynamic start gesture does
+    /// (`OutputCapability::start_dynamic`), under the authoritative Dynamics lock.
+    pub fn start_dynamic(
+        &self,
+        request: light_dynamics::DynamicStartRequest,
+    ) -> Result<Uuid, light_dynamics::DynamicRuntimeError> {
+        self.dynamics
+            .lock()
+            .apply_recorded_control(light_dynamics::TimedDynamicControl {
+                at_millis: request.now_millis,
+                control: light_dynamics::DynamicControl::Start(Box::new(request)),
+            })
+            .map(|outcome| outcome.instance_id.expect("Start selects an instance"))
+    }
+
     /// Render one frame through the production Live transaction.
     pub fn render(
         &self,
@@ -147,6 +167,7 @@ impl LiveOutputBench {
             .try_prepare_output_frame(options)
             .ok_or_else(|| EngineError::StalePreparedFrame.to_string())?;
         let capture = started.elapsed();
+        let _ = super::start_path_timing::take();
         let transaction_started = Instant::now();
         let mut hybrid = false;
         let committed = dynamic_output_frame(
@@ -173,7 +194,9 @@ impl LiveOutputBench {
         )
         .map_err(|error| error.to_string())?;
         let transaction = transaction_started.elapsed();
+        let start_path = super::start_path_timing::take();
         let publish_started = Instant::now();
+        let dynamic_samples = committed.samples.len();
         let frame = RenderedSemanticFrame {
             rendered: committed.output,
             options,
@@ -201,6 +224,8 @@ impl LiveOutputBench {
             hybrid,
             capture,
             transaction,
+            start_path,
+            dynamic_samples,
             publication,
             work,
         })
