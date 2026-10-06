@@ -169,3 +169,57 @@ test("OVERALL-DEMO-PACKAGED @api › the shipped demo's universal Colour presets
 		).toBe(true);
 	}
 });
+
+test("OVERALL-DEMO-PACKAGED @api › every shipped demo Dynamic starts on its Group under programming contract 1", async ({
+	api,
+}) => {
+	const bytes = await fs.readFile(
+		new URL("../assets/demo.show", import.meta.url),
+	);
+	const show = await api.createShow<{ id: string }>({
+		name: `canonical-demo-dynamics-${crypto.randomUUID()}`,
+		data_base64: bytes.toString("base64"),
+		overwrite: false,
+	});
+	await api.openShow(show.id, { transition: "hold_current" });
+	const dynamics = await api.showObjects<{
+		name: string;
+		lanes: Array<{ attribute?: string }>;
+	}>(show.id, "dynamic");
+	expect(dynamics).toHaveLength(30);
+	// TL-648: family lanes are typed; only Intensity keeps scalar lanes.
+	expect(
+		dynamics.flatMap((dynamic) =>
+			dynamic.body.lanes.flatMap((lane) =>
+				lane.attribute === undefined || lane.attribute === "intensity"
+					? []
+					: [`${dynamic.body.name}: ${lane.attribute}`],
+			),
+		),
+	).toEqual([]);
+	for (const dynamic of dynamics)
+		await api.request(
+			"POST",
+			`/api/v2/dynamics/${encodeURIComponent(dynamic.id)}/start`,
+			{ targets: [] },
+			true,
+			undefined,
+			{ showId: show.id },
+		);
+	const runtime = await api.request<{
+		instances: Array<{ dynamic_id: string; targets: string[] }>;
+	}>("GET", "/api/v2/dynamics/runtime", undefined, true, undefined, {
+		showId: show.id,
+	});
+	expect(
+		dynamics
+			.filter(
+				(dynamic) =>
+					!runtime.instances.some(
+						(instance) =>
+							instance.dynamic_id === dynamic.id && instance.targets.length > 0,
+					),
+			)
+			.map((dynamic) => dynamic.body.name),
+	).toEqual([]);
+});

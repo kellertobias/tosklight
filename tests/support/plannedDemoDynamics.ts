@@ -1,9 +1,22 @@
 import type { ApiDriver } from "../bench/core/api";
 import { putPlannedDemoObject } from "./plannedDemoObjects";
 import {
-	semanticLane,
-	semanticRandomGroup,
+	PAN_TRAVEL_DEGREES,
+	TILT_TRAVEL_DEGREES,
 } from "./plannedDemoSemantic";
+
+/**
+ * Programming contract 1 (TL-552/TL-648): Position, Color and Zoom lanes are typed family lanes,
+ * authored here exactly as the Dynamics editor stores them. Pan and Tilt are Angles in degrees,
+ * Color lanes semantic recipe components on 0–1. Only Intensity keeps scalar lanes.
+ */
+const PAN = angles("pan");
+const TILT = angles("tilt");
+/** A Waterfall sweeps Tilt between 15 % and 85 % of the demo movers' nominal 270° travel. */
+const WATERFALL_TILT_LOW = (0.15 - 0.5) * TILT_TRAVEL_DEGREES;
+const WATERFALL_TILT_HIGH = (0.85 - 0.5) * TILT_TRAVEL_DEGREES;
+/** A Circle swings 35 % of the travel either side of Current. */
+const CIRCLE_SHARE = 0.35;
 
 const FAMILY_GROUPS = [
 	["Beam Show", "4", "A"],
@@ -43,15 +56,11 @@ export function plannedDemoDynamicDefinitions() {
 	for (const [group, groupId] of MOVING_GROUPS) {
 		definitions.push(
 			definition(definitions.length + 1, `${group} Circle`, groupId, "E", [
-				lane("pan", "middle_amplitude", "sinus"),
-				lane("tilt", "middle_amplitude", "cosinus"),
+				circleLane(PAN, "sinus", CIRCLE_SHARE * PAN_TRAVEL_DEGREES),
+				circleLane(TILT, "cosinus", CIRCLE_SHARE * TILT_TRAVEL_DEGREES),
 			]),
 			definition(definitions.length + 2, `${group} Waterfall`, groupId, "E", [
-				keyframeLane("tilt", [
-					[0, 0.15],
-					[0.5, 0.85],
-					[1, 0.15],
-				]),
+				waterfallTilt(),
 				keyframeLane("intensity", [
 					[0, 0],
 					[0.45, 1],
@@ -68,11 +77,7 @@ export function plannedDemoDynamicDefinitions() {
 			"8",
 			"E",
 			[
-				keyframeLane("tilt", [
-					[0, 0.15],
-					[0.5, 0.85],
-					[1, 0.15],
-				]),
+				waterfallTilt(),
 				keyframeLane("intensity", [
 					[0, 0],
 					[0.45, 1],
@@ -89,11 +94,11 @@ export function plannedDemoDynamicDefinitions() {
 			"27",
 			"C",
 			[
-				lane("color.red", "random", "sinus", "color"),
-				lane("color.green", "random", "sinus", "color"),
-				lane("color.blue", "random", "sinus", "color"),
+				familyRandomLane(recipe("red"), "color"),
+				familyRandomLane(recipe("green"), "color"),
+				familyRandomLane(recipe("blue"), "color"),
 			],
-			[randomGroup("color")],
+			[familyRandomGroup("color")],
 		),
 		definition(
 			29,
@@ -106,13 +111,13 @@ export function plannedDemoDynamicDefinitions() {
 					[0.5, 1],
 					[1, 0],
 				]),
-				keyframeLane("color.blue", [
+				familyKeyframeLane(recipe("blue"), [
 					[0, 0],
 					[0.35, 1],
 					[0.75, 1],
 					[1, 0],
 				]),
-				keyframeLane("color.white", [
+				familyKeyframeLane(recipe("white_blend"), [
 					[0, 0],
 					[0.65, 0],
 					[0.8, 1],
@@ -213,13 +218,8 @@ function definition(
 	randomGroups: any[] = [],
 	ordering: any = { type: "selection" },
 ) {
-	// TL-552: family lanes are typed Programming lanes; Intensity lanes stay scalar.
-	const authoredLanes = lanes.map(semanticLane);
-	const typedRandom = authoredLanes.some(
-		(item) => item.programming && item.random_group_id,
-	);
 	const boundRandomGroups = randomGroups.map((item, index) => ({
-		...(typedRandom ? semanticRandomGroup(item) : item),
+		...item,
 		id: stableUuid(7, poolNumber * 100 + index + 1),
 	}));
 	return {
@@ -230,7 +230,7 @@ function definition(
 		color: "#4edcff",
 		icon: "∿",
 		target_binding: { type: "live_group", group_id: groupId },
-		lanes: authoredLanes.map((item, index) => ({
+		lanes: lanes.map((item, index) => ({
 			...item,
 			id: stableUuid(6, poolNumber * 100 + index + 1),
 			random_group_id: item.random_group_id
@@ -257,6 +257,89 @@ function definition(
 		run_mode: "loop",
 		default_activation: "start_now",
 		activation_boundary: "beat",
+	};
+}
+
+function angles(component: "pan" | "tilt") {
+	return { representation: { kind: "angles" }, component: { kind: component } };
+}
+
+/** A semantic Color component; White Blend is orthogonal to the RGB recipe base. */
+function recipe(component: "red" | "green" | "blue" | "white_blend") {
+	return {
+		representation: { kind: "semantic_color", basis: "recipe" },
+		component: { kind: "color", component },
+	};
+}
+
+const scalarValue = (value: number) => ({
+	kind: "value",
+	value: { kind: "scalar", value },
+});
+
+function familyLane(address: object, configuration: object, randomGroupId?: string) {
+	return {
+		speed_multiplier: { numerator: 1, denominator: 1 },
+		width: 1,
+		random_group_id: randomGroupId ?? null,
+		phase: null,
+		programming: { address, configuration },
+	};
+}
+
+/** Swings `amplitude` degrees either side of Current. */
+function circleLane(address: object, periodic: string, amplitude: number) {
+	return familyLane(address, {
+		mode: "middle_amplitude",
+		configuration: {
+			middle: { kind: "current" },
+			amplitude: { kind: "scalar", value: amplitude },
+			function: periodic,
+			size: 1,
+			pwm: {
+				attack: 0,
+				on: 0.5,
+				decay: 0,
+				off: 0.5,
+				attack_interpolation: "linear",
+				decay_interpolation: "linear",
+			},
+		},
+	});
+}
+
+function familyKeyframeLane(address: object, points: Array<[number, number]>) {
+	return familyLane(address, {
+		mode: "keyframes",
+		configuration: {
+			points: points.map(([position, value]) => ({
+				position: Math.min(position, 0.999),
+				source: scalarValue(value),
+				interpolation: "ease_in_out",
+			})),
+			size: 1,
+		},
+	});
+}
+
+function waterfallTilt() {
+	return familyKeyframeLane(TILT, [
+		[0, WATERFALL_TILT_LOW],
+		[0.5, WATERFALL_TILT_HIGH],
+		[1, WATERFALL_TILT_LOW],
+	]);
+}
+
+function familyRandomLane(address: object, randomGroupId: string) {
+	return familyLane(address, { mode: "random" }, randomGroupId);
+}
+
+/** A Random group for typed lanes: its range is in the components' own 0–1 recipe domain. */
+function familyRandomGroup(key: string) {
+	const { low: _low, high: _high, ...shared } = randomGroup(key);
+	return {
+		...shared,
+		programming_range: { low: scalarValue(0), high: scalarValue(1) },
 	};
 }
 

@@ -1,11 +1,9 @@
 /**
  * Semantic programming values for the planned demo generator (`76-demo-show-generation`).
  *
- * TL-552: the generator authors programming contract 1 intent only: whole-family semantic Color,
- * Position Angles in degrees, and typed Dynamic lanes. The legacy normalized `pan`/`tilt` and
- * `color.red/green/blue/white` branch (TL-560's `LIGHT_DEMO_SEMANTIC` switch) is gone, because a
- * contract-1 desk rejects that programming. The committed `assets/demo.show` is generated from
- * this path.
+ * TL-552: the generator authors programming contract 1 intent only: whole-family semantic Color
+ * and Position Angles in degrees here, typed Dynamic lanes in `plannedDemoDynamics`. The
+ * committed `assets/demo.show` is generated from this path.
  *
  * The Color values are the exact contract-1 serialization (recipe, authoritative XYZ derived
  * from the recipe by `VirtualColorAuthoringV1::recipe_xyz`, default White Blend/target, UV 0,
@@ -53,104 +51,5 @@ export function semanticAngles(pan: number, tilt: number) {
 			pan_degrees: { kind: "value", value: panDegrees(pan) },
 			tilt_degrees: { kind: "value", value: tiltDegrees(tilt) },
 		},
-	};
-}
-
-const scalar = (value: number) => ({
-	kind: "value",
-	value: { kind: "scalar", value },
-});
-
-/** Typed lane address and the scalar domain conversion for one legacy lane attribute. */
-function typedAddress(attribute: string) {
-	switch (attribute) {
-		case "pan":
-			return {
-				address: { representation: { kind: "angles" }, component: { kind: "pan" } },
-				convert: panDegrees,
-				span: PAN_TRAVEL_DEGREES,
-			};
-		case "tilt":
-			return {
-				address: { representation: { kind: "angles" }, component: { kind: "tilt" } },
-				convert: tiltDegrees,
-				span: TILT_TRAVEL_DEGREES,
-			};
-		case "color.red":
-		case "color.green":
-		case "color.blue":
-			return {
-				address: {
-					representation: { kind: "semantic_color", basis: "recipe" },
-					component: { kind: "color", component: attribute.slice("color.".length) },
-				},
-				convert: (value: number) => value,
-				span: 1,
-			};
-		case "color.white":
-			return {
-				address: {
-					representation: { kind: "semantic_color", basis: "recipe" },
-					component: { kind: "color", component: "white_blend" },
-				},
-				convert: (value: number) => value,
-				span: 1,
-			};
-		default:
-			return undefined;
-	}
-}
-
-/**
- * Converts one legacy scalar lane (as built by `plannedDemoDynamics`) into a typed Programming
- * lane on the owning family, or returns it unchanged for non-family attributes (intensity).
- */
-export function semanticLane(legacy: any): any {
-	const typed = typedAddress(legacy.attribute);
-	if (!typed) return legacy;
-	const { attribute, mode, keyframes, max_min, middle_amplitude, ...shared } = legacy;
-	const source = (value: any) =>
-		value?.type === "value" ? scalar(typed.convert(value.value)) : { kind: "current" };
-	const configuration =
-		mode === "keyframes"
-			? {
-					...keyframes,
-					points: keyframes.points.map((point: any) => ({
-						...point,
-						source: source(point.source),
-					})),
-				}
-			: mode === "max_min"
-				? {
-						...max_min,
-						minimum: source(max_min.minimum),
-						maximum: source(max_min.maximum),
-					}
-				: mode === "middle_amplitude"
-					? {
-							...middle_amplitude,
-							middle: source(middle_amplitude.middle),
-							amplitude: {
-								kind: "scalar",
-								value: middle_amplitude.amplitude * typed.span,
-							},
-						}
-					: undefined;
-	return {
-		...shared,
-		programming: {
-			address: typed.address,
-			configuration:
-				mode === "random" ? { mode: "random" } : { mode, configuration },
-		},
-	};
-}
-
-/** A random group shared by typed lanes uses the typed range over the 0–1 recipe domain. */
-export function semanticRandomGroup(legacy: any): any {
-	const { low, high, ...shared } = legacy;
-	return {
-		...shared,
-		programming_range: { low: scalar(low.value), high: scalar(high.value) },
 	};
 }
