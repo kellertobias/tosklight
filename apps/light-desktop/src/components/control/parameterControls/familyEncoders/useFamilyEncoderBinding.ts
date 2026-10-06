@@ -42,6 +42,7 @@ import {
 	pointSlotDisplay,
 } from "./familyPointChoices";
 import { isNativeSlot } from "./nativeColorSlots";
+import { type ColorGroupValueEntry, colorSlotDisplay } from "./colorSlotDisplay";
 import {
 	type ProgrammerGroupValueEntry,
 	selectionPositionEntries,
@@ -216,6 +217,15 @@ function programmedValues(
 	});
 }
 
+/** TL-653: the Programmer values a semantic Color slot reads (fixture and selected group). */
+function colorValues(projection: ParameterProjection) {
+	return {
+		programmerValues: projection.programmerValues as readonly ProgrammerValueEntry[],
+		groupValues: projection.groupProgrammerValues as readonly ColorGroupValueEntry[],
+		groupId: projection.selectedGroupId,
+	};
+}
+
 function editTarget(
 	projection: ParameterProjection,
 	values: readonly ProgrammerValueEntry[],
@@ -315,6 +325,8 @@ export function useFamilyEncoderBinding(
 		display: (index) => {
 			const slot = componentSlot(index);
 			if (isNativeSlot(slot) && slot) return native.display(slot);
+			const color = slot && colorSlotDisplay(slot, colorValues(projection));
+			if (color) return color;
 			if (slot?.edit === "target_reference") {
 				const shown = pointSlotDisplay(
 					slot,

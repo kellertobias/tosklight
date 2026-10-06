@@ -67,6 +67,11 @@ changes programmed colour:
 - **Easy with Amber and UV** — adds a second page with Amber and UV.
 - **Advanced** — adds a second page with Temperature, Duv and the colour wheels.
 
+Each Color encoder shows the selection's programmed value. A fixture that holds no colour yet
+shows open white — Red, Green and Blue at 100%, White Blend at 0%, 6500 K — the colour its first
+edit starts from. Selected fixtures with different values show **Mixed**, and a fixture that holds a
+Direct colour shows **Direct** until an edit on page 1 or 2 turns it back into a Color Intent.
+
 Pages 3 and 4 hold the reference head's own colour controls; see [Direct Color](07-direct-color.md).
 
 ### The Color special dialog
