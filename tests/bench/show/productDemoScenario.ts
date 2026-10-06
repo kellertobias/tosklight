@@ -1871,7 +1871,12 @@ async function buildGroups(
 	);
 	setBulkGroupCreationPace(desk);
 	for (const [selection, destination, name] of [
-		[["1", "2", "9", "TRU", "1", "5", "0", "ENT"], 2, "Beam Audience"],
+		// Beam Audience includes the eight Robin LEDBeam 150 (451–458) of the canonical rig.
+		[
+			["1", "2", "9", "TRU", "1", "5", "0", "+", "4", "5", "1", "TRU", "4", "5", "8", "ENT"],
+			2,
+			"Beam Audience",
+		],
 		[["1", "5", "1", "TRU", "1", "5", "4", "ENT"], 3, "Beam Auxiliary"],
 		[["2", "2", "7", "TRU", "2", "4", "2", "ENT"], 9, "Wash Audience"],
 		[["2", "4", "3", "TRU", "2", "4", "6", "ENT"], 10, "Wash Auxiliary"],
@@ -1968,8 +1973,14 @@ async function buildGroups(
 	await toggleProgrammerPlaybacks(desk, demo);
 	await expect(demo.locator(".mode-toggle")).toHaveClass(/playbacks-active/u);
 	const commandLine = page.getByRole("textbox", { name: "Command line" });
-	await groupTile(app, 6).click({ button: "right" });
-	await expect(commandLine).toHaveValue("SET GROUP 6");
+	// A direct Group Master assignment is [^SET], the source Group tile, then the destination
+	// (a right-click on a tile opens its settings instead).
+	// On touch SHIFT toggles, so it is pressed again to release it after [^SET].
+	await desk.click(keypad.getByRole("button", { name: "SHIFT", exact: true }));
+	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
+	await desk.click(keypad.getByRole("button", { name: "SHIFT", exact: true }));
+	await desk.click(groupTile(app, 6));
+	await expect(commandLine).toHaveValue(/GROUP 6/u);
 	await desk.click(demo.locator('[data-playback-slot="1"]'));
 	await expect
 		.poll(async () => playbackTargetAtPhysicalSlot(api, showId, 1, 1))
@@ -1978,9 +1989,9 @@ async function buildGroups(
 			group_id: "6",
 		});
 	await desk.setDemoAction(
-		"Assign Beam Show Even to Playback 2 through the command line: SET GROUP 7 AT 1 . 2.",
+		"Assign Beam Show Even to Playback 2 through the command line: ASSIGN GROUP 7 AT PBK 1.2.",
 	);
-	await submitVisibleCommand(page, api, "SET GROUP 7 AT 1 . 2");
+	await submitVisibleCommand(page, api, "ASSIGN GROUP 7 AT PBK 1.2");
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupTileHoldFrames);
 	await expect
 		.poll(async () => playbackTargetAtPhysicalSlot(api, showId, 1, 2))
@@ -2116,13 +2127,13 @@ async function buildPresetSetup(
 	)
 		await desk.click(keypad.locator('[data-keypad-key="HIGH"]'));
 	await expect(demo.locator(".command-status .highlight-status")).toHaveText(
-		"Highlight",
+		/Highlight$/u,
 	);
 	await openBuiltIn(desk, app, "Presets");
 	const presets = app.locator(".preset-pool-window");
 	await showPresetGroupShortcuts(page, presets);
 	await desk.click(
-		presets.getByRole("button", { name: "Position", exact: true }),
+		presetPaneControl(presets, "Position"),
 	);
 	for (const position of [
 		{ name: "Down", address: "3.1", pan: ["5", "0"], tilt: ["2", "5"] },
@@ -2151,7 +2162,7 @@ async function buildPresetSetup(
 	await desk.setDemoAction(
 		"Create the first Color preset as absolute encoder values while Highlight shows the result.",
 	);
-	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
+	await desk.click(presetPaneControl(presets, "Color"));
 	await selectPresetGroupShortcut(desk, presets, "Beam Show");
 	await setEncoderValue(desk, demo, "Color", "Red", ["1", "0", "0"]);
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
@@ -2172,20 +2183,40 @@ async function buildPresetSetup(
 	await desk.click(
 		app.getByRole("button", { name: "Special Dialog", exact: true }),
 	);
-	const colorDialog = page.locator(".special-dialog-card");
-	const colorSheet = colorDialog.locator(".color-sheet");
-	const colorBox = await colorSheet.boundingBox();
+	// The dialog opens compact in the encoder area or as the full modal, whichever fits; either
+	// shows a 2D picker (compact) or the hue ring (modal) to touch.
+	const colorDialog = page.getByRole("dialog", { name: "Color Special Dialog" });
+	await expect(colorDialog).toBeVisible();
+	const picker = colorDialog
+		.locator('[role="application"], [role="slider"][aria-label="Hue"]')
+		.first();
+	const colorBox = await picker.boundingBox();
 	if (!colorBox)
 		throw new Error("The graphical Color Special Dialog is not visible");
 	await page.mouse.click(
 		colorBox.x + colorBox.width * 0.78,
 		colorBox.y + colorBox.height * 0.3,
 	);
-	await desk.click(
-		colorDialog.getByRole("button", { name: "Close modal", exact: true }),
-	);
+	// A hue alone is white at Saturation 0: touch Saturation near full as well.
+	const saturation = colorDialog.getByRole("slider", {
+		name: "Saturation",
+		exact: true,
+	});
+	await saturation.focus();
+	await page.keyboard.press("End");
+	await expect(saturation).toHaveAttribute("aria-valuenow", "100");
+	const closeModal = colorDialog.getByRole("button", {
+		name: "Close Special Dialog",
+		exact: true,
+	});
+	if (await closeModal.count()) await desk.click(closeModal);
+	else await page.keyboard.press("Escape");
+	await expect(colorDialog).toBeHidden();
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(presetTile(presets, "2.2"));
+	await expect
+		.poll(async () => api.showObject(showId, "preset", "2.2"))
+		.not.toBeNull();
 	await desk.fastForward(
 		"Completing the remaining Color presets in three to four seconds, then programming Position and Beam presets at one second each.",
 		() =>
@@ -2212,10 +2243,23 @@ async function buildPresetSetup(
 		await desk.click(keypad.locator('[data-keypad-key="HIGH"]'));
 }
 
+/**
+ * A control in the Preset pool's window header: the family tabs and the Groups action sit in the
+ * header, outside the pool body.
+ */
+function presetPaneControl(presets: Locator, name: string) {
+	// The nearest ancestor that also holds the window header's tab list.
+	const pane = presets.locator("xpath=ancestor::*[.//*[@role='tablist']][1]");
+	return pane
+		.getByRole("tab", { name, exact: true })
+		.or(pane.getByRole("button", { name, exact: true }))
+		.first();
+}
+
 async function showPresetGroupShortcuts(page: Page, presets: Locator) {
 	const shortcuts = presets.locator(".group-strip");
 	if (await shortcuts.isVisible()) return;
-	const toggle = presets.getByRole("button", { name: "Groups", exact: true });
+	const toggle = presetPaneControl(presets, "Groups");
 	const box = await toggle.boundingBox();
 	if (!box) throw new Error("The Preset Group-shortcut toggle is not visible");
 	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -2587,7 +2631,7 @@ async function demonstrateBuskingAndPreload(
 	);
 	await openBuiltIn(desk, app, "Presets");
 	const presets = app.locator(".preset-pool-window");
-	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
+	await desk.click(presetPaneControl(presets, "Color"));
 	const washColorValues = valuesForFixtures(
 		preparedLook.values,
 		preparedLook.washFixtureIds,
@@ -2620,7 +2664,7 @@ async function demonstrateBuskingAndPreload(
 	);
 	await openBuiltIn(desk, app, "Presets");
 	await desk.click(
-		presets.getByRole("button", { name: "Position", exact: true }),
+		presetPaneControl(presets, "Position"),
 	);
 	const fanOut = await api.showObject<any>(showId, "preset", "3.4");
 	if (!fanOut)
@@ -2651,7 +2695,7 @@ async function demonstrateBuskingAndPreload(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
 	);
-	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
+	await desk.click(presetPaneControl(presets, "Color"));
 	const beamColorValues = valuesForFixtures(
 		preparedLook.values,
 		preparedLook.beamFixtureIds,
@@ -3302,18 +3346,23 @@ async function setEncoderValue(
 	const controls = demo
 		.locator(".product-demo-application .parameter-controls")
 		.first();
-	await desk.click(
-		controls
-			.getByRole("button", {
-				name: new RegExp(`^${escapeRegex(family)}(?: \\d+ of \\d+)?$`),
-			})
-			.first(),
-	);
-	await desk.click(
-		controls.getByRole("button", {
-			name: new RegExp(`^Encoder \\d+: ${escapeRegex(label)},`),
-		}),
-	);
+	const tab = controls
+		.getByRole("button", {
+			name: new RegExp(`^${escapeRegex(family)}(?: \\d+ of \\d+)?$`),
+		})
+		.first();
+	const encoder = controls.getByRole("button", {
+		name: new RegExp(`^Encoder \\d+: ${escapeRegex(label)},`),
+	});
+	// Tapping the active family tab moves to its next page, so tap until the encoder shows.
+	const shown = () =>
+		encoder
+			.waitFor({ state: "visible", timeout: 1_500 })
+			.then(() => true)
+			.catch(() => false);
+	for (let page = 0; page < 4 && !(await shown()); page += 1)
+		await desk.click(tab);
+	await desk.click(encoder);
 	const dialog = demo.page().getByRole("dialog", {
 		name: /^Encoder \d+ value$/,
 	});
