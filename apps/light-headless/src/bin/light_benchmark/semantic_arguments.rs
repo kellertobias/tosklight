@@ -52,6 +52,9 @@ pub struct SemanticArguments {
     /// `--start-latency` (TL-641): measure one Start Now Dynamic gesture on every fixture of a
     /// running headless-stress Live lane instead of the timed report.
     pub start_latency: bool,
+    /// `--start-latency-cycles N` (TL-646): also release and restart the probe Dynamic N times,
+    /// once without and once with the desk's persistence checkpoint after each release.
+    pub start_latency_cycles: u16,
 }
 
 impl Default for SemanticArguments {
@@ -70,6 +73,7 @@ impl Default for SemanticArguments {
             digest_lifecycle: false,
             output_workers: None,
             start_latency: false,
+            start_latency_cycles: 0,
         }
     }
 }
@@ -126,6 +130,10 @@ impl SemanticArguments {
             }
             "--digest-lifecycle" => self.digest_lifecycle = true,
             "--start-latency" => self.start_latency = true,
+            "--start-latency-cycles" => {
+                self.start_latency_cycles =
+                    bounded(&value()?, 1, 120, "start latency cycles")? as u16
+            }
             "--output-workers" => {
                 let value = value()?;
                 self.output_workers = Some(
@@ -165,6 +173,9 @@ impl SemanticArguments {
         }
         if self.start_latency && (!self.typed_lanes || self.digest_ticks.is_some()) {
             return Err("--start-latency needs --semantic and no --digest-ticks".into());
+        }
+        if self.start_latency_cycles > 0 && !self.start_latency {
+            return Err("--start-latency-cycles needs --start-latency".into());
         }
         if self.static_bases_only && self.workload_dir.is_none() {
             return Err("--static-bases-only needs a --semantic-workload".into());

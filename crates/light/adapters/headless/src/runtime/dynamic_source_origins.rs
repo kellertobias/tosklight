@@ -624,6 +624,11 @@ pub(super) struct CachedStaticEvidence {
 }
 
 impl DynamicSourceOrigins {
+    /// How many immutable source records the catalogue holds, active or historical.
+    pub fn record_count(&self) -> usize {
+        self.records.len()
+    }
+
     /// A frame that only read the catalogue can keep the published Arc unchanged.
     pub fn shares_storage(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.records, &other.records)

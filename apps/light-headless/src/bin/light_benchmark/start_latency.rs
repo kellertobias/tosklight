@@ -95,6 +95,20 @@ pub struct SerializedProbe {
     pub repeated_start: RepeatedStart,
     /// Gesture plus the first frame, without waiting for a frame boundary.
     pub start_to_first_output_microseconds: f64,
+    /// TL-646 (`--start-latency-cycles`): repeated release and restart, first without and then
+    /// with the desk's persistence checkpoint after each release.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub cycles: Vec<StartCycle>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StartCycle {
+    pub checkpointed: bool,
+    pub cycle: u16,
+    pub gesture_microseconds: f64,
+    pub first_frame_microseconds: f64,
+    /// Source records in the published catalogue after the restart's first frame.
+    pub source_records: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -367,7 +381,14 @@ fn serialized(arguments: &Arguments, config: ProfileConfig) -> Result<Serialized
         2 * SETTLE_FRAMES + 2,
         1,
     )?;
+    let cycles = start_cycles(
+        &scenario,
+        &pending,
+        config.rate_hz,
+        arguments.semantic.start_latency_cycles,
+    )?;
     Ok(SerializedProbe {
+        cycles,
         repeated_start,
         steady_before: distribution(&before),
         start_to_first_output_microseconds: gesture.total_microseconds
@@ -392,13 +413,54 @@ fn start_link(pending: &PendingStart, attempt: u8) -> Uuid {
     )
 }
 
+/// TL-646: release and restart `count` times without the desk's persistence checkpoint, then
+/// `count` times with it after each release, recording the first frame and catalogue size.
+fn start_cycles(
+    lane: &SharedLane<'_>,
+    pending: &PendingStart,
+    rate_hz: u16,
+    count: u16,
+) -> Result<Vec<StartCycle>, String> {
+    let mut cycles = Vec::new();
+    let mut attempt: u8 = 1;
+    for checkpointed in [false, true] {
+        for cycle in 1..=count {
+            attempt += 1;
+            // Every restart starts far past the previous one, so ticks stay monotonic.
+            let tick = u64::from(attempt) * 100_000;
+            let restarted = restart_with(lane, pending, rate_hz, tick, attempt, checkpointed)?;
+            cycles.push(StartCycle {
+                checkpointed,
+                cycle,
+                gesture_microseconds: restarted.gesture.total_microseconds,
+                first_frame_microseconds: restarted.first_frame.total_microseconds,
+                source_records: lane.bench.dynamic_source_records(),
+            });
+        }
+    }
+    Ok(cycles)
+}
+
 /// Release the first start, let output settle without it, then start it again.
 fn restart(
     lane: &SharedLane<'_>,
     pending: &PendingStart,
     rate_hz: u16,
+    tick: u64,
+    attempt: u8,
+) -> Result<RepeatedStart, String> {
+    restart_with(lane, pending, rate_hz, tick, attempt, false)
+}
+
+/// [`restart`], optionally running the desk's persistence checkpoint once output has settled
+/// without the released Dynamic, as a desk gesture persists the Output runtime.
+fn restart_with(
+    lane: &SharedLane<'_>,
+    pending: &PendingStart,
+    rate_hz: u16,
     mut tick: u64,
     attempt: u8,
+    checkpointed: bool,
 ) -> Result<RepeatedStart, String> {
     let release = pending
         .targets
@@ -428,6 +490,9 @@ fn restart(
         } else if tick > 10 * SETTLE_FRAMES + 100 {
             return Err("the released probe Dynamic stayed in output".into());
         }
+    }
+    if checkpointed {
+        lane.bench.checkpoint_dynamic_sources()?;
     }
     set_tick(lane, tick, rate_hz);
     let gesture = gesture(lane, pending, start_link(pending, attempt))?;

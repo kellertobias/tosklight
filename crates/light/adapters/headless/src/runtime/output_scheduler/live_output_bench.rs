@@ -155,6 +155,30 @@ impl LiveOutputBench {
             .map(|outcome| outcome.instance_id.expect("Start selects an instance"))
     }
 
+    /// TL-646: the cold checkpoint the desk runs whenever it persists the Output runtime after a
+    /// gesture (`OutputResources::dynamic_source_checkpoint`): retire the source records the
+    /// runtime can no longer reach. Returns the record count before and after.
+    pub fn checkpoint_dynamic_sources(&self) -> Result<(usize, usize), String> {
+        let dynamics = self.dynamics.lock();
+        let runtime = dynamics.snapshot();
+        let published = self.origins.load_full();
+        let mut origins = (*published).clone();
+        let before = origins.record_count();
+        origins
+            .prune_runtime(&runtime)
+            .map_err(|error| error.to_string())?;
+        let after = origins.record_count();
+        if !origins.shares_storage(&published) {
+            self.origins.store(Arc::new(origins));
+        }
+        Ok((before, after))
+    }
+
+    /// How many source records the published catalogue holds.
+    pub fn dynamic_source_records(&self) -> usize {
+        self.origins.load().record_count()
+    }
+
     /// Render one frame through the production Live transaction.
     pub fn render(
         &self,

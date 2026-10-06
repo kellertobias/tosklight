@@ -462,6 +462,27 @@ mod tests {
             "--start-latency",
         ]);
         assert!(probe.semantic.start_latency);
+        assert_eq!(probe.semantic.start_latency_cycles, 0);
+        let cycles = parsed(&[
+            "--headless-stress-fixtures",
+            "1000",
+            "--semantic",
+            "--start-latency",
+            "--start-latency-cycles",
+            "20",
+        ]);
+        assert_eq!(cycles.semantic.start_latency_cycles, 20);
+        assert!(
+            Arguments::parse([
+                "--headless-stress-fixtures".into(),
+                "1000".into(),
+                "--semantic".into(),
+                "--start-latency-cycles".into(),
+                "20".into()
+            ])
+            .is_err(),
+            "cycles need the start-latency probe"
+        );
         assert!(
             Arguments::parse([
                 "--semantic".into(),
