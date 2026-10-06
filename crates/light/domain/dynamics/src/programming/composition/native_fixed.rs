@@ -148,7 +148,7 @@ impl NativeFixedStep {
         )?;
         portable.validate()?;
         value = AttributeValue::ColorProgram(Arc::new(ColorProgram::Direct { recipe, portable }));
-        value.validate_programming_address(&ProgrammingOwner::Color.key())?;
+        value.validate_programming_address(ProgrammingOwner::Color.key_ref())?;
         if let Some(arena) = trace {
             let source = sample_trace(sample, arena);
             trace_root = Some(arena.write(

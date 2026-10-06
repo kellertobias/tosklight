@@ -270,7 +270,7 @@ fn collect_legacy_owners(
             ProgrammingOwner::Focus,
             ProgrammingOwner::Zoom,
         ] {
-            if sample.value().attribute == owner.key()
+            if sample.value().attribute == *owner.key_ref()
                 || independent_programming_component(&sample.value().attribute, owner)
             {
                 legacy_owners.insert((sample.value().fixture_id, owner));

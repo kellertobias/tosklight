@@ -385,7 +385,7 @@ impl CompiledProgrammingLane {
             return Ok(AngleNumericSample::NotApplicable);
         };
         original.validate_programming_address(
-            &light_core::programming::ProgrammingOwner::Position.key(),
+            light_core::programming::ProgrammingOwner::Position.key_ref(),
         )?;
         address::ensure(
             matches!(original, light_core::AttributeValue::Position(_)),

@@ -70,7 +70,7 @@ pub(super) fn appearance_transition(
             && !matches!(value, AttributeValue::GroupFamily(_)),
         "frame resolver returned an incompatible or unmaterialized Color family",
     )?;
-    value.validate_programming_address(&ProgrammingOwner::Color.key())?;
+    value.validate_programming_address(ProgrammingOwner::Color.key_ref())?;
     if let AttributeValue::ColorProgram(program) = &value
         && matches!(program.as_ref(), ColorProgram::Direct { .. })
     {

@@ -54,7 +54,7 @@ impl PositionAnglePairEndpoint {
                 } => {
                     original
                         .value
-                        .validate_programming_address(&ProgrammingOwner::Position.key())?;
+                        .validate_programming_address(ProgrammingOwner::Position.key_ref())?;
                     if original.value.spread_control_points() != 0
                         || !matches!(&original.value, AttributeValue::Position(_))
                     {
@@ -116,7 +116,7 @@ impl PositionAnglePairEndpoint {
             })
             .transpose()?;
         if let Some(value) = &adopted {
-            value.validate_programming_address(&ProgrammingOwner::Position.key())?;
+            value.validate_programming_address(ProgrammingOwner::Position.key_ref())?;
             if value.spread_control_points() != 0
                 || !matches!(value,
                 AttributeValue::Position(position) if matches!(position.as_ref(), PositionIntent::Angles { .. }))

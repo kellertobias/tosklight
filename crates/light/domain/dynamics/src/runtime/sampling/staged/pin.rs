@@ -332,7 +332,7 @@ impl LanePinning<'_> {
             value
         } else {
             observed
-                .current(target, &lane.output_owner())
+                .current(target, lane.output_owner_ref())
                 .map_or(value, |base| base + (value - base) * controller.size)
         };
         Some(DynamicSampleExpression::LegacyScalar {
@@ -341,7 +341,7 @@ impl LanePinning<'_> {
             occurrence: None,
             dependency_occurrence: observed.used_current.get().then(|| {
                 crate::DynamicSourceDependency::unknown(
-                    observed.current_occurrence(target, &lane.output_owner()),
+                    observed.current_occurrence(target, lane.output_owner_ref()),
                 )
             }),
         })

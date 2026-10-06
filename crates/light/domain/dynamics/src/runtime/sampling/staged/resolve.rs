@@ -244,7 +244,7 @@ fn retain_position_cohort(
         let lane = &definition.lanes[pinned.lane_index];
         let key = (controller_id, pinned.target, lane.id);
         if position_required.contains(&pinned.target) {
-            let mut position = lane.output_owner() == ProgrammingOwner::Position.key();
+            let mut position = lane.output_owner_ref() == ProgrammingOwner::Position.key_ref();
             if let PinnedValue::Ready(expression) = &pinned.value {
                 position |= expression.contains_angles();
                 expression

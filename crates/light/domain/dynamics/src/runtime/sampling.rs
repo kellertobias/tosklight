@@ -566,10 +566,10 @@ fn expression_address(
 ) -> Option<FrameAddress> {
     if expression
         .legacy_leaf()
-        .is_some_and(|(attribute, _)| *attribute == lane.output_owner())
+        .is_some_and(|(attribute, _)| attribute == lane.output_owner_ref())
         || expression
             .programming_leaf()
-            .is_some_and(|(address, _)| address.owner().key() == lane.output_owner())
+            .is_some_and(|(address, _)| address.owner().key_ref() == lane.output_owner_ref())
     {
         cached
     } else {

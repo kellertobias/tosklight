@@ -68,9 +68,15 @@ impl DynamicLane {
     }
 
     pub fn output_owner(&self) -> AttributeKey {
+        self.output_owner_ref().clone()
+    }
+
+    /// [`Self::output_owner`] borrowed (TL-639 round 7): frame workers compare it without
+    /// touching a shared canonical key's count.
+    pub fn output_owner_ref(&self) -> &AttributeKey {
         match &self.body {
-            DynamicLaneBody::LegacyScalar(body) => body.attribute.clone(),
-            DynamicLaneBody::Programming(body) => body.address.owner().key(),
+            DynamicLaneBody::LegacyScalar(body) => &body.attribute,
+            DynamicLaneBody::Programming(body) => body.address.owner().key_ref(),
         }
     }
 

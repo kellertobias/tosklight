@@ -574,7 +574,7 @@ fn validate_position(value: &AttributeValue) -> Result<(), TransitionError> {
             && !matches!(value, AttributeValue::GroupFamily(_)),
         "Position materialization must be a complete materialized Position owner",
     )?;
-    value.validate_programming_address(&ProgrammingOwner::Position.key())?;
+    value.validate_programming_address(ProgrammingOwner::Position.key_ref())?;
     Ok(())
 }
 

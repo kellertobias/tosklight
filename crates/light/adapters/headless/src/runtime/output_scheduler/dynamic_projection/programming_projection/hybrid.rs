@@ -743,11 +743,13 @@ fn same_static_baseline(
     target: FixtureId,
     owner: ProgrammingOwner,
 ) -> bool {
-    let key = owner.key();
+    // Borrowed (TL-639 round 7): parallel workers compare here, and cloning the shared
+    // canonical key would contend on its count.
+    let key = owner.key_ref();
     // One lookup per token (TL-639 round 2); the comparisons are those of the field queries.
     let (original, scalar) = match (
-        original.static_winner(target, &key),
-        scalar.static_winner(target, &key),
+        original.static_winner(target, key),
+        scalar.static_winner(target, key),
     ) {
         (None, None) => return true,
         (Some(original), Some(scalar)) => (original, scalar),

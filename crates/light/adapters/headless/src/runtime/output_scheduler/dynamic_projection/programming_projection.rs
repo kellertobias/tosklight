@@ -234,10 +234,12 @@ impl<'a, S: DynamicTickSource> CapturedProgrammingSources<'a, S> {
             return Ok(None);
         };
         let binding = DynamicSourceBinding::StaticBaseline { target, owner };
-        let key = owner.key();
+        // Borrowed (TL-639 round 7): parallel workers bind here, and cloning the shared
+        // canonical key would contend on its count.
+        let key = owner.key_ref();
         let evidence = self
             .has_captured_family_base(target, owner)
-            .then(|| self.static_sources.family_evidence(target, &key))
+            .then(|| self.static_sources.family_evidence(target, key))
             .flatten();
         let Some(evidence) = evidence.filter(|evidence| !evidence.entries().is_empty()) else {
             unbind_in(&mut *origins.borrow_mut(), &binding);

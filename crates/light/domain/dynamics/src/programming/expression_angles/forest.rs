@@ -827,7 +827,7 @@ fn capture_current(
     let current = sources
         .try_position_current_family(target, address)?
         .map(|value| {
-            value.validate_programming_address(&ProgrammingOwner::Position.key())?;
+            value.validate_programming_address(ProgrammingOwner::Position.key_ref())?;
             ensure(
                 value.spread_control_points() == 0 && matches!(&value, AttributeValue::Position(_)),
                 "Angle Current needs a complete captured Position family",
