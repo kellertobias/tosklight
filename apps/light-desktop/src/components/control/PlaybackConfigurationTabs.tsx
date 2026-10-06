@@ -167,30 +167,20 @@ function playbackTargetColumn(
 	let onChange = (_value: string) => {};
 	if (family === "cue_list" && draft.target.type === "cue_list") {
 		value = draft.target.cue_list_id;
-		options = cueLists.map((cue) => ({
-			value: cue.id,
-			ariaLabel: `${cue.number} ${cue.name}`,
-			label: <NumberedObjectLabel number={cue.number} name={cue.name} />,
-		}));
+		options = cueLists.map((cue) => numberedOption(cue.id, cue.number, cue.name));
 		onChange = (cue_list_id) =>
 			onDraftChange({ ...draft, target: { type: "cue_list", cue_list_id } });
 	} else if (family === "dynamic" && draft.target.type === "dynamic") {
 		const assignment = draft.target.assignment;
 		label = "Dynamic options";
 		value = assignment.dynamic_id ?? undefined;
-		options = dynamics.map((dynamic) => {
-				const name = `${dynamic.body.name}${dynamic.body.target_binding.type === "targetless" ? " · targetless" : ""}`;
-				return {
-					value: dynamic.id,
-					ariaLabel: `${dynamic.body.pool_number} ${name}`,
-					label: (
-						<NumberedObjectLabel
-							number={dynamic.body.pool_number}
-							name={name}
-						/>
-					),
-				};
-			});
+		options = dynamics.map((dynamic) =>
+			numberedOption(
+				dynamic.id,
+				dynamic.body.pool_number,
+				`${dynamic.body.name}${dynamic.body.target_binding.type === "targetless" ? " · targetless" : ""}`,
+			),
+		);
 		onChange = (dynamicId) => {
 			const dynamic = dynamics.find((candidate) => candidate.id === dynamicId);
 			if (!dynamic) return;
@@ -215,16 +205,9 @@ function playbackTargetColumn(
 	} else if (family === "group" && draft.target.type === "group") {
 		const target = draft.target;
 		value = target.group_id;
-		options = groups.map((group, index) => ({
-			value: group.id,
-			ariaLabel: `${index + 1} ${group.body.name ?? group.id}`,
-			label: (
-				<NumberedObjectLabel
-					number={index + 1}
-					name={group.body.name ?? group.id}
-				/>
-			),
-		}));
+		options = groups.map((group, index) =>
+			numberedOption(group.id, index + 1, group.body.name ?? group.id),
+		);
 		onChange = (group_id) =>
 			onDraftChange({
 				...draft,
@@ -411,6 +394,15 @@ export function PlaybackFunctionTab({
 			</section>
 		</div>
 	);
+}
+
+/** A numbered option: the radio itself is named "<number> <name>". */
+function numberedOption(value: string, number: number, name: string) {
+	return {
+		value,
+		ariaLabel: `${number} ${name}`,
+		label: <NumberedObjectLabel number={number} name={name} />,
+	};
 }
 
 function NumberedObjectLabel({
