@@ -53,12 +53,13 @@ impl<'frame> DeferredTypedSampling<'frame> {
     /// [`Self::complete`] with `workers`: the same samples, requirements, keyframe caches and
     /// source logs, with the typed lanes evaluated on several threads.
     pub fn complete_in_parallel(
-        self,
+        mut self,
         sources: &dyn DynamicValueSourceResolver,
         workers: &mut dyn PreparationWorkers,
     ) -> Result<CompletedDynamicSamples<'frame>, DynamicRuntimeError> {
         let chunks = workers.chunks().clamp(1, crate::TARGET_SHARDS);
         let mut chunk_of_item = Vec::new();
+        let mut plan_of_item = Vec::new();
         let recorded = {
             let runtime = &*self.runtime;
             let plans = &*self.plans;
@@ -82,6 +83,7 @@ impl<'frame> DeferredTypedSampling<'frame> {
                             .get(&id)
                             .expect("pinned compiled lane");
                         chunk_of_item.push(shard_chunk(target_shard(pinned.target), chunks));
+                        plan_of_item.push(plan_index);
                         items.push(Item {
                             plan: plan_index,
                             work: work_index,
@@ -111,6 +113,27 @@ impl<'frame> DeferredTypedSampling<'frame> {
                 logs: (0, 0),
             })
             .collect::<Vec<_>>();
+        // TL-639 round 7: with every lane evaluated by a worker, the plans apply and emit on the
+        // workers too; the forks' logs are appended in lane order first, as the walk below would.
+        if let Some(instances) = self.workers.filter(|_| {
+            self.plans.len() > 1 && cursors.iter().all(|cursor| cursor.stopped.is_none())
+        }) {
+            let mut evaluated = (0..self.plans.len())
+                .map(|_| Vec::new())
+                .collect::<Vec<_>>();
+            for (chunk, plan) in chunk_of_item.into_iter().zip(plan_of_item) {
+                let cursor = &mut cursors[chunk];
+                let (evaluation, logs) = cursor
+                    .evaluated
+                    .next()
+                    .expect("one evaluation per recorded member");
+                workers.append_logs(chunk, cursor.logs, logs);
+                cursor.logs = logs;
+                evaluated[plan].push(evaluation);
+            }
+            self.complete_instances_in_parallel(evaluated, instances)?;
+            return Ok(self.finish());
+        }
         let mut items = chunk_of_item.into_iter();
         let mut recorded = || {
             let chunk = items.next().expect("one record per typed lane");
@@ -140,19 +163,14 @@ impl<'frame> DeferredTypedSampling<'frame> {
                 sources,
                 self.samples,
                 Some(self.requirements),
-                self.runtime.output_frame_undo.as_mut(),
+                self.runtime
+                    .output_frame_undo
+                    .as_mut()
+                    .map(transaction::journal),
                 &mut recorded,
             )?;
         }
-        for id in self.completed_instances {
-            self.runtime.complete_one_shot(*id);
-        }
-        self.completion.set(true);
-        Ok(CompletedDynamicSamples {
-            samples: self.samples,
-            completion_identity: std::ptr::from_ref(self.completion) as usize,
-            requirements: self.requirements,
-        })
+        Ok(self.finish())
     }
 }
 

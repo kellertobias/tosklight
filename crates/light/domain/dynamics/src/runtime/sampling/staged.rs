@@ -10,9 +10,11 @@ use light_core::programming::{ProgrammingOwner, TransitionError};
 use std::{cell::Cell, collections::HashSet};
 
 mod emit;
+mod instances;
 mod parallel;
 mod pin;
 mod resolve;
+pub use instances::InstanceWorkers;
 pub use parallel::CompletedChunk;
 
 type SampleKey = (Uuid, FixtureId, Uuid);
@@ -28,9 +30,23 @@ pub struct DynamicSamplingScratch {
     samples: Vec<DynamicRuntimeSample>,
     work: SamplingWorkBuffers,
     requirements: Vec<DynamicFamilyPreparationRequirement>,
+    /// The caller's worker threads for per-instance pinning and completion (TL-639 round 7).
+    workers: Option<Arc<dyn InstanceWorkers>>,
+    /// Per-instance sample and requirement runs of a parallel completion, kept for capacity.
+    spare_outputs: Vec<SpareOutputs>,
 }
 
+type SpareOutputs = (
+    Vec<DynamicRuntimeSample>,
+    Vec<DynamicFamilyPreparationRequirement>,
+);
+
 impl DynamicSamplingScratch {
+    /// Pin and complete instances on `workers` from the next frame on (`None`: in turn).
+    pub fn set_instance_workers(&mut self, workers: Option<Arc<dyn InstanceWorkers>>) {
+        self.workers = workers;
+    }
+
     pub fn clear(&mut self) {
         for plan in self.plans.drain(..) {
             self.work.recycle(plan);
@@ -50,6 +66,8 @@ pub(in crate::runtime) struct SamplingWorkBuffers {
     controllers: HashMap<Uuid, Vec<PinnedController>>,
     /// Fx-hashed (TL-639): per-frame lookups only, never iterated.
     random_envelopes: rustc_hash::FxHashMap<RandomKey, f32>,
+    /// Per-instance envelope caches of parallel pinning (TL-639 round 7), kept for capacity.
+    spare_envelopes: Vec<rustc_hash::FxHashMap<RandomKey, f32>>,
 }
 
 impl SamplingWorkBuffers {
@@ -104,6 +122,8 @@ pub struct DeferredTypedSampling<'frame> {
     samples: &'frame mut Vec<DynamicRuntimeSample>,
     completion: &'frame Cell<bool>,
     requirements: &'frame mut Vec<DynamicFamilyPreparationRequirement>,
+    workers: Option<&'frame dyn InstanceWorkers>,
+    spare_outputs: &'frame mut Vec<SpareOutputs>,
 }
 
 impl<'frame> DeferredTypedSampling<'frame> {
@@ -111,7 +131,7 @@ impl<'frame> DeferredTypedSampling<'frame> {
         self,
         sources: &dyn DynamicValueSourceResolver,
     ) -> Result<CompletedDynamicSamples<'frame>, DynamicRuntimeError> {
-        for plan in self.plans {
+        for plan in self.plans.iter_mut() {
             let instance = self
                 .runtime
                 .instances
@@ -123,19 +143,27 @@ impl<'frame> DeferredTypedSampling<'frame> {
                 sources,
                 self.samples,
                 Some(self.requirements),
-                self.runtime.output_frame_undo.as_mut(),
+                self.runtime
+                    .output_frame_undo
+                    .as_mut()
+                    .map(transaction::journal),
                 &mut || None,
             )?;
         }
+        Ok(self.finish())
+    }
+
+    /// Complete the one-shot instances and certify the frame's samples.
+    fn finish(self) -> CompletedDynamicSamples<'frame> {
         for id in self.completed_instances {
             self.runtime.complete_one_shot(*id);
         }
         self.completion.set(true);
-        Ok(CompletedDynamicSamples {
+        CompletedDynamicSamples {
             samples: self.samples,
             completion_identity: std::ptr::from_ref(self.completion) as usize,
             requirements: self.requirements,
-        })
+        }
     }
 }
 
@@ -167,6 +195,58 @@ impl DynamicRuntime {
     where
         E: From<DynamicRuntimeError>,
     {
+        self.sample_staged(
+            (now_millis, output_interval_millis, speed_groups),
+            instances::PinSources::Local(scalar_sources, authored_sources),
+            addresses,
+            scratch,
+            operation,
+        )
+    }
+
+    /// [`Self::sample_all_programming_staged`] with sources the scratch's instance workers may
+    /// share (TL-639 round 7): instances are pinned on the workers when there are enough lanes.
+    #[allow(clippy::too_many_arguments)]
+    pub fn sample_all_programming_staged_shared<T, E>(
+        &mut self,
+        now_millis: u64,
+        output_interval_millis: u64,
+        speed_groups: &[DynamicSpeedTransport; 5],
+        scalar_sources: &(dyn ScalarSourceResolver + Sync),
+        authored_sources: &(dyn DynamicValueSourceResolver + Sync),
+        addresses: Option<&dyn FrameAddressResolver>,
+        scratch: &mut DynamicSamplingScratch,
+        operation: impl for<'frame> FnOnce(
+            &'frame [DynamicRuntimeSample],
+            DeferredTypedSampling<'frame>,
+        ) -> Result<(CompletedDynamicSamples<'frame>, T), E>,
+    ) -> Result<T, E>
+    where
+        E: From<DynamicRuntimeError>,
+    {
+        self.sample_staged(
+            (now_millis, output_interval_millis, speed_groups),
+            instances::PinSources::Shared(scalar_sources, authored_sources),
+            addresses,
+            scratch,
+            operation,
+        )
+    }
+
+    fn sample_staged<T, E>(
+        &mut self,
+        (now_millis, output_interval_millis, speed_groups): (u64, u64, &[DynamicSpeedTransport; 5]),
+        sources: instances::PinSources<'_>,
+        addresses: Option<&dyn FrameAddressResolver>,
+        scratch: &mut DynamicSamplingScratch,
+        operation: impl for<'frame> FnOnce(
+            &'frame [DynamicRuntimeSample],
+            DeferredTypedSampling<'frame>,
+        ) -> Result<(CompletedDynamicSamples<'frame>, T), E>,
+    ) -> Result<T, E>
+    where
+        E: From<DynamicRuntimeError>,
+    {
         if self.output_frame_undo.is_none() {
             return Err(DynamicRuntimeError::InvalidSample(
                 "staged sampling requires an output transaction".into(),
@@ -185,6 +265,10 @@ impl DynamicRuntime {
             // TL-639: reproducible runs also fix the otherwise hash-ordered sample order.
             instances.sort_unstable_by_key(|(id, _)| *id);
         }
+        // TL-639 round 7: every instance's frame is prepared in order first, then the instances
+        // are pinned (on the workers when there are enough lanes). Pinning one instance reads
+        // nothing another one's preparation or pinning writes.
+        let mut jobs = Vec::with_capacity(instances.len());
         for (instance_id, speed) in instances {
             let instance = self
                 .instances
@@ -211,19 +295,24 @@ impl DynamicRuntime {
                 || Arc::from([]),
                 |resolver| instance.frame_addresses(resolver),
             );
-            let plan = pin_samples(
-                instance,
+            jobs.push(instances::PinJob {
                 instance_id,
-                now_millis,
-                cycle,
-                output_interval_millis,
-                scalar_sources,
-                authored_sources,
+                cycle_duration_millis: cycle,
                 frame,
                 addresses,
-                &mut scratch.work,
-                self.output_frame_undo.as_mut(),
-            )?;
+            });
+        }
+        let pinned = self.pin_jobs(
+            jobs,
+            &instances::PinInputs {
+                now_millis,
+                output_interval_millis,
+                sources,
+            },
+            &mut scratch.work,
+            scratch.workers.as_deref(),
+        )?;
+        for plan in pinned {
             append_scalar_samples(&plan, &mut scratch.scalar_samples);
             scratch.plans.push(plan);
         }
@@ -240,6 +329,8 @@ impl DynamicRuntime {
                 samples: &mut scratch.samples,
                 completion: &completion,
                 requirements: &mut scratch.requirements,
+                workers: scratch.workers.as_deref(),
+                spare_outputs: &mut scratch.spare_outputs,
             },
         )?;
         if !completion.get()
@@ -325,7 +416,33 @@ pub(super) fn pin_samples(
     frame: SamplingFrame,
     addresses: Arc<[Option<FrameAddress>]>,
     buffers: &mut SamplingWorkBuffers,
-    mut undo: Option<&mut transaction::OutputFrameUndo>,
+    undo: Option<&mut transaction::Journal>,
+) -> Result<PinnedInstance, DynamicRuntimeError> {
+    let controllers = buffers.controllers.remove(&instance_id).unwrap_or_default();
+    pin_instance(
+        instance,
+        (instance_id, now_millis),
+        (cycle_duration_millis, output_interval_millis),
+        (sources, authored_sources),
+        (frame, addresses),
+        controllers,
+        &mut buffers.random_envelopes,
+        undo,
+    )
+}
+
+/// [`pin_samples`] with the instance's recycled controller work and a Random envelope cache
+/// (keyed by instance, so one per instance answers as the frame's shared one does).
+#[allow(clippy::too_many_arguments)]
+fn pin_instance(
+    instance: &mut DynamicInstance,
+    (instance_id, now_millis): (Uuid, u64),
+    (cycle_duration_millis, output_interval_millis): (u64, u64),
+    (sources, authored_sources): (&dyn ScalarSourceResolver, &dyn DynamicValueSourceResolver),
+    (frame, addresses): (SamplingFrame, Arc<[Option<FrameAddress>]>),
+    mut controllers: Vec<PinnedController>,
+    random_envelopes: &mut rustc_hash::FxHashMap<RandomKey, f32>,
+    mut undo: Option<&mut transaction::Journal>,
 ) -> Result<PinnedInstance, DynamicRuntimeError> {
     let evaluator = DynamicEvaluator::new(&frame.definition);
     let random_phases = random_phase_by_lane_target(
@@ -336,10 +453,8 @@ pub(super) fn pin_samples(
     );
     let holding = instance.paused_at_millis.is_some()
         && instance.activation_policy == crate::ActivationPolicy::JoinSyncNow;
-    let mut controllers = buffers.controllers.remove(&instance_id).unwrap_or_default();
     let mut controller_count = 0;
     let retain_held = holding || frame.synchronized_resume_mix.is_some_and(|mix| mix < 1.0);
-    let random_envelopes = &mut buffers.random_envelopes;
     let pinning = pin::LanePinning {
         instance_id,
         cycle_duration_millis,
@@ -451,7 +566,7 @@ pub(super) fn complete_samples(
     sources: &dyn DynamicValueSourceResolver,
     samples: &mut Vec<DynamicRuntimeSample>,
     requirements: Option<&mut Vec<DynamicFamilyPreparationRequirement>>,
-    mut undo: Option<&mut transaction::OutputFrameUndo>,
+    mut undo: Option<&mut transaction::Journal>,
     recorded: &mut dyn FnMut() -> Option<resolve::Evaluated>,
 ) -> Result<(), DynamicRuntimeError> {
     let sources = super::super::preset_values::RetainedPresetSources {

@@ -101,7 +101,7 @@ impl LanePinning<'_> {
         controller: &DynamicController,
         preserve_angle_targets: Option<&HashSet<FixtureId>>,
         random_envelopes: &mut rustc_hash::FxHashMap<RandomKey, f32>,
-        mut undo: Option<&mut transaction::OutputFrameUndo>,
+        mut undo: Option<&mut transaction::Journal>,
     ) {
         let frame = self.frame;
         let lanes = &frame.definition.lanes;
@@ -161,7 +161,7 @@ impl LanePinning<'_> {
         (lane_index, lane, facts): (usize, &crate::DynamicLane, &LaneFacts<'_>),
         preserve_angle_branches: bool,
         random_envelopes: &mut rustc_hash::FxHashMap<RandomKey, f32>,
-        undo: Option<&mut transaction::OutputFrameUndo>,
+        undo: Option<&mut transaction::Journal>,
     ) {
         let frame = self.frame;
         let holding = self.holding;
@@ -269,7 +269,7 @@ impl LanePinning<'_> {
         lane: &crate::DynamicLane,
         target: FixtureId,
         random_envelopes: &mut rustc_hash::FxHashMap<RandomKey, f32>,
-        undo: Option<&mut transaction::OutputFrameUndo>,
+        undo: Option<&mut transaction::Journal>,
     ) -> Option<f32> {
         let frame = self.frame;
         let instance_id = self.instance_id;

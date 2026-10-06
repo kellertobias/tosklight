@@ -38,6 +38,7 @@ pub use programmer_identity::normalize_legacy_programmer_controller_ids;
 pub use sample_boundary::{DynamicSampleBoundary, DynamicSampleScope};
 pub use sampling::{
     CompletedChunk, CompletedDynamicSamples, DeferredTypedSampling, DynamicSamplingScratch,
+    InstanceWorkers,
 };
 pub use transaction::DynamicOutputFrameScratch;
 

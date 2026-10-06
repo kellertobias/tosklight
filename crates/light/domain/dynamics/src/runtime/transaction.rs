@@ -26,7 +26,7 @@ pub(super) struct OutputFrameUndo {
     spare_sampling: HashMap<Uuid, SamplingUndo>,
 }
 
-struct SamplingUndo {
+pub(super) struct SamplingUndo {
     clock: SamplingClock,
     previous_last: Option<SampleValues>,
     random: HashMap<RandomKey, Option<RandomStreamState>>,
@@ -128,57 +128,37 @@ impl OutputFrameUndo {
         if self.cold.contains_key(&instance.id) || self.warm.contains_key(&instance.id) {
             return;
         }
-        let mut state = self
-            .spare_sampling
-            .remove(&instance.id)
-            .unwrap_or_else(|| SamplingUndo {
-                clock: SamplingClock::capture(instance),
-                previous_last: None,
-                random: HashMap::new(),
-                unavailable: HashMap::new(),
-                held_before: None,
-            });
-        state.clock = SamplingClock::capture(instance);
+        let state = fresh_sampling(self.spare_sampling.remove(&instance.id), instance);
         self.warm.insert(instance.id, state);
     }
-    pub(super) fn begin_samples(&mut self, instance: &mut DynamicInstance) {
-        self.sampling(instance);
-        let Some(warm) = self.warm.get_mut(&instance.id) else {
-            return;
-        };
-        if warm.previous_last.is_none() {
-            let mut spare = self.spare_last.remove(&instance.id).unwrap_or_default();
-            spare.clear();
-            warm.previous_last = Some(std::mem::replace(&mut instance.last_sample_values, spare));
+    /// Lend the journal of one instance's sampling to a worker (TL-639 round 7): its warm
+    /// record and spare buffers move into the handle, which records exactly what this journal
+    /// would; [`Self::take_back`] returns them.
+    pub(super) fn lend(&mut self, id: Uuid) -> InstanceUndo {
+        InstanceUndo {
+            id,
+            cold: self.cold.contains_key(&id),
+            warm: self.warm.remove(&id),
+            spare_sampling: self.spare_sampling.remove(&id),
+            spare_last: self.spare_last.remove(&id),
         }
     }
-    pub(super) fn random(&mut self, instance: &DynamicInstance, key: RandomKey) {
-        self.sampling(instance);
-        if let Some(warm) = self.warm.get_mut(&instance.id) {
-            warm.random
-                .entry(key)
-                .or_insert_with(|| instance.random_streams.get(&key).cloned());
+    pub(super) fn take_back(&mut self, lent: InstanceUndo) {
+        let InstanceUndo {
+            id,
+            cold: _,
+            warm,
+            spare_sampling,
+            spare_last,
+        } = lent;
+        if let Some(warm) = warm {
+            self.warm.insert(id, warm);
         }
-    }
-    pub(super) fn unavailable(&mut self, instance: &DynamicInstance, key: SampleKey) {
-        self.sampling(instance);
-        if let Some(warm) = self.warm.get_mut(&instance.id) {
-            warm.unavailable
-                .entry(key)
-                .or_insert_with(|| instance.unavailable_samples.get(&key).cloned());
+        if let Some(spare) = spare_sampling {
+            self.spare_sampling.insert(id, spare);
         }
-    }
-    /// Only call before an actual hold-map mutation (initial capture, membership change or
-    /// completed Resume). Steady playing/paused frames do not copy retained histories.
-    pub(super) fn held(&mut self, instance: &DynamicInstance) {
-        self.sampling(instance);
-        if let Some(warm) = self.warm.get_mut(&instance.id) {
-            warm.held_before.get_or_insert_with(|| {
-                (
-                    instance.synchronized_hold_values.clone(),
-                    instance.synchronized_hold_angle_sources.clone(),
-                )
-            });
+        if let Some(spare) = spare_last {
+            self.spare_last.insert(id, spare);
         }
     }
     fn restore(&mut self, runtime: &mut DynamicRuntime) {
@@ -247,6 +227,117 @@ impl OutputFrameUndo {
     }
 }
 
+fn fresh_sampling(spare: Option<SamplingUndo>, instance: &DynamicInstance) -> SamplingUndo {
+    let mut state = spare.unwrap_or_else(|| SamplingUndo {
+        clock: SamplingClock::capture(instance),
+        previous_last: None,
+        random: HashMap::new(),
+        unavailable: HashMap::new(),
+        held_before: None,
+    });
+    state.clock = SamplingClock::capture(instance);
+    state
+}
+
+impl SamplingUndo {
+    /// Keep the instance's previous samples, once per frame, swapping in a spare buffer.
+    fn begin_samples(
+        &mut self,
+        instance: &mut DynamicInstance,
+        spare: impl FnOnce() -> Option<SampleValues>,
+    ) {
+        if self.previous_last.is_none() {
+            let mut spare = spare().unwrap_or_default();
+            spare.clear();
+            self.previous_last = Some(std::mem::replace(&mut instance.last_sample_values, spare));
+        }
+    }
+}
+
+/// What sampling journals about one instance before it changes it: the frame's whole journal
+/// ([`OutputFrameUndo`]) or one instance's lent part of it ([`InstanceUndo`], TL-639 round 7).
+pub(super) trait SamplingJournal {
+    /// The instance's warm record, created on first use; `None` while the instance is
+    /// journaled whole (cold), which restores everything.
+    fn warm(&mut self, instance: &DynamicInstance) -> Option<&mut SamplingUndo>;
+    fn begin_samples(&mut self, instance: &mut DynamicInstance);
+
+    fn random(&mut self, instance: &DynamicInstance, key: RandomKey) {
+        if let Some(warm) = self.warm(instance) {
+            warm.random
+                .entry(key)
+                .or_insert_with(|| instance.random_streams.get(&key).cloned());
+        }
+    }
+    fn unavailable(&mut self, instance: &DynamicInstance, key: SampleKey) {
+        if let Some(warm) = self.warm(instance) {
+            warm.unavailable
+                .entry(key)
+                .or_insert_with(|| instance.unavailable_samples.get(&key).cloned());
+        }
+    }
+    /// Only call before an actual hold-map mutation (initial capture, membership change or
+    /// completed Resume). Steady playing/paused frames do not copy retained histories.
+    fn held(&mut self, instance: &DynamicInstance) {
+        if let Some(warm) = self.warm(instance) {
+            warm.held_before.get_or_insert_with(|| {
+                (
+                    instance.synchronized_hold_values.clone(),
+                    instance.synchronized_hold_angle_sources.clone(),
+                )
+            });
+        }
+    }
+}
+
+impl SamplingJournal for OutputFrameUndo {
+    fn warm(&mut self, instance: &DynamicInstance) -> Option<&mut SamplingUndo> {
+        self.sampling(instance);
+        self.warm.get_mut(&instance.id)
+    }
+    fn begin_samples(&mut self, instance: &mut DynamicInstance) {
+        self.sampling(instance);
+        let id = instance.id;
+        if let Some(warm) = self.warm.get_mut(&id) {
+            warm.begin_samples(instance, || self.spare_last.remove(&id));
+        }
+    }
+}
+
+/// One instance's lent journal (TL-639 round 7), see [`OutputFrameUndo::lend`].
+pub(super) struct InstanceUndo {
+    id: Uuid,
+    cold: bool,
+    warm: Option<SamplingUndo>,
+    spare_sampling: Option<SamplingUndo>,
+    spare_last: Option<SampleValues>,
+}
+
+impl SamplingJournal for InstanceUndo {
+    fn warm(&mut self, instance: &DynamicInstance) -> Option<&mut SamplingUndo> {
+        debug_assert_eq!(
+            instance.id, self.id,
+            "a lent journal serves its own instance"
+        );
+        if self.cold {
+            return None;
+        }
+        if self.warm.is_none() {
+            self.warm = Some(fresh_sampling(self.spare_sampling.take(), instance));
+        }
+        self.warm.as_mut()
+    }
+    fn begin_samples(&mut self, instance: &mut DynamicInstance) {
+        if self.warm(instance).is_none() {
+            return;
+        }
+        let spare_last = &mut self.spare_last;
+        if let Some(warm) = self.warm.as_mut() {
+            warm.begin_samples(instance, || spare_last.take());
+        }
+    }
+}
+
 impl DynamicRuntime {
     /// Commit sampling and output reconciliation only when the caller's complete calculation
     /// succeeds. The closure must include family composition and final frame encoding. Errors
@@ -298,4 +389,12 @@ impl DynamicRuntime {
             undo.record_instance(id, self.instances.get(&id));
         }
     }
+}
+
+/// A sampling journal as functions take it.
+pub(super) type Journal = dyn SamplingJournal + 'static;
+
+/// The frame's journal as a [`Journal`].
+pub(super) fn journal(undo: &mut OutputFrameUndo) -> &mut Journal {
+    undo
 }

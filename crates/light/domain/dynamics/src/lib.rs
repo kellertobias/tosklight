@@ -36,7 +36,7 @@ pub use runtime::{
     DynamicRandomPulseSnapshot, DynamicRandomStreamSnapshot, DynamicRuntime, DynamicRuntimeError,
     DynamicRuntimeSample, DynamicRuntimeSnapshot, DynamicSampleBoundary, DynamicSampleScope,
     DynamicSamplingScratch, DynamicSpeedTransport, DynamicStartRequest, DynamicTargetLanes,
-    DynamicTargetScope, LegacyDynamicSample, NativeColorModelCapability,
+    DynamicTargetScope, InstanceWorkers, LegacyDynamicSample, NativeColorModelCapability,
     NativeColorModelUnavailable, NativeColorUnavailableReason, PreparedDynamicDefinitions,
     PreparedDynamicPresetSources, TimedDynamicControl, normalize_legacy_programmer_controller_ids,
     replay_dynamic_controls,

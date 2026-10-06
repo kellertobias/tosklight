@@ -42,6 +42,7 @@ mod staged;
 pub(super) use staged::SamplingWorkBuffers;
 pub use staged::{
     CompletedChunk, CompletedDynamicSamples, DeferredTypedSampling, DynamicSamplingScratch,
+    InstanceWorkers,
 };
 
 struct SamplingFrame {
@@ -148,7 +149,7 @@ impl DynamicRuntime {
             frame,
             addresses,
             &mut self.sampling_buffers,
-            self.output_frame_undo.as_mut(),
+            self.output_frame_undo.as_mut().map(transaction::journal),
         )?;
         let mut samples = Vec::new();
         let result = staged::complete_samples(
@@ -157,7 +158,7 @@ impl DynamicRuntime {
             programming_sources,
             &mut samples,
             None,
-            self.output_frame_undo.as_mut(),
+            self.output_frame_undo.as_mut().map(transaction::journal),
             &mut || None,
         );
         self.sampling_buffers.recycle(plan);

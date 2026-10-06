@@ -96,6 +96,23 @@ impl OutputPool {
     }
 }
 
+/// A frame's per-instance Dynamic work (TL-639 round 7): every index once, on the pool.
+impl light_dynamics::InstanceWorkers for OutputPool {
+    fn run_indexed(&self, count: usize, run: &(dyn Fn(usize) + Sync)) {
+        use rayon::prelude::*;
+        if self.workers() <= 1 || count <= 1 {
+            (0..count).for_each(run);
+            return;
+        }
+        self.pool.install(|| {
+            (0..count)
+                .into_par_iter()
+                .with_max_len(1)
+                .for_each(run)
+        });
+    }
+}
+
 /// Below this many items a sort stays on the caller.
 const MIN_PARALLEL_SORT: usize = if cfg!(test) { 2 } else { 4096 };
 

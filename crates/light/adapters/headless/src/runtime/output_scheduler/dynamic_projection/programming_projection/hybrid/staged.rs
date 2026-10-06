@@ -21,7 +21,7 @@ pub(super) fn prepare_hybrid_frame<T>(
     resolver: &impl HybridFrameResolver,
     presets: Option<&dyn DynamicValueSourceResolver>,
     observer: &mut impl HybridFrameObserver<T>,
-    scalar_sources: &impl DynamicTickSource,
+    scalar_sources: &(impl DynamicTickSource + Sync),
     static_lane: StaticLane<'_>,
     prepare_static: impl Fn(&[ContributionBatch]) -> PreparedStaticFamilyFrame,
 ) -> Result<PreparedHybridFrame<T>, DynamicRuntimeError> {
@@ -49,6 +49,7 @@ pub(super) fn prepare_hybrid_frame<T>(
     } = scratch;
     native_current.borrow_mut().begin_frame();
     let output_pool = engine.output_pool();
+    share_output_pool(sampling, output_pool.as_ref());
     let result = sample_captured_dynamic_inputs_with_context(
         runtime,
         inputs,
@@ -62,7 +63,7 @@ pub(super) fn prepare_hybrid_frame<T>(
                 fixed,
                 controls,
             )?;
-            runtime.sample_all_programming_staged(
+            runtime.sample_all_programming_staged_shared(
                 now,
                 interval,
                 inputs.speed_transports,
@@ -155,6 +156,16 @@ pub(super) fn prepare_hybrid_frame<T>(
     );
     native_current.borrow_mut().finish_frame();
     finish_hybrid_frame(result?, resolver, models, origins, frame_token)
+}
+
+/// TL-639 round 7: the frame's Dynamic instances pin and complete on the output pool too.
+fn share_output_pool(
+    sampling: &mut light_dynamics::DynamicSamplingScratch,
+    pool: Option<&Arc<light_engine::parallel::OutputPool>>,
+) {
+    sampling.set_instance_workers(
+        pool.map(|pool| Arc::clone(pool) as Arc<dyn light_dynamics::InstanceWorkers>),
+    );
 }
 
 type StagedHybridOutput<T> = (

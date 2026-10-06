@@ -12,7 +12,7 @@ pub(super) fn emit_controller_samples(
     definition: &DynamicDefinition,
     work: &mut PinnedController,
     samples: &mut Vec<DynamicRuntimeSample>,
-    mut undo: Option<&mut transaction::OutputFrameUndo>,
+    mut undo: Option<&mut transaction::Journal>,
 ) -> Result<(), DynamicRuntimeError> {
     let track_emitted = !work.retained.is_empty();
     work.emitted_keys.clear();
@@ -120,7 +120,7 @@ pub(super) fn emit_controller_samples(
 pub(super) fn finish_synchronized_holds(
     instance: &mut DynamicInstance,
     plan: &PinnedInstance,
-    undo: Option<&mut transaction::OutputFrameUndo>,
+    undo: Option<&mut transaction::Journal>,
 ) {
     if plan.holding {
         instance.synchronized_hold_captured = true;
