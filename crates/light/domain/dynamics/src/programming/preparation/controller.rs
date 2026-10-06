@@ -18,7 +18,6 @@ pub(super) trait PreparationOutput {
 /// The frame's own output.
 pub(super) struct FamilyOutput<'a> {
     pub(super) families: &'a mut Vec<DynamicFamilySampleGroup>,
-    pub(super) family_buffers: &'a mut Vec<Vec<FamilyCompositionSample>>,
     pub(super) family_indices: &'a mut HashMap<(FixtureId, ProgrammingOwner), usize>,
     pub(super) legacy: &'a mut Vec<DynamicRuntimeSample>,
     pub(super) requirements: &'a mut Vec<DynamicFamilyPreparationRequirement>,
@@ -34,19 +33,20 @@ impl PreparationOutput for FamilyOutput<'_> {
         if samples.is_empty() {
             return;
         }
-        let index = *self
-            .family_indices
-            .entry((target, owner))
-            .or_insert_with(|| {
-                let index = self.families.len();
+        // TL-639 round 7: a new group takes the controller's samples with their storage.
+        match self.family_indices.entry((target, owner)) {
+            std::collections::hash_map::Entry::Occupied(index) => {
+                self.families[*index.get()].samples.extend(samples);
+            }
+            std::collections::hash_map::Entry::Vacant(index) => {
+                index.insert(self.families.len());
                 self.families.push(DynamicFamilySampleGroup {
                     target,
                     owner,
-                    samples: self.family_buffers.pop().unwrap_or_default(),
+                    samples,
                 });
-                index
-            });
-        self.families[index].samples.extend(samples);
+            }
+        }
     }
 
     fn legacy(&mut self, sample: DynamicRuntimeSample) {
@@ -145,7 +145,6 @@ pub(super) fn prepare(
         controller,
         position,
         families,
-        family_buffers,
         family_indices,
         legacy,
         requirements,
@@ -155,7 +154,6 @@ pub(super) fn prepare(
     } = scratch;
     let mut out = FamilyOutput {
         families,
-        family_buffers,
         family_indices,
         legacy,
         requirements,
@@ -218,10 +216,26 @@ impl<O: PreparationOutput> Preparer<'_, O> {
             self.prepare_position_controller(sources, native_models)
         } else {
             // Pure Target component lanes retain narrow masks and are never promoted to pairs.
-            for index in 0..self.controller.len() {
-                self.prepare_sample(self.controller[index].clone(), native_models)?;
-            }
-            Ok(())
+            // TL-639 round 7: the samples move out of the controller buffer (cleared by the next
+            // controller), and a legacy scalar leaf, its own only projection (`split_owners`),
+            // passes straight through as its legacy fragment.
+            let mut controller = std::mem::take(&mut *self.controller);
+            let prepared = controller.drain(..).try_for_each(|sample| {
+                if matches!(
+                    sample.expression,
+                    DynamicSampleExpression::LegacyScalar { .. }
+                ) {
+                    self.out.legacy(DynamicRuntimeSample {
+                        address: None,
+                        ..sample
+                    });
+                    Ok(())
+                } else {
+                    self.prepare_sample(sample, native_models)
+                }
+            });
+            *self.controller = controller;
+            prepared
         }
     }
 }

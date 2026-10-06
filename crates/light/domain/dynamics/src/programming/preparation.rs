@@ -73,7 +73,6 @@ pub struct DynamicFamilyPreparationScratch {
     controller: Vec<DynamicRuntimeSample>,
     position: Vec<DynamicRuntimeSample>,
     families: Vec<DynamicFamilySampleGroup>,
-    family_buffers: Vec<Vec<FamilyCompositionSample>>,
     family_indices: HashMap<(FixtureId, ProgrammingOwner), usize>,
     legacy: Vec<DynamicRuntimeSample>,
     requirements: Vec<DynamicFamilyPreparationRequirement>,
@@ -82,16 +81,32 @@ pub struct DynamicFamilyPreparationScratch {
     /// Last frame's compiled samples this preparation did not reuse (TL-639 round 6), for the
     /// caller to free off the frame's thread ([`Self::take_retired`]).
     retired: HashMap<CacheKey, CompiledSample>,
+    /// Last frame's output, cleared by this preparation (TL-639 round 7), freed the same way.
+    retired_output: RetiredOutput,
 }
 
-/// Compiled samples a preparation no longer needs; dropping them only frees memory.
-pub struct RetiredPreparation(#[allow(dead_code)] HashMap<CacheKey, CompiledSample>);
+/// A cleared preparation output: its groups (with their samples) and legacy fragments.
+#[derive(Default)]
+#[allow(dead_code)] // held only to be dropped
+struct RetiredOutput {
+    families: Vec<DynamicFamilySampleGroup>,
+    legacy: Vec<DynamicRuntimeSample>,
+}
+
+/// Compiled samples and output a preparation no longer needs; dropping them only frees memory.
+pub struct RetiredPreparation(
+    #[allow(dead_code)] HashMap<CacheKey, CompiledSample>,
+    #[allow(dead_code)] RetiredOutput,
+);
 
 impl DynamicFamilyPreparationScratch {
-    /// Take the compiled samples the last preparation retired, to drop them elsewhere. Left
-    /// in place, they are dropped by the next preparation.
+    /// Take the compiled samples and the cleared output the last preparation retired, to drop
+    /// them elsewhere. Left in place, they are dropped by the next preparation.
     pub fn take_retired(&mut self) -> RetiredPreparation {
-        RetiredPreparation(std::mem::take(&mut self.retired))
+        RetiredPreparation(
+            std::mem::take(&mut self.retired),
+            std::mem::take(&mut self.retired_output),
+        )
     }
 
     /// The last preparation's result.
@@ -113,13 +128,15 @@ impl DynamicFamilyPreparationScratch {
         self.sort_keys.clear();
     }
 
+    /// Retire the last output whole (TL-639 round 7): its groups and fragments move out with
+    /// their storage, to be freed by whoever takes them ([`Self::take_retired`]); the next
+    /// output starts in buffers sized like the last one.
     fn clear_output(&mut self) {
-        for mut group in self.families.drain(..) {
-            group.samples.clear();
-            self.family_buffers.push(group.samples);
-        }
+        let (groups, fragments) = (self.families.len(), self.legacy.len());
+        let families = std::mem::replace(&mut self.families, Vec::with_capacity(groups));
+        let legacy = std::mem::replace(&mut self.legacy, Vec::with_capacity(fragments));
+        self.retired_output = RetiredOutput { families, legacy };
         self.family_indices.clear();
-        self.legacy.clear();
         self.requirements.clear();
         self.sampling_requirements.clear();
     }

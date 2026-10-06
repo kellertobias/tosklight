@@ -214,7 +214,6 @@ fn prepare_in_parallel(
         controller,
         position,
         families,
-        family_buffers,
         family_indices,
         legacy,
         requirements,
@@ -224,7 +223,6 @@ fn prepare_in_parallel(
     } = scratch;
     let mut out = FamilyOutput {
         families,
-        family_buffers,
         family_indices,
         legacy,
         requirements,

@@ -85,3 +85,36 @@ fn leaf_owner_split_shape_and_angles_equal_the_generic_traversal() {
         assert_eq!(shape(&leaf), shape(&generic), "{leaf:?}");
     }
 }
+
+/// TL-639 round 7: a legacy scalar leaf passes straight through preparation as its own legacy
+/// fragment (the sample without its frame address), in order with the controller's other lanes,
+/// exactly as the owner split and `prepare_part` produce it.
+#[test]
+fn legacy_leaves_pass_through_as_the_owner_split_would_produce_them() {
+    let addressed = |lane: u128, expression: E| DynamicRuntimeSample {
+        address: Some(light_core::FrameAddress {
+            generation: 7,
+            slot: lane as u32,
+        }),
+        ..sample(lane, expression)
+    };
+    let inputs = vec![
+        addressed(10, legacy("intensity", 0.5)),
+        addressed(11, color(ColorComponent::Red, 0.4)),
+        addressed(12, legacy("intensity", 0.25)),
+        addressed(13, wrapped(&legacy("intensity", 0.75))),
+    ];
+    let mut scratch = DynamicFamilyPreparationScratch::default();
+    let prepared =
+        prepare_dynamic_family_samples(&inputs, &Sources::default(), None, &mut scratch).unwrap();
+    let expected = [&inputs[0], &inputs[2], &inputs[3]]
+        .into_iter()
+        .map(|input| DynamicRuntimeSample {
+            address: None,
+            ..input.clone()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(prepared.legacy, expected.as_slice());
+    assert_eq!(prepared.families.len(), 1);
+    assert_eq!(prepared.families[0].owner, ProgrammingOwner::Color);
+}
