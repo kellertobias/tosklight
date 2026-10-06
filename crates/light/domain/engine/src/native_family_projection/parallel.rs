@@ -21,6 +21,9 @@ pub(super) fn pool_for(pool: Option<&OutputPool>, writes: usize) -> Option<&Outp
 
 type Key = (FixtureId, ProgrammingOwner, Uuid);
 
+/// Where a run started, with its target and destination (root, fixture index).
+type Run = (usize, (FixtureId, ProgrammingOwner), (FixtureId, usize));
+
 fn key(write: &FamilyNativeWrite) -> Key {
     (write.target, write.owner, write.instance_id)
 }
@@ -34,7 +37,7 @@ struct Chunk {
     /// Where each instance was first written.
     created: Vec<(usize, Uuid)>,
     /// Where each run started, with its target and destination.
-    runs: Vec<(usize, (FixtureId, ProgrammingOwner), (FixtureId, usize))>,
+    runs: Vec<Run>,
     counts: FxHashMap<Key, usize>,
 }
 
