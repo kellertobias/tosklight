@@ -58,12 +58,14 @@ impl<'frame> DeferredTypedSampling<'frame> {
         workers: &mut dyn PreparationWorkers,
     ) -> Result<CompletedDynamicSamples<'frame>, DynamicRuntimeError> {
         let chunks = workers.chunks().clamp(1, crate::TARGET_SHARDS);
-        let mut chunk_of_item = Vec::new();
-        let mut plan_of_item = Vec::new();
+        // Sized once (TL-639 round 7): one entry per typed lane.
+        let typed = self.typed_lane_count();
+        let mut chunk_of_item = Vec::with_capacity(typed);
+        let mut plan_of_item = Vec::with_capacity(typed);
         let recorded = {
             let runtime = &*self.runtime;
             let plans = &*self.plans;
-            let mut items = Vec::new();
+            let mut items = Vec::with_capacity(typed);
             let mut presets = Vec::with_capacity(plans.len());
             for (plan_index, plan) in plans.iter().enumerate() {
                 let instance = runtime
@@ -71,17 +73,22 @@ impl<'frame> DeferredTypedSampling<'frame> {
                     .get(&plan.instance_id)
                     .ok_or(DynamicRuntimeError::MissingInstance)?;
                 presets.push(Arc::clone(&instance.preset_values.by_binding));
+                // Each definition lane's compiled lane, looked up once per plan rather than
+                // once per target (TL-639 round 7).
+                let lanes = plan
+                    .frame
+                    .definition
+                    .lanes
+                    .iter()
+                    .map(|lane| instance.programming_lanes.get(&lane.id))
+                    .collect::<Vec<_>>();
                 for (work_index, work) in plan.controllers.iter().enumerate() {
                     for &lane in &work.typed_indices {
                         let pinned = &work.lanes[lane];
                         if !matches!(pinned.value, PinnedValue::Typed { .. }) {
                             continue;
                         }
-                        let id = plan.frame.definition.lanes[pinned.lane_index].id;
-                        let compiled = instance
-                            .programming_lanes
-                            .get(&id)
-                            .expect("pinned compiled lane");
+                        let compiled = lanes[pinned.lane_index].expect("pinned compiled lane");
                         chunk_of_item.push(shard_chunk(target_shard(pinned.target), chunks));
                         plan_of_item.push(plan_index);
                         items.push(Item {
@@ -118,8 +125,17 @@ impl<'frame> DeferredTypedSampling<'frame> {
         if let Some(instances) = self.workers.filter(|_| {
             self.plans.len() > 1 && cursors.iter().all(|cursor| cursor.stopped.is_none())
         }) {
-            let mut evaluated = (0..self.plans.len())
-                .map(|_| Vec::new())
+            let mut evaluated = self
+                .plans
+                .iter()
+                .map(|plan| {
+                    Vec::with_capacity(
+                        plan.controllers
+                            .iter()
+                            .map(|work| work.typed_indices.len())
+                            .sum(),
+                    )
+                })
                 .collect::<Vec<_>>();
             for (chunk, plan) in chunk_of_item.into_iter().zip(plan_of_item) {
                 let cursor = &mut cursors[chunk];
