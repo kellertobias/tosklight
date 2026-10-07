@@ -62,6 +62,20 @@ function selectGroup(api: ApiDriver, rig: IntentRig) {
 	});
 }
 
+/**
+ * Back on the desk after Show Patch, as the operator does from the left dock. The desk layout
+ * keeps the open built-in, so a reload can restore Show Patch once its debounced save has landed.
+ */
+async function backOnTheDesk(page: Page) {
+	const toggle = page.getByRole("button", { name: "Desktops / Built-ins", exact: true });
+	if ((await toggle.getAttribute("data-dock-mode")) !== "desks") await toggle.click();
+	const builtIn = page.locator('main[data-light-surface="built-in"]');
+	if (await builtIn.isVisible())
+		await page.getByRole("navigation", { name: "Desktops", exact: true }).locator('[aria-current="page"]').click();
+	await expect(builtIn).toHaveCount(0);
+	await expect(page.locator('main[data-light-surface="desktop"]')).toBeVisible();
+}
+
 /** The Position family button; a multi-page family names its page, e.g. `Position 1 of 2`. */
 function positionFamily(page: Page) {
 	return page.getByRole("button", { name: /^Position( \d+ of \d+)?$/ });
@@ -182,6 +196,7 @@ test.describe("Position Points (TL-651)", () => {
 		// 4. Back on the desk the Point encoder steps Origin → Singer → the patched Point → Origin,
 		// naming each one, and the movers aim at the chosen Point.
 		await desk.open(api.baseUrl);
+		await backOnTheDesk(page);
 		await positionFamily(page).click();
 		encoder = await pointEncoder(page);
 		await expect.poll(() => encoderText(encoder)).toBe("—");
@@ -270,6 +285,7 @@ test.describe("Position Points (TL-651)", () => {
 
 		// Aim the group at the unpatched Point through the encoder.
 		await desk.open(api.baseUrl);
+		await backOnTheDesk(page);
 		await positionFamily(page).click();
 		const encoder = await pointEncoder(page);
 		for (const reference of [{ kind: "origin" }, { kind: "point", point_id: rigPoint }, { kind: "point", point_id: spare }]) {
@@ -289,6 +305,7 @@ test.describe("Position Points (TL-651)", () => {
 
 		// The reference is kept and named as missing; the next step goes on to the Points that exist.
 		await desk.open(api.baseUrl);
+		await backOnTheDesk(page);
 		await positionFamily(page).click();
 		const after = await pointEncoder(page);
 		await expect.poll(() => groupPosition(api)).toMatchObject(atPoint(spare));
