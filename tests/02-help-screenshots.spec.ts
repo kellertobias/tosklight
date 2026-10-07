@@ -226,11 +226,15 @@ async function captureWorkflowReference(page: Page) {
   await expect(loadShow.getByRole("button", { name: "Load Latest" }).first()).toBeVisible();
   await loadShow.screenshot({ path: workflowShot("show-load-revisions.png") });
   await closeNested(".load-show-modal");
-  // Save As writes the MVR archive straight to the chosen location and reports where it went.
+  // Save As writes the MVR archive straight to the chosen location and then shows the server's
+  // summary of that archive: where it went, what it carries and every export warning.
   await page.getByRole("button", { name: "Save As", exact: true }).click();
   const saveAs = page.getByRole("dialog", { name: "Save show" });
   await saveAs.getByRole("button", { name: "Export MVR", exact: true }).click();
-  await expect(saveAs.getByRole("status")).toContainText("Exported MVR to");
+  const exportSummary = saveAs.getByRole("status", { name: "MVR export summary" });
+  await expect(exportSummary).toContainText("Exported MVR to");
+  await expect(exportSummary).toContainText(/\d+ fixtures · \d+ scenery objects/u);
+  await expect(exportSummary).toContainText("Not included:");
   await saveAs.screenshot({ path: workflowShot("mvr-export.png") });
   await closeNested(".save-show-modal");
   // Load from MVR offers its file chooser straight away; the archive just exported is the one an
@@ -240,7 +244,7 @@ async function captureWorkflowReference(page: Page) {
   const mvrPicker = page.getByRole("dialog", { name: "Choose files or folders" });
   await mvrPicker.getByRole("button", { name: "Spring Tour.mvr, file" }).click();
   await mvrPicker.getByRole("button", { name: "Select", exact: true }).click();
-  const importMvr = page.getByRole("dialog", { name: "MVR import and export" });
+  const importMvr = page.getByRole("dialog", { name: "MVR import" });
   await expect(importMvr.locator(".mvr-summary")).toBeVisible();
   await importMvr.screenshot({ path: workflowShot("mvr-new-show.png") });
   await closeNested(".mvr-modal");
