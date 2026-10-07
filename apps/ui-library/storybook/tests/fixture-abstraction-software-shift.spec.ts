@@ -40,6 +40,12 @@ async function openCompactColor(page: Page) {
 	await page.getByRole("button", { name: "Special Dialog", exact: true }).tap();
 	await expect(page.locator(".fam-inline-dialog")).toBeVisible();
 }
+/** The full Color modal shows the per-fixture results on its Details tab. */
+async function showDetails(page: Page) {
+	const tab = page.getByRole("dialog", { name: "Color Special Dialog", exact: true }).getByRole("tab", { name: "Details", exact: true });
+	await tab.tap();
+	await expect(tab).toHaveAttribute("aria-selected", "true");
+}
 async function selectionValues(page: Page, attribute: string) {
 	return page.locator("[data-testid^='selection-color-']").evaluateAll(
 		(rows, key) => rows.map(row => Number(row.getAttribute(`data-${key}`))), attribute);
@@ -89,11 +95,13 @@ test("software SHIFT arms ordered endpoints for White Blend, Temperature/Duv and
 	// Expand shows each ordered fixture's value, including the intermediate fixtures.
 	await page.locator(".fam-inline-dialog").getByRole("button", { name: "Expand", exact: true }).tap();
 	await expect(page.getByRole("dialog", { name: "Color Special Dialog", exact: true })).toHaveAttribute("aria-modal", "true");
+	await showDetails(page);
 	await expectSpread(page, "white", [20, 40, 60, 80]);
 	await expectSpread(page, "temperature", [3000, 5000, 7000, 9000]);
 	await expectSpread(page, "duv", [-.015, -.005, .005, .015], 5);
 	await expectSpread(page, "hue", [300, 340, 20, 60], 0);
 	await expectSpread(page, "saturation", [80, 66.67, 53.33, 40], 0);
+	await page.getByRole("tab", { name: "Color", exact: true }).tap();
 	await expect(slider(page, "Hue")).toHaveAttribute("aria-valuetext", "300 through 60 degrees");
 	await expect(slider(page, "Saturation")).toHaveAttribute("aria-valuetext", "80% through 40%");
 
@@ -116,6 +124,7 @@ test("software SHIFT arms ordered endpoints for White Blend, Temperature/Duv and
 	await touchFader(page, "Duv", .5);
 	await expect(slider(page, "Duv")).toHaveAttribute("aria-valuetext", "0.0000");
 	await page.locator(".fam-inline-dialog").getByRole("button", { name: "Expand", exact: true }).tap();
+	await showDetails(page);
 	await expectSpread(page, "white", [50, 50, 50, 50]);
 	await expectSpread(page, "temperature", [6000, 6000, 6000, 6000]);
 	await expectSpread(page, "duv", [0, 0, 0, 0], 5);

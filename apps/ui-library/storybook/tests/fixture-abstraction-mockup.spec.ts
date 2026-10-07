@@ -51,9 +51,10 @@ async function openSpecial(page: Page) {
 	const dialog = page.getByRole("dialog", { name: /Special Dialog$/ });
 	await expect(dialog).toBeVisible();
 	if (await dialog.evaluate(element => Boolean(element.closest(".ui-modal-stack-layer")))) {
-		// ModalStack first renders inert, then registers and hands off focus on the next frame.
+		// ModalStack first renders inert, then registers and hands off focus on the next frame,
+		// to the first title-bar control (the Color modal's first tab, otherwise the close button).
 		await expect(dialog).toHaveAttribute("aria-modal", "true");
-		await expect(dialog.locator(".ui-modal-title-close")).toBeFocused();
+		await expect.poll(() => dialog.evaluate(element => element.contains(document.activeElement)), "Focus moves into the modal").toBe(true);
 	}
 }
 async function closeSpecial(page: Page, activeFamily = "Color") {
@@ -68,8 +69,16 @@ async function expandColor(page: Page) {
 	if (await expand.count()) await expand.click();
 	await expect(dialog).toHaveAttribute("aria-modal", "true");
 }
+/** The full Color modal shows its controls on the Color tab and the per-fixture results on Details. */
+async function showColorTab(page: Page, name: "Color" | "Details" | "Preview") {
+	const tab = page.getByRole("dialog", { name: "Color Special Dialog", exact: true }).getByRole("tab", { name, exact: true });
+	if (!await tab.count()) return;
+	if (await tab.getAttribute("aria-selected") !== "true") await tab.click();
+	await expect(tab).toHaveAttribute("aria-selected", "true");
+}
 function slider(page: Page, name: string) { return page.getByRole("slider", { name, exact: true }); }
 async function clickFader(page: Page, name: string, fraction: number, shift = false) {
+	await showColorTab(page, "Color");
 	const control = slider(page, name), bounds = await control.boundingBox();
 	expect(bounds).not.toBeNull();
 	if (shift) await page.keyboard.down("Shift");
@@ -77,6 +86,7 @@ async function clickFader(page: Page, name: string, fraction: number, shift = fa
 	if (shift) await page.keyboard.up("Shift");
 }
 async function dragFader(page: Page, name: string, to: "minimum" | "maximum") {
+	await showColorTab(page, "Color");
 	const control = slider(page, name), bounds = await control.boundingBox();
 	expect(bounds).not.toBeNull();
 	await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
@@ -86,6 +96,7 @@ async function dragFader(page: Page, name: string, to: "minimum" | "maximum") {
 	await expect(control).toHaveAttribute("aria-valuenow", (await control.getAttribute(to === "minimum" ? "aria-valuemin" : "aria-valuemax"))!);
 }
 async function clickHue(page: Page, degrees: number, shift = false) {
+	await showColorTab(page, "Color");
 	const ring = slider(page, "Hue"), bounds = await ring.boundingBox();
 	expect(bounds).not.toBeNull();
 	const radians = degrees * Math.PI / 180;
@@ -564,6 +575,7 @@ test("Focus beam edges and focus plane respond to direct dragging", async ({ pag
 
 function matchRow(page: Page, index: number) { return page.getByTestId(`color-match-${["a7", "root", "auro"][index]}`); }
 async function expectRangeValues(page: Page, attribute: string, expected: number[]) {
+	await showColorTab(page, "Details");
 	for (const [index, value] of expected.entries()) {
 		await expect.poll(async () => Number(await matchRow(page, index).getAttribute(`data-${attribute}`)), `Fixture ${index + 1} receives its ordered ${attribute} value`).toBeCloseTo(value, attribute === "duv" ? 5 : 2);
 	}
@@ -583,8 +595,9 @@ test("Shift first and last hues spread over the shortest arc with clockwise half
 	await clickHue(page, 0);
 	await clickHue(page, 180, true);
 	await expectRangeValues(page, "hue", [0, 90, 180]);
-	await expect(slider(page, "Hue")).toHaveAttribute("aria-valuetext", "0 through 180 degrees");
 	await expect(page.getByLabel("Cameo ROOT PAR 6 estimated output", { exact: true })).toHaveCSS("background-color", "rgb(128, 255, 0)");
+	await showColorTab(page, "Color");
+	await expect(slider(page, "Hue")).toHaveAttribute("aria-valuetext", "0 through 180 degrees");
 	await clickHue(page, 240, true);
 	await expectRangeValues(page, "hue", [0, 300, 240]);
 	await page.screenshot({ path: `${shots}/color-range-shortest-hue-arc.png`, fullPage: true });
@@ -632,8 +645,10 @@ test("a Shift drag sets range endpoints and normal keyboard editing collapses on
 	await page.mouse.up();
 	await page.keyboard.up("Shift");
 	await expectRangeValues(page, "white", [20, 50, 80]);
+	await showColorTab(page, "Color");
 	await control.press("Shift+ArrowLeft");
 	await expectRangeValues(page, "white", [20, 49.5, 79]);
+	await showColorTab(page, "Color");
 	await control.press("End");
 	await expectRangeValues(page, "white", [100, 100, 100]);
 });
@@ -645,6 +660,7 @@ test("RGBWAUV paging retains unsupported UV in the per-fixture comparison", asyn
 	await setEncoder(page, 2, "UV", 25);
 	await openSpecial(page);
 	await expandColor(page);
+	await showColorTab(page, "Details");
 	await expect(matchRow(page, 0)).toContainText(/UV.*unavailable|UV.*unsupported/);
 	await expect(matchRow(page, 2)).toContainText(/UV.*unavailable|UV.*unsupported/);
 	await expect(page.getByLabel("JBLED A7 estimated output", { exact: true })).toHaveCSS("background-color", "rgb(255, 0, 255)");
@@ -724,6 +740,8 @@ for (const hardware of [false, true]) {
 			await expect(slider(page, "White Blend")).toBeVisible();
 			await expect(slider(page, "Temperature")).toHaveCount(0);
 			await expect(slider(page, "Duv")).toHaveCount(0);
+			await expect(processedMedia(page)).toHaveCount(0);
+			await showColorTab(page, "Preview");
 			await expect(processedMedia(page)).toBeVisible();
 			await expectEditorFits(page, "Color");
 			await page.screenshot({ path: `${shots}/media-ring-modal-${hardware ? "hardware" : "software"}-${viewport.width}.png`, fullPage: true });
@@ -742,6 +760,8 @@ for (const hardware of [false, true]) {
 				await expandColor(page);
 				await expectEditorFits(page, "Color");
 				await expectFlushTitle(page);
+				await showColorTab(page, "Details");
+				await expectEditorFits(page, "Color");
 				const matches = page.getByTestId("color-matches");
 				for (let index = 0; index < 3; index++) await expect(matchRow(page, index)).toBeVisible();
 				if (white) {
@@ -856,6 +876,7 @@ test("compact 2D Shift endpoints spread both hue and saturation in fixture order
 	await expandColor(page);
 	await expectRangeValues(page, "hue", [300, 0, 60]);
 	await expectRangeValues(page, "saturation", [80, 60, 40]);
+	await showColorTab(page, "Color");
 	await expect(slider(page, "Hue")).toHaveAttribute("aria-valuetext", "300 through 60 degrees");
 	await expect(slider(page, "Saturation")).toHaveAttribute("aria-valuetext", "80% through 40%");
 });
