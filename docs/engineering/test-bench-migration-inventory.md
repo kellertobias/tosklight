@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **386 root cases across 118 files**.
+Default catalog: **389 root cases across 120 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -201,6 +201,9 @@ Default catalog: **386 root cases across 118 files**.
 | 126-color-dialog-live-group.spec.ts | @ui › hue then Saturation on a live Group programs the Group's colour with the shown hue, and Record stores it | repository contract | @ui | color-dialog-live-group | standard failure evidence | parallel | pending-semantic-migration |
 | 127-dynamic-editor-position-circle.spec.ts | BENCH-DYNAMIC-EDITOR-001 @bench @ui › a two-axis Circle built by touch in the Dynamics editor stores typed Angle lanes in degrees and moves the movers | repository contract | @bench @ui | dynamic-editor-position-circle | standard failure evidence | parallel | migrated-semantic-world |
 | 127-dynamic-editor-position-circle.spec.ts | BENCH-DYNAMIC-EDITOR-002 @bench @ui › Color and Zoom lanes chosen in the Dynamics editor are stored as semantic family lanes in their own units | repository contract | @bench @ui | dynamic-editor-position-circle | standard failure evidence | parallel | migrated-semantic-world |
+| 127-group-pool-selection-indicators.spec.ts | GROUP-SELECTION @ui › tiles distinguish live Groups from full and partial fixture selection | repository contract | @ui | group-pool-selection-indicators | standard failure evidence | parallel | pending-semantic-migration |
+| 128-error-copy.spec.ts | ERROR-COPY @ui › connection errors copy complete server diagnostics with an icon-only button | repository contract | @ui | error-copy | standard failure evidence | parallel | pending-semantic-migration |
+| 128-error-copy.spec.ts | ERROR-COPY @ui › a rejected command has copy controls in software and attached-hardware history | repository contract | @ui | error-copy | standard failure evidence | parallel | pending-semantic-migration |
 | 128-position-points.spec.ts | POSITION-CONTROLS-012 @ui › Create Point from the Point encoder, name and place it unpatched, step to it and to a patched Point, and keep it across save and reload | repository contract | @ui | position-points | standard failure evidence | parallel | pending-semantic-migration |
 | 128-position-points.spec.ts | POSITION-CONTROLS-013 @ui › a deleted Point reads Missing point and the encoder steps on to the Points that exist | repository contract | @ui | position-points | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
