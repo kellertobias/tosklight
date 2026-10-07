@@ -683,3 +683,43 @@
 	background: transparent;
 	border: 2px solid #fff;
 }
+
+/* Automatic preset previews: drawn from the stored Color or Position intention. */
+.preset-card .pool-card-media:has(.preset-preview) {
+	background: #0d1216;
+}
+.preset-preview-color {
+	display: flex;
+	width: 100%;
+	height: 100%;
+}
+.preset-preview-segment {
+	flex: 1 1 0;
+	min-width: 3px;
+}
+.preset-preview-segment + .preset-preview-segment {
+	box-shadow: inset 1px 0 0 rgb(0 0 0 / 55%);
+}
+.preset-preview-segment.unknown {
+	background: repeating-linear-gradient(135deg, #59636b 0 4px, #2b3238 4px 8px);
+}
+.preset-preview-position {
+	height: 100%;
+	max-width: 100%;
+	aspect-ratio: 1;
+}
+.preset-preview-frame {
+	fill: #151c21;
+	stroke: color-mix(in srgb, #9aa7af 35%, transparent);
+	stroke-width: 2;
+}
+.preset-preview-axis {
+	stroke: color-mix(in srgb, #9aa7af 22%, transparent);
+	stroke-width: 1.5;
+	fill: none;
+}
+.preset-preview-dot {
+	fill: #f4f7f8;
+	stroke: #0d1216;
+	stroke-width: 2;
+}

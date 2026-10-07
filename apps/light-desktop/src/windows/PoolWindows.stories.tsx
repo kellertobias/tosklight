@@ -6,6 +6,10 @@ import {
 	marketingKnownFixtureIds,
 	marketingPositionPresets,
 } from "../../../ui-library/storybook/fixtures/marketingApplication";
+import {
+	previewColorPresets,
+	previewPositionPresets,
+} from "../../../ui-library/storybook/fixtures/presetPreviews";
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
 import type { CommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import { defaultPoolPresentation } from "../features/poolPresentation/poolPresentation";
@@ -303,4 +307,17 @@ export const PresetsNarrowShort: Story = {
 
 export const PresetsWideTall: Story = {
 	render: () => <MarketingColorPresetsWindow width={1280} height={760} />,
+};
+
+/**
+ * Color and Position presets preview their stored programming intention; an explicit icon or
+ * colour and a preset stored before intentions keep today's tile.
+ */
+export const IntentPresetPreviews: Story = {
+	render: () => (
+		<div style={{ display: "grid", gridTemplateRows: "1fr 1fr", height: "100vh" }}>
+			<MarketingPresetWindow family="Color" presets={previewColorPresets} />
+			<MarketingPresetWindow family="Position" presets={previewPositionPresets} />
+		</div>
+	),
 };

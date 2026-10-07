@@ -20,6 +20,7 @@ import {
 	WindowScrollArea,
 	WindowSettings,
 } from "@tosklight/ui/window-kit";
+import { useMemo } from "react";
 import type { PoolPresentationConfiguration } from "../../api/types";
 import { PoolColorSettings } from "../../components/shared/PoolColorSettings";
 import {
@@ -27,6 +28,12 @@ import {
 	RecordModeDialog,
 } from "../../components/shared/RecordModeDialog";
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
+import { PresetPreviewGlyph } from "../../features/presetPreview/PresetPreviewGlyph";
+import {
+	type PresetPreview,
+	presetIntentPreview,
+	presetTileArtwork,
+} from "../../features/presetPreview/presetPreview";
 import type { PresetCard } from "../../features/presetRecording/presetCards";
 import {
 	type PresetFixtureCounts,
@@ -109,29 +116,165 @@ interface PresetCardGridProps {
 	mutationTarget?: PoolMutationTarget | null;
 	/** Active / defined fixture counts per stored Preset id. */
 	fixtureCounts?: ReadonlyMap<string, PresetFixtureCounts>;
+	/** Ordered Group membership, so a Group value previews one sample per member. */
+	groupMembers?: ReadonlyMap<string, readonly string[]>;
 	onActivate(index: number): void;
 	onConfigure?(index: number): void;
 }
 
+type PresetSlotProps = Omit<
+	PresetCardGridProps,
+	"cards" | "cardSizing" | "groupMembers"
+> & {
+	index: number;
+	preset: PresetCard | null;
+	preview: PresetPreview | null;
+};
+
+function presetMutationState(
+	preset: PresetCard | null,
+	filtered: boolean,
+	family: PresetFamily,
+	mutationTarget: PoolMutationTarget | null,
+) {
+	const eligible =
+		mutationTarget?.phase === "source"
+			? preset !== null && !filtered
+			: mutationTarget?.phase === "destination"
+				? preset === null &&
+					mutationTarget.source.startsWith(`${family.toUpperCase()} PRESET `)
+				: false;
+	return {
+		eligible,
+		state: eligible ? poolMutationTargetState(mutationTarget) : null,
+	};
+}
+
+function presetSecondary(
+	preset: PresetCard | null,
+	filtered: boolean,
+	storedFamily: PresetFamily,
+	{
+		fixtureCounts,
+		updateArmed,
+		selectionCount,
+		storeArmed,
+	}: Pick<
+		PresetSlotProps,
+		"fixtureCounts" | "updateArmed" | "selectionCount" | "storeArmed"
+	>,
+) {
+	if (preset)
+		return filtered
+			? storedFamily
+			: presetFixtureCountLabel(
+					fixtureCounts?.get(preset.id) ?? {
+						active: 0,
+						defined: Object.keys(preset.body.values).length,
+						universal:
+							Object.keys(preset.body.universal_values ?? {}).length > 0,
+					},
+				);
+	if (updateArmed) return "Touch to check Update eligibility";
+	if (!selectionCount) return "Select fixtures to record";
+	return storeArmed ? "Record here" : "Tap to record programmer";
+}
+
+function PresetPoolSlot(props: PresetSlotProps) {
+	const { index, preset, family, storeArmed, updateArmed, setArmed } = props;
+	const storedFamily = normalizePresetFamily(preset?.body.family);
+	const filtered = Boolean(preset && storedFamily !== family);
+	const id = preset?.id ?? presetStorageKey(presetAddress(family, index + 1));
+	const customization = props.customizations[id];
+	const mutation = presetMutationState(
+		preset,
+		filtered,
+		family,
+		props.mutationTarget ?? null,
+	);
+	const presentation = resolveConfiguredPoolPresentation(
+		props.poolPresentation,
+		{
+			showId: props.showId,
+			surfaceKey: props.surfaceKey,
+			fallbackMode: props.fallbackMode,
+			objectType: "preset",
+			presetFamily: storedFamily.toLowerCase() as Lowercase<PresetFamily>,
+			itemColorKey: id,
+			itemColor: preset?.body.color,
+			states: [
+				...(!preset ? (["empty"] as const) : []),
+				...(filtered ? (["disabled"] as const) : []),
+				...(storeArmed ? (["record-target", "store-target"] as const) : []),
+				...(updateArmed ? (["update-target"] as const) : []),
+				...(setArmed ? (["set-target"] as const) : []),
+				...(mutation.state ? [mutation.state] : []),
+			],
+		},
+	);
+	// The pool grid stamps each slot's identity onto the element it renders.
+	const identity = Object.fromEntries(
+		Object.entries(props).filter(([name]) => name.startsWith("data-")),
+	);
+	const artwork = preset
+		? presetTileArtwork(preset.body, customization, filtered ? null : props.preview)
+		: { preview: null };
+	return (
+		<PoolCard
+			{...identity}
+			disabled={
+				filtered ||
+				Boolean(
+					preset &&
+						!props.recallReady &&
+						!storeArmed &&
+						!updateArmed &&
+						!setArmed &&
+						!mutation.eligible,
+				)
+			}
+			className={`preset-card preset-family-${preset ? storedFamily.toLowerCase() : family.toLowerCase()} ${presentation.className} ${filtered ? "filtered" : ""}`}
+			style={presentation.style}
+			onClick={() => props.onActivate(index)}
+			onContextMenu={(event) => {
+				event.preventDefault();
+				props.onConfigure?.(index);
+			}}
+			model={{
+				number: preset?.body.number ?? index + 1,
+				primary: filtered
+					? "Other family"
+					: (customization?.title ?? preset?.body.name ?? "Empty"),
+				secondary: presetSecondary(preset, filtered, storedFamily, props),
+				icon: artwork.icon,
+				preview: artwork.preview && (
+					<PresetPreviewGlyph preview={artwork.preview} />
+				),
+				iconColor: artwork.color,
+				color: artwork.color,
+				kind: "preset",
+				states: presentation.states,
+			}}
+		/>
+	);
+}
+
 export function PresetCardGrid({
 	cards,
-	family,
 	cardSizing,
-	customizations,
-	poolPresentation,
-	showId,
-	surfaceKey,
-	fallbackMode,
-	selectionCount,
-	recallReady,
-	storeArmed,
-	updateArmed,
-	setArmed,
-	mutationTarget = null,
-	fixtureCounts,
-	onActivate,
-	onConfigure,
+	groupMembers,
+	...slotProps
 }: PresetCardGridProps) {
+	const { family } = slotProps;
+	const previews = useMemo(
+		() =>
+			new Map(
+				cards.flatMap((preset) =>
+					preset ? [[preset.id, presetIntentPreview(preset.body, groupMembers)] as const] : [],
+				),
+			),
+		[cards, groupMembers],
+	);
 	const slots: PoolSlotViewModel<string>[] = cards.flatMap((preset, index) =>
 		preset
 			? [
@@ -163,96 +306,12 @@ export function PresetCardGrid({
 				})}
 				renderSlot={(_, index) => {
 					const preset = cards[index] ?? null;
-					const storedFamily = normalizePresetFamily(preset?.body.family);
-					const filtered = Boolean(preset && storedFamily !== family);
-					const id =
-						preset?.id ?? presetStorageKey(presetAddress(family, index + 1));
-					const customization = customizations[id];
-					const mutationEligible =
-						mutationTarget?.phase === "source"
-							? preset !== null && !filtered
-							: mutationTarget?.phase === "destination"
-								? preset === null &&
-									mutationTarget.source.startsWith(
-										`${family.toUpperCase()} PRESET `,
-									)
-								: false;
-					const mutationState = mutationEligible
-						? poolMutationTargetState(mutationTarget)
-						: null;
-					const presentation = resolveConfiguredPoolPresentation(
-						poolPresentation,
-						{
-							showId,
-							surfaceKey,
-							fallbackMode,
-							objectType: "preset",
-							presetFamily:
-								storedFamily.toLowerCase() as Lowercase<PresetFamily>,
-							itemColorKey: id,
-							itemColor: preset?.body.color,
-							states: [
-								...(!preset ? (["empty"] as const) : []),
-								...(filtered ? (["disabled"] as const) : []),
-								...(storeArmed ? (["record-target"] as const) : []),
-								...(storeArmed ? (["store-target"] as const) : []),
-								...(updateArmed ? (["update-target"] as const) : []),
-								...(setArmed ? (["set-target"] as const) : []),
-								...(mutationState ? [mutationState] : []),
-							],
-						},
-					);
-					const cardColor = customization?.color ?? preset?.body.color;
 					return (
-						<PoolCard
-							disabled={
-								filtered ||
-								Boolean(
-									preset &&
-										!recallReady &&
-										!storeArmed &&
-										!updateArmed &&
-										!setArmed &&
-										!mutationEligible,
-								)
-							}
-							className={`preset-card preset-family-${preset ? storedFamily.toLowerCase() : family.toLowerCase()} ${presentation.className} ${filtered ? "filtered" : ""}`}
-							style={presentation.style}
-							onClick={() => onActivate(index)}
-							onContextMenu={(event) => {
-								event.preventDefault();
-								onConfigure?.(index);
-							}}
-							model={{
-								number: preset?.body.number ?? index + 1,
-								primary: filtered
-									? "Other family"
-									: (customization?.title ?? preset?.body.name ?? "Empty"),
-								secondary: preset
-									? filtered
-										? storedFamily
-										: presetFixtureCountLabel(
-												fixtureCounts?.get(preset.id) ?? {
-													active: 0,
-													defined: Object.keys(preset.body.values).length,
-													universal:
-														Object.keys(preset.body.universal_values ?? {})
-															.length > 0,
-												},
-											)
-									: updateArmed
-										? "Touch to check Update eligibility"
-										: selectionCount
-											? storeArmed
-												? "Record here"
-												: "Tap to record programmer"
-											: "Select fixtures to record",
-								icon: customization?.icon ?? preset?.body.icon,
-								iconColor: cardColor,
-								color: cardColor,
-								kind: "preset",
-								states: presentation.states,
-							}}
+						<PresetPoolSlot
+							{...slotProps}
+							index={index}
+							preset={preset}
+							preview={preset ? (previews.get(preset.id) ?? null) : null}
 						/>
 					);
 				}}
@@ -370,6 +429,12 @@ export function PresetCustomizationDialog({
 						/>
 					</FormLayout>
 					<footer>
+						<Button
+							disabled={!draft.icon && !draft.color}
+							onClick={() => onDraft({ ...draft, icon: "", color: undefined })}
+						>
+							Automatic icon
+						</Button>
 						<Button onClick={onClose}>Cancel</Button>
 						<Button className="primary" onClick={onSave}>
 							Save button
