@@ -167,7 +167,7 @@ describe("ProgrammingInteractionStore authority", () => {
 			selection: selection(1, [FIXTURE_2, FIXTURE_1]),
 		};
 
-		expect(() => store.applyChange(conflicting, 31)).toThrowError(
+		expect(() => store.applyChange(conflicting, 31)).toThrow(
 			ProgrammingProtocolError,
 		);
 		expect(store.getSnapshot().commandLine?.revision).toBe(1);

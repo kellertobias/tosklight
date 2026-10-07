@@ -76,7 +76,7 @@ describe("v2 command-line wire validation", () => {
 					options: [{ ...pendingChoice.options[0], id: "invalid" }],
 				},
 			}),
-		).toThrowError("$.pending_choice.options[0].id");
+		).toThrow("$.pending_choice.options[0].id");
 	});
 
 	it("rejects unsafe wire integers before JavaScript can silently round them", () => {
@@ -85,7 +85,7 @@ describe("v2 command-line wire validation", () => {
 				...commandLine,
 				revision: Number.MAX_SAFE_INTEGER + 1,
 			}),
-		).toThrowError("$.revision: expected a non-negative safe integer");
+		).toThrow("$.revision: expected a non-negative safe integer");
 	});
 
 	it("rejects missing required fields with a useful path", () => {
@@ -95,7 +95,7 @@ describe("v2 command-line wire validation", () => {
 				outcome: "rejected",
 				command_line: commandLine,
 			}),
-		).toThrowError("$.error: expected a string; received undefined");
+		).toThrow("$.error: expected a string; received undefined");
 	});
 
 	it("exposes structured validation errors", () => {
@@ -144,7 +144,7 @@ describe("v2 command-line event wire validation", () => {
 			source: "http",
 		};
 
-		expect(() => decodeCommandLineChangedEvent(event)).toThrowError(
+		expect(() => decodeCommandLineChangedEvent(event)).toThrow(
 			"$.desk_id: expected a hyphenated UUID",
 		);
 		expect(() =>
@@ -153,6 +153,6 @@ describe("v2 command-line event wire validation", () => {
 				desk_id: "20000000-0000-0000-0000-000000000001",
 				source: "osc",
 			}),
-		).toThrowError("$.source: expected one of http, http_key");
+		).toThrow("$.source: expected one of http, http_key");
 	});
 });

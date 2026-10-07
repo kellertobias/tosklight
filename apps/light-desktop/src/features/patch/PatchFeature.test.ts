@@ -318,7 +318,7 @@ describe("Patch v2 wire boundary", () => {
 				...value,
 				show_revision: Number.MAX_SAFE_INTEGER + 1,
 			}),
-		).toThrowError("$.show_revision");
+		).toThrow("$.show_revision");
 	});
 
 	it("maps portable installed appearance and rejects non-canonical gel colors", () => {
@@ -360,7 +360,7 @@ describe("Patch v2 wire boundary", () => {
 		});
 
 		appearance.gel.embedded_fallback.visualizer_srgb = "#c01020";
-		expect(() => decodePatchSnapshot(value)).toThrowError("visualizer_srgb");
+		expect(() => decodePatchSnapshot(value)).toThrow("visualizer_srgb");
 	});
 
 	it("requires a Patch event delta to carry its enclosing sequence", () => {
@@ -397,14 +397,14 @@ describe("Patch v2 wire boundary", () => {
 					},
 				},
 			}),
-		).toThrowError("$.event.payload.delta.event_sequence");
+		).toThrow("$.event.payload.delta.event_sequence");
 	});
 
 	it("rejects a changed outcome without a semantic event sequence", () => {
 		const value = wireOutcome("request-1");
 		expect(() =>
 			decodePatchFixturesOutcome({ ...value, event_sequence: null }),
-		).toThrowError("$.event_sequence");
+		).toThrow("$.event_sequence");
 	});
 });
 
@@ -880,7 +880,7 @@ describe("Patch optimistic store", () => {
 			},
 		]);
 
-		expect(() => store.applyDelta(malformed)).toThrowError(
+		expect(() => store.applyDelta(malformed)).toThrow(
 			"references missing profile",
 		);
 		expect(store.getSnapshot()).toEqual(before);
