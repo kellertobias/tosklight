@@ -1872,7 +1872,7 @@ floor at 125 Hz). During the round the owner replaced those deadlines: the ceili
 × 512 = 12,288 parameters, nothing beyond it is optimised or benchmarked, and the targets are the
 four rows below. None of round 7's typed tiers is inside the ceiling (stress 2,000 needs 74
 universes, the sustained hard floor 32), so the round added typed workloads of the target sizes and
-measured them. Every target row is met on this machine with a p99 at most 0.46 of its budget, and
+measured them. Every target row is met on this machine with a p99 at most 0.43 of its budget, and
 the entry-level estimate holds 40 Hz at 8 universes when the frame runs on two or more threads; the
 binding case is the typed stress mix on one thread. No engine code changed: with the targets met,
 none of the profiled candidates (below) had a payoff that justified a cross-frame cache or a new
