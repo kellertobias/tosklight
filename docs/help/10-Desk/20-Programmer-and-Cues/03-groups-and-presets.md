@@ -6,6 +6,8 @@ Groups store ordered fixture selections. Presets store reusable attribute values
 
 Select fixtures, press `[REC]`, and choose a Group target or enter its number. Normal record overwrites; `[REC] [+]` merges; `[REC] [-]` subtracts. Intentionally empty Groups remain valid stored objects and differ from absent Group numbers. Missing Groups in a range are skipped.
 
+The Group Pool prominently highlights the live Group references selected for programming, including multiple Groups. Other Groups show a filled white dot in the bottom-left corner when all their fixtures are selected, or a hollow white dot when only some are selected. These dots indicate selected lamps without selecting the Group itself. Double-pressing a Group selects its frozen fixtures, so it shows a filled dot rather than the live Group highlight. Clearing selection removes the indicators.
+
 A Group reference remains connected to its source; dereference it when a frozen fixture list is required. Derived Groups retain their ordering rule and source relationship. See [Command Line Reference](01-command-line.md) for exact syntax.
 
 Plain-click a Group to select its live membership. Double-press it quickly to select the current

@@ -96,6 +96,7 @@ const command: CommandLineSurface = {
 	pristine: true,
 	selected: ["fixture-1", "fixture-2"],
 	selectedGroupId: "4",
+	selectedGroupIds: ["4"],
 	read: () => ({
 		ready: false,
 		text: "",

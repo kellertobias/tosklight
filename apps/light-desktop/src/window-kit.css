@@ -635,7 +635,7 @@
 .dmx-raw-value .touch-value-button > .ui-button small {
 	text-align: right;
 }
-.group-pool-window .group-card:not(.empty) {
+.group-pool-window .group-card:not(.empty):not(.selected) {
 	border-color: color-mix(in srgb, var(--pool-card-color) 68%, var(--line2));
 	background: color-mix(in srgb, var(--pool-card-color) 18%, var(--panel2));
 }
@@ -658,4 +658,28 @@
 	display: flex;
 	justify-content: flex-end;
 	gap: 6px;
+}
+
+.group-pool-window .group-card.selected {
+	border-width: 2px;
+	border-color: var(--pool-card-resolved-color);
+	background: color-mix(in srgb, var(--pool-card-resolved-color) 48%, var(--panel2));
+	box-shadow: inset 0 0 0 1px var(--pool-card-resolved-color);
+}
+.group-membership-selection-dot {
+	position: absolute;
+	z-index: 3;
+	left: 8px;
+	bottom: 2px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 0 0 1px #0008;
+	pointer-events: none;
+}
+
+.group-membership-selection-dot.partial {
+	background: transparent;
+	border: 2px solid #fff;
 }

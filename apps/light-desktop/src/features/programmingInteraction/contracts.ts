@@ -170,3 +170,16 @@ export function selectedGroupId(
 	const only = expression.items[0];
 	return only.type === "live_group" ? only.groupId : null;
 }
+
+/** Live Group sources explicitly retained by the operator's selection expression. */
+export function selectedGroupIds(selection: SelectionProjection | null): string[] {
+	const expression = selection?.expression;
+	if (expression?.type === "live_group") return [expression.groupId];
+	if (expression?.type !== "sources" && expression?.type !== "playback_contents") return [];
+	const groups = new Set<string>();
+	for (const item of expression.items) {
+		if (item.type === "live_group") groups.add(item.groupId);
+		else if (item.type === "remove_live_group") groups.delete(item.groupId);
+	}
+	return [...groups];
+}

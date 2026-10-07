@@ -33,6 +33,8 @@ interface GroupPoolCardSlotProps
 	group: Group | null;
 	index: number;
 	selected: boolean;
+	partiallySelected: boolean;
+	fullySelected: boolean;
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setTarget: boolean;
@@ -53,6 +55,8 @@ function GroupPoolCardSlot({
 	group,
 	index,
 	selected,
+	partiallySelected,
+	fullySelected,
 	storeArmed,
 	updateArmed,
 	setTarget,
@@ -93,6 +97,8 @@ function GroupPoolCardSlot({
 			knownFixtureIds={knownFixtureIds}
 			capabilities={capabilities}
 			selected={selected}
+			partiallySelected={partiallySelected}
+			fullySelected={fullySelected}
 			storeArmed={storeArmed}
 			updateArmed={updateArmed}
 			setTarget={setTarget}
@@ -280,13 +286,13 @@ export function GroupPoolGrid({
 				: emptyGroupRecordingTarget(id),
 		).finally(() => dispatch({ type: "SET_STORE_ARMED", value: false }));
 	};
-	const slots = groupPoolSlots(cards);
+	const selectionFor = groupSelectionResolver(command);
 	return (
 		<WindowScrollArea>
 			<PoolGrid
 				columns={columns}
 				cardSizing={poolCardSizing(state)}
-				slots={slots}
+				slots={groupPoolSlots(cards)}
 				slotCount={cards.length}
 				emptySlot={(index) => ({
 					id: String(index + 1),
@@ -299,7 +305,7 @@ export function GroupPoolGrid({
 						<GroupPoolCardSlot
 							group={group}
 							index={index}
-							selected={command.selectedGroupId === group?.id}
+							{...selectionFor(group)}
 							storeArmed={state.storeArmed}
 							updateArmed={state.updateArmed}
 							setTarget={Boolean(group && setTargetArmed)}
@@ -331,4 +337,20 @@ export function GroupPoolGrid({
 			/>
 		</WindowScrollArea>
 	);
+}
+
+function groupSelectionState(group: Group | null, selectedFixtures: Set<string>, selectedGroups: Set<string>) {
+	const members = group?.body.fixtures ?? [];
+	const selectedCount = members.filter((id) => selectedFixtures.has(id)).length;
+	return {
+		selected: Boolean(group && selectedGroups.has(group.id)),
+		fullySelected: members.length > 0 && selectedCount === members.length,
+		partiallySelected: selectedCount > 0 && selectedCount < members.length,
+	};
+}
+
+function groupSelectionResolver(command: CommandLineSurface) {
+	const fixtures = new Set(command.selected);
+	const groups = new Set(command.selectedGroupIds);
+	return (group: Group | null) => groupSelectionState(group, fixtures, groups);
 }

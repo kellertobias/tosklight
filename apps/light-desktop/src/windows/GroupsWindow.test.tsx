@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
 	loadGroupSettings: vi.fn(),
 	setGroupMaster: vi.fn(),
 	commandLine: "",
+	selected: [] as string[],
+	selectedGroupIds: [] as string[],
 	state: {
 		poolGridDefaultWidth: 72,
 		poolGridMinimumWidth: 56,
@@ -86,8 +88,9 @@ vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
 		text: mocks.commandLine,
 		target: "GROUP" as const,
 		pristine: true,
-		selected: [],
+		selected: mocks.selected,
 		selectedGroupId: null,
+		selectedGroupIds: mocks.selectedGroupIds,
 		read: () => ({
 			text: mocks.commandLine,
 			target: "GROUP",
@@ -191,6 +194,8 @@ describe("GroupsWindow action routing", () => {
 			});
 		mocks.setGroupMaster.mockReset().mockResolvedValue(null);
 		mocks.commandLine = "";
+		mocks.selected = [];
+		mocks.selectedGroupIds = [];
 		mocks.state.storeArmed = false;
 		mocks.state.groupsReturnToStage = false;
 		mocks.state.controlMode = "programmer";
@@ -200,6 +205,51 @@ describe("GroupsWindow action routing", () => {
 		mocks.groups[0].body.color = undefined;
 		mocks.groups[0].body.icon = undefined;
 		mocks.groups[1].revision = 1;
+	});
+
+	it("distinguishes live Group targets from full and partial member selection", () => {
+		const first = mocks.groups[0].body.fixtures;
+		const second = mocks.groups[1].body.fixtures;
+		try {
+			mocks.groups[0].body.fixtures = ["fixture-1", "fixture-2"];
+			mocks.selected = ["fixture-1"];
+			const view = render(<GroupsWindow compact />);
+			const partial = buttonForText("Stored Empty");
+			const full = buttonForText("Stored Populated");
+			expect(partial).toHaveAttribute("data-group-selection", "partial");
+			expect(partial).not.toHaveClass("selected");
+			expect(screen.getByRole("img", { name: "Some group fixtures selected; group not selected" })).toBeInTheDocument();
+			expect(full).not.toHaveClass("selected");
+			expect(full).toHaveAttribute("aria-pressed", "false");
+			expect(full).toHaveAttribute("data-group-selection", "full");
+			mocks.selected = ["fixture-1", "fixture-2", "unrelated-fixture"];
+			view.rerender(<GroupsWindow compact />);
+			expect(partial).not.toHaveClass("selected");
+			expect(full).not.toHaveClass("selected");
+			expect(screen.queryByRole("img", { name: "Some group fixtures selected; group not selected" })).toBeNull();
+			mocks.selectedGroupIds = ["4", "5"];
+			view.rerender(<GroupsWindow compact />);
+			expect(partial).toHaveClass("selected");
+			expect(full).toHaveClass("selected");
+			expect(full).toHaveAttribute("data-group-selection", "group");
+			mocks.selected = [];
+			mocks.selectedGroupIds = [];
+			view.rerender(<GroupsWindow compact />);
+			expect(partial).toHaveAttribute("data-group-selection", "none");
+			expect(full).not.toHaveClass("selected");
+			// Stored empty groups and vacant slots never match an empty selection.
+			mocks.groups[0].body.fixtures = [];
+			view.rerender(<GroupsWindow compact />);
+			expect(view.container.querySelectorAll(".group-card.selected")).toHaveLength(0);
+			mocks.selectedGroupIds = ["4"];
+			view.rerender(<GroupsWindow compact />);
+			expect(partial).toHaveAttribute("data-group-selection", "group");
+			expect(partial).toHaveAttribute("data-group-membership", "none");
+			expect(partial).toHaveAttribute("aria-pressed", "true");
+		} finally {
+			mocks.groups[0].body.fixtures = first;
+			mocks.groups[1].body.fixtures = second;
+		}
 	});
 
 	it("keeps 200 ordered slots with stable stored and empty identities", () => {

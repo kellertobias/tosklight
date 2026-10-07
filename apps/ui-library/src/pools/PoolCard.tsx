@@ -35,12 +35,14 @@ export interface PoolCardViewModel {
 
 export interface PoolCardProps extends Omit<ButtonProps, "children"> {
 	model: PoolCardViewModel;
+	cornerIndicator?: ReactNode;
 	onPressHold?: () => void;
 	holdDelay?: number;
 }
 
 export function PoolCard({
 	model,
+	cornerIndicator,
 	className = "",
 	onPressHold,
 	holdDelay = 650,
@@ -91,6 +93,7 @@ export function PoolCard({
 				hasMedia={hasMedia}
 				color={color}
 			/>
+			{cornerIndicator}
 		</Button>
 	);
 }

@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import type { CommandTarget } from "../../../features/programmingInteraction/contracts";
-import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
+import { selectedGroupId, selectedGroupIds } from "../../../features/programmingInteraction/contracts";
 import {
 	useProgrammingCommandLineActions,
 	useProgrammingCommandLineReady,
@@ -93,6 +93,7 @@ export function useCommandLineSurface({
 		pristine,
 		selected,
 		selectedGroupId: selectedGroupId(selectionProjection),
+		selectedGroupIds: selectedGroupIds(selectionProjection),
 		read,
 		replace,
 		reset,

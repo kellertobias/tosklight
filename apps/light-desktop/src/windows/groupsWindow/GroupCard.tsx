@@ -58,6 +58,8 @@ export function GroupCard({
 	knownFixtureIds,
 	capabilities,
 	selected,
+	partiallySelected,
+	fullySelected = false,
 	storeArmed,
 	updateArmed,
 	setTarget,
@@ -78,6 +80,8 @@ export function GroupCard({
 	knownFixtureIds: Set<string>;
 	capabilities: Map<string, Set<string>>;
 	selected: boolean;
+	partiallySelected: boolean;
+	fullySelected?: boolean;
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setTarget: boolean;
@@ -136,20 +140,17 @@ export function GroupCard({
 			...(mutationOperation ? ([`${mutationOperation}-target`] as const) : []),
 		],
 	});
-	const attributesLabel =
-		attributes.length > 0 ? `${attributes.length} portable attributes` : null;
-	const details = [
-		missing > 0 ? `⚠ ${missing} missing` : null,
-		attributesLabel,
-		unsupported > 0 ? `⚠ ${unsupported} unsupported values` : null,
-	].filter((detail): detail is string => Boolean(detail));
+	const details = groupDetails(attributes, missing, unsupported);
 	return (
 		<PoolCard
 			data-pool-slot-id={poolSlotId}
+			data-group-selection={selected ? "group" : fullySelected ? "full" : partiallySelected ? "partial" : "none"}
+			data-group-membership={fullySelected ? "full" : partiallySelected ? "partial" : "none"}
 			data-pool-position={index}
 			className={`group-card ${presentation.className}`}
 			style={presentation.style}
 			aria-pressed={selected}
+			cornerIndicator={groupMembershipDot(partiallySelected, fullySelected, selected)}
 			model={{
 				number: index + 1,
 				primary: group?.body.name ?? (group ? `Group ${index + 1}` : "Empty"),
@@ -197,4 +198,19 @@ export function GroupCard({
 			onClick={scheduleLiveSelection}
 		/>
 	);
+}
+
+function groupMembershipDot(partiallySelected: boolean, fullySelected: boolean, selected: boolean) {
+	if (selected || (!partiallySelected && !fullySelected)) return null;
+	return (
+		<span className={`group-membership-selection-dot ${fullySelected ? "full" : "partial"}`} role="img" aria-label={fullySelected ? "All group fixtures selected; group not selected" : "Some group fixtures selected; group not selected"} />
+	);
+}
+
+function groupDetails(attributes: string[], missing: number, unsupported: number) {
+	return [
+		missing > 0 ? `⚠ ${missing} missing` : null,
+		attributes.length > 0 ? `${attributes.length} portable attributes` : null,
+		unsupported > 0 ? `⚠ ${unsupported} unsupported values` : null,
+	].filter((detail): detail is string => Boolean(detail));
 }
