@@ -1,8 +1,8 @@
-import { ErrorAlert } from "@tosklight/ui";
 import type { PlaybackButtonAction, PlaybackDefinition } from "../../api/types";
 import {
 	Button,
 	ColorPickerField,
+	ErrorAlert,
 	FormLayout,
 	GroupedSelectionField,
 	MultiValueToggleField,
@@ -175,13 +175,10 @@ function playbackTargetColumn(
 		const assignment = draft.target.assignment;
 		label = "Dynamic options";
 		value = assignment.dynamic_id ?? undefined;
-		options = dynamics.map((dynamic) =>
-			numberedOption(
-				dynamic.id,
-				dynamic.body.pool_number,
-				`${dynamic.body.name}${dynamic.body.target_binding.type === "targetless" ? " · targetless" : ""}`,
-			),
-		);
+		options = dynamics.map(({ id, body }) => {
+			const suffix = body.target_binding.type === "targetless" ? " · targetless" : "";
+			return numberedOption(id, body.pool_number, `${body.name}${suffix}`);
+		});
 		onChange = (dynamicId) => {
 			const dynamic = dynamics.find((candidate) => candidate.id === dynamicId);
 			if (!dynamic) return;
