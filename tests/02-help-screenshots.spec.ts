@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import type { ApiDriver } from "./bench/core/api";
 import { expect, test } from "./bench/core/fixtures";
+import { semanticColor } from "./support/plannedDemoSemantic";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(180_000);
@@ -148,7 +149,8 @@ const workflowScreenshots = [
 async function openSeededDefaultStageShow(api: ApiDriver): Promise<ShowEntry> {
   const bytes = await fs.readFile(new URL("./fixtures/default-stage.show", import.meta.url));
   const show = await api.createShow<ShowEntry>({
-    name: `Docs Default Stage ${crypto.randomUUID()}`,
+    // Each run gets a fresh desk data directory, so the operator-facing name can stay stable.
+    name: "Spring Tour",
     data_base64: bytes.toString("base64"),
     overwrite: false,
   });
@@ -220,17 +222,27 @@ async function captureWorkflowReference(page: Page) {
   await page.locator(".show-modal").getByRole("button", { name: "Enter Setup", exact: true }).hover();
   await page.locator(".show-modal").screenshot({ path: workflowShot("show-menu.png") });
   await page.getByRole("button", { name: "Load", exact: true }).click();
-  await page.getByRole("dialog", { name: "Load show" }).screenshot({ path: workflowShot("show-load-revisions.png") });
+  const loadShow = page.getByRole("dialog", { name: "Load show" });
+  await expect(loadShow.getByRole("button", { name: "Load Latest" }).first()).toBeVisible();
+  await loadShow.screenshot({ path: workflowShot("show-load-revisions.png") });
   await closeNested(".load-show-modal");
+  // Save As writes the MVR archive straight to the chosen location and reports where it went.
+  await page.getByRole("button", { name: "Save As", exact: true }).click();
+  const saveAs = page.getByRole("dialog", { name: "Save show" });
+  await saveAs.getByRole("button", { name: "Export MVR", exact: true }).click();
+  await expect(saveAs.getByRole("status")).toContainText("Exported MVR to");
+  await saveAs.screenshot({ path: workflowShot("mvr-export.png") });
+  await closeNested(".save-show-modal");
+  // Load from MVR offers its file chooser straight away; the archive just exported is the one an
+  // operator would preview before creating the show.
   await page.getByRole("button", { name: "New Show", exact: true }).click();
   await page.getByRole("button", { name: "Load from MVR", exact: true }).click();
-  await page.getByRole("dialog", { name: "MVR import and export" }).screenshot({ path: workflowShot("mvr-new-show.png") });
-  await closeNested(".mvr-modal");
-  await page.getByRole("button", { name: "Save As", exact: true }).click();
-  await page.getByRole("button", { name: "Export as MVR", exact: true }).click();
-  const exportMvr = page.getByRole("dialog", { name: "MVR import and export" });
-  await expect(exportMvr.locator(".mvr-summary")).toBeVisible();
-  await exportMvr.screenshot({ path: workflowShot("mvr-export.png") });
+  const mvrPicker = page.getByRole("dialog", { name: "Choose files or folders" });
+  await mvrPicker.getByRole("button", { name: "Spring Tour.mvr, file" }).click();
+  await mvrPicker.getByRole("button", { name: "Select", exact: true }).click();
+  const importMvr = page.getByRole("dialog", { name: "MVR import and export" });
+  await expect(importMvr.locator(".mvr-summary")).toBeVisible();
+  await importMvr.screenshot({ path: workflowShot("mvr-new-show.png") });
   await closeNested(".mvr-modal");
   await page.getByRole("button", { name: "Show Patch", exact: true }).click();
 
@@ -386,12 +398,15 @@ async function seedScreenshotProgramming(api: ApiDriver, showId: string) {
     values: {},
     group_values: { "1": { intensity: { kind: "normalized", value: 0.5 } } },
   });
+  // Colour presets are universal: one whole semantic colour that recall applies to every
+  // selected fixture, the form recording a Preset with one colour on every fixture stores.
   await put(api, showId, "preset", "2.1", {
     name: "Warm Stage",
     family: "Color",
     number: 1,
     values: {},
-    group_values: { "3": { "color.red": { kind: "normalized", value: 1 }, "color.green": { kind: "normalized", value: 0.55 }, "color.blue": { kind: "normalized", value: 0.25 } } },
+    group_values: {},
+    universal_values: { color: semanticColor("Tungsten White") },
   });
 
   const cueListId = crypto.randomUUID();

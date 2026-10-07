@@ -407,21 +407,21 @@
 			"file": "workflows/mvr-export.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 820, "height": 214 },
+			"viewport": { "width": 1120, "height": 304 },
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
-			"reason": "No deterministic MVR export dialog story exists."
+			"reason": "Save Show As reports a finished MVR export only after the running desk has written the archive."
 		},
 		{
 			"file": "workflows/mvr-new-show.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 820, "height": 170 },
+			"viewport": { "width": 820, "height": 570 },
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
-			"reason": "No deterministic MVR new-show dialog story exists."
+			"reason": "The New Show from MVR preview needs an archive the running desk has inspected."
 		},
 		{
 			"file": "workflows/patch-add-fixture.png",
