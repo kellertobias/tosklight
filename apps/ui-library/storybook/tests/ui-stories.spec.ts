@@ -565,7 +565,8 @@ test("Dynamics lane layout preserves full-width geometry and isolated interactio
 					};
 				}),
 			);
-		expect(geometry).toHaveLength(3);
+		// Intensity, Blue, Pan and Tilt: the story's Pan/Tilt pair is two typed Angle lanes.
+		expect(geometry).toHaveLength(4);
 		expect(
 			await page.locator(".dynamic-lane-overview button button").count(),
 		).toBe(0);
@@ -596,16 +597,15 @@ test("Dynamics lane layout preserves full-width geometry and isolated interactio
 			expect(lane.curveSelect.height).toBeCloseTo(lane.curve.height, 0);
 			expect(lane.action.right).toBeLessThanOrEqual(viewport.width);
 		}
-		expect(geometry[1].row.height).toBeCloseTo(geometry[0].row.height, 0);
-		expect(geometry[2].row.height).toBeCloseTo(geometry[0].row.height, 0);
+		for (const lane of geometry.slice(1))
+			expect(lane.row.height).toBeCloseTo(geometry[0].row.height, 0);
 		if (listOverflow.scrollHeight === listOverflow.clientHeight)
 			expect(
 				geometry.reduce((sum, lane) => sum + lane.row.height, 0),
 			).toBeGreaterThan((list?.height ?? 0) - 24);
-		for (const key of ["identity", "curve", "action"] as const) {
-			expect(geometry[1][key].x).toBeCloseTo(geometry[0][key].x, 0);
-			expect(geometry[2][key].x).toBeCloseTo(geometry[0][key].x, 0);
-		}
+		for (const key of ["identity", "curve", "action"] as const)
+			for (const lane of geometry.slice(1))
+				expect(lane[key].x).toBeCloseTo(geometry[0][key].x, 0);
 
 		const screenshotPath = `${artifactDirectory}/${viewport.mode}-${viewport.width}x${viewport.height}.png`;
 		await page.screenshot({ path: screenshotPath });
