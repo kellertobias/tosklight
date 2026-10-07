@@ -18,6 +18,11 @@ export interface PoolCardViewModel {
 	secondary?: ReactNode;
 	details?: string[];
 	icon?: ReactNode;
+	/**
+	 * Artwork derived from the object's own content, such as a stored colour or aim. It takes the
+	 * icon's place in the media box; the caller decides when an explicit icon wins instead.
+	 */
+	preview?: ReactNode;
 	iconColor?: string;
 	iconBackgroundColor?: string;
 	image?: { src: string; alt: string };
@@ -61,7 +66,9 @@ export function PoolCard({
 	);
 	const hasInformation =
 		model.secondary != null || Boolean(model.details?.length);
-	const hasMedia = Boolean(model.image || model.icon != null || color);
+	const hasMedia = Boolean(
+		model.image || model.preview != null || model.icon != null || color,
+	);
 	const interactions = usePoolCardPressHold({
 		onPressHold,
 		holdDelay,
@@ -285,6 +292,8 @@ function PoolCardContents({
 							src={model.image.src}
 							alt={model.image.alt}
 						/>
+					) : model.preview != null ? (
+						<span className="pool-card-preview">{model.preview}</span>
 					) : catalogIcon?.source === "catalog" ? (
 						<img
 							className="pool-card-icon-image"

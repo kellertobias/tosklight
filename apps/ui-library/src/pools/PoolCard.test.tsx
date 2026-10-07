@@ -10,6 +10,27 @@ afterEach(() => {
 });
 
 describe("PoolCard", () => {
+	it("draws derived preview artwork in the media box in place of an icon", () => {
+		render(
+			<PoolCard
+				model={{
+					number: 2,
+					primary: "Rainbow",
+					preview: <span data-testid="artwork">swatch</span>,
+					kind: "preset",
+				}}
+			/>,
+		);
+		const card = screen.getByRole("button", { name: /Rainbow/ });
+		expect(card).toHaveClass("has-media");
+		expect(card).not.toHaveClass("has-color");
+		const media = card.querySelector(".pool-card-media");
+		expect(media?.querySelector(".pool-card-preview")).toContainElement(
+			screen.getByTestId("artwork"),
+		);
+		expect(media?.querySelector(".pool-card-icon, .pool-card-color")).toBeNull();
+	});
+
 	it("preserves ordered state, warnings, color, icon, and callbacks", () => {
 		const select = vi.fn();
 		render(
