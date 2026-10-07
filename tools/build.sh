@@ -179,6 +179,8 @@ build_safari() {
   }
   cp "$ROOT/tools/codesafari-overrides.css" "$LIGHT_SAFARI_DIR/codesafari-overrides.css"
   node "$ROOT/tools/inject-codesafari-overrides.mjs" "$LIGHT_SAFARI_DIR/index.html"
+  # Serve syntax-highlighting grammars from the site instead of lighter.codehike.org.
+  node "$ROOT/tools/codesafari-self-host-highlighting.mjs" "$LIGHT_SAFARI_DIR"
   echo "Created $LIGHT_SAFARI_DIR"
 }
 
