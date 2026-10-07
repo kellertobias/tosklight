@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 //! DMX frame scheduling and production Art-Net 4 / ANSI E1.31 output.
 
+pub mod change_lead;
 pub mod codec;
 pub mod delivery;
 pub mod external;
@@ -10,6 +11,10 @@ pub mod route;
 pub mod scheduler;
 pub mod usb;
 
+pub use change_lead::{
+    CHANGE_LEAD_PLAUSIBLE_LIMIT_MICROS, CHANGE_LEAD_RECENT_WINDOW_SECONDS, ChangeLeadSnapshot,
+    ChangeLeadTime,
+};
 pub use codec::{
     ARTNET_PORT, SACN_DISCOVERY_UNIVERSE, SACN_PORT, artdmx_packet, artnet_broadcast_destination,
     sacn_data_packet, sacn_multicast_destination, tosklight_software,

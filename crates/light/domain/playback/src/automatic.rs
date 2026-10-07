@@ -214,6 +214,8 @@ impl PlaybackEngine {
                 },
             );
             if let Some(transition) = transition.as_mut() {
+                // TL-659: an automatic step starts at the tick that takes it.
+                self.change_lead.mark(now.timestamp_micros());
                 let ordinal = self.next_transition_ordinal;
                 self.next_transition_ordinal = ordinal.saturating_add(1);
                 playback.transition_ordinal = ordinal;

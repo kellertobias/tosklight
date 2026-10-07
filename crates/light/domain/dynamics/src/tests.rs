@@ -3,6 +3,7 @@ use light_core::{AttributeKey, FixtureId};
 use std::{cell::Cell, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
+mod change_lead;
 mod lane_contract;
 mod runtime_control;
 mod runtime_control_journal;

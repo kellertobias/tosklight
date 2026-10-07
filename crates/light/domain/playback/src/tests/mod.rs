@@ -68,6 +68,7 @@ fn contribution_level(engine: &PlaybackEngine, at: DateTime<Utc>, fixture: Fixtu
 }
 
 mod automatic;
+mod change_lead;
 mod contribution;
 mod controls;
 mod cue_dynamic_sources;

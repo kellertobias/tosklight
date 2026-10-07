@@ -15,6 +15,8 @@ import type {
 export interface DmxDiagnostics {
 	readDmx: () => Promise<DmxSnapshot>;
 	readOutputHealth: () => Promise<OutputHealth>;
+	/** TL-659: start every change lead time reading over; absent on surfaces without a server. */
+	resetChangeLeadTime?: () => Promise<OutputHealth["change_lead"]>;
 	/** The Nodes tab's endpoint snapshot; absent on surfaces without a live server. */
 	readNetworkEndpoints?: () => Promise<NetworkEndpointsSnapshot>;
 	setDmxOverride: (

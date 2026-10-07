@@ -9,6 +9,7 @@ export function createOutputActions(
 	ServerCapabilities,
 	| "readDmx"
 	| "readOutputHealth"
+	| "resetChangeLeadTime"
 	| "readNetworkEndpoints"
 	| "readVisualization"
 	| "setDmxOverride"
@@ -20,6 +21,7 @@ export function createOutputActions(
 	return {
 		readDmx: () => api.mediaOutput.dmx(),
 		readOutputHealth: () => api.runtime.outputHealth(),
+		resetChangeLeadTime: () => api.mediaOutput.resetChangeLeadTime(),
 		readNetworkEndpoints: () => api.mediaOutput.networkEndpoints(),
 		readVisualization: (preload = false) =>
 			api.mediaOutput.visualization(preload),

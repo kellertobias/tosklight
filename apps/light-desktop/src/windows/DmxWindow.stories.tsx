@@ -42,6 +42,7 @@ function DmxStoryHarness(props: Partial<DmxWindowViewProps>) {
         }));
       }}
       outputHealth={props.outputHealth ?? dmxOutputHealth}
+      onResetChangeLeadTime={() => setLastMutation("change-lead-reset")}
       outputRoutes={props.outputRoutes ?? []}
       patchedFixtures={props.patchedFixtures ?? dmxPatchedFixtures}
       snapshot={snapshot}

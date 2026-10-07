@@ -66,7 +66,7 @@ impl PlaybackEngine {
     ) -> Result<&ActivePlayback, String> {
         let source = self.action_source(key, id, identity);
         let interrupted_source = self.transition_source_at(key, now);
-        let transition_ordinal = self.take_transition_ordinal();
+        let transition_ordinal = self.take_transition_ordinal(now);
         let source_ordinal = self.take_source_occurrence_ordinal();
         let jump_index = self
             .active
@@ -282,7 +282,7 @@ impl PlaybackEngine {
     ) -> Result<&ActivePlayback, String> {
         let source = self.action_source(key, id, identity);
         let interrupted_source = self.transition_source_at(key, now);
-        let transition_ordinal = self.take_transition_ordinal();
+        let transition_ordinal = self.take_transition_ordinal(now);
         let source_ordinal = self.take_source_occurrence_ordinal();
         let cue_list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
         let index = cue_list
@@ -377,7 +377,7 @@ impl PlaybackEngine {
     ) -> Result<&ActivePlayback, String> {
         let source = self.action_source(key, id, identity);
         let interrupted_source = self.transition_source_at(key, now);
-        let transition_ordinal = self.take_transition_ordinal();
+        let transition_ordinal = self.take_transition_ordinal(now);
         let source_ordinal = self.take_source_occurrence_ordinal();
         let compiled = &self.compiled_cue_lists[&id];
         let playback = self.active.get_mut(&key).ok_or("cue list is not active")?;

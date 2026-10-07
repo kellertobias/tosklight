@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -114,6 +115,10 @@ pub struct OutputHealth {
     ///
     /// Empty until the first frame is measured, then one entry per band.
     pub frame_rate_band_counts: Vec<u64>,
+    /// TL-659: change lead time. Shared, not copied: the output lane takes its own handle once
+    /// and records without this struct's lock; every clone reads the same readings.
+    #[serde(skip)]
+    pub change_lead: Arc<crate::ChangeLeadTime>,
     #[serde(skip)]
     window: RecentOutputWindow,
 }
@@ -176,11 +181,15 @@ impl OutputHealth {
 
     /// Clears every counter that an operator reads as "since show start".
     ///
-    /// The configured rate survives because it describes the desk, not the loaded show.
+    /// The configured rate survives because it describes the desk, not the loaded show. The
+    /// change lead readings start over too, on the handle the output lane already holds.
     pub fn reset_for_new_show(&mut self) {
         let frame_hz = self.frame_hz;
+        let change_lead = Arc::clone(&self.change_lead);
+        change_lead.reset();
         *self = Self {
             frame_hz,
+            change_lead,
             ..Self::default()
         };
     }

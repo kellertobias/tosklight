@@ -127,8 +127,13 @@ impl DynamicRuntime {
         if let Some(undo) = &mut self.output_frame_undo {
             undo.sampling(instance);
         }
-        let frame = match prepare_sampling(instance, now_millis, cycle_duration_millis, transport)?
-        {
+        let frame = match prepare_sampling(
+            instance,
+            now_millis,
+            cycle_duration_millis,
+            transport,
+            &mut self.change_lead,
+        )? {
             SamplingPreparation::Idle => return Ok((Vec::new(), false)),
             SamplingPreparation::Complete => return Ok((Vec::new(), true)),
             SamplingPreparation::Ready(frame) => frame,
@@ -308,6 +313,7 @@ fn prepare_sampling(
     now_millis: u64,
     cycle_duration_millis: u64,
     transport: Option<DynamicSpeedTransport>,
+    change_lead: &mut light_core::ChangeLeadLedger,
 ) -> Result<SamplingPreparation, DynamicRuntimeError> {
     if instance.completed {
         return Ok(SamplingPreparation::Idle);
@@ -328,7 +334,9 @@ fn prepare_sampling(
         .paused_at_millis
         .or(instance.speed_paused_at_millis)
         .unwrap_or(now_millis);
-    let Some(elapsed) = activation_elapsed(instance, now_millis, effective_now, transport) else {
+    let Some(elapsed) =
+        activation_elapsed(instance, now_millis, effective_now, transport, change_lead)
+    else {
         return Ok(SamplingPreparation::Idle);
     };
     let definition = Arc::clone(&instance.definition);
@@ -376,6 +384,7 @@ fn activation_elapsed(
     now_millis: u64,
     effective_now: u64,
     transport: Option<DynamicSpeedTransport>,
+    change_lead: &mut light_core::ChangeLeadLedger,
 ) -> Option<u64> {
     match (instance.activation_policy, transport) {
         (crate::ActivationPolicy::JoinSyncNow, Some(transport)) => {
@@ -402,6 +411,8 @@ fn activation_elapsed(
             } else {
                 let boundary = next_activation_boundary(instance, now_millis, transport);
                 instance.pending_until_millis = Some(boundary);
+                // TL-659: the scheduled start instant of a boundary start.
+                change_lead.mark(super::change_lead::ledger_micros(boundary));
                 boundary
             };
             (now_millis >= boundary).then(|| effective_now.saturating_sub(boundary))

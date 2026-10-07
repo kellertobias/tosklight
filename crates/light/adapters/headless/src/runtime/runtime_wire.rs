@@ -53,7 +53,10 @@ pub(super) fn show(show: ShowEntry) -> wire::RuntimeShowEntry {
     }
 }
 
-pub(super) fn output_health(health: OutputHealth) -> wire::RuntimeOutputHealth {
+pub(super) fn output_health(
+    health: OutputHealth,
+    change_lead: light_output::ChangeLeadSnapshot,
+) -> wire::RuntimeOutputHealth {
     wire::RuntimeOutputHealth {
         frames_sent: health.frames_sent,
         packets_sent: health.packets_sent,
@@ -77,6 +80,21 @@ pub(super) fn output_health(health: OutputHealth) -> wire::RuntimeOutputHealth {
         recent_send_errors: health.recent_send_errors,
         frame_rate_band_bounds_hz: light_output::OUTPUT_FRAME_RATE_BAND_BOUNDS_HZ.to_vec(),
         frame_rate_band_counts: health.frame_rate_band_counts.clone(),
+        change_lead: change_lead_time(change_lead),
+    }
+}
+
+pub(super) fn change_lead_time(
+    change_lead: light_output::ChangeLeadSnapshot,
+) -> wire::RuntimeChangeLeadTime {
+    wire::RuntimeChangeLeadTime {
+        maximum_micros: change_lead.maximum_micros,
+        recent_maximum_micros: change_lead.recent_maximum_micros,
+        last_micros: change_lead.last_micros,
+        recent_window_seconds: light_output::CHANGE_LEAD_RECENT_WINDOW_SECONDS,
+        samples: change_lead.samples,
+        excluded: change_lead.excluded,
+        plausible_limit_micros: light_output::CHANGE_LEAD_PLAUSIBLE_LIMIT_MICROS,
     }
 }
 

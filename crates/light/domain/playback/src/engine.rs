@@ -31,6 +31,8 @@ pub struct PlaybackEngine {
     pub(crate) next_source_occurrence_ordinal: u64,
     /// Where a Position fading in from no previous Cue value starts (TL-552).
     pub(crate) family_start: crate::contribution::FamilyStartSlot,
+    /// TL-659: Cue transitions waiting for the first output frame that carries them.
+    pub(crate) change_lead: light_core::ChangeLeadLedger,
 }
 
 impl Default for PlaybackEngine {
@@ -67,6 +69,7 @@ impl PlaybackEngine {
             next_transition_ordinal: 1,
             next_source_occurrence_ordinal: 1,
             family_start: Default::default(),
+            change_lead: Default::default(),
         }
     }
 

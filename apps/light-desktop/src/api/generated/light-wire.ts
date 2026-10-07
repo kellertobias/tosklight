@@ -1424,7 +1424,44 @@ frame_rate_band_bounds_hz: Array<number>,
 /**
  * Frames delivered in each band since show start.
  */
-frame_rate_band_counts: number[], };
+frame_rate_band_counts: number[],
+/**
+ * TL-659: how long started Cues and Dynamics take to reach the wire.
+ */
+change_lead: RuntimeChangeLeadTime, };
+export type RuntimeChangeLeadTime = {
+/**
+ * Longest lead since the desk started, the show opened, or the operator reset it; `null`
+ * until a start has been measured.
+ */
+maximum_micros: number | null,
+/**
+ * Longest lead sent within the last `recent_window_seconds`.
+ */
+recent_maximum_micros: number | null,
+/**
+ * Lead of the most recently measured start.
+ */
+last_micros: number | null, recent_window_seconds: number,
+/**
+ * Output frames that carried at least one start since the last reset.
+ */
+samples: number,
+/**
+ * Starts whose lead exceeded `plausible_limit_micros`: a running source re-established on
+ * its original start instant, not a start reaching output late.
+ */
+excluded: number, plausible_limit_micros: number, };
+export type RuntimeChangeLeadTimeUpdateRequest = {
+/**
+ * Client-generated identity; a resend returns the first outcome instead of resetting again.
+ */
+request_id: string, reset: boolean, };
+export type RuntimeChangeLeadTimeUpdateOutcome = { change_lead: RuntimeChangeLeadTime,
+/**
+ * True when this answers a resend of an earlier request.
+ */
+replayed: boolean, };
 export type RuntimeClientSummary = { client_id: string, name: string, connected: boolean, last_connected_at: string | null, desk: RuntimeControlDesk, can_remove: boolean, };
 export type RuntimeAttributeDescriptor = { id: string, label: string, family: string, value_type: string, default_unit: string | null, display_unit: string | null, physical_unit: string | null, normalized_min: number | null, normalized_max: number | null, domain_min: number | null, domain_max: number | null, cyclic: boolean, recordable: boolean, encoder_group: AttributeEncoderGroup, encoder_page: number, encoder_slot: number, built_in: boolean, retired: boolean, activation_group_id: string | null, push_turn_of: string | null, };
 export type RuntimeHighlightFixture = { fixture_id: string, name: string | null, number: number | null, };

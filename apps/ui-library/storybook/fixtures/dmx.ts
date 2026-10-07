@@ -178,4 +178,13 @@ export const dmxOutputHealth: OutputHealth = {
 	recent_send_errors: 0,
 	frame_rate_band_bounds_hz: [20, 30, 40, 44, 60],
 	frame_rate_band_counts: [0, 0, 1, 3, 12],
+	change_lead: {
+		maximum_micros: 41_250,
+		recent_maximum_micros: 23_400,
+		last_micros: 18_900,
+		recent_window_seconds: 60,
+		samples: 27,
+		excluded: 0,
+		plausible_limit_micros: 5_000_000,
+	},
 };

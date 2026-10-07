@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **389 root cases across 120 files**.
+Default catalog: **391 root cases across 121 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -206,6 +206,8 @@ Default catalog: **389 root cases across 120 files**.
 | 128-error-copy.spec.ts | ERROR-COPY @ui › a rejected command has copy controls in software and attached-hardware history | repository contract | @ui | error-copy | standard failure evidence | parallel | pending-semantic-migration |
 | 128-position-points.spec.ts | POSITION-CONTROLS-012 @ui › Create Point from the Point encoder, name and place it unpatched, step to it and to a patched Point, and keep it across save and reload | repository contract | @ui | position-points | standard failure evidence | parallel | pending-semantic-migration |
 | 128-position-points.spec.ts | POSITION-CONTROLS-013 @ui › a deleted Point reads Missing point and the encoder steps on to the Points that exist | repository contract | @ui | position-points | standard failure evidence | parallel | pending-semantic-migration |
+| 129-dmx-change-lead-time.spec.ts | CHANGE-LEAD-001 @api the longest GO-to-sent-frame lead is reported and reset | repository contract | @api | dmx-change-lead-time | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 129-dmx-change-lead-time.spec.ts | CHANGE-LEAD-002 @ui the DMX output summary shows the change lead time and resets it | repository contract | @ui | dmx-change-lead-time | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 19-manual-review-software-corrections.spec.ts | POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize | docs/testing/10-desk-lock-and-operator-ui.md | @ui | manual-review-software-corrections | standard failure evidence | parallel | pending-semantic-migration |

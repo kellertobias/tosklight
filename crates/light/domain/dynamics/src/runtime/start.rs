@@ -73,6 +73,10 @@ impl DynamicRuntime {
         let activation_policy = request
             .activation_policy_override
             .unwrap_or(definition.default_activation);
+        self.mark_start_change_lead(
+            &request,
+            activation_policy == crate::ActivationPolicy::NextBoundary,
+        );
         let instance = DynamicInstance {
             id: instance_id,
             programming_lanes: self.compiled_lanes[&definition.id].clone(),
@@ -183,6 +187,12 @@ impl DynamicRuntime {
     /// Add the starting controller to a reused instance, restarting it first when completed.
     fn restart_existing_instance(&mut self, instance_id: Uuid, request: &DynamicStartRequest) {
         self.journal_instance(instance_id);
+        // A start that still waits for the instance's boundary is marked once it is chosen.
+        let waits_for_boundary = self.instances.get(&instance_id).is_some_and(|instance| {
+            instance.activation_policy == crate::ActivationPolicy::NextBoundary
+                && (instance.completed || instance.pending_until_millis.is_none())
+        });
+        self.mark_start_change_lead(request, waits_for_boundary);
         let instance = self
             .instances
             .get_mut(&instance_id)

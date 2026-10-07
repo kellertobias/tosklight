@@ -186,6 +186,40 @@ describe("DMX application view", () => {
     expect(screen.getByText("No raw DMX overrides are active.")).toBeInTheDocument();
   });
 
+  it("reports the change lead time in milliseconds and lets the operator reset it", () => {
+    const onResetChangeLeadTime = vi.fn();
+    renderView({ onResetChangeLeadTime });
+    const lead = screen.getByRole("region", { name: "Change lead time" });
+    expect(within(lead).getAllByRole("definition").map((node) => node.textContent)).toEqual([
+      "41.3 ms",
+      "23.4 ms",
+      "18.9 ms",
+    ]);
+    expect(within(lead).getByText("Last 60 s")).toBeInTheDocument();
+    fireEvent.click(within(lead).getByRole("button", { name: "Reset" }));
+    expect(onResetChangeLeadTime).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no change lead until a start was measured, and a failed reset", () => {
+    renderView({
+      outputHealth: {
+        ...dmxOutputHealth,
+        change_lead: {
+          ...dmxOutputHealth.change_lead,
+          maximum_micros: null,
+          recent_maximum_micros: null,
+          last_micros: null,
+          samples: 0,
+        },
+      },
+      changeLeadError: "The desk server is not connected.",
+    });
+    const lead = screen.getByRole("region", { name: "Change lead time" });
+    expect(within(lead).getAllByRole("definition").map((node) => node.textContent)).toEqual(["—", "—", "—"]);
+    expect(within(lead).getByRole("button", { name: "Reset" })).toBeDisabled();
+    expect(within(lead).getByRole("alert")).toHaveTextContent("The desk server is not connected.");
+  });
+
   it("exposes Small and Large dot settings through the production settings surface", () => {
     const { onDotSizeChange } = renderView();
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));

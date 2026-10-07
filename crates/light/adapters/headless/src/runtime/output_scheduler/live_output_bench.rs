@@ -232,6 +232,7 @@ impl LiveOutputBench {
                 programmer_values: Arc::clone(prepared.dynamic_programmer_values()),
                 cue_values: prepared.cue_dynamic_values().into(),
                 ordinary: committed.ordinary,
+                change_lead_start: committed.change_lead_start,
             })),
         };
         if self.publish {

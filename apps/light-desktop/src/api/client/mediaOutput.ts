@@ -1,5 +1,10 @@
 import { decodeOutputDmxSnapshot } from "../outputDmxWire";
-import type { OutputDmxSnapshot } from "../generated/light-wire";
+import type {
+	OutputDmxSnapshot,
+	RuntimeChangeLeadTime,
+	RuntimeChangeLeadTimeUpdateOutcome,
+	RuntimeChangeLeadTimeUpdateRequest,
+} from "../generated/light-wire";
 import type { NetworkEndpointsSnapshot } from "../../features/dmxDiagnostics/networkEndpoints";
 import type {
 	OutputRuntimeActionOutcome,
@@ -193,6 +198,20 @@ export class MediaOutputApiClient {
 				"/api/v2/output/network-endpoints",
 			),
 		);
+	}
+
+	/** TL-659: start every change lead time reading over. */
+	async resetChangeLeadTime(): Promise<RuntimeChangeLeadTime> {
+		const request = {
+			request_id: crypto.randomUUID(),
+			reset: true,
+		} satisfies RuntimeChangeLeadTimeUpdateRequest;
+		const outcome =
+			await this.transport.request<RuntimeChangeLeadTimeUpdateOutcome>(
+				"/api/v2/output/change-lead-time/update",
+				jsonRequest("POST", request),
+			);
+		return outcome.change_lead;
 	}
 
 	mediaServers(): Promise<{ fixtures: MediaServerFixture[] }> {

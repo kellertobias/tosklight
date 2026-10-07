@@ -1,10 +1,18 @@
 use crate::*;
 
 impl PlaybackEngine {
-    pub(crate) fn take_transition_ordinal(&mut self) -> u64 {
+    /// Orders a Cue transition starting at `at`, which the next output frame has to carry.
+    pub(crate) fn take_transition_ordinal(&mut self, at: DateTime<Utc>) -> u64 {
+        self.change_lead.mark(at.timestamp_micros());
         let ordinal = self.next_transition_ordinal;
         self.next_transition_ordinal = ordinal.saturating_add(1);
         ordinal
+    }
+
+    /// TL-659: the earliest Cue transition due by `sampled_at`, taken by the output frame
+    /// sampled then. Call only from the Live output lane, under the Playback lock.
+    pub fn claim_change_lead_start(&mut self, sampled_at: DateTime<Utc>) -> Option<i64> {
+        self.change_lead.claim(sampled_at.timestamp_micros())
     }
 
     pub(crate) fn observe_restored_transition_ordinal(&mut self, ordinal: u64) {

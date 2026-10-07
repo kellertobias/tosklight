@@ -24,6 +24,9 @@ pub(in crate::runtime) struct CommittedDynamicOutput<T> {
     /// The captured ordinary resolution (finalized). Readers showing the programmed parameter
     /// use `raw_values`/`raw_value`.
     pub ordinary: Option<light_engine::FrameValues>,
+    /// TL-659: the earliest Cue or Dynamic start this frame carries, in application-time
+    /// microseconds; the output lane measures the change lead time from it once the frame is sent.
+    pub change_lead_start: Option<i64>,
 }
 
 /// The caller holds the authoritative Dynamics lock. The catalogue uses the same transaction
@@ -95,7 +98,7 @@ pub(in crate::runtime) fn dynamic_output_frame<T>(
         programmer_reconciliation_cache: Some(cache),
         force_source_reconciliation: false,
     };
-    let (((output, sampled), origins), sample_boundary) = {
+    let (((output, sampled), origins), sample_boundary, change_lead_start) = {
         // All authoritative paths take these in the same order. The runtime stays locked
         // through rendering, so operator mutations cannot be erased by a failed rollback.
         let mut dynamics = dynamics.lock();
@@ -175,7 +178,8 @@ pub(in crate::runtime) fn dynamic_output_frame<T>(
                 boundary,
             );
         }
-        (result, boundary)
+        let starts = claim_carried_starts(&mut dynamics, frame, now_millis);
+        (result, boundary, starts)
     };
     let events =
         dynamic_transition_events(&sampled.before_runtime, &sampled.after_runtime, now_millis);
@@ -200,11 +204,23 @@ pub(in crate::runtime) fn dynamic_output_frame<T>(
         samples: sampled.samples,
         origins,
         sample_boundary,
+        change_lead_start,
         ordinary: match sources.values.get() {
             Some(TickValues::Prepared(source)) => Some(source.clone()),
             Some(TickValues::Legacy(_)) | None => None,
         },
     })
+}
+
+/// TL-659: a committed frame carries every Cue and Dynamic start due by its sample instant. The
+/// caller still holds the Dynamics lock it committed under.
+fn claim_carried_starts(
+    dynamics: &mut light_dynamics::DynamicRuntime,
+    frame: &light_engine::PreparedOutputFrame,
+    now_millis: u64,
+) -> Option<i64> {
+    let dynamic_start = dynamics.claim_change_lead_start(now_millis);
+    light_core::earliest_start(frame.claim_change_lead_start(), dynamic_start)
 }
 
 #[cfg(test)]

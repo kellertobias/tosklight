@@ -64,7 +64,10 @@ pub(super) async fn diagnostics(
     let output_bind_ip = state.installation.configuration().output_bind_ip;
     let visualization = runtime_visualization_diagnostics(&state);
     Ok(Json(wire::RuntimeDiagnosticsSnapshot {
-        output: runtime_wire::output_health(state.output.health_snapshot()),
+        output: runtime_wire::output_health(
+            state.output.health_snapshot(),
+            state.output.change_lead_snapshot(),
+        ),
         output_bind_ip: output_bind_ip.to_string(),
         output_routes: serde_json::to_value(output_routes)
             .map_err(|error| ApiError::internal(error.to_string()))?,
@@ -106,7 +109,10 @@ pub(super) async fn performance_diagnostics(
     let _session = authenticate(&state, &headers)?;
     let _ = state.output.resolved_values();
     Ok(Json(wire::RuntimePerformanceDiagnosticsSnapshot {
-        output: runtime_wire::output_health(state.output.health_snapshot()),
+        output: runtime_wire::output_health(
+            state.output.health_snapshot(),
+            state.output.change_lead_snapshot(),
+        ),
         programmer_action_timing: serde_json::to_value(state.action_timing.snapshot())
             .map_err(|error| ApiError::internal(error.to_string()))?,
         visualization: runtime_visualization_diagnostics(&state),
@@ -231,7 +237,10 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
         active_programmers: Vec::new(),
         highlight_states,
         frame_rate_hz: state.output.frame_rate_hz(),
-        output_health: runtime_wire::output_health(state.output.health_snapshot()),
+        output_health: runtime_wire::output_health(
+            state.output.health_snapshot(),
+            state.output.change_lead_snapshot(),
+        ),
         active_timecode_source,
         active_timecode,
         active_show_error: state.active_show.error(),

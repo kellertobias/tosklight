@@ -20,6 +20,8 @@ pub(crate) struct PlaybackResolution {
     pub(crate) cue_dynamic_values: Vec<light_playback::ActiveCueDynamicValue>,
     pub(crate) dynamic_playbacks: Vec<light_playback::ActiveDynamicPlayback>,
     pub(crate) dynamics_paused: bool,
+    /// TL-659: the earliest Cue transition claimed by this Live capture, in microseconds.
+    pub(crate) change_lead_start: Option<i64>,
 }
 
 pub(crate) struct ProgrammerLaneInputs<'a> {
@@ -402,19 +404,23 @@ impl Engine {
             let mut playback = generation.playback().write();
             let PlaybackTickResult { transitions } =
                 playback.tick(now, (timecode != u64::MAX).then_some(timecode));
+            let change_lead_start = playback.claim_change_lead_start(now);
             // The tick is the only mutation. Reading the contributions needs no exclusivity, so
             // the lock steps down atomically: no command slips in between the tick and the values
             // built from it, and status readers stop waiting out the whole resolve. This relies on
             // parking_lot's downgrade; the standard library's RwLock has none.
             let playback = parking_lot::RwLockWriteGuard::downgrade(playback);
-            return Self::playback_resolution(
-                &playback,
-                now,
-                transitions,
-                sampled,
-                capture_preview,
-                &self.scratch,
-            );
+            return PlaybackResolution {
+                change_lead_start,
+                ..Self::playback_resolution(
+                    &playback,
+                    now,
+                    transitions,
+                    sampled,
+                    capture_preview,
+                    &self.scratch,
+                )
+            };
         }
         let playback = generation.playback().read();
         Self::playback_resolution(
@@ -467,6 +473,7 @@ impl Engine {
             cue_dynamic_values: playback.active_cue_dynamic_values(),
             dynamic_playbacks: playback.active_dynamic_playbacks(),
             dynamics_paused: playback.dynamics_paused(),
+            change_lead_start: None,
         }
     }
 

@@ -553,6 +553,7 @@ pub(in crate::runtime) struct ReplayResource {
     virtual_playback_zones:
         Arc<Mutex<virtual_playback_zones_http::VirtualPlaybackZonesReplayCache>>,
     visualizer_view: Arc<Mutex<visualizer_view_http::VisualizerViewReplayCache>>,
+    change_lead: Arc<Mutex<change_lead_http::ChangeLeadReplayCache>>,
 }
 
 impl Default for ReplayResource {
@@ -573,7 +574,27 @@ impl Default for ReplayResource {
             stage_layout: Arc::default(),
             virtual_playback_zones: Arc::default(),
             visualizer_view: Arc::default(),
+            change_lead: Arc::default(),
         }
+    }
+}
+
+impl ReplayResource {
+    /// TL-659: a resend of a change lead time update answers with the first outcome; anything
+    /// else runs `apply` once, under the replay window, and remembers what it returned.
+    pub(in crate::runtime) fn change_lead_update(
+        &self,
+        key: change_lead_http::ReplayKey,
+        request: light_wire::v2::runtime::RuntimeChangeLeadTimeUpdateRequest,
+        apply: impl FnOnce() -> light_wire::v2::runtime::RuntimeChangeLeadTimeUpdateOutcome,
+    ) -> Result<light_wire::v2::runtime::RuntimeChangeLeadTimeUpdateOutcome, ApiError> {
+        let mut replay = self.change_lead.lock();
+        if let Some(outcome) = replay.get(&key, &request)? {
+            return Ok(outcome);
+        }
+        let outcome = apply();
+        replay.insert(key, request, outcome.clone());
+        Ok(outcome)
     }
 }
 

@@ -76,6 +76,28 @@ impl OutputResource {
         }
     }
 
+    /// TL-659: the change lead time recorder the output lanes write to.
+    pub(in crate::runtime) fn change_lead_recorder(&self) -> Arc<light_output::ChangeLeadTime> {
+        output_scheduler::change_lead::change_lead_recorder(&self.health)
+    }
+
+    /// TL-659: change lead readings at the desk's application time.
+    pub(in crate::runtime) fn change_lead_snapshot(&self) -> light_output::ChangeLeadSnapshot {
+        self.change_lead_recorder()
+            .snapshot(self.engine.application_time().timestamp_micros())
+    }
+
+    /// TL-659: a test-bench frame's delivery, measured exactly as the Live lane measures it.
+    pub(in crate::runtime) fn record_change_lead(&self, start: Option<i64>, delivered: bool) {
+        let recorder = self.change_lead_recorder();
+        output_scheduler::change_lead::record_change_lead(
+            &recorder,
+            &self.engine,
+            start,
+            delivered,
+        );
+    }
+
     /// Restarts the counters an operator reads as "since show start".
     pub(in crate::runtime) fn reset_show_output_health(&self) {
         self.health
