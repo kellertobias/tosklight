@@ -15,7 +15,6 @@ import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleCont
 import { useScreens } from "../../features/screens/ScreensContext";
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import type {
-	MvrExportPreview,
 	MvrImportPreview,
 	ShowEntry,
 	ShowRevision,
@@ -136,19 +135,13 @@ function useShowRevisionController(options: ShowRevisionControllerOptions) {
 	};
 }
 
-/** State and workflow for the MVR import/export flows, kept outside QuickSetupModal for size. */
-function useMvrController(
-	lifecycle: ReturnType<typeof useShowLifecycle>,
-	bootstrap: ReturnType<typeof useBootstrapSnapshot>,
-	closeSaveAs: () => void,
-) {
-	const [mvrMode, setMvrMode] = useState<"new" | "merge" | "export" | null>(
+/** State and workflow for the MVR import flows, kept outside QuickSetupModal for size. */
+function useMvrController(lifecycle: ReturnType<typeof useShowLifecycle>) {
+	const [mvrMode, setMvrMode] = useState<"new" | "merge" | null>(
 		null,
 	);
 	const [mvrTarget, setMvrTarget] = useState<ShowEntry | null>(null);
 	const [mvrPreview, setMvrPreview] = useState<MvrImportPreview | null>(null);
-	const [mvrExportPreview, setMvrExportPreview] =
-		useState<MvrExportPreview | null>(null);
 	const [mvrName, setMvrName] = useState("");
 	const [mvrBusy, setMvrBusy] = useState(false);
 	const mvrFilePickerTrigger = useRef<(() => void) | null>(null);
@@ -207,29 +200,12 @@ function useMvrController(
 			setMvrBusy(false);
 		}
 	}
-	async function inspectExport(show: ShowEntry) {
-		setMvrTarget(show);
-		setMvrBusy(true);
-		try {
-			setMvrExportPreview((await lifecycle?.previewMvrExport(show.id)) ?? null);
-		} finally {
-			setMvrBusy(false);
-		}
-	}
 	function openMvrImport(closeSource: () => void) {
 		closeSource();
 		setMvrMode("new");
 		setMvrTarget(null);
 		setMvrPreview(null);
 		setMvrFilePickerRequested(true);
-	}
-	function openMvrExport() {
-		closeSaveAs();
-		setMvrMode("export");
-		setMvrExportPreview(null);
-		const active = bootstrap?.active_show;
-		if (active) void inspectExport(active);
-		else setMvrTarget(null);
 	}
 	return {
 		mvrMode,
@@ -238,7 +214,6 @@ function useMvrController(
 		setMvrTarget,
 		mvrPreview,
 		setMvrPreview,
-		mvrExportPreview,
 		mvrName,
 		setMvrName,
 		mvrBusy,
@@ -249,9 +224,7 @@ function useMvrController(
 		setMvrResolutions,
 		inspectMvr,
 		applyMvr,
-		inspectExport,
 		openMvrImport,
-		openMvrExport,
 	};
 }
 
@@ -321,9 +294,7 @@ function useQuickSetupModel() {
 	const selectiveImport = useSelectiveImport();
 	const desktop = useDesktopBridge();
 	const dialogs = useQuickSetupDialogState();
-	const mvr = useMvrController(lifecycle, bootstrap, () =>
-		dialogs.setSaveAsOpen(false),
-	);
+	const mvr = useMvrController(lifecycle);
 	const flashDriveConnected = false;
 	const showIndicator = useShowIndicator();
 	const patchedFixtures = usePatchedFixturesView(state.setupOpen);

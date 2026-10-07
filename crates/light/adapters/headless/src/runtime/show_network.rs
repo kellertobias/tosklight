@@ -10,7 +10,9 @@ use base64::Engine;
 use light_discovery::{Peer, Role};
 use light_wire::v2::{
     discovery::DiscoveredRole,
-    show_library::{ShowLibraryActionOutcome, ShowLibraryActionResult, ShowLibrarySnapshot},
+    show_library::{
+        MvrExportSummary, ShowLibraryActionOutcome, ShowLibraryActionResult, ShowLibrarySnapshot,
+    },
     show_network as wire,
 };
 use serde::Deserialize;
@@ -490,7 +492,7 @@ pub(super) async fn export_mvr_to_peer(
     name: &str,
     root_id: &str,
     path: &str,
-) -> Result<(String, String), ApiError> {
+) -> Result<(String, String, MvrExportSummary), ApiError> {
     let peer = discovered_desk(state, instance)?;
     // Guard the source even though the export reads a library operand.
     if state
@@ -503,13 +505,13 @@ pub(super) async fn export_mvr_to_peer(
             "The active show changed; reopen Save As",
         ));
     }
-    let (_, document, _) = super::build_mvr_export(state, show_id)?;
+    let (_, document, summary) = super::build_mvr_export(state, show_id)?;
     let data =
         light_mvr::write(&document).map_err(|error| ApiError::internal(error.to_string()))?;
     let result = peer_save(&peer,request_id,serde_json::json!({"type":"export_mvr_file","show_id":null,
         "data_base64":base64::engine::general_purpose::STANDARD.encode(data),"name":name,"root_id":root_id,"path":path})).await?;
     match result {
-        ShowLibraryActionResult::FileSaved { root_id, path } => Ok((root_id, path)),
+        ShowLibraryActionResult::FileSaved { root_id, path } => Ok((root_id, path, summary)),
         _ => Err(ApiError::bad_gateway(
             "The destination desk returned an unexpected export result",
         )),

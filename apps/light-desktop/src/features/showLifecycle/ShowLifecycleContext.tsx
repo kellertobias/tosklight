@@ -2,7 +2,6 @@ import { createContext, type PropsWithChildren, useContext } from "react";
 import type { DiscoveredPeer } from "../../api/client/discovery";
 import type {
 	MvrApplyResult,
-	MvrExportPreview,
 	MvrImportPreview,
 	NetworkShowCatalog,
 	ShowEntry,
@@ -27,7 +26,7 @@ export interface ShowLifecycleActions {
 	initializeEmptyShow: (baseShowId?: string) => Promise<boolean>;
     networkSaveFolders: (instance: string, rootId: string, path: string) => Promise<import("../../api/client/shows").ShowSaveFolders>;
     saveShowCopy: (name: string, target: import("../../api/client/shows").ShowSaveTarget, baseShow: boolean) => Promise<ShowEntry>;
-    exportMvrFile: (name: string, target: import("../../api/client/shows").ShowSaveTarget) => Promise<import("../../api/client/shows").SavedShowFile>;
+    exportMvrFile: (name: string, target: import("../../api/client/shows").ShowSaveTarget) => Promise<import("../../api/client/shows").ExportedMvrFile>;
     networkShows: () => Promise<NetworkShowCatalog>;
     importRemoteShow: (instance: string, showId: string | null, revision: number | null, open: boolean) => Promise<ShowEntry | null>;
     prepareShowRevision: (id: string, revision: number) => Promise<ShowEntry | null>;
@@ -52,8 +51,6 @@ export interface ShowLifecycleActions {
 			>;
 		},
 	) => Promise<MvrApplyResult>;
-	previewMvrExport: (showId: string) => Promise<MvrExportPreview>;
-	downloadMvr: (show: ShowEntry) => Promise<void>;
 	shutdownServer: () => Promise<boolean>;
 }
 

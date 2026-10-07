@@ -155,7 +155,7 @@ async fn mvr_export_writes_the_selected_folder_and_never_overwrites_an_existing_
     let (status, saved) =
         destination_action(&app, &token, "mvr-folder-export", action.clone()).await;
     assert_eq!(status, StatusCode::OK, "{saved}");
-    assert_eq!(saved["result"]["type"], "file_saved");
+    assert_eq!(saved["result"]["type"], "mvr_exported");
     assert_eq!(saved["result"]["path"], "export/Rig.mvr");
     let bytes = std::fs::read(data_dir.join("shows/export/Rig.mvr")).unwrap();
     assert!(bytes.starts_with(b"PK"));
@@ -165,5 +165,84 @@ async fn mvr_export_writes_the_selected_folder_and_never_overwrites_an_existing_
         std::fs::read(data_dir.join("shows/export/Rig.mvr")).unwrap(),
         bytes
     );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+/// Stores the fixture's immutable profile revision and its patch record in a library show.
+fn patch_library_show(path: &str, fixture: &light_fixture::PatchedFixture) {
+    let store = ShowStore::open(path).unwrap();
+    let profile = fixture.definition.profile_snapshot.as_deref().unwrap();
+    store
+        .insert_fixture_profile_revision(
+            &light_show::FixtureProfileRevision::from_profile(
+                serde_json::to_value(profile).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let body = light_fixture::PortablePatchedFixtureRecord::from_runtime_fixture(fixture)
+        .unwrap()
+        .into_body();
+    store
+        .put_object(
+            "patched_fixture",
+            &fixture.fixture_id.0.to_string(),
+            &body,
+            0,
+        )
+        .unwrap();
+}
+
+#[tokio::test]
+async fn mvr_export_reports_the_summary_and_warnings_of_the_archive_it_wrote() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let source = create_show(&app, &token, "MVR summary").await;
+    let (fixture, _, _) = schema_v2_direct_fixture();
+    patch_library_show(source["path"].as_str().unwrap(), &fixture);
+    let action = serde_json::json!({"type":"export_mvr_file","show_id":source["id"],"data_base64":null,"name":"Summary","root_id":"shows","path":""});
+    let (status, saved) = destination_action(&app, &token, "mvr-summary-export", action).await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let result = &saved["result"];
+    assert_eq!(result["type"], "mvr_exported");
+    assert_eq!(result["root_id"], "shows");
+    assert_eq!(result["path"], "Summary.mvr");
+    let summary = &result["summary"];
+    assert_eq!(summary["fixtures"], 1);
+    assert_eq!(summary["scenery"], 0);
+    assert_eq!(
+        summary["omitted"],
+        serde_json::json!(["cues, presets, playbacks, users, and desk layouts"])
+    );
+    // The summary is the one the archive was built from, not a second preview pass.
+    let written =
+        light_mvr::read(&std::fs::read(data_dir.join("shows/Summary.mvr")).unwrap()).unwrap();
+    assert_eq!(written.fixtures.len(), 1);
+    let warnings: Vec<&str> = summary["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|warning| warning.as_str().unwrap())
+        .collect();
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning
+                .contains("generated GDTF files from the current fixture profiles")),
+        "{warnings:?}"
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn mvr_export_of_an_unknown_show_fails_without_writing_an_archive() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let action = serde_json::json!({"type":"export_mvr_file","show_id":Uuid::new_v4(),"data_base64":null,"name":"Missing","root_id":"shows","path":""});
+    let (status, body) = destination_action(&app, &token, "mvr-missing-export", action).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert!(!data_dir.join("shows/Missing.mvr").exists());
     let _ = std::fs::remove_dir_all(data_dir);
 }

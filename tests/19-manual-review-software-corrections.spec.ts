@@ -174,7 +174,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 
     await desk.recordStep("MVR FILE PICKER", "New Show from MVR reuses the same picker but changes the accepted extension to .mvr.");
     await loadShow.getByRole("button", { name: "Load from MVR", exact: true }).click();
-    const mvr = page.getByRole("dialog", { name: "MVR import and export" });
+    const mvr = page.getByRole("dialog", { name: "MVR import" });
     await mvr.getByRole("button", { name: "Choose MVR file", exact: true }).click();
     await expectPickerConstraint(page, files.invalid, files.mvr);
     await mvr.locator(".modal-close").click();

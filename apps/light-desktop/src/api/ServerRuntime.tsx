@@ -274,8 +274,6 @@ function useShowLifecycleSource(
 			openShowRevision: value.openShowRevision,
 			previewMvr: value.previewMvr,
 			applyMvr: value.applyMvr,
-			previewMvrExport: value.previewMvrExport,
-			downloadMvr: value.downloadMvr,
 			shutdownServer: value.shutdownServer,
 		}),
 		[
@@ -303,8 +301,6 @@ function useShowLifecycleSource(
 			value.openShowRevision,
 			value.previewMvr,
 			value.applyMvr,
-			value.previewMvrExport,
-			value.downloadMvr,
 			value.shutdownServer,
 		],
 	);

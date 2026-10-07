@@ -6,7 +6,7 @@ export function createMvrActions(
 	model: ServerController,
 ): Pick<
 	ServerCapabilities,
-	"previewMvr" | "applyMvr" | "previewMvrExport" | "downloadMvr"
+	"previewMvr" | "applyMvr"
 > {
 	const { api, setError, setShows, refresh } = model;
 	return {
@@ -21,21 +21,6 @@ export function createMvrActions(
 			} catch (reason) {
 				setError(formatErrorDetails(reason));
 				throw reason;
-			}
-		},
-		previewMvrExport: (showId) => api.shows.mvrExportPreview(showId),
-		downloadMvr: async (show) => {
-			try {
-				const blob = await api.shows.downloadMvr(show.id);
-				const url = URL.createObjectURL(blob);
-				const anchor = document.createElement("a");
-				anchor.href = url;
-				anchor.download = `${show.name}.mvr`;
-				anchor.click();
-				URL.revokeObjectURL(url);
-				setError(null);
-			} catch (reason) {
-				setError(formatErrorDetails(reason));
 			}
 		},
 	};

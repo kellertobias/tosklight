@@ -24,6 +24,7 @@ import {
 	base64,
 	deleteProfileRevision,
 	exportMvr,
+	exportMvrSummary,
 	exportPackage,
 	gdtfDescription,
 	gdtfMembers,
@@ -31,7 +32,6 @@ import {
 	importGdtf,
 	importPackage,
 	librarySignature,
-	mvrExportPreview,
 	openFreshShow,
 	packageProfile,
 	patchProfile,
@@ -248,7 +248,7 @@ test.describe("docs/testing/31-fixture-physical-mapping.md", () => {
 		};
 		await saveProfile(api, curved);
 		await patchProfile(api, showId, { id: curved.id, revision: 1, modeId: curved.modes[0].id, footprint: 3 }, 1, 2);
-		const preview = await mvrExportPreview(api, showId);
+		const preview = await exportMvrSummary(api, showId);
 		const label = `E2E Physical · ${curved.name}`;
 		expect(preview.missing_profiles).toContain(label);
 		const refusal = preview.warnings.find((warning) => warning.startsWith(`${label} (revision 1)`));
@@ -289,7 +289,7 @@ test.describe("docs/testing/31-fixture-physical-mapping.md", () => {
 		expect(Buffer.from(current).equals(Buffer.from(source))).toBe(false);
 		expect(gdtfDescription(current)).toContain("from fixture profile revision 2");
 		expect(gdtfDescription(current)).toMatch(/Name="Zoom" Attribute="Zoom"[^>]*PhysicalFrom="4" PhysicalTo="45"/u);
-		expect((await mvrExportPreview(api, editedShow)).warnings.join("\n")).toContain("generated GDTF files from the current fixture profiles");
+		expect((await exportMvrSummary(api, editedShow)).warnings.join("\n")).toContain("generated GDTF files from the current fixture profiles");
 	});
 
 	test("FIXTURE-GDTF-002 @api › GDTF preview publishes nothing; one confirmed import keeps exact raw values and retries idempotently", async ({

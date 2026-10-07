@@ -235,6 +235,12 @@ pub enum ShowLibraryActionResult {
         root_id: String,
         path: String,
     },
+    /// The active show was exported as an MVR archive; `summary` describes what was written.
+    MvrExported {
+        root_id: String,
+        path: String,
+        summary: MvrExportSummary,
+    },
     Show {
         show: RuntimeShowEntry,
     },
@@ -282,8 +288,9 @@ pub struct MvrPreviewFixture {
     pub matched: bool,
 }
 
+/// What one MVR export actually wrote, and everything it could not carry.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct MvrExportPreview {
+pub struct MvrExportSummary {
     pub fixtures: usize,
     pub scenery: usize,
     pub embedded_profiles: usize,

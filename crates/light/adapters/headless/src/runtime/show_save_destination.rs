@@ -1,5 +1,6 @@
 //! Save portable copies and MVR exports to an explicitly selected confined folder.
 use super::*;
+use light_wire::v2::show_library::MvrExportSummary;
 use std::{fs, io::Write, path::Path as FsPath};
 
 fn file_name(name: &str, extension: &str) -> Result<String, ApiError> {
@@ -134,13 +135,15 @@ pub(super) fn export_mvr_file(
     name: String,
     root_id: String,
     path: String,
-) -> Result<(String, String), ApiError> {
+) -> Result<(String, String, Option<MvrExportSummary>), ApiError> {
     let directory = super::file_manager::writable_show_folder(state, &root_id, &path)?;
     let leaf = file_name(&name, "mvr")?;
-    let bytes = match (show_id, data_base64) {
+    let (bytes, summary) = match (show_id, data_base64) {
         (Some(id), None) => {
-            let (_, document, _) = build_mvr_export(state, id)?;
-            light_mvr::write(&document).map_err(|error| ApiError::internal(error.to_string()))?
+            let (_, document, summary) = build_mvr_export(state, id)?;
+            let bytes = light_mvr::write(&document)
+                .map_err(|error| ApiError::internal(error.to_string()))?;
+            (bytes, Some(summary))
         }
         (None, Some(encoded)) => {
             let bytes = STANDARD
@@ -151,7 +154,7 @@ pub(super) fn export_mvr_file(
                     "data_base64 must contain an MVR archive",
                 ));
             }
-            bytes
+            (bytes, None)
         }
         _ => {
             return Err(ApiError::bad_request(
@@ -165,5 +168,5 @@ pub(super) fn export_mvr_file(
     } else {
         format!("{}/{}", path.trim_end_matches('/'), leaf)
     };
-    Ok((root_id, relative))
+    Ok((root_id, relative, summary))
 }

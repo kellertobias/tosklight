@@ -1,6 +1,5 @@
 import type {
 	MvrApplyResult,
-	MvrExportPreview,
 	MvrImportPreview,
 	NetworkShowCatalog,
 	ShowEntry,
@@ -9,6 +8,7 @@ import type {
 import type {
 	MvrImportResolution,
 	MvrImportResolutionAction,
+	MvrExportSummary,
 	NetworkShowCatalog as WireNetworkShowCatalog,
 	RuntimeShowEntry,
 	ShowLibraryAction,
@@ -35,7 +35,8 @@ export interface MvrApplyInput {
 
 export interface ShowSaveTarget { rootId: string; path: string; instance?: string; }
 export interface ShowSaveFolders { roots: import("../types").FileRoot[]; entries: import("../types").FileEntry[]; root_id?: string | null; path?: string; }
-export interface SavedShowFile { root_id: string; path: string; }
+/** An MVR archive the server wrote, with the summary of exactly what that archive carries. */
+export interface ExportedMvrFile { root_id: string; path: string; summary: MvrExportSummary; }
 
 export class ShowApiClient {
 	constructor(private readonly transport: ClientTransport) {}
@@ -70,12 +71,12 @@ export class ShowApiClient {
             ? {type:"save_copy_to_peer",instance:target.instance,source_show_id:sourceId,name,root_id:target.rootId,path:target.path,is_base_show:baseShow}
             : {type:"save_copy",source_show_id:sourceId,data_base64:null,name,root_id:target.rootId,path:target.path,is_base_show:baseShow});
     }
-    async exportMvrFile(showId: string, name: string, target: ShowSaveTarget): Promise<SavedShowFile> {
+    async exportMvrFile(showId: string, name: string, target: ShowSaveTarget): Promise<ExportedMvrFile> {
         const outcome = await this.action(target.instance
             ? {type:"export_mvr_to_peer",instance:target.instance,show_id:showId,name,root_id:target.rootId,path:target.path}
             : {type:"export_mvr_file",show_id:showId,data_base64:null,name,root_id:target.rootId,path:target.path});
-        if (outcome.type !== "file_saved") throw new Error("The export did not return a saved file");
-        return outcome;
+        if (outcome.type !== "mvr_exported") throw new Error("The export did not return an MVR export summary");
+        return {root_id:outcome.root_id,path:outcome.path,summary:outcome.summary};
     }
 	async networkShows(): Promise<NetworkShowCatalog> {
 		const catalog = await this.transport.request<WireNetworkShowCatalog>(
@@ -237,14 +238,6 @@ export class ShowApiClient {
 			}
 			return { ...result.result, show: showEntry(result.result.show) };
 		});
-	}
-
-	mvrExportPreview(id: string): Promise<MvrExportPreview> {
-		return this.transport.request(`/api/v2/shows/${id}/mvr/preview`);
-	}
-
-	downloadMvr(id: string): Promise<Blob> {
-		return this.transport.blob(`/api/v2/shows/${id}/mvr`);
 	}
 
 	private async showAction(action: ShowLibraryAction): Promise<ShowEntry> {
