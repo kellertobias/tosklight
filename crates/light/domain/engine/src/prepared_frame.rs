@@ -28,6 +28,7 @@ pub struct PreparedOutputFrame {
     pub(crate) playback: crate::resolution::PlaybackResolution,
     automatic_transitions_claimed: std::sync::atomic::AtomicBool,
     automatic_cue_actions_claimed: std::sync::atomic::AtomicBool,
+    change_lead_claimed: std::sync::atomic::AtomicBool,
     pub(crate) releases: crate::ContributionBatch,
     pub(crate) tracked: Arc<crate::TrackedInputFrame>,
     pub(crate) colors: HashMap<String, crate::engine::GroupColorContribution>,
@@ -123,6 +124,15 @@ impl PreparedOutputFrame {
             &[]
         } else {
             &self.playback.automatic_transitions
+        }
+    }
+    /// TL-659: the earliest Cue transition this capture carries, in application-time
+    /// microseconds. One claim per capture, so a retried capture never measures it twice.
+    pub fn claim_change_lead_start(&self) -> Option<i64> {
+        if self.change_lead_claimed.swap(true, Ordering::AcqRel) {
+            None
+        } else {
+            self.playback.change_lead_start
         }
     }
     /// Playback already advanced at capture. Its application events have one owner even when a
@@ -235,6 +245,7 @@ impl Engine {
             playback,
             automatic_transitions_claimed: std::sync::atomic::AtomicBool::new(false),
             automatic_cue_actions_claimed: std::sync::atomic::AtomicBool::new(false),
+            change_lead_claimed: std::sync::atomic::AtomicBool::new(false),
             releases,
             tracked: self.tracking_frame(),
             colors: self.group_colors.read().clone(),

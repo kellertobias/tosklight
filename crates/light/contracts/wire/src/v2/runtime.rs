@@ -137,6 +137,50 @@ pub struct RuntimeOutputHealth {
     /// Frames delivered in each band since show start.
     #[ts(type = "number[]")]
     pub frame_rate_band_counts: Vec<u64>,
+    /// TL-659: how long started Cues and Dynamics take to reach the wire.
+    pub change_lead: RuntimeChangeLeadTime,
+}
+
+/// TL-659: change lead time, from when a Cue or Dynamic should start outputting (its triggered or
+/// scheduled start instant) to when the output frame that first carries it was sent.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct RuntimeChangeLeadTime {
+    /// Longest lead since the desk started, the show opened, or the operator reset it; `null`
+    /// until a start has been measured.
+    #[ts(type = "number | null")]
+    pub maximum_micros: Option<u64>,
+    /// Longest lead sent within the last `recent_window_seconds`.
+    #[ts(type = "number | null")]
+    pub recent_maximum_micros: Option<u64>,
+    /// Lead of the most recently measured start.
+    #[ts(type = "number | null")]
+    pub last_micros: Option<u64>,
+    pub recent_window_seconds: u32,
+    /// Output frames that carried at least one start since the last reset.
+    #[ts(type = "number")]
+    pub samples: u64,
+    /// Starts whose lead exceeded `plausible_limit_micros`: a running source re-established on
+    /// its original start instant, not a start reaching output late.
+    #[ts(type = "number")]
+    pub excluded: u64,
+    #[ts(type = "number")]
+    pub plausible_limit_micros: u64,
+}
+
+/// TL-659: the operator's change lead time edit. `reset` starts every reading over.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct RuntimeChangeLeadTimeUpdateRequest {
+    /// Client-generated identity; a resend returns the first outcome instead of resetting again.
+    pub request_id: String,
+    #[serde(default)]
+    pub reset: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct RuntimeChangeLeadTimeUpdateOutcome {
+    pub change_lead: RuntimeChangeLeadTime,
+    /// True when this answers a resend of an earlier request.
+    pub replayed: bool,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]

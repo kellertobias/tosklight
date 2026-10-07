@@ -1052,6 +1052,10 @@ impl OutputResource {
                 },
             );
             if completed.is_err() {
+                output_scheduler::change_lead::carry_uncommitted_capture(
+                    &self.change_lead_recorder(),
+                    &prepared,
+                );
                 events.extend(output_scheduler::captured_playback_events(
                     &self.engine,
                     active_show,
@@ -1073,6 +1077,7 @@ impl OutputResource {
                     programmer_values: Arc::clone(prepared.dynamic_programmer_values()),
                     cue_values: prepared.cue_dynamic_values().into(),
                     ordinary: completed.ordinary,
+                    change_lead_start: completed.change_lead_start,
                 });
                 let (rendered, timing) = completed.output;
                 (

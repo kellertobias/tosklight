@@ -352,6 +352,7 @@ function useProviderActionSources(
 		() => ({
 			readDmx: value.readDmx,
 			readOutputHealth: value.readOutputHealth,
+			resetChangeLeadTime: value.resetChangeLeadTime,
 			readNetworkEndpoints: value.readNetworkEndpoints,
 			setDmxOverride: value.setDmxOverride,
 			outputRoutes: value.outputRoutes,
@@ -362,6 +363,7 @@ function useProviderActionSources(
 		[
 			value.readDmx,
 			value.readOutputHealth,
+			value.resetChangeLeadTime,
 			value.readNetworkEndpoints,
 			value.setDmxOverride,
 			value.outputRoutes,

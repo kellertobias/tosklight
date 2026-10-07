@@ -267,6 +267,7 @@ mod timecode_waveform;
 mod update_api;
 
 pub(crate) use capabilities::active_show::repository::ActiveShowRepository;
+mod change_lead_http;
 mod update_plans;
 mod virtual_playback_zones_http;
 mod visualizer_view_http;

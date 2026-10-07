@@ -27,8 +27,8 @@ impl PlaybackEngine {
                 if had_runtime {
                     self.restart_first_cue_if_needed(key, cue_list_id);
                 }
-                let transition_ordinal =
-                    (had_runtime && !was_enabled).then(|| self.take_transition_ordinal());
+                let transition_ordinal = (had_runtime && !was_enabled)
+                    .then(|| self.take_transition_ordinal(self.clock.now()));
                 let active = self
                     .active
                     .get_mut(&key)
@@ -90,8 +90,8 @@ impl PlaybackEngine {
             changed = true;
         }
         changed |= self.restart_first_cue_if_needed(key, id);
-        let transition_ordinal =
-            (had_runtime && (!was_enabled || changed)).then(|| self.take_transition_ordinal());
+        let transition_ordinal = (had_runtime && (!was_enabled || changed))
+            .then(|| self.take_transition_ordinal(self.clock.now()));
         let active = self.active.get_mut(&key).unwrap();
         active.playback_identity = None;
         changed |= activate_normal(active, number);

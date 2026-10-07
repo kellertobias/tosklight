@@ -7,7 +7,7 @@ use crate::light_benchmark::{
     semantic_programming::{
         SemanticBuild, intensity_starts, live_bench, set_semantic_bases, start_dynamics,
     },
-    semantic_runner::{LiveScenario, LiveWorkloadDescription},
+    semantic_runner::{LiveScenario, LiveWorkloadDescription, PendingStart},
     semantic_workload::OMITTED,
 };
 use chrono::{TimeZone, Utc};
@@ -283,35 +283,14 @@ pub fn build(
             }),
     );
     let live = match (semantic, starts) {
-        (Some(options), Some(starts)) => {
-            set_semantic_bases(&programmers, session, &programmable)?;
-            start_dynamics(&programmers, session, &starts)?;
-            let description = LiveWorkloadDescription {
-                kind: "sustained_show_live_transaction",
-                typed_lane_attributes: vec!["intensity".into()],
-                semantic_base_targets: programmable.len(),
-                started_dynamics: starts.len(),
-                animated_targets: fixture_ids.len(),
-                manifest_sha256: None,
-                workload_id: None,
-                expected_dirty_targets: None,
-                expected_moving_points: None,
-                harness_rig_height_mm: None,
-                omitted_from_live_transaction: OMITTED,
-            };
-            let bench = live_bench(
-                Arc::clone(&engine),
-                starts.into_iter().map(|start| start.definition),
-                options.rate_hz,
-                options.publish,
-            )?;
-            Some(LiveScenario {
-                bench,
-                tracking: None,
-                description,
-                pending_start: None,
-            })
-        }
+        (Some(options), Some(starts)) => Some(sustained_live(
+            &engine,
+            &programmers,
+            session,
+            options,
+            starts,
+            (&programmable, &fixture_ids),
+        )?),
         _ => None,
     };
 
@@ -791,4 +770,61 @@ mod tests {
         config.universes = 12;
         assert!(build(config, ProtocolSelection::ArtNet, None, &package_dir, None).is_err());
     }
+}
+
+/// The typed-lane Live lane: semantic bases on every fixture and head, then the Intensity
+/// Dynamics started, or (TL-641 `--start-latency`) left for the probe to start the first of them
+/// on every fixture and logical head.
+fn sustained_live(
+    engine: &Arc<Engine>,
+    programmers: &ProgrammerRegistry,
+    session: SessionId,
+    options: SemanticBuild,
+    mut starts: Vec<crate::light_benchmark::semantic_programming::DynamicStart>,
+    (programmable, fixture_ids): (&[FixtureId], &[FixtureId]),
+) -> Result<LiveScenario, String> {
+    set_semantic_bases(programmers, session, programmable)?;
+    let pending_start = if options.defer_starts {
+        // The show's keyframe wave runs from Current to a preset the Live lane has no source
+        // for, so it never moves DMX. The probe's Start Now Dynamic is that wave's own Max/Min
+        // sine (10-90 %), which changes every target from its first frame.
+        for lane in &mut starts[0].definition.lanes {
+            lane.legacy_mut()
+                .ok_or("the sustained-show Dynamic has a legacy Intensity lane")?
+                .mode = light_dynamics::DynamicLaneMode::MaxMin;
+        }
+        Some(PendingStart {
+            session,
+            definition: starts[0].definition.clone(),
+            targets: fixture_ids.to_vec(),
+        })
+    } else {
+        start_dynamics(programmers, session, &starts)?;
+        None
+    };
+    let description = LiveWorkloadDescription {
+        kind: "sustained_show_live_transaction",
+        typed_lane_attributes: vec!["intensity".into()],
+        semantic_base_targets: programmable.len(),
+        started_dynamics: starts.len(),
+        animated_targets: fixture_ids.len(),
+        manifest_sha256: None,
+        workload_id: None,
+        expected_dirty_targets: None,
+        expected_moving_points: None,
+        harness_rig_height_mm: None,
+        omitted_from_live_transaction: OMITTED,
+    };
+    let bench = live_bench(
+        Arc::clone(engine),
+        starts.into_iter().map(|start| start.definition),
+        options.rate_hz,
+        options.publish,
+    )?;
+    Ok(LiveScenario {
+        bench,
+        tracking: None,
+        description,
+        pending_start,
+    })
 }

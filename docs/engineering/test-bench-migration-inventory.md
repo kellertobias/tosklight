@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **392 root cases across 121 files**.
+Default catalog: **394 root cases across 122 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -206,6 +206,8 @@ Default catalog: **392 root cases across 121 files**.
 | 128-error-copy.spec.ts | ERROR-COPY @ui › a rejected command has copy controls in software and attached-hardware history | repository contract | @ui | error-copy | standard failure evidence | parallel | pending-semantic-migration |
 | 128-position-points.spec.ts | POSITION-CONTROLS-012 @ui › Create Point from the Point encoder, name and place it unpatched, step to it and to a patched Point, and keep it across save and reload | repository contract | @ui | position-points | standard failure evidence | parallel | pending-semantic-migration |
 | 128-position-points.spec.ts | POSITION-CONTROLS-013 @ui › a deleted Point reads Missing point and the encoder steps on to the Points that exist | repository contract | @ui | position-points | standard failure evidence | parallel | pending-semantic-migration |
+| 129-dmx-change-lead-time.spec.ts | CHANGE-LEAD-001 @api the longest GO-to-sent-frame lead is reported and reset | repository contract | @api | dmx-change-lead-time | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 129-dmx-change-lead-time.spec.ts | CHANGE-LEAD-002 @ui the DMX output summary shows the change lead time and resets it | repository contract | @ui | dmx-change-lead-time | standard failure evidence | parallel | pending-semantic-migration |
 | 129-preset-intent-previews.spec.ts | PRESET-PREVIEW-001 @ui › Color presets show their distinct colours without recalling | docs/testing/40-preset-intent-previews.md | @ui | preset-intent-previews | standard failure evidence | parallel | pending-semantic-migration |
 | 129-preset-intent-previews.spec.ts | PRESET-PREVIEW-002 @ui › Position presets show up to ten representative aims | docs/testing/40-preset-intent-previews.md | @ui | preset-intent-previews | standard failure evidence | parallel | pending-semantic-migration |
 | 129-preset-intent-previews.spec.ts | PRESET-PREVIEW-003 @ui › previews follow updates, yield to a chosen icon and match the hardware-connected layout | docs/testing/40-preset-intent-previews.md | @ui | preset-intent-previews | standard failure evidence | parallel | pending-semantic-migration |

@@ -293,6 +293,7 @@ impl DynamicRuntime {
                 now_millis,
                 cycle,
                 speed_group_transport(&speed, speed_groups),
+                &mut self.change_lead,
             )? {
                 SamplingPreparation::Idle => continue,
                 SamplingPreparation::Complete => {

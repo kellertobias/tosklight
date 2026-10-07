@@ -3,6 +3,7 @@
 
 mod aim;
 mod attributes;
+mod change_lead;
 mod clock;
 pub mod color_intent;
 mod color_math;
@@ -28,6 +29,7 @@ pub use attributes::{
     canonical_attribute_migration_id, color_range_color, hsv_to_rgb, spread_position,
     transform_canonical_normalized, transform_canonical_value,
 };
+pub use change_lead::{ChangeLeadLedger, earliest_start};
 pub use clock::{ApplicationClock, EngineClock, ManualClock, SharedClock, SystemClock};
 pub use color_intent::{ColorProgrammingModel, ColorResolutionQuality};
 pub use frame_address::{ComponentFrameAddress, FrameAddress, FrameAddressResolver};

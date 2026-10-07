@@ -1276,21 +1276,45 @@ button {
 	font-weight: 500;
 }
 .dmx-output-rate dl,
-.dmx-output-errors dl {
+.dmx-output-errors dl,
+.dmx-output-change-lead dl {
 	display: grid;
 	gap: 6px;
 	margin: 0;
 }
-.dmx-output-rate dl {
+.dmx-output-rate dl,
+.dmx-output-change-lead dl {
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .dmx-output-rate dt,
-.dmx-output-errors dt {
+.dmx-output-errors dt,
+.dmx-output-change-lead dt {
 	color: var(--muted);
 	font-size: 11px;
 }
+.dmx-output-change-lead header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 7px;
+}
+.dmx-output-change-lead header .ui-button {
+	min-width: 72px;
+	min-height: 40px;
+}
+.dmx-output-change-lead header b {
+	color: var(--muted);
+	font-weight: 500;
+}
+.dmx-output-change-lead p {
+	margin: 7px 0 0;
+	color: var(--red);
+	font-size: 11px;
+}
 .dmx-output-rate dd,
-.dmx-output-errors dd {
+.dmx-output-errors dd,
+.dmx-output-change-lead dd {
 	margin: 0;
 	color: var(--green);
 	font-variant-numeric: tabular-nums;

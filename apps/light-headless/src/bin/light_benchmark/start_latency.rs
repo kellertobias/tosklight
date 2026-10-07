@@ -81,6 +81,11 @@ pub struct FramePhases {
     pub publication_microseconds: f64,
     pub total_microseconds: f64,
     pub dynamic_samples: usize,
+    /// TL-659: this frame claimed the start from the desk's change lead ledger, the same claim
+    /// the DMX statistics measure from.
+    pub change_lead_claimed: bool,
+    /// Application time from the claimed start to this frame's sample instant.
+    pub logical_change_lead_microseconds: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -89,6 +94,10 @@ pub struct SerializedProbe {
     pub gesture: GesturePhases,
     pub first_frame: FramePhases,
     pub first_frame_changed_dmx: bool,
+    /// Frames after the gesture until DMX first differs from the frame before it (1 = the first
+    /// frame); `None` when it did not change within the settle frames. A wave that starts at the
+    /// current level changes DMX only once it has moved away from it.
+    pub frames_until_dmx_change: Option<u64>,
     pub steady_after: Option<Distribution>,
     /// The same gesture again after releasing the first start: what remains once caches built
     /// by the first start are warm.
@@ -119,11 +128,16 @@ pub struct ConcurrentProbe {
     /// steady frame before it. A gesture that blocks that frame shows up as their difference.
     pub in_progress_frame_microseconds: f64,
     pub in_progress_frame_capture_microseconds: f64,
-    /// 1 when the frame after the in-progress one carried the Dynamic.
+    /// 0 when the in-progress frame itself carried the Dynamic (the gesture reached the
+    /// Dynamics runtime before that frame's Dynamics transaction), 1 for the next frame.
     pub frames_until_output: Option<u64>,
+    /// The same count read from the desk's change lead ledger (TL-659): the frame that claimed
+    /// the start. It equals `frames_until_output` when the measurement and the output agree.
+    pub frames_until_claimed: Option<u64>,
     pub first_frame: Option<FramePhases>,
     /// From the gesture to the end of the first frame that carried the Dynamic.
     pub start_to_first_output_microseconds: Option<f64>,
+    /// The contract: the in-progress frame or the one after it carried the Dynamic.
     pub next_frame_after_in_progress: bool,
     pub within_budget: bool,
 }
@@ -132,7 +146,7 @@ pub fn run(arguments: &Arguments) -> Result<serde_json::Value, String> {
     let mut reports = Vec::new();
     for config in profile_configs(arguments) {
         let serialized = serialized(arguments, config)?;
-        let (concurrent, shape) = concurrent(arguments, config)?;
+        let (concurrent, shape) = concurrent(arguments, config, false)?;
         let period = 1_000_000.0 / f64::from(config.rate_hz);
         reports.push(StartLatencyReport {
             fixture_count: shape.0,
@@ -235,6 +249,10 @@ fn frame_phases(frame: &LiveOutputFrame, total: Duration) -> FramePhases {
         publication_microseconds: micros(frame.publication),
         total_microseconds: micros(total),
         dynamic_samples: frame.dynamic_samples,
+        change_lead_claimed: frame.change_lead_start.is_some(),
+        logical_change_lead_microseconds: frame
+            .change_lead_start
+            .map(|start| (frame.rendered.sampled_at.timestamp_micros() - start) as f64),
     }
 }
 
@@ -370,9 +388,14 @@ fn serialized(arguments: &Arguments, config: ProfileConfig) -> Result<Serialized
     let first_frame = frame_phases(&frame, total);
     let first_frame_changed_dmx = previous.as_ref() != Some(&dmx(&frame));
     let mut after = Vec::new();
+    let mut frames_until_dmx_change = first_frame_changed_dmx.then_some(1);
     for tick in SETTLE_FRAMES + 2..2 * SETTLE_FRAMES + 2 {
         set_tick(&scenario, tick, config.rate_hz);
-        after.push(render(&scenario)?.1);
+        let (frame, total) = render(&scenario)?;
+        if frames_until_dmx_change.is_none() && previous.as_ref() != Some(&dmx(&frame)) {
+            frames_until_dmx_change = Some(tick - SETTLE_FRAMES);
+        }
+        after.push(total);
     }
     let repeated_start = restart(
         &scenario,
@@ -396,6 +419,7 @@ fn serialized(arguments: &Arguments, config: ProfileConfig) -> Result<Serialized
         gesture,
         first_frame,
         first_frame_changed_dmx,
+        frames_until_dmx_change,
         steady_after: distribution(&after),
     })
 }
@@ -514,11 +538,18 @@ struct RecordedFrame {
 }
 
 /// Paced output lane: renders until the Dynamic has been in output for `SETTLE_FRAMES` frames.
+///
+/// With a `gate`, the lane is deterministic instead of paced: the settle frame the gesture sees
+/// in progress stays reported as in progress, and no later frame starts until the gesture has
+/// finished. That models a gesture that completes within one frame period on any machine, so
+/// the contract (carried by the in-progress frame or the next one) can be asserted without
+/// depending on the host's speed.
 fn output_lane(
     scenario: &SharedLane<'_>,
     rate_hz: u16,
     in_progress: &AtomicU64,
     stop: &AtomicBool,
+    gate: Option<&AtomicBool>,
 ) -> Result<Vec<RecordedFrame>, String> {
     let period = Duration::from_nanos(1_000_000_000 / u64::from(rate_hz));
     let origin = Instant::now();
@@ -528,16 +559,27 @@ fn output_lane(
         if stop.load(Ordering::Relaxed) || origin.elapsed() > CONCURRENT_TIMEOUT {
             break;
         }
-        let deadline = origin + period * u32::try_from(tick).unwrap_or(u32::MAX);
-        if let Some(wait) = deadline.checked_duration_since(Instant::now()) {
-            std::thread::sleep(wait);
+        if let Some(gesture_done) = gate {
+            while tick > SETTLE_FRAMES
+                && !gesture_done.load(Ordering::Acquire)
+                && !stop.load(Ordering::Relaxed)
+            {
+                std::thread::yield_now();
+            }
+        } else {
+            let deadline = origin + period * u32::try_from(tick).unwrap_or(u32::MAX);
+            if let Some(wait) = deadline.checked_duration_since(Instant::now()) {
+                std::thread::sleep(wait);
+            }
         }
         set_tick(scenario, tick, rate_hz);
         let started = Instant::now();
         in_progress.store(tick + 1, Ordering::Release);
         let (frame, total) = render(scenario)?;
         let ended = Instant::now();
-        in_progress.store(0, Ordering::Release);
+        if gate.is_none() {
+            in_progress.store(0, Ordering::Release);
+        }
         carried += u64::from(frame.dynamic_samples != 0);
         frames.push(RecordedFrame {
             tick,
@@ -556,9 +598,11 @@ fn output_lane(
 
 type Shape = (usize, usize, usize);
 
+/// `gated` replaces wall-clock pacing with the deterministic gate of [`output_lane`].
 fn concurrent(
     arguments: &Arguments,
     config: ProfileConfig,
+    gated: bool,
 ) -> Result<(ConcurrentProbe, Shape), String> {
     let (scenario, pending) = prepared(arguments, config)?;
     let shape = (
@@ -570,8 +614,11 @@ fn concurrent(
     let shared = SharedLane::from(&lane);
     let in_progress = AtomicU64::new(0);
     let stop = AtomicBool::new(false);
+    let gesture_done = AtomicBool::new(false);
+    let gate = gated.then_some(&gesture_done);
     let (frames, gesture) = std::thread::scope(|scope| {
-        let output = scope.spawn(|| output_lane(&shared, config.rate_hz, &in_progress, &stop));
+        let output =
+            scope.spawn(|| output_lane(&shared, config.rate_hz, &in_progress, &stop, gate));
         // Wait for the settle frames, then press while the next frame is in progress.
         let pressed = loop {
             let tick = in_progress.load(Ordering::Acquire);
@@ -586,6 +633,7 @@ fn concurrent(
         } else {
             gesture(&shared, &pending, start_link(&pending, 0))
         };
+        gesture_done.store(true, Ordering::Release);
         if gesture.is_err() {
             stop.store(true, Ordering::Relaxed);
         }
@@ -611,6 +659,11 @@ fn concurrent(
         .iter()
         .find(|frame| frame.phases.dynamic_samples != 0);
     let frames_until_output = first.map(|frame| frame.tick - in_progress_tick);
+    // Starts the scenario build itself made are claimed by the settle frames before the gesture.
+    let frames_until_claimed = frames
+        .iter()
+        .find(|frame| frame.tick >= in_progress_tick && frame.phases.change_lead_claimed)
+        .map(|frame| frame.tick - in_progress_tick);
     let start_to_first_output =
         first.map(|frame| micros(frame.ended.saturating_duration_since(pressed_at)));
     let budget = 2.0 * 1_000_000.0 / f64::from(config.rate_hz);
@@ -619,10 +672,11 @@ fn concurrent(
             steady_before: distribution(&before),
             in_progress_frame_microseconds: micros(in_progress.total),
             in_progress_frame_capture_microseconds: micros(in_progress.capture),
-            next_frame_after_in_progress: frames_until_output == Some(1),
-            within_budget: frames_until_output == Some(1)
+            next_frame_after_in_progress: frames_until_output.is_some_and(|frames| frames <= 1),
+            within_budget: frames_until_output.is_some_and(|frames| frames <= 1)
                 && start_to_first_output.is_some_and(|latency| latency <= budget),
             frames_until_output,
+            frames_until_claimed,
             first_frame: first.map(|frame| frame.phases.clone()),
             start_to_first_output_microseconds: start_to_first_output,
             gesture,
@@ -659,18 +713,68 @@ mod tests {
         assert!(probe.first_frame.dynamic_samples > 0);
         assert!(probe.first_frame_changed_dmx);
         assert!(probe.gesture.programmer_apply_microseconds > 0.0);
-        let (concurrent, (fixtures, targets, lanes)) = concurrent(&arguments, config).unwrap();
+        // TL-659: the desk's change lead ledger names the same frame, one frame period after the
+        // gesture's application time (Dynamic start instants are whole milliseconds).
+        assert!(probe.first_frame.change_lead_claimed);
+        let period = 1_000_000.0 / f64::from(config.rate_hz);
+        let lead = probe.first_frame.logical_change_lead_microseconds.unwrap();
+        assert!(
+            (period..period + 1_000.0).contains(&lead),
+            "{lead} against {period}"
+        );
+        // Gated, not paced: the result cannot depend on how fast the host renders or applies
+        // the gesture (a debug build on a loaded CI runner included).
+        let (concurrent, (fixtures, targets, lanes)) =
+            concurrent(&arguments, config, true).unwrap();
         // 540 animated fixtures with their logical heads (1,480 targets) and 460 Dimmers.
         assert_eq!((fixtures, targets, lanes), (1_000, 1_940, 6));
+        // The contract: the frame in progress at the gesture, or the next one, carries it.
         assert!(
             concurrent
                 .frames_until_output
-                .is_some_and(|frames| frames >= 1)
+                .is_some_and(|frames| frames <= 1),
+            "carried {:?} frames after the in-progress one",
+            concurrent.frames_until_output
+        );
+        assert!(concurrent.next_frame_after_in_progress);
+        assert_eq!(
+            concurrent.frames_until_claimed, concurrent.frames_until_output,
+            "the ledger claims the start on the frame that carries it"
         );
         assert!(
             concurrent
                 .first_frame
                 .is_some_and(|frame| frame.dynamic_samples == probe.first_frame.dynamic_samples)
         );
+    }
+
+    #[test]
+    fn the_sustained_show_probe_changes_every_fixture_on_the_first_frame() {
+        let package_dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixture-library");
+        let ParseOutcome::Run(arguments) = Arguments::parse(
+            [
+                "--profile",
+                "hard-floor",
+                "--sustained-show",
+                "--universes",
+                "8",
+                "--semantic",
+                "--start-latency",
+                "--fixture-package-dir",
+                package_dir.to_str().unwrap(),
+            ]
+            .map(str::to_owned),
+        )
+        .unwrap() else {
+            panic!("expected a run");
+        };
+        let config = profile_configs(&arguments)[0];
+        let probe = serialized(&arguments, config).unwrap();
+        // 1,037 fixtures on 8 universes: one sample per fixture, and the DMX moves at once.
+        assert_eq!(probe.first_frame.dynamic_samples, 1_037);
+        assert!(probe.first_frame_changed_dmx);
+        assert_eq!(probe.frames_until_dmx_change, Some(1));
+        assert!(probe.first_frame.change_lead_claimed);
     }
 }

@@ -104,6 +104,7 @@ async fn accepted_stack_uses_its_captured_programmer_masks_even_when_live_rows_d
     let programmer = Uuid::new_v4();
     let mut frame = captured_frame(&state, fixture);
     frame.dynamics = Some(Arc::new(FrameDynamicSources {
+        change_lead_start: None,
         sample_boundary: None,
         runtime: Default::default(),
         samples: Vec::new(),

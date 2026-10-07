@@ -73,11 +73,14 @@ pub(super) async fn advance_test_clock(
         .output
         .render_frames_and_publish(&rendered, visualization_scope);
     let snapshot = state.output.snapshot();
-    let packets = state
+    let sent = state
         .output
         .send_network_routes(&snapshot.routes, &frames, &rendered.rendered.patched_slots)
-        .await
-        .map_err(ApiError::io)?;
+        .await;
+    state
+        .output
+        .record_change_lead(rendered.change_lead_start(), sent.is_ok());
+    let packets = sent.map_err(ApiError::io)?;
     let send_errors = state.output.take_send_errors();
     state.output.record_output_health(packets, send_errors);
     state.action_timing.complete_output_render(action_timing);

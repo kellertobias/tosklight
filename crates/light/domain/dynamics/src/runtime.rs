@@ -20,6 +20,7 @@ pub use control_batch::{
 pub use control_log::{
     ControlCursor as DynamicControlCursor, ControlLogError as DynamicControlLogError,
 };
+mod change_lead;
 mod lanes;
 mod native_capability;
 mod output_gate;
@@ -346,6 +347,8 @@ pub struct DynamicRuntime {
     /// TL-639: `Some` only after `derive_instance_ids_from`; new instances then take name-based
     /// identities from their definition instead of random ones.
     derived_instance_ids: Option<(Uuid, HashMap<Uuid, u64>)>,
+    /// TL-659: starts waiting for the first output frame that carries them (`change_lead.rs`).
+    change_lead: light_core::ChangeLeadLedger,
 }
 
 impl Default for DynamicRuntime {
@@ -487,6 +490,7 @@ impl DynamicRuntime {
             control_recording: None,
             sampling_buffers: Default::default(),
             derived_instance_ids: None,
+            change_lead: Default::default(),
         }
     }
 
@@ -536,6 +540,7 @@ impl DynamicRuntime {
             output_frame_undo: None,
             sampling_buffers: Default::default(),
             derived_instance_ids: None,
+            change_lead: Default::default(),
         }
     }
 

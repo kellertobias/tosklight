@@ -43,6 +43,10 @@ pub struct LiveOutputFrame {
     pub start_path: super::StartPathPhases,
     /// Dynamic samples this frame committed; the first frame of a started Dynamic has some.
     pub dynamic_samples: usize,
+    /// TL-659: the earliest start this frame claimed (application-time microseconds), the same
+    /// claim the desk measures its change lead time from. TL-641 uses it to find the first frame
+    /// that carries a started Dynamic.
+    pub change_lead_start: Option<i64>,
     /// Building the published frame and storing it in the visualization hub.
     pub publication: Duration,
     /// Cumulative Live adapter work after this frame.
@@ -232,6 +236,7 @@ impl LiveOutputBench {
                 programmer_values: Arc::clone(prepared.dynamic_programmer_values()),
                 cue_values: prepared.cue_dynamic_values().into(),
                 ordinary: committed.ordinary,
+                change_lead_start: committed.change_lead_start,
             })),
         };
         if self.publish {
@@ -243,6 +248,7 @@ impl LiveOutputBench {
         }
         let publication = publish_started.elapsed();
         let work = self.work(frame.rendered.sampled_at);
+        let change_lead_start = frame.change_lead_start();
         Ok(LiveOutputFrame {
             rendered: frame.rendered,
             hybrid,
@@ -250,6 +256,7 @@ impl LiveOutputBench {
             transaction,
             start_path,
             dynamic_samples,
+            change_lead_start,
             publication,
             work,
         })

@@ -10,6 +10,8 @@ import type {
 export interface ServerPlaybackContext {
 	readDmx: () => Promise<DmxSnapshot>;
 	readOutputHealth: () => Promise<OutputHealth>;
+	/** TL-659: start every change lead time reading over; resolves with the fresh readings. */
+	resetChangeLeadTime: () => Promise<OutputHealth["change_lead"]>;
 	readNetworkEndpoints: () => Promise<NetworkEndpointsSnapshot>;
 	readVisualization: (preload?: boolean) => Promise<VisualizationSnapshot>;
 	setDmxOverride: (

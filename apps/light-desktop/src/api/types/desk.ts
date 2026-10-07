@@ -38,6 +38,8 @@ export interface OutputHealth {
 	recent_send_errors: number;
 	frame_rate_band_bounds_hz: number[];
 	frame_rate_band_counts: number[];
+	/** TL-659: how long started Cues and Dynamics take to reach the wire. */
+	change_lead: RuntimeChangeLeadTime;
 }
 
 export interface ProgrammerState {
@@ -155,6 +157,7 @@ export interface BootstrapSnapshot {
 
 export type { AttributeDescriptor } from "@tosklight/patch/fixture-profile";
 import type { AttributeDescriptor } from "@tosklight/patch/fixture-profile";
+import type { RuntimeChangeLeadTime } from "../generated/light-wire";
 
 export interface SessionResponse {
 	session_id: string;

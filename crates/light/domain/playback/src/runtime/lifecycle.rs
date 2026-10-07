@@ -393,6 +393,7 @@ impl PlaybackEngine {
                     next_transition_ordinal: self.next_transition_ordinal,
                     next_source_occurrence_ordinal: self.next_source_occurrence_ordinal,
                     family_start: self.family_start.clone(),
+                    change_lead: Default::default(),
                 };
                 isolated.active.get_mut(key).unwrap().deleted_cue_hold = None;
                 // An interrupted transition starts at its captured interior value, not the

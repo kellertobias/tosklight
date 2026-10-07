@@ -37,7 +37,7 @@ use std::{
     pin::Pin,
     sync::{
         Arc,
-        atomic::{AtomicU16, AtomicU64, Ordering},
+        atomic::{AtomicU16, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -51,7 +51,10 @@ pub(super) use dynamic_projection::physical_adapter::{
     PhysicalAdapterLane,
     position::{PositionAdapter, tests as position_test_support},
 };
+pub(in crate::runtime) mod change_lead;
 mod dynamic_reconciliation;
+mod slow_phase_trace;
+use slow_phase_trace::trace_slow_output_phases;
 mod live_output_bench;
 pub use live_output_bench::{
     LiveOutputBench, LiveOutputFrame, LiveOutputWork, ReadoutConsumerReport, ReadoutConsumers,
@@ -101,9 +104,6 @@ use dynamic_reconciliation::{
 type OutputSequences = HashMap<(Protocol, Universe), u8>;
 type SharedSequences = Arc<tokio::sync::Mutex<OutputSequences>>;
 pub(super) type OutputTask = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'static>>;
-const SLOW_OUTPUT_PHASE_THRESHOLD: Duration = Duration::from_millis(20);
-const SLOW_OUTPUT_PHASE_SAMPLE_LIMIT: u64 = 128;
-static SLOW_OUTPUT_PHASE_SAMPLES: AtomicU64 = AtomicU64::new(0);
 
 pub(super) struct Config {
     pub bind_ip: IpAddr,
@@ -174,6 +174,7 @@ struct Runtime {
     pub(super) family_adapters: Arc<LiveFamilyAdapters>,
     pub(super) persistence: OutputPersistenceResource,
     pub(super) internal_audio: Arc<Mutex<super::internal_audio::InternalAudioRuntime>>,
+    change_lead: Arc<light_output::ChangeLeadTime>,
 }
 
 pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {
@@ -299,6 +300,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         };
         (rendered, visualization_scope, dynamic, engine)
     };
+    let change_lead_start = rendered.change_lead_start();
     runtime.internal_audio.lock().reconcile(
         rendered.rendered.source_snapshot.fixtures.as_ref(),
         rendered.rendered.profile_visualization_values.as_ref(),
@@ -336,7 +338,14 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let result = combined_delivery_result(network, usb);
     let send = send_started.elapsed();
     trace_slow_output_phases(tick_started.elapsed(), dynamic, engine, publish, send);
-    if result.is_ok() {
+    let delivered = result.is_ok();
+    change_lead::record_change_lead(
+        &runtime.change_lead,
+        &runtime.engine,
+        change_lead_start,
+        delivered,
+    );
+    if delivered {
         runtime.action_timing.complete_output_render(action_timing);
     }
     result
@@ -399,6 +408,7 @@ fn render_ordered_output_frame(
         },
     );
     if completed.is_err() {
+        change_lead::carry_uncommitted_capture(&runtime.change_lead, &prepared);
         events.extend(captured_playback_events(
             &runtime.engine,
             &runtime.active_show,
@@ -425,6 +435,7 @@ fn render_ordered_output_frame(
             programmer_values: Arc::clone(prepared.dynamic_programmer_values()),
             cue_values: prepared.cue_dynamic_values().into(),
             ordinary: completed.ordinary,
+            change_lead_start: completed.change_lead_start,
         });
         let (rendered, dynamic, engine) = completed.output;
         (
@@ -706,6 +717,10 @@ pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
     let send_started = Instant::now();
     let result = state.output.send_retained_output().await;
     let send = send_started.elapsed();
+    let change_lead_start = rendered.change_lead_start();
+    state
+        .output
+        .record_change_lead(change_lead_start, result.is_ok());
     trace_slow_output_phases(
         tick_started.elapsed(),
         semantic_timing.dynamic,
@@ -717,35 +732,6 @@ pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
         state.action_timing.complete_output_render(action_timing);
     }
     result
-}
-
-fn trace_slow_output_phases(
-    total: Duration,
-    dynamic: Duration,
-    engine: Duration,
-    publish: Duration,
-    send: Duration,
-) {
-    if total < SLOW_OUTPUT_PHASE_THRESHOLD {
-        return;
-    }
-    let sample = SLOW_OUTPUT_PHASE_SAMPLES.fetch_add(1, Ordering::Relaxed);
-    if sample >= SLOW_OUTPUT_PHASE_SAMPLE_LIMIT {
-        return;
-    }
-    tracing::info!(
-        sample = sample + 1,
-        total_micros = duration_micros(total),
-        dynamic_micros = duration_micros(dynamic),
-        engine_micros = duration_micros(engine),
-        publish_micros = duration_micros(publish),
-        send_micros = duration_micros(send),
-        "slow output tick phase sample"
-    );
-}
-
-fn duration_micros(duration: Duration) -> u64 {
-    u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
 }
 
 pub(super) fn render_with_playback_events(
@@ -1173,6 +1159,7 @@ impl SharedResources {
             family_adapters: Arc::clone(&self.family_adapters),
             persistence: self.persistence.clone(),
             internal_audio: Arc::clone(&config.internal_audio),
+            change_lead: change_lead::change_lead_recorder(&config.health),
         }
     }
 
