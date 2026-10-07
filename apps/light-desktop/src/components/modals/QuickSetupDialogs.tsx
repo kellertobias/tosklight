@@ -180,7 +180,7 @@ function SelectiveImportDialog({ model }: ModelProps) {
 
 function MvrShowPicker({ model }: ModelProps) {
 	const { lifecycle } = model.authorities;
-	const { mvrMode, setMvrTarget, inspectExport } = model.mvr;
+	const { setMvrTarget } = model.mvr;
 	return (
 		<>
 			<p>Select any show in the desk library.</p>
@@ -191,13 +191,7 @@ function MvrShowPicker({ model }: ModelProps) {
 							<b>{show.name}</b>
 							<small>Autosaved show file</small>
 						</span>
-						<Button
-							onClick={() =>
-								mvrMode === "export"
-									? void inspectExport(show)
-									: setMvrTarget(show)
-							}
-						>
+						<Button onClick={() => setMvrTarget(show)}>
 							Select
 						</Button>
 					</article>
@@ -226,7 +220,7 @@ function MvrFilePicker({ model }: ModelProps) {
 		}, 0);
 		return () => globalThis.clearTimeout(timer);
 	}, [mvrFilePickerRequested, mvrFilePickerTrigger, setMvrFilePickerRequested]);
-	if (mvrMode === "export" || model.mvr.mvrPreview) return null;
+	if (model.mvr.mvrPreview) return null;
 	return (
 		<>
 			<p>
@@ -393,39 +387,6 @@ function MvrImportPreview({ model }: ModelProps) {
 	);
 }
 
-function MvrExportPreview({ model }: ModelProps) {
-	const { lifecycle } = model.authorities;
-	const mvr = model.mvr;
-	if (mvr.mvrMode !== "export" || !mvr.mvrTarget || !mvr.mvrExportPreview)
-		return null;
-	const target = mvr.mvrTarget;
-	return (
-		<>
-			<div className="mvr-summary">
-				<b>
-					{mvr.mvrExportPreview.fixtures} fixtures ·{" "}
-					{mvr.mvrExportPreview.scenery} scenery objects
-				</b>
-				<p>Not included: {mvr.mvrExportPreview.omitted.join(", ")}</p>
-				{mvr.mvrExportPreview.warnings.map((warning) => (
-					<p className="modal-warning" key={warning}>
-						{warning}
-					</p>
-				))}
-			</div>
-			<Button
-				className="primary"
-				onClick={() => {
-					void lifecycle?.downloadMvr(target);
-					mvr.setMvrMode(null);
-				}}
-			>
-				Download {target.name}.mvr
-			</Button>
-		</>
-	);
-}
-
 function MvrDialog({ model }: ModelProps) {
 	const mvr = model.mvr;
 	if (!mvr.mvrMode) return null;
@@ -436,20 +397,15 @@ function MvrDialog({ model }: ModelProps) {
 				className="nested-modal mvr-modal"
 				role="dialog"
 				aria-modal="true"
-				aria-label="MVR import and export"
+				aria-label="MVR import"
 			>
 				<ModalTitleBar
-					title={mvr.mvrMode === "new"
-						? "New Show from MVR"
-						: mvr.mvrMode === "merge"
-							? "Add MVR to Show"
-							: "Export Show as MVR"}
+					title={mvr.mvrMode === "new" ? "New Show from MVR" : "Add MVR to Show"}
 					onClose={() => mvr.setMvrMode(null)}
 				/>
 				{needsShow && <MvrShowPicker model={model} />}
 				{!needsShow && <MvrFilePicker model={model} />}
 				<MvrImportPreview model={model} />
-				<MvrExportPreview model={model} />
 			</div>
 		</StackedModal>
 	);

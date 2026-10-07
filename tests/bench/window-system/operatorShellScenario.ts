@@ -206,7 +206,7 @@ export class BrowserOperatorShell {
 				.getByRole("button", { name: "Load from MVR", exact: true })
 				.click();
 			const mvr = this.page.getByRole("dialog", {
-				name: "MVR import and export",
+				name: "MVR import",
 			});
 			// Loading from MVR opens its dialog and asks for the file straight away, so the
 			// chooser always comes up on top of it. Waiting for either one with a guessed window

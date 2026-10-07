@@ -328,14 +328,6 @@ export interface MvrImportPreview {
 	warnings: string[];
 	address_conflicts: string[];
 }
-export interface MvrExportPreview {
-	fixtures: number;
-	scenery: number;
-	embedded_profiles: number;
-	missing_profiles: string[];
-	omitted: string[];
-	warnings: string[];
-}
 export interface MvrApplyResult {
 	show: ShowEntry;
 	imported_fixtures: number;

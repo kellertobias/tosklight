@@ -17,7 +17,6 @@ pub(super) fn router() -> Router<AppState> {
         )
         .route("/api/v2/shows/{id}/download", get(download_show))
         .route("/api/v2/mvr/imports/preview", post(preview_mvr_import_v2))
-        .route("/api/v2/shows/{id}/mvr/preview", get(preview_mvr_export_v2))
         .route("/api/v2/shows/{id}/mvr", get(export_mvr))
 }
 
@@ -370,7 +369,7 @@ fn execute_export_mvr_file(
     root_id: String,
     path: String,
 ) -> Result<wire::ShowLibraryActionResult, ApiError> {
-    let (root_id, path) = super::show_save_destination::export_mvr_file(
+    let (root_id, path, summary) = super::show_save_destination::export_mvr_file(
         state,
         show_id,
         data_base64,
@@ -378,7 +377,16 @@ fn execute_export_mvr_file(
         root_id,
         path,
     )?;
-    Ok(wire::ShowLibraryActionResult::FileSaved { root_id, path })
+    // A desk-local export reports what it wrote; archive bytes forwarded by another desk do not
+    // carry a summary, so the sending desk reports its own.
+    Ok(match summary {
+        Some(summary) => wire::ShowLibraryActionResult::MvrExported {
+            root_id,
+            path,
+            summary,
+        },
+        None => wire::ShowLibraryActionResult::FileSaved { root_id, path },
+    })
 }
 
 async fn execute_save_copy_to_peer(
@@ -414,11 +422,15 @@ async fn execute_export_mvr_to_peer(
     root_id: String,
     path: String,
 ) -> Result<wire::ShowLibraryActionResult, ApiError> {
-    let (root_id, path) = super::show_network::export_mvr_to_peer(
+    let (root_id, path, summary) = super::show_network::export_mvr_to_peer(
         state, request_id, &instance, show_id, &name, &root_id, &path,
     )
     .await?;
-    Ok(wire::ShowLibraryActionResult::FileSaved { root_id, path })
+    Ok(wire::ShowLibraryActionResult::MvrExported {
+        root_id,
+        path,
+        summary,
+    })
 }
 
 fn execute_set_base_show(
@@ -745,22 +757,6 @@ async fn preview_mvr_import_v2(
         missing_profiles: preview.missing_profiles,
         warnings: preview.warnings,
         address_conflicts: preview.address_conflicts,
-    }))
-}
-
-async fn preview_mvr_export_v2(
-    State(state): State<AppState>,
-    path: Path<Uuid>,
-    headers: HeaderMap,
-) -> Result<Json<wire::MvrExportPreview>, ApiError> {
-    let Json(preview) = preview_mvr_export(State(state), path, headers).await?;
-    Ok(Json(wire::MvrExportPreview {
-        fixtures: preview.fixtures,
-        scenery: preview.scenery,
-        embedded_profiles: preview.embedded_profiles,
-        missing_profiles: preview.missing_profiles,
-        omitted: preview.omitted,
-        warnings: preview.warnings,
     }))
 }
 

@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **394 root cases across 122 files**.
+Default catalog: **396 root cases across 123 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -238,6 +238,8 @@ Default catalog: **394 root cases across 122 files**.
 | 39-semantic-playback-and-osc.spec.ts | BENCH-PAGE-PLAYBACK-001 @bench @ui › current and explicit Page targets retain distinct Playback authority | repository contract | @bench @ui | semantic-playback-and-osc | standard failure evidence | parallel | migrated-semantic-world |
 | 39-semantic-playback-and-osc.spec.ts | BENCH-SELECTION-ROUTES-001 @bench @ui › visible panes, keypad, API, and OSC converge on the ordered selection oracle | repository contract | @bench @ui | semantic-playback-and-osc | standard failure evidence | parallel | migrated-semantic-world |
 | 40-semantic-generate-show-files.spec.ts | SHOW-000 @bench @ui › Save As produces independent reusable show files | repository contract | @bench @ui | semantic-generate-show-files | generated show/video | serial | migrated-semantic-world |
+| 41-mvr-export-summary.spec.ts | MVR-EXPORT-001 @ui › one press exports and then shows the server's summary and every warning | docs/testing/41-mvr-export-summary.md | @ui | mvr-export-summary | standard failure evidence | parallel | pending-semantic-migration |
+| 41-mvr-export-summary.spec.ts | MVR-EXPORT-002 @ui › a failed export keeps a copyable error and shows no summary | docs/testing/41-mvr-export-summary.md | @ui | mvr-export-summary | standard failure evidence | parallel | pending-semantic-migration |
 | 41-semantic-foundational-dimmer-command.spec.ts | DIM-001 @bench @ui › ordered Group edits retain their live value and append re-added fixtures | repository contract | @bench @ui | semantic-foundational-dimmer-command | standard failure evidence | parallel | migrated-semantic-world |
 | 41-semantic-foundational-dimmer-command.spec.ts | DIM-002 @bench @ui › Lightning Desk command reaches the exact rendered output boundary | repository contract | @bench @ui | semantic-foundational-dimmer-command | standard failure evidence | parallel | migrated-semantic-world |
 | 41-semantic-foundational-dimmer-command.spec.ts | CMD-001 @bench @ui › Fixture and Group default modes toggle while explicit prefixes stay scoped | repository contract | @bench @ui | semantic-foundational-dimmer-command | standard failure evidence | parallel | migrated-semantic-world |

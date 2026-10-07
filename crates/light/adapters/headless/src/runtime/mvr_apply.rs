@@ -141,7 +141,14 @@ impl light_application::mvr_export::GdtfSource for InstallationGdtf<'_> {
 pub(super) fn build_mvr_export(
     state: &AppState,
     id: Uuid,
-) -> Result<(ShowEntry, light_mvr::MvrDocument, MvrExportPreview), ApiError> {
+) -> Result<
+    (
+        ShowEntry,
+        light_mvr::MvrDocument,
+        light_wire::v2::show_library::MvrExportSummary,
+    ),
+    ApiError,
+> {
     let entry = state
         .installation
         .show(light_core::ShowId(id))
@@ -194,7 +201,7 @@ pub(super) fn build_mvr_export(
         // The hinge the Visualizer and the CAD turn the lamp's body about.
         viz_project::patched_bracket_hinge_millimetres,
     )?;
-    let preview = MvrExportPreview {
+    let summary = light_wire::v2::show_library::MvrExportSummary {
         fixtures: summary.fixtures,
         scenery: summary.scenery,
         // A generated GDTF is embedded too; the warnings say which kind the archive carries.
@@ -203,17 +210,9 @@ pub(super) fn build_mvr_export(
         omitted: vec!["cues, presets, playbacks, users, and desk layouts".into()],
         warnings: summary.warnings,
     };
-    Ok((entry, doc, preview))
+    Ok((entry, doc, summary))
 }
 
-pub(super) async fn preview_mvr_export(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    headers: HeaderMap,
-) -> Result<Json<MvrExportPreview>, ApiError> {
-    let _ = authenticate(&state, &headers)?;
-    Ok(Json(build_mvr_export(&state, id)?.2))
-}
 pub(super) async fn export_mvr(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

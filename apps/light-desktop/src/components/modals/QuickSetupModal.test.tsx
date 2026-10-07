@@ -67,8 +67,6 @@ const mocks = vi.hoisted(() => ({
     shutdownServer: vi.fn(),
     previewMvr: vi.fn(),
     applyMvr: vi.fn(),
-    previewMvrExport: vi.fn(),
-    downloadMvr: vi.fn(),
     downloadShow: vi.fn(),
 	selectiveImportCatalog: vi.fn(),
 	previewSelectiveImport: vi.fn(),
@@ -136,7 +134,7 @@ beforeEach(() => {
     mocks.files.fileEntries.mockReset().mockResolvedValue({entries:[{name:"tour.show",path:"tour.show",kind:"file",modified_millis:0},{name:"festival.show",path:"festival.show",kind:"file",modified_millis:0}]});
     mocks.server.networkShows.mockReset().mockResolvedValue({peers:[]});
     mocks.server.saveShowCopy.mockReset().mockResolvedValue({name:"Folder copy"});
-    mocks.server.exportMvrFile.mockReset().mockResolvedValue({path:"Folder copy.mvr"});
+    mocks.server.exportMvrFile.mockReset().mockResolvedValue({root_id:"shows",path:"Folder copy.mvr",summary:{fixtures:0,scenery:0,embedded_profiles:0,missing_profiles:[],omitted:[],warnings:[]}});
     mocks.server.networkSaveFolders.mockReset().mockResolvedValue({root_id:"shows",roots:[{id:"shows",label:"Desk shows",writable:true,removable:false}],entries:[]});
     mocks.server.listShowRevisions.mockReset().mockImplementation(async (id: string) => id === "original" ? [{ show_id: id, revision: 3, name: "Approved focus", created_at: "2026-07-16T10:00:00Z" }] : []);
     mocks.server.openShowRevision.mockReset().mockResolvedValue(true);
@@ -236,6 +234,53 @@ describe("QuickSetupModal show workflows", () => {
     fireEvent.click(within(dialog).getByRole("button",{name:"Export MVR"}));
     await waitFor(() => expect(mocks.server.exportMvrFile).toHaveBeenCalledWith("Folder copy",{rootId:"shows",path:"Tour folder"}));
     expect(mocks.server.saveShowAs).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's export summary and every warning until dismissed or another action starts", async () => {
+    mocks.server.exportMvrFile.mockResolvedValue({root_id:"shows",path:"Rig.mvr",summary:{fixtures:12,scenery:3,embedded_profiles:12,missing_profiles:["Acme · Spot (revision 2)"],
+      omitted:["cues, presets, playbacks, users, and desk layouts"],
+      warnings:["ToskLight generated GDTF files from the current fixture profiles","Acme · Spot (revision 2): GDTF could not be generated: curve. Export its native .toskfixture package to preserve the complete profile."]}});
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", {name:"Save As"}));
+    const dialog = screen.getByRole("dialog", {name:"Save show"});
+    await waitFor(() => expect(within(dialog).getByRole("button",{name:"Export MVR"})).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole("button",{name:"Export MVR"}));
+    const summary = await within(dialog).findByRole("status",{name:"MVR export summary"});
+    expect(summary).toHaveTextContent("Exported MVR to Shows / Rig.mvr");
+    expect(summary).toHaveTextContent("12 fixtures · 3 scenery objects");
+    expect(summary).toHaveTextContent("Not included: cues, presets, playbacks, users, and desk layouts");
+    expect(summary).toHaveTextContent("2 export warnings");
+    const warnings = within(summary).getAllByRole("listitem");
+    expect(warnings.map(item => item.textContent)).toEqual([
+      "ToskLight generated GDTF files from the current fixture profiles",
+      "Acme · Spot (revision 2): GDTF could not be generated: curve. Export its native .toskfixture package to preserve the complete profile.",
+    ]);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {configurable:true,value:{writeText}});
+    fireEvent.click(within(summary).getByRole("button",{name:"Copy warnings"}));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(warnings.map(item => item.textContent).join("\n")));
+    expect(await within(summary).findByRole("button",{name:"Warnings copied"})).toBeInTheDocument();
+    fireEvent.click(within(summary).getByRole("button",{name:"Dismiss"}));
+    expect(within(dialog).queryByRole("status",{name:"MVR export summary"})).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button",{name:"Export MVR"}));
+    await within(dialog).findByRole("status",{name:"MVR export summary"});
+    fireEvent.click(within(dialog).getByRole("button",{name:"Save as New Show"}));
+    await waitFor(() => expect(within(dialog).queryByRole("status",{name:"MVR export summary"})).not.toBeInTheDocument());
+  });
+
+  it("keeps a copyable error and no summary when the MVR export fails", async () => {
+    mocks.server.exportMvrFile.mockRejectedValue(new Error("show not found"));
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", {name:"Save As"}));
+    const dialog = screen.getByRole("dialog", {name:"Save show"});
+    await waitFor(() => expect(within(dialog).getByRole("button",{name:"Export MVR"})).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole("button",{name:"Export MVR"}));
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent("show not found");
+    expect(within(alert).getByRole("button",{name:"Copy error"})).toBeInTheDocument();
+    expect(within(dialog).queryByRole("status",{name:"MVR export summary"})).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Exporting MVR…")).not.toBeInTheDocument();
   });
 
   it.each(["Load", "Save As"])("lists each USB drive in the %s Source menu and replaces denied folders with an error", async (action) => {

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FileEntry, FileRoot, NetworkShowPeer } from "../../api/types";
 import { useFiles } from "../../features/files/FilesContext";
 import type { QuickSetupModel } from "./QuickSetupModal";
+import { MvrExportSummary, type MvrExportReport } from "./MvrExportSummary";
 
 type Source = "internal" | "usb" | "network";
 const sources = [{id:"internal",label:"Internal"},{id:"usb",label:"USB"},{id:"network",label:"Network"}] as const;
@@ -28,6 +29,7 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
     const [locationOpen, setLocationOpen] = useState(false);
     const [error, setError] = useState("");
     const [status, setStatus] = useState("");
+    const [exported, setExported] = useState<MvrExportReport | null>(null);
     const busy = (locationOpen && reading) || saving;
     const directoryCache = useRef(new Map<string, {roots?: FileRoot[]; entries: FileEntry[]; root_id?: string | null}>());
     const availableRoots = peer ? remoteRoots : roots.filter(root =>
@@ -70,13 +72,13 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
     }, [source, peer, rootId, path, files, lifecycle, locationOpen]);
 
     function switchSource(next: Source, driveId?: string) {
-        setSource(next); setPeer(null); setPath(""); setStatus(""); setLocationOpen(true);
+        setSource(next); setPeer(null); setPath(""); setStatus(""); setExported(null); setLocationOpen(true);
         setRootId(next === "internal" ? "shows" : next === "usb" ? driveId ?? roots.find(item => item.removable && !item.network)?.id ?? "" : "");
     }
     async function save() {
         const name = dialogs.showName.trim();
         if (!name || busy || !root?.writable) return;
-        setSaving(true); setError(""); setStatus("Saving show…");
+        setSaving(true); setError(""); setExported(null); setStatus("Saving show…");
         try {
             if (localDefault) {
                 if (!(await model.actions.saveAs(name))) throw new Error("Could not save this show. Check the name and desk connection, then try again.");
@@ -94,10 +96,10 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
     });
     async function exportMvr() {
         if (!root?.writable || busy) return;
-        setSaving(true); setError(""); setStatus("Exporting MVR…");
+        setSaving(true); setError(""); setExported(null); setStatus("Exporting MVR…");
         try {
             const saved = await lifecycle!.exportMvrFile(dialogs.showName.trim() || model.view.activeShow?.name || "Show", target);
-            setStatus(`Exported MVR to ${peer?.name ?? root.label} / ${saved.path}`);
+            setExported({...saved, location: peer?.name ?? root.label}); setStatus("");
         } catch(reason) {setError(formatErrorDetails(reason));setStatus("");}
         finally {setSaving(false);}
     }
@@ -140,6 +142,7 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
             </div>}
             </div>
             {error && !locationOpen && <ErrorAlert as="p" className="show-browser-error" role="alert">{error}</ErrorAlert>}{status && <p className="show-save-message" role="status">{status}</p>}
+            {exported && <MvrExportSummary report={exported} onDismiss={() => setExported(null)} />}
             <div className="show-save-fields">
             <TextInput clearable className="show-name-input" autoFocus value={dialogs.showName} onChange={event=>dialogs.setShowName(event.target.value)} onKeyboardCommit={()=>void save()} placeholder="New show name" aria-label="Show name" disabled={saving} />
             <div className="show-row-actions">

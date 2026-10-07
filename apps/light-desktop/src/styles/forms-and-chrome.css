@@ -1133,3 +1133,8 @@
 #show-save-folders .show-save-folder-toolbar { padding-top: 12px; }
 
 .show-browser-error { display: flex; align-items: center; justify-content: center; min-height: 180px; margin: 0; padding: 24px 32px; text-align: center; overflow-wrap: anywhere; color: var(--muted); }
+.save-show-modal .mvr-export-summary { margin: 0 16px 16px; }
+.mvr-export-warnings { margin: 7px 0 0; padding-left: 20px; }
+.mvr-export-warnings li + li { margin-top: 4px; }
+.mvr-export-summary-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+.mvr-export-summary-actions > .ui-button { min-height: 44px; }

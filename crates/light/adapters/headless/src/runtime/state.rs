@@ -124,16 +124,6 @@ pub(super) struct ApplyMvrResult {
     pub(super) warnings: Vec<String>,
 }
 
-#[derive(Serialize)]
-pub(super) struct MvrExportPreview {
-    pub(super) fixtures: usize,
-    pub(super) scenery: usize,
-    pub(super) embedded_profiles: usize,
-    pub(super) missing_profiles: Vec<String>,
-    pub(super) omitted: Vec<String>,
-    pub(super) warnings: Vec<String>,
-}
-
 #[derive(Clone)]
 pub(super) struct OscSubscriber {
     pub(super) path: String,

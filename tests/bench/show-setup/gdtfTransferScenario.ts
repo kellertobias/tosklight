@@ -5,7 +5,7 @@ import { type RawResponse, rawRequest } from "./installedCalibrationScenario";
 
 /**
  * Fixture profile ↔ GDTF/MVR transfers through the desk's own routes: show MVR export
- * (`GET /api/v2/shows/{id}/mvr` and its `/preview`), GDTF preview/import
+ * (`GET /api/v2/shows/{id}/mvr`, and the Save As `export_mvr_file` action with its summary), GDTF preview/import
  * (`POST /api/v2/fixture-library/gdtf/preview`, `POST …/profiles/{id}/update`) and MVR import
  * preview (`POST /api/v2/mvr/imports/preview`). Archives are inspected as the ZIPs they are.
  */
@@ -172,15 +172,30 @@ export async function patchProfile(
 	return fixtures.map((fixture) => fixture.fixture_id);
 }
 
-export interface MvrExportPreview {
+export interface MvrExportSummary {
 	fixtures: number;
+	scenery: number;
 	embedded_profiles: number;
 	missing_profiles: string[];
+	omitted: string[];
 	warnings: string[];
 }
 
-export function mvrExportPreview(api: ApiDriver, showId: string) {
-	return api.request<MvrExportPreview>("GET", `/api/v2/shows/${showId}/mvr/preview`);
+/** Exports the show the way Save As does and returns the server's summary of that archive. */
+export async function exportMvrSummary(api: ApiDriver, showId: string): Promise<MvrExportSummary> {
+	const outcome = await api.request<{ result: { type: string; summary: MvrExportSummary } }>("POST", "/api/v2/shows", {
+		request_id: crypto.randomUUID(),
+		action: {
+			type: "export_mvr_file",
+			show_id: showId,
+			data_base64: null,
+			name: `GDTF transfer ${crypto.randomUUID()}`,
+			root_id: "shows",
+			path: "",
+		},
+	});
+	if (outcome.result.type !== "mvr_exported") throw new Error(`Expected an MVR export summary, received ${outcome.result.type}`);
+	return outcome.result.summary;
 }
 
 /** The exported MVR of one show, as its raw bytes and its ZIP members. */
