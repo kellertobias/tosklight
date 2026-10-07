@@ -1,13 +1,16 @@
 import { Button } from "@tosklight/ui";
+import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
 import {
 	isRegisteredWindow,
 	windowRegistry,
 } from "../../windows/WindowRegistry";
 import { DeskGrid } from "./DeskGrid";
+import { startBuiltInWindowDrag } from "./builtInWindowDrag";
 
 export function WorkspaceView() {
 	const { state, dispatch } = useApp();
+	const desktop = useDesktopBridge();
 	const migrationNotice = state.layoutMigrationNotice ? (
 		<div className="migration-notice" role="status">
 			<span>
@@ -29,6 +32,7 @@ export function WorkspaceView() {
 					data-light-surface="built-in"
 					data-pane-type={state.builtIn}
 					aria-label={`${state.builtIn} built-in`}
+					onPointerDown={(event) => startBuiltInWindowDrag(event, desktop)}
 				>
 					<Window builtIn patchView={state.patchBuiltInView} />
 				</main>

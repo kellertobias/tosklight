@@ -15,6 +15,10 @@ main window the **X** quits ToskLight, because that window is the desk itself. O
 window the **X** closes only that screen; the screen keeps its configuration and reopens from
 **Desk Setup → Screens**.
 
+Outside fullscreen, drag a built-in's title or unused title-bar space to move the application
+window. Title-bar buttons and other controls keep their normal actions. On a Desktop, dragging
+a pane header moves that pane within the Desktop.
+
 Title-bar buttons within one action group use a single gray divider. The boundary between action groups uses a wider divider — two pixels of dark gray, one pixel of cyan, two pixels of dark gray — making related controls visible without inserting a black gap. Modal title bars use the same two dividers.
 
 > [!danger] Missing graphic
