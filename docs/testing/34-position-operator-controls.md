@@ -3,7 +3,7 @@
 ## Purpose and status
 
 These scenarios are the acceptance contract for TL-549, refined by TL-652 (readouts, ranges, target
-provenance and Angle Dynamics about a Target). They cover the production Position
+provenance and Angle Dynamics about a Target) and TL-651 (creating and managing Points). They cover the production Position
 encoders and the modal Position Special Dialog under the fixture-independent programming contract.
 Pan and Tilt are angles in degrees, Pan is unwrapped, and X, Y and Z are Target offsets in metres.
 
@@ -28,6 +28,11 @@ Executable coverage:
   lane has published and ticks frames until the dialog reads it. Step 2 is covered: the gesture's
   Preload part ends with one Preload Finish, the rest of the held motion continues on the Normal
   Programmer with its own Finish, Preload no longer changes, and the next gesture is Normal too.
+- POSITION-CONTROLS-012 and 013 (TL-651, Points) are in `tests/128-position-points.spec.ts`. Vitest
+  covers the picker's Create Point and Manage Points on the software and hardware-connected Point
+  slot (`familyEncoders/FamilyEncoderSlotSurface.point.test.tsx`), the Points view and its
+  one-shot Create Point request (`windows/PatchWindow.test.tsx`) and the Point helpers
+  (`components/setup/points/pointManagement.test.ts`).
 - POSITION-CONTROLS-005 has no Playwright case yet. Its provenance and range wording is covered by
   POSITION-CONTROLS-010 and by Vitest in `familyEncoders/positionReadouts.test.ts`.
 - POSITION-CONTROLS-010 and 011 use two AURO SPOTs 4 m apart on a truss 6 m upstage, the second one
@@ -205,6 +210,43 @@ hardware-connected layout.
    head keeps circling. The centre of the circle moves with the Target.
 4. Release the Dynamic. Verify that the head rests exactly on the centre it circled last, the
    Target's current aim.
+
+## POSITION-CONTROLS-012 — Create Point from the Point encoder, patched and unpatched Points
+
+Points are the show's 3D Points (**ToskLight → 3D Point** fixtures). One stable identity, the
+fixture UUID, serves an unpatched aim Point, a patched Point and a tracked Point alike.
+
+1. Patch two moving heads, store them as a group and select it, with no 3D Point in the show. Open
+   the **Position** tab. Verify that Point reads **No Points**, not **—**.
+2. Tap the middle of the Point encoder. Verify that the picker offers **Origin**, says that the show
+   has no Points yet, and offers **Create Point** and **Manage Points** in its title.
+3. Choose **Create Point**. Verify that **Show > Show Patch** opens on **Points** with one new row,
+   highlighted, named **Point 1**, with the next fixture ID after the highest one, **Unpatched**
+   and at 0, 0, 0 m.
+4. Rename it **Singer** and set X −1 m, Y 2 m and Z 1.5 m. Verify that the Patch stores the name and
+   the location in millimetres and that the Point stays unpatched.
+5. Add a second 3D Point patched at 2.1. Verify that the Points view lists it with its address.
+6. On the desk, step Point. Verify **Origin**, then **3 · Singer**, then the patched Point, then
+   **Origin** again; that the group's Target names each Point by its UUID; that the movers have a
+   commanded pose aimed at the unpatched Point; that Pan reads **From Point**; and that the pose
+   differs between the two Points.
+7. Open the picker. Verify that the current choice is marked, and pick **3 · Singer** by name.
+8. Record a cue, clear the Programmer, save the show and open the saved file. Verify that Singer
+   keeps its UUID, name, location and empty address, and that the cue aims the movers exactly where
+   they aimed before.
+9. Repeat steps 2 and 3 on a hardware-connected desk: touching the Point display opens the same
+   picker. Hardware and OSC `encode/N` detents step the same choices (POSITION-CONTROLS-003).
+
+## POSITION-CONTROLS-013 — A deleted Point is reported, never replaced
+
+1. With a patched 3D Point in the show, open **Show Patch > Points** and press **+ Create Point**.
+   Verify that a second, unpatched Point is added.
+2. Aim the group at the unpatched Point with the Point encoder.
+3. Delete that Point in the Points view; **Delete** asks **Confirm delete** first.
+4. Verify that the group still holds its Target at the deleted Point's UUID and that the Point
+   encoder reads **Missing point**.
+5. Step Point. Verify that the steps go on to **Origin** and then the remaining Point, and that the
+   movers aim again.
 
 ## POSITION-HOME-001 — Return Home
 
