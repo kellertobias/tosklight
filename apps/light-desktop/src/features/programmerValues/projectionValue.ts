@@ -6,6 +6,7 @@ import type {
 	ProgrammerValuesProjection,
 } from "./contracts";
 import { ProgrammerValuesProtocolError } from "./transport";
+import { dynamicStoreAddress } from "./dynamicAddress";
 
 export function canonicalProjection(
 	projection: ProgrammerValuesProjection,
@@ -30,7 +31,7 @@ export function canonicalProjection(
 	);
 	assertUnique(
 		dynamicValues,
-		(entry) => dynamicAddress(entry),
+		(entry) => dynamicStoreAddress(entry),
 		(entry) =>
 			`Dynamic control track ${dynamicInstanceLabel(entry)} projected ${entry.attribute} more than once for fixture ${entry.fixtureId}. Stop and restart the affected Dynamic; inspect that instance track if the duplicate returns.`,
 	);
@@ -55,7 +56,7 @@ function compareDynamicValues(
 		left.programmerOrder - right.programmerOrder ||
 		left.fixtureId.localeCompare(right.fixtureId) ||
 		left.attribute.localeCompare(right.attribute) ||
-		dynamicInstanceLabel(left).localeCompare(dynamicInstanceLabel(right))
+		dynamicStoreAddress(left).localeCompare(dynamicStoreAddress(right))
 	);
 }
 
@@ -67,8 +68,8 @@ export function dynamicInstanceLink(
 		: null;
 }
 
-function dynamicAddress(entry: ProgrammerDynamicValue) {
-	return `${entry.fixtureId}\u0000${entry.attribute}\u0000${dynamicInstanceLabel(entry)}`;
+export function dynamicLaneId(entry: ProgrammerDynamicValue): string | null {
+	return entry.value.type === "dynamic_on" ? entry.value.lane_id : null;
 }
 
 function dynamicInstanceLabel(entry: ProgrammerDynamicValue) {
@@ -111,6 +112,11 @@ function canonicalAttributeValue(value: AttributeValue): AttributeValue {
 			Object.freeze(spread);
 			return Object.freeze({ ...value, value: spread });
 		}
+		case "group_family":
+		case "color_program":
+		case "position":
+		case "zoom":
+			return freezeTree(structuredClone(value));
 		case "color_xyz":
 			return Object.freeze({
 				...value,
@@ -225,4 +231,19 @@ function sameValue(left: unknown, right: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function freezeTree<T>(value: T): T {
+	if (value && typeof value === "object") {
+		for (const item of Object.values(value)) freezeTree(item);
+		Object.freeze(value);
+	}
+	return value;
+}
+
+export function sameAttributeValue(
+	left: AttributeValue,
+	right: AttributeValue,
+): boolean {
+	return sameValue(left, right);
 }

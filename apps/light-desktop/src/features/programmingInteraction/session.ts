@@ -58,6 +58,7 @@ export class ProgrammingInteractionSession {
 			this.hydratedScope = {
 				commandLine: state.commandLine !== null,
 				selection: state.selection !== null,
+				alignment: state.alignment !== null,
 			};
 	}
 
@@ -304,7 +305,8 @@ export class ProgrammingInteractionSession {
 			(scope.commandLine && !state.commandLine) ||
 			(scope.selection && !state.selection) ||
 			(scope.commandLine && !previous.commandLine) ||
-			(scope.selection && !previous.selection)
+			(scope.selection && !previous.selection) ||
+			(scope.alignment && (!state.alignment || !previous.alignment))
 		);
 	}
 

@@ -1,7 +1,9 @@
 import type { DataTableColumn } from "@tosklight/ui/window-kit";
+import type { FixtureColorNotice } from "../features/colorReport/acceptedColorReport";
 import { FixtureColorDot } from "../components/shared/FixtureColorDot";
 import { SourceValue } from "../components/shared/SourceValue";
 import type { FixtureSheetCompactMode } from "../types";
+import { FixtureSheetColorNotice } from "./fixtureSheetColorNotice";
 import type { FixtureSheetRow } from "./fixtureSheetProjection";
 import type { FixtureStepPresenter } from "./fixtureSheetStep";
 import type {
@@ -12,6 +14,12 @@ import type {
 } from "./fixtureSheetValues";
 
 type Column = DataTableColumn<FixtureSheetRow>;
+
+/** TL-550: expected Color limitations of the accepted output frame, per row. */
+export interface FixtureSheetColorStatus {
+	notice(row: FixtureSheetRow): FixtureColorNotice | null;
+	openDetails(row: FixtureSheetRow): void;
+}
 
 function stepMarker(fixture: FixtureSheetRow, present: FixtureStepPresenter) {
 	const presentation = present(fixture);
@@ -231,7 +239,10 @@ function dimmerColumn(compactMode: FixtureSheetCompactMode): Column {
 	};
 }
 
-function colorColumn(compactMode: FixtureSheetCompactMode): Column {
+function colorColumn(
+	compactMode: FixtureSheetCompactMode,
+	status?: FixtureSheetColorStatus,
+): Column {
 	return {
 		id: "color",
 		header: "Color",
@@ -253,6 +264,7 @@ function colorColumn(compactMode: FixtureSheetCompactMode): Column {
 					)}
 					<span className="fixture-sheet-value-text">{fixture.colorLabel}</span>
 				</span>
+				<ColorNotice fixture={fixture} status={status} />
 				{fixture.preloadColor && (
 					<small className="preload-value">
 						<FixtureColorDot color={fixture.preloadColor} />
@@ -264,6 +276,22 @@ function colorColumn(compactMode: FixtureSheetCompactMode): Column {
 			</SourceValue>
 		),
 	};
+}
+
+function ColorNotice({
+	fixture,
+	status,
+}: {
+	fixture: FixtureSheetRow;
+	status?: FixtureSheetColorStatus;
+}) {
+	const notice = status?.notice(fixture);
+	return notice ? (
+		<FixtureSheetColorNotice
+			notice={notice}
+			onOpen={() => status?.openDetails(fixture)}
+		/>
+	) : null;
 }
 
 function positionColumn(compactMode: FixtureSheetCompactMode): Column {
@@ -492,6 +520,7 @@ export function fixtureSheetColumns(
 	showType: boolean,
 	present: FixtureStepPresenter,
 	compactMode: FixtureSheetCompactMode = "off",
+	colorStatus?: FixtureSheetColorStatus,
 ): Column[] {
 	return [
 		fixtureIdColumn(present, compactMode),
@@ -499,7 +528,7 @@ export function fixtureSheetColumns(
 		fixtureNameColumn(showType, compactMode),
 		patchColumn(),
 		dimmerColumn(compactMode),
-		colorColumn(compactMode),
+		colorColumn(compactMode, colorStatus),
 		positionColumn(compactMode),
 		valueColumn("beam", "Beam", compactMode),
 		valueColumn("shapers", "Shapers", compactMode),

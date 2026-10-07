@@ -97,6 +97,8 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
         grid_index += 1;
         placements.push(root_placement.source);
         instances.push(PhysicalInstance {
+            color_calibration: fixture.color_calibration.clone(),
+            position_calibration: fixture.position_calibration.clone(),
             scenery_size_metres: placed_scenery_size(fixture.scenery_size_metres),
             scenery_options: fixture.scenery_options.clone(),
             model_scale: light_fixture::resolved_model_scale(fixture.model_scale),
@@ -127,6 +129,8 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
             grid_index += 1;
             placements.push(placement.source);
             instances.push(PhysicalInstance {
+                color_calibration: multipatch.color_calibration.clone(),
+                position_calibration: multipatch.position_calibration.clone(),
                 scenery_size_metres: placed_scenery_size(multipatch.scenery_size_metres),
                 // Venue objects cannot be multi-patched, so an instance never has options.
                 scenery_options: Default::default(),
@@ -174,6 +178,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
     plan.scene.show_name = models.show_name.clone();
     plan.scene.source_identity = models.server_identity.clone();
     plan.scene.revision = models.patch.patch_revision;
+    plan.scene.source_show_revision = models.patch.show_revision;
     plan.scene.venue_groups = venue_group_members(&models.venue_groups);
     // Standalone `venue` records predate Venue fixtures. Once the patch carries its own scenery
     // they only duplicate it, so they are drawn solely for a show that has none.

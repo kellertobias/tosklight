@@ -8,6 +8,15 @@ import type {
 	PlaybackDefinition,
 } from "../../../apps/light-desktop/src/api/types/playback";
 import { openPatch, patchFixtureRow } from "../../support/foundational/ui";
+
+type CueChange = CueList["cues"][number]["changes"][number];
+
+/**
+ * The Move in Black cues' Pan Angles: 20 % and 80 % of a 540° travel centred on home, the pans the
+ * scenario used before Position became Angles (TL-552).
+ */
+export const MIB_DARK_PAN_DEGREES = -162;
+export const MIB_LIT_PAN_DEGREES = 162;
 import type { ApiDriver } from "../core/api";
 import { type ClockDuration, parseClockDuration } from "../core/clockScenario";
 import type { DeskDriver } from "../core/desk";
@@ -299,15 +308,26 @@ export class BrowserMoveInBlack {
 		const change = (
 			fixtureId: string,
 			attribute: string,
-			value: number,
+			value: NonNullable<CueChange["value"]>,
 			fadeMillis?: number,
 		) => ({
 			fixture_id: fixtureId,
 			attribute,
-			value: { kind: "normalized" as const, value },
+			value,
 			automatic_restore: false,
 			...(fadeMillis == null ? {} : { fade_millis: fadeMillis }),
 		});
+		const level = (value: number) => ({ kind: "normalized" as const, value });
+		// Since the TL-552 cutover Position is stored as Angles in degrees; Tilt stays at home.
+		const pan = (degrees: number) =>
+			({
+				kind: "position",
+				value: {
+					kind: "angles",
+					pan_degrees: { kind: "value", value: degrees },
+					tilt_degrees: { kind: "value", value: 0 },
+				},
+			}) as unknown as NonNullable<CueChange["value"]>;
 		const cue = (
 			number: number,
 			changes: ReturnType<typeof change>[],
@@ -341,20 +361,20 @@ export class BrowserMoveInBlack {
 				cue(
 					1,
 					fixtureIds.flatMap((id) => [
-						change(id, "intensity", 1),
-						change(id, "pan", 0.2),
+						change(id, "intensity", level(1)),
+						change(id, "position", pan(MIB_DARK_PAN_DEGREES)),
 					]),
 				),
 				cue(
 					2,
-					fixtureIds.map((id) => change(id, "intensity", 0)),
+					fixtureIds.map((id) => change(id, "intensity", level(0))),
 					2_000,
 				),
 				cue(
 					3,
 					fixtureIds.flatMap((id) => [
-						change(id, "intensity", 1),
-						change(id, "pan", 0.8, 3_000),
+						change(id, "intensity", level(1)),
+						change(id, "position", pan(MIB_LIT_PAN_DEGREES), 3_000),
 					]),
 				),
 			],

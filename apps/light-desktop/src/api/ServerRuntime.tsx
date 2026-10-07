@@ -56,6 +56,8 @@ import { ServerVisualizationRuntimeBoundary } from "./ServerVisualizationRuntime
 import type { BootstrapSnapshot } from "./types/desk";
 import type { TimecodeTransportSnapshot } from "./types/timecode";
 import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
+import { FamilyEncodersProvider } from "../features/familyEncoders/FamilyEncodersProvider";
+import { runningShowId } from "../features/deskSnapshot/selectors";
 
 export type {
 	CommandChoiceOption,
@@ -166,6 +168,8 @@ function useProviderDataSources(
 			deleteFixtureProfile: value.deleteFixtureProfile,
 			fixtureProfileRevisions: value.fixtureProfileRevisions,
 			saveFixtureProfileSourceGdtf: value.saveFixtureProfileSourceGdtf,
+			previewFixtureGdtf: value.previewFixtureGdtf,
+			importFixtureGdtf: value.importFixtureGdtf,
 			importFixturePackage: value.importFixturePackage,
 			exportFixturePackage: value.exportFixturePackage,
 			fixtureSourceMappings: value.fixtureSourceMappings,
@@ -185,6 +189,8 @@ function useProviderDataSources(
 			value.deleteFixtureProfile,
 			value.fixtureProfileRevisions,
 			value.saveFixtureProfileSourceGdtf,
+			value.previewFixtureGdtf,
+			value.importFixtureGdtf,
 			value.importFixturePackage,
 			value.exportFixturePackage,
 			value.fixtureSourceMappings,
@@ -244,11 +250,15 @@ function useShowLifecycleSource(
 ) {
 	return useMemo(
 		() => ({
-            setShowDescription: value.setShowDescription,
-            networkSaveFolders: value.networkSaveFolders, saveShowCopy: value.saveShowCopy, exportMvrFile: value.exportMvrFile,
-            networkShows: value.networkShows, importRemoteShow: value.importRemoteShow,
-            prepareShowRevision: value.prepareShowRevision, prepareShowFile: value.prepareShowFile,
-            openShowFile: value.openShowFile,
+			setShowDescription: value.setShowDescription,
+			networkSaveFolders: value.networkSaveFolders,
+			saveShowCopy: value.saveShowCopy,
+			exportMvrFile: value.exportMvrFile,
+			networkShows: value.networkShows,
+			importRemoteShow: value.importRemoteShow,
+			prepareShowRevision: value.prepareShowRevision,
+			prepareShowFile: value.prepareShowFile,
+			openShowFile: value.openShowFile,
 			shows: value.shows,
 			openShow: value.openShow,
 			openCleanDefaultShow: value.openCleanDefaultShow,
@@ -269,9 +279,15 @@ function useShowLifecycleSource(
 			shutdownServer: value.shutdownServer,
 		}),
 		[
-            value.setShowDescription,
-            value.networkSaveFolders, value.saveShowCopy, value.exportMvrFile,
-            value.networkShows, value.importRemoteShow, value.prepareShowRevision, value.prepareShowFile, value.openShowFile,
+			value.setShowDescription,
+			value.networkSaveFolders,
+			value.saveShowCopy,
+			value.exportMvrFile,
+			value.networkShows,
+			value.importRemoteShow,
+			value.prepareShowRevision,
+			value.prepareShowFile,
+			value.openShowFile,
 			value.shows,
 			value.openShow,
 			value.openCleanDefaultShow,
@@ -398,13 +414,13 @@ function useDynamicsActionSource(state: ReturnType<typeof useServerState>) {
 
 /// What the Tracking tab may ask of the desk, bound to the one desk connection.
 function usePsnSource(state: ReturnType<typeof useServerState>) {
-    return useMemo(
-        () => ({
-            snapshot: () => state.api.psn.snapshot(),
-            update: (edit: PsnEdit) => state.api.psn.update(edit),
-        }),
-        [state.api],
-    );
+	return useMemo(
+		() => ({
+			snapshot: () => state.api.psn.snapshot(),
+			update: (edit: PsnEdit) => state.api.psn.update(edit),
+		}),
+		[state.api],
+	);
 }
 
 /// What the desk sends its connected visualizers, bound to the one desk connection.
@@ -457,11 +473,11 @@ function ServerActionProviderStack({
 											>
 												<MediaServersProvider media={data.mediaServersState}>
 													<PsnProvider psn={psn}>
-													<SoundToLightProvider
-														actions={actions.soundToLightActions}
-													>
-														{children}
-													</SoundToLightProvider>
+														<SoundToLightProvider
+															actions={actions.soundToLightActions}
+														>
+															{children}
+														</SoundToLightProvider>
 													</PsnProvider>
 												</MediaServersProvider>
 											</FixtureLibraryProvider>
@@ -497,9 +513,7 @@ function ServerShowProviderStack({
 	// through a session-backed transport. Naming the Show first asks those surfaces to load
 	// through a transport that does not exist yet, and the desk reports a failure for a desk that
 	// is only still starting — a blocking alert over a console that is about to be fine.
-	const showId = state.session
-		? (state.bootstrap?.active_show?.id ?? null)
-		: null;
+	const showId = state.session ? runningShowId(state.bootstrap) : null;
 	return (
 		<ServerDeskBoundaries state={state} sessionRole={sessionRole}>
 			<ServerVisualizationRuntimeBoundary
@@ -560,7 +574,13 @@ function ServerShowProviderStack({
 														<DeskLoadingStateProvider
 															loading={state.deskLoading}
 														>
-															{children}
+															<FamilyEncodersProvider
+																client={state.api.familyEncoders}
+																showId={showId}
+																enabled={state.status === "connected"}
+															>
+																{children}
+															</FamilyEncodersProvider>
 														</DeskLoadingStateProvider>
 													</ScreensProvider>
 												</FilesProvider>

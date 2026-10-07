@@ -1,3 +1,8 @@
+import {
+	decodeColorAdoption,
+	decodeValuesHold,
+	encodeColorAdoption,
+} from "./colorAdoptionWire";
 import type {
 	ProgrammerValuesActionOutcome,
 	ProgrammerValuesActionRequest,
@@ -12,6 +17,7 @@ import type {
 	ProgrammingValuesErrorKind as WireProgrammingValuesErrorKind,
 	ProgrammingValueTiming as WireProgrammingValueTiming,
 } from "./generated/light-wire";
+import { encodeProgrammerValueIntentOperation } from "./programmingComponentEditWire";
 import {
 	booleanAt,
 	enumAt,
@@ -86,6 +92,8 @@ export function decodeProgrammerValuesActionOutcome(
 		),
 		replayed: booleanAt(response.replayed, "$.replayed"),
 		warning: optionalString(response, "warning", "$"),
+		...decodeValuesHold(response),
+		...decodeColorAdoption(response),
 	};
 	const status = enumAt(response.status, "$.status", ["changed", "no_change"]);
 	if (status === "no_change") {
@@ -169,6 +177,10 @@ function assertOutcomeFields(
 		"status",
 		"replayed",
 		"warning",
+		// TL-594: the quiet displayed-source hold reason.
+		"hold",
+		// TL-554: the semantic starting value adopted from a Direct value.
+		"color_adoption",
 	];
 	if (changed) fields.push("projection", "event_sequence");
 	exactRecordAt(response, "$", fields);
@@ -208,24 +220,33 @@ function validateRequest(request: ProgrammerValuesActionRequest) {
 function encodeAction(
 	action: ProgrammerValuesActionRequest["action"],
 ): WireProgrammingValuesAction {
+	if (action.action === "finish_gesture")
+		return {
+			type: action.action,
+			attribute: nonEmptyString(action.attribute, "$.action.attribute"),
+			undo_group: nonEmptyString(action.undoGroup, "$.action.undoGroup"),
+		};
 	if (action.action === "apply_intent")
 		return {
 			type: action.action,
 			fixture_ids: [...action.fixtureIds],
 			group_id: action.groupId ?? null,
 			attribute: action.attribute,
-			operation:
-				action.operation.type === "absolute_set"
-					? {
-							type: "absolute_set",
-							value: action.operation.value,
-						}
-					: {
-							type: "relative_step",
-							delta: action.operation.delta,
-						},
+			operation: encodeProgrammerValueIntentOperation(
+				action.operation,
+				"$.action.operation",
+			),
 			undo_group: action.undoGroup ?? null,
 			timing: encodeTiming(action.timing),
+			...(action.displayedSource
+				? {
+						displayed_source: {
+							lane: action.displayedSource.lane,
+							lease: action.displayedSource.lease,
+						},
+					}
+				: {}),
+			...encodeColorAdoption(action.colorAdoption),
 		};
 	if (action.action === "apply_indexed_preset")
 		return {
@@ -306,3 +327,10 @@ function encodeTiming(
 		delay_millis: timing.delayMillis,
 	};
 }
+
+function nonEmptyString(value: string, path: string) {
+	if (typeof value !== "string" || value.length === 0)
+		throw new WireValidationError(path, "non-empty string", value);
+	return value;
+}
+

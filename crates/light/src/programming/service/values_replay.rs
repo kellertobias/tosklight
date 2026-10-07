@@ -216,6 +216,8 @@ mod tests {
             interaction_event_sequence: None,
             replayed: false,
             warning: None,
+            hold: None,
+            color_adoption: None,
         }
     }
 }

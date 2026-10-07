@@ -165,6 +165,7 @@ impl Session {
     fn accept_values(&mut self, mut values: SceneValues, now: Instant) {
         values.resize(self.scene.emitters.len());
         values.retain_visual_motion_runtime_from(&self.values);
+        values.take_calibrated_runtime_from(&mut self.values);
         values.retain_physics_runtime_from(&self.values, self.scene.physics_scenery.len());
         if values.frame > self.last_value_frame {
             if let Some(previous) = self.last_value_instant {

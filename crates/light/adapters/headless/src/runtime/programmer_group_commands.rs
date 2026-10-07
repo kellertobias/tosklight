@@ -1,3 +1,4 @@
+use super::programmer_family_values::typed_family_command as typed_family;
 use super::*;
 
 fn percent_level(tokens: &[String]) -> Result<f32, String> {
@@ -27,6 +28,19 @@ fn execute_mixed_group_value(
 ) -> Result<usize, String> {
     let snapshot = state.output.snapshot();
     let parsed = parse_group_mixed_selection(&snapshot, address, true)?;
+    let sources = light_programmer::SelectionExpression::Sources {
+        items: parsed.sources.clone(),
+    };
+    if let Some(n) = typed_family(
+        state,
+        session,
+        value,
+        &parsed.fixtures,
+        Some(&sources),
+        timing,
+    ) {
+        return n;
+    }
     let percent = percent_level(value)?;
     state.programming.select_expression(
         session.id,
@@ -241,6 +255,45 @@ pub(super) fn execute_group_programmer_command(
             rule,
         }
     };
+    let value = &tokens[(at_index + 1).min(tokens.len())..];
+    if let Some(n) = typed_family(state, session, value, &fixtures, Some(&expression), timing) {
+        return n;
+    }
+    if at_index < tokens.len() {
+        let value = &tokens[at_index + 1..];
+        if value.len() == 3 && value[1] == "." {
+            let preset = load_command_preset(state, command_preset_address(value)?)?;
+            let semantic_aim = preset.aim_at_fixture_number.is_some()
+                && state.output.supported_programming_contract()
+                    >= light_core::programming::PROGRAMMING_CONTRACT_VERSION;
+            let preset = if semantic_aim {
+                super::programmer_aim_command::resolve_aim_preset(state, &preset)?
+            } else {
+                preset
+            };
+            let applicable = if let Some(target) = preset.aim_at_fixture_number {
+                !super::programmer_aim_command::aim_selection(state, &fixtures, target)?.is_empty()
+            } else {
+                let groups = state
+                    .output
+                    .snapshot()
+                    .groups
+                    .iter()
+                    .map(|group| (group.id.clone(), group.clone()))
+                    .collect();
+                super::command_presets::command_preset_has_values(
+                    &preset,
+                    &fixtures,
+                    &expression.live_group_owners(),
+                    &groups,
+                    state.output.supported_programming_contract(),
+                )?
+            };
+            if !applicable {
+                return Ok(0);
+            }
+        }
+    }
     state
         .programming
         .select_expression(session.id, fixtures.clone(), expression);

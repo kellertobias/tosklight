@@ -25,6 +25,26 @@ pub struct ProgrammerLifecycleSummary {
 }
 
 impl ProgrammerRegistry {
+    /// The desk's retained identity without copying values, selection or Undo history.
+    pub fn programmer_id(&self) -> Option<ProgrammerId> {
+        self.serialized(|| self.state.read().as_ref().map(|state| state.id))
+    }
+
+    /// Cold checkpoint restoration can verify authored links before any surface reconnects.
+    /// This does not activate the retained Programmer or include pending Preload edits.
+    pub fn retained_dynamic_source(&self) -> Option<crate::ActiveDynamicSessionSource> {
+        self.serialized(|| {
+            self.state.read().as_ref().map(|state| {
+                (
+                    state.id.0,
+                    state.priority,
+                    std::sync::Arc::clone(&state.dynamic_values),
+                    std::sync::Arc::clone(&state.preload_dynamic_active),
+                )
+            })
+        })
+    }
+
     /// The lifecycle of the desk's one Programmer, without cloning its complete state.
     pub fn programmer_lifecycle(&self) -> Option<ProgrammerLifecycleSummary> {
         self.serialized(|| self.lifecycle_for_desk())

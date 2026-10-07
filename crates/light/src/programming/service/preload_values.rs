@@ -1,9 +1,10 @@
+use super::values_legacy::semantic_intent;
 use super::{ProgrammingService, state::interaction_change, support::Snapshot};
 use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPorts,
     ProgrammingPreloadValueMutation, ProgrammingPreloadValueTiming,
-    ProgrammingPreloadValuesOutcome, ProgrammingPreloadValuesRequest,
-    ProgrammingPreloadValuesResult, ProgrammingValueMutation,
+    ProgrammingPreloadValuesCommand, ProgrammingPreloadValuesOutcome,
+    ProgrammingPreloadValuesRequest, ProgrammingPreloadValuesResult, ProgrammingValueMutation,
 };
 use light_core::SessionId;
 use light_programmer::{PreloadProgrammerValueMutation, PreloadProgrammerValueTiming};
@@ -22,8 +23,16 @@ impl ProgrammingService {
     ) -> Result<ProgrammingPreloadValuesResult, ActionError> {
         let (session, request_id, expected_revision) = preload_values_context(&action)?;
         self.with_programmer_and_desk_gate(action.context.desk_id, || {
+            self.assert_value_action_boundary()?;
             ports.authorize_programming_change(&action.context)?;
-            self.assert_preload_values_owner(session)?;
+            // A delayed Finish is harmless after disarm or a capture-mode change. Ordinary
+            // edits retain their existing owner and revision admission checks.
+            if !matches!(
+                &action.command.command,
+                ProgrammingPreloadValuesCommand::FinishGesture { .. }
+            ) {
+                self.assert_preload_values_owner(session)?;
+            }
             let fingerprint = preload_request_fingerprint(expected_revision, &action.command);
             let replay_identity = PreloadReplayIdentity {
                 desk_id: action.context.desk_id,
@@ -37,18 +46,43 @@ impl ProgrammingService {
             {
                 return Ok(cached);
             }
-            self.assert_preload_values_revision(expected_revision)?;
-            let capture_mode_revision = self.assert_preload_capture_precondition(
-                session,
-                action.command.expected_capture_mode_revision,
-            )?;
-            let result = self.apply_preload_values_action(
-                &action,
-                ports,
-                session,
-                expected_revision,
-                capture_mode_revision,
-            )?;
+            let result = if let ProgrammingPreloadValuesCommand::FinishGesture {
+                attribute,
+                undo_group,
+            } = &action.command.command
+            {
+                self.finish_captured_family_gesture(
+                    &action.context,
+                    true,
+                    &super::values_legacy::semantic_gesture_attribute(attribute),
+                    undo_group,
+                )?;
+                ProgrammingPreloadValuesResult {
+                    context: action.context.clone(),
+                    outcome: ProgrammingPreloadValuesOutcome::NoChange {
+                        revision: self.programmers.preload_values_revision(),
+                    },
+                    capture_mode_revision: self.programmers.capture_mode_revision(),
+                    interaction_event_sequence: None,
+                    replayed: false,
+                    warning: None,
+                    hold: None,
+                    color_adoption: None,
+                }
+            } else {
+                self.assert_preload_values_revision(expected_revision)?;
+                let capture_mode_revision = self.assert_preload_capture_precondition(
+                    session,
+                    action.command.expected_capture_mode_revision,
+                )?;
+                self.apply_preload_values_action(
+                    &action,
+                    ports,
+                    session,
+                    expected_revision,
+                    capture_mode_revision,
+                )?
+            };
             self.preload_values_replay
                 .lock()
                 .insert(replay_identity, fingerprint, result.clone());
@@ -66,47 +100,71 @@ impl ProgrammingService {
     ) -> Result<ProgrammingPreloadValuesResult, ActionError> {
         let before = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
         let raw_mutations = action.command.command.mutations();
-        let environment = (!raw_mutations.is_empty() || action.command.command.intent().is_some())
-            .then(|| ports.values_environment(&action.context))
-            .transpose()?;
-        let planned;
-        let mutations = if let Some(intent) = action.command.command.intent() {
+        let mut environment = (!raw_mutations.is_empty()
+            || action.command.command.intent().is_some())
+        .then(|| ports.values_environment(&action.context))
+        .transpose()?;
+        let mut family_gesture = None;
+        let mut hold = None;
+        let mut family_alignment_plan = None;
+        let semantic = semantic_intent(action.command.command.intent(), environment.as_ref())?;
+        let mutations = if let Some(intent) = semantic.as_deref() {
             let active = self
                 .programmers
                 .preload_pending_values(session)
                 .ok_or_else(|| {
                     ActionError::new(ActionErrorKind::NotFound, "Preload values are unavailable")
                 })?;
-            planned = plan_value_intent(
+            let active_values = active
+                .fixture_values
+                .iter()
+                .map(|value| {
+                    (
+                        (value.fixture_id, value.attribute.clone()),
+                        value.value.clone(),
+                    )
+                })
+                .collect();
+            let environment = environment
+                .as_mut()
+                .expect("Preload intents load a values environment");
+            super::values::validate_value_intent(intent, environment)?;
+            let groups = active
+                .group_values
+                .iter()
+                .map(|value| {
+                    (
+                        (value.group_id.clone(), value.attribute.clone()),
+                        value.value.clone(),
+                    )
+                })
+                .collect();
+            family_gesture = self.prepare_family_gesture(
+                &action.context,
+                ports,
+                true,
                 intent,
-                environment
-                    .as_ref()
-                    .expect("Preload intents load a values environment"),
-                active
-                    .fixture_values
-                    .iter()
-                    .map(|value| {
-                        (
-                            (value.fixture_id, value.attribute.clone()),
-                            value.value.clone(),
-                        )
-                    })
-                    .collect(),
-                active
-                    .group_values
-                    .iter()
-                    .map(|value| {
-                        (
-                            (value.group_id.clone(), value.attribute.clone()),
-                            value.value.clone(),
-                        )
-                    })
-                    .collect(),
-            )?
-            .into_iter()
-            .map(preload_mutation)
-            .collect::<Vec<_>>();
-            Cow::Owned(planned)
+                environment,
+                &active_values,
+                &groups,
+            )?;
+            hold = environment.displayed_source_hold; // TL-594: an unresolved source holds.
+            let normal_plan = if hold.is_some() {
+                Vec::new()
+            } else if let Some((mutations, plan)) = self.plan_aligned_family_intent(
+                session,
+                light_programmer::ProgrammerAlignmentLane::Preload,
+                intent,
+                environment,
+                &active_values,
+                &groups,
+            )? {
+                family_alignment_plan = Some(plan);
+                mutations
+            } else {
+                plan_value_intent(intent, environment, active_values, groups)?
+            };
+            Cow::Owned(normal_plan.into_iter().map(preload_mutation).collect())
         } else {
             raw_mutations
         };
@@ -116,12 +174,41 @@ impl ProgrammingService {
                 environment
                     .as_ref()
                     .expect("Preload value mutations load a values environment"),
+                // Intent validation already checks newly authored curves; untouched curves
+                // remain legal if a live Group has since shrunk.
+                action.command.command.intent().is_none(),
             )?;
         }
         let domain_mutations = mutations.iter().map(domain_mutation).collect::<Vec<_>>();
-        let changed = self
-            .programmers
-            .apply_preload_values(session, &domain_mutations);
+        let aligned = family_alignment_plan.is_some();
+        let mutate = || {
+            self.programmers.apply_preload_values_grouped(
+                session,
+                &domain_mutations,
+                family_gesture
+                    .as_ref()
+                    .map(|gesture| gesture.undo_group.as_str())
+                    .or_else(|| {
+                        action
+                            .command
+                            .command
+                            .intent()
+                            .and_then(|intent| intent.undo_group.as_deref())
+                    }),
+            )
+        };
+        let changed =
+            if let Some(plan) = family_alignment_plan.filter(|plan| !plan.values.is_empty()) {
+                self.programmers
+                    .apply_family_alignment_plan(session, plan, mutate)
+                    .map_err(super::alignment::alignment_error)?
+                    .0
+            } else {
+                mutate()
+            };
+        if changed && !aligned && action.command.command.intent().is_some() {
+            self.programmers.deactivate_alignment(session);
+        }
         let warning = changed
             .then(|| ports.persist(&action.context, "programmer.preload_values"))
             .flatten();
@@ -140,6 +227,8 @@ impl ProgrammingService {
         )?;
         let interaction_event_sequence = self.publish_interaction(&action.context, interaction);
         let outcome = self.preload_values_outcome(&action.context, values, revision_before);
+        // A held first sample retains no capture: the next sample adopts its own lease.
+        self.finish_family_gesture(family_gesture.filter(|_| hold.is_none()), changed);
         Ok(ProgrammingPreloadValuesResult {
             context: action.context.clone(),
             outcome,
@@ -147,6 +236,8 @@ impl ProgrammingService {
             interaction_event_sequence,
             replayed: false,
             warning,
+            hold,
+            color_adoption: super::color_adoption::reported(environment, hold),
         })
     }
 

@@ -1,8 +1,8 @@
 //! Desk-local Playback view projection events for mutations outside Playback commands.
 
 use light_application::{
-    ActionContext, EventDraft, PlaybackDeskProjection, PlaybackOperation, PlaybackPorts,
-    PlaybackUnitOfWork,
+    ActionContext, EventDraft, PlaybackDeskProjection, PlaybackOperation, PlaybackOperationResult,
+    PlaybackPorts, PlaybackUnitOfWork,
 };
 use light_show::ShowEntry;
 
@@ -39,6 +39,48 @@ pub(in crate::runtime) struct ChangePage<'a> {
 }
 
 impl<'a> ChangePage<'a> {
+    /// The caller owns activation. Portable page creation can finalize a new runtime and must
+    /// therefore happen outside ordered Playback, while retaining the original view comparison.
+    pub(in crate::runtime) fn run(
+        self,
+    ) -> PlaybackOperationResult<Result<super::super::PlaybackPageAvailability, ApiError>> {
+        let state = self.state;
+        state.programming.run_active_show_boundary(|| {
+            let before = state.playback.run_unit_of_work(CaptureDeskProjection {
+                state,
+                context: &self.context,
+            });
+            let before = match before.output {
+                Ok(before) => before,
+                Err(error) => {
+                    return PlaybackOperationResult {
+                        output: Err(error),
+                        event_sequences: Vec::new(),
+                    };
+                }
+            };
+            let availability = match super::super::ensure_playback_page_for_advance(
+                state,
+                self.show,
+                self.page,
+                &self.context,
+            ) {
+                Ok(availability) => availability,
+                Err(error) => {
+                    return PlaybackOperationResult {
+                        output: Err(error),
+                        event_sequences: Vec::new(),
+                    };
+                }
+            };
+            state.playback.run_unit_of_work(ChangeAvailablePage {
+                change: self,
+                before,
+                availability,
+            })
+        })
+    }
+
     pub(in crate::runtime) fn existing(
         state: &'a AppState,
         show_id: light_core::ShowId,
@@ -57,31 +99,37 @@ impl<'a> ChangePage<'a> {
     }
 }
 
-impl PlaybackUnitOfWork for ChangePage<'_> {
+struct CaptureDeskProjection<'a> {
+    state: &'a AppState,
+    context: &'a ActionContext,
+}
+
+impl PlaybackUnitOfWork for CaptureDeskProjection<'_> {
+    type Output = Result<PlaybackDeskProjection, ApiError>;
+    fn execute(self) -> PlaybackOperation<Self::Output> {
+        PlaybackOperation::new(projection(self.state, self.context))
+    }
+}
+
+struct ChangeAvailablePage<'a> {
+    change: ChangePage<'a>,
+    before: PlaybackDeskProjection,
+    availability: super::super::PlaybackPageAvailability,
+}
+
+impl PlaybackUnitOfWork for ChangeAvailablePage<'_> {
     type Output = Result<super::super::PlaybackPageAvailability, ApiError>;
 
     fn execute(self) -> PlaybackOperation<Self::Output> {
-        let before = match projection(self.state, &self.context) {
-            Ok(before) => before,
-            Err(error) => return PlaybackOperation::new(Err(error)),
-        };
-        let availability = match super::super::ensure_playback_page_for_advance(
-            self.state,
-            self.show,
-            self.page,
-            &self.context,
-        ) {
-            Ok(availability) => availability,
-            Err(error) => return PlaybackOperation::new(Err(error)),
-        };
+        let change = self.change;
         change_page(
-            self.state,
-            self.show.id,
-            self.context,
-            self.desk_id,
-            self.page,
-            before,
-            availability,
+            change.state,
+            change.show.id,
+            change.context,
+            change.desk_id,
+            change.page,
+            self.before,
+            self.availability,
         )
     }
 }

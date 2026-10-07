@@ -2,6 +2,10 @@
 
 use super::events::EventSnapshotCursor;
 use super::programming::ProgrammingDynamicValue;
+use super::programming_intent::{
+    ProgrammingColorProgram, ProgrammingGroupFamilyAssignment, ProgrammingPositionIntent,
+    ProgrammingZoomIntent,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -22,6 +26,10 @@ pub enum ProgrammingPreloadAttributeValue {
     Spread(Vec<f32>),
     Discrete(String),
     ColorXyz(ProgrammingPreloadColorXyz),
+    ColorProgram(ProgrammingColorProgram),
+    Position(ProgrammingPositionIntent),
+    Zoom(ProgrammingZoomIntent),
+    GroupFamily(Box<ProgrammingGroupFamilyAssignment>),
     RawDmx(u8),
     RawDmxExact(u32),
 }
@@ -125,6 +133,13 @@ pub enum ProgrammingPreloadValueMutation {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingPreloadValuesAction {
+    /// Ends only this session/desk/lane's retained semantic gesture. Does not change values.
+    /// Stale revisions and an already-ended gesture return a quiet no-change outcome.
+    FinishGesture {
+        attribute: String,
+        #[schemars(length(min = 1, max = 128))]
+        undo_group: String,
+    },
     ApplyIntent {
         #[schemars(length(max = 10_000))]
         fixture_ids: Vec<Uuid>,
@@ -138,6 +153,22 @@ pub enum ProgrammingPreloadValuesAction {
         undo_group: Option<String>,
         #[serde(default)]
         timing: ProgrammingPreloadValueTiming,
+        /// TL-594: the exact accepted source the surface displayed. First-edit adoption uses
+        /// only that leased source and holds quietly when it is gone; omitted, the edit keeps
+        /// the latest-accepted adoption (OSC and HTTP integrators).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        displayed_source: Option<super::output_readouts::DisplayedSourceRef>,
+        /// TL-554: the reference head a Direct (`native`) edit names. Absent, the server takes
+        /// the first verified head of the ordered selection.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        native_reference: Option<super::native_color::NativeColorReferenceRef>,
+        /// TL-554: the operator's explicit starting colour when the first semantic edit of a
+        /// Direct value cannot adopt its (unknown) visible appearance.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        explicit_color_start: Option<super::native_color::ExplicitColorStart>,
     },
     ApplyIndexedPreset {
         #[ts(type = "number")]
@@ -177,6 +208,10 @@ pub enum ProgrammingPreloadValuesAction {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingPreloadValueOperation {
+    ComponentEdits {
+        #[schemars(length(max = 512))]
+        edits: Vec<super::programming_intent::ProgrammingComponentEdit>,
+    },
     AbsoluteSet {
         value: ProgrammingPreloadAttributeValue,
     },
@@ -219,6 +254,14 @@ pub struct ProgrammingPreloadValuesActionOutcome {
     #[serde(flatten)]
     pub outcome: ProgrammingPreloadValuesActionState,
     pub replayed: bool,
+    /// TL-594: present when an edit that named a displayed source was held quietly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub hold: Option<super::output_readouts::ProgrammingValuesHoldReason>,
+    /// TL-554: the first semantic edit of a Direct value adopted this starting value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub color_adoption: Option<super::native_color::ColorAdoptionReport>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub warning: Option<String>,
@@ -280,6 +323,8 @@ mod tests {
             capture_mode_revision: 3,
             outcome: ProgrammingPreloadValuesActionState::NoChange,
             replayed: false,
+            hold: None,
+            color_adoption: None,
             warning: None,
         };
         let json = serde_json::to_value(outcome).unwrap();

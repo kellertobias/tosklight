@@ -11,7 +11,9 @@ mod cue_tracking;
 mod cue_transfer;
 mod engine;
 mod model;
+mod programming_validation;
 mod runtime;
+mod source_evidence;
 mod timecode;
 mod transition;
 
@@ -20,16 +22,21 @@ pub use automatic::{
     AutomaticPlaybackTransition, AutomaticPlaybackTransitionCause, PlaybackCueReference,
     PlaybackTickResult,
 };
+pub use contribution::FamilyStartSource;
 pub use controls::{PlaybackMutation, PlaybackRuntimeEffect, dynamic_playback_controller_id};
 pub use cue_recording::{
     CueListRecordingPlan, CueRecordOperation, CueRecordingContent, CueRecordingPlanError,
-    CueRecordingTiming,
+    CueRecordingTiming, refresh_cue_only_restorations,
 };
 pub use cue_transfer::{CueTransferMode, transferred_cue};
 pub use engine::PlaybackEngine;
 pub use model::CueNumber;
 pub use model::{cue::*, playback::*, runtime::*};
 pub use runtime::PlaybackTelemetrySample;
+pub use source_evidence::{
+    PlaybackFamilyEntry, PlaybackFamilyEvidence, PlaybackFamilyFootprint, PlaybackFamilyRole,
+    PlaybackRetainedValue, PlaybackSourceHistory, PlaybackSourceOccurrence,
+};
 pub use timecode::*;
 pub use transition::attribute_uses_snap_transition;
 
@@ -54,10 +61,9 @@ pub(crate) use model::cue::{
     effective_cue_out_timing,
 };
 pub(crate) use model::runtime::{
-    PlaybackKey, TemporaryPlaybackKind, advance_chaser_steps, new_active_playback,
-    reset_manual_transition,
+    PlaybackKey, advance_chaser_steps, new_active_playback, reset_manual_transition,
 };
-pub(crate) use transition::interpolate;
+pub(crate) use transition::{interpolate, interpolate_pending};
 
 #[cfg(test)]
 mod tests;

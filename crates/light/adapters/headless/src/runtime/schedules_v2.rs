@@ -44,7 +44,9 @@ pub(super) async fn run_scheduler(
                     checked_after = now;
                     continue;
                 }
-                let Some(show) = current else {
+                // Show recovery runs none of the failed show, Schedules included; its claim
+                // records stay untouched until a loadable show is active.
+                let Some(show) = current.filter(|_| !state.active_show.in_recovery()) else {
                     checked_after = now;
                     continue;
                 };
@@ -63,7 +65,11 @@ pub(super) async fn run_scheduler(
 }
 
 fn interrupt_abandoned_claims(state: &AppState) {
-    let Some(show) = state.active_show.current() else {
+    let Some(show) = state
+        .active_show
+        .current()
+        .filter(|_| !state.active_show.in_recovery())
+    else {
         return;
     };
     match ActiveShowRepository::open(&show.path).and_then(|store| {
@@ -504,7 +510,7 @@ async fn create(
 ) -> Result<Json<wire::ScheduleMutationOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let action = ReplayAction::Create(request.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state.replay.lookup_schedule(&key, &action).await? {
@@ -568,7 +574,7 @@ async fn update(
 ) -> Result<Json<wire::ScheduleMutationOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::Update(id, request.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state.replay.lookup_schedule(&key, &replay_action).await? {
@@ -666,7 +672,7 @@ async fn duplicate(
 ) -> Result<Json<wire::ScheduleMutationOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::Duplicate(source_id, request.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state.replay.lookup_schedule(&key, &replay_action).await? {
@@ -733,7 +739,7 @@ async fn remove(
 ) -> Result<Json<wire::ScheduleMutationOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let replay_action = ReplayAction::Delete(id, request.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
     if let Some(outcome) = state.replay.lookup_schedule(&key, &replay_action).await? {
@@ -782,12 +788,23 @@ fn schedule_snapshot(
     show_id: light_core::ShowId,
     now: DateTime<Utc>,
 ) -> Result<wire::ScheduleSnapshot, ApiError> {
+    let recurrence = recurrence()?;
+    // Show recovery: the failed show's Schedules do not run, so none are served.
+    if state.active_show.in_recovery() {
+        return Ok(wire::ScheduleSnapshot {
+            show_id: show_id.0,
+            show_revision: 0,
+            timezone: recurrence.timezone_name().into(),
+            server_now: timestamp(now),
+            event_sequence: state.events.latest_sequence(),
+            schedules: Vec::new(),
+        });
+    }
     let entry = active_entry(state, show_id)?;
     let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let (show_revision, objects) = store
         .objects_with_portable_revision("schedule")
         .map_err(ApiError::store)?;
-    let recurrence = recurrence()?;
     let schedules = objects
         .into_iter()
         .map(|object| schedule_projection(&store, &recurrence, object, now))

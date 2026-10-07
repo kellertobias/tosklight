@@ -1,0 +1,748 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FamilyEncoderPagesSnapshot",
+  "description": "`GET /api/v2/programming/family-encoder-pages?fixture_ids=…` response.",
+  "type": "object",
+  "properties": {
+    "color_presentation": {
+      "description": "The per-desk presentation the Color pages were laid out with.",
+      "$ref": "#/$defs/ColorEncoderPresentation"
+    },
+    "families": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FamilyEncoderGroup"
+      }
+    },
+    "fixture_ids": {
+      "description": "The requested fixtures, in request order (duplicates kept).",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "semantic": {
+      "description": "True only when the runtime supports the semantic programming contract. A client uses\n`families` only then; otherwise its legacy normalized pages stay in force.",
+      "type": "boolean"
+    },
+    "semantic_programming_contract": {
+      "description": "The contract version the semantic pages require.",
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0
+    },
+    "show_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "supported_programming_contract": {
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0
+    }
+  },
+  "required": [
+    "semantic",
+    "supported_programming_contract",
+    "semantic_programming_contract",
+    "color_presentation",
+    "show_revision",
+    "fixture_ids",
+    "families"
+  ],
+  "$defs": {
+    "ColorEncoderPresentation": {
+      "description": "The desk's Color encoder presentation. Switching it changes layout only; it never converts,\nclears or re-authors a programmed Color value.",
+      "oneOf": [
+        {
+          "description": "Page 1 Red, Green, Blue, White Blend. The default operator view.",
+          "type": "string",
+          "const": "easy_rgbw"
+        },
+        {
+          "description": "Easy RGBW plus page 2 Amber, UV.",
+          "type": "string",
+          "const": "easy_rgbwauv"
+        },
+        {
+          "description": "Page 1 as Easy; page 2 Temperature, Duv, Wheel 1, Wheel 2.",
+          "type": "string",
+          "const": "advanced"
+        }
+      ]
+    },
+    "FamilyEncoderComponentSlot": {
+      "description": "One semantic component encoder.",
+      "type": "object",
+      "properties": {
+        "component": {
+          "$ref": "#/$defs/ProgrammingComponent"
+        },
+        "convention": {
+          "description": "Zoom only: the selection's common opening convention, when every profile declares it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammingOpeningConvention"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "descriptor": {
+          "description": "The compiled runtime descriptor of `component`, unchanged.",
+          "$ref": "#/$defs/ProgrammingComponentDescriptor"
+        },
+        "edit": {
+          "$ref": "#/$defs/FamilyEncoderEditKind"
+        },
+        "fixture_ids": {
+          "description": "Requested fixtures that carry this component's owner, in request order.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "id": {
+          "description": "Stable slot id, for example `position.pan`, `position.target.x`, `color.white_blend`.",
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "limits": {
+          "description": "The selection's common limits in descriptor units, when known.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammingAttributeBounds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limits_source": {
+          "$ref": "#/$defs/FamilyEncoderLimitsSource"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "component",
+        "descriptor",
+        "limits_source",
+        "edit",
+        "fixture_ids"
+      ]
+    },
+    "FamilyEncoderEditKind": {
+      "description": "How a slot is edited through `component_edits`.",
+      "oneOf": [
+        {
+          "description": "A typed scalar component edit (`set` or `relative`).",
+          "type": "string",
+          "const": "scalar"
+        },
+        {
+          "description": "A Target reference choice (`target { reference }`); not a scalar.",
+          "type": "string",
+          "const": "target_reference"
+        },
+        {
+          "description": "No typed component edit exists yet (Color wheels); the slot is display-only.",
+          "type": "string",
+          "const": "unavailable"
+        }
+      ]
+    },
+    "FamilyEncoderFamily": {
+      "description": "The family tab that owns a set of semantic pages. Focus hosts both the Focus and Zoom owners.",
+      "type": "string",
+      "enum": [
+        "position",
+        "color",
+        "focus"
+      ]
+    },
+    "FamilyEncoderGroup": {
+      "type": "object",
+      "properties": {
+        "family": {
+          "$ref": "#/$defs/FamilyEncoderFamily"
+        },
+        "fixture_ids": {
+          "description": "Requested fixtures carrying at least one owner of this family, in request order.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "owners": {
+          "description": "Backend owners authored from this family's pages (Focus: `focus` and `zoom`).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingOwner"
+          }
+        },
+        "pages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FamilyEncoderPage"
+          }
+        },
+        "replaces_attribute_prefixes": {
+          "description": "Registry attribute prefixes these pages replace (Color: `color.`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "replaces_attributes": {
+          "description": "Registry attributes these pages replace exactly.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reserved_pages": {
+          "description": "Page numbers kept for later content; a client renders nothing for them yet.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FamilyEncoderReservedPage"
+          }
+        }
+      },
+      "required": [
+        "family",
+        "owners",
+        "fixture_ids",
+        "replaces_attributes",
+        "replaces_attribute_prefixes",
+        "pages",
+        "reserved_pages"
+      ]
+    },
+    "FamilyEncoderLimitsSource": {
+      "description": "Where a slot's `limits` came from.",
+      "oneOf": [
+        {
+          "description": "The component descriptor's own bounded domain (for example Focus 0..1).",
+          "type": "string",
+          "const": "descriptor"
+        },
+        {
+          "description": "Every selected fixture's profile declares the same physical range.",
+          "type": "string",
+          "const": "selection"
+        },
+        {
+          "description": "Selected profiles disagree; no common limit is claimed (never an intersection guess).",
+          "type": "string",
+          "const": "mixed"
+        },
+        {
+          "description": "A selected profile declares no physical range for the component.",
+          "type": "string",
+          "const": "unknown"
+        },
+        {
+          "description": "The component is finite and has no published limit (Target offsets in metres).",
+          "type": "string",
+          "const": "unbounded"
+        }
+      ]
+    },
+    "FamilyEncoderPage": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "number": {
+          "description": "1-based page number within the family.",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "slots": {
+          "description": "Four slots in encoder order; `null` is the standard empty encoder.",
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/FamilyEncoderSlot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "number",
+        "label",
+        "slots"
+      ]
+    },
+    "FamilyEncoderReservation": {
+      "description": "Why a page number is reserved without content.",
+      "oneOf": [
+        {
+          "description": "Direct (native) Color pages 3/4, owned by TL-554.",
+          "type": "string",
+          "const": "native_color"
+        }
+      ]
+    },
+    "FamilyEncoderReservedPage": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "reason": {
+          "$ref": "#/$defs/FamilyEncoderReservation"
+        }
+      },
+      "required": [
+        "number",
+        "reason"
+      ]
+    },
+    "FamilyEncoderSlot": {
+      "description": "A slot of a semantic page: a component, or a registry attribute that keeps its normalized path.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "component"
+            }
+          },
+          "$ref": "#/$defs/FamilyEncoderComponentSlot",
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "A non-semantic registry attribute placed on a semantic page (Focus page: Softness).",
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "attribute"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "attribute",
+            "label"
+          ]
+        }
+      ]
+    },
+    "ProgrammingAttributeBounds": {
+      "type": "object",
+      "properties": {
+        "max": {
+          "type": "number",
+          "format": "float"
+        },
+        "min": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ]
+    },
+    "ProgrammingAuthoringCapability": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "verified_native_control",
+            "focus_parameter"
+          ]
+        },
+        {
+          "description": "The request can be authored even when a selected lamp cannot reproduce it.",
+          "type": "string",
+          "const": "semantic_intent"
+        }
+      ]
+    },
+    "ProgrammingColorComponent": {
+      "type": "string",
+      "enum": [
+        "red",
+        "green",
+        "blue",
+        "amber",
+        "hue",
+        "saturation",
+        "white_blend",
+        "temperature",
+        "duv",
+        "uv",
+        "relative_output"
+      ]
+    },
+    "ProgrammingComponent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "$ref": "#/$defs/ProgrammingColorComponent"
+            },
+            "kind": {
+              "type": "string",
+              "const": "color"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "color_wheel"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "$ref": "#/$defs/ProgrammingNativeColorBinding"
+            },
+            "kind": {
+              "type": "string",
+              "const": "native_color"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "pan"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tilt"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_reference"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_x"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_y"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_z"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "focus"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "zoom"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "ProgrammingComponentDescriptor": {
+      "type": "object",
+      "properties": {
+        "align": {
+          "type": "boolean"
+        },
+        "capability": {
+          "$ref": "#/$defs/ProgrammingAuthoringCapability"
+        },
+        "display_scale": {
+          "type": "number",
+          "format": "float"
+        },
+        "domain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammingScalarDomain"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dynamics": {
+          "type": "boolean"
+        },
+        "fine_step": {
+          "type": "number",
+          "format": "float"
+        },
+        "interpolation": {
+          "$ref": "#/$defs/ProgrammingScalarInterpolation"
+        },
+        "owner": {
+          "$ref": "#/$defs/ProgrammingOwner"
+        },
+        "role": {
+          "$ref": "#/$defs/ProgrammingComponentRole"
+        },
+        "spread": {
+          "type": "boolean"
+        },
+        "step": {
+          "type": "number",
+          "format": "float"
+        },
+        "unit": {
+          "$ref": "#/$defs/ProgrammingComponentUnit"
+        }
+      },
+      "required": [
+        "owner",
+        "role",
+        "unit",
+        "domain",
+        "step",
+        "fine_step",
+        "display_scale",
+        "interpolation",
+        "capability",
+        "spread",
+        "align",
+        "dynamics"
+      ]
+    },
+    "ProgrammingComponentRole": {
+      "type": "string",
+      "enum": [
+        "color_recipe",
+        "color_coordinate",
+        "color_orthogonal",
+        "color_wheel",
+        "native_color",
+        "angle",
+        "target",
+        "focus",
+        "zoom"
+      ]
+    },
+    "ProgrammingComponentUnit": {
+      "type": "string",
+      "enum": [
+        "percent",
+        "degrees",
+        "metres",
+        "kelvin",
+        "duv",
+        "factor",
+        "native_integer",
+        "selection"
+      ]
+    },
+    "ProgrammingNativeColorBinding": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "function_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "channel_id",
+        "function_id"
+      ]
+    },
+    "ProgrammingOpeningConvention": {
+      "type": "string",
+      "enum": [
+        "beam",
+        "field"
+      ]
+    },
+    "ProgrammingOwner": {
+      "type": "string",
+      "enum": [
+        "color",
+        "position",
+        "focus",
+        "zoom"
+      ]
+    },
+    "ProgrammingScalarDomain": {
+      "oneOf": [
+        {
+          "description": "Unknown fixture limits remain unknown. Signed angles and metres are not percentages.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "finite"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bounds": {
+              "$ref": "#/$defs/ProgrammingAttributeBounds"
+            },
+            "kind": {
+              "type": "string",
+              "const": "bounded"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "bounds"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bounds": {
+              "$ref": "#/$defs/ProgrammingAttributeBounds"
+            },
+            "kind": {
+              "type": "string",
+              "const": "cyclic"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "bounds"
+          ]
+        }
+      ]
+    },
+    "ProgrammingScalarInterpolation": {
+      "type": "string",
+      "enum": [
+        "linear",
+        "shortest_arc",
+        "reciprocal"
+      ]
+    }
+  }
+}

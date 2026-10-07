@@ -3,7 +3,9 @@
 use bytemuck::{Pod, Zeroable};
 use media_domain::display_region::{DisplayRegion, RegionRotation};
 use media_domain::geometry::{Size, layer_transform};
-use media_domain::{LayerState, MaskSource, MasterState, OutputId, Timestamp, geometry};
+use media_domain::{
+    LayerState, MaskSource, MasterState, MediaColor, OutputId, Timestamp, geometry,
+};
 
 use crate::texture::SourceTexture;
 
@@ -45,6 +47,7 @@ impl LayerUniform {
         now: Timestamp,
     ) -> Self {
         let transform = layer_transform(layer, source, output);
+        let color = MediaColor::of_layer(layer);
         let (sin, cos) = transform.rotation_degrees.to_radians().sin_cos();
         let mut effect_types = [0; 4];
         let mut effect_mixes = [0.0; 4];
@@ -137,14 +140,14 @@ impl LayerUniform {
             size: [transform.size.0, transform.size.1],
             rotation: [cos, sin],
             output: [output.width as f32, output.height as f32],
-            // Layer dimmer becomes the alpha of the layer tint.
+            // The color stage's linear tint; the layer dimmer rides independently in its alpha.
             tint: [
-                layer.tint.red,
-                layer.tint.green,
-                layer.tint.blue,
+                color.tint.red,
+                color.tint.green,
+                color.tint.blue,
                 layer.dimmer,
             ],
-            controls: [layer.grayscale, 0.0, 0.0, 0.0],
+            controls: [color.white_blend_amount(), 0.0, 0.0, 0.0],
             blur: [layer.blur.clamp(0.0, 1.0), 0.0, 0.0, 0.0],
             // A mask that is selected but not loaded reports no opacity, so the layer draws
             // unmasked rather than vanishing while its mask is on its way.
@@ -225,11 +228,13 @@ impl MasterUniform {
         // positive size and the master mask and shapers stay where the operator placed them.
         let (horizontal, vertical) = (flip_x * scale_x.signum(), flip_y * scale_y.signum());
         let (scale_x, scale_y) = (scale_x.abs(), scale_y.abs());
+        // The master has a tint but no White Blend control, so only the tint is packed.
+        let color = MediaColor::of_master(master);
         Self {
             tint: [
-                master.tint.red,
-                master.tint.green,
-                master.tint.blue,
+                color.tint.red,
+                color.tint.green,
+                color.tint.blue,
                 master.dimmer,
             ],
             flip_mask: [

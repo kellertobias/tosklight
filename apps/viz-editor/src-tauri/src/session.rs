@@ -31,6 +31,7 @@ pub struct Session {
     pub(crate) desk_save_gate: tokio::sync::Mutex<()>,
     pub(crate) pending_desk_save: Mutex<Option<crate::discovery::show_library::PendingDeskSave>>,
     document_generation: std::sync::atomic::AtomicU64,
+    pending_mvr: Mutex<Option<mvr_preview::PendingMvrImport>>,
     library_path: Mutex<Option<PathBuf>>,
     recent: Mutex<Option<RecentShow>>,
     pub(crate) desk_source: Mutex<Option<crate::discovery::DeskSource>>,
@@ -114,6 +115,9 @@ pub struct AttributeDescriptorDto {
 }
 
 type Answer<T> = Result<T, String>;
+
+#[path = "session/mvr_preview.rs"]
+mod mvr_preview;
 
 impl Session {
     pub fn set_library_path(&self, path: Option<PathBuf>) {
@@ -273,6 +277,7 @@ impl Session {
         let document = self.attach_library(document)?;
         let summary = summarize(&document)?;
         self.source.open(document);
+        *self.pending_mvr.lock() = None;
         self.document_generation
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         *self.desk_source.lock() = std::fs::read(path.with_extension("show.desk-source.json"))

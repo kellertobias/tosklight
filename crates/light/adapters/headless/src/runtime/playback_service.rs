@@ -37,6 +37,7 @@ mod support;
 pub(super) use desk::ChangePage;
 use ports::ServerPlaybackPorts;
 pub(super) use projection::automatic_changes as automatic_projection_changes;
+pub(in crate::runtime) use projection::prepared_runtime_projections;
 
 use configured_controls::configured_control_definition;
 use conversion::{

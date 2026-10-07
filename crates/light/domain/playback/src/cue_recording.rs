@@ -298,17 +298,15 @@ fn add_missing_at(cue: &mut Cue, content: CueRecordingContent) -> AppliedTarget 
             !groups.contains(&(change.group_id.clone(), change.attribute.clone()))
         }),
     );
-    let dynamics = cue
-        .dynamic_changes
-        .iter()
-        .map(dynamic_change_key)
-        .collect::<HashSet<_>>();
-    cue.dynamic_changes.extend(
-        content
+    for change in content.dynamic_changes {
+        if !cue
             .dynamic_changes
-            .into_iter()
-            .filter(|change| !dynamics.contains(&dynamic_change_key(change))),
-    );
+            .iter()
+            .any(|stored| dynamic_change_replaces(&change, stored))
+        {
+            cue.dynamic_changes.push(change);
+        }
+    }
     stored_target(cue, false)
 }
 
@@ -467,12 +465,10 @@ fn merge_group_changes(stored: &mut Vec<GroupCueChange>, incoming: Vec<GroupCueC
 }
 
 fn merge_dynamic_changes(stored: &mut Vec<CueDynamicChange>, incoming: Vec<CueDynamicChange>) {
-    let addresses = incoming
-        .iter()
-        .map(dynamic_change_key)
-        .collect::<HashSet<_>>();
-    stored.retain(|change| !addresses.contains(&dynamic_change_key(change)));
-    stored.extend(incoming);
+    for change in incoming {
+        stored.retain(|existing| !dynamic_change_replaces(&change, existing));
+        stored.push(change);
+    }
 }
 
 fn subtract_fixture_changes(stored: &mut Vec<CueChange>, incoming: &[CueChange]) {
@@ -493,22 +489,34 @@ fn subtract_group_changes(stored: &mut Vec<GroupCueChange>, incoming: &[GroupCue
 }
 
 fn subtract_dynamic_changes(stored: &mut Vec<CueDynamicChange>, incoming: &[CueDynamicChange]) {
-    let addresses = incoming
-        .iter()
-        .map(dynamic_change_key)
-        .collect::<HashSet<_>>();
-    stored.retain(|change| !addresses.contains(&dynamic_change_key(change)));
+    stored.retain(|change| {
+        !incoming
+            .iter()
+            .any(|value| dynamic_change_replaces(value, change))
+    });
 }
 
-fn dynamic_change_key(change: &CueDynamicChange) -> (FixtureId, AttributeKey, Option<Uuid>) {
-    let instance_link = match &change.value {
-        light_dynamics::DynamicSemanticValue::DynamicOn { instance_link, .. }
-        | light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. } => {
-            Some(*instance_link)
-        }
-        light_dynamics::DynamicSemanticValue::Static { .. }
-        | light_dynamics::DynamicSemanticValue::FixAt { .. }
-        | light_dynamics::DynamicSemanticValue::Release => None,
-    };
-    (change.fixture_id, change.attribute.clone(), instance_link)
+fn dynamic_change_key(
+    change: &CueDynamicChange,
+) -> (FixtureId, AttributeKey, light_dynamics::DynamicTrackKey) {
+    (
+        change.fixture_id,
+        change.attribute.clone(),
+        change.value.track_key(),
+    )
+}
+
+fn dynamic_change_replaces(incoming: &CueDynamicChange, stored: &CueDynamicChange) -> bool {
+    incoming.value.replaces_address(
+        incoming.fixture_id,
+        &incoming.attribute,
+        stored.value.track_key(),
+        stored.fixture_id,
+        &stored.attribute,
+    )
+}
+
+/// Rebuild derived Cue-only restoration rows after editing explicit source events.
+pub fn refresh_cue_only_restorations(cue_list: &mut CueList) {
+    restoration::regenerate_automatic_restorations(cue_list);
 }

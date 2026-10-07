@@ -535,6 +535,9 @@ fn patched_configuration(
     if let Some(value) = patch.pool_presentation {
         configuration.pool_presentation = application_pool_presentation(value);
     }
+    if let Some(value) = patch.color_presentation {
+        configuration.color_presentation = value;
+    }
     if let Some(value) = patch.file_manager_system_picker_fallback {
         configuration.file_manager_system_picker_fallback = value;
     }

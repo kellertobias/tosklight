@@ -717,3 +717,6 @@ fn cue_list(id: CueListId, cue_id: Uuid, level: f32) -> Value {
     })
     .unwrap()
 }
+
+#[path = "cue_semantic_storage_tests.rs"]
+mod semantic_storage;

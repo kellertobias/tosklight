@@ -1,4 +1,227 @@
 use super::*;
+#[path = "output_runtime_tests/prepared_definitions.rs"]
+mod prepared_definitions;
+#[path = "output_runtime_tests/reassert.rs"]
+mod reassert;
+#[path = "output_runtime_tests/watermark.rs"]
+mod watermark;
+
+#[test]
+fn held_output_retains_matching_dynamic_sources_until_a_new_frame_is_admitted() {
+    let clock = Arc::new(ManualClock::new(fixed_test_time()));
+    let (state, data_dir) = test_state_with_clock(clock.clone());
+    let programmers = state.programming.programmers();
+    let session = SessionId::new();
+    programmers.start(session);
+    let first = light_core::FixtureId::new();
+    let added = light_core::FixtureId::new();
+    let definition = Arc::new(command_test_dynamic(Uuid::new_v4(), 1));
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            dynamics: vec![definition.as_ref().clone()].into(),
+            ..Default::default()
+        })
+        .unwrap();
+    let start = |fixture_id| {
+        assert!(programmers.apply_dynamic_values(
+            session,
+            &[light_programmer::DynamicProgrammerValueMutation::Set {
+                fixture_id,
+                attribute: light_core::AttributeKey::intensity(),
+                value: light_dynamics::DynamicSemanticValue::DynamicOn {
+                    instance_link: Uuid::new_v4(),
+                    lane_id: definition.lanes[0].id,
+                    dynamic: light_dynamics::DynamicReference {
+                        dynamic_id: Some(definition.id),
+                        last_known_pool_number: 1,
+                        embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
+                            definition: Arc::clone(&definition),
+                        },
+                    },
+                    overrides: light_dynamics::DynamicInstanceOverrides {
+                        size: 1.0,
+                        speed_multiplier: light_dynamics::Rational::ONE,
+                        phase_offset_degrees: 0.0,
+                    },
+                    timing: Default::default(),
+                },
+            },],
+            None
+        ));
+    };
+    let render = || {
+        state
+            .output
+            .render_with_playback_events(
+                &state.active_show.output_projection(),
+                &state.playback.render_capability(),
+                state.output.render_options(),
+            )
+            .unwrap()
+    };
+    let scope = light_wire::v2::visualization::VisualizationScope { show_id: None };
+    start(first);
+    let initial = render();
+    state.output.render_frames_and_publish(&initial, scope);
+    let retained = state.output.latest_visualization_frame().unwrap();
+    let old_sources = retained.dynamics.as_ref().unwrap();
+    assert_eq!(old_sources.samples.len(), 1);
+    assert_eq!(old_sources.programmer_values.len(), 1);
+    assert_eq!(old_sources.runtime.instances.len(), 1);
+    let old_catalogue = old_sources.origins.snapshot();
+    assert!(!old_catalogue.records.is_empty());
+    // This constant lane has no Current/activation-underlay query. Publication must not
+    // evaluate an additional ordinary frame merely for optional observer detail.
+    assert!(old_sources.ordinary.is_none());
+
+    let hold = state.output.begin_transition_hold();
+    start(added);
+    clock.advance_millis(125);
+    let held = render();
+    let held_sources = held.dynamics.as_ref().unwrap();
+    assert_eq!(held_sources.samples.len(), 2);
+    assert_eq!(held_sources.programmer_values.len(), 2);
+    assert!(held_sources.origins.snapshot().records.len() > old_catalogue.records.len());
+    state.output.render_frames_and_publish(&held, scope);
+    let still_retained = state.output.latest_visualization_frame().unwrap();
+    assert!(Arc::ptr_eq(&retained, &still_retained));
+    assert!(Arc::ptr_eq(
+        old_sources,
+        still_retained.dynamics.as_ref().unwrap()
+    ));
+    assert_eq!(old_sources.origins.snapshot(), old_catalogue);
+    assert!(
+        retained
+            .values
+            .value(added, &light_core::AttributeKey::intensity())
+            .is_none()
+    );
+
+    drop(hold);
+    clock.advance_millis(125);
+    let admitted = render();
+    let admitted_sources = Arc::clone(admitted.dynamics.as_ref().unwrap());
+    // Changing the current control after capture cannot relabel the completed output.
+    state.output.set_transition_grand_master(0.5);
+    state.output.render_frames_and_publish(&admitted, scope);
+    let latest = state.output.latest_visualization_frame().unwrap();
+    assert!(latest.sequence > retained.sequence);
+    assert_eq!(latest.sampled_at, admitted.rendered.sampled_at);
+    assert_eq!(latest.options.grand_master, admitted.options.grand_master);
+    assert_eq!(latest.options.grand_master, 1.0);
+    assert!(Arc::ptr_eq(
+        latest.dynamics.as_ref().unwrap(),
+        &admitted_sources
+    ));
+    assert!(
+        latest
+            .values
+            .value(added, &light_core::AttributeKey::intensity())
+            .is_some()
+    );
+    // Cold catalogue capture/pruning and later publication cannot change an older reader.
+    state.output.dynamic_source_checkpoint().unwrap();
+    assert_eq!(old_sources.origins.snapshot(), old_catalogue);
+    assert_eq!(old_sources.samples.len(), 1);
+    assert_eq!(old_sources.programmer_values.len(), 1);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn dynamic_source_checkpoint_restore_is_atomic_for_invalid_catalogue_and_runtime() {
+    let (state, data_dir) = test_state();
+    let programmers = state.programming.programmers();
+    let session = SessionId::new();
+    programmers.start(session);
+    let fixture = light_core::FixtureId::new();
+    let definition = command_test_dynamic(Uuid::new_v4(), 1);
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            dynamics: vec![definition.clone()].into(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(programmers.apply_dynamic_values(
+        session,
+        &[light_programmer::DynamicProgrammerValueMutation::Set {
+            fixture_id: fixture,
+            attribute: light_core::AttributeKey::intensity(),
+            value: light_dynamics::DynamicSemanticValue::DynamicOn {
+                instance_link: Uuid::new_v4(),
+                lane_id: definition.lanes[0].id,
+                dynamic: light_dynamics::DynamicReference {
+                    dynamic_id: Some(definition.id),
+                    last_known_pool_number: 1,
+                    embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
+                        definition: Arc::new(definition)
+                    },
+                },
+                overrides: light_dynamics::DynamicInstanceOverrides {
+                    size: 1.0,
+                    speed_multiplier: light_dynamics::Rational::ONE,
+                    phase_offset_degrees: 0.0,
+                },
+                timing: Default::default(),
+            },
+        },],
+        None
+    ));
+    state
+        .output
+        .render_with_playback_events(
+            &state.active_show.output_projection(),
+            &state.playback.render_capability(),
+            Default::default(),
+        )
+        .unwrap();
+    let captured = state.output.dynamic_source_checkpoint().unwrap();
+    assert_eq!(captured.runtime.instances.len(), 1);
+    assert!(!captured.runtime.instances[0].last_sample_values.is_empty());
+    assert!(!captured.origins.as_ref().unwrap().records.is_empty());
+    let roundtrip = serde_json::from_str(&serde_json::to_string(&captured).unwrap()).unwrap();
+    state
+        .output
+        .restore_dynamic_source_checkpoint(roundtrip)
+        .unwrap();
+    assert_eq!(state.output.dynamic_source_checkpoint().unwrap(), captured);
+
+    let mut missing = captured.clone();
+    missing.origins = None;
+    assert!(
+        state
+            .output
+            .restore_dynamic_source_checkpoint(missing)
+            .is_err()
+    );
+    assert_eq!(state.output.dynamic_source_checkpoint().unwrap(), captured);
+
+    let mut malformed = captured.clone();
+    malformed.runtime.instances[0].controllers[0].size = -1.0;
+    state
+        .output
+        .engine()
+        .reserve_playback_source_occurrence_watermark(17);
+    malformed
+        .origins
+        .as_mut()
+        .unwrap()
+        .records
+        .extend(watermark::checkpoint(900).origins.unwrap().records);
+    assert!(
+        state
+            .output
+            .restore_dynamic_source_checkpoint(malformed)
+            .is_err()
+    );
+    assert_eq!(state.output.dynamic_source_checkpoint().unwrap(), captured);
+    assert_eq!(
+        state.output.engine().playback_source_occurrence_watermark(),
+        17
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
 
 #[tokio::test]
 async fn legacy_master_update_publishes_one_typed_change_and_v2_repairs_it() {

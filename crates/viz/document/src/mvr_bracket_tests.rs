@@ -100,20 +100,25 @@ fn compiled(profile: &FixtureProfile, hang: Hang) -> viz_project::ScenePlan {
         profile: Arc::new(profile.clone()),
         mode_id: profile.modes[0].id,
         instances: vec![viz_project::PhysicalInstance {
+            color_calibration: None,
+            position_calibration: None,
             model_scale: light_fixture::resolved_model_scale(hang.scale),
             scenery_options: Default::default(),
             scenery_size_metres: None,
             instance_id: Uuid::new_v4(),
             name: profile.name.clone(),
             split_patches: vec![(1, Some((1, 1)))],
-            // Desk millimetres `(x, y, z)` are renderer metres `(x, z, −y)`; the rotation is
-            // `(x, z, y)` — the same mapping `viz_desk::transform` applies.
+            // Desk millimetres become renderer metres; rotation changes basis once.
             position: Vec3::new(
                 hang.location.x as f32,
                 hang.location.z as f32,
                 -(hang.location.y as f32),
             ) / 1000.0,
-            rotation_degrees: Vec3::new(hang.rotation.x, hang.rotation.z, hang.rotation.y),
+            rotation_degrees: viz_project::viz_scene::desk_rotation_to_world([
+                hang.rotation.x,
+                hang.rotation.y,
+                hang.rotation.z,
+            ]),
             invert_pan: false,
             invert_tilt: false,
             bracket_angle: hang.bracket,

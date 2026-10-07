@@ -1,5 +1,6 @@
 use super::super::{ApiError, AppState, DeskContext, Session, ShowContext, session_for_desk};
 use super::{ServerProgrammingCueDeletionPorts, cue_deletion_wire, routes::http_context};
+use crate::tolerant_json::TolerantJson;
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, State, rejection::JsonRejection},
@@ -25,7 +26,7 @@ async fn delete_cue(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    request: Result<Json<CueDeletionRequest>, JsonRejection>,
+    request: Result<TolerantJson<CueDeletionRequest>, JsonRejection>,
 ) -> Result<Response, CueDeletionHttpError> {
     let session = session_for_desk(&state, &headers, &desk).map_err(CueDeletionHttpError::api)?;
     show.verify(&state).map_err(CueDeletionHttpError::api)?;
@@ -37,7 +38,7 @@ async fn delete_cue(
         .ok_or_else(|| CueDeletionHttpError::api(ApiError::conflict("no show is active")))?;
     let expected_revision =
         super::super::parse_if_match(&headers).map_err(CueDeletionHttpError::api)?;
-    let Json(request) = request.map_err(CueDeletionHttpError::json)?;
+    let TolerantJson(request) = request.map_err(CueDeletionHttpError::json)?;
     super::routes::validate_request_id(&request.request_id).map_err(CueDeletionHttpError::api)?;
     let (request_id, command) = cue_deletion_wire::application_command(show_id, request)
         .map_err(CueDeletionHttpError::invalid)?;
@@ -53,8 +54,12 @@ async fn run_action(
     session: Session,
     action: ActionEnvelope<light_application::ProgrammingCueDeletionRequest>,
 ) -> Result<light_application::ProgrammingCueDeletionResult, CueDeletionHttpError> {
+    // ProgrammingService takes Programmer+desk. Acquire activation before those gates,
+    // avoiding a cycle with a Patch/install already owning activation and waiting Programmer.
+    let activation = state.active_show.acquire().await;
     tokio::task::spawn_blocking(move || {
-        let ports = ServerProgrammingCueDeletionPorts::new(state.clone(), session, false);
+        let _activation = activation;
+        let ports = ServerProgrammingCueDeletionPorts::with_activation_held(state.clone(), session);
         state
             .programming
             .handle_cue_deletion(action, &state.active_show, &ports)

@@ -256,7 +256,7 @@ async fn programmer_values_actions_are_atomic_revisioned_replay_safe_and_sparse_
                 {
                     "type": "set_group",
                     "group_id": "1",
-                    "attribute": "pan",
+                    "attribute": "focus",
                     "value": {"kind": "normalized", "value": 0.25}
                 }
             ]
@@ -332,7 +332,7 @@ async fn programmer_values_over_http_are_the_desks_from_every_surface() {
         "action": {
             "type": "set_group",
             "group_id": "1",
-            "attribute": "pan",
+            "attribute": "focus",
             "value": {"kind": "normalized", "value": 0.7}
         }
     });
@@ -700,9 +700,6 @@ fn native_hsi_color_range_fixture(number: u32) -> light_fixture::PatchedFixture 
         snap: false,
         reacts_to_virtual_intensity: false,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: false,
-        reacts_to_group_master: false,
-        reacts_to_grand_master: false,
         behavior: light_fixture::ChannelBehavior::Controlled,
         functions: vec![],
     })
@@ -740,7 +737,14 @@ fn programmer_color_values(
 
 #[tokio::test]
 async fn color_range_resolves_rgb_and_cmy_channels_server_side_in_selection_order() {
-    let scenario = CommandHttpScenario::new().await;
+    let scenario = CommandHttpScenario::from_state(test_state_with_programming_contract(
+        ProgrammerRegistry::default(),
+        None,
+        0,
+    ))
+    .await;
+    // TL-552 follow-up: the legacy Color dialog's Direct RGB/CMY channel fan-out is the older
+    // (contract 0) runtime's behaviour; contract 1 refuses it (`live_legacy_write_gate_tests`).
     let rgb_first = color_range_fixture(1, &["color.red", "color.green", "color.blue"]);
     let cmy_middle = color_range_fixture(2, &["color.cyan", "color.magenta", "color.yellow"]);
     let rgb_last = color_range_fixture(3, &["color.red", "color.green", "color.blue"]);
@@ -978,7 +982,14 @@ async fn color_picker_persists_canonical_color_and_renders_native_hsi_channels()
 
 #[tokio::test]
 async fn color_range_supports_a_full_revolution_back_to_the_start_color() {
-    let scenario = CommandHttpScenario::new().await;
+    let scenario = CommandHttpScenario::from_state(test_state_with_programming_contract(
+        ProgrammerRegistry::default(),
+        None,
+        0,
+    ))
+    .await;
+    // TL-552 follow-up: the legacy Color dialog's Direct RGB/CMY channel fan-out is the older
+    // (contract 0) runtime's behaviour; contract 1 refuses it (`live_legacy_write_gate_tests`).
     let fixtures: Vec<_> = (1..=3)
         .map(|number| color_range_fixture(number, &["color.red", "color.green", "color.blue"]))
         .collect();
@@ -1124,7 +1135,7 @@ async fn indexed_preset_uses_each_embedded_profile_raw_value_immediately() {
     second.fixture_id = light_core::FixtureId::new();
     second.fixture_number = Some(2);
     second.address = Some(3);
-    let second_profile = second.definition.profile_snapshot.as_mut().unwrap();
+    let second_profile = second.definition.profile_snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap();
     let light_fixture::ChannelFunctionBehavior::Indexed { raw_value, .. } =
         &mut second_profile.modes[0].channels[0].functions[0].behavior
     else {

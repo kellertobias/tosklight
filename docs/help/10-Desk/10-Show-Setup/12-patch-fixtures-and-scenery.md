@@ -87,7 +87,32 @@ the range. Rotation is ±180° about its middle value.
 
 ## Show Patch views
 
-**Fixtures**, **Media Servers**, and **Tracking** are tabs at the top right of Show Patch, next to **⚙** Settings. The tabs and **⚙** stay in the same place on all three views; a narrow window shortens the Fixtures actions instead. Media Servers and Tracking each scroll as one page with the same inner margins as Settings, so their last controls stay reachable on a short display. **⚙** opens the Show Patch Settings on the page for the current view: **Columns** for the Fixtures table, **Media Servers** for the thumbnail cache, and **Tracking** for the PosiStageNet source.
+**Fixtures**, **Points**, **Media Servers**, and **Tracking** are tabs at the top right of Show Patch, next to **⚙** Settings. The tabs and **⚙** stay in the same place on all four views; a narrow window shortens the Fixtures actions instead. Points, Media Servers and Tracking each scroll as one page with the same inner margins as Settings, so their last controls stay reachable on a short display. **⚙** opens the Show Patch Settings on the page for the current view: **Columns** for the Fixtures table (also from Points, which has no settings of its own), **Media Servers** for the thumbnail cache, and **Tracking** for the PosiStageNet source.
+
+## Points
+
+**Show Patch > Points** lists every 3D Point of the show in fixture ID order: the places the Position encoders aim at.
+A Point is an ordinary **ToskLight → 3D Point** fixture, so it keeps one identity whether it has a
+DMX address, has none, or is moved by a tracker, and it is saved with the show like any fixture.
+
+**+ Create Point**, beside the view tabs, adds an aim Point without a DMX address at the stage
+origin. It takes the next fixture ID after the highest one in the show and is named **Point 1**,
+**Point 2** and so on; the new row is highlighted. The same happens when you choose **Create Point**
+from the Position **Point** encoder, which opens this view.
+
+Each row shows:
+
+| Column | Meaning |
+| --- | --- |
+| **ID** | The Point's fixture ID. Change it in **Fixtures** with **Set fixture ID**. |
+| **Name** | Type a new name and press Enter, or use the keyboard button. The Point encoder and the Position Reference column use this name. |
+| **X**, **Y**, **Z** | Where the Point rests on stage, in metres. **Point X/Y/Z** on the Point's own encoders, a cue or a tracker move it from there. |
+| **Patch** | **Unpatched**, or the `universe.address` it sends its pose to. Patch or unpatch it in **Fixtures**. |
+| **Tracking** | The PosiStageNet tracker bound to it, or —. Bind trackers in **Tracking**. |
+
+**Delete** asks once more with **Confirm delete** before the Point is removed. Programming that still
+aims at it keeps the reference and reads **Missing point** on the Point encoder until you choose
+another Point; fixtures hung on it read **None** in Position Reference.
 
 ## Patched Media Servers
 
@@ -150,7 +175,7 @@ The placement dialog shows all 512 addresses of the selected universe as a scrol
 
 The combined **MIB** cell shows **Off** or one non-negative delay in seconds. `0 s` means Move in Black is enabled with no delay and is distinct from Off. One SET action writes enabled state and millisecond delay atomically; fractional seconds are accepted when representable.
 
-The two-row **Masters** cell shows Group Masters and Grand Master participation. Its one editor chooses **Not controlled**, **Group Master**, **Grand Master**, or **Both** and atomically applies the eligible policies. Ignoring a master is an intentional live-output exception: eligible intensity channels can remain live while that master is reduced. It does not bypass Blackout, output-route disable, hazardous-fixture safety, or emergency suppression. Multi-patch rows show this logical-fixture value as shared.
+The two-row **Masters** cell shows Group Masters and Grand Master participation. Its one editor chooses **Not controlled**, **Group Master**, **Grand Master**, or **Both** and atomically applies the eligible policies. A fixture is eligible when its mode has a level channel (Intensity, Volume) or a channel that follows the virtual intensity: masters scale the level parameters before DMX, and other channels follow them only through the virtual intensity. Ignoring a master is an intentional live-output exception: the fixture's levels remain live while that master is reduced. It does not bypass Blackout, output-route disable, hazardous-fixture safety, or emergency suppression. Multi-patch rows show this logical-fixture value as shared.
 
 The two-row **Pan / Tilt** cell shows each physical instance's inversion. Its one editor chooses **None**, **Invert Pan**, **Invert Tilt**, or **Invert Both** without changing Programmer, Preset, Cue, or tracking values. Inverted maps 0% to the high endpoint and 100% to the low endpoint while leaving 50% unchanged. The main fixture and each multi-patch instance can use different values. Inapplicable axes stay visibly unavailable and retain their dormant value.
 

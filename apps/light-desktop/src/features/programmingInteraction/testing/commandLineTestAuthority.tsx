@@ -33,6 +33,7 @@ export function createCommandLineTestAuthority({
 		cursor: 1,
 		projection: {
 			deskId,
+			alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
 			commandLine: projection,
 			selection: {
 				selected: [],

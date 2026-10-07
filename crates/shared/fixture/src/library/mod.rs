@@ -3,9 +3,11 @@ mod gel_catalog;
 mod migration;
 mod package_io;
 mod profiles;
+mod source;
 
 pub use attribute_mapping::*;
 pub use gel_catalog::*;
+pub use source::*;
 
 use crate::FixtureError;
 use rusqlite::Connection;
@@ -38,7 +40,7 @@ impl FixtureLibrary {
              PRAGMA foreign_keys=ON;
              CREATE TABLE IF NOT EXISTS fixture_definitions(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,model TEXT NOT NULL,mode TEXT NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(id,revision));
              CREATE TABLE IF NOT EXISTS fixture_profiles(id TEXT NOT NULL,revision INTEGER NOT NULL,manufacturer TEXT NOT NULL,name TEXT NOT NULL,profile_json TEXT NOT NULL,reserved_source TEXT,PRIMARY KEY(id,revision));
-             CREATE TABLE IF NOT EXISTS fixture_profile_sources(profile_id TEXT NOT NULL,profile_revision INTEGER NOT NULL,source_gdtf BLOB NOT NULL,PRIMARY KEY(profile_id,profile_revision));
+             CREATE TABLE IF NOT EXISTS fixture_profile_sources(profile_id TEXT NOT NULL,profile_revision INTEGER NOT NULL,source_gdtf BLOB NOT NULL,source_profile_fingerprint TEXT,PRIMARY KEY(profile_id,profile_revision));
              CREATE TABLE IF NOT EXISTS fixture_profile_legacy_sources(profile_id TEXT NOT NULL,profile_revision INTEGER NOT NULL,legacy_id TEXT NOT NULL,legacy_revision INTEGER NOT NULL,definition_json TEXT NOT NULL,source_gdtf BLOB,PRIMARY KEY(profile_id,profile_revision,legacy_id,legacy_revision));
              CREATE TABLE IF NOT EXISTS fixture_profile_legacy_map(legacy_id TEXT NOT NULL,legacy_revision INTEGER NOT NULL,profile_id TEXT NOT NULL,profile_revision INTEGER NOT NULL,PRIMARY KEY(legacy_id,legacy_revision));
              CREATE TABLE IF NOT EXISTS fixture_profile_migration_failures(legacy_id TEXT NOT NULL,legacy_revision INTEGER NOT NULL,error TEXT NOT NULL,PRIMARY KEY(legacy_id,legacy_revision));
@@ -55,6 +57,17 @@ impl FixtureLibrary {
         {
             conn.execute(
                 "ALTER TABLE fixture_definitions ADD COLUMN source_gdtf BLOB",
+                [],
+            )?;
+        }
+        // Existing source archives have no reliable association with the editable profile.
+        // Leave their fingerprint NULL; only an explicit attachment can establish one.
+        if conn
+            .prepare("SELECT source_profile_fingerprint FROM fixture_profile_sources LIMIT 0")
+            .is_err()
+        {
+            conn.execute(
+                "ALTER TABLE fixture_profile_sources ADD COLUMN source_profile_fingerprint TEXT",
                 [],
             )?;
         }

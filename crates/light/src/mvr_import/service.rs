@@ -31,6 +31,15 @@ impl MvrImportService {
         let document =
             self.active_show
                 .snapshot(&envelope.context, envelope.command.show_id, ports)?;
+        if let Some(expected) = envelope.context.expected_revision
+            && expected != document.patch_revision().value()
+        {
+            return Err(ActionError::new(
+                ActionErrorKind::Conflict,
+                "destination patch changed after MVR preview; preview the archive again",
+            )
+            .at_revision(document.patch_revision().value()));
+        }
         let source_show_revision = document.revision();
         let source_patch_revision = document.patch_revision();
         let planned = plan_import(&document, envelope.context, &envelope.command)?;

@@ -127,3 +127,11 @@ export type {
 	SplitPatch,
 	VersionedObject,
 } from "./wire";
+
+export { defaultPositionCalibration, positionCalibrationError } from "./positionCalibration";
+export type { InstalledPositionCalibration } from "./positionCalibration";
+
+export * from "./colorCalibration";
+
+export type {PositionCalibrationIdentity,PositionCalibrationContext,InstalledAxisCalibration,InstalledAxisOverrides} from "./positionCalibration";
+export {positionCalibrationIdentityError,axisOverridesError,positionCalibrationIsStale} from "./positionCalibration";

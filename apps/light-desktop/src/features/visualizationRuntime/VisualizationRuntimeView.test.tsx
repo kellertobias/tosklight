@@ -129,13 +129,14 @@ describe("VisualizationRuntimeProvider", () => {
 				["normal", "preload"],
 				4,
 				false,
+				false,
 			),
 		);
 
 		rendered.rerender(provider(<Probe lane="preload" />, transport));
 
 		await waitFor(() =>
-			expect(updateClaims).toHaveBeenLastCalledWith(["preload"], 4, false),
+			expect(updateClaims).toHaveBeenLastCalledWith(["preload"], 4, false, false),
 		);
 	});
 
@@ -232,7 +233,7 @@ describe("VisualizationRuntimeProvider", () => {
 		await waitFor(() =>
 			expect(mirrorTransport.openStream).toHaveBeenCalledOnce(),
 		);
-		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 4, false);
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 4, false, false);
 		act(() => observer?.snapshot("normal", snapshot("normal")));
 		await waitFor(() =>
 			expect(screen.getByText("normal:ready:1")).toBeInTheDocument(),

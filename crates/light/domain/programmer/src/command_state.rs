@@ -85,6 +85,7 @@ impl CommandLineState {
 pub struct ProgrammerInteractionState {
     pub command_line: CommandLineState,
     pub selection: ProgrammerSelection,
+    pub alignment: crate::ProgrammerAlignmentProjection,
 }
 
 /// Lightweight desk-context state used to detect sparse interaction changes.
@@ -92,6 +93,7 @@ pub struct ProgrammerInteractionState {
 pub struct ProgrammerInteractionContextVersion {
     pub command_line: CommandLineState,
     pub selection_revision: u64,
+    pub alignment: crate::ProgrammerAlignmentProjection,
 }
 
 /// Lightweight interaction metadata for change detection without cloning ordered selections.
@@ -99,6 +101,7 @@ pub struct ProgrammerInteractionContextVersion {
 pub struct ProgrammerInteractionVersion {
     pub command_line: CommandLineState,
     pub selection_revision: u64,
+    pub alignment: crate::ProgrammerAlignmentProjection,
     pub capture_mode: ProgrammerCaptureMode,
 }
 
@@ -131,6 +134,7 @@ impl ProgrammerRegistry {
         Some(ProgrammerInteractionVersion {
             command_line: self.command_state.read().clone(),
             selection_revision: self.selection_context.read().revision,
+            alignment: self.alignment_projection(),
             capture_mode,
         })
     }
@@ -149,6 +153,7 @@ impl ProgrammerRegistry {
         ProgrammerInteractionContextVersion {
             command_line: self.command_state.read().clone(),
             selection_revision: self.selection_context.read().revision,
+            alignment: self.alignment_projection(),
         }
     }
 
@@ -168,6 +173,7 @@ impl ProgrammerRegistry {
         Some(ProgrammerInteractionState {
             command_line: self.command_state.read().clone(),
             selection: self.interaction_selection(),
+            alignment: self.alignment_projection(),
         })
     }
 

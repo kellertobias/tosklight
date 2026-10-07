@@ -292,8 +292,10 @@ for (const viewport of VIEWPORTS) {
 			path: `${artifactPaths.results}/tl-446-mode-color-${viewport.name}.png`,
 		});
 
+		// Emitters & Motion also holds the physical Position bindings, so it is taller than the
+		// window; like Color, only the body scrolls.
 		await openTab(mode, "Emitters & Motion");
-		expect(await scrollingRegions(mode)).toEqual([]);
+		expect(await scrollingRegions(mode)).toEqual(["fixture-mode-editor-body y"]);
 	});
 
 	test(`TL-446 @ui › the ${viewport.name} channel mapping window scrolls only its function list`, async ({
@@ -380,8 +382,11 @@ test("TL-447 @ui › the Sun Strip configures the color of each of its ten pixel
 	);
 	const mode = await openModeEditor(page, editor, "30 Channel");
 	await openTab(mode, "Color");
-	const sections = mode.locator(".fixture-color-editor > section");
-	// The shared master head plus ten pixels, each pixel with its own additive system.
+	const sections = mode.locator(
+		".fixture-color-editor > section:not(.fixture-color-physical)",
+	);
+	// The shared master head plus ten pixels, each pixel with its own additive system. The
+	// physical optical paths follow them in a section of their own.
 	await expect(sections).toHaveCount(11);
 	for (let pixel = 1; pixel <= 10; pixel++) {
 		const section = sections.nth(pixel);

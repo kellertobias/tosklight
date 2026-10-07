@@ -195,6 +195,7 @@ fn alignment_belongs_to_the_desk_is_transactional_and_stays_runtime_only() {
     registry
         .activate_alignment(first, ProgrammerAlignmentMode::Left)
         .unwrap();
+    let active_projection = registry.alignment_projection();
     assert!(
         registry.alignment(second).is_some(),
         "Align is the desk's state, so a second surface shows it too"
@@ -206,6 +207,7 @@ fn alignment_belongs_to_the_desk_is_transactional_and_stays_runtime_only() {
     });
     assert_eq!(result, Err("reject"));
     assert!(registry.alignment(first).is_some());
+    assert_eq!(registry.alignment_projection(), active_projection);
 
     assert!(registry.attach_command_context(second, first));
     assert_eq!(registry.alignment(second), registry.alignment(first));
@@ -215,4 +217,52 @@ fn alignment_belongs_to_the_desk_is_transactional_and_stays_runtime_only() {
     let restored = ProgrammerRegistry::default();
     restored.restore(persisted);
     assert!(restored.alignment(restored_session).is_none());
+
+    registry.deactivate_alignment(first);
+    let off = registry.alignment_projection();
+    assert!(off.revision > active_projection.revision);
+    assert_eq!(off.mode, None);
+    assert_eq!(off.fixture_count, 0);
+    let rejected = registry.with_transaction(first, || {
+        registry
+            .activate_alignment(first, ProgrammerAlignmentMode::Right)
+            .unwrap();
+        Err::<(), _>("reject activation")
+    });
+    assert!(rejected.is_err());
+    assert_eq!(registry.alignment_projection(), off);
+    assert!(!registry.deactivate_alignment(first));
+    assert_eq!(registry.alignment_projection(), off);
+}
+
+#[test]
+fn stale_alignment_plan_cannot_run_its_value_mutation() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    let fixture = FixtureId::new();
+    registry.start(session);
+    registry.select(session, [fixture]);
+    registry
+        .activate_alignment(session, ProgrammerAlignmentMode::Left)
+        .unwrap();
+    let plan = registry
+        .plan_alignment_delta(
+            session,
+            AttributeKey("pan".into()),
+            0.1,
+            &[base(fixture, 0.5, false)],
+        )
+        .unwrap();
+    registry
+        .reanchor_alignment(session, ProgrammerAlignmentMode::Right, &[])
+        .unwrap();
+    let before = registry.alignment_projection();
+    let changed = std::cell::Cell::new(false);
+    assert!(
+        registry
+            .apply_alignment_plan(session, plan, || changed.set(true))
+            .is_err()
+    );
+    assert!(!changed.get());
+    assert_eq!(registry.alignment_projection(), before);
 }

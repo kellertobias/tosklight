@@ -17,15 +17,14 @@ import type {
 } from "../../../api/client/attributeConfiguration";
 import type {
 	FixtureAttributeMapping,
+	FixtureGdtfImportPreview,
 	FixtureImportRequirement,
 } from "../../../api/client/fixtures";
-import type { FixtureDefinition, FixtureProfile } from "../../../api/types";
+import type { FixtureDefinition } from "../../../api/types";
 import { useAttributeConfigurationActions } from "../../../features/attributeConfiguration/AttributeConfigurationActions";
 import { useAttributeRegistry } from "../../../features/deskSnapshot/DeskSnapshotState";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import { RootConfinedFilePickerButton } from "../../files/RootConfinedFilePickerButton";
-import { fixtureProfileFromDefinitions } from "../fixtureProfileModel";
-import { importGdtfData } from "./gdtf";
 
 export type FixtureImportModal = "gdtf" | "package" | null;
 
@@ -35,9 +34,9 @@ interface FixtureLibraryTransfersOptions {
 	setSelectedModeKey: (key: string) => void;
 }
 
-interface PendingGdtfImport {
-	profile: FixtureProfile;
+interface PendingGdtfImport extends FixtureGdtfImportPreview {
 	source: Uint8Array;
+	expectedRevision: number;
 }
 
 interface ImportedCustomAttributeDraft {
@@ -72,69 +71,6 @@ const ENCODER_GROUP_OPTIONS: Array<{
 	{ value: "control", label: "Control" },
 	{ value: "media", label: "Media" },
 ];
-
-function gdtfValueType(
-	channel: FixtureProfile["modes"][number]["channels"][number],
-) {
-	if (channel.functions.some((fn) => fn.behavior.type === "control")) {
-		return "control" as const;
-	}
-	if (
-		channel.functions.some(
-			(fn) => fn.behavior.type === "indexed" || fn.behavior.type === "fixed",
-		)
-	) {
-		return "indexed" as const;
-	}
-	return "continuous" as const;
-}
-
-function applyGdtfMappings(
-	profile: FixtureProfile,
-	mappings: Readonly<Record<string, string>>,
-) {
-	return {
-		...profile,
-		modes: profile.modes.map((mode) => ({
-			...mode,
-			channels: mode.channels.map((channel) => {
-				const target = mappings[channel.fixture_attribute];
-				return target
-					? {
-							...channel,
-							attribute: target,
-							functions: channel.functions.map((fn) => ({
-								...fn,
-								attribute: target,
-							})),
-						}
-					: channel;
-			}),
-		})),
-	};
-}
-
-function unresolvedGdtfAttributes(
-	profile: FixtureProfile,
-	knownAttributes: ReadonlySet<string>,
-) {
-	const requirements = new Map<string, FixtureImportRequirement>();
-	for (const channel of profile.modes.flatMap((mode) => mode.channels)) {
-		if (
-			knownAttributes.has(channel.attribute) ||
-			!channel.fixture_attribute.startsWith("GDTF:")
-		) {
-			continue;
-		}
-		requirements.set(channel.fixture_attribute, {
-			attribute: channel.fixture_attribute,
-			value_type: gdtfValueType(channel),
-		});
-	}
-	return [...requirements.values()].sort((left, right) =>
-		left.attribute.localeCompare(right.attribute),
-	);
-}
 
 async function downloadFixturePackage(
 	server: ReturnType<typeof useFixtureLibrary>,
@@ -358,73 +294,46 @@ function gdtfOperations(
 	attributeRegistry: NonNullable<ReturnType<typeof useAttributeRegistry>>,
 	selectImportedProfile: (profile: ImportedProfileSelection) => void,
 ) {
-	const saveGdtfProfile = async (
-		profile: FixtureProfile,
-		source: Uint8Array,
-	) => {
-		const saved = await server?.saveFixtureProfile(profile, 0);
-		if (
-			saved &&
-			(await server?.saveFixtureProfileSourceGdtf(
-				saved.id,
-				saved.revision,
-				source,
-			))
-		)
-			selectImportedProfile(saved);
-	};
 	const importGdtfFile = async (file?: File) => {
 		if (!file) return;
 		state.setError(null);
 		state.setBusy(true);
+		state.setPendingGdtf(null);
 		try {
+			if (!server?.previewFixtureGdtf)
+				throw new Error("GDTF import requires a connected desk server.");
 			const source = new Uint8Array(await file.arrayBuffer());
-			const imported = await importGdtfData(source, file.name);
-			let profile = fixtureProfileFromDefinitions(imported);
-			const remembered = (await server?.fixtureSourceMappings?.()) ?? [];
-			const targetTypes = new Map(
+			const preview = await server.previewFixtureGdtf(source);
+			const remembered = (await server.fixtureSourceMappings?.()) ?? [];
+			const types = new Map(
 				attributeRegistry.map((descriptor) => [
 					descriptor.id,
 					descriptor.value_type,
 				]),
 			);
-			profile = applyGdtfMappings(
-				profile,
-				Object.fromEntries(
-					remembered
-						.filter(
-							(mapping) =>
-								mapping.source_format === "gdtf" &&
-								profile.modes
-									.flatMap((mode) => mode.channels)
-									.filter(
-										(channel) =>
-											channel.fixture_attribute ===
-											`GDTF:${mapping.source_attribute}`,
-									)
-									.every(
-										(channel) =>
-											gdtfValueType(channel) ===
-											targetTypes.get(mapping.target_attribute),
-									),
-						)
-						.map((mapping) => [
-							`GDTF:${mapping.source_attribute}`,
-							mapping.target_attribute,
-						]),
-				),
+			const mappings = Object.fromEntries(
+				preview.unknown_attributes.flatMap((requirement) => {
+					const preference = remembered.find(
+						(mapping) =>
+							mapping.source_format === "gdtf" &&
+							`gdtf.${mapping.source_attribute}` === requirement.attribute &&
+							types.get(mapping.target_attribute) === requirement.value_type,
+					);
+					return preference
+						? [[requirement.attribute, preference.target_attribute]]
+						: [];
+				}),
 			);
-			const unresolved = unresolvedGdtfAttributes(
-				profile,
-				new Set(attributeRegistry.map(({ id }) => id)),
-			);
-			if (unresolved.length) {
-				state.setPendingGdtf({ profile, source });
-				state.setRequirements(unresolved);
-				state.setMappings({});
-				return;
-			}
-			await saveGdtfProfile(profile, source);
+			state.setPendingGdtf({
+				...preview,
+				source,
+				expectedRevision:
+					server.fixtureProfiles.find(
+						(profile) => profile.id === preview.profile.id,
+					)?.revision ?? 0,
+			});
+			state.setRequirements(preview.unknown_attributes);
+			state.setMappings(mappings);
 		} catch (reason) {
 			state.setError(formatErrorDetails(reason));
 		} finally {
@@ -432,7 +341,8 @@ function gdtfOperations(
 		}
 	};
 	const confirmGdtfMappings = async () => {
-		if (!state.pendingGdtf || state.requirements.length === 0) return;
+		const pending = state.pendingGdtf;
+		if (!pending) return;
 		if (
 			state.requirements.some(
 				(requirement) => !state.mappings[requirement.attribute],
@@ -446,21 +356,27 @@ function gdtfOperations(
 		state.setError(null);
 		state.setBusy(true);
 		try {
-			const profile = applyGdtfMappings(
-				state.pendingGdtf.profile,
-				state.mappings,
-			);
-			if (server?.rememberFixtureSourceMapping)
-				await Promise.all(
-					state.requirements.map((requirement) =>
-						server.rememberFixtureSourceMapping?.({
-							sourceFormat: "gdtf",
-							sourceAttribute: requirement.attribute.slice("GDTF:".length),
-							targetAttribute: state.mappings[requirement.attribute] ?? null,
-						}),
-					),
-				);
-			await saveGdtfProfile(profile, state.pendingGdtf.source);
+			if (!server?.importFixtureGdtf)
+				throw new Error("GDTF import requires a connected desk server.");
+			for (const requirement of state.requirements) {
+				await server.rememberFixtureSourceMapping?.({
+					sourceFormat: "gdtf",
+					sourceAttribute: requirement.attribute.startsWith("gdtf.")
+						? requirement.attribute.slice(5)
+						: requirement.attribute,
+					targetAttribute: state.mappings[requirement.attribute] ?? null,
+				});
+			}
+			const saved = await server.importFixtureGdtf({
+				profileId: pending.profile.id,
+				expectedRevision: pending.expectedRevision,
+				source: pending.source,
+				attributeMappings: state.requirements.map((requirement) => ({
+					source_attribute: requirement.attribute,
+					target_attribute: state.mappings[requirement.attribute]!,
+				})),
+			});
+			selectImportedProfile(saved);
 		} catch (reason) {
 			state.setError(formatErrorDetails(reason));
 		} finally {
@@ -597,6 +513,7 @@ export function useFixtureLibraryTransfers({
 		exportSelectedPackage: () => downloadFixturePackage(server, selectedMode),
 		confirmPackageMappings,
 		confirmGdtfMappings,
+		pendingGdtf: state.pendingGdtf,
 		importGdtfFile,
 		importPackage,
 		mappingCandidates: [...attributeRegistry, ...createdAttributes].filter(
@@ -618,6 +535,7 @@ export function useFixtureLibraryTransfers({
 }
 
 interface FixtureImportDialogsProps {
+	pendingGdtf?: PendingGdtfImport | null;
 	busy: boolean;
 	error: string | null;
 	modal: FixtureImportModal;
@@ -805,150 +723,165 @@ function CustomAttributeImportFields({
 }
 
 export function FixtureImportDialogs({
-	busy,
-	error,
 	modal,
-	close,
-	confirmGdtfMappings,
-	confirmPackageMappings,
-	importGdtfFile,
-	importPackage,
-	mappingCandidates,
-	mappings,
-	requirements,
-	setMapping,
-	activationGroupOptions,
-	beginCustomAttribute,
-	cancelCustomAttribute,
-	createCustomAttribute,
-	customAttributeDraft,
-	editCustomAttribute,
-	placementOptions,
+	...props
 }: FixtureImportDialogsProps) {
 	return (
 		<>
-			{modal === "gdtf" && (
-				<ModalRegistration onClose={close}>
-					<div className="stacked-modal-layer">
-						<section className="nested-modal gdtf-import-modal">
-							<ModalTitleBar
-								title="Import GDTF"
-								closeLabel="Close Import GDTF"
-								onClose={close}
-							/>
-							<p>
-								Select a GDTF archive. Every DMX mode will be imported into the
-								desk-wide fixture library.
-							</p>
-							{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
-							{requirements.length === 0 ? (
-								<RootConfinedFilePickerButton
-									variant="primary"
-									disabled={busy}
-									label={busy ? "Importing…" : "Choose GDTF file"}
-									allowedExtensions={["gdtf"]}
-									onFiles={(files) => importGdtfFile(files[0])}
-								/>
-							) : (
-								<>
-									<p>
-										Map each stable GDTF source attribute to an existing
-										canonical or custom attribute. These choices are remembered
-										for later GDTF imports on this desk.
-									</p>
-									<AttributeMappingFields
-										requirements={requirements}
-										mappingCandidates={mappingCandidates}
-										mappings={mappings}
-										setMapping={setMapping}
-										activationGroupOptions={activationGroupOptions}
-										beginCustomAttribute={beginCustomAttribute}
-										cancelCustomAttribute={cancelCustomAttribute}
-										createCustomAttribute={createCustomAttribute}
-										customAttributeDraft={customAttributeDraft}
-										editCustomAttribute={editCustomAttribute}
-										placementOptions={placementOptions}
-										busy={busy}
-									/>
-									<Button
-										variant="primary"
-										disabled={
-											busy ||
-											requirements.some(
-												(requirement) => !mappings[requirement.attribute],
-											)
-										}
-										onClick={() => void confirmGdtfMappings()}
-									>
-										{busy ? "Importing…" : "Import and remember mappings"}
-									</Button>
-								</>
-							)}
-						</section>
-					</div>
-				</ModalRegistration>
-			)}
-			{modal === "package" && (
-				<ModalRegistration onClose={close}>
-					<div className="stacked-modal-layer">
-						<section className="nested-modal fixture-package-import-modal">
-							<ModalTitleBar
-								title="Import fixture"
-								closeLabel="Close Import fixture"
-								onClose={close}
-							/>
-							<p>
-								Select a transferable .toskfixture package. Its modes,
-								photograph, stage icon, and 3D model travel together.
-							</p>
-							{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
-							{requirements.length === 0 ? (
-								<RootConfinedFilePickerButton
-									variant="primary"
-									disabled={busy}
-									label={busy ? "Importing…" : "Choose fixture package"}
-									allowedExtensions={["toskfixture"]}
-									onFiles={(files) => importPackage(files[0])}
-								/>
-							) : (
-								<>
-									<p>
-										Map each package attribute to a compatible configured
-										descriptor, or create and place a custom attribute here.
-									</p>
-									<AttributeMappingFields
-										requirements={requirements}
-										mappingCandidates={mappingCandidates}
-										mappings={mappings}
-										setMapping={setMapping}
-										activationGroupOptions={activationGroupOptions}
-										beginCustomAttribute={beginCustomAttribute}
-										cancelCustomAttribute={cancelCustomAttribute}
-										createCustomAttribute={createCustomAttribute}
-										customAttributeDraft={customAttributeDraft}
-										editCustomAttribute={editCustomAttribute}
-										placementOptions={placementOptions}
-										busy={busy}
-									/>
-									<Button
-										variant="primary"
-										disabled={
-											busy ||
-											requirements.some(
-												(requirement) => !mappings[requirement.attribute],
-											)
-										}
-										onClick={() => void confirmPackageMappings()}
-									>
-										{busy ? "Importing…" : "Import with mappings"}
-									</Button>
-								</>
-							)}
-						</section>
-					</div>
-				</ModalRegistration>
-			)}
+			{modal === "gdtf" && <GdtfImportDialog {...props} />}
+			{modal === "package" && <PackageImportDialog {...props} />}
 		</>
+	);
+}
+
+type FixtureImportDialogProps = Omit<FixtureImportDialogsProps, "modal">;
+
+function GdtfImportDialog(props: FixtureImportDialogProps) {
+	const {
+		pendingGdtf,
+		busy,
+		error,
+		close,
+		confirmGdtfMappings,
+		importGdtfFile,
+		mappings,
+		requirements,
+	} = props;
+	return (
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer">
+				<section className="nested-modal gdtf-import-modal">
+					<ModalTitleBar
+						title="Import GDTF"
+						closeLabel="Close Import GDTF"
+						onClose={close}
+					/>
+					<p>
+						Select a GDTF archive. Every DMX mode will be imported into the
+						desk-wide fixture library.
+					</p>
+					{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
+					{!pendingGdtf ? (
+						<RootConfinedFilePickerButton
+							variant="primary"
+							disabled={busy}
+							label={busy ? "Reading GDTF…" : "Choose GDTF file"}
+							allowedExtensions={["gdtf"]}
+							onFiles={(files) => importGdtfFile(files[0])}
+						/>
+					) : (
+						<>
+							<p>
+								{pendingGdtf.profile.manufacturer} {pendingGdtf.profile.name} ·{" "}
+								{pendingGdtf.profile.modes.length}{" "}
+								{pendingGdtf.profile.modes.length === 1 ? "mode" : "modes"}
+							</p>
+							{pendingGdtf.expectedRevision > 0 && (
+								<p>
+									Creates a new library revision. Patched fixtures keep their
+									current revision.
+								</p>
+							)}
+							{pendingGdtf.diagnostics.length > 0 && (
+								<div className="gdtf-import-diagnostics" role="status">
+									<p>Import limitations</p>
+									<ul>
+										{pendingGdtf.diagnostics.map((item, index) => (
+											<li key={`${item.node}:${index}`}>
+												<strong>{item.node}</strong>: {item.message}
+											</li>
+										))}
+									</ul>
+								</div>
+							)}
+							{requirements.length > 0 && (
+								<p>
+									Map each stable GDTF source attribute to an existing canonical
+									or custom attribute. These choices are remembered for later
+									GDTF imports on this desk.
+								</p>
+							)}
+							<AttributeMappingFields {...props} />
+							<Button
+								variant="primary"
+								disabled={
+									busy ||
+									requirements.some(
+										(requirement) => !mappings[requirement.attribute],
+									)
+								}
+								onClick={() => void confirmGdtfMappings()}
+							>
+								{busy
+									? "Importing…"
+									: requirements.length
+										? "Import and remember mappings"
+										: "Import fixture"}
+							</Button>
+						</>
+					)}
+				</section>
+			</div>
+		</ModalRegistration>
+	);
+}
+
+function PackageImportDialog(props: FixtureImportDialogProps) {
+	const {
+		busy,
+		error,
+		close,
+		confirmPackageMappings,
+		importPackage,
+		mappings,
+		requirements,
+	} = props;
+	return (
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer">
+				<section className="nested-modal fixture-package-import-modal">
+					<ModalTitleBar
+						title="Import fixture"
+						closeLabel="Close Import fixture"
+						onClose={close}
+					/>
+					<p>
+						Select a transferable .toskfixture package. Its modes, photograph,
+						stage icon, and 3D model travel together.
+					</p>
+					{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
+					{requirements.length === 0 ? (
+						<RootConfinedFilePickerButton
+							variant="primary"
+							disabled={busy}
+							label={busy ? "Importing…" : "Choose fixture package"}
+							allowedExtensions={["toskfixture"]}
+							onFiles={(files) => importPackage(files[0])}
+						/>
+					) : (
+						<>
+							<p>
+								Map each package attribute to a compatible configured
+								descriptor, or create and place a custom attribute here.
+							</p>
+							<AttributeMappingFields {...props} />
+							<Button
+								variant="primary"
+								disabled={
+									busy ||
+									requirements.some(
+										(requirement) => !mappings[requirement.attribute],
+									)
+								}
+								onClick={() => void confirmPackageMappings()}
+							>
+								{busy ? "Importing…" : "Import with mappings"}
+							</Button>
+						</>
+					)}
+				</section>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -956,6 +889,7 @@ function defaultEncoderGroup(
 	valueType: AttributeValueType,
 ): AttributeEncoderGroup {
 	if (valueType === "color") return "color";
+	if (valueType === "position") return "position";
 	if (valueType === "control") return "control";
 	return "beam";
 }

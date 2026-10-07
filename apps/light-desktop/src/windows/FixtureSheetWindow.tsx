@@ -24,18 +24,17 @@ import {
 } from "../features/programmingInteraction/ProgrammingInteractionView";
 import { useDesktopBridge } from "../platform/desktop";
 import { useApp } from "../state/AppContext";
-import type { FixtureSheetColumn } from "../types";
 import {
 	DEFAULT_FIXTURE_SHEET_COLUMNS,
 	FixtureSheetSettings,
 } from "./FixtureSheetSettings";
-import { fixtureSheetColumns } from "./fixtureSheetColumns";
 import { useFixtureSheetCuelistAuthority } from "./fixtureSheetCuelistAuthority";
 import {
 	useFixtureSheetRows,
 	useFixtureSheetVisualizations,
 } from "./fixtureSheetProjection";
 import { createFixtureStepPresenter } from "./fixtureSheetStep";
+import { useFixtureSheetColumns } from "./useFixtureSheetColorStatus";
 import type { WindowProps } from "./windowTypes";
 
 /**
@@ -180,13 +179,10 @@ export function FixtureSheetWindow({
 		() => createFixtureStepPresenter(highlight),
 		[highlight],
 	);
-	const columns = useMemo(
-		() =>
-			fixtureSheetColumns(showType, presentStep, compactMode).filter((column) =>
-				visibleColumnIds.includes(column.id as FixtureSheetColumn),
-			),
-		[compactMode, presentStep, showType, visibleColumnIds],
-	);
+	const columns = useFixtureSheetColumns(active, visibleFixtureIds, {
+		refreshKey: deferredProgrammerValues,
+		...{ showType, presentStep, compactMode, visibleColumnIds },
+	});
 	const selectedFixtureIds = useMemo(
 		() => new Set(selection?.selected ?? []),
 		[selection?.selected],

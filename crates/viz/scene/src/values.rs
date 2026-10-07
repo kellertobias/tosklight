@@ -11,6 +11,8 @@ use uuid::Uuid;
 /// [`crate::Scene::emitters`].
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct SceneValues {
+    #[serde(default)]
+    pub physical_positions: Vec<crate::PhysicalPositionValues>,
     pub emitters: Vec<EmitterValues>,
     /// Scan paths, parallel to [`Self::emitters`]. Every entry exists; only laser emitters ever
     /// have points in theirs.
@@ -77,6 +79,7 @@ impl SceneValues {
     /// targets. Replacing all three every time a 10 Hz DMX snapshot arrives makes a moving head
     /// repeatedly jump back to its provider-side home position.
     pub fn retain_visual_motion_runtime_from(&mut self, previous: &Self) {
+        self.retain_calibrated_motion_from(previous);
         fn retain_kinematics(next: &mut PhysicalMotionState, previous: &PhysicalMotionState) {
             next.position_degrees = previous.position_degrees;
             next.velocity_degrees_per_second = previous.velocity_degrees_per_second;
@@ -178,7 +181,8 @@ impl SceneValues {
                     (index as f32 + 0.5) / emitter.gobo_wheel_motion.slot_count.max(1) as f32;
             }
             emitter.colour_wheel_motion.advance(elapsed);
-            if let Some(index) = emitter.colour_wheel_motion.visible_slot()
+            if emitter.physical_color.is_none()
+                && let Some(index) = emitter.colour_wheel_motion.visible_slot()
                 && let Some(colour) = emitter.colour_wheel_palette.get(index)
             {
                 emitter.colour = *colour;
@@ -192,27 +196,32 @@ impl SceneValues {
     /// motion metadata. A position target which has settled is static; a velocity target is
     /// time-driven even while it is still accelerating from zero.
     pub fn is_time_driven(&self, persistence: &PersistencePreference) -> bool {
-        self.emitters.iter().any(|emitter| {
-            (persistence.is_active()
-                && (emitter.held_intensity > emitter.visible_intensity() + f32::EPSILON
+        self.physical_positions
+            .iter()
+            .any(|p| p.axes.iter().any(|a| a.motion.is_moving()))
+            || self.emitters.iter().any(|emitter| {
+                (persistence.is_active()
+                    && (emitter.held_intensity > emitter.visible_intensity() + f32::EPSILON
+                        || emitter
+                            .cells
+                            .iter()
+                            .any(|cell| cell.held_intensity > cell.intensity + f32::EPSILON)))
                     || emitter
-                        .cells
+                        .gobo_wheels
                         .iter()
-                        .any(|cell| cell.held_intensity > cell.intensity + f32::EPSILON)))
-                || emitter
-                    .gobo_wheels
-                    .iter()
-                    .chain(&emitter.prism_wheels)
-                    .any(|wheel| {
-                        wheel.rotation_motion.is_moving() || wheel.wheel_motion.motion.is_moving()
-                    })
-                || emitter.pan_motion.is_moving()
-                || emitter.tilt_motion.is_moving()
-                || emitter.gobo_rotation_motion.is_moving()
-                || emitter.prism_rotation_motion.is_moving()
-                || emitter.gobo_wheel_motion.motion.is_moving()
-                || emitter.colour_wheel_motion.motion.is_moving()
-        }) || self.laser_scans.iter().any(|scan| !scan.points.is_empty())
+                        .chain(&emitter.prism_wheels)
+                        .any(|wheel| {
+                            wheel.rotation_motion.is_moving()
+                                || wheel.wheel_motion.motion.is_moving()
+                        })
+                    || emitter.pan_motion.is_moving()
+                    || emitter.tilt_motion.is_moving()
+                    || emitter.gobo_rotation_motion.is_moving()
+                    || emitter.prism_rotation_motion.is_moving()
+                    || emitter.gobo_wheel_motion.motion.is_moving()
+                    || emitter.colour_wheel_motion.motion.is_moving()
+            })
+            || self.laser_scans.iter().any(|scan| !scan.points.is_empty())
             || self
                 .effect_frames
                 .iter()
@@ -231,10 +240,36 @@ impl SceneValues {
     /// its look instead of going black for however long the desk holds the same frame. A head
     /// that is genuinely new starts at its defaults.
     pub fn carry_over(&mut self, previous: &Scene, next: &Scene) {
-        let mut held: HashMap<(Uuid, u16), (EmitterValues, LaserScan, EffectFrame)> =
+        // Authored emitter UUID distinguishes two lenses driven by one logical head. Legacy
+        // synthetic scenes retain per-head ordering without depending on global emitter indices.
+        fn keys(scene: &Scene) -> Vec<(Uuid, u16, Uuid)> {
+            let mut ordinal = HashMap::<(Uuid, u16), u128>::new();
+            scene
+                .emitters
+                .iter()
+                .enumerate()
+                .map(|(i, e)| {
+                    let instance = scene
+                        .fixtures
+                        .get(e.fixture_index as usize)
+                        .map_or(Uuid::nil(), |f| f.instance_id);
+                    let nth = ordinal.entry((instance, e.head_index)).or_default();
+                    let id = scene
+                        .emitter_ids
+                        .get(i)
+                        .copied()
+                        .unwrap_or_else(|| Uuid::from_u128(*nth));
+                    *nth += 1;
+                    (instance, e.head_index, id)
+                })
+                .collect()
+        }
+        let previous_keys = keys(previous);
+        let next_keys = keys(next);
+        let mut held: HashMap<(Uuid, u16, Uuid), (EmitterValues, LaserScan, EffectFrame)> =
             HashMap::with_capacity(previous.emitters.len());
         for (index, emitter) in previous.emitters.iter().enumerate() {
-            let Some(fixture) = previous.fixtures.get(emitter.fixture_index as usize) else {
+            let Some(_) = previous.fixtures.get(emitter.fixture_index as usize) else {
                 continue;
             };
             let Some(values) = self.emitters.get(index) else {
@@ -242,18 +277,16 @@ impl SceneValues {
             };
             let scan = self.laser_scans.get(index).cloned().unwrap_or_default();
             let effect = self.effect_frames.get(index).cloned().unwrap_or_default();
-            held.insert(
-                (fixture.instance_id, emitter.head_index),
-                (values.clone(), scan, effect),
-            );
+            held.insert(previous_keys[index], (values.clone(), scan, effect));
         }
         let carried: Vec<_> = next
             .emitters
             .iter()
-            .map(|emitter| {
+            .enumerate()
+            .map(|(index, emitter)| {
                 next.fixtures
                     .get(emitter.fixture_index as usize)
-                    .and_then(|fixture| held.remove(&(fixture.instance_id, emitter.head_index)))
+                    .and_then(|_| held.remove(&next_keys[index]))
                     .unwrap_or_default()
             })
             .collect();
@@ -375,6 +408,14 @@ pub struct EmitterValues {
     /// Raw additive primary drive, independent of mixed beam colour.
     #[serde(default)]
     pub source_primaries: [f32; 3],
+    #[serde(default)]
+    pub physical_color: Option<PhysicalColorState>,
+    #[serde(default)]
+    pub uv_drive: f32,
+    #[serde(default)]
+    pub physical_optics: Option<PhysicalOpticsState>,
+    #[serde(default)]
+    pub physical_pose: Option<crate::PhysicalPoseState>,
     /// Pan parameter `0..=1` mapped through the emitter's pan axis.
     pub pan: f32,
     /// Simulated physical Pan. Its authored zero is the geometry node's local transform.
@@ -448,6 +489,10 @@ impl Default for EmitterValues {
             intensity: 0.0,
             colour: [1.0, 1.0, 1.0],
             source_primaries: [0.0; 3],
+            physical_color: None,
+            uv_drive: 0.,
+            physical_optics: None,
+            physical_pose: None,
             pan: 0.5,
             pan_motion: PhysicalMotionState::default(),
             tilt: 0.5,
@@ -695,364 +740,34 @@ impl EmitterValues {
         FACETS[index]
     }
 
-    /// Effective visible intensity including the shutter gate.
+    fn has_visible_output(&self) -> bool {
+        // An authoritative zero visible prediction must not draw an opaque black beam. Native
+        // dimmer and UV drive remain independent, including unknown UV spill and measured zero.
+        self.physical_color.is_none() || self.colour.iter().any(|c| *c > 0.0)
+    }
+
+    /// Effective visible intensity including the shutter gate and known visible emission.
     pub fn visible_intensity(&self) -> f32 {
-        (self.intensity * self.shutter).clamp(0.0, 1.0)
+        if self.has_visible_output() {
+            (self.intensity * self.shutter).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// Visible display intensity with the existing persistence tail. A tail cannot turn a
+    /// physically black/UV-only color into an opaque cone when visible output is absent.
+    pub fn retained_visible_intensity(&self) -> f32 {
+        if self.has_visible_output() {
+            self.held_intensity.max(self.visible_intensity())
+        } else {
+            0.0
+        }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::scene::{
-        BodyKind, EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, FixtureBody,
-        FixtureInstance,
-    };
-    use glam::Vec3;
-
-    fn fixture(instance_id: Uuid, name: &str) -> FixtureInstance {
-        FixtureInstance {
-            instance_id,
-            fixture_id: instance_id,
-            name: name.into(),
-            number: None,
-            position: Vec3::ZERO,
-            rotation_degrees: Vec3::ZERO,
-            position_master: None,
-            bracket_degrees: 0.0,
-            bracket_hinge: None,
-            shaper_degrees: None,
-            installed_colour: [1.0; 3],
-            installed_shaper_angles_degrees: [0.0; 4],
-            drawn_as_scenery: false,
-            invisible: false,
-            body: FixtureBody {
-                size: Vec3::splat(0.3),
-                kind: BodyKind::Lantern,
-            },
-            patched: true,
-            address: None,
-            model: None,
-            fallback: None,
-        }
-    }
-
-    fn emitter(fixture_index: u32, head_index: u16) -> EmitterInstance {
-        EmitterInstance {
-            fixture_index,
-            head_index,
-            label: "head".into(),
-            local_origin: Vec3::ZERO,
-            tilt_pivot: Vec3::ZERO,
-            local_orientation_degrees: Vec3::ZERO,
-            pan: None,
-            tilt: None,
-            beam_angle_degrees: 10.0,
-            field_angle_degrees: 20.0,
-            optics: EmitterOptics::default(),
-            kind: EmitterKind::Beam,
-            cells: EmitterLayoutCells::single(),
-            laser: None,
-            effect: None,
-            live_shaper_angle_roles: [false; 4],
-            shaper_roles: [false; 4],
-            live_shaper_rotation_role: false,
-        }
-    }
-
-    /// A rig of exactly these fixtures and these heads, which is all these tests need of a scene.
-    fn rig(fixtures: Vec<FixtureInstance>, emitters: Vec<EmitterInstance>) -> Scene {
-        Scene {
-            fixtures,
-            emitters,
-            ..Scene::default()
-        }
-    }
-
-    /// Two fixtures, each with one head, and the first one is removed.
-    #[test]
-    fn a_head_keeps_its_level_when_the_fixture_before_it_is_removed() {
-        let first = Uuid::from_u128(1);
-        let second = Uuid::from_u128(2);
-        let previous = rig(
-            vec![fixture(first, "one"), fixture(second, "two")],
-            vec![emitter(0, 0), emitter(1, 0)],
-        );
-
-        let mut values = SceneValues::default();
-        values.resize(2);
-        values.emitters[0].intensity = 0.25;
-        values.emitters[1].intensity = 0.8;
-        values.emitters[1].colour = [1.0, 0.0, 0.0];
-
-        let next = rig(vec![fixture(second, "two")], vec![emitter(0, 0)]);
-
-        values.carry_over(&previous, &next);
-        assert_eq!(values.emitters.len(), 1);
-        assert_eq!(values.emitters[0].intensity, 0.8);
-        assert_eq!(values.emitters[0].colour, [1.0, 0.0, 0.0]);
-    }
-
-    #[test]
-    fn a_newly_patched_head_starts_at_its_defaults() {
-        let known = Uuid::from_u128(1);
-        let added = Uuid::from_u128(9);
-        let previous = rig(vec![fixture(known, "one")], vec![emitter(0, 0)]);
-        let mut values = SceneValues::default();
-        values.resize(1);
-        values.emitters[0].intensity = 0.5;
-
-        let next = rig(
-            vec![fixture(added, "new"), fixture(known, "one")],
-            vec![emitter(0, 0), emitter(1, 0)],
-        );
-
-        values.carry_over(&previous, &next);
-        assert_eq!(values.emitters.len(), 2);
-        assert_eq!(values.emitters[0].intensity, 0.0);
-        assert_eq!(values.emitters[1].intensity, 0.5);
-    }
-
-    #[test]
-    fn static_values_do_not_request_display_clock_frames() {
-        let mut values = SceneValues::default();
-        values.resize(1);
-        assert!(!values.is_time_driven(&PersistencePreference::default()));
-    }
-
-    #[test]
-    fn persistence_and_unsettled_motion_request_display_clock_frames() {
-        let mut values = SceneValues::default();
-        values.resize(1);
-        values.emitters[0].held_intensity = 1.0;
-        assert!(values.is_time_driven(&PersistencePreference::default()));
-        values.emitters[0].held_intensity = 0.0;
-        values.emitters[0]
-            .pan_motion
-            .set_target(PhysicalMotionTarget::Position {
-                degrees: 90.0,
-                max_speed: 180.0,
-                acceleration: 360.0,
-                deceleration: 360.0,
-            });
-        assert!(values.is_time_driven(&PersistencePreference::default()));
-    }
-
-    #[test]
-    fn a_settled_position_target_is_static() {
-        let mut values = SceneValues::default();
-        values.resize(1);
-        values.emitters[0].pan_motion = PhysicalMotionState {
-            position_degrees: 90.0,
-            velocity_degrees_per_second: 0.0,
-            target: Some(PhysicalMotionTarget::Position {
-                degrees: 90.0,
-                max_speed: 180.0,
-                acceleration: 360.0,
-                deceleration: 360.0,
-            }),
-        };
-        assert!(!values.is_time_driven(&PersistencePreference::default()));
-    }
-
-    /// Heads of one multi-head fixture are told apart by their head index, not by their order.
-    #[test]
-    fn each_head_of_a_fixture_keeps_its_own_value() {
-        let bar = Uuid::from_u128(7);
-        let previous = rig(
-            vec![fixture(bar, "bar")],
-            vec![emitter(0, 0), emitter(0, 1), emitter(0, 2)],
-        );
-        let mut values = SceneValues::default();
-        values.resize(3);
-        for (index, emitter) in values.emitters.iter_mut().enumerate() {
-            emitter.intensity = index as f32 / 10.0;
-        }
-
-        // The middle head is gone: a mode change that drops a cell.
-        let next = rig(
-            vec![fixture(bar, "bar")],
-            vec![emitter(0, 0), emitter(0, 2)],
-        );
-
-        values.carry_over(&previous, &next);
-        assert_eq!(values.emitters[0].intensity, 0.0);
-        assert_eq!(values.emitters[1].intensity, 0.2);
-    }
-
-    #[test]
-    fn absolute_motion_preserves_multi_turn_targets_and_respects_limits() {
-        let mut motion = PhysicalMotionState::default();
-        motion.set_target(PhysicalMotionTarget::Position {
-            degrees: 630.0,
-            max_speed: 180.0,
-            acceleration: 360.0,
-            deceleration: 360.0,
-        });
-        motion.advance(0.25);
-        assert!(motion.position_degrees > 0.0 && motion.position_degrees < 630.0);
-        assert!(motion.velocity_degrees_per_second <= 180.0);
-        for _ in 0..200 {
-            motion.advance(0.1);
-        }
-        assert!((motion.position_degrees - 630.0).abs() < 0.001);
-        assert_eq!(motion.velocity_degrees_per_second, 0.0);
-    }
-
-    #[test]
-    fn position_motion_can_start_toward_a_negative_target_from_rest() {
-        let mut motion = PhysicalMotionState::default();
-        motion.set_target(PhysicalMotionTarget::Position {
-            degrees: -54.0,
-            max_speed: 180.0,
-            acceleration: 360.0,
-            deceleration: 360.0,
-        });
-
-        motion.advance(0.1);
-
-        assert!(motion.position_degrees < 0.0);
-        assert!(motion.velocity_degrees_per_second < 0.0);
-    }
-
-    #[test]
-    fn provider_frames_keep_renderer_kinematics_but_replace_the_target() {
-        let old_target = PhysicalMotionTarget::Position {
-            degrees: -54.0,
-            max_speed: 180.0,
-            acceleration: 360.0,
-            deceleration: 360.0,
-        };
-        let new_target = PhysicalMotionTarget::Position {
-            degrees: 54.0,
-            max_speed: 180.0,
-            acceleration: 360.0,
-            deceleration: 360.0,
-        };
-        let mut previous = SceneValues::default();
-        previous.resize(1);
-        previous.emitters[0].pan_motion = PhysicalMotionState {
-            position_degrees: -12.0,
-            velocity_degrees_per_second: -40.0,
-            target: Some(old_target),
-        };
-        let mut incoming = SceneValues::default();
-        incoming.resize(1);
-        incoming.emitters[0].pan_motion.target = Some(new_target);
-
-        incoming.retain_visual_motion_runtime_from(&previous);
-
-        assert_eq!(incoming.emitters[0].pan_motion.position_degrees, -12.0);
-        assert_eq!(
-            incoming.emitters[0].pan_motion.velocity_degrees_per_second,
-            -40.0
-        );
-        assert_eq!(incoming.emitters[0].pan_motion.target, Some(new_target));
-    }
-
-    #[test]
-    fn a_replaced_target_is_followed_without_teleporting() {
-        let mut motion = PhysicalMotionState::default();
-        motion.set_target(PhysicalMotionTarget::Position {
-            degrees: 90.0,
-            max_speed: 90.0,
-            acceleration: 180.0,
-            deceleration: 180.0,
-        });
-        motion.advance(0.25);
-        let before = motion.position_degrees;
-        motion.set_target(PhysicalMotionTarget::Position {
-            degrees: -90.0,
-            max_speed: 90.0,
-            acceleration: 180.0,
-            deceleration: 180.0,
-        });
-        assert_eq!(motion.position_degrees, before);
-        motion.advance(0.25);
-        assert!(motion.position_degrees > -90.0);
-    }
-
-    #[test]
-    fn endless_motion_accelerates_to_an_authored_signed_velocity() {
-        let mut motion = PhysicalMotionState::default();
-        motion.set_target(PhysicalMotionTarget::Velocity {
-            degrees_per_second: -120.0,
-            acceleration: 240.0,
-            deceleration: 360.0,
-        });
-        motion.advance(0.25);
-        assert_eq!(motion.velocity_degrees_per_second, -60.0);
-        assert_eq!(motion.position_degrees, -15.0);
-        motion.advance(0.25);
-        assert_eq!(motion.velocity_degrees_per_second, -120.0);
-    }
-
-    #[test]
-    fn an_ordered_wheel_crosses_intermediate_slots() {
-        let mut wheel = WheelMotionState::default();
-        wheel.set_target(3, 4, 180.0, 720.0, 720.0);
-        let mut visited = Vec::new();
-        for _ in 0..20 {
-            wheel.advance(0.1);
-            let slot = wheel.visible_slot().unwrap();
-            if visited.last() != Some(&slot) {
-                visited.push(slot);
-            }
-        }
-        assert!(visited.windows(2).all(|pair| pair[0] <= pair[1]));
-        assert!(visited.contains(&1));
-        assert!(visited.contains(&2));
-        assert_eq!(visited.last(), Some(&3));
-    }
-
-    #[test]
-    fn independent_optical_wheels_traverse_without_resetting_each_other() {
-        let mut slow = OpticalWheelValues::default();
-        slow.wheel_motion.set_target(3, 4, 90.0, 360.0, 360.0);
-        let mut fast = OpticalWheelValues::default();
-        fast.wheel_motion.set_target(1, 4, 360.0, 1440.0, 1440.0);
-        let mut values = SceneValues::default();
-        values.resize(1);
-        values.emitters[0].gobo_wheels = vec![slow, fast];
-        let mut visited = Vec::new();
-        for _ in 0..50 {
-            values.apply_physical_motion(0.1);
-            let slot = values.emitters[0].gobo_wheels[0].slot(4);
-            if visited.last() != Some(&slot) {
-                visited.push(slot);
-            }
-        }
-        assert!(visited.contains(&1) && visited.contains(&2));
-        assert_eq!(values.emitters[0].gobo_wheels[0].slot(4), 3);
-        assert_eq!(values.emitters[0].gobo_wheels[1].slot(4), 1);
-    }
-
-    #[test]
-    fn a_new_provider_frame_changes_slots_without_raising_a_released_body() {
-        let previous = SceneValues {
-            physics_frames: vec![PhysicsFrame {
-                released: true,
-                settled: true,
-                position_offset: [0.0, -5.0, 0.0],
-                slots: vec![255],
-                ..PhysicsFrame::default()
-            }],
-            ..SceneValues::default()
-        };
-        let mut next = SceneValues {
-            physics_frames: vec![PhysicsFrame {
-                slots: vec![64],
-                ..PhysicsFrame::default()
-            }],
-            ..SceneValues::default()
-        };
-        next.retain_physics_runtime_from(&previous, 1);
-        assert!(next.physics_frames[0].released);
-        assert!(next.physics_frames[0].settled);
-        assert_eq!(next.physics_frames[0].position_offset, [0.0, -5.0, 0.0]);
-        assert_eq!(next.physics_frames[0].slots, [64]);
-    }
-}
+mod tests;
 
 /// One pixel cell's value.
 #[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
@@ -1125,4 +840,27 @@ pub struct ScanPoint {
     /// both a timing and a brightness: a point the scanner dwells on receives proportionally more
     /// of the frame's light, which is why the corners of a real laser figure are the bright parts.
     pub dwell: f32,
+}
+
+/// Passive prediction metadata. UV is native drive, never visible violet or optical watts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PhysicalColorState {
+    pub known_xyz: [f32; 3],
+    pub visible_complete: bool,
+    /// 0 unknown, 1 estimated, 2 manufacturer, 3 measured.
+    pub quality: u8,
+    pub flags: u32,
+    pub uv_drive: f32,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PhysicalOpticsState {
+    /// Nominal distribution fitted to the authored opening convention, not measured photometry.
+    pub zoom_shape_half_angle: Option<f32>,
+    pub shape_nominal: bool,
+    /// None means no known angle. An angle without a convention remains uncertain.
+    pub zoom_full_degrees: Option<f32>,
+    pub zoom_is_field: Option<bool>,
+    pub zoom_uncertain: bool,
+    pub focus_uncertain: bool,
+    pub focus_nominal: bool,
 }

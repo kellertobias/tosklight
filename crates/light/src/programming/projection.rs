@@ -13,6 +13,7 @@ pub struct ProgrammingInteractionProjection {
     pub desk_id: Uuid,
     pub command_line: CommandLineState,
     pub selection: ProgrammerSelection,
+    pub alignment: light_programmer::ProgrammerAlignmentProjection,
 }
 
 impl ProgrammingInteractionProjection {
@@ -28,6 +29,7 @@ impl ProgrammingInteractionProjection {
             desk_id,
             command_line: interaction.command_line,
             selection: interaction.selection,
+            alignment: interaction.alignment,
         })
     }
 }

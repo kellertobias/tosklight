@@ -1,5 +1,6 @@
+use crate::PlaybackRetainedValue;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use light_core::{CueListId, TimedValue};
+use light_core::CueListId;
 use uuid::Uuid;
 
 use super::{
@@ -79,7 +80,26 @@ impl PlaybackEngine {
             ) else {
                 continue;
             };
-            advance_automatic_playback(playback, cue_list, compiled, None, timing);
+            let prior = playback.source_history.clone();
+            if advance_automatic_playback(playback, cue_list, compiled, None, timing).is_some() {
+                let ordinal = crate::source_evidence::take_occurrence_ordinal(
+                    &mut self.next_source_occurrence_ordinal,
+                );
+                playback.source_history =
+                    playback.previous_index.zip(ordinal).map(|(from, ordinal)| {
+                        crate::PlaybackSourceHistory::cue_leg(
+                            prior.as_ref(),
+                            compiled,
+                            playback.sequence_master_source(),
+                            now,
+                            ordinal,
+                            from,
+                            playback.cue_index,
+                            playback.tracking_wrap,
+                            false,
+                        )
+                    });
+            }
         }
     }
 
@@ -197,6 +217,10 @@ impl PlaybackEngine {
                 let ordinal = self.next_transition_ordinal;
                 self.next_transition_ordinal = ordinal.saturating_add(1);
                 playback.transition_ordinal = ordinal;
+                let source_ordinal = crate::source_evidence::take_occurrence_ordinal(
+                    &mut self.next_source_occurrence_ordinal,
+                );
+                playback.begin_source_history(now, source_ordinal, compiled);
                 transition.transition_ordinal = ordinal;
             }
             transitions.extend(transition);
@@ -255,7 +279,7 @@ fn advance_automatic_playback(
     playback: &mut ActivePlayback,
     cue_list: &CueList,
     compiled: &CompiledCueList,
-    transition_source: Option<&[TimedValue]>,
+    transition_source: Option<&[PlaybackRetainedValue]>,
     timing: AutomaticTiming,
 ) -> Option<AutomaticPlaybackTransition> {
     if !playback.enabled || playback.paused || chaser_is_paused(cue_list, &timing) {
@@ -278,7 +302,7 @@ fn advance_link(
     playback: &mut ActivePlayback,
     cue_list: &CueList,
     compiled: &CompiledCueList,
-    transition_source: Option<&[TimedValue]>,
+    transition_source: Option<&[PlaybackRetainedValue]>,
     timing: &AutomaticTiming,
 ) -> Option<AutomaticPlaybackTransition> {
     // A live timecode source remains authoritative. Allowing Link to move away from the latest
@@ -354,7 +378,7 @@ fn speed_group_index(group: &str) -> usize {
 fn advance_timecode(
     playback: &mut ActivePlayback,
     cue_list: &CueList,
-    transition_source: Option<&[TimedValue]>,
+    transition_source: Option<&[PlaybackRetainedValue]>,
     timing: &AutomaticTiming,
 ) -> Option<AutomaticPlaybackTransition> {
     let index = timecode_index(cue_list, timing.timecode_frame?)?;
@@ -391,7 +415,7 @@ fn timecode_index(cue_list: &CueList, frame: u64) -> Option<usize> {
 fn advance_chaser(
     playback: &mut ActivePlayback,
     cue_list: &CueList,
-    transition_source: Option<&[TimedValue]>,
+    transition_source: Option<&[PlaybackRetainedValue]>,
     timing: &AutomaticTiming,
 ) -> Option<AutomaticPlaybackTransition> {
     let elapsed = elapsed_since_activation(playback, timing.now);
@@ -404,7 +428,8 @@ fn advance_chaser(
     let advanced_steps = advance_chaser_steps(playback, cue_list, requested_steps);
     if advanced_steps > 0 {
         playback.completed_trigger_cue_id = None;
-        playback.deleted_cue_transition_source = transition_source.map(<[TimedValue]>::to_vec);
+        playback.deleted_cue_transition_source =
+            transition_source.map(<[PlaybackRetainedValue]>::to_vec);
     }
     advance_chaser_clock(playback, step_millis, requested_steps);
     (advanced_steps > 0).then(|| {
@@ -428,7 +453,7 @@ fn advance_follow_or_wait(
     playback: &mut ActivePlayback,
     cue_list: &CueList,
     compiled: &CompiledCueList,
-    transition_source: Option<&[TimedValue]>,
+    transition_source: Option<&[PlaybackRetainedValue]>,
     timing: &AutomaticTiming,
 ) -> Option<AutomaticPlaybackTransition> {
     let next_index = next_cue_index(playback.cue_index, cue_list)?;
@@ -535,7 +560,7 @@ fn holds_nothing(
 
 fn install_transition_source(
     playback: &mut ActivePlayback,
-    source: Option<&[TimedValue]>,
+    source: Option<&[PlaybackRetainedValue]>,
     previous_index: usize,
 ) {
     if let Some(source) = source {

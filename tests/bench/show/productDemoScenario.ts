@@ -206,16 +206,16 @@ export const PRODUCT_DEMO_SCRIPT = {
 		},
 		placements: [
 			{
-				targets: "0.1 primary THRU multipatch 3",
-				location: { x: "-3 THRU 3", y: "4", z: "4.15" },
+				targets: "0.1",
+				location: { x: "-3", y: "4", z: "4.15" },
 			},
 			{
-				targets: "0.2 primary THRU multipatch 3",
-				location: { x: "-3 THRU 3", y: "0", z: "4.15" },
+				targets: "0.2",
+				location: { x: "-3", y: "0", z: "4.15" },
 			},
 			{
-				targets: "0.3 primary THRU multipatch 3",
-				location: { x: "-3 THRU 3", y: "-3", z: "4.15" },
+				targets: "0.3",
+				location: { x: "-3", y: "-3", z: "4.15" },
 			},
 			{
 				targets: "1 THRU 3",
@@ -240,7 +240,7 @@ export const PRODUCT_DEMO_SCRIPT = {
 			{
 				targets: "601 primary THRU multipatch 7",
 				location: { x: "-1 THRU 1", y: "4", z: "4.4" },
-				rotation: { x: "0", y: "-18 THRU 18", z: "0" },
+				rotation: { x: "0", y: "18 THRU -18", z: "0" },
 			},
 			{
 				targets: "901 primary THRU multipatch 3",
@@ -319,6 +319,10 @@ export class BrowserProductDemo {
 		const testInfo = this.testInfo;
 		testInfo.setTimeout(RECORDING ? 2_700_000 : 300_000);
 		page.setDefaultTimeout(15_000);
+		// The product demo frame is laid out for Full HD. At the default 1280x720 test viewport its
+		// simulated hardware keypad columns overlap, so an unrecorded regression run would press
+		// the wrong keys.
+		await page.setViewportSize({ width: 1920, height: 1080 });
 		await loadCanonicalCopy(
 			api,
 			bench,
@@ -470,31 +474,14 @@ export class BrowserProductDemo {
 					pauseForFixtureLibrary: truss === 1,
 					pauseForPlacement: truss === 1,
 				});
+				// A truss run is one Venue object per two-metre span, placed one at a time
+				// (Venue objects take no multi-patch copies). The touch UI places the first
+				// span; the scenery step below adds the run's other spans beside it.
 				const trussPrimary = fixtureRow(patchWindow, `0.${truss}`);
 				if (truss > 1) desk.setRecordingClickPace("typing");
 				await desk.click(trussPrimary);
-				for (let segment = 1; segment <= 3; segment++) {
-					await desk.click(
-						patchWindow.getByRole("button", {
-							name: "+ Add multi-patch",
-							exact: true,
-						}),
-					);
-					await expect(patchWindow.locator(".multipatch-row")).toHaveCount(
-						(truss - 1) * 3 + segment,
-					);
-					if (truss === 1 && segment === 1) desk.setRecordingClickPace("rapid");
-				}
-				const allMultipatches = patchWindow.locator(".multipatch-row");
-				const lastPhysicalRow = allMultipatches.nth(truss * 3 - 1);
-				if (truss > 1) desk.setRecordingClickPace("typing");
-				await desk.click(trussPrimary);
-				await desk.click(lastPhysicalRow.locator("td").first(), {
-					modifiers: ["Shift"],
-				});
-				const placement = demoPatchPlacement(
-					`0.${truss} primary THRU multipatch 3`,
-				);
+				if (truss === 1) desk.setRecordingClickPace("rapid");
+				const placement = demoPatchPlacement(`0.${truss}`);
 				for (const [axis, keys] of [
 					["X", valuePadKeys(placement.location.x)],
 					["Y", valuePadKeys(placement.location.y)],
@@ -502,7 +489,7 @@ export class BrowserProductDemo {
 				] as const)
 					await spreadPhysicalPatchVectorThroughTouchUi(
 						desk,
-						lastPhysicalRow,
+						trussPrimary,
 						"location",
 						axis,
 						keys,
@@ -836,7 +823,9 @@ export class BrowserProductDemo {
 			expect(canonical.patch).toMatchObject({
 				fixtureRecords: 254,
 				physicalInstances: 287,
-				occupiedSlots: 3_378,
+				// Includes the Media Servers' 158-slot mapping personality, as the demo generator
+				// (DEMO-GENERATOR-001) counts it.
+				occupiedSlots: 3_544,
 			});
 			await expect
 				.poll(async () => (await api.patch()).fixtures.length)
@@ -844,7 +833,9 @@ export class BrowserProductDemo {
 			await expect(patchWindow.locator(".ui-window-info")).toContainText(
 				`${PLANNED_DEMO_TOTAL_FIXTURE_RECORDS} fixtures`,
 			);
-			await expect(fixtureRow(patchWindow, 417)).toBeVisible();
+			// The progressive patch ends on its last items, the two Media Servers, so their layer
+			// is the one left in view.
+			await expect(fixtureRow(patchWindow, 1001)).toBeVisible();
 			await expect(fixtureRow(patchWindow, 101)).toHaveCount(0);
 			await configureOutput(desk, page, app, bench, api, showId);
 			performanceBaseline = await captureProductDemoPerformance(page);
@@ -1300,7 +1291,9 @@ async function addFixtureThroughTouchUi(
 		.nth(1);
 	await desk.click(
 		fixtureColumn.getByRole("button", {
-			name: new RegExp(`^${escapeRegex(input.family)}\\b`),
+			// The family name, then its lowercase category or the mode count: a longer family
+			// that merely starts with the same words ("Four-Point Truss Corner …") is not it.
+			name: new RegExp(`^${escapeRegex(input.family)}(?:\\s+\\p{Ll}|\\s+·|$)`, "u"),
 		}),
 	);
 	const modeTrigger = browser
@@ -1717,8 +1710,12 @@ async function configureOutput(
 			exact: true,
 		}),
 	);
+	// Outputs is a tabbed section: the Output Engine opens first and the routes live behind their
+	// own tab.
+	await desk.click(app.getByRole("tab", { name: "Routes", exact: true }));
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.outputSurfaceHoldFrames);
 	const routes = app.getByRole("region", { name: "Output routes" });
+	await expect(routes).toBeVisible();
 	await createOutputRoute(
 		desk,
 		page,
@@ -1738,7 +1735,9 @@ async function configureOutput(
 		.toBe(9);
 	await expect(routes.locator(".output-route-list > article")).toHaveCount(9);
 	for (let universe = 1; universe <= 9; universe++)
-		await expect(routes).toContainText(`Logical ${universe} →`);
+		await expect(routes).toContainText(
+			`Logical ${universe} · Art-Net ${universe} · Art-Net Unicast`,
+		);
 	await routes
 		.locator(".output-route-list > article")
 		.last()
@@ -1872,7 +1871,12 @@ async function buildGroups(
 	);
 	setBulkGroupCreationPace(desk);
 	for (const [selection, destination, name] of [
-		[["1", "2", "9", "TRU", "1", "5", "0", "ENT"], 2, "Beam Audience"],
+		// Beam Audience includes the eight Robin LEDBeam 150 (451–458) of the canonical rig.
+		[
+			["1", "2", "9", "TRU", "1", "5", "0", "+", "4", "5", "1", "TRU", "4", "5", "8", "ENT"],
+			2,
+			"Beam Audience",
+		],
 		[["1", "5", "1", "TRU", "1", "5", "4", "ENT"], 3, "Beam Auxiliary"],
 		[["2", "2", "7", "TRU", "2", "4", "2", "ENT"], 9, "Wash Audience"],
 		[["2", "4", "3", "TRU", "2", "4", "6", "ENT"], 10, "Wash Auxiliary"],
@@ -1969,8 +1973,14 @@ async function buildGroups(
 	await toggleProgrammerPlaybacks(desk, demo);
 	await expect(demo.locator(".mode-toggle")).toHaveClass(/playbacks-active/u);
 	const commandLine = page.getByRole("textbox", { name: "Command line" });
-	await groupTile(app, 6).click({ button: "right" });
-	await expect(commandLine).toHaveValue("SET GROUP 6");
+	// A direct Group Master assignment is [^SET], the source Group tile, then the destination
+	// (a right-click on a tile opens its settings instead).
+	// On touch SHIFT toggles, so it is pressed again to release it after [^SET].
+	await desk.click(keypad.getByRole("button", { name: "SHIFT", exact: true }));
+	await desk.click(keypad.getByRole("button", { name: "SET", exact: true }));
+	await desk.click(keypad.getByRole("button", { name: "SHIFT", exact: true }));
+	await desk.click(groupTile(app, 6));
+	await expect(commandLine).toHaveValue(/GROUP 6/u);
 	await desk.click(demo.locator('[data-playback-slot="1"]'));
 	await expect
 		.poll(async () => playbackTargetAtPhysicalSlot(api, showId, 1, 1))
@@ -1979,9 +1989,9 @@ async function buildGroups(
 			group_id: "6",
 		});
 	await desk.setDemoAction(
-		"Assign Beam Show Even to Playback 2 through the command line: SET GROUP 7 AT 1 . 2.",
+		"Assign Beam Show Even to Playback 2 through the command line: ASSIGN GROUP 7 AT PBK 1.2.",
 	);
-	await submitVisibleCommand(page, api, "SET GROUP 7 AT 1 . 2");
+	await submitVisibleCommand(page, api, "ASSIGN GROUP 7 AT PBK 1.2");
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.groupTileHoldFrames);
 	await expect
 		.poll(async () => playbackTargetAtPhysicalSlot(api, showId, 1, 2))
@@ -2025,11 +2035,16 @@ async function buildDynamicsSetup(
 	);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	await chooseDynamicAttribute(desk, page, "Tilt");
+	// Pan arrives with a Tilt partner following Current; the added Tilt lane replaces it once
+	// the desk has stored the pair, so the editor settles on two lanes.
+	await expect(
+		app.getByRole("list", { name: "Dynamic lanes" }).getByRole("listitem"),
+	).toHaveCount(2);
 	await desk.click(app.getByRole("button", { name: /^Select lane 2, Tilt$/ }));
 	await chooseDynamicCurve(desk, page, app, "Cosinus");
 	await configureDynamicThroughTouch(desk, page, app, "Beam Show Circle");
 	await desk.click(
-		app.getByRole("button", { name: "← Back to Pool", exact: true }),
+		app.getByRole("button", { name: "← Dynamics", exact: true }),
 	);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 
@@ -2045,7 +2060,7 @@ async function buildDynamicsSetup(
 	await chooseDynamicCurve(desk, page, app, "PWM");
 	await configureDynamicThroughTouch(desk, page, app, "Beam Show PWM");
 	await desk.click(
-		app.getByRole("button", { name: "← Back to Pool", exact: true }),
+		app.getByRole("button", { name: "← Dynamics", exact: true }),
 	);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsResultHoldFrames);
 	const visibleDynamicIds = await dynamicIdentities(api, showId, [1, 19]);
@@ -2117,13 +2132,13 @@ async function buildPresetSetup(
 	)
 		await desk.click(keypad.locator('[data-keypad-key="HIGH"]'));
 	await expect(demo.locator(".command-status .highlight-status")).toHaveText(
-		"Highlight",
+		/Highlight$/u,
 	);
 	await openBuiltIn(desk, app, "Presets");
 	const presets = app.locator(".preset-pool-window");
 	await showPresetGroupShortcuts(page, presets);
 	await desk.click(
-		presets.getByRole("button", { name: "Position", exact: true }),
+		presetPaneControl(presets, "Position"),
 	);
 	for (const position of [
 		{ name: "Down", address: "3.1", pan: ["5", "0"], tilt: ["2", "5"] },
@@ -2136,7 +2151,7 @@ async function buildPresetSetup(
 		},
 	] as const) {
 		await clearProgrammer(desk, keypad, api);
-		await selectPresetGroupShortcut(desk, presets, "Beam Show");
+		await selectPresetGroupShortcut(desk, api, presets, "Beam Show");
 		await desk.setDemoAction(
 			`Program the ${position.name} Position preset${position.name === "Fan" ? " with a THRU spread" : " with direct Pan and Tilt values"}.`,
 		);
@@ -2152,9 +2167,12 @@ async function buildPresetSetup(
 	await desk.setDemoAction(
 		"Create the first Color preset as absolute encoder values while Highlight shows the result.",
 	);
-	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
-	await selectPresetGroupShortcut(desk, presets, "Beam Show");
+	await desk.click(presetPaneControl(presets, "Color"));
+	await selectPresetGroupShortcut(desk, api, presets, "Beam Show");
+	// A first Color edit starts from open white: Red alone stays white, so Green and Blue go to 0.
 	await setEncoderValue(desk, demo, "Color", "Red", ["1", "0", "0"]);
+	await setEncoderValue(desk, demo, "Color", "Green", ["0"]);
+	await setEncoderValue(desk, demo, "Color", "Blue", ["0"]);
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(presetTile(presets, "2.1"));
 
@@ -2162,7 +2180,7 @@ async function buildPresetSetup(
 	await desk.setDemoAction(
 		"Create the second Color preset with the graphical Color Special Dialog.",
 	);
-	await selectPresetGroupShortcut(desk, presets, "Beam Show");
+	await selectPresetGroupShortcut(desk, api, presets, "Beam Show");
 	await desk.click(
 		demo
 			.locator(".product-demo-application .parameter-controls")
@@ -2173,20 +2191,40 @@ async function buildPresetSetup(
 	await desk.click(
 		app.getByRole("button", { name: "Special Dialog", exact: true }),
 	);
-	const colorDialog = page.locator(".special-dialog-card");
-	const colorSheet = colorDialog.locator(".color-sheet");
-	const colorBox = await colorSheet.boundingBox();
+	// The dialog opens compact in the encoder area or as the full modal, whichever fits; either
+	// shows a 2D picker (compact) or the hue ring (modal) to touch.
+	const colorDialog = page.getByRole("dialog", { name: "Color Special Dialog" });
+	await expect(colorDialog).toBeVisible();
+	const picker = colorDialog
+		.locator('[role="application"], [role="slider"][aria-label="Hue"]')
+		.first();
+	const colorBox = await picker.boundingBox();
 	if (!colorBox)
 		throw new Error("The graphical Color Special Dialog is not visible");
 	await page.mouse.click(
 		colorBox.x + colorBox.width * 0.78,
 		colorBox.y + colorBox.height * 0.3,
 	);
-	await desk.click(
-		colorDialog.getByRole("button", { name: "Close modal", exact: true }),
-	);
+	// A hue alone is white at Saturation 0: touch Saturation near full as well.
+	const saturation = colorDialog.getByRole("slider", {
+		name: "Saturation",
+		exact: true,
+	});
+	await saturation.focus();
+	await page.keyboard.press("End");
+	await expect(saturation).toHaveAttribute("aria-valuenow", "100");
+	const closeModal = colorDialog.getByRole("button", {
+		name: "Close Special Dialog",
+		exact: true,
+	});
+	if (await closeModal.count()) await desk.click(closeModal);
+	else await page.keyboard.press("Escape");
+	await expect(colorDialog).toBeHidden();
 	await desk.click(keypad.getByRole("button", { name: "RECORD", exact: true }));
 	await desk.click(presetTile(presets, "2.2"));
+	await expect
+		.poll(async () => api.showObject(showId, "preset", "2.2"))
+		.not.toBeNull();
 	await desk.fastForward(
 		"Completing the remaining Color presets in three to four seconds, then programming Position and Beam presets at one second each.",
 		() =>
@@ -2213,10 +2251,23 @@ async function buildPresetSetup(
 		await desk.click(keypad.locator('[data-keypad-key="HIGH"]'));
 }
 
+/**
+ * A control in the Preset pool's window header: the family tabs and the Groups action sit in the
+ * header, outside the pool body.
+ */
+function presetPaneControl(presets: Locator, name: string) {
+	// The nearest ancestor that also holds the window header's tab list.
+	const pane = presets.locator("xpath=ancestor::*[.//*[@role='tablist']][1]");
+	return pane
+		.getByRole("tab", { name, exact: true })
+		.or(pane.getByRole("button", { name, exact: true }))
+		.first();
+}
+
 async function showPresetGroupShortcuts(page: Page, presets: Locator) {
 	const shortcuts = presets.locator(".group-strip");
 	if (await shortcuts.isVisible()) return;
-	const toggle = presets.getByRole("button", { name: "Groups", exact: true });
+	const toggle = presetPaneControl(presets, "Groups");
 	const box = await toggle.boundingBox();
 	if (!box) throw new Error("The Preset Group-shortcut toggle is not visible");
 	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -2226,17 +2277,26 @@ async function showPresetGroupShortcuts(page: Page, presets: Locator) {
 	await expect(shortcuts).toBeVisible();
 }
 
+/**
+ * A single press of a Group shortcut selects the live Group once the double-press window (which
+ * would select it frozen) has passed, so the demo waits until the tile shows the Group selected
+ * and the desk's Programmer holds the live Group before it programs anything.
+ */
 async function selectPresetGroupShortcut(
 	desk: DeskDriver,
+	api: ApiDriver,
 	presets: Locator,
 	name: string,
 ) {
-	await desk.click(
-		presets
-			.locator(".group-strip .group-card")
-			.getByText(name, { exact: true })
-			.first(),
-	);
+	const card = presets
+		.locator(".group-strip .group-card")
+		.filter({ has: presets.page().getByText(name, { exact: true }) })
+		.first();
+	await desk.click(card.getByText(name, { exact: true }));
+	await expect(card).toHaveAttribute("aria-pressed", "true");
+	await expect
+		.poll(async () => JSON.stringify((await programmer(api)).selection_expression))
+		.toContain('"live_group"');
 }
 
 async function buildCueProgramming(
@@ -2294,7 +2354,7 @@ async function buildCueProgramming(
 			width: 10,
 			height: 9,
 		},
-		{ cueListSource: "follow-selection", showCueSidebar: true },
+		{ cueListSource: "follow-selection" },
 	);
 	await configuration.apply();
 	await fixtureSheet.expect.visible();
@@ -2432,6 +2492,19 @@ async function recordVisibleCuelist({
 		.locator(`.cuelist-card[data-pool-slot-id="${number}"]`)
 		.first();
 	await desk.click(poolCard);
+	// The placeholder Cuelist holds one empty Cue, so Record asks Add, Merge, or Overwrite: the
+	// look replaces that placeholder Cue.
+	const recordChoice = page.getByRole("dialog", { name: "Record Cue choice" });
+	const resolveRecordChoice = async () => {
+		if (await recordChoice.isVisible())
+			await desk.click(
+				recordChoice.getByRole("button", { name: "Overwrite Cue", exact: true }),
+			);
+	};
+	await recordChoice
+		.waitFor({ state: "visible", timeout: 1_500 })
+		.catch(() => undefined);
+	await resolveRecordChoice();
 	const recordedCueListId = async () => {
 		const target = await playbackTarget(api, showId, number);
 		if (target?.type !== "cue_list") return null;
@@ -2446,7 +2519,13 @@ async function recordVisibleCuelist({
 			: null;
 	};
 	await page.waitForTimeout(500);
-	if ((await recordedCueListId()) === null) await poolCard.click();
+	if ((await recordedCueListId()) === null) {
+		await poolCard.click();
+		await recordChoice
+			.waitFor({ state: "visible", timeout: 1_500 })
+			.catch(() => undefined);
+		await resolveRecordChoice();
+	}
 	await expect.poll(recordedCueListId).not.toBeNull();
 	if ((await record.getAttribute("aria-pressed")) === "true")
 		await desk.click(record);
@@ -2580,15 +2659,18 @@ async function demonstrateBuskingAndPreload(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
 	);
-	await openGroups(desk, keypad);
-	await desk.click(groupTile(app, 11));
+	// A single Group press selects the live Group once its double-press window has passed.
+	await selectLiveGroupThroughPool(desk, app, keypad, 11);
+	await expect
+		.poll(async () => (await programmer(api)).selected)
+		.toEqual(preparedLook.washFixtureIds);
 	await demoPause(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
 	);
 	await openBuiltIn(desk, app, "Presets");
 	const presets = app.locator(".preset-pool-window");
-	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
+	await desk.click(presetPaneControl(presets, "Color"));
 	const washColorValues = valuesForFixtures(
 		preparedLook.values,
 		preparedLook.washFixtureIds,
@@ -2602,7 +2684,7 @@ async function demonstrateBuskingAndPreload(
 					api,
 					showId,
 					preparedLook.washFixtureIds,
-					new Set(["color.red", "color.green", "color.blue"]),
+					new Set(["color"]),
 				),
 				washColorValues,
 			),
@@ -2621,17 +2703,19 @@ async function demonstrateBuskingAndPreload(
 	);
 	await openBuiltIn(desk, app, "Presets");
 	await desk.click(
-		presets.getByRole("button", { name: "Position", exact: true }),
+		presetPaneControl(presets, "Position"),
 	);
 	const fanOut = await api.showObject<any>(showId, "preset", "3.4");
 	if (!fanOut)
 		throw new Error("The Busking Preload look requires Position 3.4 Fan Out");
-	const beamPositionValues = normalizedPresetFixtureValues(
-		fanOut.body.values,
+	const beamPositionValues = presetFixtureValues(
+		fanOut.body,
 		preparedLook.beamFixtureIds,
-		new Set(["pan", "tilt"]),
+		new Set(["position"]),
 	);
-	expect(new Set(Object.values(beamPositionValues)).size).toBeGreaterThan(2);
+	expect(
+		new Set(Object.values(beamPositionValues).map((value) => JSON.stringify(value))).size,
+	).toBeGreaterThan(2);
 	await recallPresetThroughTouchWithRetry(
 		desk,
 		presetTile(presets, "3.4"),
@@ -2641,7 +2725,7 @@ async function demonstrateBuskingAndPreload(
 					api,
 					showId,
 					preparedLook.beamFixtureIds,
-					new Set(["pan", "tilt"]),
+					new Set(["position"]),
 				),
 				beamPositionValues,
 			),
@@ -2650,7 +2734,7 @@ async function demonstrateBuskingAndPreload(
 		demo.page(),
 		PRODUCT_DEMO_SCRIPT.pacing.preloadProgrammingStepFrames,
 	);
-	await desk.click(presets.getByRole("button", { name: "Color", exact: true }));
+	await desk.click(presetPaneControl(presets, "Color"));
 	const beamColorValues = valuesForFixtures(
 		preparedLook.values,
 		preparedLook.beamFixtureIds,
@@ -2664,16 +2748,22 @@ async function demonstrateBuskingAndPreload(
 					api,
 					showId,
 					preparedLook.beamFixtureIds,
-					new Set(["color.red", "color.green", "color.blue"]),
+					new Set(["color"]),
 				),
 				beamColorValues,
 			),
 	);
+	// The Preload look is published with the next rendered frame, and the bench clock renders a
+	// frame only when it advances.
+	await bench.tick(0);
 	await expect
 		.poll(async () =>
-			visualizationColorLook(api, preparedLook.fixtureIds, true),
+			valuesMatch(
+				await visualizationColorLook(api, preparedLook.fixtureIds, true),
+				preparedLook.values,
+			),
 		)
-		.toEqual(preparedLook.values);
+		.toBe(true);
 	await api.request("PUT", "/api/v2/configuration", {
 		programmer_fade_millis: PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis,
 	});
@@ -2753,10 +2843,13 @@ async function demonstrateBuskingAndPreload(
 		]),
 	);
 	await setProgrammerFixtureValues(api, finalIntensityValues);
+	// The edit follows the two-second Programmer Fade, and the bench clock renders only when it
+	// advances.
+	await bench.tick(PRODUCT_DEMO_SCRIPT.pacing.programmerFadeMillis);
 	await expect
 		.poll(async () =>
-			valuesMatch(
-				await visualizationAttributeLook(
+			numbersMatch(
+				await visualizationNumberLook(
 					api,
 					finalIntensityOwners,
 					new Set(["intensity"]),
@@ -2787,16 +2880,21 @@ async function demonstrateBuskingAndPreload(
 		.toEqual([...visibleFinalFixtures].sort());
 	await expect
 		.poll(async () =>
-			visualizationColorLook(api, preparedLook.fixtureIds, false),
+			valuesMatch(
+				await visualizationColorLook(api, preparedLook.fixtureIds, false),
+				preparedLook.values,
+			),
 		)
-		.toEqual(preparedLook.values);
+		.toBe(true);
 	await expect
 		.poll(async () =>
-			valuesMatch(
+			// Fan Out stores no value for the Robin LEDBeam 150 that joined Beam Audience
+			// (b84c3ab5e); they keep their own Position, so only the stored fixtures are compared.
+			valuesInclude(
 				await visualizationAttributeLook(
 					api,
 					preparedLook.beamFixtureIds,
-					new Set(["pan", "tilt"]),
+					new Set(["position"]),
 					false,
 				),
 				beamPositionValues,
@@ -2828,31 +2926,33 @@ function lastFixtureId(fixtureIds: string[]) {
 	return fixtureId;
 }
 
+/**
+ * The prepared Busking look as the semantic owners the Color presets store (programming
+ * contract 1): Wash fixtures take Dark Blue (2.9) and Beam fixtures Yellow (2.3), each as the
+ * fixture's own whole `color`, never separate channel percentages.
+ */
 async function expectedPreloadColorLook(api: ApiDriver, showId: string) {
-	const [washShow, beamAudience] = await Promise.all([
+	const [washShow, beamAudience, darkBlue, yellow] = await Promise.all([
 		api.showObject<any>(showId, "group", "11"),
 		api.showObject<any>(showId, "group", "2"),
+		api.showObject<any>(showId, "preset", "2.9"),
+		api.showObject<any>(showId, "preset", "2.3"),
 	]);
 	if (!washShow || !beamAudience)
 		throw new Error("The Busking Preload look requires Groups 11 and 2");
+	if (!darkBlue || !yellow)
+		throw new Error("The Busking Preload look requires Color 2.9 and 2.3");
 	const washFixtures = washShow.body.fixtures as string[];
 	const beamFixtures = beamAudience.body.fixtures as string[];
+	const color = new Set(["color"]);
 	return {
 		washFixtureIds: washFixtures,
 		beamFixtureIds: beamFixtures,
 		fixtureIds: [...washFixtures, ...beamFixtures],
-		values: Object.fromEntries([
-			...washFixtures.flatMap((fixtureId) => [
-				[`${fixtureId}:color.red`, 0],
-				[`${fixtureId}:color.green`, 0],
-				[`${fixtureId}:color.blue`, 1],
-			]),
-			...beamFixtures.flatMap((fixtureId) => [
-				[`${fixtureId}:color.red`, 1],
-				[`${fixtureId}:color.green`, 1],
-				[`${fixtureId}:color.blue`, 0],
-			]),
-		]),
+		values: {
+			...presetFixtureValues(darkBlue.body, washFixtures, color),
+			...presetFixtureValues(yellow.body, beamFixtures, color),
+		},
 	};
 }
 
@@ -2911,10 +3011,9 @@ async function setProgrammerFixtureValues(
 	);
 }
 
-function valuesForFixtures(
-	values: Record<string, number>,
-	fixtureIds: readonly string[],
-) {
+type SemanticLook = Record<string, unknown>;
+
+function valuesForFixtures(values: SemanticLook, fixtureIds: readonly string[]) {
 	const targets = new Set(fixtureIds);
 	return Object.fromEntries(
 		Object.entries(values).filter(([key]) =>
@@ -2923,23 +3022,67 @@ function valuesForFixtures(
 	);
 }
 
-function normalizedPresetFixtureValues(
-	values: Record<string, Record<string, any>>,
+/**
+ * `${fixture}:${attribute}` → the value recalling the Preset gives each fixture, for the given
+ * semantic owners: its universal value, overridden by the fixture's own stored value. The demo's
+ * Colour presets are universal (e7ce37658), so they name no fixture.
+ */
+function presetFixtureValues(
+	preset: {
+		values?: Record<string, Record<string, any>>;
+		universal_values?: Record<string, any>;
+	},
 	fixtureIds: readonly string[],
 	attributes: ReadonlySet<string>,
-) {
+): SemanticLook {
 	return Object.fromEntries(
 		fixtureIds.flatMap((fixtureId) =>
-			Object.entries(values[fixtureId] ?? {}).flatMap(([attribute, value]) =>
-				attributes.has(attribute) && value?.kind === "normalized"
-					? [[`${fixtureId}:${attribute}`, value.value]]
-					: [],
+			Object.entries({
+				...(preset.universal_values ?? {}),
+				...(preset.values?.[fixtureId] ?? {}),
+			}).flatMap(([attribute, value]) =>
+				attributes.has(attribute) && value ? [[`${fixtureId}:${attribute}`, value]] : [],
 			),
 		),
 	);
 }
 
-function valuesMatch(
+/** Exact semantic equality; numbers within f32 round-trip tolerance (stored vs wire). */
+function sameValue(actual: unknown, expected: unknown): boolean {
+	if (typeof actual === "number" && typeof expected === "number")
+		return Math.abs(actual - expected) <= 0.000_01;
+	if (Array.isArray(actual) || Array.isArray(expected))
+		return (
+			Array.isArray(actual) &&
+			Array.isArray(expected) &&
+			actual.length === expected.length &&
+			actual.every((item, index) => sameValue(item, expected[index]))
+		);
+	if (actual && expected && typeof actual === "object" && typeof expected === "object") {
+		const a = actual as Record<string, unknown>;
+		const e = expected as Record<string, unknown>;
+		const keys = new Set([...Object.keys(a), ...Object.keys(e)]);
+		return [...keys].every((key) => sameValue(a[key], e[key]));
+	}
+	return actual === expected;
+}
+
+function valuesMatch(actual: SemanticLook, expected: SemanticLook) {
+	const keys = Object.keys(expected);
+	return (
+		Object.keys(actual).length === keys.length &&
+		keys.every((key) => key in actual && sameValue(actual[key], expected[key]))
+	);
+}
+
+/** Every expected value is present and equal; other keys may hold anything. */
+function valuesInclude(actual: SemanticLook, expected: SemanticLook) {
+	return Object.keys(expected).every(
+		(key) => key in actual && sameValue(actual[key], expected[key]),
+	);
+}
+
+function numbersMatch(
 	actual: Record<string, number>,
 	expected: Record<string, number>,
 ) {
@@ -2950,11 +3093,21 @@ function valuesMatch(
 	);
 }
 
+/** The resolved semantic Color owner of each fixture, from the visualization source values. */
 async function visualizationColorLook(
 	api: ApiDriver,
 	fixtureIds: readonly string[],
 	preload: boolean,
 ) {
+	return visualizationAttributeLook(api, fixtureIds, new Set(["color"]), preload);
+}
+
+async function visualizationAttributeLook(
+	api: ApiDriver,
+	fixtureIds: readonly string[],
+	attributes: ReadonlySet<string>,
+	preload: boolean,
+): Promise<SemanticLook> {
 	const snapshot = await api.request<any>(
 		"GET",
 		`/api/v2/output/visualization${preload ? "?preload=true" : ""}`,
@@ -2962,16 +3115,14 @@ async function visualizationColorLook(
 	const targets = new Set(fixtureIds);
 	return Object.fromEntries(
 		snapshot.values.flatMap((entry: any) =>
-			targets.has(entry.fixture_id) &&
-			entry.attribute.startsWith("color.") &&
-			entry.value.kind === "normalized"
-				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value.value]]
+			targets.has(entry.fixture_id) && attributes.has(entry.attribute)
+				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value]]
 				: [],
 		),
 	);
 }
 
-async function visualizationAttributeLook(
+async function visualizationNumberLook(
 	api: ApiDriver,
 	fixtureIds: readonly string[],
 	attributes: ReadonlySet<string>,
@@ -3032,12 +3183,13 @@ async function expectProfileColorSeparation(
 		.toEqual({ washBlue: true, beamYellow: true, distinct: true });
 }
 
+/** `${fixture}:${attribute}` → the pending Preload value, Group values expanded to members. */
 async function preloadProgrammerAttributeLook(
 	api: ApiDriver,
 	showId: string,
 	fixtureIds: readonly string[],
 	attributes: ReadonlySet<string>,
-) {
+): Promise<SemanticLook> {
 	const sessionId = api.session?.session_id;
 	if (!sessionId)
 		throw new Error("The product demo requires an authenticated user");
@@ -3046,22 +3198,19 @@ async function preloadProgrammerAttributeLook(
 		`/api/v2/programmer/preload-values/snapshot`,
 	);
 	const targets = new Set(fixtureIds);
-	const values = Object.fromEntries(
+	const values: SemanticLook = Object.fromEntries(
 		snapshot.projection.fixture_values.flatMap((entry: any) =>
-			targets.has(entry.fixture_id) &&
-			attributes.has(entry.attribute) &&
-			entry.value.kind === "normalized"
-				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value.value]]
+			targets.has(entry.fixture_id) && attributes.has(entry.attribute)
+				? [[`${entry.fixture_id}:${entry.attribute}`, entry.value]]
 				: [],
 		),
 	);
 	for (const entry of snapshot.projection.group_values) {
-		if (!attributes.has(entry.attribute) || entry.value.kind !== "normalized")
-			continue;
+		if (!attributes.has(entry.attribute)) continue;
 		const group = await api.showObject<any>(showId, "group", entry.group_id);
 		for (const fixtureId of group?.body.fixtures ?? []) {
 			if (targets.has(fixtureId))
-				values[`${fixtureId}:${entry.attribute}`] = entry.value.value;
+				values[`${fixtureId}:${entry.attribute}`] = entry.value;
 		}
 	}
 	return values;
@@ -3217,9 +3366,33 @@ async function ensureStagePane3d(desk: DeskDriver, app: Locator) {
 	return stage;
 }
 
-async function openGroups(desk: DeskDriver, keypad: Locator) {
-	await desk.click(keypad.getByRole("button", { name: "SHIFT", exact: true }));
-	await desk.click(keypad.getByRole("button", { name: "1", exact: true }));
+/**
+ * The Groups built-in is on the Shift layer of the Built-ins dock (`[^1]` is the Intensity Preset
+ * built-in). On touch SHIFT toggles, so it is pressed again to release it.
+ */
+async function openGroups(desk: DeskDriver, app: Locator, keypad: Locator) {
+	const toggle = app.getByRole("button", {
+		name: "Desktops / Built-ins",
+		exact: true,
+	});
+	if ((await toggle.getAttribute("data-dock-mode")) === "desks")
+		await desk.click(toggle);
+	const shift = keypad.getByRole("button", { name: "SHIFT", exact: true });
+	await desk.click(shift);
+	await desk.click(
+		app
+			.getByRole("navigation", { name: "Shift Built-ins", exact: true })
+			.getByRole("button", { name: "Groups", exact: true }),
+	);
+	if (
+		await app
+			.getByRole("navigation", { name: "Shift Built-ins", exact: true })
+			.isVisible()
+	)
+		await desk.click(shift);
+	await expect(
+		app.getByRole("navigation", { name: "Built-ins", exact: true }),
+	).toBeVisible();
 }
 
 async function selectLiveGroupThroughPool(
@@ -3228,7 +3401,7 @@ async function selectLiveGroupThroughPool(
 	keypad: Locator,
 	groupNumber: number,
 ) {
-	await openGroups(desk, keypad);
+	await openGroups(desk, app, keypad);
 	const tile = groupTile(app, groupNumber);
 	if (
 		!(await tile.evaluate((element) => element.classList.contains("selected")))
@@ -3261,18 +3434,23 @@ async function setEncoderValue(
 	const controls = demo
 		.locator(".product-demo-application .parameter-controls")
 		.first();
-	await desk.click(
-		controls
-			.getByRole("button", {
-				name: new RegExp(`^${escapeRegex(family)}(?: \\d+ of \\d+)?$`),
-			})
-			.first(),
-	);
-	await desk.click(
-		controls.getByRole("button", {
-			name: new RegExp(`^Encoder \\d+: ${escapeRegex(label)},`),
-		}),
-	);
+	const tab = controls
+		.getByRole("button", {
+			name: new RegExp(`^${escapeRegex(family)}(?: \\d+ of \\d+)?$`),
+		})
+		.first();
+	const encoder = controls.getByRole("button", {
+		name: new RegExp(`^Encoder \\d+: ${escapeRegex(label)},`),
+	});
+	// Tapping the active family tab moves to its next page, so tap until the encoder shows.
+	const shown = () =>
+		encoder
+			.waitFor({ state: "visible", timeout: 1_500 })
+			.then(() => true)
+			.catch(() => false);
+	for (let page = 0; page < 4 && !(await shown()); page += 1)
+		await desk.click(tab);
+	await desk.click(encoder);
 	const dialog = demo.page().getByRole("dialog", {
 		name: /^Encoder \d+ value$/,
 	});
@@ -3302,13 +3480,25 @@ async function chooseDynamicAttribute(
 	const chooser = page.getByRole("dialog", { name: "Select lane attribute" });
 	await expect(chooser).toBeVisible();
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsChoiceHoldFrames);
-	await desk.click(
-		chooser.getByRole("button", {
-			name: attribute,
-			exact: true,
-		}),
-	);
+	// The chooser lists attribute groups first; the attribute sits inside its group.
+	const choice = chooser.getByRole("button", { name: attribute, exact: true });
+	if (!(await choice.isVisible())) {
+		await desk.click(
+			chooser.getByRole("button", {
+				name: DYNAMIC_ATTRIBUTE_GROUPS[attribute] ?? attribute.toLowerCase(),
+				exact: true,
+			}),
+		);
+		await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.dynamicsChoiceHoldFrames);
+	}
+	await desk.click(choice);
 }
+
+const DYNAMIC_ATTRIBUTE_GROUPS: Record<string, string> = {
+	Pan: "position",
+	Tilt: "position",
+	Intensity: "intensity",
+};
 
 async function chooseDynamicCurve(
 	desk: DeskDriver,
@@ -3488,7 +3678,7 @@ async function assignVirtualDynamic(
 	);
 	await desk.click(
 		modal.getByRole("radio", {
-			name: new RegExp(`^Dynamic ${poolNumber} · ${escapeRegex(name)}`),
+			name: new RegExp(`^${poolNumber} ${escapeRegex(name)}`),
 		}),
 	);
 	await demoPause(

@@ -3,8 +3,16 @@ use light_core::{AttributeKey, FixtureId};
 use std::{cell::Cell, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
+mod lane_contract;
 mod runtime_control;
+mod runtime_control_journal;
+mod runtime_output_gate;
+mod runtime_preview;
+mod runtime_programming;
 mod runtime_spatial;
+mod runtime_start_replay;
+mod runtime_transaction;
+mod sample_boundaries;
 mod synchronization;
 
 struct Sources {
@@ -44,38 +52,40 @@ fn source(value: f32) -> ScalarSource {
 fn lane() -> DynamicLane {
     DynamicLane {
         id: Uuid::new_v4(),
-        attribute: AttributeKey::intensity(),
-        mode: DynamicLaneMode::Keyframes,
-        keyframes: KeyframeConfiguration {
-            points: vec![
-                DynamicKeyframe {
-                    position: 0.0,
-                    source: source(0.0),
-                    interpolation: ScalarInterpolation::Linear,
-                },
-                DynamicKeyframe {
-                    position: 0.5,
-                    source: source(1.0),
-                    interpolation: ScalarInterpolation::Linear,
-                },
-            ],
-            size: 1.0,
-        },
-        max_min: MaxMinConfiguration {
-            minimum: source(0.0),
-            maximum: source(1.0),
-            function: PeriodicFunction::Sinus,
-            size: 1.0,
-            pwm: PwmShape::default(),
-        },
-        middle_amplitude: MiddleAmplitudeConfiguration {
-            middle: ScalarSource::Current,
-            amplitude: 0.5,
-            function: PeriodicFunction::Sinus,
-            size: 1.0,
-            pwm: PwmShape::default(),
-            invert_waveform: false,
-        },
+        body: crate::DynamicLaneBody::LegacyScalar(crate::LegacyScalarLaneBody {
+            attribute: AttributeKey::intensity(),
+            mode: DynamicLaneMode::Keyframes,
+            keyframes: KeyframeConfiguration {
+                points: vec![
+                    DynamicKeyframe {
+                        position: 0.0,
+                        source: source(0.0),
+                        interpolation: ScalarInterpolation::Linear,
+                    },
+                    DynamicKeyframe {
+                        position: 0.5,
+                        source: source(1.0),
+                        interpolation: ScalarInterpolation::Linear,
+                    },
+                ],
+                size: 1.0,
+            },
+            max_min: MaxMinConfiguration {
+                minimum: source(0.0),
+                maximum: source(1.0),
+                function: PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: PwmShape::default(),
+            },
+            middle_amplitude: MiddleAmplitudeConfiguration {
+                middle: ScalarSource::Current,
+                amplitude: 0.5,
+                function: PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: PwmShape::default(),
+                invert_waveform: false,
+            },
+        }),
         speed_multiplier: Rational::ONE,
         width: 1.0,
         phase: None,
@@ -119,7 +129,7 @@ fn definition(lane: DynamicLane) -> DynamicDefinition {
 fn full_size_controller_does_not_resolve_an_unused_current_underlay() {
     let target = FixtureId::new();
     let mut dynamic_lane = lane();
-    dynamic_lane.mode = DynamicLaneMode::MaxMin;
+    dynamic_lane.legacy_mut().unwrap().mode = DynamicLaneMode::MaxMin;
     let definition = definition(dynamic_lane);
     let definition_id = definition.id;
     let mut runtime = DynamicRuntime::default();
@@ -549,7 +559,7 @@ fn definition_structure_keeps_every_lane_scalar_and_rejects_indexed_attributes()
     validate_definition(&valid).unwrap();
 
     let mut invalid = valid;
-    invalid.lanes[0].attribute = AttributeKey("shutter".into());
+    invalid.lanes[0].legacy_mut().unwrap().attribute = AttributeKey("shutter".into());
     assert_eq!(
         validate_definition(&invalid),
         Err(DynamicValidationError::UnsupportedAttribute(
@@ -589,6 +599,8 @@ fn definition_overall_speed_defaults_to_one_and_advances_runtime_phase() {
     let value = runtime
         .sample(instance, 250, 1_000, 10, &Sources { current: 0.0 })
         .unwrap()[0]
+        .legacy()
+        .expect("scalar sample")
         .value;
     assert!(
         (value - 1.0).abs() < 0.0001,
@@ -599,7 +611,7 @@ fn definition_overall_speed_defaults_to_one_and_advances_runtime_phase() {
 #[test]
 fn keyframes_close_to_the_first_value_and_current_remains_live() {
     let mut lane = lane();
-    lane.mode = DynamicLaneMode::MiddleAmplitude;
+    lane.legacy_mut().unwrap().mode = DynamicLaneMode::MiddleAmplitude;
     let definition = definition(lane.clone());
     let evaluator = DynamicEvaluator::new(&definition);
     let target = FixtureId::new();
@@ -719,7 +731,12 @@ fn uniform_and_per_lane_phase_modes_sample_the_expected_lane_phase() {
             .sample(instance, 0, 1_000, 10, &Sources { current: 0.0 })
             .unwrap()
             .into_iter()
-            .map(|sample| (sample.lane_id, sample.value))
+            .map(|sample| {
+                (
+                    sample.lane_id,
+                    sample.legacy().expect("scalar sample").value,
+                )
+            })
             .collect::<HashMap<_, _>>()
     };
 
@@ -1140,6 +1157,7 @@ fn controller(id: u128, priority: i16, paused: bool) -> DynamicController {
         id: Uuid::from_u128(id),
         source: DynamicControllerSource::Programmer {
             programmer_id: Uuid::from_u128(id + 100),
+            instance_link: None,
         },
         priority,
         activated_at_millis: id as u64,

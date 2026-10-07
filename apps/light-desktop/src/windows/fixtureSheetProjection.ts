@@ -31,11 +31,13 @@ import {
 	cueListFixtureIds,
 	fixtureSheetIncludesFixture,
 } from "./fixtureSheetFilters";
+import { followsMasters } from "../components/setup/fixturePatch/patchModel";
 import { fixtureSheetTargets } from "./fixtureSheetTargets";
 import {
 	fixtureSheetGroupValues,
 	fixtureSheetNormalizedValue,
 	fixtureSheetValueIndex,
+	withCommandedPositions,
 } from "./fixtureSheetValues";
 
 type FixtureSheetTarget = ReturnType<typeof fixtureSheetTargets>[number];
@@ -358,7 +360,7 @@ function indexLimitingGroups(
 				(mode) => mode.id === fixture.definition.mode_id,
 			) ?? fixture.definition.profile_snapshot?.modes[0];
 		const eligible = profileMode
-			? profileMode.channels.some((channel) => channel.reacts_to_group_master)
+			? profileMode.channels.some(followsMasters)
 			: fixture.definition.heads.some((head) =>
 					head.parameters.some((parameter) =>
 						parameter.attribute.toLowerCase().includes("intensity"),
@@ -592,7 +594,8 @@ function useEventuallyConsistentFixtureSheetSnapshot(
 			if (inFlight) return;
 			inFlight = true;
 			try {
-				const next = await read();
+				// The Position cell reads the same commanded pose as the encoders (TL-552).
+				const next = withCommandedPositions(await read());
 				if (!cancelled)
 					setSnapshot((current) =>
 						fixtureSheetSnapshotsEqual(current, next) ? current : next,

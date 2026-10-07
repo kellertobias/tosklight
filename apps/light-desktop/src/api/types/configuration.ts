@@ -61,6 +61,8 @@ export interface DeskConfiguration {
 	highlight_look_feedback?: string[];
 	matter_enabled?: boolean;
 	pool_presentation?: PoolPresentationConfiguration;
+	/** Per-desk Easy/Advanced Color encoder presentation; never stored in a show. */
+	color_presentation?: import("../generated/light-wire").ColorEncoderPresentation;
 	update_settings_by_desk?: Record<string, unknown>;
 	file_manager_system_picker_fallback: boolean;
 	file_manager_roots: Array<{

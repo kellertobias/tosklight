@@ -1,3 +1,4 @@
+import { ColorPhysicalEditor } from "./colorPhysicalEditor";
 import { Button, FormLayout, NumberField, SelectField } from "@tosklight/ui";
 import type {
 	ColorSystem,
@@ -427,6 +428,7 @@ export function ColorEditor({
 					</section>
 				);
 			})}
+			<ColorPhysicalEditor mode={mode} onChange={onChange} />
 		</div>
 	);
 }

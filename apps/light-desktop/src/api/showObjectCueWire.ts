@@ -107,7 +107,7 @@ function decodeCueChange(
 		value:
 			change.value == null
 				? null
-				: decodeAttributeValue(change.value, `${path}.value`),
+				: decodeAttributeValue(change.value, `${path}.value`, idKey === "group_id" ? "group" : "fixture"),
 		automatic_restore: optionalBoolean(
 			change,
 			"automatic_restore",

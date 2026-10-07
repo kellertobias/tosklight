@@ -1,17 +1,6 @@
-import {
-	Button,
-	ModalRegistration,
-	ModalTitleBar,
-	SwitchField,
-} from "@tosklight/ui";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
+import { isLevelAttribute } from "../sheet/fixturePatch/patchModel";
 import type { FixtureChannel } from "../wire";
-
-/** The masters after Virtual Intensity, in the order the output applies them. */
-export const MASTER_FLAGS = [
-	["reacts_to_sequence_master", "React to Sequence Master", "SM"],
-	["reacts_to_group_master", "React to Group Master", "GM"],
-	["reacts_to_grand_master", "React to Grand Master", "GR"],
-] as const;
 
 type VirtualIntensity = "ignore" | "follow" | "inverse";
 
@@ -26,12 +15,20 @@ function virtualIntensity(channel: FixtureChannel): VirtualIntensity {
 	return channel.virtual_intensity_inverted ? "inverse" : "follow";
 }
 
-/** The masters a channel follows, short enough to sit in a table cell. */
+/** A level channel: the masters scale its parameter (Intensity, Volume) before DMX. */
+function isLevelChannel(channel: FixtureChannel) {
+	return (
+		isLevelAttribute(channel.attribute) ||
+		isLevelAttribute(channel.fixture_attribute)
+	);
+}
+
+/** How the masters reach a channel, short enough to sit in a table cell. */
 export function mastersSummary(channel: FixtureChannel) {
 	const vi = virtualIntensity(channel);
 	const active = [
+		...(isLevelChannel(channel) ? ["Level"] : []),
 		...(vi === "follow" ? ["VI"] : vi === "inverse" ? ["−VI"] : []),
-		...MASTER_FLAGS.filter(([key]) => channel[key]).map(([, , short]) => short),
 	];
 	return active.length ? active.join(" · ") : "None";
 }
@@ -69,6 +66,13 @@ export function MastersModal({
 						onClose={onClose}
 					/>
 					<div className="fixture-masters-body">
+						{/* Every master scales the level parameters before DMX; any other channel follows
+						    them only through the virtual intensity. */}
+						{isLevelChannel(channel) && (
+							<p className="fixture-masters-note">
+								The masters scale this level before DMX.
+							</p>
+						)}
 						{/* Inverse is for a channel that should do the opposite of the dimmer: a lamp that
 						    is dark while the virtual intensity is up and lit as it comes down. */}
 						<div
@@ -97,19 +101,6 @@ export function MastersModal({
 								))}
 							</div>
 						</div>
-						{MASTER_FLAGS.map(([key, name]) => (
-							<SwitchField
-								key={key}
-								label={name}
-								labelPlacement="side"
-								offLabel="Ignores"
-								onLabel="Reacts"
-								checked={channel[key]}
-								onChange={(event) =>
-									onChange({ ...channel, [key]: event.target.checked })
-								}
-							/>
-						))}
 					</div>
 				</section>
 			</div>

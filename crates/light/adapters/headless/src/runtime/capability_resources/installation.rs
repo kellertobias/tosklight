@@ -133,6 +133,14 @@ impl InstallationResource {
         self.desk.lock().active_show()
     }
 
+    pub(in crate::runtime) fn record_show_activation(
+        &self,
+        id: light_core::ShowId,
+        previous_id: Option<light_core::ShowId>,
+    ) -> Result<ShowEntry, light_show::StoreError> {
+        self.desk.lock().record_show_activation(id, previous_id)
+    }
+
     pub(in crate::runtime) fn set_active_show(
         &self,
         id: Option<light_core::ShowId>,
@@ -454,6 +462,25 @@ impl InstallationResource {
             .collect()
     }
 
+    pub(in crate::runtime) fn fixture_profile_revision_documents(
+        &self,
+        id: light_core::FixtureId,
+    ) -> Result<Vec<(u32, serde_json::Value)>, light_fixture::FixtureError> {
+        let library = self.fixture_library.lock();
+        library
+            .profile_revisions(id)?
+            .into_iter()
+            .map(|revision| {
+                library
+                    .profile_revision_document(id, revision)?
+                    .map(|document| (revision, document))
+                    .ok_or_else(|| {
+                        light_fixture::FixtureError::Invalid("fixture revision disappeared".into())
+                    })
+            })
+            .collect()
+    }
+
     pub(in crate::runtime) fn fixture_source_mapping_preferences(
         &self,
     ) -> Result<Vec<light_fixture::FixtureSourceMappingPreference>, light_fixture::FixtureError>
@@ -483,6 +510,28 @@ impl InstallationResource {
         self.fixture_library
             .lock()
             .save_profile(profile, expected_revision)
+    }
+
+    pub(in crate::runtime) fn publish_fixture_profile_revision(
+        &self,
+        profile: &light_fixture::FixtureProfile,
+    ) -> Result<bool, light_fixture::FixtureError> {
+        self.fixture_library
+            .lock()
+            .publish_profile_revision(profile)
+    }
+
+    pub(in crate::runtime) fn save_fixture_profile_with_gdtf(
+        &self,
+        profile: light_fixture::FixtureProfile,
+        expected_revision: u32,
+        source: &[u8],
+    ) -> Result<light_fixture::FixtureProfile, light_fixture::FixtureError> {
+        self.fixture_library.lock().save_profile_with_source_gdtf(
+            profile,
+            expected_revision,
+            source,
+        )
     }
 
     pub(in crate::runtime) fn delete_fixture_profile(
@@ -519,17 +568,6 @@ impl InstallationResource {
         self.fixture_library.lock().import_json(&json)
     }
 
-    pub(in crate::runtime) fn import_fixture_definition_with_source(
-        &self,
-        definition: &light_fixture::FixtureDefinition,
-        source: &[u8],
-    ) -> Result<light_fixture::FixtureDefinition, light_fixture::FixtureError> {
-        let json = serde_json::to_string(definition)?;
-        self.fixture_library
-            .lock()
-            .import_json_with_source(&json, Some(source))
-    }
-
     pub(in crate::runtime) fn delete_fixture_definition(
         &self,
         id: light_core::FixtureId,
@@ -559,6 +597,16 @@ impl InstallationResource {
         revision: u32,
     ) -> Result<Option<Vec<u8>>, light_fixture::FixtureError> {
         self.fixture_library.lock().source_gdtf(id, revision)
+    }
+
+    pub(in crate::runtime) fn fixture_source_gdtf_with_evidence(
+        &self,
+        id: light_core::FixtureId,
+        revision: u32,
+    ) -> Result<Option<light_fixture::FixtureGdtfSource>, light_fixture::FixtureError> {
+        self.fixture_library
+            .lock()
+            .source_gdtf_with_evidence(id, revision)
     }
 
     pub(in crate::runtime) fn fixture_profile_revision_document(

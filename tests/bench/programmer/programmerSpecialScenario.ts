@@ -19,20 +19,16 @@ export type ControlSemantic =
 /** Beam carries no Special Dialog; Shapers is the family that uses this shape of one. */
 export type BeamSpecialFamily = "Shapers";
 
-type PositionAssignment = {
-	fixture_id: string;
-	attribute: "pan" | "tilt";
-	value: number;
-};
-type ColorAssignment = {
+/** Programmer Angles of one head, in degrees (the semantic Position owner, TL-552). */
+type PositionAngles = {
 	fixtureId: string;
-	attribute: string;
-	value: number;
+	pan: number;
+	tilt: number;
 };
-type PickerColor = {
-	hue: number;
-	saturation: number;
-	brightness: number;
+/** The requested White Blend (0–1) of one Color head's semantic colour. */
+type WhiteBlendAssignment = {
+	fixtureId: string;
+	whiteBlend: number;
 };
 
 const CONTROL_LABELS: Record<ControlSemantic, string> = {
@@ -48,13 +44,13 @@ const CONTROL_LABELS: Record<ControlSemantic, string> = {
 export class BrowserProgrammerSpecials {
 	private positionContract?: {
 		selected: string[];
-		home: PositionAssignment[];
-		before: PositionAssignment[];
+		home: PositionAngles[];
+		before: PositionAngles[];
 	};
 	private colorContract?: {
 		selected: string[];
-		range: ColorAssignment[];
-		prior: ColorAssignment[];
+		range: WhiteBlendAssignment[];
+		prior: WhiteBlendAssignment[];
 	};
 	readonly position = {
 		prepareReturnHomeContract: () => this.prepareReturnHomeContract(),
@@ -91,6 +87,11 @@ export class BrowserProgrammerSpecials {
 		private readonly showId?: () => string,
 	) {}
 
+	/**
+	 * Two Position heads of the canonical show, in reverse patch order, with a fixture without
+	 * Position between them. Each starts from its own programmed Angles; home is the semantic
+	 * home pose, Pan 0° and Tilt 0° (the centre of travel), for every head.
+	 */
 	private async prepareReturnHomeContract(): Promise<void> {
 		const patch = await this.fixtures();
 		const targets = patch.flatMap((fixture) => {
@@ -101,32 +102,21 @@ export class BrowserProgrammerSpecials {
 				const fixtureId = head.shared
 					? fixture.fixture_id
 					: logicalByIndex.get(head.index);
-				if (!fixtureId) return [];
-				const home = (["pan", "tilt"] as const).flatMap((attribute) => {
-					const parameter = head.parameters.find(
-						(candidate) => candidate.attribute === attribute,
-					);
-					if (!parameter) return [];
-					return [
-						{
-							fixture_id: fixtureId,
-							attribute,
-							value: Number.isFinite(parameter.default)
-								? parameter.default
-								: 0.5,
-						},
-					];
-				});
-				return home.length ? [{ fixtureId, home }] : [];
+				const attributes = new Set(
+					head.parameters.map((parameter) => parameter.attribute),
+				);
+				return fixtureId && attributes.has("pan") && attributes.has("tilt")
+					? [fixtureId]
+					: [];
 			});
 		});
 		expect(targets.length).toBeGreaterThanOrEqual(2);
 		const chosen = [targets[1], targets[0]];
-		const home = chosen.flatMap((target) => target.home);
-		const before = home.map((assignment, index) => ({
-			...assignment,
-			value: index % 2 === 0 ? 0.91 : 0.09,
-		}));
+		const home = chosen.map((fixtureId) => ({ fixtureId, pan: 0, tilt: 0 }));
+		const before = [
+			{ fixtureId: chosen[0], pan: 120, tilt: 30 },
+			{ fixtureId: chosen[1], pan: -60, tilt: -20 },
+		];
 		const nonPosition = patch.find((fixture) =>
 			fixture.definition.heads.every((head) =>
 				head.parameters.every(
@@ -135,16 +125,16 @@ export class BrowserProgrammerSpecials {
 			),
 		);
 		const selected = [
-			chosen[0].fixtureId,
+			chosen[0],
 			...(nonPosition ? [nonPosition.fixture_id] : []),
-			chosen[1].fixtureId,
+			chosen[1],
 		];
 		await replaceProgrammingSelection(this.api, {
 			surface: "api",
 			showId: this.requiredShowId(),
 			fixtures: selected,
 		});
-		await this.setPositionAssignments(before);
+		await this.setPositionAngles(before);
 		this.positionContract = { selected, home, before };
 	}
 
@@ -201,50 +191,90 @@ export class BrowserProgrammerSpecials {
 			await expect(
 				this.page.locator(".control-section.hardware-connected"),
 			).toBeVisible();
-		const dialog = await this.openDialog("Position");
+		const dialog = await this.openPositionDialog();
 		const action = dialog.getByRole("button", {
 			name: "Return Home",
 			exact: true,
 		});
 		await expect(action).toBeEnabled();
 		await this.desk.click(action);
-		await this.closeDialog(dialog);
+		await this.closePositionDialog(dialog);
 	}
 
 	private async expectReturnHomeUnavailable(): Promise<void> {
-		const dialog = await this.openDialog("Position");
+		const dialog = await this.openPositionDialog();
 		await expect(
 			dialog.getByRole("button", { name: "Return Home", exact: true }),
 		).toBeDisabled();
-		await this.closeDialog(dialog);
+		await this.closePositionDialog(dialog);
+	}
+
+	/**
+	 * The semantic Position Special Dialog (TL-549): a standard modal titled **Position**. The
+	 * family button names its page on a multi-page layout (`Position 1 of 2`).
+	 */
+	private async openPositionDialog(): Promise<Locator> {
+		await this.desk.click(
+			this.page.getByRole("button", { name: /^Position( \d+ of \d+)?$/ }),
+		);
+		await this.desk.click(
+			this.page.getByRole("button", { name: "Special Dialog", exact: true }),
+		);
+		const dialog = this.page.getByRole("dialog", {
+			name: "Position Special Dialog",
+			exact: true,
+		});
+		await expect(dialog).toBeVisible();
+		return dialog;
+	}
+
+	private async closePositionDialog(dialog: Locator): Promise<void> {
+		await this.desk.click(
+			dialog.getByRole("button", {
+				name: "Close Position Special Dialog",
+				exact: true,
+			}),
+		);
+		await expect(dialog).toBeHidden();
 	}
 
 	private async expectPositionAssignments(
 		key: "home" | "before",
 	): Promise<void> {
-		const contract = this.requiredPositionContract();
-		await expectProgrammerAssignments(
-			this.api,
-			contract[key].map(({ fixture_id, attribute, value }) => ({
-				fixtureId: fixture_id,
-				attribute,
-				value,
-			})),
-		);
+		const expected = this.requiredPositionContract()[key];
+		await expect
+			.poll(async () => {
+				const values = (await currentProgrammer(this.api)).values;
+				return expected.map(({ fixtureId }) => {
+					const entry = values.find(
+						(value) =>
+							value.fixture_id === fixtureId && value.attribute === "position",
+					);
+					return programmedAngles(entry?.value);
+				});
+			})
+			.toEqual(expected.map(({ pan, tilt }) => ({ pan, tilt })));
 	}
 
-	private async setPositionAssignments(
-		assignments: readonly PositionAssignment[],
+	private async setPositionAngles(
+		angles: readonly PositionAngles[],
 	): Promise<void> {
 		await batchProgrammerValues(this.api, {
 			surface: "api",
 			showId: this.requiredShowId(),
-			mutations: assignments.map((assignment) => ({
+			mutations: angles.map(({ fixtureId, pan, tilt }) => ({
 				action: "set_fixture",
-				fixtureId: assignment.fixture_id,
-				attribute: assignment.attribute,
-				value: { kind: "normalized", value: assignment.value },
-				timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				fixtureId,
+				attribute: "position",
+				value: {
+					kind: "position",
+					value: {
+						kind: "angles",
+						pan_degrees: { kind: "value", value: pan },
+						tilt_degrees: { kind: "value", value: tilt },
+					},
+				} as never,
+				timing: { fade: false, fadeMillis: null, delayMillis: null },
 			})),
 		});
 	}
@@ -257,6 +287,12 @@ export class BrowserProgrammerSpecials {
 		return this.positionContract;
 	}
 
+	/**
+	 * Three Color heads of the canonical show (a logical head first when one exists) with a
+	 * fixture without Color between the second and third. Each starts from the same semantic
+	 * white at White Blend 33%; the range is White Blend 80% → 20% over the Color heads in
+	 * selection order (docs/testing/36 SEMANTIC-COLOR-003).
+	 */
 	private async prepareColorRangeContract(): Promise<void> {
 		const patch = await this.fixtures();
 		const colorTargets = patch.flatMap((fixture) => {
@@ -285,7 +321,7 @@ export class BrowserProgrammerSpecials {
 			...colorTargets
 				.filter((target) => target.fixtureId !== logical?.fixtureId)
 				.slice(0, 2),
-		];
+		].map((target) => target.fixtureId);
 		const nonColor = patch.find((fixture) =>
 			fixture.definition.heads.every((head) =>
 				head.parameters.every(
@@ -294,129 +330,163 @@ export class BrowserProgrammerSpecials {
 			),
 		);
 		const selected = [
-			chosen[0].fixtureId,
-			chosen[1].fixtureId,
+			chosen[0],
+			chosen[1],
 			...(nonColor ? [nonColor.fixture_id] : []),
-			chosen[2].fixtureId,
+			chosen[2],
 		];
-		const range = colorProgrammerAssignments(
-			selected,
-			patch,
-			interpolatePickerRange(
-				selected.length,
-				COLOR_RANGE_START,
-				COLOR_RANGE_END,
-			),
-		);
-		const prior = range.map((assignment) => ({
-			...assignment,
-			value: 0.33,
-		}));
+		const range = whiteBlendRange(chosen, COLOR_RANGE_FIRST, COLOR_RANGE_LAST);
+		const prior = chosen.map((fixtureId) => ({ fixtureId, whiteBlend: 0.33 }));
 		await replaceProgrammingSelection(this.api, {
 			surface: "api",
 			showId: this.requiredShowId(),
 			fixtures: selected,
 		});
-		await this.setColorAssignments(prior);
+		await this.setWhiteBlend(prior);
 		this.colorContract = { selected, range, prior };
 	}
 
+	/** One ordinary touch on White Blend sets every Color head to the same value. */
 	private async setUniformColor(): Promise<void> {
 		const contract = this.requiredColorContract();
-		const uniformPoint = {
-			hue: 0.35,
-			saturation: 0.6,
-			brightness: 0.85,
-		};
-		const expected = colorProgrammerAssignments(
-			contract.selected,
-			await this.fixtures(),
-			contract.selected.map(() => uniformPoint),
+		const dialog = await this.openColorDialog();
+		await touchFader(this.page, whiteBlendFader(dialog), COLOR_UNIFORM);
+		await expectWhiteBlend(
+			this.api,
+			contract.range.map(({ fixtureId }) => ({
+				fixtureId,
+				whiteBlend: COLOR_UNIFORM,
+			})),
 		);
-		const dialog = await this.openDialog("Color");
-		const before = await this.programmerValuesRevision();
-		await clickPicker(this.page, uniformPoint.hue, 1 - uniformPoint.saturation);
-		await expect.poll(() => this.programmerValuesRevision()).toBe(before + 1);
-		await expectProgrammerAssignments(this.api, expected);
-		await this.closeDialog(dialog);
+		await this.closeColorDialog(dialog);
 	}
 
+	/**
+	 * Keyboard Shift held for one drag from 80% to 20%: the press only marks endpoint 1 and
+	 * writes nothing; reaching the last value completes the ordered range.
+	 */
 	private async applyColorRangeWithShift(): Promise<void> {
-		const contract = this.requiredColorContract();
-		const dialog = await this.openDialog("Color");
-		const before = await this.programmerValuesRevision();
+		const dialog = await this.openColorDialog();
 		await this.page.keyboard.down("Shift");
-		await beginPickerDrag(this.page, COLOR_RANGE_START, COLOR_RANGE_END);
-		await expect(
-			this.page.locator('.color-range-preview[data-active="true"]'),
-		).toBeVisible();
-		expect(await this.programmerValuesRevision()).toBe(before);
-		await this.page.mouse.up();
-		await this.page.keyboard.up("Shift");
-		await expect.poll(() => this.programmerValuesRevision()).toBe(before + 1);
-		await expect(
-			this.page.locator('.color-range-preview[data-active="false"]'),
-		).toBeVisible();
-		await expectProgrammerAssignments(this.api, contract.range);
-		await this.closeDialog(dialog);
+		try {
+			await this.touchRange(dialog, "drag");
+		} finally {
+			await this.page.keyboard.up("Shift");
+		}
+		await this.closeColorDialog(dialog);
 	}
 
+	/** A shifted first touch that is cancelled by the system leaves the Programmer untouched. */
 	private async cancelColorRangeWithShift(): Promise<void> {
-		const dialog = await this.openDialog("Color");
-		const before = await this.programmerValuesRevision();
+		const contract = this.requiredColorContract();
+		const dialog = await this.openColorDialog();
+		const fader = whiteBlendFader(dialog);
 		await this.page.keyboard.down("Shift");
-		await beginPickerDrag(this.page, COLOR_RANGE_START, COLOR_RANGE_END);
-		await expect(
-			this.page.locator('.color-range-preview[data-active="true"]'),
-		).toBeVisible();
-		await this.page.locator(".color-sheet").dispatchEvent("pointercancel", {
-			pointerId: 1,
-			pointerType: "mouse",
-		});
-		await this.page.keyboard.up("Shift");
-		await this.page.mouse.up();
-		await expect(this.page.locator(".color-range-preview")).toHaveCount(0);
-		expect(await this.programmerValuesRevision()).toBe(before);
-		await this.closeDialog(dialog);
+		try {
+			const point = await faderPoint(fader, COLOR_RANGE_FIRST);
+			await this.page.mouse.move(point.x, point.y);
+			await this.page.mouse.down();
+			await expect(pendingEndpoint(dialog)).toBeVisible();
+			await fader.dispatchEvent("pointercancel", {
+				pointerId: 1,
+				pointerType: "mouse",
+			});
+			await this.page.mouse.up();
+		} finally {
+			await this.page.keyboard.up("Shift");
+		}
+		await expectWhiteBlend(this.api, contract.prior);
+		await this.closeColorDialog(dialog);
 	}
 
+	/** The attached hardware Shift arms the same ordered range as the keyboard. */
 	private async applyColorRangeWithHardwareShift(): Promise<void> {
-		if (!this.hardware.connected)
+		if (!this.hardware?.connected)
 			throw new Error("Hardware Color range requires hardware.connect() first");
-		const contract = this.requiredColorContract();
 		const alias = "desk";
-		const dialog = await this.openDialog("Color");
+		const dialog = await this.openColorDialog();
 		try {
 			await this.hardware.send(`/light/${alias}/programmer/shift`, [true]);
-			await expect(
-				this.page.locator('.color-sheet[data-range-shift="armed"]'),
-			).toBeVisible();
-			const before = await this.programmerValuesRevision();
-			await beginPickerDrag(this.page, COLOR_RANGE_START, COLOR_RANGE_END);
-			expect(await this.programmerValuesRevision()).toBe(before);
-			await this.page.mouse.up();
-			await expect.poll(() => this.programmerValuesRevision()).toBe(before + 1);
-			await expectProgrammerAssignments(this.api, contract.range);
-			await expect(
-				this.page.locator('.color-sheet[data-range-shift="armed"]'),
-			).toBeVisible();
+			await this.touchRange(dialog, "touches");
 			await this.hardware.send(`/light/${alias}/programmer/shift`, [false]);
-			await expect(
-				this.page.locator('.color-sheet[data-range-shift="idle"]'),
-			).toBeVisible();
 		} finally {
 			await this.hardware
 				.send(`/light/${alias}/programmer/shift`, [false])
 				.catch(() => undefined);
-			await this.closeDialog(dialog);
+			await this.closeColorDialog(dialog);
 		}
 	}
 
-	private async expectColorAssignments(key: "prior" | "range"): Promise<void> {
-		await expectProgrammerAssignments(
-			this.api,
-			this.requiredColorContract()[key],
+	/**
+	 * A shifted range on White Blend from 80% to 20%, as one drag or as two touches. Shift must
+	 * already be held or armed.
+	 */
+	private async touchRange(dialog: Locator, mode: "drag" | "touches"): Promise<void> {
+		const contract = this.requiredColorContract();
+		const fader = whiteBlendFader(dialog);
+		const first = await faderPoint(fader, COLOR_RANGE_FIRST);
+		const last = await faderPoint(fader, COLOR_RANGE_LAST);
+		await this.page.mouse.move(first.x, first.y);
+		await this.page.mouse.down();
+		if (mode === "touches") await this.page.mouse.up();
+		await expect(pendingEndpoint(dialog)).toBeVisible();
+		await expect(dialog.getByText("Shift-click the last value")).toBeVisible();
+		// The first endpoint alone is never written.
+		await expectWhiteBlend(this.api, contract.prior);
+		if (mode === "drag") {
+			await this.page.mouse.move(last.x, last.y, { steps: 6 });
+			await this.page.mouse.up();
+		} else await this.page.mouse.click(last.x, last.y);
+		await expect(
+			dialog.locator('output[aria-label="White Blend value"]'),
+		).toHaveText(
+			`${Math.round(COLOR_RANGE_FIRST * 100)}% → ${Math.round(COLOR_RANGE_LAST * 100)}%`,
 		);
+		for (const endpoint of ["1", "2"])
+			await expect(
+				whiteBlendField(dialog).locator(
+					`.horizontal-range-handle[data-endpoint="${endpoint}"]`,
+				),
+			).toHaveCount(1);
+		await expectWhiteBlend(this.api, contract.range);
+	}
+
+	/**
+	 * The semantic Color Special Dialog (TL-550): compact in the encoder area when it fits, the
+	 * full modal otherwise. White Blend is on the first page of both.
+	 */
+	private async openColorDialog(): Promise<Locator> {
+		await this.desk.click(
+			this.page.getByRole("button", { name: /^Color( \d+ of \d+)?$/ }).first(),
+		);
+		await this.desk.click(
+			this.page.getByRole("button", { name: "Special Dialog", exact: true }),
+		);
+		const dialog = this.page.getByRole("dialog", {
+			name: "Color Special Dialog",
+			exact: true,
+		});
+		await expect(dialog).toBeVisible();
+		await expect(whiteBlendFader(dialog)).toBeVisible();
+		return dialog;
+	}
+
+	/** The modal closes with its close button; the compact page by tapping the Color tab. */
+	private async closeColorDialog(dialog: Locator): Promise<void> {
+		const close = dialog.getByRole("button", {
+			name: "Close Special Dialog",
+			exact: true,
+		});
+		if (await close.count()) await this.desk.click(close);
+		else
+			await this.desk.click(
+				this.page.getByRole("button", { name: /^Color( \d+ of \d+)?$/ }).first(),
+			);
+		await expect(dialog).toBeHidden();
+	}
+
+	private async expectColorAssignments(key: "prior" | "range"): Promise<void> {
+		await expectWhiteBlend(this.api, this.requiredColorContract()[key]);
 	}
 
 	private async expectColorSelection(): Promise<void> {
@@ -425,18 +495,17 @@ export class BrowserProgrammerSpecials {
 			.toEqual(this.requiredColorContract().selected);
 	}
 
-	private async setColorAssignments(
-		assignments: readonly ColorAssignment[],
-	): Promise<void> {
+	/** A complete semantic white at the given White Blend, one programmer value per head. */
+	private async setWhiteBlend(values: readonly WhiteBlendAssignment[]): Promise<void> {
 		await batchProgrammerValues(this.api, {
 			surface: "api",
 			showId: this.requiredShowId(),
-			mutations: assignments.map(({ fixtureId, attribute, value }) => ({
+			mutations: values.map(({ fixtureId, whiteBlend }) => ({
 				action: "set_fixture",
 				fixtureId,
-				attribute,
-				value: { kind: "normalized", value },
-				timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				attribute: "color",
+				value: semanticWhite(whiteBlend) as never,
+				timing: { fade: false, fadeMillis: null, delayMillis: null },
 			})),
 		});
 	}
@@ -453,14 +522,6 @@ export class BrowserProgrammerSpecials {
 		if (!this.colorContract)
 			throw new Error("Call special.color.prepareRangeContract() first");
 		return this.colorContract;
-	}
-
-	private async programmerValuesRevision(): Promise<number> {
-		const snapshot = await this.api.request<any>(
-			"GET",
-			`/api/v2/programmer/values/snapshot`,
-		);
-		return snapshot.projection.revision;
 	}
 
 	private session() {
@@ -674,118 +735,116 @@ const COLOR_ATTRIBUTES = [
 	"color.magenta",
 	"color.yellow",
 ] as const;
-const COLOR_RANGE_START: PickerColor = {
-	hue: 0.1,
-	saturation: 0.8,
-	brightness: 0.85,
-};
-const COLOR_RANGE_END: PickerColor = {
-	hue: 0.9,
-	saturation: 0.2,
-	brightness: 0.85,
-};
+const COLOR_UNIFORM = 0.6;
+const COLOR_RANGE_FIRST = 0.8;
+const COLOR_RANGE_LAST = 0.2;
 
-function interpolatePickerRange(
-	count: number,
-	start: PickerColor,
-	end: PickerColor,
-): PickerColor[] {
-	if (count <= 0) return [];
-	if (count === 1) return [end];
-	return Array.from({ length: count }, (_, index) => {
-		if (index === 0) return { ...start, brightness: end.brightness };
-		if (index === count - 1) return end;
-		const ratio = index / (count - 1);
-		return {
-			hue: start.hue + (end.hue - start.hue) * ratio,
-			saturation:
-				start.saturation + (end.saturation - start.saturation) * ratio,
-			brightness: end.brightness,
-		};
-	});
+/** Equal steps from the first to the last value over the heads, in selection order. */
+function whiteBlendRange(
+	fixtureIds: readonly string[],
+	first: number,
+	last: number,
+): WhiteBlendAssignment[] {
+	const steps = Math.max(1, fixtureIds.length - 1);
+	return fixtureIds.map((fixtureId, index) => ({
+		fixtureId,
+		whiteBlend: first + ((last - first) * index) / steps,
+	}));
 }
 
-function colorProgrammerAssignments(
-	selectedFixtures: readonly string[],
-	patch: readonly PatchedFixture[],
-	colors: readonly PickerColor[],
-): ColorAssignment[] {
-	return selectedFixtures.flatMap((fixtureId, index) => {
-		const fixture = patch.find(
-			(candidate) =>
-				candidate.fixture_id === fixtureId ||
-				candidate.logical_heads.some((head) => head.fixture_id === fixtureId),
-		);
-		if (!fixture) return [];
-		const logicalHead = fixture.logical_heads.find(
-			(head) => head.fixture_id === fixtureId,
-		);
-		const heads = logicalHead
-			? fixture.definition.heads.filter(
-					(head) => head.index === logicalHead.head_index,
-				)
-			: fixture.definition.heads.filter((head) => head.shared);
-		const attributes = new Set(
-			heads.flatMap((head) =>
-				head.parameters.map((parameter) => parameter.attribute),
-			),
-		);
-		const color = colors[index];
-		if (!color) return [];
-		const [red, green, blue] = hsvToRgb(color);
-		const values: Array<[string, number]> = [
-			["color.red", red],
-			["color.green", green],
-			["color.blue", blue],
-			["color.cyan", 1 - red],
-			["color.magenta", 1 - green],
-			["color.yellow", 1 - blue],
-		];
-		return values.flatMap(([attribute, value]) =>
-			attributes.has(attribute) ? [{ fixtureId, attribute, value }] : [],
-		);
-	});
+/** The semantic default white (docs/help 05-color-intent) at the given White Blend. */
+function semanticWhite(whiteBlend: number) {
+	return {
+		kind: "color_program",
+		value: {
+			kind: "semantic",
+			intent: {
+				base_xyz: { x: 0.95047, y: 1, z: 1.08883 },
+				recipe: { version: 1, rgb: [1, 1, 1], amber: 0, approximate: false },
+				white_blend: whiteBlend,
+				white_target: { kelvin: 6500, duv: 0 },
+				uv: { amount: 0 },
+				relative_output: 1,
+				allocation: "preserve_recipe",
+			},
+		},
+	};
 }
 
-function hsvToRgb({ hue, saturation, brightness }: PickerColor): number[] {
-	const i = Math.floor(hue * 6);
-	const f = hue * 6 - i;
-	const p = brightness * (1 - saturation);
-	const q = brightness * (1 - f * saturation);
-	const t = brightness * (1 - (1 - f) * saturation);
-	return [
-		[brightness, t, p],
-		[q, brightness, p],
-		[p, brightness, t],
-		[p, q, brightness],
-		[t, p, brightness],
-		[brightness, p, q],
-	][i % 6];
+function whiteBlendField(dialog: Locator): Locator {
+	return dialog.locator('.horizontal-range-field[data-control="white_blend"]');
 }
 
-async function clickPicker(page: Page, x: number, y: number): Promise<void> {
-	const box = await page.locator(".color-sheet").boundingBox();
-	if (!box) throw new Error("Color sheet has no pointer box");
-	await page.mouse.click(box.x + box.width * x, box.y + box.height * y);
+function whiteBlendFader(dialog: Locator): Locator {
+	return dialog.getByRole("slider", { name: "White Blend", exact: true });
 }
 
-async function beginPickerDrag(
-	page: Page,
-	start: PickerColor,
-	end: PickerColor,
+/** The lone endpoint-1 marker a shifted first touch leaves. */
+function pendingEndpoint(dialog: Locator): Locator {
+	return whiteBlendField(dialog).locator(
+		'.horizontal-range-handle[data-endpoint="1"]',
+	);
+}
+
+/** The point on the fader's travel for `value` (0–1), below its label and readout. */
+async function faderPoint(fader: Locator, value: number) {
+	const box = await fader.boundingBox();
+	if (!box) throw new Error("White Blend fader has no pointer box");
+	return { x: box.x + box.width * value, y: box.y + box.height * 0.7 };
+}
+
+/** One touch (press and release) at `value` on a horizontal range fader. */
+async function touchFader(page: Page, fader: Locator, value: number) {
+	const point = await faderPoint(fader, value);
+	await page.mouse.click(point.x, point.y);
+}
+
+/** The requested White Blend of one programmed semantic Color value, or null. */
+function programmedWhiteBlend(value: unknown): number | null {
+	const color = value as
+		| { kind?: string; value?: { kind?: string; intent?: { white_blend?: unknown } } }
+		| undefined;
+	if (color?.kind !== "color_program" || color.value?.kind !== "semantic") return null;
+	const whiteBlend = color.value.intent?.white_blend;
+	return typeof whiteBlend === "number" ? whiteBlend : null;
+}
+
+async function expectWhiteBlend(
+	api: ApiDriver,
+	expected: readonly WhiteBlendAssignment[],
 ): Promise<void> {
-	const box = await page.locator(".color-sheet").boundingBox();
-	if (!box) throw new Error("Color sheet has no pointer box");
-	await page.mouse.move(
-		box.x + box.width * start.hue,
-		box.y + box.height * (1 - start.saturation),
-	);
-	await page.mouse.down();
-	await page.mouse.move(
-		box.x + box.width * end.hue,
-		box.y + box.height * (1 - end.saturation),
-		{ steps: 5 },
-	);
+	await expect
+		.poll(async () => {
+			const values = (await currentProgrammer(api)).values;
+			return expected.every(({ fixtureId, whiteBlend }) => {
+				const entry = values.find(
+					(value) => value.fixture_id === fixtureId && value.attribute === "color",
+				);
+				const actual = programmedWhiteBlend(entry?.value);
+				// One fader step is 1%; the requested value is exact to well below that.
+				return actual !== null && Math.abs(actual - whiteBlend) < 0.0005;
+			});
+		})
+		.toBe(true);
+}
+
+/** The requested Angles of one programmed semantic Position value, or null. */
+function programmedAngles(value: unknown): { pan: number; tilt: number } | null {
+	const position = value as
+		| {
+				kind?: string;
+				value?: {
+					kind?: string;
+					pan_degrees?: { kind?: string; value?: unknown };
+					tilt_degrees?: { kind?: string; value?: unknown };
+				};
+		  }
+		| undefined;
+	const angles = position?.kind === "position" ? position.value : undefined;
+	if (angles?.kind !== "angles") return null;
+	const pan = angles.pan_degrees?.value;
+	const tilt = angles.tilt_degrees?.value;
+	return typeof pan === "number" && typeof tilt === "number" ? { pan, tilt } : null;
 }
 
 async function currentProgrammer(api: ApiDriver): Promise<{
@@ -813,30 +872,4 @@ async function currentProgrammer(api: ApiDriver): Promise<{
 		) ?? programmers[0];
 	if (!current) throw new Error("No programmer is available");
 	return current;
-}
-
-async function expectProgrammerAssignments(
-	api: ApiDriver,
-	expected: readonly ColorAssignment[],
-): Promise<void> {
-	await expect
-		.poll(async () => {
-			const values = (await currentProgrammer(api)).values;
-			return expected.every((assignment) => {
-				const actual = values.find(
-					(value) =>
-						value.fixture_id === assignment.fixtureId &&
-						value.attribute === assignment.attribute,
-				);
-				const value =
-					typeof actual?.value === "number"
-						? actual.value
-						: actual?.value?.value;
-				return (
-					typeof value === "number" &&
-					Math.abs(value - assignment.value) < 0.00001
-				);
-			});
-		})
-		.toBe(true);
 }

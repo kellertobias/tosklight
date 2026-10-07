@@ -13,8 +13,11 @@ Fixtures used throughout, as hung at the Südbahnhof:
 - **PAR L 2** and **PAR R 3**: `Generic › Dimmer RGB Control PAR` (RGB, virtual intensity)
 - **Wash 4**: `ROBE › Robin 300 LEDWash`, mode `Mode 3` (RGBW mover with a dimmer)
 
-Five Color presets hold Red, Green, Blue, Amber (red with three-quarter green), and White. White
-also sets the mover's white emitter. Each of the other presets sets it to zero, so the
+Five Color presets hold Red, Green, Blue, Amber (red with three-quarter green), and White (full
+White Blend). The show programs Color Intent, so each head matches the colour rather than copying
+encoder percentages: three-quarter green is an sRGB component and an RGB emitter shows it at its
+linear-light level (DMX 133), and White is the 6500 K white (RGB 255/240/253), which the mover
+makes from its white emitter. The other presets leave the mover's white emitter at zero, so the
 mover shows the pure colour.
 
 ## BENCH-RITUAL-COLOR-001 — One colour at a time, and back to rest

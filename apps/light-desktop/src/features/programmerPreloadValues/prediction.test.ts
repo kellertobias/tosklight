@@ -103,4 +103,27 @@ describe("predictProgrammerPreloadValues", () => {
 			),
 		).toBe(current);
 	});
+	it("leaves semantic component edits to the server without flattening a whole value", () => {
+		const current = preloadProjection({
+			fixtureValues: [preloadFixtureValue(0.2, { programmerOrder: 4 })],
+		});
+		const predicted = predictProgrammerPreloadValues({
+			action: "apply_intent",
+			fixtureIds: [FIXTURE_1],
+			attribute: "position",
+			operation: {
+				type: "component_edits",
+				edits: [
+					{ kind: "activate_angles" },
+					{
+						kind: "scalar",
+						component: { kind: "pan" },
+						operation: { kind: "relative", value: 10 },
+					},
+				],
+			},
+			timing,
+		})(current);
+		expect(predicted).toBe(current);
+	});
 });

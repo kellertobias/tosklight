@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Channels grouped by the head that owns them, keeping fixture-level channels available to all.
-pub(super) fn group_by_head<'a>(
+pub(crate) fn group_by_head<'a>(
     mode: &'a FixtureMode,
     channels: &'a HashMap<Uuid, ChannelRef>,
 ) -> HashMap<Uuid, Vec<(&'a FixtureChannel, &'a ChannelRef)>> {
@@ -56,7 +56,7 @@ pub(super) fn group_by_head<'a>(
     grouped
 }
 
-pub(super) fn build_binding(
+pub(crate) fn build_binding(
     owned: &[(&FixtureChannel, &ChannelRef)],
     instance: &PhysicalInstance,
     mode: &FixtureMode,
@@ -255,7 +255,7 @@ pub(super) fn layout_cells(emitter: &GeometryEmitter) -> Vec<Vec3> {
 }
 
 /// Split a head's colour channels across its cells when the mode repeats them per pixel.
-pub(super) fn cell_bindings(
+pub(crate) fn cell_bindings(
     owned: &[(&FixtureChannel, &ChannelRef)],
     cells: usize,
 ) -> Vec<ColourBinding> {

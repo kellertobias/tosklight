@@ -58,6 +58,68 @@ export type FixtureSheetGroupValues = Record<
 	FixtureSheetGroupValue
 >;
 
+/**
+ * The sheet's own key for a fixture's commanded Position pose. It is never a registry
+ * attribute, so nothing else reads it as a resolved value.
+ */
+export const FIXTURE_SHEET_COMMANDED_POSITION = "position:commanded";
+
+/**
+ * The Position cell shows the pose the fixture is actually commanded to, the same readout the
+ * Pan/Tilt encoders show: an idle mover at its declared default pose, a programmed one at its
+ * achieved Angles. The server lists each requested owner with one common commanded pair in
+ * `commanded_positions`; it is indexed here under {@link FIXTURE_SHEET_COMMANDED_POSITION}.
+ * Divergent copies and owners without a pose are absent.
+ */
+export function withCommandedPositions(
+	snapshot: VisualizationSnapshot | null,
+): VisualizationSnapshot | null {
+	const owners = snapshot?.commanded_positions;
+	if (!snapshot || !owners?.length) return snapshot;
+	return {
+		...snapshot,
+		values: [
+			...snapshot.values,
+			...owners.map((owner) => ({
+				fixture_id: owner.fixture_id,
+				attribute: FIXTURE_SHEET_COMMANDED_POSITION,
+				value: {
+					kind: "position" as const,
+					value: {
+						kind: "angles" as const,
+						pan_degrees: { kind: "value" as const, value: owner.pan_degrees },
+						tilt_degrees: { kind: "value" as const, value: owner.tilt_degrees },
+					},
+				},
+			})),
+		],
+	};
+}
+
+/** Pan and Tilt in degrees from one literal Angles value. */
+function literalAngles(value: AttributeValue | undefined) {
+	if (value?.kind !== "position" || value.value.kind !== "angles") return null;
+	const { pan_degrees: pan, tilt_degrees: tilt } = value.value;
+	return pan.kind === "value" && tilt.kind === "value"
+		? { pan: pan.value, tilt: tilt.value }
+		: null;
+}
+
+/**
+ * Pan/Tilt read in degrees: the commanded pose, else the resolved Angles request. Null when the
+ * member is not an axis or neither is known.
+ */
+function positionAxisText(
+	attribute: string,
+	values: ReadonlyMap<string, AttributeValue> | undefined,
+) {
+	if (attribute !== "pan" && attribute !== "tilt") return null;
+	const angles =
+		literalAngles(values?.get(FIXTURE_SHEET_COMMANDED_POSITION)) ??
+		literalAngles(values?.get("position"));
+	return angles ? `${formatNumber(angles[attribute])}°` : null;
+}
+
 export function fixtureSheetValueIndex(snapshot: VisualizationSnapshot | null) {
 	const result = new Map<string, Map<string, AttributeValue>>();
 	for (const value of snapshot?.values ?? []) {
@@ -70,6 +132,33 @@ export function fixtureSheetValueIndex(snapshot: VisualizationSnapshot | null) {
 	}
 	return result;
 }
+
+/**
+ * The native Red/Green/Blue channels the sheet shows for the Color group. Under the semantic
+ * programming contract the registry publishes no encoder descriptors for them (Color is edited
+ * as one Color Intent), yet the visualization still reports their output, so the sheet keeps
+ * its colour dot and readable values for every fixture that has them.
+ */
+const NATIVE_RGB_DESCRIPTORS: readonly AttributeDescriptor[] = (
+	[
+		["color.red", "Red", 1],
+		["color.green", "Green", 2],
+		["color.blue", "Blue", 3],
+	] as const
+).map(([id, label, slot]) => ({
+	id,
+	label,
+	family: "color",
+	value_type: "continuous",
+	default_unit: "percent",
+	display_unit: "percent",
+	domain_min: null,
+	domain_max: null,
+	encoder_group: "color",
+	encoder_page: 1,
+	encoder_slot: slot,
+	retired: false,
+}));
 
 export function fixtureSheetGroupValues({
 	target,
@@ -88,9 +177,14 @@ export function fixtureSheetGroupValues({
 	dynamicStack: readonly FixtureSheetDynamicEntry[];
 	preloadDynamicStack: readonly FixtureSheetDynamicEntry[];
 }): FixtureSheetGroupValues {
+	const known = new Set(registry.map((descriptor) => descriptor.id));
+	const fullRegistry = [
+		...registry,
+		...NATIVE_RGB_DESCRIPTORS.filter((descriptor) => !known.has(descriptor.id)),
+	];
 	return Object.fromEntries(
 		FIXTURE_SHEET_ATTRIBUTE_GROUPS.map((group) => {
-			const descriptors = registry
+			const descriptors = fullRegistry
 				.filter(
 					(descriptor) =>
 						descriptor.encoder_group === group &&
@@ -114,16 +208,25 @@ export function fixtureSheetGroupValues({
 					pending && !fixtureSheetAttributeValuesEqual(pending, value)
 						? pending
 						: null;
-				const source = programmerAttributes.has(descriptor.id)
-					? ("programmer" as const)
-					: values?.has(descriptor.id)
-						? ("playback" as const)
-						: ("default" as const);
+				// Since TL-552 Pan and Tilt are programmed as the Position family, and colour
+				// channels as one Color Intent.
+				const family =
+					group === "position" || group === "color" ? group : descriptor.id;
+				const source =
+					programmerAttributes.has(descriptor.id) ||
+					programmerAttributes.has(family)
+						? ("programmer" as const)
+						: values?.has(descriptor.id) || values?.has(family)
+							? ("playback" as const)
+							: ("default" as const);
 				return {
 					attribute: descriptor.id,
 					label: descriptor.label,
 					value,
-					text: formatFixtureSheetValue(value, descriptor, target),
+					text:
+						(group === "position" &&
+							positionAxisText(descriptor.id, values)) ||
+						formatFixtureSheetValue(value, descriptor, target),
 					preloadValue,
 					preloadText:
 						preloadValue == null
@@ -247,6 +350,16 @@ function formatFixtureSheetValue(
 			return formatNormalized(value.value, descriptor);
 		case "discrete":
 			return semanticValueLabel(value.value, descriptor.id, target);
+        case "group_family":
+            // Fixture projections normally arrive materialized. Group summaries retain an
+            // explicit mixed indication instead of choosing an arbitrary member's appearance.
+            return "Group values";
+		case "color_program":
+			return value.value.kind === "semantic" ? "Color intent" : "Direct color";
+		case "position":
+			return value.value.kind === "angles" ? "Angles" : "Target";
+		case "zoom":
+			return value.value.opening_degrees.kind === "value" ? `${formatNumber(value.value.opening_degrees.value)}°` : "Spread";
 		case "color_xyz":
 			return `XYZ ${formatNumber(value.value.x)}, ${formatNumber(value.value.y)}, ${formatNumber(value.value.z)}`;
 		case "spread":
@@ -265,7 +378,9 @@ function formatNormalized(value: number, descriptor: AttributeDescriptor) {
 				value * (descriptor.domain_max - descriptor.domain_min)
 			: value;
 	if (unit === "percent" || unit === "%") return `${Math.round(value * 100)}%`;
-	if (unit === "deg" || unit === "°") return `${formatNumber(domainValue)}°`;
+	// Without a declared domain a channel fraction is not an angle: never label it in degrees.
+	if (unit === "deg" || unit === "°")
+		return domainValue === value ? "—" : `${formatNumber(domainValue)}°`;
 	if (unit) return `${formatNumber(domainValue)} ${unit}`;
 	return `${Math.round(value * 100)}%`;
 }

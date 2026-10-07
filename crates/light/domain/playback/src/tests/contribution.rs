@@ -81,9 +81,62 @@ fn move_in_black_looks_through_dark_cues_and_uses_future_position_timing() {
         "only Position-family values move early"
     );
     assert_eq!(&*candidate.values[0].attribute.0, "pan");
-    assert_eq!(candidate.values[0].current, AttributeValue::Normalized(0.2));
+    assert_eq!(
+        candidate.values[0].current,
+        Some(AttributeValue::Normalized(0.2))
+    );
     assert_eq!(candidate.values[0].target, AttributeValue::Normalized(0.8));
     assert_eq!(candidate.values[0].fade_millis, 3_000);
+}
+
+#[test]
+fn semantic_move_in_black_retains_missing_underlay_and_omits_a_release_target() {
+    use light_core::programming::{PositionIntent, TargetReference};
+    let fixture = FixtureId::new();
+    let target = AttributeValue::Position(Arc::new(PositionIntent::target(
+        TargetReference::Point {
+            point_id: Uuid::from_u128(99),
+        },
+        [1.0, 0.0, 0.0],
+    )));
+    for release in [false, true] {
+        let mut dark = Cue::new(cue_number(1.0));
+        dark.changes.push(value(fixture, "intensity", 0.0));
+        if release {
+            dark.changes.push(CueChange {
+                fixture_id: fixture,
+                attribute: AttributeKey("position".into()),
+                value: Some(target.clone()),
+                automatic_restore: false,
+                fade_millis: None,
+                delay_millis: None,
+            });
+        }
+        let mut lit = Cue::new(cue_number(2.0));
+        lit.changes.push(value(fixture, "intensity", 1.0));
+        lit.changes.push(CueChange {
+            fixture_id: fixture,
+            attribute: AttributeKey("position".into()),
+            value: (!release).then(|| target.clone()),
+            automatic_restore: false,
+            fade_millis: None,
+            delay_millis: None,
+        });
+        let cues = list(vec![dark, lit]);
+        let id = cues.id;
+        let mut engine = PlaybackEngine::default();
+        engine.register(cues).unwrap();
+        engine.register_definition(definition(1, id)).unwrap();
+        engine.go_playback(1).unwrap();
+        let candidates = engine.move_in_black_candidates();
+        if release {
+            assert!(candidates.is_empty());
+        } else {
+            assert_eq!(candidates.len(), 1);
+            assert_eq!(candidates[0].values[0].current, None);
+            assert_eq!(candidates[0].values[0].target, target);
+        }
+    }
 }
 
 #[test]

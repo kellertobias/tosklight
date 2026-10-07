@@ -44,7 +44,8 @@ impl ProgrammerRegistry {
             preload_group_pending: HashMap::new(),
             preload_group_active: Arc::new(HashMap::new()),
             preload_group_release_pending: vec![],
-            preload_group_release_active: vec![],
+            preload_released_colors: Arc::default(),
+            preload_group_release_active: Arc::default(),
             preload_playback_pending: vec![],
             preload_playback_active: false,
             connected: true,
@@ -58,6 +59,7 @@ impl ProgrammerRegistry {
             undo: vec![],
             redo: vec![],
             active_value_undo_group: None,
+            value_gesture_epoch: 0,
         };
         *self.state.write() = Some(state.clone());
         state
@@ -86,6 +88,22 @@ impl ProgrammerRegistry {
                     .chain(state.preload_group_pending.values())
                     .chain(state.preload_group_active.values())
                     .flat_map(|attributes| attributes.values().map(|value| value.programmer_order)),
+            )
+            .chain(
+                state
+                    .dynamic_values
+                    .iter()
+                    .chain(state.preload_dynamic_pending.iter())
+                    .chain(state.preload_dynamic_active.iter())
+                    .map(|value| value.programmer_order),
+            )
+            .chain(
+                state
+                    .group_release_values
+                    .iter()
+                    .chain(state.preload_group_release_pending.iter())
+                    .chain(state.preload_group_release_active.iter())
+                    .map(|value| value.programmer_order),
             )
             .max()
             .unwrap_or(0);
@@ -127,6 +145,7 @@ impl ProgrammerRegistry {
         }
         shared.command_line.clear();
         *self.state.write() = Some(shared);
+        self.invalidate_pending_output_cache();
     }
     /// The interaction context this session operates.
     ///

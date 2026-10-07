@@ -1,4 +1,4 @@
-import type { ShowEntry } from "../../api/types";
+import type { BootstrapSnapshot, ShowEntry } from "../../api/types";
 import type { DeskSnapshot } from "./store";
 
 export function selectBootstrap(snapshot: DeskSnapshot) {
@@ -27,6 +27,18 @@ export function selectSession(snapshot: DeskSnapshot) {
 
 export function selectActiveShow(snapshot: DeskSnapshot) {
 	return snapshot.bootstrap?.active_show ?? null;
+}
+
+/**
+ * The Show whose objects the desk reads. A Show in recovery stays the named active Show for the
+ * recovery dialog, but nothing of it runs, so no surface loads its objects or derives runtime
+ * identities (Groups, Playbacks, Pages) from it.
+ */
+export function runningShowId(
+	bootstrap: Pick<BootstrapSnapshot, "active_show" | "active_show_error"> | null,
+): string | null {
+	if (bootstrap?.active_show_error) return null;
+	return bootstrap?.active_show?.id ?? null;
 }
 
 export function selectActiveShowId(snapshot: DeskSnapshot) {

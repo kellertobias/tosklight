@@ -27,6 +27,7 @@ struct FrameShared {
     fallback_values: ResolvedValues,
     fallback_changed_at: ResolvedChangedAt,
     values: OnceLock<ResolvedValues>,
+    raw_values: OnceLock<ResolvedValues>,
     changed_at: OnceLock<ResolvedChangedAt>,
 }
 
@@ -47,6 +48,7 @@ impl FrameValues {
                 fallback_values: ResolvedValues::default(),
                 fallback_changed_at: ResolvedChangedAt::default(),
                 values: OnceLock::new(),
+                raw_values: OnceLock::new(),
                 changed_at: OnceLock::new(),
             }),
         }
@@ -60,6 +62,7 @@ impl FrameValues {
                 fallback_values: values,
                 fallback_changed_at: changed_at,
                 values: OnceLock::new(),
+                raw_values: OnceLock::new(),
                 changed_at: OnceLock::new(),
             }),
         }
@@ -73,6 +76,26 @@ impl FrameValues {
     /// The dense frame behind these values, when there is one.
     pub(crate) fn frame(&self) -> Option<&ResolvedFrame> {
         self.shared.frame.as_ref()
+    }
+
+    /// Available only on an explicitly traced observer frame. Equal payloads do not imply the
+    /// same source; overrides and Freeze deliberately clear their underlying source identity.
+    pub fn contribution_origin(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&crate::ContributionOrigin> {
+        self.frame()?.origin(fixture, attribute)
+    }
+
+    /// Exact producer-supplied authorship and dependency trace for a winning composed sample.
+    /// Available only on an observer frame. Equal values do not imply equal ownership.
+    pub fn contribution_family_evidence(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&Arc<crate::ContributionFamilyEvidence>> {
+        self.frame()?.family_evidence(fixture, attribute)
     }
 
     /// One value by name, without building a map to find it.
@@ -102,6 +125,51 @@ impl FrameValues {
         }
     }
 
+    /// One programmed parameter by name, BEFORE the output-parameter masters: what a source (or a
+    /// Freeze) holds, not what the masters made of it. A level only the masters' default fill
+    /// holds reads as absent. Values handed in by name are returned as they are.
+    ///
+    /// This is the read for anything that feeds a value back into a resolution (a Dynamic's
+    /// Current) or shows the programmed parameter (the Fixture Sheet): the resolution is finalized
+    /// once later, so reading a finalized level would master it twice.
+    pub fn raw_value(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&AttributeValue> {
+        match &self.shared.frame {
+            Some(frame) => frame.raw_value(fixture_id, attribute),
+            None => self
+                .shared
+                .fallback_values
+                .get(&(fixture_id, attribute.clone())),
+        }
+    }
+
+    /// Every programmed parameter by name, before the masters (see [`Self::raw_value`]). Built
+    /// once, on the first ask.
+    pub fn raw_values(&self) -> &ResolvedValues {
+        let Some(frame) = self.shared.frame.as_ref() else {
+            return &self.shared.fallback_values;
+        };
+        self.shared.raw_values.get_or_init(|| {
+            let mut values =
+                ResolvedValues::with_capacity_and_hasher(frame.occupied_len(), Default::default());
+            for (slot, winner) in frame.occupied() {
+                if let Some(value) = winner.raw_value() {
+                    let (fixture_id, attribute) = frame.slots().pair(slot);
+                    values.insert((fixture_id, attribute.clone()), value.clone());
+                }
+            }
+            for (fixture_id, attribute, winner) in frame.overflowed() {
+                if let Some(value) = winner.raw_value() {
+                    values.insert((fixture_id, attribute.clone()), value.clone());
+                }
+            }
+            values
+        })
+    }
+
     /// When one value last changed, without building a map to find out.
     pub fn changed_at(
         &self,
@@ -115,7 +183,7 @@ impl FrameValues {
                     .overflow(fixture_id)
                     .iter()
                     .find(|(candidate, _)| candidate == attribute)
-                    .map(|(_, winner)| winner.changed_at),
+                    .and_then(|(_, winner)| winner.output_changed_at()),
             },
             None => self
                 .shared
@@ -156,10 +224,14 @@ impl FrameValues {
             );
             for (slot, winner) in frame.occupied() {
                 let (fixture_id, attribute) = frame.slots().pair(slot);
-                changed_at.insert((fixture_id, attribute.clone()), winner.changed_at);
+                if let Some(at) = winner.output_changed_at() {
+                    changed_at.insert((fixture_id, attribute.clone()), at);
+                }
             }
             for (fixture_id, attribute, winner) in frame.overflowed() {
-                changed_at.insert((fixture_id, attribute.clone()), winner.changed_at);
+                if let Some(at) = winner.output_changed_at() {
+                    changed_at.insert((fixture_id, attribute.clone()), at);
+                }
             }
             changed_at
         })
@@ -194,7 +266,9 @@ impl FrameValues {
     }
 
     pub fn materialised_by_name(&self) -> bool {
-        self.shared.values.get().is_some() || self.shared.changed_at.get().is_some()
+        self.shared.values.get().is_some()
+            || self.shared.raw_values.get().is_some()
+            || self.shared.changed_at.get().is_some()
     }
 
     /// Whether these values are backed by the dense frame rather than a map.

@@ -6,10 +6,11 @@ use light_core::{
 };
 use light_dynamics::{
     ActivationBoundary, ActivationPolicy, DynamicDefinition, DynamicEvaluationContext,
-    DynamicEvaluator, DynamicKeyframe, DynamicLane, DynamicLaneMode, DynamicRandomGroup,
-    DynamicSpeed, DynamicTargetBinding, KeyframeConfiguration, MaxMinConfiguration,
-    MiddleAmplitudeConfiguration, PeriodicFunction, PhaseDistribution, PhaseOrdering, PwmShape,
-    Rational, ScalarInterpolation, ScalarSource, ScalarSourceResolver, SpeedGroup,
+    DynamicEvaluator, DynamicKeyframe, DynamicLane, DynamicLaneBody, DynamicLaneMode,
+    DynamicRandomGroup, DynamicRandomRange, DynamicSpeed, DynamicTargetBinding,
+    KeyframeConfiguration, LegacyScalarLaneBody, MaxMinConfiguration, MiddleAmplitudeConfiguration,
+    PeriodicFunction, PhaseDistribution, PhaseOrdering, PwmShape, Rational, ScalarInterpolation,
+    ScalarSource, ScalarSourceResolver, SpeedGroup,
 };
 use light_engine::{
     ContributionBatch, ContributionSample, ContributionSourceId, Engine, EnginePlaybackCommand,
@@ -55,7 +56,7 @@ pub struct ScenarioFixtureInventory {
 }
 
 pub struct BenchmarkScenario {
-    pub engine: Engine,
+    pub engine: Arc<Engine>,
     pub clock: Arc<ManualClock>,
     pub logical_start: chrono::DateTime<Utc>,
     pub universes: u16,
@@ -78,6 +79,8 @@ pub struct BenchmarkScenario {
     pub(super) dynamic_overlaps_static_or_programmer: bool,
     pub(super) programmer_assignment_fraction: &'static str,
     pub(super) dynamic: Option<BenchmarkDynamic>,
+    /// TL-596: semantic scenarios render through the production Live transaction instead.
+    pub live: Option<crate::light_benchmark::semantic_runner::LiveScenario>,
 }
 
 impl BenchmarkScenario {
@@ -148,7 +151,7 @@ impl BenchmarkScenario {
         let dynamic =
             BenchmarkDynamic::for_attribute(&fixture_ids, dynamic_attribute.clone(), logical_start);
         Ok(Self {
-            engine,
+            engine: Arc::new(engine),
             clock,
             logical_start,
             universes: config.universes,
@@ -187,6 +190,7 @@ impl BenchmarkScenario {
             dynamic_overlaps_static_or_programmer: false,
             programmer_assignment_fraction: "1/4 of mapped slots",
             dynamic: Some(dynamic),
+            live: None,
         })
     }
 
@@ -238,7 +242,6 @@ fn sampled_batches(
             contribution.value,
             contribution.source,
             contribution.transition_ordinal,
-            contribution.sequence_master,
         ));
         index += 1;
     }
@@ -285,9 +288,6 @@ fn packed_definition(footprint: u16) -> Result<light_fixture::FixtureDefinition,
                 snap: false,
                 reacts_to_virtual_intensity: false,
                 virtual_intensity_inverted: false,
-                reacts_to_sequence_master: true,
-                reacts_to_group_master: true,
-                reacts_to_grand_master: true,
                 behavior: ChannelBehavior::Controlled,
                 functions: vec![],
             })
@@ -335,6 +335,8 @@ fn packed_fixture(
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -478,60 +480,9 @@ impl BenchmarkDynamic {
         started_at: chrono::DateTime<Utc>,
         instance_count: usize,
     ) -> Result<Self, String> {
-        if instance_count == 0 || targets.len() < instance_count {
-            return Err(
-                "production Dynamics require one nonempty target partition per instance".into(),
-            );
-        }
-        let base = benchmark_dynamic_definition(targets, AttributeKey::intensity());
-        let variants = {
-            let [pwm, middle, random] = benchmark_dynamic_variants(&base);
-            [base, pwm, middle, random]
-        };
-        let attributes = [
-            AttributeKey::intensity(),
-            AttributeKey("color.red".into()),
-            AttributeKey("color.green".into()),
-            AttributeKey("color.blue".into()),
-            AttributeKey("pan".into()),
-            AttributeKey("tilt".into()),
-        ];
-        let definitions = (0..instance_count)
-            .map(|index| {
-                let mut definition = variants[index % variants.len()].clone();
-                definition.id = fixed_uuid(0x5b, index as u64 + 1);
-                definition.pool_number = index as u16 + 1;
-                definition.name = format!("Headless production Dynamic {}", index + 1);
-                let partition = targets
-                    .iter()
-                    .enumerate()
-                    .filter(|(target_index, _)| target_index % instance_count == index)
-                    .map(|(_, target)| *target)
-                    .collect::<Vec<_>>();
-                definition.target_binding =
-                    DynamicTargetBinding::FrozenTargets { targets: partition };
-                let seed = definition.lanes[0].clone();
-                definition.lanes = attributes
-                    .iter()
-                    .enumerate()
-                    .map(|(lane_index, attribute)| {
-                        let mut lane = seed.clone();
-                        lane.id = fixed_uuid(0x5c + index as u64, lane_index as u64 + 1);
-                        lane.attribute = attribute.clone();
-                        for point in &mut lane.keyframes.points {
-                            if let ScalarSource::Preset {
-                                attribute: source_attribute,
-                                ..
-                            } = &mut point.source
-                            {
-                                *source_attribute = attribute.clone();
-                            }
-                        }
-                        lane
-                    })
-                    .collect();
-                definition
-            })
+        let definitions = production_definitions(targets, instance_count)?
+            .into_iter()
+            .map(|(definition, _)| definition)
             .collect();
         let count = targets.len() as f32;
         Ok(Self {
@@ -560,6 +511,13 @@ impl BenchmarkDynamic {
         let mut samples = Vec::with_capacity(self.targets.len() * 6);
         for (definition_index, definition) in self.definitions.iter().enumerate() {
             let evaluator = DynamicEvaluator::new(definition);
+            // TL-553: one owner key per lane, borrowed per target as the pre-semantic harness
+            // borrowed `lane.attribute`; a key per sample added two atomic Arc operations each.
+            let owners = definition
+                .lanes
+                .iter()
+                .map(|lane| lane.output_owner())
+                .collect::<Vec<_>>();
             let cycle_duration_millis = match definition.speed {
                 DynamicSpeed::Fixed { duration_millis } => duration_millis,
                 DynamicSpeed::SpeedGroup {
@@ -580,10 +538,10 @@ impl BenchmarkDynamic {
                 if !selected {
                     continue;
                 }
-                for lane in &definition.lanes {
+                for (lane, owner) in definition.lanes.iter().zip(&owners) {
                     // The desk's Dynamics runtime remembers these; the benchmark asks each tick,
                     // outside the timed path, and hands the engine the same numbers.
-                    let address = addresser.frame_address(*target, &lane.attribute);
+                    let address = addresser.frame_address(*target, owner);
                     let Some(mut value) = evaluator.sample_lane(
                         lane,
                         DynamicEvaluationContext {
@@ -614,7 +572,7 @@ impl BenchmarkDynamic {
                     samples.push(
                         ContributionSample::independent(TimedValue {
                             fixture_id: *target,
-                            attribute: lane.attribute.clone(),
+                            attribute: owner.clone(),
                             value: AttributeValue::Normalized(value),
                             priority: 10 + definition_index as i16 + controller_switch,
                             changed_at: at,
@@ -630,7 +588,7 @@ impl BenchmarkDynamic {
                         samples.push(
                             ContributionSample::independent(TimedValue {
                                 fixture_id: *target,
-                                attribute: lane.attribute.clone(),
+                                attribute: owner.clone(),
                                 value: AttributeValue::Normalized(0.65),
                                 priority: 40,
                                 changed_at: at,
@@ -650,48 +608,124 @@ impl BenchmarkDynamic {
     }
 }
 
+/// The headless-stress Dynamics: `instance_count` partitions of `targets`, cycling the four
+/// legacy variants, each with the six lanes Intensity, `color.red/green/blue`, `pan` and `tilt`.
+/// Returns each definition with its target partition.
+pub(super) fn production_definitions(
+    targets: &[FixtureId],
+    instance_count: usize,
+) -> Result<Vec<(DynamicDefinition, Vec<FixtureId>)>, String> {
+    if instance_count == 0 || targets.len() < instance_count {
+        return Err(
+            "production Dynamics require one nonempty target partition per instance".into(),
+        );
+    }
+    let base = benchmark_dynamic_definition(targets, AttributeKey::intensity());
+    let variants = {
+        let [pwm, middle, random] = benchmark_dynamic_variants(&base);
+        [base, pwm, middle, random]
+    };
+    let attributes = [
+        AttributeKey::intensity(),
+        AttributeKey("color.red".into()),
+        AttributeKey("color.green".into()),
+        AttributeKey("color.blue".into()),
+        AttributeKey("pan".into()),
+        AttributeKey("tilt".into()),
+    ];
+    Ok((0..instance_count)
+        .map(|index| {
+            let mut definition = variants[index % variants.len()].clone();
+            definition.id = fixed_uuid(0x5b, index as u64 + 1);
+            definition.pool_number = index as u16 + 1;
+            definition.name = format!("Headless production Dynamic {}", index + 1);
+            let partition = targets
+                .iter()
+                .enumerate()
+                .filter(|(target_index, _)| target_index % instance_count == index)
+                .map(|(_, target)| *target)
+                .collect::<Vec<_>>();
+            definition.target_binding = DynamicTargetBinding::FrozenTargets {
+                targets: partition.clone(),
+            };
+            let seed = definition.lanes[0].clone();
+            definition.lanes = attributes
+                .iter()
+                .enumerate()
+                .map(|(lane_index, attribute)| {
+                    let mut lane = seed.clone();
+                    lane.id = fixed_uuid(0x5c + index as u64, lane_index as u64 + 1);
+                    let body = lane.legacy_mut().expect("legacy benchmark fixture");
+                    body.attribute = attribute.clone();
+                    for point in &mut body.keyframes.points {
+                        if let ScalarSource::Preset {
+                            attribute: source_attribute,
+                            ..
+                        } = &mut point.source
+                        {
+                            *source_attribute = attribute.clone();
+                        }
+                    }
+                    lane
+                })
+                .collect();
+            (definition, partition)
+        })
+        .collect())
+}
+
+/// The sustained-show Intensity Dynamic and its three variants, as `BenchmarkDynamic::intensity`
+/// samples them.
+pub(super) fn intensity_definitions(targets: &[FixtureId]) -> [DynamicDefinition; 4] {
+    let definition = benchmark_dynamic_definition(targets, AttributeKey::intensity());
+    let [pwm, middle, random] = benchmark_dynamic_variants(&definition);
+    [definition, pwm, middle, random]
+}
+
 fn benchmark_dynamic_definition(
     targets: &[FixtureId],
     attribute: AttributeKey,
 ) -> DynamicDefinition {
     let lane = DynamicLane {
         id: fixed_uuid(0x5a, 2),
-        attribute: attribute.clone(),
-        mode: DynamicLaneMode::Keyframes,
-        keyframes: KeyframeConfiguration {
-            points: vec![
-                DynamicKeyframe {
-                    position: 0.0,
-                    source: ScalarSource::Current,
-                    interpolation: ScalarInterpolation::Linear,
-                },
-                DynamicKeyframe {
-                    position: 0.5,
-                    source: ScalarSource::Preset {
-                        preset_id: "benchmark:1".into(),
-                        attribute,
-                        last_valid_by_target: Vec::new(),
+        body: DynamicLaneBody::LegacyScalar(LegacyScalarLaneBody {
+            attribute: attribute.clone(),
+            mode: DynamicLaneMode::Keyframes,
+            keyframes: KeyframeConfiguration {
+                points: vec![
+                    DynamicKeyframe {
+                        position: 0.0,
+                        source: ScalarSource::Current,
+                        interpolation: ScalarInterpolation::Linear,
                     },
-                    interpolation: ScalarInterpolation::EaseInOut,
-                },
-            ],
-            size: 1.0,
-        },
-        max_min: MaxMinConfiguration {
-            minimum: ScalarSource::Value { value: 0.1 },
-            maximum: ScalarSource::Value { value: 0.9 },
-            function: PeriodicFunction::Sinus,
-            size: 1.0,
-            pwm: PwmShape::default(),
-        },
-        middle_amplitude: MiddleAmplitudeConfiguration {
-            middle: ScalarSource::Current,
-            amplitude: 0.4,
-            function: PeriodicFunction::Sinus,
-            size: 1.0,
-            pwm: PwmShape::default(),
-            invert_waveform: false,
-        },
+                    DynamicKeyframe {
+                        position: 0.5,
+                        source: ScalarSource::Preset {
+                            preset_id: "benchmark:1".into(),
+                            attribute,
+                            last_valid_by_target: Vec::new(),
+                        },
+                        interpolation: ScalarInterpolation::EaseInOut,
+                    },
+                ],
+                size: 1.0,
+            },
+            max_min: MaxMinConfiguration {
+                minimum: ScalarSource::Value { value: 0.1 },
+                maximum: ScalarSource::Value { value: 0.9 },
+                function: PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: PwmShape::default(),
+            },
+            middle_amplitude: MiddleAmplitudeConfiguration {
+                middle: ScalarSource::Current,
+                amplitude: 0.4,
+                function: PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: PwmShape::default(),
+                invert_waveform: false,
+            },
+        }),
         speed_multiplier: Rational::ONE,
         width: 1.0,
         phase: None,
@@ -735,9 +769,10 @@ fn benchmark_dynamic_variants(definition: &DynamicDefinition) -> [DynamicDefinit
     pwm.id = fixed_uuid(0x5a, 4);
     pwm.pool_number = 2;
     pwm.name = "Benchmark PWM Speed Group".into();
-    pwm.lanes[0].mode = DynamicLaneMode::MaxMin;
-    pwm.lanes[0].max_min.function = PeriodicFunction::Pwm;
-    pwm.lanes[0].max_min.pwm = PwmShape {
+    let body = pwm.lanes[0].legacy_mut().expect("legacy benchmark fixture");
+    body.mode = DynamicLaneMode::MaxMin;
+    body.max_min.function = PeriodicFunction::Pwm;
+    body.max_min.pwm = PwmShape {
         attack: 0.1,
         on: 0.35,
         decay: 0.15,
@@ -761,9 +796,12 @@ fn benchmark_dynamic_variants(definition: &DynamicDefinition) -> [DynamicDefinit
     middle.id = fixed_uuid(0x5a, 5);
     middle.pool_number = 3;
     middle.name = "Benchmark Current wet/dry wave".into();
-    middle.lanes[0].mode = DynamicLaneMode::MiddleAmplitude;
-    middle.lanes[0].middle_amplitude.middle = ScalarSource::Current;
-    middle.lanes[0].middle_amplitude.amplitude = 0.45;
+    let body = middle.lanes[0]
+        .legacy_mut()
+        .expect("legacy benchmark fixture");
+    body.mode = DynamicLaneMode::MiddleAmplitude;
+    body.middle_amplitude.middle = ScalarSource::Current;
+    body.middle_amplitude.amplitude = 0.45;
     middle.speed = DynamicSpeed::Fixed {
         duration_millis: 180,
     };
@@ -777,13 +815,18 @@ fn benchmark_dynamic_variants(definition: &DynamicDefinition) -> [DynamicDefinit
     random.id = fixed_uuid(0x5a, 7);
     random.pool_number = 4;
     random.name = "Benchmark seeded Random pulses".into();
-    random.lanes[0].mode = DynamicLaneMode::Random;
+    random.lanes[0]
+        .legacy_mut()
+        .expect("legacy benchmark fixture")
+        .mode = DynamicLaneMode::Random;
     random.lanes[0].random_group_id = Some(random_group_id);
     random.random_groups = vec![DynamicRandomGroup {
         id: random_group_id,
         seed: 0x5a17,
-        low: ScalarSource::Value { value: 0.05 },
-        high: ScalarSource::Value { value: 0.95 },
+        range: DynamicRandomRange::LegacyScalar {
+            low: ScalarSource::Value { value: 0.05 },
+            high: ScalarSource::Value { value: 0.95 },
+        },
         decision_interval_millis: 80,
         start_probability: 0.55,
         mean_duration_millis: 160,

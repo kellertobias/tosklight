@@ -1,0 +1,399 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OutputDmxSnapshot",
+  "description": "Complete output observation captured at one authoritative publication boundary.",
+  "type": "object",
+  "properties": {
+    "frame": {
+      "description": "Absent for producers that do not publish evaluated frame identities yet.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OutputFrameIdentity"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "native": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OutputNativeLane"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "native_protocol": {
+      "type": "integer",
+      "format": "uint16",
+      "default": 0,
+      "maximum": 65535,
+      "minimum": 0
+    },
+    "overrides": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/OutputDmxOverride"
+      }
+    },
+    "points": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/OutputPointPose"
+      }
+    },
+    "preload": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OutputNativeLane"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "preload_status": {
+      "description": "Present only when the Preload lane is read from the accepted Pending publication (the\nfamily adapters are engaged). It names the Pending episode whose ticket stamps\n`preload.frame`, or says passively why no Pending frame is published. Absent for\nlegacy servers and for the legacy Preload projection.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OutputPreloadStatus"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "universes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OutputDmxUniverse"
+      }
+    }
+  },
+  "required": [
+    "native_protocol",
+    "revision",
+    "frame",
+    "universes",
+    "overrides",
+    "points",
+    "native",
+    "preload"
+  ],
+  "$defs": {
+    "OutputDmxOverride": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "universe": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "value": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "universe",
+        "address",
+        "value"
+      ]
+    },
+    "OutputDmxUniverse": {
+      "type": "object",
+      "properties": {
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          }
+        },
+        "universe": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "universe",
+        "slots"
+      ]
+    },
+    "OutputFrameIdentity": {
+      "description": "Identity of one evaluated output observation, independent of the show revision.",
+      "type": "object",
+      "properties": {
+        "generation": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sampled_at": {
+          "description": "Evaluation timestamp in RFC3339 format.",
+          "type": "string"
+        },
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tracking": {
+          "description": "Tracking inputs captured with this output frame, when the producer supplies them.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputTrackingIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "generation",
+        "sequence",
+        "sampled_at"
+      ]
+    },
+    "OutputNativeInstance": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "instance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "native_identity": {
+          "type": "string"
+        },
+        "owned_channels": {
+          "description": "Preload only: true channels replace Live; false channels retain actual Live native/DMX.\nNone is a complete native row (including older native-protocol-1 servers).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "raw": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        }
+      },
+      "required": [
+        "fixture_id",
+        "instance_id",
+        "native_identity",
+        "raw",
+        "owned_channels"
+      ]
+    },
+    "OutputNativeLane": {
+      "description": "Already resolved and encoded by the engine. Raw channels are mode-order, including static\nchannels, and retain all coarse/fine bytes. No requested-color or normalized overlay values.",
+      "type": "object",
+      "properties": {
+        "frame": {
+          "description": "Identifies this lane's own evaluation; independent Preload must not inherit Live's stamp.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputFrameIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "instances": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OutputNativeInstance"
+          }
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OutputPointPose"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "show_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "show_id",
+        "revision",
+        "frame",
+        "instances",
+        "points"
+      ]
+    },
+    "OutputPointPose": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "offset_metres": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "rotation_degrees": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "required": [
+        "fixture_id",
+        "offset_metres",
+        "rotation_degrees"
+      ]
+    },
+    "OutputPreloadState": {
+      "description": "Passive Pending states. Only `published` carries a lane; every other state is \"not\navailable\" and is never filled from Live or from a fresh evaluation.",
+      "oneOf": [
+        {
+          "description": "`preload` is the episode's last accepted Pending frame.",
+          "type": "string",
+          "const": "published"
+        },
+        {
+          "description": "Preload is engaged, but this episode has not accepted a Pending frame yet.",
+          "type": "string",
+          "const": "not_yet_available"
+        },
+        {
+          "description": "Preload is not engaged on the desk.",
+          "type": "string",
+          "const": "idle"
+        },
+        {
+          "description": "A queued Preload Playback cannot be previewed.",
+          "type": "string",
+          "const": "queue_preview_unavailable"
+        }
+      ]
+    },
+    "OutputPreloadStatus": {
+      "description": "Where the desk's Pending (Preload) publication stands for one read.",
+      "type": "object",
+      "properties": {
+        "episode": {
+          "description": "The Pending episode of the published lane. A new episode restarts its tickets, so the\nlane's `frame.sequence` is ordered only within one episode.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "state": {
+          "$ref": "#/$defs/OutputPreloadState"
+        }
+      },
+      "required": [
+        "state"
+      ]
+    },
+    "OutputTrackingIdentity": {
+      "description": "Receiver and Point epochs of the tracking input held by one evaluated output frame.",
+      "type": "object",
+      "properties": {
+        "accepted_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "configuration_generation": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "point_generation": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sampled_at_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "show_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "source_generation": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "show_id",
+        "configuration_generation",
+        "point_generation",
+        "source_generation",
+        "accepted_sequence",
+        "sampled_at_millis"
+      ]
+    }
+  }
+}

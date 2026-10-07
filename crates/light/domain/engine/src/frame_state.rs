@@ -9,7 +9,9 @@ use chrono::{DateTime, Utc};
 use light_core::{AttributeValue, MergeMode};
 
 use crate::Slot;
-use crate::contribution::ApplicableSequenceMaster;
+
+mod shards;
+pub(crate) use shards::FrameShard;
 
 /// What a candidate offers a slot, apart from the value itself.
 #[derive(Clone, Copy)]
@@ -28,9 +30,33 @@ pub(crate) struct SlotWinner {
     pub(crate) value: AttributeValue,
     pub(crate) priority: i16,
     pub(crate) changed_at: DateTime<Utc>,
+    /// A post-static projection has its own output timestamp, including explicit unknown.
+    /// The original `changed_at` remains the static arbitration stamp.
+    pub(crate) projected_changed_at: Option<Option<DateTime<Utc>>>,
     pub(crate) merge_mode: MergeMode,
     pub(crate) transition_ordinal: Option<u64>,
-    pub(crate) sequence_master: Option<ApplicableSequenceMaster>,
+    pub(crate) origin: Option<std::sync::Arc<crate::contribution_batch::ContributionOrigin>>,
+    pub(crate) family_evidence:
+        Option<std::sync::Arc<crate::contribution_batch::ContributionFamilyEvidence>>,
+    /// Runtime-only live Position crossing behind the held `value` (TL-544 G1).
+    pub(crate) pending_transition:
+        Option<std::sync::Arc<light_core::programming::PendingFamilyTransition>>,
+    /// What the raw resolution held before the masters changed this level: `None` when no master
+    /// touched it (`value` is raw), `Some(None)` for an unsourced level the masters filled at its
+    /// default, `Some(Some(raw))` for a mastered contribution. Freeze and family projection write
+    /// a raw value and clear it.
+    pub(crate) pre_master: Option<Option<AttributeValue>>,
+}
+
+impl SlotWinner {
+    /// The value before the output-parameter masters: the raw parameter, or the Freeze or family
+    /// value that replaced it. `None` when only the masters' default fill holds the slot.
+    pub(crate) fn raw_value(&self) -> Option<&AttributeValue> {
+        match &self.pre_master {
+            None => Some(&self.value),
+            Some(raw) => raw.as_ref(),
+        }
+    }
 }
 
 impl Default for SlotWinner {
@@ -39,10 +65,20 @@ impl Default for SlotWinner {
             value: AttributeValue::Normalized(0.0),
             priority: 0,
             changed_at: DateTime::<Utc>::MIN_UTC,
+            projected_changed_at: None,
             merge_mode: MergeMode::Ltp,
             transition_ordinal: None,
-            sequence_master: None,
+            origin: None,
+            family_evidence: None,
+            pending_transition: None,
+            pre_master: None,
         }
+    }
+}
+
+impl SlotWinner {
+    pub(crate) fn output_changed_at(&self) -> Option<DateTime<Utc>> {
+        self.projected_changed_at.unwrap_or(Some(self.changed_at))
     }
 }
 
@@ -113,43 +149,107 @@ impl FrameState {
             .flatten()
     }
 
+    /// Scale a level value this fill resolved, keeping who decided it.
+    pub(crate) fn scale_level(&mut self, slot: Slot, factor: f32) {
+        if !self.is_current(slot) {
+            return;
+        }
+        if let Some(winner) = self.winners.get_mut(slot.index())
+            && let Some(level) = winner.value.normalized()
+        {
+            winner.pre_master.get_or_insert(Some(winner.value.clone()));
+            winner.value = AttributeValue::Normalized(level * factor);
+        }
+    }
+
+    /// Hold a level nobody contributed at its mastered profile default.
+    ///
+    /// The value has no source: no origin, no family evidence, no transition and an unknown
+    /// change time, so nothing reading the frame can mistake it for a programmed or played value.
+    pub(crate) fn fill_unsourced_level(&mut self, slot: Slot, value: AttributeValue) {
+        let index = slot.index();
+        if index >= self.winners.len() || self.stamp[index] == self.epoch {
+            return;
+        }
+        self.stamp[index] = self.epoch;
+        self.touched.push(index as u32);
+        let winner = &mut self.winners[index];
+        winner.value = value;
+        winner.priority = i16::MIN;
+        winner.changed_at = DateTime::<Utc>::MIN_UTC;
+        winner.projected_changed_at = Some(None);
+        winner.merge_mode = MergeMode::Htp;
+        winner.transition_ordinal = None;
+        winner.origin = None;
+        winner.family_evidence = None;
+        winner.pending_transition = None;
+        winner.pre_master = Some(None);
+    }
+
+    /// Update one already-resolved family after composition, without offering another LTP vote.
+    /// Its baseline rank stays intact; the projection explicitly chooses source/master metadata.
+    pub(crate) fn project_family(
+        &mut self,
+        slot: Slot,
+        value: AttributeValue,
+        metadata: crate::FamilyProjectionMetadata,
+    ) -> bool {
+        if !self.is_current(slot) {
+            return false;
+        }
+        metadata.apply(&mut self.winners[slot.index()], value);
+        true
+    }
+
     /// Offer a value for a slot, keeping whichever of the two the merge rules prefer.
     ///
     /// `build` is only called when the candidate actually wins, so a losing contribution costs a
     /// comparison rather than a clone.
     pub(crate) fn offer(&mut self, slot: Slot, offer: Offer, build: impl FnOnce(&mut SlotWinner)) {
+        if let Some(winner) = self.win(slot, offer) {
+            winner.origin = None;
+            winner.family_evidence = None;
+            build(winner);
+        }
+    }
+
+    /// [`Self::offer`] with a traced origin and family evidence (TL-639 round 7): a winning
+    /// offer whose origin or evidence the slot already holds (from this fill or the last) keeps
+    /// it, any other takes its own. Nothing is built or counted for a losing offer.
+    pub(crate) fn offer_with_origin(
+        &mut self,
+        slot: Slot,
+        offer: Offer,
+        (origin, evidence): (
+            crate::contribution::OfferedOrigin<'_>,
+            Option<&std::sync::Arc<crate::ContributionFamilyEvidence>>,
+        ),
+        build: impl FnOnce(&mut SlotWinner),
+    ) {
+        if let Some(winner) = self.win(slot, offer) {
+            take_traced(winner, (origin, evidence));
+            build(winner);
+        }
+    }
+
+    /// Arbitrate `offer` against the slot's holder; when it wins, stamp the slot and return its
+    /// winner with every field but the value, the origin and the evidence reset for the
+    /// candidate.
+    fn win(&mut self, slot: Slot, offer: Offer) -> Option<&mut SlotWinner> {
         let index = slot.index();
         if index >= self.winners.len() {
-            return;
+            return None;
         }
-        if self.stamp[index] == self.epoch {
-            let current = &self.winners[index];
-            let wins = if offer.priority != current.priority {
-                offer.priority > current.priority
-            } else if offer.merge_mode == MergeMode::Htp {
-                offer.normalized > current.value.normalized().unwrap_or(0.0)
-            } else {
-                ltp_wins(
-                    offer.changed_at,
-                    offer.transition_ordinal,
-                    current.changed_at,
-                    current.transition_ordinal,
-                )
-            };
-            if !wins {
-                return;
-            }
-        } else {
-            self.stamp[index] = self.epoch;
+        let first = arbitrate(
+            self.epoch,
+            &mut self.stamp[index],
+            &mut self.winners[index],
+            offer,
+        )?;
+        if first {
             self.touched.push(index as u32);
         }
-        let winner = &mut self.winners[index];
-        winner.priority = offer.priority;
-        winner.changed_at = offer.changed_at;
-        winner.merge_mode = offer.merge_mode;
-        winner.transition_ordinal = offer.transition_ordinal;
-        winner.sequence_master = None;
-        build(winner);
+        Some(&mut self.winners[index])
     }
 
     /// Write a value into a slot regardless of what holds it, as a Freeze does when it takes the
@@ -165,7 +265,10 @@ impl FrameState {
         }
         let winner = &mut self.winners[index];
         winner.value = value;
-        winner.sequence_master = None;
+        winner.origin = None;
+        winner.family_evidence = None;
+        winner.pending_transition = None;
+        winner.pre_master = None;
     }
 
     /// Take a slot over, optionally restamping when its value changed.
@@ -180,6 +283,7 @@ impl FrameState {
             && index < self.winners.len()
         {
             self.winners[index].changed_at = changed_at;
+            self.winners[index].projected_changed_at = None;
         }
     }
 
@@ -197,6 +301,55 @@ impl FrameState {
     pub(crate) fn occupied_len(&self) -> usize {
         self.touched.len()
     }
+}
+
+/// Arbitrate `offer` against a slot's holder in fill `epoch`. `Some(first)` when the offer
+/// wins (`first`: it is the slot's first write this fill), with the slot stamped and its winner
+/// reset for the candidate except the value, the origin and the evidence.
+fn arbitrate(epoch: u32, stamp: &mut u32, winner: &mut SlotWinner, offer: Offer) -> Option<bool> {
+    let first = *stamp != epoch;
+    if !first {
+        let wins = if offer.priority != winner.priority {
+            offer.priority > winner.priority
+        } else if offer.merge_mode == MergeMode::Htp {
+            offer.normalized > winner.value.normalized().unwrap_or(0.0)
+        } else {
+            ltp_wins(
+                offer.changed_at,
+                offer.transition_ordinal,
+                winner.changed_at,
+                winner.transition_ordinal,
+            )
+        };
+        if !wins {
+            return None;
+        }
+    }
+    *stamp = epoch;
+    winner.priority = offer.priority;
+    winner.changed_at = offer.changed_at;
+    winner.projected_changed_at = None;
+    winner.merge_mode = offer.merge_mode;
+    winner.transition_ordinal = offer.transition_ordinal;
+    winner.pending_transition = None;
+    winner.pre_master = None;
+    Some(first)
+}
+
+/// A traced winner's origin and evidence: kept when the slot already holds them (see
+/// [`FrameState::offer_with_origin`]), otherwise the offer's own.
+fn take_traced(
+    winner: &mut SlotWinner,
+    (origin, evidence): (
+        crate::contribution::OfferedOrigin<'_>,
+        Option<&std::sync::Arc<crate::ContributionFamilyEvidence>>,
+    ),
+) {
+    winner.origin = origin.resolve(winner.origin.take());
+    winner.family_evidence = match (winner.family_evidence.take(), evidence) {
+        (Some(held), Some(offered)) if std::sync::Arc::ptr_eq(&held, offered) => Some(held),
+        (_, offered) => offered.cloned(),
+    };
 }
 
 fn ltp_wins(
@@ -234,6 +387,82 @@ mod tests {
             },
             |winner| winner.value = value,
         );
+    }
+
+    /// TL-639 round 7: a traced offer keeps the origin and evidence its slot already holds when
+    /// they describe the same contribution, across fills and within one; a losing offer builds
+    /// nothing; anything else holds exactly what an eager build would have.
+    #[test]
+    fn traced_offers_keep_an_equal_origin_and_evidence_and_build_only_for_a_winner() {
+        use crate::contribution::OfferedOrigin;
+        use crate::contribution_batch::ContributionSourceId;
+        use std::borrow::Cow;
+        let source = ContributionSourceId::programmer_transient(
+            light_core::ProgrammerId(uuid::Uuid::from_u128(1)),
+            "a",
+        );
+        let evidence = std::sync::Arc::new(crate::ContributionFamilyEvidence::new(Vec::new()));
+        let timed = |at: i64| light_core::TimedValue {
+            fixture_id: light_core::FixtureId(uuid::Uuid::from_u128(2)),
+            attribute: light_core::AttributeKey("pan".into()),
+            value: AttributeValue::Normalized(0.5),
+            priority: 0,
+            changed_at: DateTime::from_timestamp(at, 0).unwrap(),
+            programmer_order: 0,
+            merge_mode: MergeMode::Ltp,
+            fade: false,
+            fade_millis: None,
+            delay_millis: None,
+        };
+        let traced = |state: &mut FrameState, value: &light_core::TimedValue| {
+            state.offer_with_origin(
+                Slot::from_index(0),
+                Offer {
+                    priority: 0,
+                    changed_at: value.changed_at,
+                    merge_mode: MergeMode::Ltp,
+                    transition_ordinal: None,
+                    normalized: 0.5,
+                },
+                (
+                    OfferedOrigin::Built {
+                        source: Cow::Borrowed(&source),
+                        value,
+                        transition_ordinal: None,
+                    },
+                    Some(&evidence),
+                ),
+                |winner| winner.value = value.value.clone(),
+            )
+        };
+        let held = |state: &FrameState| {
+            let winner = state.get(Slot::from_index(0)).unwrap();
+            (
+                winner.origin.clone().unwrap(),
+                winner.family_evidence.clone().unwrap(),
+            )
+        };
+        let mut state = state();
+        state.begin();
+        traced(&mut state, &timed(10));
+        let (first, first_evidence) = held(&state);
+        assert!(std::sync::Arc::ptr_eq(&first_evidence, &evidence));
+        // An earlier (losing) offer changes nothing; the next fill keeps both allocations.
+        traced(&mut state, &timed(5));
+        assert!(std::sync::Arc::ptr_eq(&held(&state).0, &first));
+        state.begin();
+        traced(&mut state, &timed(10));
+        assert!(std::sync::Arc::ptr_eq(&held(&state).0, &first));
+        // A later edit wins with its own origin, equal to an eager build.
+        let later = timed(20);
+        traced(&mut state, &later);
+        let (origin, _) = held(&state);
+        assert!(!std::sync::Arc::ptr_eq(&origin, &first));
+        assert!(origin.describes(&source, &later, None));
+        // A plain offer clears both, as before.
+        offer(&mut state, 0, 0.9, 0, 30);
+        let winner = state.get(Slot::from_index(0)).unwrap();
+        assert!(winner.origin.is_none() && winner.family_evidence.is_none());
     }
 
     #[test]

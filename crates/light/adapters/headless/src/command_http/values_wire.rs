@@ -1,3 +1,4 @@
+use super::intent_wire::{IntoIntentDomain, ToIntentWire};
 use light_application as application;
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_wire::v2::{events::EventSnapshotCursor, programming as wire};
@@ -21,6 +22,13 @@ pub(crate) fn values_command(
         }
     }
     Ok(match action {
+        wire::ProgrammingValuesAction::FinishGesture {
+            attribute,
+            undo_group,
+        } => application::ProgrammingValuesCommand::FinishGesture {
+            attribute: AttributeKey(attribute.into()),
+            undo_group,
+        },
         wire::ProgrammingValuesAction::ApplyIntent {
             fixture_ids,
             group_id,
@@ -28,6 +36,9 @@ pub(crate) fn values_command(
             operation,
             undo_group,
             timing,
+            displayed_source,
+            native_reference,
+            explicit_color_start,
         } => application::ProgrammingValuesCommand::ApplyIntent {
             intent: application::ProgrammingValueIntent {
                 fixture_ids: fixture_ids.into_iter().map(FixtureId).collect(),
@@ -39,12 +50,22 @@ pub(crate) fn values_command(
                             value,
                         ))
                     }
+                    wire::ProgrammingValueOperation::ComponentEdits { edits } => {
+                        application::ProgrammingValueOperation::ComponentEdits(
+                            edits.into_intent_domain(),
+                        )
+                    }
                     wire::ProgrammingValueOperation::RelativeStep { delta } => {
                         application::ProgrammingValueOperation::RelativeStep(delta)
                     }
                 },
                 undo_group,
                 timing: application_timing(timing),
+                displayed_source: displayed_source.map(super::displayed_source),
+                color_adoption: super::color_adoption_request(
+                    native_reference,
+                    explicit_color_start,
+                ),
             },
         },
         wire::ProgrammingValuesAction::ApplyIndexedPreset { .. } => {
@@ -160,6 +181,8 @@ pub(crate) fn values_outcome(
         outcome,
         replayed: result.replayed,
         warning: result.warning,
+        hold: result.hold.map(super::hold_reason),
+        color_adoption: result.color_adoption.map(super::color_adoption_report),
     }
 }
 
@@ -263,6 +286,8 @@ pub(in crate::runtime) fn values_change(
                 fixture_id: address.fixture_id.0,
                 attribute: address.attribute.0.to_string(),
                 instance_link: address.instance_link,
+                lane_id: address.lane_id,
+                component: address.component.as_ref().map(ToIntentWire::to_intent_wire),
             })
             .collect(),
     }
@@ -540,7 +565,7 @@ const fn application_timing(
     }
 }
 
-fn application_value(value: wire::ProgrammingAttributeValue) -> AttributeValue {
+pub(super) fn application_value(value: wire::ProgrammingAttributeValue) -> AttributeValue {
     match value {
         wire::ProgrammingAttributeValue::Normalized(value) => AttributeValue::Normalized(value),
         wire::ProgrammingAttributeValue::Spread(values) => AttributeValue::Spread(values),
@@ -550,6 +575,18 @@ fn application_value(value: wire::ProgrammingAttributeValue) -> AttributeValue {
             y: value.y,
             z: value.z,
         }),
+        wire::ProgrammingAttributeValue::ColorProgram(value) => {
+            AttributeValue::ColorProgram(std::sync::Arc::new(value.into_intent_domain()))
+        }
+        wire::ProgrammingAttributeValue::Position(value) => {
+            AttributeValue::Position(std::sync::Arc::new(value.into_intent_domain()))
+        }
+        wire::ProgrammingAttributeValue::Zoom(value) => {
+            AttributeValue::Zoom(std::sync::Arc::new(value.into_intent_domain()))
+        }
+        wire::ProgrammingAttributeValue::GroupFamily(value) => {
+            AttributeValue::GroupFamily(std::sync::Arc::new((*value).into_intent_domain()))
+        }
         wire::ProgrammingAttributeValue::RawDmx(value) => AttributeValue::RawDmx(value),
         wire::ProgrammingAttributeValue::RawDmxExact(value) => AttributeValue::RawDmxExact(value),
     }
@@ -592,6 +629,18 @@ pub(super) fn attribute_value(value: &AttributeValue) -> wire::ProgrammingAttrib
                 y: value.y,
                 z: value.z,
             })
+        }
+        AttributeValue::ColorProgram(value) => {
+            wire::ProgrammingAttributeValue::ColorProgram(value.as_ref().to_intent_wire())
+        }
+        AttributeValue::Position(value) => {
+            wire::ProgrammingAttributeValue::Position(value.as_ref().to_intent_wire())
+        }
+        AttributeValue::Zoom(value) => {
+            wire::ProgrammingAttributeValue::Zoom(value.as_ref().to_intent_wire())
+        }
+        AttributeValue::GroupFamily(value) => {
+            wire::ProgrammingAttributeValue::GroupFamily(Box::new(value.as_ref().to_intent_wire()))
         }
         AttributeValue::RawDmx(value) => wire::ProgrammingAttributeValue::RawDmx(*value),
         AttributeValue::RawDmxExact(value) => wire::ProgrammingAttributeValue::RawDmxExact(*value),

@@ -85,6 +85,14 @@ pub struct PsnStatusProjection {
     /// What the senders call themselves, once their info packets have said.
     pub system_names: Vec<String>,
     pub trackers: Vec<PsnTrackerProjection>,
+    /// Optional for older receivers. Observational ingress metadata, never an output-frame
+    /// identity to join onto independently retained DMX, Point poses or physical values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub sources: Option<Vec<PsnSourceProjection>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub diagnostics: Option<PsnReceiverDiagnosticsProjection>,
     pub placements: Vec<PsnPlacementProjection>,
     pub occupied_zone_ids: Vec<Uuid>,
     #[ts(type = "number")]
@@ -97,6 +105,72 @@ pub struct PsnStatusProjection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub error: Option<String>,
+}
+
+/// Identity of a frame accepted by one receiver source resource. Both epochs are needed:
+/// rebind/show activation replaces the resource; an explicit sender restart replaces its epoch.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PsnAcceptedSampleProjection {
+    pub source: String,
+    #[ts(type = "number")]
+    pub source_generation: u64,
+    #[ts(type = "number")]
+    pub source_epoch: u64,
+    #[ts(type = "number")]
+    pub sequence: u64,
+    pub frame_id: u8,
+    /// Sender-relative send time, not a synchronized wall-clock time or freshness clock.
+    #[ts(type = "number")]
+    pub sender_timestamp_micros: u64,
+    /// Receiver monotonic time when all accepted parts were available. A particular tracker
+    /// may have arrived in an earlier part: retain its independent age_millis for freshness.
+    #[ts(type = "number")]
+    pub accepted_at_millis: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(default)]
+pub struct PsnIngressDiagnosticsProjection {
+    #[ts(type = "number")]
+    pub duplicate_datagrams: u64,
+    #[ts(type = "number")]
+    pub rejected_datagrams: u64,
+    #[ts(type = "number")]
+    pub incomplete_frames: u64,
+    #[ts(type = "number")]
+    pub ambiguous_datagrams: u64,
+    #[ts(type = "number")]
+    pub invalid_positions: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PsnSourceProjection {
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub accepted_sample: Option<PsnAcceptedSampleProjection>,
+    #[serde(default)]
+    pub diagnostics: PsnIngressDiagnosticsProjection,
+}
+
+/// Passive receiver limits/data quality, separate from actionable socket/configuration errors.
+#[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(default)]
+pub struct PsnReceiverDiagnosticsProjection {
+    #[ts(type = "number")]
+    pub source_count: u64,
+    #[ts(type = "number")]
+    pub source_capacity: u64,
+    /// New-source datagrams dropped at capacity; already-held sources are never evicted.
+    #[ts(type = "number")]
+    pub rejected_source_datagrams: u64,
+    /// Current raw finite positions whose calibration could not produce finite show coordinates.
+    #[ts(type = "number")]
+    pub invalid_calibrated_positions: u64,
+    /// Stored rows withheld because their binding UUID is repeated, including disabled rows.
+    /// Independent binding identities continue to track; the stored configuration is preserved.
+    #[ts(type = "number")]
+    pub conflicting_binding_rows: u64,
 }
 
 /// The source's condition in operator language.
@@ -130,6 +204,10 @@ pub struct PsnTrackerProjection {
     pub stale: bool,
     /// Which sender this came from, as address and port.
     pub source: String,
+    /// Last finite positional sample; may be older than the source's latest accepted frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub accepted_sample: Option<PsnAcceptedSampleProjection>,
 }
 
 /// One binding, and where it actually put its point.
@@ -226,4 +304,67 @@ pub struct PsnUpdateOutcome {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PsnErrorResponse {
     pub error: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn older_status_and_tracker_payloads_remain_readable_without_provenance() {
+        let status: PsnStatusProjection = serde_json::from_value(serde_json::json!({
+            "enabled": true,
+            "system_names": [],
+            "trackers": [{ "tracker_id": 1, "age_millis": 30, "stale": false, "source": "10.0.0.1:56565" }],
+            "placements": [], "occupied_zone_ids": [], "frames": 1, "ignored_datagrams": 0
+        })).unwrap();
+        assert!(status.sources.is_none());
+        assert!(status.diagnostics.is_none());
+        assert!(status.trackers[0].accepted_sample.is_none());
+        let encoded = serde_json::to_value(status).unwrap();
+        assert!(encoded.get("sources").is_none());
+        assert!(encoded.get("diagnostics").is_none());
+        assert!(encoded["trackers"][0].get("accepted_sample").is_none());
+    }
+
+    #[test]
+    fn partial_diagnostics_default_and_future_fields_are_tolerated() {
+        let source: PsnSourceProjection = serde_json::from_value(serde_json::json!({
+            "source": "10.0.0.1:56565", "future": true,
+            "diagnostics": { "duplicate_datagrams": 4, "future": 9 }
+        }))
+        .unwrap();
+        assert_eq!(source.diagnostics.duplicate_datagrams, 4);
+        assert_eq!(source.diagnostics.rejected_datagrams, 0);
+        assert!(source.accepted_sample.is_none());
+        let receiver: PsnReceiverDiagnosticsProjection =
+            serde_json::from_value(serde_json::json!({ "source_count": 2 })).unwrap();
+        assert_eq!(receiver.source_count, 2);
+        assert_eq!(receiver.rejected_source_datagrams, 0);
+        assert_eq!(receiver.conflicting_binding_rows, 0);
+    }
+
+    #[test]
+    fn provenance_keeps_sender_and_receiver_clocks_distinct_and_uses_ts_numbers() {
+        let sample = PsnAcceptedSampleProjection {
+            source: "10.0.0.1:56565".into(),
+            source_generation: 7,
+            source_epoch: 2,
+            sequence: 5_000_000_000,
+            frame_id: 255,
+            sender_timestamp_micros: 6_000_000_000,
+            accepted_at_millis: 110,
+        };
+        let roundtrip: PsnAcceptedSampleProjection =
+            serde_json::from_value(serde_json::to_value(&sample).unwrap()).unwrap();
+        assert_eq!(roundtrip, sample);
+        let config = ts_rs::Config::default();
+        for declaration in [
+            PsnAcceptedSampleProjection::decl(&config),
+            PsnIngressDiagnosticsProjection::decl(&config),
+            PsnReceiverDiagnosticsProjection::decl(&config),
+        ] {
+            assert!(!declaration.contains("bigint"));
+        }
+    }
 }

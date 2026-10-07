@@ -1,9 +1,7 @@
 import type { ApiDriver } from "../bench/core/api";
-import {
-	plannedDemoFamilyNumbers,
-	plannedDemoRoleNumbers,
-} from "./plannedDemoManifest";
+import { plannedDemoFamilyNumbers } from "./plannedDemoManifest";
 import { putPlannedDemoObject } from "./plannedDemoObjects";
+import { semanticAngles, semanticColor } from "./plannedDemoSemantic";
 
 interface PatchedTargetFixture {
 	fixture_id: string;
@@ -69,24 +67,18 @@ export async function installPlannedDemoPresets(
 				: [[fixture.fixture_number, targetIds(fixture)] as const],
 		),
 	);
-	const colorTargets = targets(byNumber, [
-		...plannedDemoFamilyNumbers("profile"),
-		...plannedDemoFamilyNumbers("wash"),
-		...plannedDemoFamilyNumbers("led"),
-		...plannedDemoRoleNumbers("Sunstrips"),
-	]);
 	const movingTargets = targets(byNumber, [
 		...plannedDemoFamilyNumbers("profile"),
 		...plannedDemoFamilyNumbers("wash"),
 	]);
 	const profileTargets = targets(byNumber, plannedDemoFamilyNumbers("profile"));
+	// Colour presets are universal (owner decision 2026-10-04): one shared colour that recall
+	// applies to every selected fixture, named or not. This is the form recording a Preset with
+	// one whole colour on every fixture stores (`Preset::consolidate_universal_color`).
 	for (const [index, [name, red, green, blue]] of COLORS.entries()) {
 		await putPlannedDemoObject(api, showId, "preset", `2.${index + 1}`, {
-			...preset(index + 1, name, "Color", colorTargets, {
-				"color.red": red,
-				"color.green": green,
-				"color.blue": blue,
-			}),
+			...presetWithFixtureValues(index + 1, name, "Color", {}),
+			universal_values: { color: semanticColor(name) },
 			icon: "●",
 			color: rgbHex(red, green, blue),
 		});
@@ -101,7 +93,12 @@ export async function installPlannedDemoPresets(
 						"Position",
 						fanOutPositionValues(movingTargets),
 					)
-				: preset(index + 1, name, "Position", movingTargets, { pan, tilt });
+				: presetWithFixtureValues(
+						index + 1,
+						name,
+						"Position",
+						uniform(movingTargets, { position: semanticAngles(pan, tilt) }),
+					);
 		await putPlannedDemoObject(api, showId, "preset", `3.${index + 1}`, body);
 		await options.onItem?.({ family: "Position", index, name });
 	}
@@ -169,12 +166,7 @@ function presetWithFixtureValues(
 	number: number,
 	name: string,
 	family: string,
-	values: Readonly<
-		Record<
-			string,
-			Readonly<Record<string, { kind: "normalized"; value: number }>>
-		>
-	>,
+	values: Readonly<Record<string, Readonly<Record<string, unknown>>>>,
 ) {
 	return {
 		name,
@@ -185,20 +177,24 @@ function presetWithFixtureValues(
 	};
 }
 
+/** The same authored values on every target (semantic presets carry typed values as-is). */
+function uniform(
+	fixtureIds: readonly string[],
+	values: Readonly<Record<string, unknown>>,
+) {
+	return Object.fromEntries(fixtureIds.map((fixtureId) => [fixtureId, values]));
+}
+
 function fanOutPositionValues(fixtureIds: readonly string[]) {
 	const lastIndex = Math.max(fixtureIds.length - 1, 1);
 	return Object.fromEntries(
 		fixtureIds.map((fixtureId, index) => [
 			fixtureId,
 			{
-				pan: {
-					kind: "normalized" as const,
-					value: 0.18 + (0.64 * index) / lastIndex,
-				},
-				tilt: {
-					kind: "normalized" as const,
-					value: index % 2 === 0 ? 0.44 : 0.62,
-				},
+				position: semanticAngles(
+					0.18 + (0.64 * index) / lastIndex,
+					index % 2 === 0 ? 0.44 : 0.62,
+				),
 			},
 		]),
 	);

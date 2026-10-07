@@ -229,3 +229,23 @@ fn reading_keeps_each_layers_name_and_the_fixtures_inside_it() {
         .unwrap();
     assert_eq!(fixture.layer.as_deref(), Some(truss.id.as_str()));
 }
+
+#[test]
+fn case_colliding_members_cannot_shadow_gdtf_source() {
+    let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
+    let options = SimpleFileOptions::default();
+    zip.start_file("GeneralSceneDescription.xml", options)
+        .unwrap();
+    zip.write_all(b"<GeneralSceneDescription verMajor=\"1\" verMinor=\"6\"><Scene><Layers/></Scene></GeneralSceneDescription>").unwrap();
+    zip.start_file("fixture.gdtf", options).unwrap();
+    zip.write_all(b"one").unwrap();
+    zip.start_file("Fixture.GDTF", options).unwrap();
+    zip.write_all(b"two").unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    assert!(
+        read(&bytes)
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate archive member")
+    );
+}

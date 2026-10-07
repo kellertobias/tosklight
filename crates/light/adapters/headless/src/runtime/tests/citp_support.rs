@@ -33,6 +33,7 @@ fn schema_v1_dimmer_rows(
         .enumerate()
         .map(|(index, footprint)| {
             let definition = light_fixture::FixtureDefinition {
+                runtime_color_context: None,
                 schema_version: 1,
                 id: light_core::FixtureId::new(),
                 revision: 1,

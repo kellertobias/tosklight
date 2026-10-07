@@ -1,5 +1,6 @@
 import type { LightApi } from "../../api/client/api";
 import type { BootstrapSnapshot, SessionResponse } from "../../api/types";
+import { runningShowId } from "../deskSnapshot/selectors";
 import type { FrontendWarmupTask } from "../frontendWarmup/coordinator";
 import {
 	frontendPerformanceDiagnostics,
@@ -207,9 +208,7 @@ export async function bootstrapConnection(
 	state.setConnectionGeneration((current) => current + 1);
 	state.deskLockStore.install(deskLock);
 	installForegroundResources(state, resources);
-	await loadShowObjects(
-		bootstrap.active_show_error ? null : (bootstrap.active_show?.id ?? null),
-	);
+	await loadShowObjects(runningShowId(bootstrap));
 	restoreProgrammerState(state, resources.programming);
 	finishBootstrap();
 	return session;

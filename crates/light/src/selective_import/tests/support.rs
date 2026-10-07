@@ -309,6 +309,8 @@ pub(super) struct TestPorts {
     pub fail_asset_prepare: AtomicBool,
     pub mismatch_prepared_assets: AtomicBool,
     pub asset_steps: Mutex<Vec<&'static str>>,
+    /// Every inverse the service handed to the import undo history, in order.
+    pub recorded_undo: Mutex<Vec<SelectiveShowImportUndoTarget>>,
     prepare_gate: Arc<PrepareGate>,
     source_gate: Arc<PrepareGate>,
     descriptor_gate: Arc<PrepareGate>,
@@ -335,6 +337,7 @@ impl TestPorts {
             fail_asset_prepare: AtomicBool::new(false),
             mismatch_prepared_assets: AtomicBool::new(false),
             asset_steps: Mutex::new(Vec::new()),
+            recorded_undo: Mutex::new(Vec::new()),
             prepare_gate: Arc::new(PrepareGate::default()),
             source_gate: Arc::new(PrepareGate::default()),
             descriptor_gate: Arc::new(PrepareGate::default()),
@@ -497,6 +500,14 @@ impl SelectiveShowImportPorts for TestPorts {
         }
     }
 
+    fn record_selective_import_undo(
+        &self,
+        _context: &ActionContext,
+        target: SelectiveShowImportUndoTarget,
+    ) {
+        self.recorded_undo.lock().push(target);
+    }
+
     fn reconcile_selective_import(&self, change: &SelectiveShowImportChange) {
         self.steps.lock().push("reconcile");
         self.reconciled.lock().push(change.clone());
@@ -629,6 +640,7 @@ fn describe_custom_object(
             })
         };
         descriptor.references.push(ImportObjectReference {
+            allow_missing: false,
             target: light_show::PortableShowObjectKey::new(field("kind")?, field("id")?),
             target_slot: field("slot")?.into(),
             source_identity: field("identity")?.into(),
@@ -770,6 +782,8 @@ pub(super) fn portable_fixture_record(
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -778,6 +792,8 @@ pub(super) fn portable_fixture_record(
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -838,6 +854,8 @@ pub(super) fn legacy_fixture_record(
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),

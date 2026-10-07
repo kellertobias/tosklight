@@ -141,11 +141,14 @@ export function applyFixtureRootTransform(
 	item: Stage3dFixture,
 ) {
 	root.position.set(item.position.x, item.position.z, -item.position.y);
-	root.rotation.set(
+	const basis = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+	const desk = new THREE.Quaternion().setFromEuler(new THREE.Euler(
 		THREE.MathUtils.degToRad(item.position.rotationX),
-		THREE.MathUtils.degToRad(item.position.rotationZ),
 		THREE.MathUtils.degToRad(item.position.rotationY),
-	);
+		THREE.MathUtils.degToRad(item.position.rotationZ),
+		"XYZ",
+	));
+	root.quaternion.copy(basis).multiply(desk).multiply(basis.clone().invert());
 	// The bracket turns the fixture in its own frame, after the placement rotation: a lantern
 	// faced across the stage and then angled down in its clamp points where both of those say.
 	if (item.bracketAngle)

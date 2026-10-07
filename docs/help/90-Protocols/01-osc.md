@@ -36,6 +36,23 @@ only, and can be retired once no saved configuration still uses one.
 
 Keypad input uses `/light/{desk}/programmer/{key}` with a pressed value. Digits are `digit-0` through `digit-9`; command names include `group`, `at`, `plus`, `minus`, `time`, `delay`, `link`, `shift`, `set`, `record`, `enter`, `clear`, and `backspace`. The [Command Line Reference](../10-Desk/20-Programmer-and-Cues/01-command-line.md) defines their operator semantics. A successful Link transition is published through the ordinary playback event with cause `link`, previous/current stable Cue references, and transition ordinal. Playback `effective-next-cue` feedback resolves a current Link destination unless an explicit loaded Cue overrides it.
 
+### Family values
+
+`/light/{desk}/programmer/family/{component}` sets one Color, Position or Focus value of the desk's
+current ordered selection, exactly like the same typed value on the command line. Send one number
+to set the value, or several to spread them in selection order like `[THRU]`. Numbers are in the
+encoder's units:
+
+| Component | Unit |
+| --- | --- |
+| `red`, `green`, `blue`, `white-blend` | Percent, 0 to 100 |
+| `pan`, `tilt` | Degrees; a negative number is a negative angle |
+| `focus` | Percent, 0 to 100 |
+| `zoom` | Degrees |
+
+Family values require a desk-button surface. A rejected value leaves the Programmer unchanged and
+returns `/light/{desk}/feedback/programmer/error <original-address> <message>`.
+
 Playback addresses deliberately distinguish current-page and explicit-page operation:
 
 | Address | Meaning |
@@ -71,6 +88,10 @@ Every subscription snapshot publishes `global-paused`, `runtime-count`, and one
 `runtime/{runtime-uuid}/{active|pool-number|name|target-count|controller-count|winning-controller|paused}`
 family per running instance. Each controller publishes
 `controller/{controller-uuid}/{runtime-instance|source|priority|size|speed|phase|paused|winning|releasing}`.
+`source` names the controller's current owner as `programmer:{uuid}`, `cue:{cuelist-uuid}:{link}`,
+`playback:{number}` or `virtual-playback:{page}:{number}`. When a running Playback Dynamic moves to
+another Playback or changes priority, `source` and `priority` follow the current assignment without
+restarting the Dynamic.
 Programmer-owned summaries remain under `feedback/dynamic/instance/{uuid}` and
 `feedback/dynamic/{pool-number}/active`. Treat `runtime-count` and the identities in each refresh
 as authoritative replacements for a locally cached instance list.

@@ -11,6 +11,7 @@ fn operational_fixture(fixture_id: light_core::FixtureId) -> light_fixture::Patc
         fixture_number: None,
         virtual_fixture_number: None,
         definition: light_fixture::FixtureDefinition {
+            runtime_color_context: None,
             schema_version: 1,
             id: light_core::FixtureId::new(),
             revision: 1,
@@ -62,6 +63,8 @@ fn operational_fixture(fixture_id: light_core::FixtureId) -> light_fixture::Patc
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),

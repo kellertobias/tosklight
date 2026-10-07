@@ -31,8 +31,15 @@ async fn read_psn(
 ) -> Result<Response, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
-    let (revision, configuration) = stored_configuration(&state, show_id)?;
-    let status = state.psn.tick(super::psn::listener::now_millis()).status;
+    // Show recovery: the failed show's PSN configuration and Macros are not served; the answer is
+    // the empty show's "off, nothing bound".
+    let recovery = state.active_show.in_recovery();
+    let (revision, configuration) = if recovery {
+        (0, light_application::PsnConfiguration::default())
+    } else {
+        stored_configuration(&state, show_id)?
+    };
+    let status = state.psn.status(super::psn::listener::now_millis());
     Ok(json_with_etag(
         revision,
         wire_psn::PsnSnapshot {
@@ -40,7 +47,11 @@ async fn read_psn(
             configuration: wire_configuration(&configuration),
             status: wire_status(&status),
             points: points(&state),
-            macros: macros(&state, show_id)?,
+            macros: if recovery {
+                Vec::new()
+            } else {
+                macros(&state, show_id)?
+            },
         },
     ))
 }
@@ -57,7 +68,7 @@ async fn update_psn(
             "request_id must be between 1 and 128 characters",
         ));
     }
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let key = ReplayKey {
         desk_id: session.desk.id,
         session_id: session.id.0,
@@ -69,7 +80,9 @@ async fn update_psn(
     }
     let (revision, stored) = stored_configuration(&state, show_id)?;
     let updated = apply(stored.clone(), &request)?;
-    updated.validate().map_err(ApiError::bad_request)?;
+    updated
+        .validate_update(&stored)
+        .map_err(ApiError::bad_request)?;
     let outcome = if updated == stored {
         wire_psn::PsnUpdateOutcome {
             request_id: request.request_id.clone(),
@@ -119,9 +132,8 @@ async fn update_psn(
             replayed: false,
         }
     };
-    // The receiver hears about it now rather than when the show is next read: an enable switch
-    // that takes a second to do anything reads as broken.
-    state.psn.install(updated);
+    // The accepted document installed the receiver inside the activation boundary. Reinstalling
+    // here after that permit was released could put this show's tracking back after a show switch.
     state.replay.insert_psn(key, request, outcome.clone()).await;
     Ok(json_with_etag(outcome.revision, outcome))
 }
@@ -200,6 +212,110 @@ pub(super) fn stored_configuration(
             Ok((revision, configuration))
         }
     }
+}
+
+/// Where a prepared PSN configuration came from. Loading never validates or rejects a stored
+/// body: an absent object is the valid "off" configuration, a decodable body is used as stored
+/// (the receiver withholds conflicting rows), and an undecodable body passively becomes the
+/// default while the stored object is left untouched for repair.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(not(test), allow(dead_code))] // Reported by TL-584's owned activation workflow.
+pub(super) enum PsnConfigurationOrigin {
+    Absent,
+    Stored,
+    Undecodable(String),
+}
+
+/// PSN configuration derived from one exact portable document without touching live tracking,
+/// sockets, events or the show file.
+#[derive(Clone, Debug)]
+#[cfg_attr(not(test), allow(dead_code))] // Installed by TL-584's owned activation workflow.
+pub(super) struct PreparedPsnConfiguration {
+    pub(super) show_id: light_core::ShowId,
+    pub(super) show_revision: u64,
+    pub(super) object_revision: u64,
+    pub(super) configuration: light_application::PsnConfiguration,
+    pub(super) origin: PsnConfigurationOrigin,
+}
+
+impl PreparedPsnConfiguration {
+    pub(super) fn for_document(document: &light_show::PortableShowDocument) -> Self {
+        let (object_revision, configuration, origin) = match document.object("psn", PSN_OBJECT_ID) {
+            None => (
+                0,
+                light_application::PsnConfiguration::default(),
+                PsnConfigurationOrigin::Absent,
+            ),
+            Some(object) => match serde_json::from_value(object.body().clone()) {
+                Ok(configuration) => (
+                    object.revision(),
+                    configuration,
+                    PsnConfigurationOrigin::Stored,
+                ),
+                Err(error) => (
+                    object.revision(),
+                    light_application::PsnConfiguration::default(),
+                    PsnConfigurationOrigin::Undecodable(error.to_string()),
+                ),
+            },
+        };
+        Self {
+            show_id: document.id(),
+            show_revision: document.revision().value(),
+            object_revision,
+            configuration,
+            origin,
+        }
+    }
+}
+
+/// Install tracking as part of the accepted show transaction, including Undo and imports. Packet
+/// handling never reads the portable store; the next listener tick sees this exact owner.
+pub(super) fn install_document(state: &AppState, document: &light_show::PortableShowDocument) {
+    let configuration = PreparedPsnConfiguration::for_document(document).configuration;
+    state
+        .psn
+        .install_for_show(Some(document.id()), configuration);
+    super::psn::output::publish(
+        state,
+        state
+            .psn
+            .committed_tracking_frame(super::psn::listener::now_millis()),
+    );
+}
+
+/// Cold show activation/startup only. Equal configuration in a different show still installs a
+/// different tracking owner and cannot reuse the previous show's held marker positions.
+pub(super) fn install_current_show(state: &AppState) {
+    let show_id = state.active_show.current().map(|show| show.id);
+    let configuration = show_id
+        .and_then(|show_id| stored_configuration(state, show_id).ok())
+        .map(|(_, configuration)| configuration)
+        .unwrap_or_default();
+    state.psn.reset_for_show(show_id, configuration);
+    super::psn::output::publish(
+        state,
+        state
+            .psn
+            .committed_tracking_frame(super::psn::listener::now_millis()),
+    );
+}
+
+/// Memory-only activation installer for a configuration prepared from the compiled document.
+/// Like cold activation it always resets tracking ownership, even for an equal configuration or
+/// the same show ID, and it never reopens the show file. The receiver's listener observes the
+/// new owner on its own schedule; this function does not bind or rebind sockets.
+#[cfg_attr(not(test), allow(dead_code))] // Called by TL-584's owned activation workflow.
+pub(super) fn install_prepared(state: &AppState, prepared: &PreparedPsnConfiguration) {
+    state
+        .psn
+        .reset_for_show(Some(prepared.show_id), prepared.configuration.clone());
+    super::psn::output::publish(
+        state,
+        state
+            .psn
+            .committed_tracking_frame(super::psn::listener::now_millis()),
+    );
 }
 
 /// Apply an intent update to what is stored.
@@ -331,8 +447,33 @@ pub(super) fn wire_status(
                 age_millis: tracker.age_millis,
                 stale: tracker.stale,
                 source: tracker.source.to_string(),
+                accepted_sample: tracker.accepted_sample.map(wire_accepted_sample),
             })
             .collect(),
+        sources: Some(
+            status
+                .sources
+                .iter()
+                .map(|source| wire_psn::PsnSourceProjection {
+                    source: source.source.to_string(),
+                    accepted_sample: source.accepted_sample.map(wire_accepted_sample),
+                    diagnostics: wire_psn::PsnIngressDiagnosticsProjection {
+                        duplicate_datagrams: source.diagnostics.duplicate_datagrams,
+                        rejected_datagrams: source.diagnostics.rejected_datagrams,
+                        incomplete_frames: source.diagnostics.incomplete_frames,
+                        ambiguous_datagrams: source.diagnostics.ambiguous_datagrams,
+                        invalid_positions: source.diagnostics.invalid_positions,
+                    },
+                })
+                .collect(),
+        ),
+        diagnostics: Some(wire_psn::PsnReceiverDiagnosticsProjection {
+            source_count: status.sources.len() as u64,
+            source_capacity: status.source_capacity as u64,
+            rejected_source_datagrams: status.rejected_source_datagrams,
+            invalid_calibrated_positions: status.invalid_calibrated_positions as u64,
+            conflicting_binding_rows: status.conflicting_binding_rows as u64,
+        }),
         placements: status
             .placements
             .iter()
@@ -347,6 +488,20 @@ pub(super) fn wire_status(
         frames: status.frames,
         ignored_datagrams: status.ignored_datagrams,
         error: status.error.clone(),
+    }
+}
+
+fn wire_accepted_sample(
+    identity: super::psn::service::TrackingSampleIdentity,
+) -> wire_psn::PsnAcceptedSampleProjection {
+    wire_psn::PsnAcceptedSampleProjection {
+        source: identity.source.to_string(),
+        source_generation: identity.source_generation,
+        source_epoch: identity.sample.id.source_epoch,
+        sequence: identity.sample.id.sequence,
+        frame_id: identity.sample.frame_id,
+        sender_timestamp_micros: identity.sample.sender_timestamp_micros,
+        accepted_at_millis: identity.sample.accepted_at_millis,
     }
 }
 
@@ -412,4 +567,128 @@ fn json_with_etag<T: serde::Serialize>(revision: u64, body: T) -> Response {
         response.headers_mut().insert(header::ETAG, value);
     }
     response
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::super::psn::service::{
+        PsnStatus, SourceReport, TrackerReport, TrackingSampleIdentity,
+    };
+    use super::*;
+    use light_psn_wire::{PsnAcceptedSample, PsnIngressDiagnostics, PsnSampleId};
+
+    #[test]
+    fn passive_diagnostics_preserve_source_and_older_positional_sample_without_errors() {
+        let source = "10.0.0.1:56565".parse().unwrap();
+        let position = TrackingSampleIdentity {
+            source_generation: 7,
+            source,
+            sample: PsnAcceptedSample {
+                id: PsnSampleId {
+                    source_epoch: 2,
+                    sequence: 4,
+                },
+                frame_id: 254,
+                sender_timestamp_micros: 50_000,
+                accepted_at_millis: 100,
+            },
+        };
+        let current = TrackingSampleIdentity {
+            sample: PsnAcceptedSample {
+                id: PsnSampleId {
+                    source_epoch: 2,
+                    sequence: 5,
+                },
+                frame_id: 255,
+                sender_timestamp_micros: 60_000,
+                accepted_at_millis: 110,
+            },
+            ..position
+        };
+        let status = PsnStatus {
+            enabled: true,
+            trackers: vec![TrackerReport {
+                tracker_id: 3,
+                name: None,
+                position_metres: Some([1.0, 2.0, 3.0]),
+                age_millis: 40,
+                stale: false,
+                source,
+                accepted_sample: Some(position),
+            }],
+            sources: vec![SourceReport {
+                source,
+                accepted_sample: Some(current),
+                diagnostics: PsnIngressDiagnostics {
+                    duplicate_datagrams: 1,
+                    rejected_datagrams: 2,
+                    incomplete_frames: 3,
+                    ambiguous_datagrams: 4,
+                    invalid_positions: 5,
+                },
+            }],
+            rejected_source_datagrams: 6,
+            source_capacity: 64,
+            invalid_calibrated_positions: 7,
+            conflicting_binding_rows: 2,
+            ..Default::default()
+        };
+        let before = status.clone();
+        let wire = wire_status(&status);
+        assert_eq!(status, before, "projection must be read-only");
+        assert_eq!(
+            wire.trackers[0].accepted_sample,
+            Some(wire_accepted_sample(position))
+        );
+        assert_eq!(
+            wire.trackers[0].age_millis, 40,
+            "do not replace positional age with whole-frame age"
+        );
+        let sources = wire.sources.as_ref().unwrap();
+        assert_eq!(
+            sources[0].accepted_sample,
+            Some(wire_accepted_sample(current))
+        );
+        assert_eq!(
+            sources[0].diagnostics,
+            wire_psn::PsnIngressDiagnosticsProjection {
+                duplicate_datagrams: 1,
+                rejected_datagrams: 2,
+                incomplete_frames: 3,
+                ambiguous_datagrams: 4,
+                invalid_positions: 5,
+            }
+        );
+        assert_eq!(
+            wire.diagnostics.unwrap(),
+            wire_psn::PsnReceiverDiagnosticsProjection {
+                source_count: 1,
+                source_capacity: 64,
+                rejected_source_datagrams: 6,
+                invalid_calibrated_positions: 7,
+                conflicting_binding_rows: 2,
+            }
+        );
+        assert!(wire.error.is_none());
+        let encoded = serde_json::to_value(wire).unwrap();
+        assert!(encoded.get("error").is_none());
+        assert!(encoded.get("output_frame_sequence").is_none());
+    }
+
+    #[test]
+    fn an_unheard_source_exposes_absent_sample_without_inventing_zero_identity() {
+        let status = PsnStatus {
+            sources: vec![SourceReport {
+                source: "10.0.0.1:56565".parse().unwrap(),
+                accepted_sample: None,
+                diagnostics: PsnIngressDiagnostics::default(),
+            }],
+            ..Default::default()
+        };
+        let wire = wire_status(&status);
+        let value = serde_json::to_value(wire).unwrap();
+        assert!(value["sources"][0].get("accepted_sample").is_none());
+        assert_eq!(value["diagnostics"]["source_count"], 1);
+        assert!(value.get("error").is_none());
+    }
 }

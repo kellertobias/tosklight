@@ -15,6 +15,7 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
             dmx_to: 127,
             attribute: AttributeKey::intensity(),
             priority: 0,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Continuous {
                 physical_min: 0.0,
@@ -29,6 +30,7 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
             dmx_to: 255,
             attribute: AttributeKey("shutter".into()),
             priority: 10,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Fixed {
                 semantic_id: "open".into(),
@@ -52,6 +54,8 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
         }],
         channels: vec![fixture_channel],
         color_systems: vec![],
+        color_physical: None,
+        position_physical: None,
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
@@ -79,9 +83,7 @@ fn compiled_resolution_matches_dynamic_resolution_and_active_ownership() {
     ];
     let scales = ChannelScales {
         virtual_intensity: Some(0.8),
-        sequence_master: 0.7,
-        group_master: 0.6,
-        grand_master: 0.5,
+        highlight_master: 0.5,
     };
     let plan = mode.compile_resolution_plan();
     let bound = plan.bind(&mode).unwrap();
@@ -128,9 +130,6 @@ fn compiled_static_channel_uses_only_default_and_highlight_values() {
     channel.highlight_raw = 211;
     channel.invert = true;
     channel.reacts_to_virtual_intensity = true;
-    channel.reacts_to_sequence_master = true;
-    channel.reacts_to_group_master = true;
-    channel.reacts_to_grand_master = true;
     let control = FixtureMode::control_action_attribute(channel.id);
     let values = HashMap::from([
         (channel.attribute.clone(), AttributeValue::Normalized(0.75)),
@@ -140,9 +139,7 @@ fn compiled_static_channel_uses_only_default_and_highlight_values() {
     let bound = plan.bind(&mode).unwrap();
     let normal = bound.resolve_channel(0, &values, false, None, |_| ChannelScales {
         virtual_intensity: Some(0.0),
-        sequence_master: 0.0,
-        group_master: 0.0,
-        grand_master: 0.0,
+        highlight_master: 0.0,
     });
     let highlighted = bound.resolve_channel(0, &values, true, None, |_| {
         panic!("static Highlight output does not request semantic master scales")

@@ -14,6 +14,49 @@ const SHOW_ID = "show-a";
 const DYNAMIC_ID = "dynamic-a";
 
 describe("DynamicMutationWriter", () => {
+ it("settles server-completed partner lanes instead of retaining the optimistic lane list", async () => {
+  const { store, object } = readyStore();
+  const lane = object.body.lanes[0];
+  const canonical = { ...object.body, lanes: [lane, { ...lane, id: "server-current-partner" }] };
+  const writer = new DynamicMutationWriter(store, { object: vi.fn(), updateDynamic: vi.fn().mockResolvedValue(actionOutcome(2, canonical)) });
+  await writer.update(SHOW_ID, DYNAMIC_ID, { type: "replace_lane", lane_id: lane.id, lane: { ...lane, width: 0.5 } });
+  expect(store.getSnapshot().dynamics[0].body.lanes).toEqual(canonical.lanes);
+  expect(store.getSnapshot().pendingObjectKeys.size).toBe(0);
+ });
+	it("drops the optimistic lane list when the change event outruns the response", async () => {
+		const { store, object } = readyStore();
+		const [lane] = object.body.lanes;
+		const added = { ...lane, id: "added" };
+		// The desk normalizes the write: the optimistic list keeps a lane the server dropped.
+		const canonical = { ...object.body, lanes: [added] };
+		const writer = new DynamicMutationWriter(store, {
+			object: vi.fn(),
+			updateDynamic: vi.fn().mockResolvedValue(actionOutcome(2, canonical)),
+		});
+		const pending = writer.update(SHOW_ID, DYNAMIC_ID, {
+			type: "add_lane",
+			lane: added,
+			index: null,
+		});
+		expect(store.getSnapshot().dynamics[0].body.lanes).toHaveLength(2);
+		store.applyChange({
+			showId: SHOW_ID,
+			showRevision: 2,
+			eventSequence: 2,
+			changes: [
+				{
+					kind: "dynamic",
+					objectId: DYNAMIC_ID,
+					objectRevision: 2,
+					body: canonical,
+					deleted: false,
+				},
+			],
+		} as Parameters<typeof store.applyChange>[0]);
+		await pending;
+		expect(store.getSnapshot().dynamics[0].body.lanes).toEqual(canonical.lanes);
+		expect(store.getSnapshot().pendingObjectKeys.size).toBe(0);
+	});
 	it("projects an encoder mutation before the server response settles", async () => {
 		const { store, object } = readyStore();
 		let resolve!: (outcome: ShowObjectActionOutcome) => void;

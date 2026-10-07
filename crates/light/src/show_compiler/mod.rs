@@ -1,4 +1,6 @@
+mod dynamic_presets;
 mod migrations;
+mod native_sources;
 mod objects;
 mod patch;
 mod prepare;
@@ -22,6 +24,7 @@ use light_show::PortableShowCandidate;
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct ShowCompileDirty {
     pub(crate) fixtures: bool,
+    pub(crate) native_sources: bool,
     pub(crate) cue_lists: bool,
     pub(crate) dynamics: bool,
     pub(crate) presets: bool,
@@ -38,9 +41,9 @@ pub(crate) fn compile_show_candidate(
     candidate: PortableShowCandidate<'_>,
 ) -> Result<EngineSnapshot, ActionError> {
     let fixtures = patch::compile_patch(candidate)?;
-    let cue_lists = objects::decode(candidate, "cue_list")?;
+    let cue_lists = objects::decode_cue_lists(candidate)?;
     let groups = objects::decode_groups(candidate)?;
-    let dynamics = objects::decode_dynamics(candidate, &groups)?;
+    let (dynamics, required_programming_contract) = objects::decode_dynamics(candidate, &groups)?;
     let dynamic_stage_positions = objects::decode_dynamic_stage_positions(candidate)?;
     let mut playbacks = objects::decode(candidate, "playback")?;
     let mut playback_pages = objects::decode(candidate, "playback_page")?;
@@ -48,6 +51,8 @@ pub(crate) fn compile_show_candidate(
     let control_mappings = objects::decode(candidate, "control_mapping")?;
     objects::supply_playback_defaults(&cue_lists, &mut playbacks, &mut playback_pages);
     Ok(EngineSnapshot {
+        required_programming_contract,
+        native_color_sources: native_sources::compile(candidate, None)?,
         fixtures: fixtures.into(),
         cue_lists: cue_lists.into(),
         dynamics: dynamics.into(),
@@ -78,8 +83,13 @@ fn compile_show_candidate_incremental(
     let mut snapshot = previous.clone();
     snapshot.revision = candidate.revision().value();
 
+    if dirty.native_sources || !snapshot.native_color_sources.is_prepared() {
+        snapshot.native_color_sources =
+            native_sources::compile(candidate, Some(&previous.native_color_sources))?;
+    }
+
     if dirty.cue_lists {
-        snapshot.cue_lists = objects::decode(candidate, "cue_list")?.into();
+        snapshot.cue_lists = objects::decode_cue_lists(candidate)?.into();
     }
     if dirty.dynamics || dirty.presets || dirty.groups {
         let groups = if dirty.groups {
@@ -87,7 +97,9 @@ fn compile_show_candidate_incremental(
         } else {
             snapshot.groups.as_ref().clone()
         };
-        snapshot.dynamics = objects::decode_dynamics(candidate, &groups)?.into();
+        let (dynamics, required) = objects::decode_dynamics(candidate, &groups)?;
+        snapshot.dynamics = dynamics.into();
+        snapshot.required_programming_contract = required;
     }
     if dirty.stage_layouts {
         snapshot.dynamic_stage_positions =

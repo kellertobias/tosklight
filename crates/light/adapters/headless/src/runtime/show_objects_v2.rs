@@ -31,6 +31,14 @@ async fn collection_snapshot(
 ) -> Result<Json<wire::ShowObjectCollectionSnapshot>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
+    if state.active_show.in_recovery() {
+        return Ok(Json(wire::ShowObjectCollectionSnapshot {
+            show_id: show_id.0,
+            show_revision: 0,
+            kind,
+            objects: Vec::new(),
+        }));
+    }
     let entry = active_entry(&state, show_id)?;
     let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let (show_revision, mut objects) = store
@@ -53,6 +61,15 @@ async fn exact_snapshot(
 ) -> Result<Json<wire::ShowObjectExactSnapshot>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
+    if state.active_show.in_recovery() {
+        return Ok(Json(wire::ShowObjectExactSnapshot {
+            show_id: show_id.0,
+            show_revision: 0,
+            kind,
+            object_id,
+            object: None,
+        }));
+    }
     let entry = active_entry(&state, show_id)?;
     let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let (show_revision, mut object) = exact_object_snapshot(&store, &kind, &object_id)?;
@@ -81,7 +98,7 @@ async fn output_route_action_v2(
 ) -> Result<Json<wire::OutputRouteActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let key = ReplayKey {
         session_id: session.id.0,
         show_id,
@@ -243,10 +260,16 @@ fn apply_route_patch(
     Ok(body)
 }
 
+/// The active show's library entry, for routes that open its store directly.
+///
+/// Show recovery refuses it (409, see `ActiveShowResource::ensure_content_writable`): no route
+/// reads or writes the failed show's file through this. Collection reads answer their empty shape
+/// before they get here.
 pub(super) fn active_entry(
     state: &AppState,
     show_id: light_core::ShowId,
 ) -> Result<ShowEntry, ApiError> {
+    super::ensure_show_content_writable(state)?;
     state
         .active_show
         .current()

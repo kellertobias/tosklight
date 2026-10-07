@@ -9,6 +9,7 @@ import type { SendControl } from "../../controller/types";
 
 interface NavigationRailProps {
 	page: number;
+	alignActive?: boolean;
 	send: SendControl;
 	nativePageControls?: boolean;
 }
@@ -17,6 +18,7 @@ export function NavigationRail({
 	page,
 	send,
 	nativePageControls = false,
+	alignActive = false,
 }: NavigationRailProps) {
 	const programmerActionIds = useRef(
 		new Map<ProgrammerControlAction, string>(),
@@ -61,6 +63,7 @@ export function NavigationRail({
 			<ControlButton
 				className="key-align"
 				label="ALIGN"
+				lamp={{ color: alignActive ? "#27c4d8" : "#25303a", state: alignActive ? "on" : "off" }}
 				onDown={() => sendProgrammerAction("align", true)}
 				onUp={() => sendProgrammerAction("align", false)}
 			/>

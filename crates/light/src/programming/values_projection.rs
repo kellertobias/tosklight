@@ -2,7 +2,7 @@ use super::{ProgrammingPorts, ProgrammingService};
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_core::SessionId;
 use light_core::{AttributeKey, FixtureId};
-use light_dynamics::{DynamicAddressValue, DynamicSemanticValue};
+use light_dynamics::DynamicAddressValue;
 use light_programmer::{ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerRegistry};
 use std::sync::Arc;
 
@@ -43,6 +43,8 @@ pub struct ProgrammingDynamicValueAddress {
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,
     pub instance_link: Option<uuid::Uuid>,
+    pub lane_id: Option<uuid::Uuid>,
+    pub component: Option<light_core::programming::ProgrammingComponent>,
 }
 
 /// One ordered normal-value transition. The retained projection remains available to command
@@ -216,10 +218,12 @@ impl ProgrammingValuesContent {
                     .keys()
                     .filter(|key| !after_dynamic.contains_key(*key))
                     .map(
-                        |(fixture_id, attribute, instance_link)| ProgrammingDynamicValueAddress {
+                        |(fixture_id, attribute, track)| ProgrammingDynamicValueAddress {
                             fixture_id: *fixture_id,
                             attribute: attribute.clone(),
-                            instance_link: *instance_link,
+                            instance_link: track.instance_link,
+                            lane_id: track.lane_id,
+                            component: track.component,
                         },
                     )
                     .collect()
@@ -232,13 +236,14 @@ impl ProgrammingValuesContent {
     }
 }
 
-fn dynamic_address(value: &DynamicAddressValue) -> (FixtureId, AttributeKey, Option<uuid::Uuid>) {
-    let instance_link = match &value.value {
-        DynamicSemanticValue::DynamicOn { instance_link, .. }
-        | DynamicSemanticValue::DynamicOff { instance_link, .. } => Some(*instance_link),
-        _ => None,
-    };
-    (value.fixture_id, value.attribute.clone(), instance_link)
+fn dynamic_address(
+    value: &DynamicAddressValue,
+) -> (FixtureId, AttributeKey, light_dynamics::DynamicTrackKey) {
+    (
+        value.fixture_id,
+        value.attribute.clone(),
+        value.value.track_key(),
+    )
 }
 
 #[cfg(test)]
@@ -293,6 +298,8 @@ mod dynamic_delta_tests {
                 fixture_id: FixtureId(Uuid::from_u128(1)),
                 attribute: AttributeKey("intensity".into()),
                 instance_link: Some(first),
+                lane_id: None,
+                component: None,
             }]
         );
     }

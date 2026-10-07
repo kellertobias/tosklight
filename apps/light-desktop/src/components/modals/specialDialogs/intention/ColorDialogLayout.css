@@ -1,0 +1,26 @@
+/* Color Special Dialog shell. Slot content (pickers, faders, approximation) brings its own styling. */
+.color-dialog-compact, .color-dialog-modal { color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; min-width: 0; }
+
+/* Compact Special occupies the four encoder slots. Its actions sit below White Blend. */
+.color-dialog-compact { height: 100%; min-height: 0; width: 100%; }
+.color-dialog-compact .color-dialog-compact-page { display: grid; height: 100%; grid-template-columns: minmax(0, 1fr) 230px; align-items: center; gap: 24px; padding: 10px 16px; min-height: 0; min-width: 0; }
+.color-dialog-compact .color-dialog-compact-page[data-page="white"] { grid-template-columns: minmax(0, 1fr) 170px; }
+.color-dialog-compact .color-dialog-compact-page[data-page="preview"] { grid-template-columns: minmax(0, 1fr) 140px; }
+.color-dialog-compact .color-dialog-actions { display: grid; gap: 22px; align-content: center; min-width: 0; }
+.color-dialog-compact .color-dialog-buttons { display: flex; gap: 8px; }
+.color-dialog-compact .color-dialog-buttons .ui-button { min-height: 40px; flex: 1; padding-inline: 10px; white-space: nowrap; }
+.color-dialog-compact .color-dialog-compact-page:not([data-page="mix"]) .color-dialog-buttons { flex-direction: column; }
+
+/* Full standard modal: title bar flush with the frame and carrying the Color | Details tabs. The
+   Color tab is the selection itself; the Details tab scrolls through approximation and Direct. */
+.color-dialog-layer { padding: 12px; }
+.color-dialog-layer.ui-modal-stack-layer > .color-dialog-modal[role="dialog"] { padding: 0; max-height: calc(100dvh - 24px); width: min(1060px, calc(100vw - 24px)); display: flex; flex-direction: column; }
+.color-dialog-modal > .ui-modal-titlebar { margin: 0; padding: 0; border-radius: 5px 5px 0 0; flex-shrink: 0; }
+.color-dialog-modal .color-dialog-modal-body { display: grid; gap: 18px; padding: 16px 22px; overflow: auto; min-height: 0; }
+.color-dialog-modal .color-dialog-controls { min-width: 0; width: 100%; }
+.color-dialog-modal .color-dialog-modal-body[data-tab="details"] { align-content: start; overscroll-behavior: contain; }
+.color-dialog-modal .color-dialog-approximation { display: grid; gap: 10px; }
+.color-dialog-modal .color-dialog-native { border-top: 1px solid var(--border); padding-top: 14px; }
+.color-dialog-modal .color-dialog-approximation h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.color-dialog-modal .color-dialog-media-preview { height: 220px; min-width: 0; }
+@media (max-width: 650px) { .color-dialog-modal .color-dialog-modal-body { padding: 14px; } }

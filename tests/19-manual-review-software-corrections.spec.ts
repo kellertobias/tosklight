@@ -371,16 +371,20 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 async function expectPoolCardsSquare(pane: Locator): Promise<void> {
   const cards = pane.locator(".group-card");
   await expect(cards.first()).toBeVisible();
-  const geometry = await cards.evaluateAll((elements) => elements.slice(0, 12).map((element) => {
-    const bounds = element.getBoundingClientRect();
-    return { width: bounds.width, height: bounds.height };
-  }));
-  for (const bounds of geometry) {
-    expect(Math.abs(bounds.width - bounds.height)).toBeLessThanOrEqual(1);
-  }
-  const scroller = pane.locator(".ui-window-scroller");
-  expect(await scroller.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
-  expect(await scroller.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  // The pool sizes its cards from the pane's measured width, a frame after the pane opens or
+  // resizes; the settled layout is what must be square.
+  await expect(async () => {
+    const geometry = await cards.evaluateAll((elements) => elements.slice(0, 12).map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return { width: bounds.width, height: bounds.height };
+    }));
+    for (const bounds of geometry) {
+      expect(Math.abs(bounds.width - bounds.height)).toBeLessThanOrEqual(1);
+    }
+    const scroller = pane.locator(".ui-window-scroller");
+    expect(await scroller.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+    expect(await scroller.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  }).toPass({ timeout: 5_000 });
 }
 
 function dockEntry(page: Page, name: string): Locator {

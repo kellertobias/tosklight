@@ -34,6 +34,8 @@ fn visual_only_profile_renders_without_a_dmx_encoding_plan() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -73,6 +75,8 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -88,6 +92,8 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -102,6 +108,8 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
+            required_programming_contract: 0,
+            native_color_sources: Default::default(),
             fixtures: vec![fixture].into(),
             cue_lists: vec![].into(),
             dynamics: vec![].into(),
@@ -141,6 +149,8 @@ fn logical_head_programmer_value_renders_to_physical_patch() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
+            required_programming_contract: 0,
+            native_color_sources: Default::default(),
             fixtures: vec![fixture].into(),
             cue_lists: vec![].into(),
             dynamics: vec![].into(),

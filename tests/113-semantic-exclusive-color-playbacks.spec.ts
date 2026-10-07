@@ -25,21 +25,34 @@ const WASH_MOVER = {
 	mode: "Mode 3",
 } as const;
 
-/** The basic colours, as percentages of red, green, blue, and (on the mover) white. */
+/**
+ * The basic colours as the Easy Color encoders set them (Red, Green, Blue and White Blend, in
+ * percent), with the DMX each head shows. The show programs Color Intent, so a colour is matched,
+ * not copied channel by channel: an encoder percentage is an sRGB component, which an RGB emitter
+ * shows at its linear-light level (three-quarter green is 52%, DMX 133), and a full White Blend is
+ * the 6500 K white rather than every emitter at full. Every head of the rig shows the same colour.
+ */
 const COLORS = [
-	{ name: "Red", red: 100, green: 0, blue: 0, white: 0 },
-	{ name: "Green", red: 0, green: 100, blue: 0, white: 0 },
-	{ name: "Blue", red: 0, green: 0, blue: 100, white: 0 },
-	{ name: "Amber", red: 100, green: 75, blue: 0, white: 0 },
-	{ name: "White", red: 100, green: 100, blue: 100, white: 100 },
+	{ name: "Red", red: 100, green: 0, blue: 0, white: 0, rgb: [255, 0, 0], moverWhite: 0 },
+	{ name: "Green", red: 0, green: 100, blue: 0, white: 0, rgb: [0, 255, 0], moverWhite: 0 },
+	{ name: "Blue", red: 0, green: 0, blue: 100, white: 0, rgb: [0, 0, 255], moverWhite: 0 },
+	{ name: "Amber", red: 100, green: 75, blue: 0, white: 0, rgb: [255, 133, 0], moverWhite: 0 },
+	{
+		name: "White",
+		red: 100,
+		green: 100,
+		blue: 100,
+		white: 100,
+		rgb: [255, 240, 253],
+		// The RGBW mover makes the white from its white emitter, trimmed by red and blue.
+		moverRgb: [15, 0, 13],
+		moverWhite: 251,
+	},
 ] as const;
 
-/** The DMX byte a percentage lands on, give or take one step of rounding. */
-const byte = (percent: number) => ({
-	between: [
-		Math.max(0, Math.floor((percent * 255) / 100) - 1),
-		Math.min(255, Math.ceil((percent * 255) / 100) + 1),
-	] as [number, number],
+/** A DMX byte, give or take one step of rounding. */
+const byte = (value: number) => ({
+	between: [Math.max(0, value - 1), Math.min(255, value + 1)] as [number, number],
 });
 
 scenario(
@@ -121,25 +134,20 @@ scenario(
 					runtime: { enabled: index === active },
 				});
 		};
-		const expectRig = async (color: {
-			red: number;
-			green: number;
-			blue: number;
-			white: number;
-		}) => {
-			const rgb = {
-				"Color red": byte(color.red),
-				"Color green": byte(color.green),
-				"Color blue": byte(color.blue),
-			};
+		const expectRig = async (color: (typeof COLORS)[number]) => {
+			const rgb = (values: readonly number[]) => ({
+				"Color red": byte(values[0]),
+				"Color green": byte(values[1]),
+				"Color blue": byte(values[2]),
+			});
 			// The first and last pixel of the bar, both PARs, and the mover at full.
-			await t.expectFixtureDMX(fixture(1, 2), rgb);
-			await t.expectFixtureDMX(fixture(1, 11), rgb);
-			await t.expectFixtureDMX(fixture(2), rgb);
-			await t.expectFixtureDMX(fixture(3), rgb);
+			await t.expectFixtureDMX(fixture(1, 2), rgb(color.rgb));
+			await t.expectFixtureDMX(fixture(1, 11), rgb(color.rgb));
+			await t.expectFixtureDMX(fixture(2), rgb(color.rgb));
+			await t.expectFixtureDMX(fixture(3), rgb(color.rgb));
 			await t.expectFixtureDMX(fixture(4), {
-				...rgb,
-				"Color white": byte(color.white),
+				...rgb("moverRgb" in color ? color.moverRgb : color.rgb),
+				"Color white": byte(color.moverWhite),
 				Intensity: 255,
 			});
 		};

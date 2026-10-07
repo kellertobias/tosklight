@@ -1,12 +1,13 @@
 //! Authenticated active-show and compatibility ports for Playback topology.
 
+use super::PreparedOutputSnapshot;
 use super::{AppState, ServerActiveShowPorts, ServerActiveShowUnitOfWork, Session, emit};
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowPorts,
     PlaybackTopologyPorts,
 };
 use light_core::{SessionId, ShowId};
-use light_engine::{EngineSnapshot, PreparedEngineSnapshot};
+use light_engine::EngineSnapshot;
 use light_show::{PortableShowObjectRedo, PortableShowObjectUndo};
 
 #[derive(Clone)]
@@ -92,7 +93,7 @@ impl ServerPlaybackTopologyPorts {
 
 impl ActiveShowPorts for ServerPlaybackTopologyPorts {
     type UnitOfWork = ServerActiveShowUnitOfWork;
-    type PreparedRuntime = PreparedEngineSnapshot;
+    type PreparedRuntime = PreparedOutputSnapshot;
 
     fn authorize_mutation(&self, context: &ActionContext) -> Result<(), ActionError> {
         self.authorize(context)
@@ -106,7 +107,7 @@ impl ActiveShowPorts for ServerPlaybackTopologyPorts {
     ) -> Result<T, ActionError> {
         let _activation =
             (!self.active_show_held).then(|| self.state.active_show.acquire_blocking());
-        operation()
+        self.state.programming.run_active_show_boundary(operation)
     }
 
     fn begin_active_show(
@@ -144,6 +145,15 @@ impl ActiveShowPorts for ServerPlaybackTopologyPorts {
         snapshot: EngineSnapshot,
     ) -> Result<Self::PreparedRuntime, ActionError> {
         self.active.prepare_runtime(snapshot)
+    }
+
+    fn finalize_runtime<T>(
+        &self,
+        context: &ActionContext,
+        prepared: Self::PreparedRuntime,
+        persist: impl FnOnce() -> Result<T, ActionError>,
+    ) -> Result<T, ActionError> {
+        self.active.finalize_runtime(context, prepared, persist)
     }
 
     fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime) {

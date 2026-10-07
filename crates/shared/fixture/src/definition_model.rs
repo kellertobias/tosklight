@@ -122,6 +122,9 @@ pub struct ColorCalibration {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FixtureDefinition {
+    /// Trusted authoring identity retained by runtime projection; never accepted from wire/show JSON.
+    #[serde(skip)]
+    pub runtime_color_context: Option<std::sync::Arc<crate::ColorCalibrationContext>>,
     pub schema_version: u16,
     pub id: FixtureId,
     pub revision: u32,
@@ -158,7 +161,7 @@ pub struct FixtureDefinition {
     #[serde(default)]
     pub mode_id: Option<Uuid>,
     #[serde(default)]
-    pub profile_snapshot: Option<Box<FixtureProfile>>,
+    pub profile_snapshot: Option<std::sync::Arc<FixtureProfile>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

@@ -8,12 +8,16 @@
 
 use light_core::FixtureId;
 use light_fixture::{
-    FixtureDefinition, FixtureProfile, PatchedFixture, PatchedFixtureCompiler,
+    FixtureDefinition, FixtureGdtfSource, FixtureProfile, PatchedFixture, PatchedFixtureCompiler,
     PatchedFixtureProfileReference, PortablePatchError, PortablePatchedFixtureRecord,
-    ResolvedFixtureProfileRevision, gdtf,
+    ResolvedFixtureProfileRevision, fixture_profile_source_fingerprint, gdtf,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap, HashSet};
+
+#[path = "mvr_export_sources.rs"]
+mod sources;
 use uuid::Uuid;
 
 pub const TOSKLIGHT_MVR_FIXTURE_METADATA_PATH: &str = "tosklight/fixture-metadata.json";
@@ -22,12 +26,17 @@ pub const TOSKLIGHT_MVR_FIXTURE_METADATA_PATH: &str = "tosklight/fixture-metadat
 struct ToskLightMvrFixtureMetadata {
     version: u32,
     fixtures: Vec<ToskLightMvrFixtureMetadataEntry>,
+    /// Archive members are shared by hash; descriptors retain their original association.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    gdtf_sources: BTreeMap<String, light_fixture::ProfileGdtfSource>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct ToskLightMvrFixtureMetadataEntry {
     mvr_uuid: Uuid,
     fixture: PatchedFixture,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source_gdtf_ref: Option<String>,
     /// The hinge the fixture's matrix turns the body about, in fixture-local desk millimetres.
     /// Absent — as in every archive written before hinges were exported — means the matrix turns
     /// the whole lamp about its origin.
@@ -89,17 +98,30 @@ pub fn tosklight_mvr_fixture_metadata(
     if metadata.version != 1 {
         return HashMap::new();
     }
+    let sources = sources::read_sources(document, metadata.gdtf_sources);
     metadata
         .fixtures
         .into_iter()
-        .map(|entry| {
-            (
+        .filter_map(|mut entry| {
+            if let Some(reference) = entry.source_gdtf_ref {
+                // A missing or corrupt retained archive invalidates this native entry. Fall back
+                // to the standard MVR description, rather than silently certify different bytes.
+                let source = sources.get(&reference)?.clone();
+                entry
+                    .fixture
+                    .definition
+                    .profile_snapshot
+                    .as_mut()
+                    .map(std::sync::Arc::make_mut)?
+                    .source_gdtf = Some(source);
+            }
+            Some((
                 entry.mvr_uuid,
                 ToskLightMvrFixture {
                     fixture: entry.fixture,
                     bracket_hinge_millimetres: entry.bracket_hinge_millimetres,
                 },
-            )
+            ))
         })
         .collect()
 }
@@ -109,10 +131,9 @@ pub fn tosklight_mvr_fixture_metadata(
 pub struct MvrExportSummary {
     pub fixtures: usize,
     pub scenery: usize,
-    /// Fixtures whose profile's retained source GDTF is embedded unchanged.
+    /// Fixtures using original archives verified against their actual profile snapshot.
     pub embedded_profiles: usize,
-    /// Fixtures whose profile has no retained source GDTF, described by a GDTF generated from the
-    /// profile instead.
+    /// Fixtures described by GDTF generated from their current immutable profile snapshot.
     pub generated_profiles: usize,
     /// Fixtures whose profile could not be embedded either way. They are referenced, not embedded.
     pub missing_profiles: Vec<String>,
@@ -135,6 +156,21 @@ pub trait GdtfSource {
         profile: FixtureId,
         revision: u32,
     ) -> Result<Option<Vec<u8>>, Self::Error>;
+
+    /// Bytes and evidence must come from the same source record. Providers without an explicit
+    /// association remain unverified; having the same profile id or revision is insufficient.
+    fn source_gdtf_with_evidence(
+        &self,
+        profile: FixtureId,
+        revision: u32,
+    ) -> Result<Option<FixtureGdtfSource>, Self::Error> {
+        Ok(self
+            .source_gdtf(profile, revision)?
+            .map(|data| FixtureGdtfSource {
+                data,
+                profile_fingerprint: None,
+            }))
+    }
 }
 
 /// Resolves stored `patched_fixture` objects into fixtures an export can describe.
@@ -154,7 +190,7 @@ where
         .into_iter()
         .map(|(id, body)| {
             let record = PortablePatchedFixtureRecord::decode(body)?;
-            Ok((id, compiler.compile(&record)?))
+            Ok((id, compiler.compile_for_export(&record)?))
         })
         .collect()
 }
@@ -204,7 +240,7 @@ struct ExportedType {
     /// The archive member, which is also what every fixture of this revision names as its spec.
     spec: String,
     /// For a generated file: each profile mode's id, its own name and its name in the GDTF.
-    /// `None` for a retained source, whose mode names are the ones the profile was imported with.
+    /// Absent when a verified original archive keeps the source mode names.
     generated: Option<GeneratedModes>,
 }
 
@@ -228,8 +264,9 @@ impl ExportedType {
 ///
 /// `fixtures` is `(stored object id, fixture)` in stored order, and `layers` the patch layers they
 /// belong to, from [`mvr_layers`]. Every fixture's profile revision is
-/// embedded once: as its retained source GDTF where one exists, otherwise as a GDTF generated from
-/// the profile, because an application opening the archive refuses a fixture whose GDTF is absent.
+/// described once from its current profile snapshot. Original source bytes may predate profile
+/// edits, so they cannot replace current data without a verified source/profile association.
+/// Export limitations and missing GDTF files are reported in the existing summary warnings.
 ///
 /// `bracket_hinge` answers where a fixture's body turns in its bracket, in fixture-local desk
 /// millimetres — `viz_project::patched_bracket_hinge_millimetres`, the hinge the Visualizer and the
@@ -254,50 +291,70 @@ pub fn build_mvr_document<S: GdtfSource>(
         ..Default::default()
     };
     let mut summary = MvrExportSummary::default();
-    let mut types: HashMap<(Uuid, u32), Option<ExportedType>> = HashMap::new();
+    let mut types: HashMap<(Uuid, u32, String, Option<String>), Option<ExportedType>> =
+        HashMap::new();
     let mut archive_names = HashSet::new();
     let mut tosklight_fixtures = Vec::with_capacity(fixtures.len());
+    let mut source_archives = sources::SourceArchiveWriter::default();
     for (id, fixture) in fixtures {
         let definition = &fixture.definition;
+        let mut native_fixture = fixture.clone();
+        let source_gdtf_ref =
+            source_archives.detach(&mut native_fixture, &mut document, &mut summary.warnings);
+        // The canonical fingerprint intentionally excludes source evidence. Source-only optical
+        // data can differ for otherwise identical profiles, so it must also distinguish exports.
+        let source_cache_key = source_gdtf_ref.clone().or_else(|| {
+            definition.profile_snapshot.as_ref().and_then(|profile| {
+                profile
+                    .source_gdtf
+                    .as_ref()
+                    .map(|_| format!("invalid:{id}"))
+            })
+        });
         let preferred = metadata
             .get(id)
             .and_then(|body| body.get("gdtf_spec"))
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned)
             .unwrap_or_else(|| {
-                let model = match definition.model.trim() {
-                    "" => definition.name.trim(),
-                    model => model,
-                };
+                let model = profile_name(definition);
                 format!("{}@{model}.gdtf", definition.manufacturer)
             });
-        let key = (definition.id.0, definition.revision);
-        if let std::collections::hash_map::Entry::Vacant(slot) = types.entry(key) {
+        // A portable show can carry different snapshots with identical library identifiers
+        // (including a selected-mode subset). Never reuse evidence or generated bytes by id alone.
+        let prepared = prepare_profile(definition);
+        let fingerprint = match &prepared {
+            Ok(prepared) => prepared.fingerprint.clone(),
+            Err(error) => format!("unavailable:{error}"),
+        };
+        let key = (
+            definition.id.0,
+            definition.revision,
+            fingerprint,
+            source_cache_key,
+        );
+        if let std::collections::hash_map::Entry::Vacant(slot) = types.entry(key.clone()) {
             slot.insert(export_type(
                 definition,
+                &prepared,
                 &preferred,
                 gdtf,
                 &mut document,
                 &mut archive_names,
+                &mut summary.warnings,
             )?);
         }
-        let (spec, mode) = match &types[&key] {
-            Some(exported) => {
-                if exported.generated.is_some() {
-                    summary.generated_profiles += 1;
-                } else {
-                    summary.embedded_profiles += 1;
-                }
-                (exported.spec.clone(), exported.mode(definition))
-            }
-            None => {
-                summary.missing_profiles.push(format!(
-                    "{} · {}",
-                    definition.manufacturer, definition.model
-                ));
-                (preferred, definition.mode.clone())
-            }
-        };
+        // Verified source bytes may already be retained as an ancillary member. Once standard
+        // export has written the same bytes at the MVR root, point descriptors there and remove
+        // the redundant copy. Generated output cannot take the original source's place.
+        if let Some(exported) = &types[&key]
+            && exported.generated.is_none()
+            && let Some(reference) = &source_gdtf_ref
+        {
+            source_archives.use_standard_member(reference, &exported.spec, &mut document);
+        }
+        let (spec, mode) =
+            exported_spec_and_mode(types[&key].as_ref(), definition, preferred, &mut summary);
         let uuid = by_fixture
             .get(id.as_str())
             .and_then(|uuid| Uuid::parse_str(uuid).ok())
@@ -308,7 +365,8 @@ pub fn build_mvr_document<S: GdtfSource>(
             .flatten();
         tosklight_fixtures.push(ToskLightMvrFixtureMetadataEntry {
             mvr_uuid: uuid,
-            fixture: fixture.clone(),
+            fixture: native_fixture,
+            source_gdtf_ref,
             bracket_hinge_millimetres: hinge,
         });
         document.fixtures.push(light_mvr::MvrFixture {
@@ -328,19 +386,67 @@ pub fn build_mvr_document<S: GdtfSource>(
             class: None,
         });
     }
-    let metadata = ToskLightMvrFixtureMetadata {
-        version: 1,
-        fixtures: tosklight_fixtures,
-    };
+    embed_tosklight_metadata(
+        &mut document,
+        ToskLightMvrFixtureMetadata {
+            version: 1,
+            fixtures: tosklight_fixtures,
+            gdtf_sources: source_archives.descriptors,
+        },
+    );
+    add_profile_warnings(&mut summary);
+    summary.fixtures = document.fixtures.len();
+    summary.scenery = document.geometry.len();
+    Ok((document, summary))
+}
+
+/// The GDTF spec and mode a fixture references, counting how its profile was exported.
+fn exported_spec_and_mode(
+    exported: Option<&ExportedType>,
+    definition: &FixtureDefinition,
+    preferred: String,
+    summary: &mut MvrExportSummary,
+) -> (String, String) {
+    match exported {
+        Some(exported) => {
+            if exported.generated.is_some() {
+                summary.generated_profiles += 1;
+            } else {
+                summary.embedded_profiles += 1;
+            }
+            (exported.spec.clone(), exported.mode(definition))
+        }
+        None => {
+            summary.missing_profiles.push(format!(
+                "{} · {}",
+                definition.manufacturer,
+                profile_name(definition)
+            ));
+            (preferred, definition.mode.clone())
+        }
+    }
+}
+
+/// Stores ToskLight's own fixture metadata beside the standard MVR content.
+fn embed_tosklight_metadata(
+    document: &mut light_mvr::MvrDocument,
+    metadata: ToskLightMvrFixtureMetadata,
+) {
     if let Ok(data) = serde_json::to_vec(&metadata) {
         document
             .files
             .insert(TOSKLIGHT_MVR_FIXTURE_METADATA_PATH.into(), data);
     }
+}
+
+/// Explains generated and missing GDTF profiles to the operator.
+fn add_profile_warnings(summary: &mut MvrExportSummary) {
     if summary.generated_profiles > 0 {
         summary.warnings.push(
-            "Some fixture profiles have no retained source GDTF; ToskLight generated GDTF files \
-             for them with their modes and channels, but without wheels, emitters or 3D models"
+            "ToskLight generated GDTF files from the current fixture profiles with their modes, \
+             channels, supported physical functions and colour emitters, filters and wheels, but \
+             without native calibration provenance, Position geometry, Zoom conventions or \
+             detailed 3D models"
                 .to_owned(),
         );
     }
@@ -351,45 +457,140 @@ pub fn build_mvr_document<S: GdtfSource>(
                 .to_owned(),
         );
     }
-    summary.fixtures = document.fixtures.len();
-    summary.scenery = document.geometry.len();
-    Ok((document, summary))
+}
+
+fn profile_name(definition: &FixtureDefinition) -> &str {
+    match definition.model.trim() {
+        "" => definition.name.trim(),
+        model => model,
+    }
 }
 
 /// Embeds the GDTF for one profile revision, or returns `None` when there is none to embed.
 fn export_type<S: GdtfSource>(
     definition: &FixtureDefinition,
+    prepared: &Result<PreparedProfile<'_>, light_fixture::ProfileError>,
     preferred: &str,
     gdtf: &S,
     document: &mut light_mvr::MvrDocument,
     archive_names: &mut HashSet<String>,
+    warnings: &mut Vec<String>,
 ) -> Result<Option<ExportedType>, S::Error> {
-    let (data, generated) = match gdtf.source_gdtf(definition.id, definition.revision)? {
-        Some(source) => (source, None),
-        None => match generated_gdtf(definition) {
-            Some((data, modes)) => (data, Some(modes)),
-            None => return Ok(None),
-        },
+    let label = format!(
+        "{} · {} (revision {})",
+        definition.manufacturer,
+        profile_name(definition),
+        definition.revision
+    );
+    let embedded = prepared
+        .as_ref()
+        .ok()
+        .and_then(|prepared| prepared.profile.source_gdtf.as_ref());
+    let source = if let Some(embedded) = embedded {
+        match embedded.decoded_archive() {
+            Ok(data) => Some(FixtureGdtfSource {
+                data,
+                profile_fingerprint: embedded.profile_fingerprint.clone(),
+            }),
+            Err(error) => {
+                warnings.push(format!(
+                    "{label}: embedded GDTF source was not used: {error}"
+                ));
+                None
+            }
+        }
+    } else {
+        gdtf.source_gdtf_with_evidence(definition.id, definition.revision)?
     };
+    if let Some(source) = source {
+        let matches = prepared.as_ref().is_ok_and(|prepared| {
+            source.profile_fingerprint.as_ref() == Some(&prepared.fingerprint)
+        });
+        if matches {
+            let existing = document
+                .files
+                .iter()
+                .filter(|(path, data)| {
+                    !path.contains('/')
+                        && path.to_ascii_lowercase().ends_with(".gdtf")
+                        && **data == source.data
+                })
+                .map(|(path, _)| path.clone())
+                .min();
+            let spec = existing
+                .unwrap_or_else(|| archive_name(preferred, definition.revision, archive_names));
+            document.files.entry(spec.clone()).or_insert(source.data);
+            return Ok(Some(ExportedType {
+                spec,
+                generated: None,
+            }));
+        }
+        let reason = if source.profile_fingerprint.is_some() {
+            "its associated profile does not match the actual export snapshot"
+        } else {
+            "it is not verified against the actual export snapshot"
+        };
+        warnings.push(format!(
+            "{label}: the retained source GDTF was not used because {reason}. \
+             The original source remains retained with its original evidence."
+        ));
+    }
+    let generated = match prepared {
+        Ok(prepared) => generated_gdtf(&prepared.profile).map_err(|error| error.to_string()),
+        Err(error) => Err(error.to_string()),
+    };
+    let (data, modes) = match generated {
+        Ok(generated) => generated,
+        Err(error) => {
+            warnings.push(format!(
+                "{label}: GDTF could not be generated: {error}. No GDTF is embedded for this \
+                 profile; other applications may not load these fixtures. Export its native \
+                 .toskfixture package to preserve the complete profile."
+            ));
+            return Ok(None);
+        }
+    };
+    let generated = Some(modes);
     let spec = archive_name(preferred, definition.revision, archive_names);
     document.files.insert(spec.clone(), data);
     Ok(Some(ExportedType { spec, generated }))
 }
 
-/// A GDTF describing the profile the fixture was patched from, with its modes' GDTF names.
-fn generated_gdtf(definition: &FixtureDefinition) -> Option<(Vec<u8>, GeneratedModes)> {
+struct PreparedProfile<'a> {
+    profile: Cow<'a, FixtureProfile>,
+    fingerprint: String,
+}
+
+fn prepare_profile(
+    definition: &FixtureDefinition,
+) -> Result<PreparedProfile<'_>, light_fixture::ProfileError> {
     let profile = match definition.profile_snapshot.as_deref() {
-        Some(profile) => profile.clone(),
-        None => FixtureProfile::from_flat_modes(std::slice::from_ref(definition)).ok()?,
+        Some(profile) => Cow::Borrowed(profile),
+        None => Cow::Owned(FixtureProfile::from_flat_modes(std::slice::from_ref(
+            definition,
+        ))?),
     };
-    let data = gdtf::profile::package_profile(&profile).ok()?;
+    let fingerprint = fixture_profile_source_fingerprint(&profile).map_err(|error| {
+        light_fixture::ProfileError::Invalid(format!("source fingerprint: {error}"))
+    })?;
+    Ok(PreparedProfile {
+        profile,
+        fingerprint,
+    })
+}
+
+/// A GDTF describing the exact export snapshot, with its modes' GDTF names.
+fn generated_gdtf(
+    profile: &FixtureProfile,
+) -> Result<(Vec<u8>, GeneratedModes), light_fixture::ProfileError> {
+    let data = gdtf::profile::package_profile(profile)?;
     let modes = profile
         .modes
         .iter()
-        .zip(gdtf::profile::mode_names(&profile))
+        .zip(gdtf::profile::mode_names(profile))
         .map(|(mode, gdtf)| (mode.id, mode.name.clone(), gdtf))
         .collect();
-    Some((data, modes))
+    Ok((data, modes))
 }
 
 /// A GDTF file name at the archive root that no other member shares, even by case.

@@ -33,8 +33,39 @@ pub struct ProgrammerAlignmentState {
     /// Selection order frozen when Align was activated.
     pub fixtures: Vec<FixtureId>,
     pub binding: Option<ProgrammerAlignmentBinding>,
+    /// Mutually exclusive with the normalized binding. Complete anchors and immutable models
+    /// are runtime-only and participate in atomic registry transaction snapshots.
+    pub family_binding: Option<std::sync::Arc<crate::ProgrammerFamilyAlignmentBinding>>,
     /// Signed encoder movement accumulated across every accepted sample.
     pub input_position: f32,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ProgrammerAlignmentProjection {
+    pub revision: u64,
+    pub mode: Option<ProgrammerAlignmentMode>,
+    pub binding: Option<ProgrammerAlignmentProjectionBinding>,
+    pub fixture_count: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProgrammerAlignmentProjectionBinding {
+    Attribute {
+        attribute: AttributeKey,
+    },
+    Family {
+        component: light_core::programming::ProgrammingComponent,
+        lane: crate::ProgrammerAlignmentLane,
+        group_id: Option<String>,
+    },
+}
+
+/// Committed Off has its own revision. The shared allocator can advance in a rejected staged
+/// command, so its current counter must never be exposed as the live projection revision.
+#[derive(Clone, Default)]
+pub(crate) struct ProgrammerAlignmentContext {
+    pub revision: u64,
+    pub active: Option<ProgrammerAlignmentState>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -52,6 +83,7 @@ pub struct ProgrammerAlignmentPlan {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProgrammerAlignmentError {
+    InvalidFamily(String),
     UnknownSession,
     EmptySelection,
     NotActive,
@@ -101,9 +133,10 @@ impl ProgrammerRegistry {
             mode,
             fixtures,
             binding: None,
+            family_binding: None,
             input_position: 0.0,
         };
-        *self.alignment_context.write() = Some(state.clone());
+        self.install_alignment(state.clone());
         Ok(state)
     }
 
@@ -111,7 +144,46 @@ impl ProgrammerRegistry {
         self.sessions
             .read()
             .contains(&session)
-            .then(|| self.alignment_context.read().clone())?
+            .then(|| self.alignment_context.read().active.clone())?
+    }
+
+    pub fn alignment_projection(&self) -> ProgrammerAlignmentProjection {
+        self.serialized(|| {
+            let context = self.alignment_context.read();
+            let Some(state) = &context.active else {
+                return ProgrammerAlignmentProjection {
+                    revision: context.revision,
+                    ..Default::default()
+                };
+            };
+            ProgrammerAlignmentProjection {
+                revision: context.revision,
+                mode: Some(state.mode),
+                fixture_count: state.fixtures.len(),
+                binding: state
+                    .family_binding
+                    .as_ref()
+                    .map(|binding| ProgrammerAlignmentProjectionBinding::Family {
+                        component: binding.component,
+                        lane: binding.lane,
+                        group_id: binding.group_id.clone(),
+                    })
+                    .or_else(|| {
+                        state.binding.as_ref().map(|binding| {
+                            ProgrammerAlignmentProjectionBinding::Attribute {
+                                attribute: binding.attribute.clone(),
+                            }
+                        })
+                    }),
+            }
+        })
+    }
+
+    fn install_alignment(&self, state: ProgrammerAlignmentState) {
+        *self.alignment_context.write() = ProgrammerAlignmentContext {
+            revision: state.revision,
+            active: Some(state),
+        };
     }
 
     /// Re-anchor an active mode from values resolved at the mode-switch instant.
@@ -130,8 +202,14 @@ impl ProgrammerRegistry {
         let current = self
             .alignment_context
             .read()
+            .active
             .clone()
             .ok_or(ProgrammerAlignmentError::NotActive)?;
+        if current.family_binding.is_some() {
+            return Err(ProgrammerAlignmentError::InvalidFamily(
+                "typed Align requires complete family reanchoring".into(),
+            ));
+        }
         let binding = match current.binding.as_ref() {
             Some(binding) => {
                 validate_bases(&current.fixtures, bases)?;
@@ -149,9 +227,10 @@ impl ProgrammerRegistry {
             mode,
             fixtures: current.fixtures,
             binding,
+            family_binding: None,
             input_position: current.input_position,
         };
-        *self.alignment_context.write() = Some(state.clone());
+        self.install_alignment(state.clone());
         Ok(state)
     }
 
@@ -181,8 +260,40 @@ impl ProgrammerRegistry {
     pub fn commit_alignment_plan(
         &self,
         session: SessionId,
-        mut plan: ProgrammerAlignmentPlan,
+        plan: ProgrammerAlignmentPlan,
     ) -> Result<ProgrammerAlignmentState, ProgrammerAlignmentError> {
+        self.commit_alignment_state(session, plan.expected_revision, plan.next_state)
+    }
+
+    pub(crate) fn commit_alignment_state(
+        &self,
+        session: SessionId,
+        expected_revision: u64,
+        next_state: ProgrammerAlignmentState,
+    ) -> Result<ProgrammerAlignmentState, ProgrammerAlignmentError> {
+        self.apply_alignment_state(session, expected_revision, next_state, || ())
+            .map(|(_, state)| state)
+    }
+
+    /// Check the runtime modifier before an infallible, already validated value batch. Holding
+    /// the common mutation gate avoids both partial rejection and a full Undo-history clone on
+    /// every encoder detent. Callers must not change Align inside the value mutation.
+    pub fn apply_alignment_plan<T>(
+        &self,
+        session: SessionId,
+        plan: ProgrammerAlignmentPlan,
+        mutate: impl FnOnce() -> T,
+    ) -> Result<(T, ProgrammerAlignmentState), ProgrammerAlignmentError> {
+        self.apply_alignment_state(session, plan.expected_revision, plan.next_state, mutate)
+    }
+
+    pub(crate) fn apply_alignment_state<T>(
+        &self,
+        session: SessionId,
+        expected_revision: u64,
+        mut next_state: ProgrammerAlignmentState,
+        mutate: impl FnOnce() -> T,
+    ) -> Result<(T, ProgrammerAlignmentState), ProgrammerAlignmentError> {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         if !self.sessions.read().contains(&session) {
@@ -192,24 +303,31 @@ impl ProgrammerRegistry {
         let actual = self
             .alignment_context
             .read()
+            .active
             .as_ref()
             .map(|state| state.revision)
             .ok_or(ProgrammerAlignmentError::NotActive)?;
-        if actual != plan.expected_revision {
+        if actual != expected_revision {
             return Err(ProgrammerAlignmentError::RevisionConflict {
-                expected: plan.expected_revision,
+                expected: expected_revision,
                 actual,
             });
         }
-        plan.next_state.revision = self.next_alignment_revision();
-        *self.alignment_context.write() = Some(plan.next_state.clone());
-        Ok(plan.next_state)
+        let result = mutate();
+        next_state.revision = self.next_alignment_revision();
+        self.install_alignment(next_state.clone());
+        Ok((result, next_state))
     }
 
     pub fn deactivate_alignment(&self, _session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
-        self.alignment_context.write().take().is_some()
+        let mut context = self.alignment_context.write();
+        if context.active.take().is_none() {
+            return false;
+        }
+        context.revision = self.next_alignment_revision();
+        true
     }
 
     /// Deactivate only when an already-bound Align context is about to receive another logical
@@ -226,10 +344,11 @@ impl ProgrammerRegistry {
         let different = self
             .alignment_context
             .read()
+            .active
             .as_ref()
             .and_then(|state| state.binding.as_ref())
             .is_some_and(|binding| binding.attribute != *attribute);
-        different && self.alignment_context.write().take().is_some()
+        different && self.deactivate_alignment(session)
     }
 
     pub(crate) fn next_alignment_revision(&self) -> u64 {
@@ -285,6 +404,11 @@ fn plan_alignment_delta(
     delta: f32,
     bases: &[ProgrammerAlignmentBase],
 ) -> Result<ProgrammerAlignmentPlan, ProgrammerAlignmentError> {
+    if state.family_binding.is_some() {
+        return Err(ProgrammerAlignmentError::InvalidFamily(
+            "Align is bound to a typed component".into(),
+        ));
+    }
     let expected_revision = state.revision;
     let previous_input_position = state.input_position;
     let input_position = previous_input_position + delta;
@@ -339,6 +463,7 @@ fn plan_alignment_delta(
             mode: state.mode,
             fixtures: state.fixtures,
             binding: Some(binding),
+            family_binding: None,
             input_position,
         },
         values,

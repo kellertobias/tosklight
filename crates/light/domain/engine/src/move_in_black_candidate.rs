@@ -63,13 +63,13 @@ fn base_position(
     candidate
         .values
         .iter()
-        .map(|value| {
+        .filter_map(|value| {
             let key = (candidate.fixture_id, value.attribute.clone());
             let base = base_resolved
                 .get(&key)
                 .cloned()
-                .unwrap_or_else(|| value.current.clone());
-            (value.attribute.clone(), base)
+                .or_else(|| value.current.clone())?;
+            Some((value.attribute.clone(), base))
         })
         .collect()
 }

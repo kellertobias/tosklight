@@ -14,6 +14,7 @@ import { AppShellView } from "../components/shell/AppShell";
 import { LeftDock } from "../components/shell/LeftDock";
 import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
 import { applyDynamicUpdateIntent } from "../features/dynamics/dynamicUpdateIntent";
+import type { ScalarDynamicLane } from "../features/dynamics/laneModel";
 import type { ShowObject } from "../features/showObjects/contracts";
 import {
 	createDefaultDynamicDefinition,
@@ -45,8 +46,8 @@ const attributes = [
 	{ id: "color.red", label: "Red", family: "Color" },
 	{ id: "color.green", label: "Green", family: "Color" },
 	{ id: "color.blue", label: "Blue", family: "Color" },
-	{ id: "pan", label: "Pan", family: "Position" },
-	{ id: "tilt", label: "Tilt", family: "Position" },
+	{ id: "position.pan", label: "Pan", family: "Position" },
+	{ id: "position.tilt", label: "Tilt", family: "Position" },
 	{ id: "zoom", label: "Zoom", family: "Focus" },
 ] as const;
 
@@ -55,8 +56,10 @@ function createStoryDynamic(): DynamicObject {
 		definition: "dynamic-story-201",
 		lane: "dynamic-story-intensity",
 	});
+	const intensity = base.lanes[0] as ScalarDynamicLane;
 	const blue = createDefaultDynamicLane("color.blue", "dynamic-story-blue");
-	const pan = createDefaultDynamicLane("pan", "dynamic-story-pan");
+	const pan = createDefaultDynamicLane("position.pan", "dynamic-story-pan");
+	const tilt = createDefaultDynamicLane("position.tilt", "dynamic-story-tilt");
 	return {
 		kind: "dynamic",
 		id: base.id,
@@ -69,11 +72,11 @@ function createStoryDynamic(): DynamicObject {
 			target_binding: { type: "live_group", group_id: "group-front-wash" },
 			lanes: [
 				{
-					...base.lanes[0],
+					...intensity,
 					mode: "keyframes",
 					width: 0.72,
 					keyframes: {
-						...base.lanes[0].keyframes,
+						...intensity.keyframes,
 						points: [
 							{
 								position: 0,
@@ -88,7 +91,7 @@ function createStoryDynamic(): DynamicObject {
 						],
 					},
 					max_min: {
-						...base.lanes[0].max_min,
+						...intensity.max_min,
 						minimum: { type: "value", value: 0.18 },
 						maximum: { type: "value", value: 0.92 },
 					},
@@ -98,17 +101,8 @@ function createStoryDynamic(): DynamicObject {
 					speed_multiplier: { numerator: 1, denominator: 2 },
 					width: 0.58,
 				},
-				{
-					...pan,
-					mode: "middle_amplitude",
-					speed_multiplier: { numerator: 1, denominator: 2 },
-					middle_amplitude: {
-						...pan.middle_amplitude,
-						middle: { type: "current" },
-						amplitude: 0.28,
-						function: "cosinus",
-					},
-				},
+				{ ...pan, speed_multiplier: { numerator: 1, denominator: 2 } },
+				{ ...tilt, speed_multiplier: { numerator: 1, denominator: 2 } },
 			],
 			phase: {
 				...base.phase,

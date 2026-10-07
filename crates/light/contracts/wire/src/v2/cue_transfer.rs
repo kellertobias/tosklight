@@ -16,7 +16,6 @@ pub enum CueTransferMode {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct CueTransferRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -111,12 +110,19 @@ mod tests {
     use crate::v2::command_line::CommandTarget;
 
     #[test]
-    fn request_rejects_unknown_or_client_authored_scope() {
+    fn request_ignores_unknown_fields_without_accepting_client_authored_scope() {
+        let expected: CueTransferRequest = serde_json::from_value(request()).unwrap();
         for forged in ["show_id", "desk_id", "user_id", "session_id", "command"] {
             let mut value = request();
             value[forged] = serde_json::json!("forged");
-            assert!(serde_json::from_value::<CueTransferRequest>(value).is_err());
+            assert_eq!(
+                serde_json::from_value::<CueTransferRequest>(value).unwrap(),
+                expected
+            );
         }
+        let mut invalid = request();
+        invalid["mode"] = serde_json::json!("unsupported");
+        assert!(serde_json::from_value::<CueTransferRequest>(invalid).is_err());
     }
 
     #[test]

@@ -54,6 +54,12 @@ export interface TouchEncoderProps {
 	onSetRange?(points: number[]): void;
 	onPresetSelect?(value: string): void;
 	onRelease?(): void;
+	/**
+	 * Called once when a drag that stepped the encoder ends: pointer release, pointer cancel,
+	 * lost pointer capture, window blur or the document becoming hidden. Its rate motion has
+	 * already stopped; later moves of that pointer are ignored until a new press.
+	 */
+	onDragEnd?(): void;
 }
 
 interface DragState {
@@ -273,10 +279,11 @@ function useTouchEncoderInteraction({
 	fastStep,
 	indexed,
 	onStep,
+	onDragEnd,
 	repeatSeconds,
 	slowStep,
 	continuous,
-}: Pick<TouchEncoderProps, "disabled" | "indexed" | "onStep"> & {
+}: Pick<TouchEncoderProps, "disabled" | "indexed" | "onStep" | "onDragEnd"> & {
 	fastStep: number;
 	repeatSeconds: number;
 	slowStep: number;
@@ -286,18 +293,39 @@ function useTouchEncoderInteraction({
 	const drag = useRef<DragState | null>(null);
 	const interval = useRef<number | null>(null);
 	const onStepRef = useRef(onStep);
+	const onDragEndRef = useRef(onDragEnd);
 	const suppressClick = useRef(false);
 	onStepRef.current = onStep;
+	onDragEndRef.current = onDragEnd;
 	const stopContinuous = () => {
 		if (interval.current !== null) window.clearInterval(interval.current);
 		interval.current = null;
 	};
-	useEffect(
-		() => () => {
+	/** Ends the open drag once: stops the rate motion, then reports a drag that stepped. */
+	const endDrag = () => {
+		const current = drag.current;
+		if (!current) return;
+		drag.current = null;
+		stopContinuous();
+		setMotion(null);
+		if (current.moved) onDragEndRef.current?.();
+	};
+	const endDragRef = useRef(endDrag);
+	endDragRef.current = endDrag;
+	useEffect(() => {
+		// Window blur or a hidden document ends the drag: no rate motion keeps running unseen.
+		const blur = () => endDragRef.current();
+		const visibility = () => {
+			if (document.hidden) endDragRef.current();
+		};
+		window.addEventListener("blur", blur);
+		document.addEventListener("visibilitychange", visibility);
+		return () => {
+			window.removeEventListener("blur", blur);
+			document.removeEventListener("visibilitychange", visibility);
 			if (interval.current !== null) window.clearInterval(interval.current);
-		},
-		[],
-	);
+		};
+	}, []);
 	const beginContinuous = () => {
 		if (interval.current !== null || !drag.current?.delta) return;
 		onStepRef.current(drag.current.delta, drag.current.undoGroup);
@@ -362,9 +390,7 @@ function useTouchEncoderInteraction({
 		const current = drag.current;
 		if (!current || current.pointerId !== event.pointerId) return;
 		suppressClick.current = current.moved;
-		drag.current = null;
-		stopContinuous();
-		setMotion(null);
+		endDrag();
 		if (suppressClick.current)
 			window.setTimeout(() => {
 				suppressClick.current = false;
@@ -458,6 +484,7 @@ export function TouchEncoder({
 	onSetRange,
 	onPresetSelect,
 	onRelease,
+	onDragEnd,
 }: TouchEncoderProps) {
 	const [editing, setEditing] = useState(false);
 	const [inputValue, setInputValue] = useState("");
@@ -473,6 +500,7 @@ export function TouchEncoder({
 		fastStep,
 		indexed,
 		onStep,
+		onDragEnd,
 		repeatSeconds,
 		slowStep,
 	});
@@ -530,6 +558,7 @@ export function TouchEncoder({
 				onPointerMove={interaction.onPointerMove}
 				onPointerUp={interaction.finishPointer}
 				onPointerCancel={interaction.finishPointer}
+				onLostPointerCapture={interaction.finishPointer}
 				onWheel={onWheel}
 				onKeyDown={onKeyDown}
 			>

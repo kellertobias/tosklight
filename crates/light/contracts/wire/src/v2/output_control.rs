@@ -5,6 +5,132 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
+/// Identity of one evaluated output observation, independent of the show revision.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputFrameIdentity {
+    #[ts(type = "number")]
+    pub generation: u64,
+    #[ts(type = "number")]
+    pub sequence: u64,
+    /// Evaluation timestamp in RFC3339 format.
+    pub sampled_at: String,
+    /// Tracking inputs captured with this output frame, when the producer supplies them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub tracking: Option<OutputTrackingIdentity>,
+}
+
+/// Receiver and Point epochs of the tracking input held by one evaluated output frame.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputTrackingIdentity {
+    pub show_id: Option<Uuid>,
+    #[ts(type = "number")]
+    pub configuration_generation: u64,
+    #[ts(type = "number")]
+    pub point_generation: u64,
+    #[ts(type = "number")]
+    pub source_generation: u64,
+    #[ts(type = "number")]
+    pub accepted_sequence: u64,
+    #[ts(type = "number")]
+    pub sampled_at_millis: u64,
+}
+
+/// Complete output observation captured at one authoritative publication boundary.
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputDmxSnapshot {
+    #[serde(default)]
+    pub native_protocol: u16,
+    #[ts(type = "number")]
+    pub revision: u64,
+    /// Absent for producers that do not publish evaluated frame identities yet.
+    #[serde(default)]
+    pub frame: Option<OutputFrameIdentity>,
+    pub universes: Vec<OutputDmxUniverse>,
+    #[serde(default)]
+    pub overrides: Vec<OutputDmxOverride>,
+    #[serde(default)]
+    pub points: Vec<OutputPointPose>,
+    #[serde(default)]
+    pub native: Option<OutputNativeLane>,
+    #[serde(default)]
+    pub preload: Option<OutputNativeLane>,
+    /// Present only when the Preload lane is read from the accepted Pending publication (the
+    /// family adapters are engaged). It names the Pending episode whose ticket stamps
+    /// `preload.frame`, or says passively why no Pending frame is published. Absent for
+    /// legacy servers and for the legacy Preload projection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub preload_status: Option<OutputPreloadStatus>,
+}
+
+/// Where the desk's Pending (Preload) publication stands for one read.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputPreloadStatus {
+    pub state: OutputPreloadState,
+    /// The Pending episode of the published lane. A new episode restarts its tickets, so the
+    /// lane's `frame.sequence` is ordered only within one episode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub episode: Option<Uuid>,
+}
+
+/// Passive Pending states. Only `published` carries a lane; every other state is "not
+/// available" and is never filled from Live or from a fresh evaluation.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputPreloadState {
+    /// `preload` is the episode's last accepted Pending frame.
+    Published,
+    /// Preload is engaged, but this episode has not accepted a Pending frame yet.
+    NotYetAvailable,
+    /// Preload is not engaged on the desk.
+    Idle,
+    /// A queued Preload Playback cannot be previewed.
+    QueuePreviewUnavailable,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputDmxUniverse {
+    pub universe: u16,
+    pub slots: Vec<u8>,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputDmxOverride {
+    pub universe: u16,
+    pub address: u16,
+    pub value: u8,
+}
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputPointPose {
+    pub fixture_id: Uuid,
+    pub offset_metres: [f32; 3],
+    pub rotation_degrees: [f32; 3],
+}
+/// Already resolved and encoded by the engine. Raw channels are mode-order, including static
+/// channels, and retain all coarse/fine bytes. No requested-color or normalized overlay values.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputNativeLane {
+    pub show_id: Option<Uuid>,
+    #[ts(type = "number")]
+    pub revision: u64,
+    /// Identifies this lane's own evaluation; independent Preload must not inherit Live's stamp.
+    #[serde(default)]
+    pub frame: Option<OutputFrameIdentity>,
+    pub instances: Vec<OutputNativeInstance>,
+    pub points: Vec<OutputPointPose>,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputNativeInstance {
+    pub fixture_id: Uuid,
+    pub instance_id: Uuid,
+    pub native_identity: String,
+    pub raw: Vec<u32>,
+    /// Preload only: true channels replace Live; false channels retain actual Live native/DMX.
+    /// None is a complete native row (including older native-protocol-1 servers).
+    #[serde(default)]
+    pub owned_channels: Option<Vec<bool>>,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DmxOverrideRequest {
     pub request_id: String,
@@ -286,6 +412,63 @@ fn default_height() -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn output_frame_metadata_is_optional_and_belongs_to_each_lane() {
+        let old_lane = serde_json::json!({
+            "show_id": null, "revision": 5, "instances": [], "points": []
+        });
+        let mut output: OutputDmxSnapshot = serde_json::from_value(serde_json::json!({
+            "revision": 5,
+            "universes": [],
+            "native": old_lane.clone(),
+            "preload": old_lane
+        }))
+        .unwrap();
+        assert_eq!(output.frame, None);
+        assert_eq!(output.native.as_ref().unwrap().frame, None);
+        assert_eq!(output.preload.as_ref().unwrap().frame, None);
+
+        let frame = OutputFrameIdentity {
+            generation: 7,
+            sequence: 19,
+            sampled_at: "2026-09-29T12:34:56.123Z".into(),
+            tracking: Some(OutputTrackingIdentity {
+                show_id: Some(Uuid::new_v4()),
+                configuration_generation: 2,
+                point_generation: 3,
+                source_generation: 4,
+                accepted_sequence: 5,
+                sampled_at_millis: 6,
+            }),
+        };
+        output.frame = Some(frame.clone());
+        output.native.as_mut().unwrap().frame = Some(frame);
+        let encoded = serde_json::to_value(&output).unwrap();
+        assert_eq!(encoded["frame"]["generation"], 7);
+        assert_eq!(encoded["frame"]["sequence"], 19);
+        assert_eq!(encoded["frame"]["tracking"]["point_generation"], 3);
+        assert_eq!(encoded["native"]["frame"], encoded["frame"]);
+        assert!(
+            encoded["preload"]["frame"].is_null(),
+            "an independently evaluated Preload remains unstamped until its own adapter supplies metadata"
+        );
+        assert_eq!(
+            serde_json::from_value::<OutputDmxSnapshot>(encoded).unwrap(),
+            output
+        );
+        let declaration = OutputFrameIdentity::decl(&ts_rs::Config::default());
+        assert!(declaration.contains("generation: number"));
+        assert!(declaration.contains("sequence: number"));
+        assert!(declaration.contains("tracking?: OutputTrackingIdentity | null"));
+        let old_identity: OutputFrameIdentity = serde_json::from_value(serde_json::json!({
+            "generation": 7,
+            "sequence": 19,
+            "sampled_at": "2026-09-29T12:34:56.123Z"
+        }))
+        .unwrap();
+        assert_eq!(old_identity.tracking, None);
+    }
 
     #[test]
     fn requests_tolerate_future_fields_but_keep_known_fields_typed() {

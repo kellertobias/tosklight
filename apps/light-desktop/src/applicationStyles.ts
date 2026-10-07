@@ -1,4 +1,5 @@
 import "./styles.css";
+import "@tosklight/patch/styles.css";
 import "./help.css";
 import "./window-kit.css";
 import "./hardware.css";

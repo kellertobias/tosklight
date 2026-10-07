@@ -67,7 +67,7 @@ impl CommandContractScenario {
     self.state.programming.set(
         self.session.id,
         preset_fixture,
-        light_core::AttributeKey("pan".into()),
+        light_core::AttributeKey("gobo.1".into()),
         light_core::AttributeValue::Normalized(0.4),
     );
     execute_programmer_command(&self.state, &self.session, "RECORD 0.1").unwrap();

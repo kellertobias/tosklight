@@ -1141,7 +1141,7 @@ pub struct LayerState {
     pub dimmer: f32,
     pub volume: f32,
     pub tint: Tint,
-    /// Blends from source color to luminance.
+    /// White Blend: linear desaturation before the tint; see [`crate::color::MediaColor`].
     pub grayscale: f32,
     pub mask: MaskState,
     /// The two current effect selectors. Legacy personality layouts continue to use `effects`.

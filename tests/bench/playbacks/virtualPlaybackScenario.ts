@@ -79,17 +79,33 @@ export class BrowserVirtualPlaybacks {
 							right: style.borderRightWidth,
 							bottom: style.borderBottomWidth,
 							left: style.borderLeftWidth,
-							inset: [style.top, style.right, style.bottom, style.left],
 						};
 					}),
 				)
-				.toEqual({
-					top: expected.has("top") ? "3px" : "0px",
-					right: expected.has("right") ? "3px" : "0px",
-					bottom: expected.has("bottom") ? "3px" : "0px",
-					left: expected.has("left") ? "3px" : "0px",
-					inset: ["-1px", "-1px", "-1px", "-1px"],
-				});
+				.toEqual(
+					{
+						top: expected.has("top") ? "3px" : "0px",
+						right: expected.has("right") ? "3px" : "0px",
+						bottom: expected.has("bottom") ? "3px" : "0px",
+						left: expected.has("left") ? "3px" : "0px",
+					},
+				);
+			// The fence lies half the grid's real gap outside the tile's border, so the fences of
+			// neighbouring members meet in the gap as one continuous outline.
+			const fence = await target.evaluate((element) => {
+				const style = getComputedStyle(element, "::after");
+				const gap = Number.parseFloat(
+					getComputedStyle(element.parentElement ?? element).columnGap,
+				);
+				const border = Number.parseFloat(getComputedStyle(element).borderTopWidth);
+				return {
+					inset: [style.top, style.right, style.bottom, style.left],
+					outside: `${-(gap / 2 + border)}px`,
+					gap,
+				};
+			});
+			expect(fence.gap, "the desk grid has a real gap").toBeGreaterThan(0);
+			expect(fence.inset).toEqual(Array(4).fill(fence.outside));
 		},
 		runtime: async (
 			identity: VirtualPlaybackIdentity,

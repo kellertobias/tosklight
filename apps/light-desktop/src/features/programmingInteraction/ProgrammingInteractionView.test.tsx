@@ -197,6 +197,7 @@ describe("ProgrammingInteractionViewProvider", () => {
 		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
 		expect(transport.subscriptions[0].scope).toEqual({
 			commandLine: true,
+			alignment: false,
 			selection: true,
 		});
 
@@ -355,6 +356,7 @@ describe("ProgrammingInteractionViewProvider", () => {
 		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
 		expect(transport.subscriptions[0].scope).toEqual({
 			commandLine: false,
+			alignment: false,
 			selection: true,
 		});
 		const renderCount = onRender.mock.calls.length;
@@ -444,6 +446,7 @@ describe("ProgrammingInteractionViewProvider", () => {
 		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
 		expect(transport.subscriptions[0].scope).toEqual({
 			commandLine: true,
+			alignment: false,
 			selection: false,
 		});
 		await waitFor(() =>

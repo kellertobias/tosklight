@@ -1,27 +1,54 @@
 //! A GDTF fixture type generated from a ToskLight fixture profile.
 //!
 //! An MVR names a GDTF file for every fixture, and a receiving application refuses the archive
-//! when that file is absent. A profile imported from GDTF keeps its source archive, which an export
-//! embeds unchanged; the shipped library and every profile authored on the desk exist only as
-//! ToskLight profiles. This describes such a profile in the writer's subset: every mode with its
+//! when that file is absent. Retained source archives may predate profile edits, so this describes
+//! the current ToskLight profile in the writer's subset: every mode with its
 //! exact slots, byte widths, splits, defaults, Highlight values and function ranges, and one beam
-//! per logical head. Wheels, emitters and 3D models are not reconstructed.
+//! per logical head. Authored physical colour models become emitters, filters, colour wheels and
+//! beam spectra; nominal beam optics are written on every beam. 3D models and Axis geometry are
+//! not reconstructed, and every piece of authored physical data GDTF cannot carry is reported by
+//! [`export_diagnostics`].
 
-use super::{Channel, ChannelSet, FixtureType, GEOMETRY, Mode, Width, gdtf_name};
-use crate::{
-    ChannelFunctionBehavior, ChannelResolution, FixtureChannel, FixtureMode, FixtureProfile,
-    ProfileError,
-};
+use super::{Channel, FixtureType, GEOMETRY, Mode, Width, gdtf_name};
+
+mod functions;
+mod limitations;
+mod optics;
+use crate::{ChannelResolution, FixtureChannel, FixtureMode, FixtureProfile, ProfileError};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 /// Body edge in metres where the profile records no dimension, so the fixture is still drawn.
 const DEFAULT_BODY_METRES: f32 = 0.3;
 
+/// Authored data a generated GDTF does not carry, named so an export is never silently partial.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GdtfExportDiagnostic {
+    /// Mode, geometry and item the data belongs to.
+    pub node: String,
+    pub message: String,
+}
+
 /// Packages every mode of `profile` as a `.gdtf` archive.
 pub fn package_profile(profile: &FixtureProfile) -> Result<Vec<u8>, ProfileError> {
-    super::package(&fixture_type(profile)?)
-        .map_err(|error| ProfileError::Invalid(error.to_string()))
+    Ok(package_profile_with_diagnostics(profile)?.0)
+}
+
+/// Packages `profile` and reports the authored data the archive does not carry.
+pub fn package_profile_with_diagnostics(
+    profile: &FixtureProfile,
+) -> Result<(Vec<u8>, Vec<GdtfExportDiagnostic>), ProfileError> {
+    let (fixture, diagnostics) = describe(profile)?;
+    let bytes =
+        super::package(&fixture).map_err(|error| ProfileError::Invalid(error.to_string()))?;
+    Ok((bytes, diagnostics))
+}
+
+/// The authored physical data a generated GDTF of `profile` cannot carry.
+pub fn export_diagnostics(
+    profile: &FixtureProfile,
+) -> Result<Vec<GdtfExportDiagnostic>, ProfileError> {
+    Ok(describe(profile)?.1)
 }
 
 /// The DMX mode names the generated fixture type uses, in profile mode order.
@@ -40,18 +67,29 @@ pub fn mode_names(profile: &FixtureProfile) -> Vec<String> {
 
 /// Describes every mode of `profile` as one GDTF fixture type.
 pub fn fixture_type(profile: &FixtureProfile) -> Result<FixtureType, ProfileError> {
+    Ok(describe(profile)?.0)
+}
+
+fn describe(
+    profile: &FixtureProfile,
+) -> Result<(FixtureType, Vec<GdtfExportDiagnostic>), ProfileError> {
     let (heads, beams) = beams(profile);
-    let modes = profile
+    let optics = optics::build(profile, &heads);
+    let mut modes = profile
         .modes
         .iter()
         .zip(mode_names(profile))
-        .map(|(mode, name)| {
+        .enumerate()
+        .map(|(index, (mode, name))| {
             Ok(Mode {
                 name,
-                channels: channels(mode, &heads)?,
+                channels: channels(mode, &heads, |channel, functions| {
+                    optics.annotate(index, channel, functions)
+                })?,
             })
         })
-        .collect::<Result<_, ProfileError>>()?;
+        .collect::<Result<Vec<_>, ProfileError>>()?;
+    functions::separate_attribute_units(&mut modes);
     let name = [&profile.name, &profile.short_name]
         .into_iter()
         .map(|name| name.trim())
@@ -66,7 +104,9 @@ pub fn fixture_type(profile: &FixtureProfile) -> Result<FixtureType, ProfileErro
         "" => "Generic".to_owned(),
         manufacturer => manufacturer.to_owned(),
     };
-    Ok(FixtureType {
+    let mut diagnostics = optics.diagnostics;
+    limitations::position_and_optics(profile, &mut diagnostics);
+    let fixture = FixtureType {
         name,
         short_name,
         manufacturer,
@@ -78,7 +118,9 @@ pub fn fixture_type(profile: &FixtureProfile) -> Result<FixtureType, ProfileErro
         modes,
         body_size: Some(body_size(profile)),
         beams,
-    })
+        physical: optics.physical,
+    };
+    Ok((fixture, diagnostics))
 }
 
 /// Length (X), width (Y) and height (Z) in metres, from the profile's millimetre dimensions.
@@ -123,6 +165,7 @@ fn beams(profile: &FixtureProfile) -> (HashMap<Uuid, String>, Vec<String>) {
 fn channels(
     mode: &FixtureMode,
     heads: &HashMap<Uuid, String>,
+    annotate: impl Fn(&FixtureChannel, &mut [super::Function]),
 ) -> Result<Vec<Channel>, ProfileError> {
     let primary = mode.primary_slots()?;
     let mut used = HashSet::new();
@@ -142,19 +185,41 @@ fn channels(
             }
             let width = width(channel.resolution);
             let max = width.max_raw();
+            if channel.default_raw > max || channel.highlight_raw > max {
+                return Err(ProfileError::Invalid(
+                    "GDTF channel default/highlight exceeds its resolution".into(),
+                ));
+            }
+            let mut functions = functions::from_channel(channel)?;
+            annotate(channel, &mut functions);
+            let physical_unit = functions::physical_unit(channel.unit.as_deref())?.or_else(|| {
+                functions
+                    .iter()
+                    .find(|function| {
+                        function.original_attribute
+                            == native_function_attribute(channel, channel.attribute.0.as_ref())
+                    })
+                    .and_then(|function| function.physical_unit.clone())
+            });
             Ok(Channel {
                 name: name.clone(),
+                main_attribute: (name != attribute).then_some(attribute),
                 attribute: name,
                 offset: primary[&channel.id],
                 width,
-                default: channel.default_raw.min(max),
-                sets: sets(channel, max),
+                default: channel.default_raw,
+                sets: functions
+                    .iter()
+                    .flat_map(|function| function.sets.iter().cloned())
+                    .collect(),
                 fine_offsets: channel.secondary_slots.clone(),
                 dmx_break: channel.split.max(1),
                 geometry,
                 feature: Some(feature.to_owned()),
-                highlight: Some(channel.highlight_raw.min(max)),
+                highlight: Some(channel.highlight_raw),
                 physical: physical(channel),
+                physical_unit,
+                functions,
             })
         })
         .collect()
@@ -169,50 +234,59 @@ const fn width(resolution: ChannelResolution) -> Width {
     }
 }
 
-/// Named ranges at their raw starts. GDTF sets cannot overlap, so functions of different priority
-/// that start at the same value keep the first name.
-fn sets(channel: &FixtureChannel, max: u32) -> Vec<ChannelSet> {
-    let mut functions: Vec<_> = channel
-        .functions
-        .iter()
-        .filter(|function| function.dmx_from <= max)
-        .collect();
-    functions.sort_by_key(|function| function.dmx_from);
-    functions.dedup_by_key(|function| function.dmx_from);
-    functions
-        .into_iter()
-        .map(|function| ChannelSet {
-            name: match &function.behavior {
-                ChannelFunctionBehavior::Fixed { label, .. }
-                | ChannelFunctionBehavior::Indexed { label, .. }
-                    if !label.trim().is_empty() =>
-                {
-                    label.clone()
-                }
-                _ => function.name.clone(),
-            },
-            from: function.dmx_from,
-        })
-        .collect()
-}
-
 fn physical(channel: &FixtureChannel) -> Option<(f32, f32)> {
     let from = channel.physical_min.unwrap_or(0.0);
     let to = channel.physical_max.unwrap_or(1.0);
     (from.is_finite() && to.is_finite() && (to - from).abs() > f32::EPSILON).then_some((from, to))
 }
 
-/// The GDTF attribute for a channel's canonical attribute, and the feature it belongs to.
+/// The GDTF attribute for a channel's native meaning, and the feature it belongs to.
 ///
 /// Standard names let a receiving console or visualizer treat a channel as the dimmer, pan or
 /// colour mix it is; anything without a standard counterpart keeps its own name as a control.
 fn attribute(channel: &FixtureChannel) -> (String, &'static str) {
-    let key: &str = &channel.attribute.0;
+    attribute_key(native_function_attribute(
+        channel,
+        channel.attribute.0.as_ref(),
+    ))
+}
+
+/// The engine can address a native subtractive filter through an inverted RGB alias.
+/// Export the physical emitter/filter meaning without applying that canonical transform to
+/// raw DMX or physical endpoints. A different function on the channel keeps its own meaning.
+fn native_function_attribute<'a>(channel: &'a FixtureChannel, attribute: &'a str) -> &'a str {
+    let native = channel.fixture_attribute.0.as_ref();
+    if attribute == channel.attribute.0.as_ref()
+        && matches!(
+            native,
+            "color.cyan"
+                | "color.magenta"
+                | "color.yellow"
+                | "color.cold_white"
+                | "color.warm_white"
+                | "media.layer.cyan"
+                | "media.layer.magenta"
+                | "media.layer.yellow"
+                | "media.master.master.cyan"
+                | "media.master.master.magenta"
+                | "media.master.master.yellow"
+        )
+    {
+        native
+    } else {
+        attribute
+    }
+}
+
+fn attribute_key(key: &str) -> (String, &'static str) {
     let standard = match key {
         "intensity" => Some(("Dimmer", "Dimmer.Dimmer")),
         "pan" => Some(("Pan", "Position.PanTilt")),
         "tilt" => Some(("Tilt", "Position.PanTilt")),
         "color.red" => Some(("ColorAdd_R", "Color.RGB")),
+        "color.hue" => Some(("ColorHSB_Hue", "Color.HSB")),
+        "color.saturation" => Some(("ColorHSB_Saturation", "Color.HSB")),
+        "color.brightness" => Some(("ColorHSB_Brightness", "Color.HSB")),
         "color.green" => Some(("ColorAdd_G", "Color.RGB")),
         "color.blue" => Some(("ColorAdd_B", "Color.RGB")),
         "color.white" => Some(("ColorAdd_W", "Color.RGB")),
@@ -221,9 +295,15 @@ fn attribute(channel: &FixtureChannel) -> (String, &'static str) {
         "color.amber" => Some(("ColorAdd_A", "Color.RGB")),
         "color.lime" => Some(("ColorAdd_GY", "Color.RGB")),
         "color.uv" => Some(("ColorAdd_UV", "Color.RGB")),
-        "color.cyan" => Some(("ColorSub_C", "Color.RGB")),
-        "color.magenta" => Some(("ColorSub_M", "Color.RGB")),
-        "color.yellow" => Some(("ColorSub_Y", "Color.RGB")),
+        "color.cyan" | "media.layer.cyan" | "media.master.master.cyan" => {
+            Some(("ColorSub_C", "Color.RGB"))
+        }
+        "color.magenta" | "media.layer.magenta" | "media.master.master.magenta" => {
+            Some(("ColorSub_M", "Color.RGB"))
+        }
+        "color.yellow" | "media.layer.yellow" | "media.master.master.yellow" => {
+            Some(("ColorSub_Y", "Color.RGB"))
+        }
         "color.temperature" => Some(("CTC", "Color.Color")),
         "color.wheel" => Some(("Color1", "Color.Color")),
         "shutter" => Some(("Shutter1", "Beam.Beam")),
@@ -237,6 +317,12 @@ fn attribute(channel: &FixtureChannel) -> (String, &'static str) {
     };
     if let Some((name, feature)) = standard {
         return (name.to_owned(), feature);
+    }
+    if let Some(color) = key
+        .strip_prefix("color.wheel.")
+        .and_then(|rest| wheel(rest, "Color"))
+    {
+        return (color, "Color.Color");
     }
     if let Some(gobo) = key
         .strip_prefix("gobo.")

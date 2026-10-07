@@ -1,7 +1,7 @@
+use super::PreparedOutputSnapshot;
 use super::{AppState, Session, reconcile_highlight_selection};
-use light_application::{ActionContext, ProgrammingSelectionRefreshResult};
+use light_application::{ActionContext, ActionError, ProgrammingSelectionRefreshResult};
 use light_core::SessionId;
-use light_engine::PreparedEngineSnapshot;
 use std::collections::{BTreeMap, HashMap};
 
 /// An outer Programming interaction already holding the desk, on whose behalf this install runs.
@@ -35,6 +35,63 @@ pub(super) enum HighlightInstallPolicy {
     Clear,
 }
 
+/// Portable-show edits finalize dependencies while the desk selection boundary is held. The
+/// runtime lease is wholly inside `finalize_snapshot`: callbacks below only run after successful
+/// publication and after releasing Playback/Dynamics. A rejected candidate leaves selection,
+/// pending choices, gestures and Highlight untouched.
+pub(super) fn finalize_prepared_snapshot_with_selection_refresh<T>(
+    state: &AppState,
+    context: &ActionContext,
+    prepared: PreparedOutputSnapshot,
+    owner: Option<ProgrammingInstallOwner>,
+    persist: impl FnOnce() -> Result<T, ActionError>,
+) -> Result<T, ActionError> {
+    let groups_changed = selection_topology(&state.output.snapshot().groups)
+        != selection_topology(&prepared.snapshot().groups);
+    let finish_owner = owner
+        .is_some_and(|owner| matches!(owner.gesture, ProgrammingOwnerGesturePolicy::Finish(_)));
+    let desk_context = state.programming.desk_interaction_context();
+    let pending_choice = state
+        .programming
+        .has_pending_command_choices_except_context(owner.and(desk_context));
+    let playback = state.playback.render_capability();
+    if !groups_changed && !finish_owner && !pending_choice {
+        return state.output.finalize_snapshot(&playback, prepared, persist);
+    }
+    let sessions = if groups_changed {
+        highlight_sessions(state, owner)
+    } else {
+        Vec::new()
+    };
+    let install = || {
+        let result = state
+            .output
+            .finalize_snapshot(&playback, prepared, persist)?;
+        state
+            .programming
+            .clear_pending_command_choices_except_context(owner.and(desk_context));
+        finish_owned_selection_gesture(state, owner);
+        for session in sessions {
+            reconcile_highlight_selection(state, &session, "show_selection_refresh");
+        }
+        Ok(result)
+    };
+    match owner {
+        Some(_) => {
+            state
+                .programming
+                .run_selection_refresh_within_interaction(context, install)
+                .output
+        }
+        None => {
+            state
+                .programming
+                .run_selection_refresh(context, install)
+                .output
+        }
+    }
+}
+
 /// Installs one already-prepared runtime while publishing the desk selection that the new Group
 /// generation changes. The caller owns the activation boundary. `owner` marks an outer Programming
 /// interaction already holding the desk, which must not be re-locked. The desk's final selection is
@@ -44,7 +101,26 @@ pub(super) enum HighlightInstallPolicy {
 pub(super) fn install_prepared_snapshot_with_selection_refresh(
     state: &AppState,
     context: &ActionContext,
-    prepared: PreparedEngineSnapshot,
+    prepared: PreparedOutputSnapshot,
+    owner: Option<ProgrammingInstallOwner>,
+    playback: PlaybackInstallPolicy,
+    highlight: HighlightInstallPolicy,
+) -> ProgrammingSelectionRefreshResult<()> {
+    let install =
+        || install_with_selection_refresh(state, context, prepared, owner, playback, highlight);
+    if matches!(playback, PlaybackInstallPolicy::Release) {
+        state
+            .programming
+            .run_value_gesture_boundary(context, install)
+    } else {
+        install()
+    }
+}
+
+fn install_with_selection_refresh(
+    state: &AppState,
+    context: &ActionContext,
+    prepared: PreparedOutputSnapshot,
     owner: Option<ProgrammingInstallOwner>,
     playback: PlaybackInstallPolicy,
     highlight: HighlightInstallPolicy,
@@ -103,7 +179,7 @@ fn finish_owned_selection_gesture(state: &AppState, owner: Option<ProgrammingIns
     }
 }
 
-fn install(state: &AppState, prepared: PreparedEngineSnapshot, policy: PlaybackInstallPolicy) {
+fn install(state: &AppState, prepared: PreparedOutputSnapshot, policy: PlaybackInstallPolicy) {
     match policy {
         PlaybackInstallPolicy::Preserve => state.output.install_prepared_snapshot(prepared),
         PlaybackInstallPolicy::Release => state

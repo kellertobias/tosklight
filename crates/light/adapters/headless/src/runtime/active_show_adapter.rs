@@ -1,3 +1,4 @@
+use super::PreparedOutputSnapshot;
 use super::capability_resources::ActiveShowDocumentCache;
 use super::{
     ActiveShowRepository, AppState, HighlightInstallPolicy, PlaybackInstallPolicy,
@@ -9,7 +10,7 @@ use light_application::{
     BackupIdentity,
 };
 use light_core::{SessionId, ShowId};
-use light_engine::{EngineError, EngineSnapshot, PreparedEngineSnapshot};
+use light_engine::{EngineError, EngineSnapshot};
 use light_show::{
     PortableShowCommit, PortableShowDocument, PortableShowObjectRedo, PortableShowObjectUndo,
     PortableShowTransaction, StoreError,
@@ -236,9 +237,31 @@ impl ServerActiveShowUnitOfWork {
         object_id: &str,
         expected_object_revision: light_core::Revision,
     ) -> Result<PortableShowObjectUndo, ActionError> {
-        self.store
+        let undo = self
+            .store
             .prepare_object_undo(kind, object_id, expected_object_revision)
-            .map_err(|error| store_error(error, None))
+            .map_err(|error| store_error(error, None))?;
+        self.refuse_legacy_history("Undo", kind, object_id, undo.body())?;
+        Ok(undo)
+    }
+
+    /// TL-552: Undo/Redo never restores a pre-cutover legacy programming body at contract ≥ 1.
+    /// The refusal changes nothing and carries an actionable message.
+    fn refuse_legacy_history(
+        &self,
+        direction: &str,
+        kind: &str,
+        object_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<(), ActionError> {
+        super::show_programming_contract::check_history_body(
+            self.state.output.supported_programming_contract(),
+            direction,
+            kind,
+            object_id,
+            body,
+        )
+        .map_err(|message| ActionError::new(ActionErrorKind::Invalid, message))
     }
 
     pub(super) fn prepare_object_redo(
@@ -247,9 +270,12 @@ impl ServerActiveShowUnitOfWork {
         object_id: &str,
         expected_object_revision: light_core::Revision,
     ) -> Result<PortableShowObjectRedo, ActionError> {
-        self.store
+        let redo = self
+            .store
             .prepare_object_redo(kind, object_id, expected_object_revision)
-            .map_err(|error| store_error(error, None))
+            .map_err(|error| store_error(error, None))?;
+        self.refuse_legacy_history("Redo", kind, object_id, redo.body())?;
+        Ok(redo)
     }
 }
 
@@ -261,6 +287,9 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
     }
 
     fn backup(&mut self, identity: &BackupIdentity) -> Result<(), ActionError> {
+        // Show recovery: every active-show write backs up and commits through this unit, whatever
+        // the transport (HTTP, WebSocket, OSC, command line). Refused before either changes disk.
+        self.state.active_show.ensure_content_writable()?;
         let revision = self.document().revision().value();
         let show_id = self.document().id();
         if identity.show_id != show_id {
@@ -305,15 +334,25 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
 
     fn commit(
         &mut self,
-        transaction: PortableShowTransaction,
+        mut transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError> {
+        self.state.active_show.ensure_content_writable()?;
         let revision = self.document().revision().value();
+        let supported = self.state.output.supported_programming_contract();
+        // TL-552 follow-up: a contract ≥ 1 commit never stores legacy programming, so no accepted
+        // write can make the show fail the load-time validator. Refused before anything is
+        // written; dormant at contract 0.
+        super::show_programming_contract::check_transaction(&transaction, supported)?;
+        // TL-560: contract ≥ 1 writers of authored programming stamp the show's marker in the
+        // same atomic commit. Dormant at contract 0.
+        super::show_programming_contract::stamp(&mut transaction, supported);
         match self.store.apply_portable_transaction(transaction) {
             Ok(commit) => {
                 if let Some(document) = self.document.as_mut() {
                     document.apply_commit(&commit);
                     debug_assert_eq!(document.revision(), commit.revision());
                     self.state.attributes.install_document(document);
+                    super::psn_http::install_document(&self.state, document);
                     self.state
                         .output
                         .engine()
@@ -345,7 +384,17 @@ impl Drop for ServerActiveShowUnitOfWork {
 
 impl ActiveShowPorts for ServerActiveShowPorts {
     type UnitOfWork = ServerActiveShowUnitOfWork;
-    type PreparedRuntime = PreparedEngineSnapshot;
+    type PreparedRuntime = PreparedOutputSnapshot;
+
+    fn run_active_show_lifecycle<T>(
+        &self,
+        _context: &ActionContext,
+        _show_id: ShowId,
+        operation: impl FnOnce() -> Result<T, ActionError>,
+    ) -> Result<T, ActionError> {
+        // The caller already owns the activation permit.
+        self.state.programming.run_active_show_boundary(operation)
+    }
 
     fn begin_active_show(
         &self,
@@ -388,6 +437,21 @@ impl ActiveShowPorts for ServerActiveShowPorts {
 
     fn normalized_active_snapshot(&self) -> Option<Arc<EngineSnapshot>> {
         Some(self.state.output.snapshot())
+    }
+
+    fn finalize_runtime<T>(
+        &self,
+        context: &ActionContext,
+        prepared: Self::PreparedRuntime,
+        persist: impl FnOnce() -> Result<T, ActionError>,
+    ) -> Result<T, ActionError> {
+        super::engine_selection_refresh::finalize_prepared_snapshot_with_selection_refresh(
+            &self.state,
+            context,
+            prepared,
+            self.programming_owner,
+            persist,
+        )
     }
 
     fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime) {

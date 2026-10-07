@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DESK_NOTICE_EVENT } from "../deskNotice/deskNotice";
 import type { ServerController } from "./model";
-import {
-	ALIGN_NO_SELECTION_NOTICE,
-	createProgrammerAlignmentActions,
-} from "./programmerAlignment";
+import { createProgrammerAlignmentActions } from "./programmerAlignment";
 
 function setup(align: (mode: string) => Promise<unknown>) {
 	const setError = vi.fn();
@@ -14,7 +11,10 @@ function setup(align: (mode: string) => Promise<unknown>) {
 	window.addEventListener(DESK_NOTICE_EVENT, listener);
 	cleanups.push(() => window.removeEventListener(DESK_NOTICE_EVENT, listener));
 	const model = {
-		api: { programming: { align: vi.fn(align) } },
+		api: { programming: { align: vi.fn(async (mode: string) => ({
+			mode: await align(mode), revision: 1, binding: null, fixtureCount: 0,
+		})) } },
+		programmingInteractionStore: { captureScope: vi.fn(), installAlignment: vi.fn() },
 		setError,
 	} as unknown as ServerController;
 	return {
@@ -30,12 +30,12 @@ afterEach(() => {
 });
 
 describe("Programmer Align feedback", () => {
-	it("reports a no-selection activation as a quiet notice, never as a desk error", async () => {
+	it("keeps a no-selection activation silent", async () => {
 		const { actions, setError, notices } = setup(async () => "off");
 
 		await expect(actions.alignSelection("left")).resolves.toBe("off");
 
-		expect(notices).toEqual([ALIGN_NO_SELECTION_NOTICE]);
+		expect(notices).toEqual([]);
 		expect(setError).toHaveBeenCalledTimes(1);
 		expect(setError).toHaveBeenCalledWith(null);
 	});

@@ -331,6 +331,8 @@ fn fixture_input() -> PatchFixtureInput {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -371,6 +373,8 @@ fn projection_from(input: PatchFixtureInput) -> PatchFixtureProjection {
         grand_master_enabled: input.grand_master_enabled,
         invert_pan: input.invert_pan,
         invert_tilt: input.invert_tilt,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: input.installed_appearance,
@@ -391,6 +395,8 @@ fn profile_projection() -> PatchProfileRevisionProjection {
         fixture_type: "LED".into(),
         patch_policy: PatchProfilePolicy::Dmx,
         referenced_modes: vec![PatchModeProjection {
+            native_color_identities: vec![],
+            position_calibration_identity: None,
             mode_id: MODE_ID,
             name: "8 channel".into(),
             splits: vec![PatchModeSplitProjection {

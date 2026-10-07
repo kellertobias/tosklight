@@ -152,6 +152,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
                 fixture_number: Some(1001),
                 virtual_fixture_number: None,
                 definition: light_fixture::FixtureDefinition {
+                    runtime_color_context: None,
                     schema_version: 1,
                     id: light_core::FixtureId::new(),
                     revision: 1,
@@ -208,6 +209,8 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
                 grand_master_enabled: true,
                 invert_pan: false,
                 invert_tilt: false,
+                position_calibration: None,
+                color_calibration: None,
                 bracket_angle: 0.0,
                 shaper_angle: None,
                 installed_appearance: Default::default(),

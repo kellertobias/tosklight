@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Button } from "../controls";
 import {
@@ -247,6 +247,68 @@ describe("ModalProvider", () => {
     fireEvent.click(closer);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     expect(opener).toHaveFocus();
+  });
+
+  it("registers a modal before it is painted, so it is top on its first frame", () => {
+    const close = vi.fn();
+    // Siblings' layout effects run in tree order, after the modal's own; both precede paint.
+    function AfterModalLayout() {
+      useLayoutEffect(() => {
+        fireEvent.keyDown(document, { key: "Escape" });
+      }, []);
+      return null;
+    }
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <ModalProvider>
+          <ModalRegistration id="below" onClose={vi.fn()}>
+            <div className="stacked-modal-layer">
+              <section role="dialog" aria-label="Below" />
+            </div>
+          </ModalRegistration>
+          <Button onClick={() => setOpen(true)}>Open</Button>
+          {open && (
+            <>
+              <ModalRegistration id="fresh" onClose={close}>
+                <div className="stacked-modal-layer">
+                  <section role="dialog" aria-label="Fresh">
+                    <input aria-label="Zone name" />
+                  </section>
+                </div>
+              </ModalRegistration>
+              <AfterModalLayout />
+            </>
+          )}
+        </ModalProvider>
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    // Escape in the same layout phase already reaches the new modal, not the one below it.
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("keeps focus that is already inside a modal when its initial focus runs", async () => {
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <ModalProvider>
+          <Button onClick={() => setOpen(true)}>Open</Button>
+          {open && (
+            <ModalFrame id="entry" ariaLabel="Entry" title="Entry" onClose={() => setOpen(false)}>
+              <input aria-label="Lock message" />
+            </ModalFrame>
+          )}
+        </ModalProvider>
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    const field = screen.getByLabelText("Lock message");
+    field.focus();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(field).toHaveFocus();
   });
 
   it("updates close policy by stable identifier and reports missing identifiers", () => {

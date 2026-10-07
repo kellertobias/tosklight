@@ -7,6 +7,20 @@ use light_programmer::{
 };
 
 impl ProgrammingService {
+    /// Already inside a Programmer action boundary; do not reacquire its desk gate.
+    pub(super) fn finish_alignment(&self, context: &ActionContext, session: SessionId) {
+        if self.programmers.deactivate_alignment(session) {
+            self.publish_interaction(
+                context,
+                crate::ProgrammingInteractionChange::with_alignment(
+                    context.desk_id,
+                    None,
+                    None,
+                    Some(self.programmers.alignment_projection()),
+                ),
+            );
+        }
+    }
     /// Change the desk-local Align modifier without changing Programmer values or Undo history.
     ///
     /// `Ok(None)` means Align is Off afterwards. Activating Align while nothing is selected
@@ -17,6 +31,29 @@ impl ProgrammingService {
         ports: &dyn ProgrammingPorts,
         mode: Option<ProgrammerAlignmentMode>,
     ) -> Result<Option<ProgrammerAlignmentState>, ActionError> {
+        self.change_alignment(context, ports, |_| mode)
+    }
+
+    pub fn cycle_alignment(
+        &self,
+        context: &ActionContext,
+        ports: &dyn ProgrammingPorts,
+    ) -> Result<Option<ProgrammerAlignmentState>, ActionError> {
+        self.change_alignment(context, ports, |current| match current {
+            None => Some(ProgrammerAlignmentMode::Left),
+            Some(ProgrammerAlignmentMode::Left) => Some(ProgrammerAlignmentMode::Right),
+            Some(ProgrammerAlignmentMode::Right) => Some(ProgrammerAlignmentMode::Out),
+            Some(ProgrammerAlignmentMode::Out) => Some(ProgrammerAlignmentMode::In),
+            Some(ProgrammerAlignmentMode::In) => None,
+        })
+    }
+
+    fn change_alignment(
+        &self,
+        context: &ActionContext,
+        ports: &dyn ProgrammingPorts,
+        requested: impl FnOnce(Option<ProgrammerAlignmentMode>) -> Option<ProgrammerAlignmentMode>,
+    ) -> Result<Option<ProgrammerAlignmentState>, ActionError> {
         let session = context_session(context)?;
         self.with_programmer_and_desk_gate(context.desk_id, || {
             ports.authorize_programming_change(context)?;
@@ -26,13 +63,28 @@ impl ProgrammingService {
                     "Programmer Align is unavailable",
                 ));
             }
-            match mode {
+            let before = self.programmers.alignment_projection();
+            let mode = requested(before.mode);
+            let result = match mode {
                 None => {
                     self.programmers.deactivate_alignment(session);
                     Ok(None)
                 }
                 Some(mode) => self.activate_or_reanchor_alignment(context, ports, session, mode),
+            }?;
+            let after = self.programmers.alignment_projection();
+            if before != after {
+                self.publish_interaction(
+                    context,
+                    crate::ProgrammingInteractionChange::with_alignment(
+                        context.desk_id,
+                        None,
+                        None,
+                        Some(after),
+                    ),
+                );
             }
+            Ok(result)
         })
     }
 
@@ -47,13 +99,18 @@ impl ProgrammingService {
             return match self.programmers.activate_alignment(session, mode) {
                 Ok(state) => Ok(Some(state)),
                 // Align with nothing selected is a harmless no-op: Align stays Off and nothing
-                // else changes. The caller reports the resulting Off mode as a quiet notice.
+                // else changes. Expected no-ops do not produce a notice.
                 Err(ProgrammerAlignmentError::EmptySelection) => Ok(None),
                 Err(error) => Err(alignment_error(error)),
             };
         };
         if current.mode == mode {
             return Ok(Some(current));
+        }
+        if let Some(binding) = &current.family_binding {
+            return self
+                .reanchor_aligned_family(context, ports, session, mode, binding)
+                .map(Some);
         }
         let bases = match current.binding.as_ref() {
             None => Vec::new(),
@@ -121,6 +178,7 @@ pub(super) fn alignment_bases(
 
 pub(super) fn alignment_error(error: ProgrammerAlignmentError) -> ActionError {
     let (kind, message) = match error {
+        ProgrammerAlignmentError::InvalidFamily(message) => (ActionErrorKind::Invalid, message),
         ProgrammerAlignmentError::UnknownSession => (
             ActionErrorKind::NotFound,
             "Programmer Align is unavailable".to_owned(),

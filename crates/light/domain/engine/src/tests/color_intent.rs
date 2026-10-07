@@ -5,10 +5,10 @@ use super::*;
 
 fn rgb_engine() -> (Engine, ProgrammerRegistry, SessionId, FixtureId) {
     let (fixture, fixture_id) = schema_v2_fixture(&[
-        ("intensity", false, false, false, false, false),
-        ("color.red", false, false, false, false, false),
-        ("color.green", false, false, false, false, false),
-        ("color.blue", false, false, false, false, false),
+        ("intensity", false, false),
+        ("color.red", false, false),
+        ("color.green", false, false),
+        ("color.blue", false, false),
     ]);
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
@@ -111,8 +111,7 @@ fn the_report_names_each_heads_quality_for_its_current_target() {
         Some(light_fixture::ColorIntentEngine::Additive)
     );
 
-    let (dimmer, dimmer_id) =
-        schema_v2_fixture(&[("intensity", false, false, false, false, false)]);
+    let (dimmer, dimmer_id) = schema_v2_fixture(&[("intensity", false, false)]);
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {

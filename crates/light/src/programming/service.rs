@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 #[path = "service/alignment.rs"]
 mod alignment;
+mod color_adoption;
 #[path = "service/cue_deletion.rs"]
 mod cue_deletion;
 #[path = "service/cue_deletion_replay.rs"]
@@ -32,6 +33,9 @@ mod cue_transfer;
 mod cue_transfer_replay;
 #[path = "service/external.rs"]
 mod external;
+mod family_alignment;
+mod family_gesture;
+mod family_values;
 #[path = "service/group_management.rs"]
 mod group_management;
 #[path = "service/group_management_replay.rs"]
@@ -80,6 +84,8 @@ mod update;
 mod update_replay;
 #[path = "service/values.rs"]
 mod values;
+#[path = "service/values_legacy.rs"]
+mod values_legacy;
 #[path = "service/values_replay.rs"]
 mod values_replay;
 #[path = "service/values_replay_fingerprint.rs"]
@@ -88,6 +94,7 @@ mod values_replay_fingerprint;
 mod values_replay_memory;
 #[path = "service/values_validation.rs"]
 mod values_validation;
+mod zoom_adoption;
 
 use super::show_history::ShowHistory;
 use cue_deletion_replay::CueDeletionReplayCache;
@@ -122,6 +129,8 @@ pub struct ProgrammingService {
     pub(super) desk_gates: DeskOperationGates,
     replay: Arc<Mutex<ReplayCache>>,
     values_replay: Arc<Mutex<ValuesReplayCache>>,
+    family_gesture: Arc<Mutex<Option<family_gesture::PreparedFamilyGesture>>>,
+    value_transaction_depth: Arc<std::sync::atomic::AtomicUsize>,
     preload_values_replay: Arc<Mutex<PreloadValuesReplayCache>>,
     preload_lifecycle_replay: Arc<Mutex<PreloadLifecycleReplayCache>>,
     priority_replay: Arc<Mutex<PriorityReplayCache>>,
@@ -151,6 +160,8 @@ impl ProgrammingService {
             desk_gates: DeskOperationGates::default(),
             replay: Arc::default(),
             values_replay: Arc::default(),
+            family_gesture: Arc::default(),
+            value_transaction_depth: Arc::default(),
             preload_values_replay: Arc::default(),
             preload_lifecycle_replay: Arc::default(),
             priority_replay: Arc::default(),

@@ -26,6 +26,7 @@ pub struct PortableShowTransaction {
     pub(super) deletes: BTreeSet<PortableShowObjectKey>,
     pub(super) profile_revisions: BTreeMap<FixtureProfileRevisionId, FixtureProfileRevision>,
     pub(super) patch_changed: bool,
+    pub(super) metadata: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -42,9 +43,15 @@ pub struct PortableShowCommit {
     written: Vec<PortableShowObject>,
     deleted: Vec<PortableShowObjectKey>,
     profile_revisions: Vec<FixtureProfileRevision>,
+    metadata: BTreeMap<String, String>,
 }
 
 impl PortableShowCommit {
+    /// Metadata values this commit wrote, such as the programming-contract marker.
+    pub fn written_metadata(&self) -> &BTreeMap<String, String> {
+        &self.metadata
+    }
+
     pub const fn revision(&self) -> PortableShowRevision {
         self.revision
     }
@@ -82,7 +89,19 @@ impl PortableShowTransaction {
             deletes: BTreeSet::new(),
             profile_revisions: BTreeMap::new(),
             patch_changed: false,
+            metadata: BTreeMap::new(),
         }
+    }
+
+    /// Writes one portable-show metadata value atomically with this transaction's objects.
+    pub fn set_metadata(&mut self, key: impl Into<String>, value: impl Into<String>) -> &mut Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+
+    /// Metadata values staged by this transaction.
+    pub fn metadata(&self) -> &BTreeMap<String, String> {
+        &self.metadata
     }
 
     pub const fn expected_revision(&self) -> PortableShowRevision {
@@ -181,6 +200,7 @@ impl PortableShowTransaction {
             && self.deletes.is_empty()
             && self.profile_revisions.is_empty()
             && !self.patch_changed
+            && self.metadata.is_empty()
     }
 
     pub fn change_count(&self) -> usize {
@@ -196,6 +216,11 @@ impl PortableShowTransaction {
             .keys()
             .map(PortableShowObjectKey::kind)
             .chain(self.deletes.iter().map(PortableShowObjectKey::kind))
+    }
+
+    /// Raw bodies this transaction writes (object puts and staged Undo/Redo bodies).
+    pub fn object_writes(&self) -> impl Iterator<Item = (&PortableShowObjectKey, &Value)> {
+        self.writes.iter()
     }
 
     pub fn changed_object_keys(&self) -> impl Iterator<Item = &PortableShowObjectKey> {
@@ -239,11 +264,13 @@ struct AppliedChanges {
     deleted: Vec<PortableShowObjectKey>,
     profile_revisions: Vec<FixtureProfileRevision>,
     patch_changed: bool,
+    metadata: BTreeMap<String, String>,
 }
 
 impl AppliedChanges {
     fn changed(&self) -> bool {
-        self.patch_changed
+        !self.metadata.is_empty()
+            || self.patch_changed
             || !self.written.is_empty()
             || !self.deleted.is_empty()
             || !self.profile_revisions.is_empty()
@@ -260,6 +287,7 @@ impl AppliedChanges {
             written: self.written,
             deleted: self.deleted,
             profile_revisions: self.profile_revisions,
+            metadata: self.metadata,
         }
     }
 }
@@ -288,12 +316,20 @@ fn apply_changes(
         deletes,
         profile_revisions,
         patch_changed,
+        metadata,
     } = changes;
+    for (key, value) in &metadata {
+        tx.execute(
+            "INSERT INTO metadata(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [key, value],
+        )?;
+    }
     Ok(AppliedChanges {
         profile_revisions: apply_profile_revisions(tx, profile_revisions)?,
         written: apply_writes(tx, writes, undoes, redoes)?,
         deleted: apply_deletes(tx, deletes)?,
         patch_changed,
+        metadata,
     })
 }
 

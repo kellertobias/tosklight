@@ -1,5 +1,5 @@
 import type { PatchedFixture } from "../../../api/types";
-import { fixtureDisplayId } from "./fixtureIds";
+import { compareFixtureIds, fixtureDisplayId } from "./fixtureIds";
 
 /** The attribute that makes a fixture a 3D Point, the same test the desk and the Stage apply. */
 const POINT_ATTRIBUTE = "point.position.x";
@@ -20,9 +20,12 @@ export function isPositionPoint(fixture: PatchedFixture): boolean {
 	);
 }
 
-/** Every 3D Point in the patch, in table order. */
+/**
+ * Every 3D Point in the patch, in Fixture ID order (the order Show Patch opens in), whatever order
+ * the Patch delivered them in. The Point encoder steps and every Point picker list them so.
+ */
 export function positionPoints(fixtures: readonly PatchedFixture[]): PatchedFixture[] {
-	return fixtures.filter(isPositionPoint);
+	return fixtures.filter(isPositionPoint).sort(compareFixtureIds);
 }
 
 /**

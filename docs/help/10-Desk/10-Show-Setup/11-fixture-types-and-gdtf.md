@@ -136,6 +136,8 @@ A show patched before this keeps the fixture revision embedded in it and is unaf
 - **ROBE Robin DLS Profile**, **Robin 600X LEDWash**, **Robin LEDBeam 150**, **Robin 300 LEDWash**, and **Robin DLF Wash** — every documented manufacturer personality. The 600X and 300 zone modes expose their three concentric RGBW zones as logical heads.
 - **Claypaky Sharpy**, **ETC Source Four LED Series 2 Lustr**, **CHAUVET Professional COLORado 1 Solo**, and **GLP JDC1**. JDC1 SPix modes expose all twelve RGB plate pixels and twelve white beam segments as logical heads.
 
+**Position physical data.** The **Cameo AURO SPOT Z300**, **JB-Lighting JBLED A7**, **ROBE Robin DLS Profile** and **Martin MAC 300** bind their Pan and Tilt channels to the yoke and head axes of their geometry in every mode, so fixture-independent Position programming can aim them in degrees. Only the travel comes from the manufacturer: the centre of the documented travel is taken as the neutral pose, and the pivots, zero and direction are marked estimated rather than measured. Correct them per fixture with **Show Patch → Pan / Tilt → Position calibration**. Every other mover with one Pan and one Tilt channel, such as the Claypaky Sharpy, Martin MAC 250 Entour, ROBE Robin 300/600X LEDWash, DLF Wash and LEDBeam 150, or the Default Stage's built-in moving lights, gets a nominal Position model when it is patched. Its travel is the one its channels declare in degrees, centred on the neutral pose; a channel that declares no travel in degrees gets a nominal Pan of 540° and Tilt of 270°, also centred. The beam is placed on the tilt axis. These angles are labelled estimated and uncalibrated, and the stored fixture type does not change. Calibrate the fixture, or add Position data to its fixture type, for exact aiming. A Tilt-only fixture such as the GLP JDC1 gets the same nominal model with its missing Pan held fixed at 0°, an absolute Pan or Tilt that turns endlessly keeps its multi-turn angle, and a scanner aims its beam through a modelled mirror. A fixture this cannot describe has no Position and stays *Unsupported*: an axis that only takes a rotation speed, a laser's scan engine, and a Media server's model rotation. Every shipped fixture with a Zoom declares its opening as a **Beam angle** or **Field angle**: the AURO SPOT Z300 and the other fixtures whose manual states the range cite it, and the rest carry a nominal range marked estimated.
+
 The Source Four LED Series 2 configuration can independently enable Strobe, Fan Control, and Plus Seven. Its package contains the canonical console personalities, including the common fully enabled and Plus Seven variants, instead of multiplying every fixture-menu option permutation into a separate mode.
 
 Channel order, footprints, fine-byte slots, safe defaults, and physical ranges come from the corresponding manufacturer DMX charts. So do the positions on colour and gobo wheels, prisms, macros, effect banks, and the power, special-function and reset channels: the shipped manufacturer packages name each band the chart prints, so an encoder reads "Gobo 3" or "Total reset" rather than a percentage. Where a manufacturer chart is genuinely proportional - a frost, a fan, a macro speed - the channel stays a single range, and where one DMX range carries two mutually exclusive meanings chosen from the fixture menu, such as ROBE's combined Pan/Tilt speed and time, the package keeps the range unnamed rather than asserting one of them. Shipped packages are not privileged or reserved: after loading, they are normal desk-library profiles. When a newer shipped package is installed, ToskLight updates it only if its last package-installed revision is still current. An operator-created later revision is preserved and reported instead of being overwritten.
@@ -149,9 +151,9 @@ readable and exportable.
 
 ## Import GDTF
 
-Choose **Import GDTF** and select a `.gdtf` archive. ToskLight normalizes the supported modes, channels, physical information, emitters, capabilities, geometry, and model into a fixture profile and retains the original GDTF bytes beside every resulting immutable revision. MVR export can therefore use the retained source instead of reconstructing an archive from lossy normalized data.
+Choose **Import GDTF** and select a `.gdtf` archive. ToskLight previews the supported modes, complete channel widths, functions and physical endpoints as a canonical fixture profile. Import limitations identify geometry, optics and other information retained only in the original GDTF archive. New imports associate that archive with the exact normalized profile content. This association records the import snapshot; it does not certify the manufacturer's physical measurements. MVR export reuses the rich original archive only when the exported profile still matches that snapshot. A library revision number alone does not establish a match.
 
-GDTF interchange is preserved in both directions through the show workflow: import the original `.gdtf` into the Fixture Library, then export an MVR to carry the retained GDTF archives for the fixtures in that rig. A profile without a retained GDTF is exported in the MVR as a GDTF generated from the profile's modes and channels; it describes the patch and channel layout but not wheels, emitters or the 3D model. The Fixture Library does not export a standalone GDTF file.
+If the profile changed, its source association is unavailable (including older imports), or it has no source archive, MVR export generates GDTF from the actual profile embedded in the show. The preview reports this limitation. Generated GDTF preserves supported functions, directed physical endpoints, units, channel widths, fine bytes and defaults, and the physical colour model: additive emitters, continuous colour filters, colour wheels and their filters, and fixed sources. It does not carry measurement provenance, Position calibration and axis geometry, the Zoom opening convention, scanner mirror kinematics or a detailed 3D model; Native ToskLight fixture metadata keeps those. Unsupported curves or units produce a specific warning instead of silently substituting stale source bytes. Native ToskLight fixture metadata in the MVR retains the full authored profile. The Fixture Library does not export a standalone GDTF file.
 
 The same canonical-attribute preflight applies before a newly normalized GDTF profile is stored. An
 import or migration error leaves the original data untouched and appears in the open import dialog
@@ -258,10 +260,18 @@ row has these columns:
   attribute — with the channel's functions as a table underneath. A function's behavior-specific
   values, such as a fixed value's label or angular motion, open under its row with **Details**.
 - **Invert** and **Snap** switch the channel's inversion and whether it jumps instead of fading.
-- **Masters** opens **React to Virtual Intensity** — **Ignore**, **Follow**, or **Inverse** — and
-  the switches for **React to Sequence Master**, **React to Group Master**, and **React to Grand
-  Master**. **Inverse** makes the channel full while the virtual intensity is at zero and gone at
-  full, for a slot that must do the opposite of the dimmer. The table shows it as *−VI*.
+- **Masters** shows how the masters reach the channel. Every master — Cue, Group, Grand, and
+  Blackout — scales a fixture's level parameters (Intensity, Volume) before they become DMX, so a
+  level channel follows them on its own; the table shows it as *Level*. Any other channel follows
+  them only through **React to Virtual Intensity**: **Ignore**, **Follow**, or **Inverse**. Every
+  light-emitting head without an Intensity channel — an RGB PAR, each cell of a pixel bar — has a
+  virtual dimmer: an Intensity you program, record and master like a physical one. Its colour
+  emitters (Red, Green, Blue, White, Amber, UV, Lime and the like) start on **Follow** when the
+  channel is created or imported, so they dim with it; on a head with a physical dimmer they start
+  on **Ignore**, because the dimmer already dims them. Cyan, Magenta and Yellow flags start on
+  **Ignore**. **Inverse** makes the channel full while the virtual intensity is at zero and gone at
+  full, for a slot that must do the opposite of the dimmer. The table shows these as *VI* and
+  *−VI*. A Cue that stores no Intensity for such a head does not dim it from its fader.
 
 The table is the tab's only scrolling area: it scrolls up, down, and sideways under a fixed column
 header, while the mode editor's title bar and split headers stay in place. In a channel's
@@ -284,6 +294,32 @@ A **Static output** channel has no Programmer control. It transmits its authored
 during normal output and its separately authored Highlight raw value while Highlight is active, so
 a normally fixed control slot can still switch a fixture display or identification mode for
 Highlight. A per-fixture Highlight override may replace that Highlight raw value.
+
+### Physical mapping calibration
+
+Open **Mapping > Details** on a Continuous function to document its physical response.
+The function's raw endpoints and physical values define the mapping; decreasing physical values
+are valid, such as Zoom running from a wide beam to a narrow one.
+
+Choose **Mapping quality** as Unknown, Estimated, Manufacturer or Measured. Manufacturer and
+Measured require a **Mapping source**. Use **Mapping revision** to identify a revised calibration.
+A Zoom function explicitly measured in degrees can also declare **Beam angle** or **Field angle**;
+leave the convention Unknown when the source does not say which it is.
+
+The default is a straight line between the function endpoints. **Use sampled mapping** adds those
+endpoints, then **Add intermediate sample** adds a point on the curve to edit. Raw values must
+increase, and physical values must keep moving in the same direction. The first and last samples
+must match the function endpoints. Changing an endpoint leaves the samples intact and reports the
+mismatch; **Use function endpoints** repairs those two samples explicitly. **Use linear mapping**
+removes intermediate samples while retaining quality/source information.
+
+The preview shows raw DMX against physical values and a midpoint readout. Invalid samples stay
+visible for correction and block saving. Changing channel resolution keeps the curve's relative
+raw positions, unless reducing resolution would merge sample points; that change is refused.
+Existing profiles without calibration remain valid and read as Unknown.
+
+In this implementation increment, this calibration is saved in the profile and `.toskfixture`
+package and used by the editor preview. It does not yet alter live output or Stage simulation.
 
 ### Color
 
@@ -312,6 +348,52 @@ is never used. Each wheel slot gives every field room for its value; in a narrow
 **DMX from** and **DMX to** move onto their own line rather than shrinking. Then use **Generate
 portable presets** in **Control → Special Dialog** when fixed or indexed choices should be added to
 the show.
+
+### Physical optical paths
+
+The Color tab also contains **Physical optical paths**, one per head. Use **Create physical path**
+to start from the head's existing Color controls. Existing emitter values retain their evidence
+quality; a missing source or filter measurement stays Unknown. These settings are saved with the
+fixture and its portable package. Live Color matching uses them: a requested colour is fitted to
+this head's native controls through its optical path, and the Color dialog's approximation reports
+the result with the path's evidence quality.
+
+**Native Color controls** lists the exact profile channels participating in Color. Include all
+emitters, filters, wheels and color-mode controls. Function selectors identify the actual native
+channel and raw interval, including channels whose programmer aliases overlap. Service/reset
+functions cannot become recordable Color values.
+
+Choose an Unknown source, a Fixed lamp source, or Additive emitters. An emitter declares its
+visible/UV/IR role, XYZ when known, maximum drive, response exponent and native direction. A
+reversed native direction means the beginning of that function is full output and the end is off.
+For a fixed source, **XYZ known** starts with zero output; enter the actual source values rather
+than accepting an invented white. Manufacturer and Measured quality require a source record.
+
+Add filters in the order light passes through them. CMY flags, correction filters and wheels are
+separate stages, each attached to an exact channel function. **Move earlier/later** changes the
+order while preserving identity and data. An isolated wheel-color XYZ is not a transmission
+measurement and cannot predict its combination with another filter. Missing transmission is
+reported explicitly. Spectra and whole-path recipe measurements imported in a `.toskfixture`
+remain intact; the current form shows their retained sample counts.
+
+Changing a referenced channel's byte layout is refused until its physical path is reconfigured.
+Deleting a referenced channel/function leaves a validation error, so incomplete calibration cannot
+silently be saved. Updating the optical model revision pins a new appearance model; it does not
+rewrite stored show presets.
+
+### Installed Position calibration
+
+In **Show Patch**, open the physical fixture row's **Pan / Tilt** editor, then
+**Position calibration…**. Each multi-patch copy has its own calibration. Enter signed,
+unwrapped **Pan zero offset (°)** and **Tilt zero offset (°)**, quality, source and revision.
+Manufacturer and Measured quality require a source. **Clear calibration** returns that physical
+instance to missing calibration; the fixture-library profile remains unchanged.
+
+The offsets are stored with the portable show/patch and survive edits in Architect. When Position
+is programmed in degrees or as a Target, the desk applies them while converting to Pan/Tilt DMX, so
+they change the DMX output and the Stage beam that follows it. Existing Pan/Tilt inversion and
+mounting rotation remain separate settings; the resolver applies direction and zero correction
+once.
 
 ### Emitters & Motion
 
@@ -368,6 +450,86 @@ The server assigns revision numbers atomically and rejects concurrent edits. Ope
 
 Legacy library entries migrate through an explicit schema-v1 reader. Compatible modes are combined only when their fixture-family metadata agrees; conflicts remain separate and produce a visible warning. Installations that predate transferable packages remove only the historical code-owned catalog rows, then load the equivalent `.toskfixture` files as ordinary profiles. User-authored profiles are never claimed by manufacturer or model name.
 
-During legacy or GDTF migration, intensity, RGB/RGBW/additive, CMY/subtractive, and identifiable Open/White wheel channels receive the same deterministic physical Highlight defaults; unmatched wheel, Position, and unrelated channels retain their source defaults. Existing authored schema-v2 Highlight raw values are preserved exactly. A patched fixture without a per-instance Highlight override map inherits those values from its embedded profile revision. Later desk-library edits therefore do not silently change the Highlight Look already stored with a show.
+During legacy flat-definition migration, intensity, RGB/RGBW/additive, CMY/subtractive, and identifiable Open/White wheel channels receive the same deterministic physical Highlight defaults; unmatched wheel, Position, and unrelated channels retain their source defaults. Canonical GDTF import preserves an explicit source Highlight value at the channel’s full precision; when Highlight is absent, it retains the native default without inventing calibrated white. Existing authored schema-v2 Highlight raw values are preserved exactly. A patched fixture without a per-instance Highlight override map inherits those values from its embedded profile revision. Later desk-library edits therefore do not silently change the Highlight Look already stored with a show.
 
 ![Create a complete revisioned fixture profile](../../assets/screenshots/workflows/fixture-library-create.png)
+
+
+## GDTF import preview and retained source
+
+Choosing a GDTF file first opens a preview. The desk reads native channel widths,
+ordered coarse/fine addresses, DMX breaks, channel functions, defaults and physical
+endpoints on the server. Review the listed import limitations, map any unknown
+attributes, then choose **Import fixture** (or **Import and remember mappings**).
+Importing an existing fixture type creates a new library revision; fixtures already
+patched in a show keep their selected revision.
+
+The preview distinguishes supported channel data from information retained only in
+the original archive. Geometry, optical measurements and wheel references that have
+not been translated are not presented as calibrated output. Unsupported executable
+relationships, including conditional function ownership and response curves that the
+reader cannot represent, stop the import with an explanation.
+
+New canonical imports retain the original GDTF archive inside the portable fixture
+profile. It travels in `.toskfixture` packages and profile revisions embedded in shows.
+Editing the profile keeps the source archive and its original association. An MVR
+export reuses those bytes only while they still match the complete exported profile;
+otherwise it generates the supported subset and reports the limitations. Retained
+source data does not prove that a fixture has been physically measured.
+
+
+### Installed Color calibration
+
+In **Show → Setup → Patch**, open a physical fixture's **Light source** editor and choose
+**Color calibration…**. A root fixture and each multi-patch copy hold independent observations.
+
+Add an emitter's **output gain** when its output differs from the profile: 1.0 keeps the profile
+output and 0.0 represents no output. This scales the emitter's XYZ and spectral power together;
+it does not describe a hue change or invent missing emitter data. For CMY, wheels or other
+compound optical paths, add a **whole-path observation** with output XYZ and the complete native
+recipe used to measure it, including parked wheels. Recipe defaults are an editing template;
+these controls send no commands to a lamp. Record quality, evidence source and revision honestly.
+Manufacturer and Measured require a source.
+
+Observations retain the exact profile revision, mode and optical path. If the patched fixture
+changes, incompatible observations remain saved but inactive. Clear them before authoring new
+ones for that lamp. A physical hardware swap using the same profile also needs a calibration
+review. New Architect duplicates start without Color calibration. **Clear Color calibration**
+removes observations from only the selected physical instance.
+
+This increment saves and validates installation data. Applying it to live color fitting and
+Stage is part of the subsequent engine integration; saved presets and cues are not modified.
+
+
+## Physical geometry and individual axis calibration
+
+In the Fixture Library's **Geometry** editor, **Declare physical geometry** records the
+coordinate convention and the quality of the supporting measurements. Geometry uses local
+millimetres with Y up; the neutral beam points along −Y. A bracket can be unknown, fixed, or
+an authored hinge with a body, pivot and axis. An unknown pivot must not be labelled measured.
+Physical movement paths need identity scale; bake visual model scale into the actual dimensions.
+
+In a mode's **Emitters & Motion** editor, **Configure physical Position** connects a physical
+axis to an exact native channel function. Configure the function's angular motion and units
+first. Absolute angle uses degrees; continuous rotation speed uses degrees per second.
+Multiple turns remain signed angles, and a speed-only axis cannot provide an absolute position.
+
+In Patch, open **Pan / Tilt → Position calibration** for the physical lamp or copy. Individual
+axis overrides replace its usual Pan/Tilt zero and direction together. Each override belongs to
+that profile, mode and physical geometry. Replacing the lamp or changing its geometry retains
+old measurements as inactive; **Clear axis overrides** removes that set without discarding the
+family offsets. Copies have independent calibration. New duplicated hardware starts without
+installed measurements.
+
+These declarations and corrections drive fixture-independent Position programming: Angles and
+Target values reach each lamp's DMX through its own calibrated model, and Stage aims the beam with
+the same model.
+
+
+### UV emitter data
+
+In a physical optical path, select **UV effect** as the emitter purpose and bind its exact native
+UV function. Missing color measurements do not mean the UV control is absent. XYZ describes only
+its visible output, which may include violet light; leave it unknown unless supported by data.
+A measured zero and an unknown value are different. Spectral measurements remain optional.
+UV strength and fluorescent scenery appearance cannot be inferred from the visible color alone.

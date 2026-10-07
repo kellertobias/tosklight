@@ -45,6 +45,48 @@ Startup reads the same archives through `FixtureLibrary::load_fixture_package_di
 - A mode geometry graph may be empty when the packaged GLB or a broad device-type fallback supplies the Stage representation.
 - `HeadColorSystem` drives Color Intent, which shows one device-independent colour on every fixture. A head may carry several systems (a CMY engine and a colour wheel); the continuous engine is used first and a steady wheel slot only when it cannot come within Δu′v′ 0.02. Each system carries `calibration: { status, revision, source }`: `measured` only for colorimeter or spectrometer data, `nominal` for datasheet or typical values (the reading of a profile that omits the block), `uncalibrated` when the data cannot promise a colour. Increment `revision` whenever the system's colour data changes. Additive emitters carry their full-drive `xyz`, `maximum_level` and `response_curve`. A `subtractive` system may carry `filters: { open_xyz, cyan_xyz, magenta_xyz, yellow_xyz }`, the measured beam open and with each flag fully in; omit it rather than invent it. A `discrete_wheel` slot carries `measured_xyz` when measured and `steady: false` for a split, scroll, rotation or effect position (unset reads its name: split, half, scroll, rotation, rainbow, effect and similar are not steady). Heads without authored systems still resolve from their channel attributes and are reported uncalibrated, so author a system only from real data.
 
+## Intent-programming physical foundation
+
+The optional `ChannelFunction.physical_mapping` and `FixtureMode.color_physical` blocks are
+additive authoring data. During the foundation increment they do not replace the current live
+mapping or `HeadColorSystem` resolver. Preserve existing supported runtime metadata as well.
+Do not claim a fixture matches physically just because these fields validate.
+
+- Physical mapping retains directed endpoints and optional monotone raw/physical samples at the
+  channel's full 8/16/24/32-bit width. Keep exact byte order, function domain, unit and provenance.
+  Zoom values are full opening degrees with an explicit beam/field convention. Focus remains
+  normalized 0–100%; do not fabricate distance from a focus channel.
+- A version-1 `color_physical` model has one ordered path per modeled logical head. Each path owns
+  the complete native Color channel set, including parked and currently unmodeled mechanisms.
+  Bind emitters and filters to stable channel and function IDs, never display names or raw slot
+  indices. Missing or foreign references are invalid. Shared controls must belong to an explicitly
+  shared head; this does not establish independent solvability for every dependent head.
+- Sources are unknown, fixed or additive. Additive emitters retain full-drive XYZ and/or source
+  spectrum, visible/UV/IR band, native direction, maximum drive, response and provenance.
+  A label such as RGBW is a topology hint, not measured emitter chromaticity.
+- Filters are in physical beam order. Store transmission spectra only when known, over explicit
+  disjoint native intervals. Source spectra are linear relative spectral power per nanometre on
+  a common path scale; filter spectra are dimensionless transmission in 0–1. Retain wavelength
+  coverage and gaps. Do not multiply isolated XYZ wheel-slot or CMY colors to predict stacked
+  filters. Missing source spectra or filter transmission remains unknown.
+- Whole-path measurements identify every owned native control exactly once, including open or
+  parked channels. They describe that complete recipe only. A zero XYZ measurement is black,
+  not a missing value. Service/reset functions cannot be native Color recipes.
+- Quality is explicit: unknown, estimated, manufacturer or measured. Manufacturer and measured
+  entries require evidence. Imported nominal colors do not become measurements. Retain imported
+  spectra and recipe measurements even when the simple editor does not author individual samples.
+- Stable path/emitter/filter IDs join the existing identity rules. The native layout signature
+  distinguishes recipe compatibility from the full appearance/profile digest; do not recreate
+  IDs during calibration updates or move old recipes onto different channel functions.
+- Installed pan/tilt `position_calibration` belongs to the show patch root or its specific physical
+  multi-patch copy, never to the transferable library fixture. It stores unwrapped zero offsets,
+  quality, source and revision, separately from mounting pose and Pan/Tilt inversion.
+
+Normal semantic Color presets/cues will store the requested intent. Fixture metadata must enable
+the destination resolver to write every destination Color channel, including additional White,
+CMY or wheel channels after a fixture replacement. Explicit Direct recipes retain their separate
+compatibility and best-effort portable behavior; they are not the default recording format.
+
 ## Identity rules
 
 - Generate UUIDs once for the profile, modes, heads, channels, functions, and geometry parts and retain them. UUID v4 is acceptable. Splits use their positive `number` and have no UUID.
@@ -69,3 +111,26 @@ Represent documented unused slots as static channels. Mark unknown facts unknown
 A packaged scan script must be an ES module exporting `scan(input)` and returning control points with `x`/`y` deflections in `-1..=1`, `r`/`g`/`b` in `0..=1`, and an `amount` percentage of the scan. Verify it by loading the package and rendering rather than by reading it: `docs/help/45-Visualizer/05-lasers.md` is the operator-facing contract, and the engine's own rules — the ILDA colour-arrives-at-the-point convention, dwell as brightness, the sandbox and the per-frame time budget — are in `crates/viz/laser`.
 
 GLB is optional unless exact manufacturer appearance is requested or the broad device-type fallback is inadequate. When supplied, verify useful non-collapsed bounds, intended node bindings, pivots, emitter ownership, and finite non-zero scales for visible parts.
+
+
+## Explicit physical geometry and Position calibration
+
+For the intention-programming contract, use optional `GeometryGraph.physical_contract` version 1
+and `FixtureMode.position_physical` version 1. Their presence is explicit authoring, not an automatic
+claim that existing artwork is measured. Geometry is local mm, right-handed Y-up, beam −Y and
+neutral `Rx*Ry*Rz`; motion composes a local axis-angle rotation after the neutral rotation.
+The optionality belongs to the whole contract; inside it bracket state is explicitly unknown,
+fixed, or a parent-frame hinge attached to an existing body node. Physical ancestry is rigid.
+See the equations and TL-555 section in `docs/plans/fixture-independent-programming.md`.
+
+Bind Position by exact node/channel/function IDs, explicit Pan/Tilt role and the function's
+absolute-degree or degree/second motion metadata. Preserve multi-turn endpoints and fine ordering.
+Shared cross-head motors require a shared channel head. Do not infer exact physical bindings from
+attribute names or silently lift/rekey a graph after its physical contract has been authored.
+
+Installed axis overrides and Color observations belong to each show-patch physical instance.
+They are not profile fields and are not inherited by newly duplicated hardware. Axis overrides
+replace the complete zero/inversion pair and retain a source identity for stale-data detection.
+Color observations retain their full immutable optical/native identity and exact complete recipe.
+Changing profiles retains stale observations as inactive; do not relabel them as measurements of
+the replacement lamp. Live integration and physical acceptance remain separate from metadata validation.

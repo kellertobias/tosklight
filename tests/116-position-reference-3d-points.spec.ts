@@ -213,14 +213,22 @@ test("POSITION-REFERENCE-001 @ui › the column appears with a 3D Point, stores 
 	);
 
 	// The desk states the point's pose to the Stage beside its universes: at rest, no offset.
-	const output = await api.request<{
-		points: Array<{
-			fixture_id: string;
-			offset_metres: [number, number, number];
-			rotation_degrees: [number, number, number];
-		}>;
-	}>("GET", "/api/v2/output/dmx");
-	const pose = output.points.find((candidate) => candidate.fixture_id === POINT_ID);
+	// Since the TL-552 cutover engages the Live family path, the route reports only the poses of
+	// the last published frame of the current Patch revision (TL-594); the bench clock is manual,
+	// so let one output frame publish before reading.
+	const readPose = async () => {
+		const output = await api.request<{
+			points: Array<{
+				fixture_id: string;
+				offset_metres: [number, number, number];
+				rotation_degrees: [number, number, number];
+			}>;
+		}>("GET", "/api/v2/output/dmx");
+		return output.points.find((candidate) => candidate.fixture_id === POINT_ID);
+	};
+	await bench.tick(25);
+	await expect.poll(readPose).toBeDefined();
+	const pose = await readPose();
 	expect(pose).toBeDefined();
 	for (const value of [...(pose?.offset_metres ?? []), ...(pose?.rotation_degrees ?? [])])
 		expect(Math.abs(value)).toBeLessThan(0.01);

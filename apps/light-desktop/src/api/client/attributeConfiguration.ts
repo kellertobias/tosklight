@@ -18,6 +18,8 @@ import { jsonRequest } from "./transport";
 export type {
 	ColorIntentHeadReport,
 	ColorIntentReport,
+	ColorIntentUvReport,
+	ColorIntentUvStatus,
 	ColorModelImpact,
 	ColorResolutionQuality,
 } from "../generated/light-wire";

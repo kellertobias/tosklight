@@ -117,9 +117,6 @@ fn media_fixture() -> (PatchedFixture, FixtureId) {
                     snap: false,
                     reacts_to_virtual_intensity: false,
                     virtual_intensity_inverted: false,
-                    reacts_to_sequence_master: true,
-                    reacts_to_group_master: true,
-                    reacts_to_grand_master: true,
                     behavior: ChannelBehavior::Controlled,
                     functions: vec![ChannelFunction::continuous(
                         attribute,
@@ -161,6 +158,8 @@ fn media_fixture() -> (PatchedFixture, FixtureId) {
             grand_master_enabled: true,
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),

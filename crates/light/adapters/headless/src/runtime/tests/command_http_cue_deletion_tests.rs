@@ -42,6 +42,82 @@ fn cue_deletion_request(
     })
 }
 
+#[tokio::test]
+async fn standalone_cue_deletion_waits_for_activation_before_programmer_and_keeps_completion() {
+    let (scenario, show_id) = cue_navigation_scenario().await;
+    let (show_revision, object_revision, cue_id) = cue_deletion_authority(&scenario, "2.5");
+    let body = cue_deletion_request(
+        "activation-ordered-delete",
+        serde_json::json!({"type":"current_page","expected_page":1,"slot":2}),
+        "2.5", object_revision, cue_id, 2,
+    );
+    let baseline = scenario.state.events.latest_sequence();
+    let compatibility = cue_delete_compatibility_events(&scenario).len();
+    scenario.state.installation.delete_session(scenario.session.id).unwrap();
+    let app = scenario.app.clone();
+    let request = Request::post("/api/v2/cues/delete")
+        .header("x-tosk-show", &show_id)
+        .header("x-tosk-desk", scenario.session.desk.id.to_string())
+        .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+        .header(header::IF_MATCH, show_revision.to_string())
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let response = super::active_show_lifecycle_ordering_tests::request_waiting_for_activation_keeps_programmer_available(
+        &scenario.state,
+        async move { app.oneshot(request).await.unwrap() },
+    ).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json(response).await;
+    assert_eq!(body["status"], "changed");
+    assert_eq!(body["deleted_cue"]["id"], cue_id.to_string());
+    assert_eq!(body["cue_list"]["object_revision"], object_revision + 1);
+    assert_eq!(cue_deletion_show_events(&scenario, baseline), 1);
+    assert_eq!(cue_delete_compatibility_events(&scenario).len(), compatibility);
+    assert!(scenario.state.installation.persisted_sessions().unwrap()
+        .iter().any(|entry| entry.id == scenario.session.id),
+        "standalone completion must persist Programmer despite inherited activation");
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn cue_deletion_route_tolerates_nested_extra_fields_but_rejects_invalid_known_fields() {
+    let (scenario, show_id) = cue_navigation_scenario().await;
+    let (show_revision, object_revision, cue_id) = cue_deletion_authority(&scenario, "2.5");
+    let baseline = scenario.state.events.latest_sequence();
+    let mut request = cue_deletion_request(
+        "tolerant-delete",
+        serde_json::json!({"type":"current_page","expected_page":1,"slot":2}),
+        "2.5", object_revision, cue_id, 2,
+    );
+    request["show_id"] = serde_json::json!(Uuid::new_v4());
+    request["future_option"] = serde_json::json!(true);
+    request["address"]["future_address"] = serde_json::json!(true);
+    request["authority"]["future_authority"] = serde_json::json!(true);
+    for pointer in ["/address/slot", "/authority/object_revision"] {
+        let mut invalid = request.clone();
+        *invalid.pointer_mut(pointer).unwrap() = serde_json::json!("invalid");
+        let response = delete_cue_action(
+            &scenario, scenario.session.desk.id, &show_id, show_revision, invalid,
+        ).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error = json(response).await;
+        assert!(error["error"].as_str().unwrap().contains(pointer.split('/').nth(1).unwrap()), "{error}");
+        assert_eq!(scenario.state.events.latest_sequence(), baseline);
+        assert_eq!(cue_deletion_authority(&scenario, "2.5"), (show_revision, object_revision, cue_id));
+    }
+    let response = delete_cue_action(
+        &scenario, scenario.session.desk.id, &show_id, show_revision, request,
+    ).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json(response).await;
+    assert_eq!(body["status"], "changed");
+    assert_eq!(body["show_id"], show_id);
+    assert_eq!(body["deleted_cue"]["id"], cue_id.to_string());
+    assert_eq!(cue_deletion_show_events(&scenario, baseline), 1);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
 async fn delete_cue_action(
     scenario: &CommandHttpScenario,
     desk_id: Uuid,

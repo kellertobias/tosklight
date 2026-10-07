@@ -162,10 +162,10 @@ fn typed_batch_is_one_pending_projection_event_persist_and_checkpoint() {
                 ProgrammingPreloadValuesCommand::Batch {
                     mutations: vec![
                         fixture_set(setup.fixtures[0], "intensity", 0.25, Default::default()),
-                        fixture_set(setup.fixtures[1], "pan", 0.5, timing),
+                        fixture_set(setup.fixtures[1], "iris", 0.5, timing),
                         ProgrammingPreloadValueMutation::SetGroup {
                             group_id: "front".into(),
-                            attribute: AttributeKey("tilt".into()),
+                            attribute: AttributeKey("softness".into()),
                             value: AttributeValue::Spread(vec![0.1, 0.9]),
                             timing,
                         },
@@ -215,8 +215,8 @@ fn typed_batch_is_one_pending_projection_event_persist_and_checkpoint() {
 fn preload_intent_captures_linked_context_values_once_in_one_checkpoint() {
     let mut setup = PreloadValuesSetup::new();
     let fixture = setup.fixtures[0];
-    let red = AttributeKey("color.red".into());
-    let green = AttributeKey("color.green".into());
+    let red = AttributeKey("gobo.1".into());
+    let green = AttributeKey("gobo.2".into());
     setup.ports.environment.supported_attributes =
         HashMap::from([(fixture, HashSet::from([red.clone(), green.clone()]))]);
     setup.ports.environment.current_values = light_engine::ResolvedValues::from_iter([
@@ -246,6 +246,8 @@ fn preload_intent_captures_linked_context_values_once_in_one_checkpoint() {
                     fade_millis: Some(1_000),
                     delay_millis: None,
                 },
+                displayed_source: None,
+                color_adoption: Default::default(),
             },
         },
     );
@@ -280,7 +282,7 @@ fn preload_intent_captures_linked_context_values_once_in_one_checkpoint() {
     );
 
     setup.ports.environment.current_values.insert(
-        (fixture, AttributeKey("color.green".into())),
+        (fixture, AttributeKey("gobo.2".into())),
         AttributeValue::Normalized(0.1),
     );
     let replay = setup
@@ -598,4 +600,76 @@ fn legacy_clear_go_release_undo_and_lifecycle_publish_pending_transitions_once()
         .unwrap();
     assert!(lifecycle.preload_values_event_sequence.is_some());
     assert_eq!(setup.values_events().len(), 10);
+}
+
+#[test]
+fn pending_semantic_edits_share_normal_planning_and_one_undo_gesture() {
+    use light_core::programming::*;
+    let mut setup = PreloadValuesSetup::new();
+    let fixture = setup.fixtures[0];
+    setup.ports.environment.current_values.insert(
+        (fixture, AttributeKey::color()),
+        AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic {
+            intent: ColorIntent {
+                uv: UvIntent { amount: 0.6 },
+                ..Default::default()
+            },
+        })),
+    );
+    let capture = setup.enter_capture();
+    let before = setup.registry.undo_depth(setup.session).unwrap();
+    for (index, value) in [0.5, 1.0].into_iter().enumerate() {
+        let result = setup
+            .service
+            .handle_preload_values(
+                setup.action(
+                    &format!("semantic-pending-{index}"),
+                    index as u64,
+                    capture,
+                    ProgrammingPreloadValuesCommand::ApplyIntent {
+                        intent: ProgrammingValueIntent {
+                            fixture_ids: vec![fixture],
+                            group_id: None,
+                            attribute: AttributeKey::color(),
+                            operation: ProgrammingValueOperation::ComponentEdits(vec![
+                                ComponentEdit::Scalar {
+                                    component: ProgrammingComponent::Color(
+                                        ColorComponent::WhiteBlend,
+                                    ),
+                                    operation: ScalarEdit::Set(ScalarIntent::Value(value)),
+                                },
+                            ]),
+                            undo_group: Some("white-fader".into()),
+                            timing: Default::default(),
+                            displayed_source: None,
+                            color_adoption: Default::default(),
+                        },
+                    },
+                ),
+                &setup.ports,
+            )
+            .unwrap();
+        assert_eq!(result.outcome.revision(), index as u64 + 1);
+        setup.ports.environment.current_values.clear();
+    }
+    let state = setup.registry.get(setup.session).unwrap();
+    assert_eq!(state.undo.len(), before + 1);
+    assert!(state.values.is_empty());
+    let AttributeValue::ColorProgram(program) = &state.preload_pending[0].value else {
+        panic!()
+    };
+    let ColorProgram::Semantic { intent } = program.as_ref() else {
+        panic!()
+    };
+    assert_eq!(intent.uv.amount, 0.6);
+    assert_eq!(intent.white_blend, 1.0);
+    assert!(setup.registry.undo(setup.session));
+    assert!(
+        setup
+            .registry
+            .get(setup.session)
+            .unwrap()
+            .preload_pending
+            .is_empty()
+    );
 }

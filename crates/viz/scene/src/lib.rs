@@ -40,7 +40,7 @@ pub use model::{
 pub use persistence::{
     DEFAULT_DECAY_SECONDS, DEFAULT_FALLOFF, DEFAULT_THRESHOLD, PersistencePreference,
 };
-pub use points::{PointPose, slaved_to_point};
+pub use points::{PointPose, desk_rotation_to_world, slaved_to_point};
 pub use provider::{
     ProviderCapabilities, ProviderError, ProviderEvent, ProviderKind, SceneProvider,
 };
@@ -70,3 +70,11 @@ pub use view::{
 
 /// Wire/protocol version of the semantic scene contract understood by this render core.
 pub const SCENE_PROTOCOL_VERSION: u32 = 3;
+
+pub use values::{PhysicalColorState, PhysicalOpticsState};
+
+mod physical_position;
+pub use physical_position::{PhysicalPoseState, PhysicalPositionPlan, PhysicalPositionValues};
+
+mod physical_optics;
+pub use physical_optics::physical_zoom_outer_half_angle;

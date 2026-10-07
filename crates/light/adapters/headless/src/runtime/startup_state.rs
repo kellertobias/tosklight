@@ -1,8 +1,9 @@
 //! Persistent state loading and engine restoration for process startup.
 
+use super::show_programming_contract::{check_programmer, check_runtime_payload};
 use super::{
     ActiveShowRepository, DeskConfiguration, InstallationResource, PersistedOutputRuntime,
-    active_playbacks_setting, compile_active_show_for_startup, fixed_test_time,
+    active_playbacks_setting, fixed_test_time, load_active_show_runtime_for_startup,
     output_runtime_setting, sibling_fixture_package_dir, startup_options,
 };
 use anyhow::Context;
@@ -19,6 +20,20 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
+
+/// TL-552: production supports the semantic programming contract (`PROGRAMMING_CONTRACT_VERSION`).
+/// Only the `#[cfg(test)]` startup harness can report another contract; see
+/// `e2e_semantic_contract`.
+fn supported_programming_contract() -> u16 {
+    super::e2e_semantic_contract::startup_programming_contract()
+}
+
+#[path = "startup_runtime_recovery.rs"]
+mod runtime_recovery;
+
+mod programmer_migration;
+
+use programmer_migration::{migrate_frozen_group_selection, migrate_retired_programmer_attributes};
 
 pub(super) fn rebase_desk_show_paths(
     desk: &DeskStore,
@@ -324,6 +339,7 @@ pub(super) struct StartupState {
     pub(super) persistent: PersistentState,
     pub(super) programmers: ProgrammerRegistry,
     pub(super) engine: Arc<Engine>,
+    pub(super) dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
     pub(super) active_show_error: Option<String>,
     pub(super) output_runtime: PersistedOutputRuntime,
     pub(super) manual_clock: Option<Arc<ManualClock>>,
@@ -333,15 +349,19 @@ pub(super) struct StartupState {
 impl StartupState {
     pub(super) fn load(options: startup_options::StartupOptions) -> anyhow::Result<Self> {
         let persistent = PersistentState::open(options)?;
-        let (manual_clock, programmers) = restore_programmers(&persistent)?;
-        let (engine, active_show_error) = load_engine(&persistent, &programmers)?;
-        let output_runtime = load_output_runtime(&persistent, active_show_error.as_deref())?;
+        let (manual_clock, programmers, programmer_recovery) = restore_programmers(&persistent)?;
+        let (engine, dynamics, active_show_error) =
+            load_engine(&persistent, &programmers, programmer_recovery)?;
+        let (output_runtime, output_recovery) =
+            load_output_runtime(&persistent, &programmers, active_show_error.as_deref())?;
+        let active_show_error = active_show_error.or(output_recovery);
         apply_output_runtime(&engine, &output_runtime);
         let speed_groups = create_speed_groups(&persistent.configuration);
         Ok(Self {
             persistent,
             programmers,
             engine,
+            dynamics,
             active_show_error,
             output_runtime,
             manual_clock,
@@ -352,7 +372,7 @@ impl StartupState {
 
 fn restore_programmers(
     persistent: &PersistentState,
-) -> anyhow::Result<(Option<Arc<ManualClock>>, ProgrammerRegistry)> {
+) -> anyhow::Result<(Option<Arc<ManualClock>>, ProgrammerRegistry, Option<String>)> {
     let manual_clock = persistent
         .test_bench
         .then(|| Arc::new(ManualClock::new(fixed_test_time())));
@@ -375,11 +395,13 @@ fn restore_programmers(
              the rest were written out"
         );
     }
-    if let Some(session) = collapse.canonical {
-        restore_programmer(&programmers, session);
-    }
+    let recovery = collapse
+        .canonical
+        .map(|session| restore_programmer(&programmers, session, &persistent.data_dir))
+        .transpose()?
+        .flatten();
     tracing::info!("persisted programmers restored");
-    Ok((manual_clock, programmers))
+    Ok((manual_clock, programmers, recovery))
 }
 
 fn application_clock(manual_clock: Option<&Arc<ManualClock>>) -> SharedClock {
@@ -388,341 +410,100 @@ fn application_clock(manual_clock: Option<&Arc<ManualClock>>) -> SharedClock {
         .unwrap_or_else(|| Arc::new(SystemClock))
 }
 
-fn restore_programmer(programmers: &ProgrammerRegistry, session: light_show::PersistedSession) {
+fn restore_programmer(
+    programmers: &ProgrammerRegistry,
+    session: light_show::PersistedSession,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<Option<String>> {
     let parsed = (|| -> anyhow::Result<light_programmer::ProgrammerState> {
         let mut value = serde_json::from_str::<serde_json::Value>(&session.programmer_json)?;
         migrate_frozen_group_selection(&mut value);
         migrate_retired_programmer_attributes(&mut value).map_err(anyhow::Error::msg)?;
-        Ok(serde_json::from_value(value)?)
+        check_programmer(&value, supported_programming_contract())?;
+        let programmer: light_programmer::ProgrammerState = serde_json::from_value(value)?;
+        anyhow::ensure!(
+            programmer.required_programming_contract() <= supported_programming_contract(),
+            "stored Programmer requires programming contract {}; this runtime supports {}",
+            programmer.required_programming_contract(),
+            supported_programming_contract()
+        );
+        programmer
+            .validate_programming()
+            .map_err(anyhow::Error::msg)?;
+        Ok(programmer)
     })();
     match parsed {
         Ok(mut programmer) => {
             programmer.connected = false;
             programmers.restore(programmer);
+            Ok(None)
         }
-        Err(error) => {
-            tracing::warn!(session_id=%session.id.0, %error, "ignoring invalid persisted programmer")
-        }
-    }
-}
-
-/// Normalizes retired canonical identities in durable Programmer and Preload state. This stays a
-/// scoped JSON migration instead of changing `AttributeKey` deserialization globally: fixture
-/// profiles deliberately retain their fixture-facing source identity.
-fn migrate_retired_programmer_attributes(value: &mut serde_json::Value) -> Result<(), String> {
-    let mut migrated = value.clone();
-    migrate_retired_programmer_attributes_in_place(&mut migrated)?;
-    *value = migrated;
-    Ok(())
-}
-
-fn migrate_retired_programmer_attributes_in_place(
-    value: &mut serde_json::Value,
-) -> Result<(), String> {
-    let Some(programmer) = value.as_object_mut() else {
-        return Ok(());
-    };
-    for field in [
-        "values",
-        "dynamic_values",
-        "preload_pending",
-        "preload_active",
-        "preload_dynamic_pending",
-        "preload_dynamic_active",
-    ] {
-        if let Some(values) = programmer
-            .get_mut(field)
-            .and_then(serde_json::Value::as_array_mut)
-        {
-            migrate_programmer_value_records(values, field)?;
-        }
-    }
-    for field in [
-        "group_values",
-        "preload_group_pending",
-        "preload_group_active",
-    ] {
-        if let Some(groups) = programmer
-            .get_mut(field)
-            .and_then(serde_json::Value::as_object_mut)
-        {
-            for (group_id, attributes) in groups {
-                let Some(attributes) = attributes.as_object_mut() else {
-                    continue;
-                };
-                migrate_programmer_attribute_map(attributes, &format!("{field}/{group_id}"))?;
-            }
-        }
-    }
-    for history in ["undo", "redo"] {
-        if let Some(snapshots) = programmer
-            .get_mut(history)
-            .and_then(serde_json::Value::as_array_mut)
-        {
-            for snapshot in snapshots {
-                migrate_retired_programmer_attributes_in_place(snapshot)?;
-            }
-        }
-    }
-    migrate_embedded_programmer_attributes(value, "programmer")?;
-    Ok(())
-}
-
-fn migrate_programmer_value_records(
-    values: &mut [serde_json::Value],
-    path: &str,
-) -> Result<(), String> {
-    let mut addresses = std::collections::HashMap::new();
-    for (index, value) in values.iter().enumerate() {
-        let Some(body) = value.as_object() else {
-            continue;
-        };
-        let Some(fixture_id) = body.get("fixture_id").and_then(serde_json::Value::as_str) else {
-            continue;
-        };
-        let Some(attribute) = body.get("attribute").and_then(serde_json::Value::as_str) else {
-            continue;
-        };
-        let canonical = canonical_migration(attribute).map_or(attribute, |migration| migration.0);
-        let key = (fixture_id.to_owned(), canonical.to_owned());
-        if let Some(previous) = addresses.insert(key, attribute.to_owned())
-            && previous != attribute
-        {
-            return Err(format!(
-                "attribute migration conflict at {path}/{index}: fixture {fixture_id} stores both legacy {attribute} and canonical {canonical} values"
-            ));
-        }
-    }
-    for value in values {
-        let Some(attribute) = value
-            .get("attribute")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned)
-        else {
-            continue;
-        };
-        let Some((canonical, transform)) = canonical_migration(&attribute) else {
-            continue;
-        };
-        if let Some(stored) = value.get_mut("value") {
-            if path.contains("dynamic") {
-                migrate_programmer_dynamic_value(stored, transform, path)?;
-            } else {
-                migrate_programmer_attribute_value(stored, transform, path)?;
-            }
-        } else if transform == light_core::CanonicalAttributeTransform::InvertNormalized {
-            return Err(format!(
-                "attribute migration failed at {path}: value is missing"
-            ));
-        }
-        value["attribute"] = serde_json::Value::String(canonical.into());
-    }
-    Ok(())
-}
-
-fn migrate_programmer_attribute_map(
-    attributes: &mut serde_json::Map<String, serde_json::Value>,
-    path: &str,
-) -> Result<(), String> {
-    let migrations = attributes
-        .keys()
-        .filter_map(|source| {
-            canonical_migration(source)
-                .map(|(target, transform)| (source.clone(), target, transform))
-        })
-        .collect::<Vec<_>>();
-    for (source, target, _) in &migrations {
-        if source != target && attributes.contains_key(*target) {
-            return Err(format!(
-                "attribute migration conflict at {path}: stored Group values contain both legacy {source} and canonical {target}"
-            ));
-        }
-    }
-    for (source, target, transform) in migrations {
-        let mut stored = attributes
-            .remove(&source)
-            .expect("collected Programmer migration source remains present");
-        if stored.get("kind").is_some() {
-            migrate_programmer_attribute_value(&mut stored, transform, path)?;
-        } else if let Some(value) = stored.get_mut("value") {
-            migrate_programmer_attribute_value(value, transform, path)?;
-        } else if transform == light_core::CanonicalAttributeTransform::InvertNormalized {
-            return Err(format!(
-                "attribute migration failed at {path}/{source}: Group value payload is missing"
-            ));
-        }
-        attributes.insert(target.into(), stored);
-    }
-    Ok(())
-}
-
-fn migrate_programmer_dynamic_value(
-    value: &mut serde_json::Value,
-    transform: light_core::CanonicalAttributeTransform,
-    path: &str,
-) -> Result<(), String> {
-    match value.get("type").and_then(serde_json::Value::as_str) {
-        Some("static") => {
-            let stored = value.get_mut("value").ok_or_else(|| {
-                format!("attribute migration failed at {path}: static value is missing")
-            })?;
-            migrate_programmer_attribute_value(stored, transform, path)
-        }
-        Some("fix_at")
-            if transform == light_core::CanonicalAttributeTransform::InvertNormalized =>
-        {
-            let stored = value
-                .get("value")
-                .and_then(serde_json::Value::as_f64)
-                .ok_or_else(|| {
-                    format!("attribute migration failed at {path}: Fix At value must be a number")
-                })?;
-            value["value"] = serde_json::to_value(light_core::transform_canonical_normalized(
-                stored as f32,
-                transform,
-            ))
-            .map_err(|error| error.to_string())?;
-            Ok(())
-        }
-        _ => Ok(()),
-    }
-}
-
-fn migrate_programmer_attribute_value(
-    value: &mut serde_json::Value,
-    transform: light_core::CanonicalAttributeTransform,
-    path: &str,
-) -> Result<(), String> {
-    if transform == light_core::CanonicalAttributeTransform::Identity {
-        return Ok(());
-    }
-    let stored = value.clone();
-    let mut typed = serde_json::from_value::<light_core::AttributeValue>(value.clone())
-        .map_err(|error| format!("attribute migration failed at {path}: {error}"))?;
-    let before = serde_json::to_value(&typed).map_err(|error| error.to_string())?;
-    light_core::transform_canonical_value(&mut typed, transform)
-        .map_err(|error| format!("attribute migration failed at {path}: {error}"))?;
-    let after = serde_json::to_value(typed).map_err(|error| error.to_string())?;
-    *value = stored;
-    light_application::lossless_json::apply_delta(value, &before, &after);
-    Ok(())
-}
-
-fn migrate_embedded_programmer_attributes(
-    value: &mut serde_json::Value,
-    path: &str,
-) -> Result<(), String> {
-    let looks_like_dynamic = value.get("target_binding").is_some() && value.get("lanes").is_some();
-    if looks_like_dynamic
-        && let Ok(mut definition) =
-            serde_json::from_value::<light_dynamics::DynamicDefinition>(value.clone())
-        && light_dynamics::validate_definition(&definition).is_ok()
-    {
-        let before = serde_json::to_value(&definition).map_err(|error| error.to_string())?;
-        light_dynamics::migrate_canonical_attributes(&mut definition)?;
-        let after = serde_json::to_value(definition).map_err(|error| error.to_string())?;
-        light_application::lossless_json::apply_delta(value, &before, &after);
-    }
-    if let Some(body) = value.as_object_mut() {
-        if body
-            .get("attribute")
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(is_legacy_strobe_attribute)
-        {
-            body.insert(
-                "attribute".into(),
-                serde_json::Value::String("shutter".into()),
-            );
-        }
-        for (field, value) in body {
-            migrate_embedded_programmer_attributes(value, &format!("{path}/{field}"))?;
-        }
-    } else if let Some(values) = value.as_array_mut() {
-        for (index, value) in values.iter_mut().enumerate() {
-            migrate_embedded_programmer_attributes(value, &format!("{path}/{index}"))?;
-        }
-    }
-    Ok(())
-}
-
-fn is_legacy_strobe_attribute(attribute: &str) -> bool {
-    matches!(
-        light_core::canonical_attribute_migration_id(attribute),
-        Some(("shutter", light_core::CanonicalAttributeTransform::Identity))
-    )
-}
-
-fn canonical_migration(
-    attribute: &str,
-) -> Option<(&'static str, light_core::CanonicalAttributeTransform)> {
-    light_core::canonical_attribute_migration_id(attribute)
-}
-
-/// Programmers persisted before the DEGRP rework may carry the removed `frozen_group` selection
-/// expression (including inside undo/redo snapshots). Dereference it to the concrete fixtures the
-/// selection already resolved to, matching current DEGRP semantics.
-fn migrate_frozen_group_selection(value: &mut serde_json::Value) {
-    let Some(object) = value.as_object_mut() else {
-        return;
-    };
-    let frozen = object
-        .get("selection_expression")
-        .and_then(|expression| expression.get("type"))
-        .and_then(serde_json::Value::as_str)
-        == Some("frozen_group");
-    if frozen {
-        let items = object
-            .get("selected")
-            .and_then(serde_json::Value::as_array)
-            .map(|selected| {
-                selected
-                    .iter()
-                    .map(|fixture_id| {
-                        serde_json::json!({"type": "fixture", "fixture_id": fixture_id})
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        object.insert(
-            "selection_expression".into(),
-            serde_json::json!({"type": "sources", "items": items}),
-        );
-    }
-    for history in ["undo", "redo"] {
-        if let Some(snapshots) = object
-            .get_mut(history)
-            .and_then(serde_json::Value::as_array_mut)
-        {
-            for snapshot in snapshots {
-                migrate_frozen_group_selection(snapshot);
-            }
-        }
+        Err(error) => runtime_recovery::preserve(
+            data_dir,
+            "Programmer",
+            session.id.0,
+            &session.programmer_json,
+            &error,
+        )
+        .map(Some),
     }
 }
 
 fn load_engine(
     persistent: &PersistentState,
     programmers: &ProgrammerRegistry,
-) -> anyhow::Result<(Arc<Engine>, Option<String>)> {
-    let engine = Arc::new(Engine::new(programmers.clone()));
-    let active_show_error = compile_active_show(&engine, persistent);
+    programmer_recovery: Option<String>,
+) -> anyhow::Result<(
+    Arc<Engine>,
+    Arc<Mutex<light_dynamics::DynamicRuntime>>,
+    Option<String>,
+)> {
+    let engine = Arc::new(Engine::with_programming_contract_support(
+        programmers.clone(),
+        supported_programming_contract(),
+    ));
+    let (dynamics, active_show_error) = match programmer_recovery {
+        Some(error) => (None, Some(error)),
+        None => match compile_active_show(&engine, persistent) {
+            Ok(dynamics) => (dynamics, None),
+            Err(error) => (None, Some(error)),
+        },
+    };
+    // Failed or absent shows retain the empty Engine and its empty source catalogue. Never carry
+    // a rejected candidate's models into Programmer reconstruction or checkpoint recovery.
+    let dynamics = Arc::new(Mutex::new(dynamics.unwrap_or_else(|| {
+        light_dynamics::DynamicRuntime::with_native_color_models(
+            engine.supported_programming_contract(),
+            engine.snapshot().native_color_sources.clone(),
+        )
+    })));
     tracing::info!("engine snapshot ready");
     configure_engine(&engine, &persistent.configuration)?;
-    restore_active_playbacks(persistent, &engine, active_show_error.as_deref())?;
-    Ok((engine, active_show_error))
+    let playback_recovery =
+        restore_active_playbacks(persistent, &engine, active_show_error.as_deref())?;
+    let active_show_error = active_show_error.or(playback_recovery);
+    Ok((engine, dynamics, active_show_error))
 }
 
-fn compile_active_show(engine: &Engine, persistent: &PersistentState) -> Option<String> {
-    let active = persistent.active_show.as_ref()?;
+fn compile_active_show(
+    engine: &Engine,
+    persistent: &PersistentState,
+) -> Result<Option<light_dynamics::DynamicRuntime>, String> {
+    let Some(active) = persistent.active_show.as_ref() else {
+        return Ok(None);
+    };
     tracing::info!(show=%active.name, "compiling active show");
-    let message = compile_active_show_for_startup(
+    load_active_show_runtime_for_startup(
         engine,
         active,
         &persistent.data_dir,
         persistent.configuration.backup_retention,
-    )?;
-    tracing::error!(show=%active.name, error=%message, "starting in show recovery mode");
-    Some(message)
+    )
+    .map(Some)
+    .map_err(|message| {
+        tracing::error!(show=%active.name, error=%message, "starting in show recovery mode");
+        message
+    })
 }
 
 fn configure_engine(engine: &Engine, configuration: &DeskConfiguration) -> anyhow::Result<()> {
@@ -741,27 +522,47 @@ fn restore_active_playbacks(
     persistent: &PersistentState,
     engine: &Engine,
     recovery_error: Option<&str>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<String>> {
     let Some(show) = available_show(persistent, recovery_error) else {
-        return Ok(());
+        return Ok(None);
     };
     let Some(serialized) = persistent
         .desk
         .setting(&active_playbacks_setting(show.id))?
     else {
-        return Ok(());
+        return Ok(None);
     };
-    match serde_json::from_str::<Vec<light_playback::ActivePlayback>>(&serialized) {
+    let parsed = (|| -> anyhow::Result<Vec<light_playback::ActivePlayback>> {
+        check_runtime_payload("Playback", &serialized, supported_programming_contract())?;
+        let playbacks = serde_json::from_str::<Vec<light_playback::ActivePlayback>>(&serialized)?;
+        let required = playbacks
+            .iter()
+            .map(light_playback::ActivePlayback::required_programming_contract)
+            .max()
+            .unwrap_or(0);
+        anyhow::ensure!(
+            required <= engine.supported_programming_contract(),
+            "stored Playback runtime requires programming contract {required}; this runtime supports {}",
+            engine.supported_programming_contract()
+        );
+        Ok(playbacks)
+    })();
+    match parsed {
         Ok(playbacks) => {
             engine
                 .execute_playback(EnginePlaybackCommand::RestoreActive(playbacks))
                 .expect("restoring validated Playback state is infallible");
+            Ok(None)
         }
-        Err(error) => {
-            tracing::warn!(show_id=?show.id, %error, "ignoring invalid persisted playback runtime")
-        }
+        Err(error) => runtime_recovery::preserve(
+            &persistent.data_dir,
+            "Playback",
+            show.id.0,
+            &serialized,
+            &error,
+        )
+        .map(Some),
     }
-    Ok(())
 }
 
 fn available_show<'a>(
@@ -776,29 +577,43 @@ fn available_show<'a>(
 
 fn load_output_runtime(
     persistent: &PersistentState,
+    programmers: &ProgrammerRegistry,
     recovery_error: Option<&str>,
-) -> anyhow::Result<PersistedOutputRuntime> {
+) -> anyhow::Result<(PersistedOutputRuntime, Option<String>)> {
     let Some(show) = available_show(persistent, recovery_error) else {
-        return Ok(PersistedOutputRuntime::default());
+        return Ok((PersistedOutputRuntime::default(), None));
     };
     let Some(serialized) = persistent.desk.setting(&output_runtime_setting(show.id))? else {
-        return Ok(PersistedOutputRuntime::default());
+        return Ok((PersistedOutputRuntime::default(), None));
     };
-    Ok(parse_output_runtime(show, &serialized))
-}
-
-fn parse_output_runtime(show: &ShowEntry, serialized: &str) -> PersistedOutputRuntime {
-    match serde_json::from_str::<PersistedOutputRuntime>(serialized) {
-        Ok(runtime) if runtime.is_valid() => runtime,
-        Ok(_) => {
-            tracing::warn!(show_id=?show.id, "ignoring invalid persisted output runtime");
-            PersistedOutputRuntime::default()
+    let candidate = parse_output_runtime(&serialized).and_then(|mut runtime| {
+        if let Some(snapshot) = &mut runtime.dynamic_runtime {
+            super::normalize_programmer_dynamic_checkpoint(programmers, snapshot)?;
         }
+        // Legacy controller-key normalization must not leave a previously valid source
+        // catalogue pointing at different retained expression/controller identities.
+        runtime.validate_for_support(supported_programming_contract())?;
+        Ok(runtime)
+    });
+    match candidate {
+        Ok(runtime) => Ok((runtime, None)),
         Err(error) => {
-            tracing::warn!(show_id=?show.id, %error, "ignoring invalid persisted output runtime");
-            PersistedOutputRuntime::default()
+            let message = runtime_recovery::preserve(
+                &persistent.data_dir,
+                "Output",
+                show.id.0,
+                &serialized,
+                &error,
+            )?;
+            Ok((PersistedOutputRuntime::default(), Some(message)))
         }
     }
+}
+
+fn parse_output_runtime(serialized: &str) -> anyhow::Result<PersistedOutputRuntime> {
+    check_runtime_payload("Output", serialized, supported_programming_contract())?;
+    // Embedded/deleted Dynamic definitions are independent of the active show's gate.
+    PersistedOutputRuntime::decode_for_support(serialized, supported_programming_contract())
 }
 
 fn apply_output_runtime(engine: &Engine, runtime: &PersistedOutputRuntime) {
@@ -836,336 +651,109 @@ fn create_speed_groups(configuration: &DeskConfiguration) -> Arc<Mutex<[SpeedGro
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{migrate_frozen_group_selection, migrate_retired_programmer_attributes};
+mod tests;
 
-    /// Restart recovery of a durable programmer persisted before the DEGRP rework: the removed
-    /// `frozen_group` selection expression (top level and inside undo/redo snapshots) must map to
-    /// the dereferenced `sources` form instead of dropping the whole programmer.
-    #[test]
-    fn legacy_frozen_group_programmer_snapshots_restore_as_dereferenced_sources() {
-        let fixture_a = uuid::Uuid::new_v4();
-        let fixture_b = uuid::Uuid::new_v4();
-        let mut value = serde_json::json!({
-            "id": uuid::Uuid::new_v4(),
-            "session_id": uuid::Uuid::new_v4(),
-            "user_id": uuid::Uuid::new_v4(),
-            "priority": 0,
-            "selected": [fixture_a, fixture_b],
-            "selection_expression": {"type": "frozen_group", "group_id": "7", "source_revision": 4},
-            "values": [],
-            "connected": true,
-            "last_activity": "2026-07-20T09:30:00Z",
-            "undo": [{
-                "selected": [fixture_a],
-                "selection_expression": {"type": "frozen_group", "group_id": "7", "source_revision": 3},
-            }],
-        });
-        migrate_frozen_group_selection(&mut value);
-        let programmer: light_programmer::ProgrammerState =
-            serde_json::from_value(value).expect("legacy frozen_group programmer deserializes");
-        let expected = |fixtures: &[uuid::Uuid]| light_programmer::SelectionExpression::Sources {
-            items: fixtures
-                .iter()
-                .map(|id| light_programmer::SelectionReference::Fixture {
-                    fixture_id: light_core::FixtureId(*id),
-                })
-                .collect(),
+/// Source-only originals, captured before normalization or any success-path persistence.
+/// Session authentication data is deliberately excluded from this type.
+#[derive(serde::Serialize)]
+pub(super) struct OriginalStartupOwners {
+    show_id: Option<light_core::ShowId>,
+    programmers: Vec<OriginalStartupProgrammer>,
+    playback: Option<String>,
+    output: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct OriginalStartupProgrammer {
+    session_id: light_core::SessionId,
+    programmer_json: String,
+}
+
+impl OriginalStartupOwners {
+    pub(super) fn capture(persistent: &PersistentState) -> anyhow::Result<Self> {
+        let show_id = persistent.active_show.as_ref().map(|show| show.id);
+        let programmers = persistent
+            .desk
+            .persisted_sessions()?
+            .into_iter()
+            .map(|session| OriginalStartupProgrammer {
+                session_id: session.id,
+                programmer_json: session.programmer_json,
+            })
+            .collect();
+        let (playback, output) = match show_id {
+            Some(show) => (
+                persistent.desk.setting(&active_playbacks_setting(show))?,
+                persistent.desk.setting(&output_runtime_setting(show))?,
+            ),
+            None => (None, None),
         };
-        assert_eq!(
-            programmer.selection_expression,
-            Some(expected(&[fixture_a, fixture_b]))
-        );
-        assert_eq!(
-            programmer.undo[0].selection_expression,
-            Some(expected(&[fixture_a]))
-        );
-        assert_eq!(
-            programmer.selected,
-            vec![
-                light_core::FixtureId(fixture_a),
-                light_core::FixtureId(fixture_b)
-            ]
-        );
+        Ok(Self {
+            show_id,
+            programmers,
+            playback,
+            output,
+        })
     }
+}
 
-    #[test]
-    fn retired_strobe_programmer_values_migrate_across_normal_preload_dynamic_and_history_state() {
-        let fixture = uuid::Uuid::new_v4();
-        let mut value = serde_json::json!({
-            "values": [{"fixture_id": fixture, "attribute": "strobe", "value": 0.4}],
-            "dynamic_values": [{
-                "fixture_id": fixture,
-                "attribute": "strobe",
-                "value": {"type": "dynamic_on", "dynamic": {
-                    "embedded_fallback": {"definition": {
-                        "target_binding": {"type": "targetless"},
-                        "lanes": [{
-                            "id": uuid::Uuid::new_v4(),
-                            "attribute": "strobe",
-                            "keyframes": {"points": [{"source": {
-                                "type": "preset", "attribute": "strobe"
-                            }}]}
-                        }],
-                        "phase": {},
-                        "speed": {}
-                    }}
-                }}
-            }],
-            "preload_pending": [{"fixture_id": fixture, "attribute": "strobe"}],
-            "group_values": {"front": {"strobe": {"value": 0.5}}},
-            "preload_group_active": {"front": {"strobe": {"value": 0.6}}},
-            "undo": [{
-                "values": [{"fixture_id": fixture, "attribute": "strobe"}],
-                "group_values": {"front": {"strobe": {"value": 0.3}}}
-            }],
-            "future_programmer": {"kept": true}
-        });
-
-        migrate_retired_programmer_attributes(&mut value).unwrap();
-
-        assert_eq!(value["values"][0]["attribute"], "shutter");
-        assert_eq!(value["dynamic_values"][0]["attribute"], "shutter");
-        assert_eq!(
-            value["dynamic_values"][0]["value"]["dynamic"]["embedded_fallback"]["definition"]["lanes"]
-                [0]["attribute"],
-            "shutter"
-        );
-        assert_eq!(
-            value["dynamic_values"][0]["value"]["dynamic"]["embedded_fallback"]["definition"]["lanes"]
-                [0]["keyframes"]["points"][0]["source"]["attribute"],
-            "shutter"
-        );
-        assert_eq!(value["preload_pending"][0]["attribute"], "shutter");
-        assert_eq!(value["group_values"]["front"]["shutter"]["value"], 0.5);
-        assert_eq!(
-            value["preload_group_active"]["front"]["shutter"]["value"],
-            0.6
-        );
-        assert_eq!(value["undo"][0]["values"][0]["attribute"], "shutter");
-        assert_eq!(
-            value["undo"][0]["group_values"]["front"]["shutter"]["value"],
-            0.3
-        );
-        assert_eq!(
-            value["future_programmer"],
-            serde_json::json!({"kept": true})
-        );
-
-        let once = value.clone();
-        migrate_retired_programmer_attributes(&mut value).unwrap();
-        assert_eq!(value, once, "Programmer migration must be idempotent");
+/// Process startup only, before rendering/control inputs/server tasks begin.
+/// Live show activation retains its separate destination preflight boundary.
+pub(super) fn finalize_restored_owners_for_startup(
+    state: &super::AppState,
+    originals: OriginalStartupOwners,
+) -> anyhow::Result<()> {
+    if state.active_show.error().is_some() {
+        return Ok(());
     }
-
-    #[test]
-    fn retired_strobe_programmer_conflict_preserves_the_original_json() {
-        let fixture = uuid::Uuid::new_v4();
-        let original = serde_json::json!({
-            "values": [
-                {"fixture_id": fixture, "attribute": "strobe"},
-                {"fixture_id": fixture, "attribute": "shutter"}
-            ]
-        });
-        let mut value = original.clone();
-
-        let error = migrate_retired_programmer_attributes(&mut value).unwrap_err();
-
-        assert!(error.contains("attribute migration conflict at values/1"));
-        assert_eq!(value, original);
-    }
-
-    #[test]
-    fn legacy_cmy_programmer_values_migrate_inverse_across_normal_preload_and_dynamic_state() {
-        let fixture = uuid::Uuid::new_v4();
-        let mut value = serde_json::json!({
-            "values": [{
-                "fixture_id": fixture,
-                "attribute": "color.cyan",
-                "value": {"kind":"normalized","value":0.2}
-            }, {
-                "fixture_id": fixture,
-                "attribute": "color.cold_white",
-                "value": {"kind":"normalized","value":0.35,"future_value":"kept"}
-            }, {
-                "fixture_id": fixture,
-                "attribute": "frost.1",
-                "value": {"kind":"normalized","value":0.55}
-            }],
-            "dynamic_values": [{
-                "fixture_id": fixture,
-                "attribute": "color.magenta",
-                "value": {"type":"fix_at","value":0.3,"timing":{}}
-            }],
-            "preload_pending": [{
-                "fixture_id": fixture,
-                "attribute": "color.yellow",
-                "value": {"kind":"spread","value":[0.0,0.25,1.0]}
-            }, {
-                "fixture_id": fixture,
-                "attribute": "color.warm_white",
-                "value": {"kind":"normalized","value":0.65}
-            }],
-            "group_values": {"front": {"color.cyan": {
-                "value":{"kind":"normalized","value":0.4},
-                "changed_at":"2026-08-04T00:00:00Z"
-            }}},
-            "preload_group_active": {"front": {"color.magenta": {
-                "kind":"normalized","value":0.1
-            }}},
-            "future_programmer": {"kept":true}
-        });
-
-        migrate_retired_programmer_attributes(&mut value).unwrap();
-
-        assert_eq!(value["values"][0]["attribute"], "color.red");
-        assert_migrated_number(&value["values"][0]["value"]["value"], 0.8);
-        assert_eq!(value["values"][1]["attribute"], "color.white");
-        assert_migrated_number(&value["values"][1]["value"]["value"], 0.35);
-        assert_eq!(value["values"][1]["value"]["future_value"], "kept");
-        assert_eq!(value["values"][2]["attribute"], "softness");
-        assert_migrated_number(&value["values"][2]["value"]["value"], 0.55);
-        assert_eq!(value["dynamic_values"][0]["attribute"], "color.green");
-        assert_migrated_number(&value["dynamic_values"][0]["value"]["value"], 0.7);
-        assert_eq!(value["preload_pending"][0]["attribute"], "color.blue");
-        let spread = value["preload_pending"][0]["value"]["value"]
-            .as_array()
-            .unwrap();
-        for (actual, expected) in spread.iter().zip([1.0, 0.75, 0.0]) {
-            assert_migrated_number(actual, expected);
+    let normalized = super::playback_exclusion_normalization::
+        normalize_restored_virtual_playback_exclusions_deferred(state)
+        .map_err(|error| anyhow::anyhow!(error.message))?;
+    match state
+        .output
+        .finalize_restored_owners(&state.playback.render_capability())
+    {
+        Ok(()) => {
+            if normalized.persistence_pending {
+                if let Err(error) = super::persist_active_playbacks(state) {
+                    tracing::warn!(error=%error.message,
+                        "validated restored Playback normalization persistence is pending");
+                }
+            }
+            Ok(())
         }
-        assert_eq!(value["preload_pending"][1]["attribute"], "color.amber");
-        assert_migrated_number(&value["preload_pending"][1]["value"]["value"], 0.65);
-        assert_migrated_number(
-            &value["group_values"]["front"]["color.red"]["value"]["value"],
-            0.6,
-        );
-        assert_migrated_number(
-            &value["preload_group_active"]["front"]["color.green"]["value"],
-            0.9,
-        );
-        assert_eq!(value["future_programmer"], serde_json::json!({"kept":true}));
-    }
-
-    #[test]
-    fn legacy_position_movement_programmer_values_migrate_and_conflicts_stay_atomic() {
-        let fixture = uuid::Uuid::new_v4();
-        let mut value = serde_json::json!({
-            "values": [{
-                "fixture_id": fixture,
-                "attribute": "fixture.mspeed",
-                "value": {"kind":"normalized","value":0.25}
-            }],
-            "preload_pending": [{
-                "fixture_id": fixture,
-                "attribute": "fixture.pan_tilt_speed_time",
-                "value": {"kind":"normalized","value":0.75}
-            }]
-        });
-        migrate_retired_programmer_attributes(&mut value).unwrap();
-        assert_eq!(value["values"][0]["attribute"], "position.movement");
-        assert_eq!(
-            value["preload_pending"][0]["attribute"],
-            "position.movement"
-        );
-
-        let original = serde_json::json!({
-            "values": [
-                {"fixture_id": fixture, "attribute": "pan.time"},
-                {"fixture_id": fixture, "attribute": "tilt.time"}
-            ]
-        });
-        let mut conflict = original.clone();
-        let error = migrate_retired_programmer_attributes(&mut conflict).unwrap_err();
-        assert!(error.contains("attribute migration conflict"));
-        assert!(error.contains("position.movement"));
-        assert_eq!(conflict, original);
-    }
-
-    #[test]
-    fn legacy_media_programmer_values_migrate_and_conflicts_stay_atomic() {
-        let fixture = uuid::Uuid::new_v4();
-        let mut value = serde_json::json!({
-            "values": [{
-                "fixture_id": fixture,
-                "attribute": "media.opacity",
-                "value": {"kind":"normalized","value":0.25}
-            }],
-            "preload_pending": [{
-                "fixture_id": fixture,
-                "attribute": "media.rotation",
-                "value": {"kind":"normalized","value":0.75}
-            }, {
-                "fixture_id": fixture,
-                "attribute": "media.tint",
-                "value": {"kind":"color_xyz","value":{"x":0.2,"y":0.3,"z":0.4}}
-            }]
-        });
-        migrate_retired_programmer_attributes(&mut value).unwrap();
-        assert_eq!(value["values"][0]["attribute"], "intensity");
-        assert_eq!(
-            value["preload_pending"][0]["attribute"],
-            "position.rotation"
-        );
-        assert_eq!(value["preload_pending"][1]["attribute"], "color");
-
-        for (original, target) in [
-            (
-                serde_json::json!({
-                    "values": [
-                        {"fixture_id": fixture, "attribute": "media.opacity"},
-                        {"fixture_id": fixture, "attribute": "intensity"}
-                    ]
-                }),
-                "intensity",
-            ),
-            (
-                serde_json::json!({
-                    "values": [
-                        {"fixture_id": fixture, "attribute": "media.tint"},
-                        {"fixture_id": fixture, "attribute": "color"}
-                    ]
-                }),
-                "color",
-            ),
-        ] {
-            let mut conflict = original.clone();
-            let error = migrate_retired_programmer_attributes(&mut conflict).unwrap_err();
-            assert!(error.contains("attribute migration conflict"));
-            assert!(error.contains(target));
-            assert_eq!(conflict, original);
+        Err(error) => {
+            // Prepare the complete empty pair before touching Programmer or published state.
+            let prepared = state.output.prepare_snapshot(Default::default())?;
+            let checkpoint = super::dynamic_source_origins::DynamicRuntimeSourceCheckpoint {
+                runtime: Default::default(),
+                origins: Some(
+                    super::dynamic_source_origins::DynamicSourceOrigins::default().snapshot(),
+                ),
+            };
+            let prepared = state
+                .output
+                .prepare_snapshot_restore(prepared, checkpoint)?;
+            let serialized = serde_json::to_string(&originals)?;
+            let message = runtime_recovery::preserve(
+                state.installation.data_dir(),
+                "Dynamic owners",
+                originals
+                    .show_id
+                    .map(|id| id.0)
+                    .unwrap_or_else(uuid::Uuid::nil),
+                &serialized,
+                &anyhow::anyhow!(error.to_string()),
+            )?;
+            // Reporting must succeed before the irreversible in-memory recovery commit.
+            // This guard prevents controls/shutdown from overwriting either saved checkpoint.
+            state.active_show.set_error(Some(message));
+            state.programming.reset_all();
+            state
+                .output
+                .install_prepared_snapshot_releasing_playback(prepared);
+            super::restore_prevalidated_output_controls(state, &PersistedOutputRuntime::default());
+            Ok(())
         }
-    }
-
-    #[test]
-    fn legacy_endless_axis_programmer_values_migrate_and_conflicts_stay_atomic() {
-        let fixture = uuid::Uuid::new_v4();
-        let mut value = serde_json::json!({
-            "values": [
-                {"fixture_id": fixture, "attribute": "pan.continuous"},
-                {"fixture_id": fixture, "attribute": "tilt.continuous"}
-            ]
-        });
-        migrate_retired_programmer_attributes(&mut value).unwrap();
-        assert_eq!(value["values"][0]["attribute"], "pan");
-        assert_eq!(value["values"][1]["attribute"], "tilt");
-
-        for (source, target) in [("pan.continuous", "pan"), ("tilt.continuous", "tilt")] {
-            let original = serde_json::json!({
-                "values": [
-                    {"fixture_id": fixture, "attribute": source},
-                    {"fixture_id": fixture, "attribute": target}
-                ]
-            });
-            let mut conflict = original.clone();
-            let error = migrate_retired_programmer_attributes(&mut conflict).unwrap_err();
-            assert!(error.contains("attribute migration conflict"));
-            assert!(error.contains(target));
-            assert_eq!(conflict, original);
-        }
-    }
-
-    fn assert_migrated_number(value: &serde_json::Value, expected: f64) {
-        let actual = value.as_f64().expect("expected JSON number");
-        assert!((actual - expected).abs() < 1.0e-6, "{actual} != {expected}");
     }
 }

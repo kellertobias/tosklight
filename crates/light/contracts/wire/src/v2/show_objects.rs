@@ -2,9 +2,9 @@
 
 use super::{
     dynamics::{
-        DynamicActivationBoundaryProjection, DynamicPhaseSpreadModeProjection,
-        DynamicRationalProjection, DynamicRunModeProjection,
-        DynamicSpatialMappingOverrideProjection,
+        DynamicActivationBoundaryProjection, DynamicLaneProjection,
+        DynamicPhaseSpreadModeProjection, DynamicRandomGroupProjection, DynamicRationalProjection,
+        DynamicRunModeProjection, DynamicSpatialMappingOverrideProjection,
     },
     events::{OutputDeliveryMode, OutputProtocol, OutputRoute, OutputRouteChange},
 };
@@ -258,8 +258,8 @@ pub struct DynamicUpdateActionRequest {
     pub intent: DynamicUpdateIntent,
 }
 
-/// One deliberate editor mutation. Domain-shaped payloads remain JSON at the transport package
-/// boundary and are decoded and validated into `light-dynamics` types by the server adapter.
+/// One deliberate editor mutation. Typed lane and range input is validated at the wire boundary;
+/// the domain validates cross-lane and fixture-model invariants before publication.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DynamicUpdateIntent {
@@ -280,14 +280,12 @@ pub enum DynamicUpdateIntent {
         spatial_mapping: DynamicSpatialMappingOverrideProjection,
     },
     AddLane {
-        #[ts(type = "unknown")]
-        lane: serde_json::Value,
+        lane: DynamicLaneProjection,
         index: Option<usize>,
     },
     ReplaceLane {
         lane_id: Uuid,
-        #[ts(type = "unknown")]
-        lane: serde_json::Value,
+        lane: DynamicLaneProjection,
     },
     DeleteLane {
         lane_id: Uuid,
@@ -321,13 +319,11 @@ pub enum DynamicUpdateIntent {
         boundary: DynamicActivationBoundaryProjection,
     },
     AddRandomGroup {
-        #[ts(type = "unknown")]
-        group: serde_json::Value,
+        group: DynamicRandomGroupProjection,
     },
     ReplaceRandomGroup {
         group_id: Uuid,
-        #[ts(type = "unknown")]
-        group: serde_json::Value,
+        group: DynamicRandomGroupProjection,
     },
     DeleteRandomGroup {
         group_id: Uuid,

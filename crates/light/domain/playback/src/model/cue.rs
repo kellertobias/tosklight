@@ -335,8 +335,10 @@ pub(crate) fn cue_completion_millis(
             light_dynamics::DynamicSemanticValue::Static { timing, .. }
             | light_dynamics::DynamicSemanticValue::DynamicOn { timing, .. }
             | light_dynamics::DynamicSemanticValue::DynamicOff { timing, .. }
-            | light_dynamics::DynamicSemanticValue::FixAt { timing, .. } => *timing,
-            light_dynamics::DynamicSemanticValue::Release => Default::default(),
+            | light_dynamics::DynamicSemanticValue::FixAt { timing, .. }
+            | light_dynamics::DynamicSemanticValue::ProgrammingFixAt { timing, .. } => *timing,
+            light_dynamics::DynamicSemanticValue::Release
+            | light_dynamics::DynamicSemanticValue::ProgrammingRelease { .. } => Default::default(),
         };
         timing
             .delay_millis

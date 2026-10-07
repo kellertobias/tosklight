@@ -1,5 +1,6 @@
 //! Authenticated Cue-transfer ports over the shared active-show lifecycle.
 
+use super::super::PreparedOutputSnapshot;
 use super::super::{
     AppState, ProgrammingInstallOwner, ProgrammingOwnerGesturePolicy,
     ProgrammingOwnerHighlightPolicy, ServerActiveShowPorts, ServerActiveShowUnitOfWork, Session,
@@ -10,7 +11,7 @@ use light_application::{
     ProgrammingCueTransferPorts,
 };
 use light_core::{SessionId, ShowId};
-use light_engine::{EngineSnapshot, PreparedEngineSnapshot};
+use light_engine::EngineSnapshot;
 use light_show::PortableShowObjectUndo;
 
 #[derive(Clone)]
@@ -19,6 +20,7 @@ pub(crate) struct ServerProgrammingCueTransferPorts {
     session: Session,
     active: ServerActiveShowPorts,
     within_interaction: bool,
+    activation_held: bool,
 }
 
 impl ServerProgrammingCueTransferPorts {
@@ -39,7 +41,16 @@ impl ServerProgrammingCueTransferPorts {
             state,
             session,
             within_interaction,
+            activation_held: false,
         }
+    }
+
+    /// Standalone HTTP owns activation before entering ProgrammingService, but still owns
+    /// its own completion persistence and events rather than an outer interaction's.
+    pub(crate) fn with_activation_held(state: AppState, session: Session) -> Self {
+        let mut ports = Self::new(state, session, false);
+        ports.activation_held = true;
+        ports
     }
 
     fn authorize(&self, context: &ActionContext) -> Result<(), ActionError> {
@@ -108,7 +119,7 @@ impl ServerProgrammingCueTransferPorts {
 
 impl ActiveShowPorts for ServerProgrammingCueTransferPorts {
     type UnitOfWork = ServerActiveShowUnitOfWork;
-    type PreparedRuntime = PreparedEngineSnapshot;
+    type PreparedRuntime = PreparedOutputSnapshot;
 
     fn authorize_mutation(&self, context: &ActionContext) -> Result<(), ActionError> {
         self.authorize(context)
@@ -120,11 +131,11 @@ impl ActiveShowPorts for ServerProgrammingCueTransferPorts {
         _show_id: ShowId,
         operation: impl FnOnce() -> Result<T, ActionError>,
     ) -> Result<T, ActionError> {
-        if self.within_interaction {
-            return operation();
+        if self.within_interaction || self.activation_held {
+            return self.state.programming.run_active_show_boundary(operation);
         }
         let _activation = self.state.active_show.acquire_blocking();
-        operation()
+        self.state.programming.run_active_show_boundary(operation)
     }
 
     fn begin_active_show(
@@ -151,6 +162,15 @@ impl ActiveShowPorts for ServerProgrammingCueTransferPorts {
         snapshot: EngineSnapshot,
     ) -> Result<Self::PreparedRuntime, ActionError> {
         self.active.prepare_runtime(snapshot)
+    }
+
+    fn finalize_runtime<T>(
+        &self,
+        context: &ActionContext,
+        prepared: Self::PreparedRuntime,
+        persist: impl FnOnce() -> Result<T, ActionError>,
+    ) -> Result<T, ActionError> {
+        self.active.finalize_runtime(context, prepared, persist)
     }
 
     fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime) {

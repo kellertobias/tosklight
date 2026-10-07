@@ -56,6 +56,8 @@ export interface MvrImportReport {
 
 /** What an MVR archive holds, read before anything is written. */
 export interface MvrPreview {
+	token: string;
+	warnings: string[];
 	fixtures: MvrPreviewFixture[];
 	scenery: number;
 	missingProfiles: string[];
@@ -69,7 +71,7 @@ export interface MvrPreviewFixture {
 	gdtfMode: string;
 	universe: number | null;
 	address: number | null;
-	/** Whether a profile in the library matches this fixture. */
+	/** Whether an exact native, embedded GDTF or installed profile resolves this fixture. */
 	matched: boolean;
 	/** Whether its address overlaps something already patched here. */
 	conflicted: boolean;
@@ -501,8 +503,9 @@ export const documentSession = {
 	rename: (name: string) => invoke<void>("rename_document", { name }),
 	exportMvr: (path: string) => invoke<number>("export_mvr", { path }),
 	previewMvr: (path: string) => invoke<MvrPreview>("preview_mvr", { path }),
-	importMvr: (path: string, resolutions: Record<string, MvrResolution> = {}) =>
-		invoke<MvrImportReport>("import_mvr", { path, resolutions }),
+	importMvr: (token: string, resolutions: Record<string, MvrResolution> = {}) =>
+		invoke<MvrImportReport>("import_mvr", { token, resolutions }),
+	cancelMvrPreview: (token: string) => invoke<void>("cancel_mvr_preview", { token }),
 	/** The desks on the network that have a show to offer. */
 	deskShows: (address: string) => invoke<DeskShow[]>("desk_shows", { address }),
 	loadDeskShow: (address: string, name: string, showId: string) =>

@@ -1,3 +1,4 @@
+use super::values_legacy::semantic_intent;
 use super::{ProgrammingService, state::interaction_change, support::Snapshot};
 use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPorts, ProgrammingValueIntent,
@@ -26,6 +27,7 @@ impl ProgrammingService {
     ) -> Result<ProgrammingValuesResult, ActionError> {
         let (session, request_id, expected_revision) = values_context(&action)?;
         self.with_programmer_and_desk_gate(action.context.desk_id, || {
+            self.assert_value_action_boundary()?;
             ports.authorize_programming_change(&action.context)?;
             let fingerprint = values_request_fingerprint(expected_revision, &action.command);
             if let Some(cached) =
@@ -33,18 +35,43 @@ impl ProgrammingService {
             {
                 return Ok(cached);
             }
-            self.assert_values_revision(expected_revision)?;
-            let capture_mode_revision = self.assert_capture_mode_precondition(
-                session,
-                action.command.expected_capture_mode_revision,
-            )?;
-            let result = self.apply_values_action(
-                &action,
-                ports,
-                session,
-                expected_revision,
-                capture_mode_revision,
-            )?;
+            let result = if let ProgrammingValuesCommand::FinishGesture {
+                attribute,
+                undo_group,
+            } = &action.command.command
+            {
+                self.finish_captured_family_gesture(
+                    &action.context,
+                    false,
+                    &super::values_legacy::semantic_gesture_attribute(attribute),
+                    undo_group,
+                )?;
+                ProgrammingValuesResult {
+                    context: action.context.clone(),
+                    outcome: ProgrammingValuesOutcome::NoChange {
+                        revision: self.programmers.normal_values_revision(),
+                    },
+                    capture_mode_revision: self.programmers.capture_mode_revision(),
+                    interaction_event_sequence: None,
+                    replayed: false,
+                    warning: None,
+                    hold: None,
+                    color_adoption: None,
+                }
+            } else {
+                self.assert_values_revision(expected_revision)?;
+                let capture_mode_revision = self.assert_capture_mode_precondition(
+                    session,
+                    action.command.expected_capture_mode_revision,
+                )?;
+                self.apply_values_action(
+                    &action,
+                    ports,
+                    session,
+                    expected_revision,
+                    capture_mode_revision,
+                )?
+            };
             self.remember_values(
                 action.context.desk_id,
                 session,
@@ -66,41 +93,49 @@ impl ProgrammingService {
     ) -> Result<ProgrammingValuesResult, ActionError> {
         let lifecycle_before = self.active_lifecycle_programmer();
         let before = Snapshot::read(&self.programmers, action.context.desk_id, session)?;
-        let environment = (!action.command.command.is_clear())
+        let mut environment = (!action.command.command.is_clear())
             .then(|| ports.values_environment(&action.context))
             .transpose()?;
         let planned;
         let mut alignment_plan = None;
-        let mutations = if let Some(intent) = action.command.command.intent() {
-            let active_content = self
-                .programmers
-                .get(session)
-                .map(|state| state.update_content())
-                .unwrap_or_default();
-            let active_values = active_content
-                .fixture_values
-                .iter()
-                .map(|value| {
-                    (
-                        (value.fixture_id, value.attribute.clone()),
-                        value.value.clone(),
-                    )
-                })
-                .collect::<HashMap<_, _>>();
-            let active_group_values = active_content
-                .group_values
-                .iter()
-                .map(|value| {
-                    (
-                        (value.group_id.clone(), value.attribute.clone()),
-                        value.value.clone(),
-                    )
-                })
-                .collect::<HashMap<_, _>>();
+        let mut family_alignment_plan = None;
+        let mut family_gesture = None;
+        let mut hold = None;
+        let semantic = semantic_intent(action.command.command.intent(), environment.as_ref())?;
+        let mutations = if let Some(intent) = semantic.as_deref() {
+            let (active_values, active_group_values) = self.active_value_maps(session);
             let values_environment = environment
-                .as_ref()
+                .as_mut()
                 .expect("non-clear actions load a values environment");
-            if let Some((aligned, plan)) = self.plan_aligned_value_intent(
+            // Validate before touching Align or gesture state, including empty-target actions.
+            validate_value_intent(intent, values_environment)?;
+            family_gesture = self.prepare_family_gesture(
+                &action.context,
+                ports,
+                false,
+                intent,
+                values_environment,
+                &active_values,
+                &active_group_values,
+            )?;
+            // TL-594: an unresolvable displayed source holds the whole action quietly.
+            hold = values_environment.displayed_source_hold;
+            if hold.is_some()
+                || (intent.group_id.is_none() && intent.fixture_ids.is_empty())
+                || matches!(&intent.operation, ProgrammingValueOperation::ComponentEdits(edits) if edits.is_empty())
+            {
+                planned = Vec::new();
+            } else if let Some((aligned, plan)) = self.plan_aligned_family_intent(
+                session,
+                light_programmer::ProgrammerAlignmentLane::Normal,
+                intent,
+                values_environment,
+                &active_values,
+                &active_group_values,
+            )? {
+                planned = aligned;
+                family_alignment_plan = Some(plan);
+            } else if let Some((aligned, plan)) = self.plan_aligned_value_intent(
                 &action.context,
                 ports,
                 session,
@@ -131,34 +166,39 @@ impl ProgrammingService {
                 environment
                     .as_ref()
                     .expect("non-clear actions load a values environment"),
+                // Intent validation already checks newly authored curves; untouched curves
+                // remain legal if a live Group has since shrunk.
+                action.command.command.intent().is_none(),
             )?;
         }
-        let changed =
-            self.mutate_normal_values(session, &action.command.command, mutations.as_ref());
-        if let Some(plan) = alignment_plan {
+        let aligned = alignment_plan.is_some() || family_alignment_plan.is_some();
+        let mutate = || {
+            self.mutate_normal_values(
+                session,
+                &action.command.command,
+                mutations.as_ref(),
+                family_gesture
+                    .as_ref()
+                    .map(|gesture| gesture.undo_group.as_str()),
+            )
+        };
+        let changed = if let Some(plan) = alignment_plan {
             self.programmers
-                .commit_alignment_plan(session, plan)
-                .map_err(super::alignment::alignment_error)?;
+                .apply_alignment_plan(session, plan, mutate)
+                .map_err(super::alignment::alignment_error)?
+                .0
+        } else if let Some(plan) = family_alignment_plan.filter(|plan| !plan.values.is_empty()) {
+            self.programmers
+                .apply_family_alignment_plan(session, plan, mutate)
+                .map_err(super::alignment::alignment_error)?
+                .0
+        } else {
+            mutate()
+        };
+        if changed && !aligned && action.command.command.intent().is_some() {
+            self.programmers.deactivate_alignment(session);
         }
-        let explicit_fixture_attributes = mutations
-            .iter()
-            .filter_map(|mutation| match mutation {
-                ProgrammingValueMutation::SetFixture {
-                    fixture_id,
-                    attribute,
-                    ..
-                } => Some((*fixture_id, attribute.clone())),
-                ProgrammingValueMutation::ReleaseFixture { .. }
-                | ProgrammingValueMutation::SetGroup { .. }
-                | ProgrammingValueMutation::ReleaseGroup { .. } => None,
-            })
-            .collect::<Vec<_>>();
-        if !explicit_fixture_attributes.is_empty() {
-            ports.mark_highlight_explicit_fixture_attributes(
-                &action.context,
-                &explicit_fixture_attributes,
-            );
-        }
+        mark_explicit_fixture_attributes(ports, &action.context, mutations.as_ref());
         let warning = changed
             .then(|| ports.persist(&action.context, "programmer.values"))
             .flatten();
@@ -174,6 +214,12 @@ impl ProgrammingService {
         let interaction_event_sequence = self.publish_interaction(&action.context, interaction);
         let outcome = self.values_outcome(&action.context, values, revision_before);
         self.publish_lifecycle(&action.context, lifecycle_before);
+        if action.command.command.is_clear() {
+            self.forget_value_gesture(None);
+        } else {
+            // A held first sample retains no capture: the next sample adopts its own lease.
+            self.finish_family_gesture(family_gesture.filter(|_| hold.is_none()), changed);
+        }
         Ok(ProgrammingValuesResult {
             context: action.context.clone(),
             outcome,
@@ -181,7 +227,45 @@ impl ProgrammingService {
             interaction_event_sequence,
             replayed: false,
             warning,
+            hold,
+            color_adoption: super::color_adoption::reported(environment, hold),
         })
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn active_value_maps(
+        &self,
+        session: SessionId,
+    ) -> (
+        HashMap<(light_core::FixtureId, light_core::AttributeKey), AttributeValue>,
+        HashMap<(String, light_core::AttributeKey), AttributeValue>,
+    ) {
+        let active_content = self
+            .programmers
+            .get(session)
+            .map(|state| state.update_content())
+            .unwrap_or_default();
+        let active_values = active_content
+            .fixture_values
+            .iter()
+            .map(|value| {
+                (
+                    (value.fixture_id, value.attribute.clone()),
+                    value.value.clone(),
+                )
+            })
+            .collect();
+        let active_group_values = active_content
+            .group_values
+            .iter()
+            .map(|value| {
+                (
+                    (value.group_id.clone(), value.attribute.clone()),
+                    value.value.clone(),
+                )
+            })
+            .collect();
+        (active_values, active_group_values)
     }
 
     fn plan_aligned_value_intent(
@@ -196,8 +280,10 @@ impl ProgrammingService {
         let Some(alignment) = self.programmers.alignment(session) else {
             return Ok(None);
         };
+        if alignment.family_binding.is_some() {
+            return Ok(None);
+        }
         let ProgrammingValueOperation::RelativeStep(delta) = intent.operation else {
-            self.programmers.deactivate_alignment(session);
             return Ok(None);
         };
         if alignment
@@ -205,7 +291,6 @@ impl ProgrammingService {
             .as_ref()
             .is_some_and(|binding| binding.attribute != intent.attribute)
         {
-            self.programmers.deactivate_alignment(session);
             return Ok(None);
         }
         let bases = alignment.binding.as_ref().map_or_else(
@@ -272,6 +357,7 @@ impl ProgrammingService {
         session: SessionId,
         command: &ProgrammingValuesCommand,
         mutations: &[ProgrammingValueMutation],
+        family_undo_group: Option<&str>,
     ) -> bool {
         if command.is_clear() {
             self.programmers.clear_normal_values(session)
@@ -280,7 +366,7 @@ impl ProgrammingService {
             self.programmers.apply_normal_values_grouped(
                 session,
                 &mutations,
-                intent.undo_group.as_deref(),
+                family_undo_group.or(intent.undo_group.as_deref()),
             )
         } else {
             let mutations = mutations.iter().map(domain_mutation).collect::<Vec<_>>();
@@ -426,6 +512,15 @@ pub(super) fn plan_value_intent(
     active_group_values: HashMap<(String, light_core::AttributeKey), AttributeValue>,
 ) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
     let count = validate_value_intent(intent, environment)?;
+    if let ProgrammingValueOperation::ComponentEdits(edits) = &intent.operation {
+        return super::family_values::plan_component_edits(
+            intent,
+            edits,
+            environment,
+            &active_values,
+            &active_group_values,
+        );
+    }
     if let Some(group_id) = intent.group_id.as_ref() {
         return plan_group_value_intent(
             intent,
@@ -438,7 +533,7 @@ pub(super) fn plan_value_intent(
     plan_fixture_value_intent(intent, environment, count, active_values)
 }
 
-fn validate_value_intent(
+pub(super) fn validate_value_intent(
     intent: &ProgrammingValueIntent,
     environment: &ProgrammingValuesEnvironment,
 ) -> Result<usize, ActionError> {
@@ -460,8 +555,36 @@ fn validate_value_intent(
             "relative Programmer value step must be finite and non-zero",
         ));
     }
+    if let ProgrammingValueOperation::ComponentEdits(edits) = &intent.operation {
+        light_core::programming::validate_component_edits(edits)
+            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))?;
+        if edits
+            .first()
+            .is_some_and(|edit| edit.owner().key() != intent.attribute)
+        {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "component edits must address their complete family",
+            ));
+        }
+    }
+    super::values_validation::validate_identifier(&intent.attribute.0, "attribute")?;
+    super::values_validation::validate_timing(intent.timing)?;
+    if let ProgrammingValueOperation::AbsoluteSet(value) = &intent.operation {
+        value
+            .validate_programming_scope(if intent.group_id.is_some() {
+                light_core::programming::ProgrammingValueScope::LiveGroup
+            } else {
+                light_core::programming::ProgrammingValueScope::Universal
+            })
+            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))?;
+        super::values_validation::validate_value(value)?;
+        value
+            .validate_programming_address(&intent.attribute)
+            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))?;
+    }
     let targets_group = intent.group_id.is_some();
-    if targets_group != intent.fixture_ids.is_empty() {
+    if targets_group && !intent.fixture_ids.is_empty() {
         return Err(ActionError::new(
             ActionErrorKind::Invalid,
             "Programmer value intent requires either ordered fixture_ids or one group_id",
@@ -478,13 +601,48 @@ fn validate_value_intent(
                 .copied()
         })
         .unwrap_or(intent.fixture_ids.len());
+    if let ProgrammingValueOperation::AbsoluteSet(value) = &intent.operation {
+        let points = value.spread_control_points();
+        if count > 0 && points > 2 && points > count {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "family spread has more control points than selected ranks",
+            ));
+        }
+    }
+    if let ProgrammingValueOperation::ComponentEdits(edits) = &intent.operation {
+        let points = edits
+            .iter()
+            .filter_map(|edit| match edit {
+                light_core::programming::ComponentEdit::Scalar {
+                    operation:
+                        light_core::programming::ScalarEdit::Set(
+                            light_core::programming::ScalarIntent::Spread(points),
+                        ),
+                    ..
+                } => Some(points.len()),
+                light_core::programming::ComponentEdit::Native {
+                    operation: light_core::programming::NativeColorEdit::Spread(points),
+                    ..
+                } => Some(points.len()),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
+        if count > 0 && points > 2 && points > count {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "component spread has more control points than selected ranks",
+            ));
+        }
+    }
     if let ProgrammingValueOperation::AbsoluteSet(AttributeValue::Spread(points)) =
         &intent.operation
         && (points.len() < 2
             || points
                 .iter()
                 .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
-            || (points.len() > 2 && points.len() > count))
+            || (count > 0 && points.len() > 2 && points.len() > count))
     {
         let capacity = if targets_group {
             format!("the Group has only {count} ranks")
@@ -507,6 +665,9 @@ fn plan_group_value_intent(
     active_group_values: HashMap<(String, light_core::AttributeKey), AttributeValue>,
 ) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
     let requested = match &intent.operation {
+        ProgrammingValueOperation::ComponentEdits(_) => {
+            unreachable!("component edits use the shared family planner")
+        }
         ProgrammingValueOperation::AbsoluteSet(value) => value.clone(),
         ProgrammingValueOperation::RelativeStep(delta) => {
             let current = active_group_values
@@ -526,12 +687,16 @@ fn plan_group_value_intent(
             shift_attribute_value(current, *delta)?
         }
     };
+    let complete_family = requested.programming_owner().is_some();
     let mut mutations = vec![ProgrammingValueMutation::SetGroup {
         group_id: group_id.to_owned(),
         attribute: intent.attribute.clone(),
         value: requested,
         timing: intent.timing,
     }];
+    if complete_family {
+        return Ok(mutations);
+    }
     let mut addresses = HashSet::new();
     let linked_group_values = environment
         .activation_links
@@ -580,6 +745,26 @@ fn plan_fixture_value_intent(
 ) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
     let mut mutations = Vec::new();
     let mut addresses = HashSet::new();
+    let ranked_absolute = if let ProgrammingValueOperation::AbsoluteSet(value) = &intent.operation
+        && value.programming_owner().is_some()
+        && value.spread_control_points() > 0
+        && count > 0
+    {
+        let fallback = crate::ProgrammingFamilyContext::default();
+        // A whole Direct spread names its source in the value. The conversion context is a
+        // pinned source model; it does not derive the request from this destination fixture.
+        let context = intent
+            .fixture_ids
+            .first()
+            .and_then(|fixture| environment.family_contexts.get(fixture))
+            .unwrap_or(&fallback);
+        Some(
+            light_core::programming::compile_programming_spread(value, count, &context.borrowed())
+                .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))?,
+        )
+    } else {
+        None
+    };
     for (index, fixture_id) in intent.fixture_ids.iter().copied().enumerate() {
         let requested = match &intent.operation {
             ProgrammingValueOperation::AbsoluteSet(AttributeValue::Spread(points)) => {
@@ -589,7 +774,14 @@ fn plan_fixture_value_intent(
                     count,
                 ))
             }
-            ProgrammingValueOperation::AbsoluteSet(value) => value.clone(),
+            ProgrammingValueOperation::ComponentEdits(_) => {
+                unreachable!("component edits use the shared family planner")
+            }
+            ProgrammingValueOperation::AbsoluteSet(value) => ranked_absolute
+                .as_ref()
+                .and_then(|ranks| ranks.at_rank(index))
+                .unwrap_or(value)
+                .clone(),
             ProgrammingValueOperation::RelativeStep(delta) => {
                 let current = active_values
                     .get(&(fixture_id, intent.attribute.clone()))
@@ -616,6 +808,7 @@ fn plan_fixture_value_intent(
                 AttributeValue::Normalized(shift_normalized(current, *delta))
             }
         };
+        let complete_family = requested.programming_owner().is_some();
         push_intent_value(
             &mut mutations,
             &mut addresses,
@@ -624,6 +817,9 @@ fn plan_fixture_value_intent(
             requested,
             intent.timing,
         );
+        if complete_family {
+            continue;
+        }
         for linked in environment
             .activation_links
             .get(&intent.attribute)
@@ -694,6 +890,10 @@ fn shift_attribute_value(value: AttributeValue, delta: f32) -> Result<AttributeV
         )),
         AttributeValue::Discrete(_)
         | AttributeValue::ColorXyz(_)
+        | AttributeValue::ColorProgram(_)
+        | AttributeValue::Position(_)
+        | AttributeValue::Zoom(_)
+        | AttributeValue::GroupFamily(_)
         | AttributeValue::RawDmx(_)
         | AttributeValue::RawDmxExact(_) => Err(ActionError::new(
             ActionErrorKind::Invalid,
@@ -807,5 +1007,29 @@ mod tests {
     fn repeated_operator_steps_do_not_drift_below_the_displayed_value() {
         let value = (0..10).fold(0.0, |current, _| shift_normalized(current, 0.01));
         assert_eq!(value, 0.1);
+    }
+}
+
+/// Notify transient Highlight of exactly the fixture attributes this action authored.
+fn mark_explicit_fixture_attributes(
+    ports: &dyn ProgrammingPorts,
+    context: &crate::ActionContext,
+    mutations: &[ProgrammingValueMutation],
+) {
+    let explicit = mutations
+        .iter()
+        .filter_map(|mutation| match mutation {
+            ProgrammingValueMutation::SetFixture {
+                fixture_id,
+                attribute,
+                ..
+            } => Some((*fixture_id, attribute.clone())),
+            ProgrammingValueMutation::ReleaseFixture { .. }
+            | ProgrammingValueMutation::SetGroup { .. }
+            | ProgrammingValueMutation::ReleaseGroup { .. } => None,
+        })
+        .collect::<Vec<_>>();
+    if !explicit.is_empty() {
+        ports.mark_highlight_explicit_fixture_attributes(context, &explicit);
     }
 }

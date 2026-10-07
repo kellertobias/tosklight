@@ -6,6 +6,7 @@ mod desk;
 mod error;
 mod model;
 mod portable;
+mod programming_contract;
 mod show_store;
 
 pub use desk::DeskStore;
@@ -30,6 +31,14 @@ pub use portable::{
     canonical_fixture_profile_json, canonicalize_legacy_inline_profile_snapshots,
     discover_legacy_inline_profile_snapshots, merge_typed, merge_typed_request,
     strip_zero_u64_echo,
+};
+pub use programming_contract::{
+    LegacyProgrammingFamily, LegacyProgrammingFinding, PROGRAMMING_CONTRACT_METADATA_KEY,
+    PROGRAMMING_OBJECT_KINDS, ProgrammingContractMarker, ProgrammingContractRejection,
+    ShowProgrammingContractReport, check_programming_object_writes,
+    inspect_show_programming_contract, legacy_attribute_value, legacy_live_write_message,
+    legacy_programming_address, legacy_programming_attributes, legacy_programming_family,
+    validate_show_programming_contract, writer_stamps_programming_contract,
 };
 pub use show_store::{
     AtomicObjectDelete, AtomicObjectWrite, ShowStore, initialise_show, validate_show_file,

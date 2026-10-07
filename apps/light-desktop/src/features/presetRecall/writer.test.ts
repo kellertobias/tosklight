@@ -163,6 +163,7 @@ function harness(
 		cursor: 30,
 		projection: {
 			deskId: DESK_ID,
+			alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
 			commandLine: {
 				text: "FIXTURE",
 				target: "FIXTURE",
@@ -289,6 +290,7 @@ describe("PresetRecallWriter", () => {
 				cursor: 42,
 				projection: {
 					deskId: DESK_ID,
+					alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
 					commandLine: currentCommand(responseFirst.programmingStore),
 					selection: {
 						selected: [FIXTURE_ID],

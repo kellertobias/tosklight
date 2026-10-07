@@ -2,7 +2,7 @@ use light_core::{AttributeKey, AttributeValue};
 use std::collections::BTreeMap;
 
 pub(crate) fn apply_safe_values(
-    values: &mut crate::HeadValues,
+    values: &mut impl crate::profile_projection::HeadValueStore,
     safe: &BTreeMap<AttributeKey, AttributeValue>,
     progress: f32,
 ) {
@@ -10,14 +10,14 @@ pub(crate) fn apply_safe_values(
 }
 
 pub(crate) fn apply_safe_values_with_snap(
-    values: &mut crate::HeadValues,
+    values: &mut impl crate::profile_projection::HeadValueStore,
     safe: &BTreeMap<AttributeKey, AttributeValue>,
     progress: f32,
     is_snap: impl Fn(&AttributeKey) -> bool,
 ) {
     for (attribute, target) in safe {
         let progress = if is_snap(attribute) { 1.0 } else { progress };
-        let value = match (values.get(attribute), target) {
+        let value = match (values.value(attribute), target) {
             (Some(AttributeValue::Normalized(current)), AttributeValue::Normalized(target)) => {
                 AttributeValue::Normalized(current + (target - current) * progress)
             }
@@ -28,6 +28,6 @@ pub(crate) fn apply_safe_values_with_snap(
             }
             _ => continue,
         };
-        values.insert(attribute.clone(), value);
+        values.store(attribute.clone(), value);
     }
 }

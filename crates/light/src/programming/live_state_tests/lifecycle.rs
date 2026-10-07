@@ -214,3 +214,71 @@ fn target_user_removal_publishes_one_exact_priority_tombstone() {
     };
     assert_eq!(*revision, 1);
 }
+
+#[test]
+fn replacement_and_removal_release_align_anchors_and_publish_committed_off() {
+    for replace in [false, true] {
+        let registry = ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let desk = Uuid::new_v4();
+        let fixture = FixtureId::new();
+        registry.start(session);
+        registry.attach_command_context(session, SessionId(desk));
+        registry.select(session, [fixture]);
+        registry
+            .activate_alignment(session, ProgrammerAlignmentMode::Left)
+            .unwrap();
+        let plan = registry
+            .plan_alignment_delta(
+                session,
+                AttributeKey::intensity(),
+                0.1,
+                &[light_programmer::ProgrammerAlignmentBase {
+                    fixture_id: fixture,
+                    value: 0.5,
+                    wraps: false,
+                }],
+            )
+            .unwrap();
+        registry.commit_alignment_plan(session, plan).unwrap();
+        let before = registry.alignment_projection();
+        let events = EventBus::new(16);
+        let service = ProgrammingService::new(
+            registry.clone(),
+            events.clone(),
+            Arc::new(HighlightRegistry::default()),
+        );
+        let context = ActionContext::operator(desk, session.0, ActionSource::Http);
+        service
+            .replace_desk_programmer(
+                &context,
+                &LifecyclePorts { fixture },
+                ProgrammingLifecycleTarget::new(session, vec![desk]),
+                || {
+                    assert!(registry.clear(session));
+                    if replace {
+                        registry.start(session);
+                    }
+                    ProgrammingLifecycleCompletion::new((), replace.then_some(session))
+                },
+            )
+            .unwrap();
+        let off = registry.alignment_projection();
+        assert_eq!(off.mode, None);
+        assert_eq!(off.binding, None);
+        assert!(off.revision > before.revision);
+        let EventReplay::Events(published) = events.replay(
+            0,
+            &EventFilter::default().with_object(EventObject::programming_alignment(desk)),
+        ) else {
+            panic!("retained Align event")
+        };
+        assert_eq!(published.len(), 1);
+        let ApplicationEvent::Programming(ProgrammingEvent::InteractionChanged(change)) =
+            &published[0].payload
+        else {
+            panic!("interaction")
+        };
+        assert_eq!(change.alignment(), Some(&off));
+    }
+}

@@ -41,23 +41,23 @@ const TURNS: [(f32, f32, f32); 6] = [
 ];
 
 #[test]
-fn import_recovers_exactly_the_rotation_an_export_wrote() {
+fn import_recovers_the_orientation_an_export_wrote() {
     for (x, y, z) in TURNS {
         let placed = location(1200, -3400, 6000);
         let written = mvr_matrix(placed, rotation(x, y, z), 0.0);
         let (read_location, read_rotation) = placement_from_mvr(written);
         assert_eq!(read_location, placed);
-        assert_rotation_close(read_rotation, rotation(x, y, z));
+        assert_matrix_close(mvr_matrix(read_location, read_rotation, 0.0), written, 1e-6);
     }
 }
 
 #[test]
 fn any_orientation_survives_a_round_trip_even_where_its_angles_are_not_unique() {
-    // Beyond a quarter turn about z, and exactly at it, the same orientation has other angles.
+    // Beyond a quarter turn about y, and exactly at it, equivalent XYZ triples differ.
     for (x, y, z) in [
-        (10.0, 20.0, 135.0),
-        (-40.0, 70.0, 90.0),
-        (25.0, -5.0, -90.0),
+        (10.0, 135.0, 20.0),
+        (-40.0, 90.0, 70.0),
+        (25.0, -90.0, -5.0),
     ] {
         let written = mvr_matrix(location(0, 0, 0), rotation(x, y, z), 0.0);
         let (read_location, read_rotation) = placement_from_mvr(written);
@@ -91,9 +91,9 @@ fn stored_turns_move_the_fixture_axes_the_way_the_stage_draws_them() {
     // x turns about the cross-stage axis: local +Y tips up.
     let (_, v, _) = axes(rotation(90.0, 0.0, 0.0), 0.0);
     assert!(close(v, [0.0, 0.0, 1.0]), "{v:?}");
-    // y is the renderer's roll about the audience axis: local +X tips up.
+    // Positive y rotates local +X towards desk -Z.
     let (u, _, _) = axes(rotation(0.0, 90.0, 0.0), 0.0);
-    assert!(close(u, [0.0, 0.0, 1.0]), "{u:?}");
+    assert!(close(u, [0.0, 0.0, -1.0]), "{u:?}");
     // The bracket turns in the fixture's own frame, after the placement: turned a quarter about z,
     // the clamp's axis runs upstage, so the lantern's local +Z tips towards +X rather than towards
     // the audience.
@@ -200,4 +200,52 @@ fn import_takes_the_bracket_and_the_hinge_back_out() {
             );
         }
     }
+}
+
+#[test]
+fn compound_export_matches_independent_desk_basis_vectors() {
+    let angle = rotation(23., -38., 71.);
+    let matrix = mvr_matrix(location(1200, 2400, 3600), angle, 0.);
+    let reference = light_core::spatial::RigidTransform::euler_xyz([23., -38., 71.]).unwrap();
+    for (column, basis) in [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]
+        .into_iter()
+        .enumerate()
+    {
+        let wanted = reference.direction(basis);
+        for axis in 0..3 {
+            assert!((matrix[column * 3 + axis] - wanted[axis]).abs() < 1e-12);
+        }
+    }
+}
+
+#[test]
+fn rounded_composed_gimbal_matrix_preserves_its_basis() {
+    let composed = light_core::spatial::RigidTransform::euler_xyz([10., 35., 0.])
+        .unwrap()
+        .compose(light_core::spatial::RigidTransform::euler_xyz([0., 55., 80.]).unwrap());
+    let mut matrix = [0.; 12];
+    for (i, axis) in [[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]]
+        .into_iter()
+        .enumerate()
+    {
+        matrix[i * 3..i * 3 + 3].copy_from_slice(&composed.direction(axis));
+    }
+    let (location, rotation) = placement_from_mvr(matrix);
+    assert_matrix_close(mvr_matrix(location, rotation, 0.), matrix, 1e-6);
+}
+
+#[test]
+fn bracket_removal_at_gimbal_lock_keeps_outer_rotation() {
+    let written = mvr_matrix_hinged(
+        location(1200, -3400, 6000),
+        rotation(5., 90., 5.),
+        35.,
+        Some(HINGE),
+    );
+    let (location, rotation) = placement_from_mvr_unbracketed(written, 35., Some(HINGE));
+    assert_matrix_close(
+        mvr_matrix_hinged(location, rotation, 35., Some(HINGE)),
+        written,
+        1e-3,
+    );
 }

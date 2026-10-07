@@ -32,6 +32,30 @@ export function definitionModeChannels(
 	);
 }
 
+/** A level parameter (Intensity, Volume): every master scales these before DMX. */
+function isLevelAttribute(attribute: string) {
+	const name = attribute.toLowerCase();
+	return (
+		name === "intensity" ||
+		name.endsWith(".intensity") ||
+		name === "volume" ||
+		name.endsWith(".volume")
+	);
+}
+
+/**
+ * Whether the masters reach a channel: it carries a level parameter the masters scale before DMX,
+ * or it follows the virtual intensity, directly or inversely.
+ */
+export function followsMasters(channel: FixtureChannel) {
+	return (
+		channel.reacts_to_virtual_intensity ||
+		isLevelAttribute(channel.attribute) ||
+		isLevelAttribute(channel.fixture_attribute) ||
+		(channel.functions ?? []).some((fn) => isLevelAttribute(fn.attribute))
+	);
+}
+
 export function fixturePolicyApplicability(definition: FixtureDefinition) {
 	const channels = definitionModeChannels(definition);
 	const legacyAttributes = definition.heads.flatMap((head) =>
@@ -49,12 +73,8 @@ export function fixturePolicyApplicability(definition: FixtureDefinition) {
 			: legacyAttributes.includes(name);
 	const legacyIntensity = !channels.length && legacyAttributes.includes("intensity");
 	return {
-		groupMasters:
-			legacyIntensity ||
-			channels.some((channel) => channel.reacts_to_group_master),
-		grandMaster:
-			legacyIntensity ||
-			channels.some((channel) => channel.reacts_to_grand_master),
+		groupMasters: legacyIntensity || channels.some(followsMasters),
+		grandMaster: legacyIntensity || channels.some(followsMasters),
 		pan: isDmxPatchable(definition) && hasAttribute("pan"),
 		tilt: isDmxPatchable(definition) && hasAttribute("tilt"),
 	};

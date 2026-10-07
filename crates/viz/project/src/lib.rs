@@ -15,6 +15,7 @@ mod decode;
 mod default_model;
 mod fallback;
 mod model_drawing;
+mod physical;
 mod plan;
 mod projection;
 
@@ -29,7 +30,7 @@ pub use bracket_hinge::{
 };
 pub use cad_default_model::{ProfileDefaultModel, profile_default_model};
 pub use colour::{ResolvedColour, named_colour};
-pub use decode::Decoder;
+pub use decode::{Decoder, NativeInstanceValues};
 pub use default_model::{
     DefaultModel, FixtureTraits, all as all_default_models, choose as choose_default_model,
 };

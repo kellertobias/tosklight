@@ -740,6 +740,8 @@ describe("MediaPaneSurface control state", () => {
 		expect(surface.getByText("Multiplier / Divider")).toBeInTheDocument();
 	});
 
+	// Two full surfaces with native iframes and four real pointer sequences: about 1 s alone and
+	// several under a loaded full run. Every query is synchronous, so a stall fails, never waits.
 	it("opens the selected native Media Server controls and content in place", async () => {
 		let view = renderSurface({ kind: "ready" }, [], {
 			nativeManagementUrl: "http://192.0.2.44:8080",
@@ -770,7 +772,7 @@ describe("MediaPaneSurface control state", () => {
 		expect(
 			within(view.container).getByTitle("Media Server controls"),
 		).toHaveAttribute("src", "http://192.0.2.44:8080/media");
-	});
+	}, 15_000);
 
 	it("shows native source filters and prevents Master content browsing", async () => {
 		const onSelectSourceFilter = vi.fn();

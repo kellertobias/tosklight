@@ -56,7 +56,7 @@ fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
             definition_id: definition.id,
             controller: light_dynamics::DynamicController {
                 id: playback_controller,
-                source: light_dynamics::DynamicControllerSource::Playback { playback_number: 7 },
+                source: light_dynamics::DynamicControllerSource::physical_playback(7),
                 priority: 0,
                 activated_at_millis: 10,
                 size: 0.75,
@@ -84,6 +84,7 @@ fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
                 id: winning_controller,
                 source: light_dynamics::DynamicControllerSource::Programmer {
                     programmer_id: uuid::Uuid::new_v4(),
+                    instance_link: None,
                 },
                 priority: 1,
                 activated_at_millis: 11,
@@ -190,7 +191,10 @@ fn dynamic_coverage_reports_supported_skipped_missing_and_unpatched_addresses() 
     let mut definition = dynamic_definition(supported);
     definition.lanes.push(light_dynamics::DynamicLane {
         id: uuid::Uuid::new_v4(),
-        attribute: light_core::AttributeKey("pan".into()),
+        body: light_dynamics::DynamicLaneBody::LegacyScalar(light_dynamics::LegacyScalarLaneBody {
+            attribute: light_core::AttributeKey("pan".into()),
+            ..definition.lanes[0].legacy().unwrap().clone()
+        }),
         ..definition.lanes[0].clone()
     });
     let snapshot = EngineSnapshot {

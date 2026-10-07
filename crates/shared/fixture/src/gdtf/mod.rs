@@ -9,7 +9,12 @@
 
 use std::io::Write as _;
 
+pub mod physical;
 pub mod profile;
+pub mod read;
+
+#[cfg(test)]
+mod physical_tests;
 
 /// How much of a value a channel carries, and therefore how many slots it occupies.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -54,6 +59,8 @@ pub struct Channel {
     /// The GDTF attribute this channel drives. Free text: a media server's channels have no
     /// standard attribute, and inventing a wrong standard one is worse than a clear custom name.
     pub attribute: String,
+    /// Explicit GDTF semantic alias when the attribute name differs from its standard meaning.
+    pub main_attribute: Option<String>,
     /// One-based offset of the coarse slot within the mode.
     pub offset: u16,
     pub width: Width,
@@ -74,6 +81,10 @@ pub struct Channel {
     pub highlight: Option<u32>,
     /// Physical values at the bottom and top of the range; `None` is 0 to 1.
     pub physical: Option<(f32, f32)>,
+    /// GDTF PhysicalUnit of the logical attribute. None leaves it explicitly unspecified.
+    pub physical_unit: Option<String>,
+    /// Exact function ranges. Empty retains the simple one-function writer contract.
+    pub functions: Vec<Function>,
 }
 
 impl Default for Channel {
@@ -81,6 +92,7 @@ impl Default for Channel {
         Self {
             name: String::new(),
             attribute: String::new(),
+            main_attribute: None,
             offset: 1,
             width: Width::Byte,
             default: 0,
@@ -91,6 +103,8 @@ impl Default for Channel {
             feature: None,
             highlight: None,
             physical: None,
+            physical_unit: None,
+            functions: Vec::new(),
         }
     }
 }
@@ -101,6 +115,31 @@ pub struct ChannelSet {
     pub name: String,
     /// Inclusive first raw value in the channel's own resolution.
     pub from: u32,
+}
+
+/// One complete function interval, expressed in the channel's own raw resolution.
+/// Profile conversion inserts NoFeature intervals for gaps because GDTF infers an end
+/// from the next function's start. Unsupported curves are refused before this model is built.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Function {
+    pub name: String,
+    pub attribute: String,
+    /// Explicit GDTF semantic alias when the attribute name differs from its standard meaning.
+    pub main_attribute: Option<String>,
+    pub original_attribute: String,
+    pub feature: String,
+    pub physical_unit: Option<String>,
+    pub from: u32,
+    pub to: u32,
+    pub default: u32,
+    pub physical: Option<(f32, f32)>,
+    pub sets: Vec<ChannelSet>,
+    /// `Emitter=` link into the physical descriptions.
+    pub emitter: Option<String>,
+    /// `Filter=` link into the physical descriptions.
+    pub filter: Option<String>,
+    /// `Wheel=` link and the one-based slot every set of this function selects.
+    pub wheel: Option<(String, u16)>,
 }
 
 impl Channel {
@@ -151,6 +190,8 @@ pub struct FixtureType {
     pub body_size: Option<[f32; 3]>,
     /// Light-emitting geometries below the body, one per independently controlled head.
     pub beams: Vec<String>,
+    /// Emitters, filters, colour wheels and nominal beam optics.
+    pub physical: physical::PhysicalDescriptions,
 }
 
 /// The geometry every channel of these fixtures belongs to unless it names a beam.
@@ -178,7 +219,8 @@ pub fn description_xml(fixture: &FixtureType) -> String {
         fixture.id
     ));
     push_attribute_definitions(&mut xml, fixture);
-    xml.push_str("    <Wheels/>\n    <PhysicalDescriptions/>\n");
+    physical::push_wheels(&mut xml, &fixture.physical);
+    physical::push_physical_descriptions(&mut xml, &fixture.physical);
     push_models(&mut xml, fixture);
     push_geometries(&mut xml, fixture);
 
@@ -204,7 +246,7 @@ fn push_attribute_definitions(xml: &mut String, fixture: &FixtureType) {
     let attributes = attributes(fixture);
     // Control is always declared: every attribute without a standard feature belongs to it.
     let mut groups: Vec<(&str, Vec<&str>)> = vec![("Control", vec!["Control"])];
-    for (_, feature) in &attributes {
+    for (_, feature, _, _) in &attributes {
         let (group, name) = feature
             .split_once('.')
             .unwrap_or((feature.as_str(), feature.as_str()));
@@ -229,10 +271,16 @@ fn push_attribute_definitions(xml: &mut String, fixture: &FixtureType) {
         xml.push_str("        </FeatureGroup>\n");
     }
     xml.push_str("      </FeatureGroups>\n      <Attributes>\n");
-    for (attribute, feature) in &attributes {
+    for (attribute, feature, unit, main) in &attributes {
         let name = escape(attribute);
+        let unit = unit.as_ref().map_or_else(String::new, |unit| {
+            format!(" PhysicalUnit=\"{}\"", escape(unit))
+        });
+        let main = main.as_ref().map_or_else(String::new, |main| {
+            format!(" MainAttribute=\"{}\"", escape(main))
+        });
         xml.push_str(&format!(
-            "        <Attribute Name=\"{name}\" Pretty=\"{name}\" Feature=\"{}\"/>\n",
+            "        <Attribute Name=\"{name}\" Pretty=\"{name}\" Feature=\"{}\"{unit}{main}/>\n",
             escape(feature)
         ));
     }
@@ -292,14 +340,18 @@ fn push_geometries(xml: &mut String, fixture: &FixtureType) {
         xml.push_str(&format!(
             "        <Beam Name=\"{}\"{beam_model} \
              Position=\"{{1,0,0,{x:.6}}}{{0,1,0,0}}{{0,0,1,{z:.6}}}{{0,0,0,1}}\" \
-             BeamType=\"Wash\"/>\n",
-            escape(&gdtf_name(beam))
+             BeamType=\"Wash\"{}/>\n",
+            escape(&gdtf_name(beam)),
+            fixture.physical.beam_attributes(beam)
         ));
     }
     xml.push_str("      </Geometry>\n    </Geometries>\n");
 }
 
 fn channel_xml(channel: &Channel) -> String {
+    if !channel.functions.is_empty() {
+        return detailed_channel_xml(channel);
+    }
     let offsets = channel
         .offsets()
         .iter()
@@ -344,19 +396,120 @@ fn channel_xml(channel: &Channel) -> String {
 
 /// Every attribute the fixture's channels name, once each in the order they first appear, with
 /// the feature it belongs to.
-fn attributes(fixture: &FixtureType) -> Vec<(String, String)> {
-    let mut seen: Vec<(String, String)> = Vec::new();
+fn attributes(fixture: &FixtureType) -> Vec<(String, String, Option<String>, Option<String>)> {
+    let mut seen = Vec::new();
     for channel in fixture.modes.iter().flat_map(|mode| &mode.channels) {
         let name = gdtf_name(&channel.attribute);
-        if !seen.iter().any(|(known, _)| *known == name) {
-            let feature = channel
-                .feature
-                .clone()
-                .unwrap_or_else(|| default_feature(&name).to_owned());
-            seen.push((name, feature));
+        let feature = channel
+            .feature
+            .clone()
+            .unwrap_or_else(|| default_feature(&name).to_owned());
+        let entries = std::iter::once((
+            name,
+            feature,
+            channel.physical_unit.clone(),
+            channel.main_attribute.clone(),
+        ))
+        .chain(channel.functions.iter().map(|function| {
+            (
+                function.attribute.clone(),
+                function.feature.clone(),
+                function.physical_unit.clone(),
+                function.main_attribute.clone(),
+            )
+        }));
+        for entry in entries {
+            if !seen.iter().any(|(name, _, _, _)| *name == entry.0) {
+                seen.push(entry);
+            }
+        }
+    }
+    // Aliases always point to an actual definition, even if only the alias is used by a mode.
+    let missing = seen
+        .iter()
+        .filter_map(|(_, feature, _, main)| {
+            let main = main.as_ref()?;
+            (!seen.iter().any(|(name, _, _, _)| name == main))
+                .then(|| (main.clone(), feature.clone(), None, None))
+        })
+        .collect::<Vec<_>>();
+    for definition in missing {
+        if !seen.iter().any(|(name, _, _, _)| *name == definition.0) {
+            seen.push(definition);
         }
     }
     seen
+}
+
+/// The detailed path deliberately leaves the existing small media writer unchanged.
+fn detailed_channel_xml(channel: &Channel) -> String {
+    let offsets = channel
+        .offsets()
+        .iter()
+        .map(u16::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let resolution = channel.width.slots();
+    let geometry = gdtf_name(channel.geometry.as_deref().unwrap_or(GEOMETRY));
+    let attribute = gdtf_name(&channel.attribute);
+    let initial = channel
+        .functions
+        .iter()
+        .find(|function| (function.from..=function.to).contains(&channel.default))
+        .expect("profile conversion covers the complete raw range");
+    let initial = escape(&format!(
+        "{geometry}_{attribute}.{attribute}.{}",
+        initial.name
+    ));
+    let highlight = channel
+        .highlight
+        .map_or_else(|| "None".to_owned(), |raw| format!("{raw}/{resolution}"));
+    let mut xml = format!(
+        "          <DMXChannel DMXBreak=\"{}\" Offset=\"{offsets}\" Highlight=\"{highlight}\" Geometry=\"{}\" InitialFunction=\"{initial}\">\n            <LogicalChannel Attribute=\"{}\" Snap=\"No\" Master=\"None\" MibFade=\"0\" DMXChangeTimeLimit=\"0\">\n",
+        channel.dmx_break.max(1),
+        escape(&geometry),
+        escape(&attribute)
+    );
+    for function in &channel.functions {
+        let physical = function.physical.map_or_else(String::new, |(from, to)| {
+            // Shortest round-tripping decimal preserves f32 endpoint data, including tiny ranges.
+            format!(" PhysicalFrom=\"{from}\" PhysicalTo=\"{to}\"")
+        });
+        let links = physical_links(function);
+        xml.push_str(&format!(
+            "              <ChannelFunction Name=\"{}\" Attribute=\"{}\" OriginalAttribute=\"{}\" DMXFrom=\"{}/{resolution}\" Default=\"{}/{resolution}\"{physical}{links} RealFade=\"0\">\n",
+            escape(&function.name), escape(&function.attribute), escape(&function.original_attribute), function.from, function.default
+        ));
+        let slot = function
+            .wheel
+            .as_ref()
+            .map_or_else(String::new, |(_, slot)| {
+                format!(" WheelSlotIndex=\"{slot}\"")
+            });
+        for set in &function.sets {
+            xml.push_str(&format!(
+                "                <ChannelSet Name=\"{}\" DMXFrom=\"{}/{resolution}\"{slot}/>\n",
+                escape(&gdtf_name(&set.name)),
+                set.from
+            ));
+        }
+        xml.push_str("              </ChannelFunction>\n");
+    }
+    xml.push_str("            </LogicalChannel>\n          </DMXChannel>\n");
+    xml
+}
+
+/// `Emitter=`, `Filter=` and `Wheel=` links of one channel function.
+fn physical_links(function: &Function) -> String {
+    let wheel = function.wheel.as_ref().map(|(wheel, _)| wheel);
+    [
+        ("Emitter", function.emitter.as_ref()),
+        ("Filter", function.filter.as_ref()),
+        ("Wheel", wheel),
+    ]
+    .into_iter()
+    .filter_map(|(key, name)| Some(format!(" {key}=\"{}\"", escape(&gdtf_name(name?)))))
+    .collect()
 }
 
 /// Indexed gobos use the standard feature MagicQ maps as media wheels; everything else a caller

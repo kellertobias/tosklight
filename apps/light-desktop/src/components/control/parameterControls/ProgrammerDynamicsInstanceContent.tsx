@@ -1,4 +1,5 @@
 import { ErrorAlert } from "@tosklight/ui";
+import { dynamicLaneLabel } from "../../../features/dynamics/laneModel";
 import { Button, SelectField } from "@tosklight/ui";
 import { TouchEncoder } from "@tosklight/ui/encoders";
 import type {
@@ -118,7 +119,7 @@ function DynamicsToolbar({
 					value={selectedLane?.id ?? ""}
 					options={lanes.map((lane) => ({
 						value: lane.id,
-						label: lane.attribute,
+						label: dynamicLaneLabel(lane),
 					}))}
 					onChange={onLane}
 				/>
@@ -208,7 +209,7 @@ function HardwareInstanceControls({
 			<HardwareEncoderDisplay
 				slot={2}
 				target={{
-					label: selectedLane?.attribute ?? "Lane",
+					label: selectedLane ? dynamicLaneLabel(selectedLane) : "Lane",
 					value: `${lanes.length} lane${lanes.length === 1 ? "" : "s"}`,
 				}}
 			/>
@@ -263,11 +264,16 @@ function TouchInstanceControls({
 	onOff,
 }: InstanceContentProps & { dynamicLabel: string; status: string }) {
 	const visibleEncoderCount = useVisibleEncoderCount();
-	const page = visibleEncoderCount === 4 && controller.encoderPage === 2 ? 2 : 1;
+	const page =
+		visibleEncoderCount === 4 && controller.encoderPage === 2 ? 2 : 1;
 	if (page === 2)
 		return (
 			<>
-				<InstancePhaseEncoder selected={selected} onUpdate={onUpdate} slot={1} />
+				<InstancePhaseEncoder
+					selected={selected}
+					onUpdate={onUpdate}
+					slot={1}
+				/>
 				<DynamicOffControl error={error} onOff={onOff} />
 			</>
 		);
@@ -294,9 +300,9 @@ function TouchInstanceControls({
 				}}
 			/>
 			<TouchEncoder
-				label={`Enc 2 · ${selectedLane?.attribute ?? "Lane"}`}
+				label={`Enc 2 · ${selectedLane ? dynamicLaneLabel(selectedLane) : "Lane"}`}
 				slot={2}
-				attributeLabel={selectedLane?.attribute ?? "Lane"}
+				attributeLabel={selectedLane ? dynamicLaneLabel(selectedLane) : "Lane"}
 				value={selectedLane ? Math.max(0, lanes.indexOf(selectedLane)) : 0}
 				display={`${lanes.length} lane${lanes.length === 1 ? "" : "s"}`}
 				indexed
@@ -311,7 +317,11 @@ function TouchInstanceControls({
 			<InstanceSpeedEncoder selected={selected} onUpdate={onUpdate} slot={4} />
 			{visibleEncoderCount === 6 ? (
 				<>
-					<InstancePhaseEncoder selected={selected} onUpdate={onUpdate} slot={5} />
+					<InstancePhaseEncoder
+						selected={selected}
+						onUpdate={onUpdate}
+						slot={5}
+					/>
 					<DynamicOffControl error={error} onOff={onOff} />
 				</>
 			) : null}

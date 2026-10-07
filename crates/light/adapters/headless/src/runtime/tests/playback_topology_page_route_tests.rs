@@ -298,6 +298,94 @@ async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_crea
 }
 
 #[tokio::test]
+async fn osc_page_creation_finalizes_before_switch_and_keeps_repeat_and_missing_no_ops() {
+    let scenario = TopologyScenario::new("OSC page creation ordering").await;
+    let configured = scenario
+        .action(
+            scenario.show_revision(),
+            configure_request("osc-occupy-page-one", 0, 0),
+        )
+        .await;
+    assert_eq!(configured.status(), StatusCode::OK);
+    let desk_id = scenario_desk_id(&scenario);
+    let show_id = scenario_show_id(&scenario);
+    let revision = scenario.show_revision();
+    let cursor = scenario.state.events.latest_sequence();
+    let send_page = |page| {
+        let state = scenario.state.clone();
+        let (done, completed) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            // Exercise the hardware parser and its shared activation permit, not a direct
+            // ChangePage call. A nested Playback lock must fail this timeout instead of hanging.
+            handle_playback_osc(
+                &state,
+                "/light/page-test/page",
+                &[OscArgument::Int(page)],
+                None,
+            );
+            done.send(()).unwrap();
+        });
+        completed
+            .recv_timeout(std::time::Duration::from_secs(3))
+            .expect("OSC page creation must complete without re-locking ordered Playback");
+        worker.join().unwrap();
+    };
+
+    send_page(2);
+
+    assert_eq!(scenario.show_revision(), revision + 1);
+    assert!(scenario.document().object("playback_page", "2").is_some());
+    assert_eq!(desk_page(&scenario, desk_id, show_id), 2);
+    let filter = light_application::EventFilter::for_desk(desk_id)
+        .with_object(light_application::EventObject::playback_view(desk_id))
+        .with_object(light_application::EventObject::show_storage_object(
+            show_id,
+            "playback_page",
+            "2",
+        ));
+    let light_application::EventReplay::Events(events) =
+        scenario.state.events.replay(cursor, &filter)
+    else {
+        panic!("OSC page creation and view events must remain replayable")
+    };
+    assert_eq!(events.len(), 2);
+    assert!(matches!(
+        events[0].payload,
+        light_application::ApplicationEvent::Show(light_application::ShowEvent::ObjectsChanged(_))
+    ));
+    let light_application::ApplicationEvent::Desk(
+        light_application::DeskEvent::PlaybackViewChanged(view),
+    ) = &events[1].payload
+    else {
+        panic!("page creation must precede the authoritative desk view event")
+    };
+    assert_eq!(view.active_page, 2);
+    assert_eq!(view.scope.show_revision, revision + 1);
+    assert!(events[0].sequence < events[1].sequence);
+    assert_eq!(
+        events[1].source,
+        light_application::EventSource::Action(light_application::ActionSource::Osc)
+    );
+
+    let after_creation = scenario.state.events.latest_sequence();
+    send_page(2);
+    // An empty final page cannot auto-create a further page.
+    send_page(3);
+    assert_eq!(scenario.show_revision(), revision + 1);
+    let light_application::EventReplay::Events(repeated) =
+        scenario.state.events.replay(after_creation, &filter)
+    else {
+        panic!("repeat page events must remain replayable")
+    };
+    // OSC retains its existing compatibility notification on a repeated valid page. It must
+    // not repeat an authoritative Show mutation or changed desk-view projection.
+    assert!(repeated.is_empty());
+    assert_eq!(desk_page(&scenario, desk_id, show_id), 2);
+    assert!(scenario.document().object("playback_page", "3").is_none());
+    scenario.cleanup();
+}
+
+#[tokio::test]
 async fn page_route_rejects_unauthenticated_unsafe_and_canonical_collision_requests() {
     let scenario = TopologyScenario::new("Playback Page validation").await;
     scenario.seed(

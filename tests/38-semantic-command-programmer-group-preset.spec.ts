@@ -8,6 +8,7 @@ import {
 } from "./bench/command-selection/selectionContract";
 import { expect } from "./bench/core/fixtures";
 import { scenario } from "./bench/core/scenario";
+import { ProgrammerToken } from "./bench/encoders/encoderCatalog";
 import { StoreMode } from "./bench/groups-presets/groupScenario";
 import { PresetFamily } from "./bench/groups-presets/presetScenario";
 import { fixture as dmxFixture } from "./bench/output/fixtureDmx";
@@ -101,8 +102,12 @@ scenario(
 		await t.selection.fixtures.via.api.items(101, 102);
 
 		await t.encoder.intensity.dimmer.via.api.set(70);
-		await t.encoder.color.red.via.api.set(40);
-		await t.encoder.position.pan.via.api.set(25);
+		// Two different colours: since the TL-552 cutover a Color preset of one shared colour is
+		// stored as a universal preset, which a full recall with nothing selected leaves unchanged
+		// (help: Color Intent › Universal Color presets). A per-fixture preset keeps its targets.
+		await t.encoder.color.red.via.api.set([40, ProgrammerToken.Thru, 60]);
+		// Pan is an Angle in degrees; −135° is the old quarter of a 540° travel.
+		await t.encoder.position.pan.via.api.set(-135);
 		await t.encoder.beam.gobo1.via.api.set(30);
 
 		await t.preset.via.api.store(PresetFamily.Mixed, 1, {

@@ -13,8 +13,11 @@ use light_playback::{PlaybackIdentity, PlaybackTarget};
 
 use super::{ServerPlaybackPorts, invalid, resolve_group_playback};
 
+#[path = "projection/prepared.rs"]
+mod prepared;
 #[path = "projection/targets.rs"]
 mod targets;
+pub(in crate::runtime) use prepared::prepared_runtime_projections;
 use targets::{cue_list_projection, grand_master_projection, group_projection, speed_projection};
 
 pub(in crate::runtime) fn automatic_changes(
@@ -272,6 +275,16 @@ fn project_group(
     let playback_number = match resolve_group_playback(snapshot, group_id.as_str()) {
         Ok(number) => number,
         Err(error) if error.kind == ActionErrorKind::Conflict => None,
+        // A Group absent from the active show (deleted, or named by a previous show's layout)
+        // is reported per item so the rest of the snapshot still hydrates.
+        Err(error) if error.kind == ActionErrorKind::NotFound => {
+            return Ok(PlaybackRuntimeProjection {
+                scope,
+                requested,
+                playback_number: None,
+                target: PlaybackTargetProjection::Missing,
+            });
+        }
         Err(error) => return Err(error),
     };
     Ok(PlaybackRuntimeProjection {
@@ -576,7 +589,7 @@ pub(in crate::runtime) fn dynamic_target_lane_coverage(
                     .iter()
                     .filter(|head| head_index.is_none_or(|index| head.index == index))
                     .flat_map(|head| &head.parameters)
-                    .any(|parameter| parameter.attribute == lane.attribute)
+                    .any(|parameter| lane.drives_attribute(&parameter.attribute))
             })
             .count();
         coverage.supported_address_count += supported;

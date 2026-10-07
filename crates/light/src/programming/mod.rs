@@ -1,4 +1,5 @@
 mod capture_mode_projection;
+mod color_adoption;
 mod command;
 mod cue_active_show;
 mod cue_deletion;
@@ -15,6 +16,7 @@ mod operation;
 mod ports;
 mod preload_lifecycle;
 mod preload_playback_queue_projection;
+mod preload_preview_demand;
 mod preload_values_action;
 mod preload_values_projection;
 mod preset_active_show;
@@ -31,6 +33,10 @@ mod values_projection;
 
 pub use capture_mode_projection::{
     ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection, ProgrammingCaptureModeSnapshot,
+};
+pub use color_adoption::{
+    ProgrammingColorAdoption, ProgrammingColorAdoptionFixture, ProgrammingColorAdoptionRequest,
+    ProgrammingColorAdoptionStart, ProgrammingNativeReference,
 };
 pub use command::{
     CommandOrigin, ExecutionPolicy, ProgrammingAction, ProgrammingCommand, ProgrammingOutcome,
@@ -88,7 +94,7 @@ pub use operation::{
     ProgrammingSelectionRefreshResult, ProgrammingSelectionTarget,
 };
 pub use ports::{
-    ProgrammingExecution, ProgrammingPorts, ProgrammingReconciliation,
+    ProgrammingExecution, ProgrammingFamilyContext, ProgrammingPorts, ProgrammingReconciliation,
     ProgrammingSelectionEnvironment, ProgrammingSelectionQuery, ProgrammingValuesEnvironment,
 };
 pub use preload_lifecycle::{
@@ -103,6 +109,7 @@ pub use preload_playback_queue_projection::{
     ProgrammingPreloadPlaybackQueueItem, ProgrammingPreloadPlaybackQueueProjection,
     ProgrammingPreloadPlaybackQueueSnapshot, ProgrammingPreloadPlaybackSurface,
 };
+pub use preload_preview_demand::{PreloadPreviewDemand, preload_preview_demand};
 pub use preload_values_action::{
     ProgrammingPreloadValueMutation, ProgrammingPreloadValueTiming,
     ProgrammingPreloadValuesCommand, ProgrammingPreloadValuesOutcome,
@@ -135,8 +142,9 @@ pub use show_history::{
     ProgrammingShowUndoObject, ProgrammingShowUndoOperation, ProgrammingShowUndoTarget,
 };
 pub use values_action::{
-    ProgrammingValueIntent, ProgrammingValueMutation, ProgrammingValueOperation,
-    ProgrammingValueTiming, ProgrammingValuesCommand, ProgrammingValuesOutcome,
+    ProgrammingDisplayedLane, ProgrammingDisplayedSource, ProgrammingValueIntent,
+    ProgrammingValueMutation, ProgrammingValueOperation, ProgrammingValueTiming,
+    ProgrammingValuesCommand, ProgrammingValuesHold, ProgrammingValuesOutcome,
     ProgrammingValuesRequest, ProgrammingValuesResult,
 };
 pub use values_projection::{
@@ -150,4 +158,11 @@ mod cue_recording_service_tests;
 #[cfg(test)]
 mod live_state_tests;
 #[cfg(test)]
+pub(crate) mod semantic_intent_cases;
+#[cfg(test)]
 mod tests;
+
+pub use preset_recall_plan::{
+    as_preload as preload_preset_mutations, materialize_preset_fixture_values,
+    materialize_preset_fixture_values_with_native_models, plan_preset_selection_values,
+};

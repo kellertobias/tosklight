@@ -10,6 +10,7 @@ import {
 	maxRaw,
 	resolutionBytes,
 } from "../sheet/fixtureProfileModel";
+import { physicalMappingErrors } from "../sheet/fixtureProfileModel/physicalMapping";
 import { removeChannel } from "./channelOperations";
 
 /**
@@ -83,6 +84,15 @@ function rescaleChannel(channel: FixtureChannel, bytes: number): FixtureChannel 
 			...fn,
 			dmx_from: raw(fn.dmx_from),
 			dmx_to: raw(fn.dmx_to, true),
+			physical_mapping: fn.physical_mapping
+				? {
+						...fn.physical_mapping,
+						samples: (fn.physical_mapping.samples ?? []).map((sample) => ({
+							...sample,
+							raw: raw(sample.raw, sample.raw === fn.dmx_to),
+						})),
+					}
+				: fn.physical_mapping,
 			behavior:
 				fn.behavior.type === "fixed" || fn.behavior.type === "indexed"
 					? { ...fn.behavior, raw_value: raw(fn.behavior.raw_value) }
@@ -210,9 +220,6 @@ function channelFromByte(mode: FixtureMode, owner: FixtureChannel): FixtureChann
 		snap: owner.snap,
 		reacts_to_virtual_intensity: owner.reacts_to_virtual_intensity,
 		virtual_intensity_inverted: owner.virtual_intensity_inverted ?? false,
-		reacts_to_sequence_master: owner.reacts_to_sequence_master,
-		reacts_to_group_master: owner.reacts_to_group_master,
-		reacts_to_grand_master: owner.reacts_to_grand_master,
 		default_raw: 0,
 		highlight_raw: 0,
 	};
@@ -222,15 +229,62 @@ export type LevelChange =
 	| { mode: FixtureMode; error?: undefined }
 	| { mode?: undefined; error: string };
 
+type AttributeLabel = (attribute: string) => string;
+
+/**
+ * Why a prepared byte-layout change would damage a physical calibration, or null when it would not.
+ *
+ * Every channel whose byte count changed has each calibrated function's rescaled mapping validated
+ * against its new resolution before anything is published. A problem the mapping already had is
+ * left for the editor to report; a problem the rescale would introduce — typically a reduction
+ * that merges sample knots — refuses the whole change so the draft keeps its original curve.
+ */
+function resolutionChangeError(
+	before: FixtureMode,
+	after: FixtureMode,
+	attributeLabel: AttributeLabel,
+): string | null {
+	for (const original of before.channels) {
+		const changed = after.channels.find((candidate) => candidate.id === original.id);
+		if (!changed || changed.resolution === original.resolution) continue;
+		for (const fn of original.functions) {
+			if (!fn.physical_mapping) continue;
+			const rescaled = changed.functions.find((candidate) => candidate.id === fn.id);
+			if (!rescaled) continue;
+			const existing = new Set(physicalMappingErrors(fn, maxRaw(original.resolution)));
+			const introduced = physicalMappingErrors(rescaled, maxRaw(changed.resolution)).filter(
+				(error) => !existing.has(error),
+			);
+			if (!introduced.length) continue;
+			const name = attributeLabel(original.attribute);
+			const bits = changed.resolution.slice(1);
+			return `${name} cannot become ${bits}-bit: the physical mapping of ${fn.name || "its function"} would merge sample points or leave its raw range. Space those samples further apart or use linear mapping first.`;
+		}
+	}
+	return null;
+}
+
+/** Publishes a prepared layout only when every rescaled physical mapping still holds. */
+function checkedLayout(
+	before: FixtureMode,
+	after: FixtureMode,
+	attributeLabel: AttributeLabel,
+): LevelChange {
+	const error = resolutionChangeError(before, after, attributeLabel);
+	return error ? { error } : { mode: after };
+}
+
 /** Makes one row the given level, joining it to or parting it from a coarse channel. */
 export function setRowLevel(
 	mode: FixtureMode,
 	split: number,
 	target: SlotRow,
 	level: ChannelLevel,
-	attributeLabel: (attribute: string) => string = (attribute) => attribute,
+	attributeLabel: AttributeLabel = (attribute) => attribute,
 ): LevelChange {
 	if (level === target.level) return { mode };
+ if (mode.color_physical?.paths.some((path) => path.controls.includes(target.channel.id)))
+  return {error: "This channel belongs to a physical Color path. Remove or reconfigure that path before changing its byte layout."};
 	const rows = slotRows(mode, split);
 	const index = rows.findIndex((row) => slotRowKey(row) === slotRowKey(target));
 	if (index < 0) return { mode };
@@ -238,7 +292,7 @@ export function setRowLevel(
 
 	if (level === 0) {
 		rows[index] = { ...row, channel: channelFromByte(mode, row.channel), level: 0 };
-		return { mode: commitRows(mode, split, rows) };
+		return checkedLayout(mode, commitRows(mode, split, rows), attributeLabel);
 	}
 
 	if (row.level > 0) {
@@ -248,7 +302,7 @@ export function setRowLevel(
 		);
 		if (holder >= 0) rows[holder] = { ...rows[holder], level: row.level };
 		rows[index] = { ...row, level };
-		return { mode: commitRows(mode, split, rows) };
+		return checkedLayout(mode, commitRows(mode, split, rows), attributeLabel);
 	}
 
 	// A coarse row becomes a further byte of the nearest coarse channel doing the same job.
@@ -267,6 +321,8 @@ export function setRowLevel(
 			error: `There is no coarse ${name} on this head for this slot to refine. Give another slot the ${name} attribute first.`,
 		};
 	}
+ if (mode.color_physical?.paths.some((path) => path.controls.includes(owner.channel.id)))
+  return {error: "The coarse channel belongs to a physical Color path. Remove or reconfigure that path before changing its byte layout."};
 	const existing = rows.filter(
 		(candidate) => candidate.channel.id === owner.channel.id && candidate.level > 0,
 	).length;
@@ -284,7 +340,7 @@ export function setRowLevel(
 				}
 			: candidate,
 	);
-	return { mode: commitRows(mode, split, joined) };
+	return checkedLayout(mode, commitRows(mode, split, joined), attributeLabel);
 }
 
 /** Removes one slot; a coarse row takes its channel's other bytes with it. Later slots close up. */
@@ -321,6 +377,27 @@ export function removeSlotRow(
 		rest,
 	);
 	return next;
+}
+
+/**
+ * Removes one slot the way the table's Remove action does: removing a further byte narrows its
+ * channel, so the rescaled calibration is checked first and a damaging removal is refused.
+ */
+export function removeSlotRowChecked(
+	mode: FixtureMode,
+	split: number,
+	target: SlotRow,
+	attributeLabel: AttributeLabel = (attribute) => attribute,
+): LevelChange {
+	if (
+		target.level > 0 &&
+		mode.color_physical?.paths.some((path) => path.controls.includes(target.channel.id))
+	)
+		return {
+			error:
+				"This channel belongs to a physical Color path. Remove or reconfigure that path before removing a fine byte.",
+		};
+	return checkedLayout(mode, removeSlotRow(mode, split, target), attributeLabel);
 }
 
 /**

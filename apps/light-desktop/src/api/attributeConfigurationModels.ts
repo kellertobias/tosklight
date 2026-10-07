@@ -8,7 +8,7 @@ export type AttributeEncoderGroup =
 	| "control"
 	| "media";
 
-export type AttributeValueType = "continuous" | "color" | "indexed" | "control";
+export type AttributeValueType = import("./generated/light-wire").AttributeValueType;
 
 export interface AttributeBounds {
 	min: number;

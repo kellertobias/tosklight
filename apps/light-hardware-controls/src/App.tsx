@@ -68,6 +68,7 @@ export function App({ bridge, nativeBridge, simulatorBridge }: AppProps = {}) {
         <section className="console-layout">
           <NavigationRail
             page={feedback.page}
+            alignActive={feedback.alignActive}
             send={send}
             nativePageControls={controller.activeMode === "native-simulator"}
           />

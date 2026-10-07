@@ -10,8 +10,12 @@ Fixtures used throughout: eight `ROBE › Robin 300 LEDWash` movers in mode `Mod
 
 - Group 1 holds movers 1–4.
 - Group 2 holds movers 5–8.
-- Position preset 1 (**Down**) is pan 40 % and tilt 20 % on all eight movers.
-- Position preset 2 (**Up**) is pan 60 % and tilt 80 % on all eight movers.
+- Position preset 1 (**Down**) is Pan −54° and Tilt −81° on all eight movers.
+- Position preset 2 (**Up**) is Pan 54° and Tilt 81° on all eight movers.
+
+Position is programmed as Angles in degrees. The mover's profile declares Pan 450° and Tilt 300°
+of travel, centred on home, so Down and Up sit at 38 %/23 % and 62 %/77 % of the Pan/Tilt
+channels.
 
 ## BENCH-DYNAMIC-REUSE-001 — One Dynamic, two Groups, two Virtual Playbacks
 
@@ -22,7 +26,7 @@ This scenario is automated in `tests/114-semantic-dynamic-reuse-across-groups.sp
    - one 4-second cycle, looping;
    - grid phase spread;
    - an intensity lane from 0 to full;
-   - pan and tilt lanes from **Down** to **Up**.
+   - Pan and Tilt Angle lanes from **Down** to **Up**.
 2. Select Group 1, apply Rise, and record it onto Playback 1 (**Rise 1**). Clear the programmer.
 3. Select Group 2, apply Rise, and record it onto Playback 2 (**Rise 2**). Clear the programmer.
 4. Confirm Rise is still targetless. Give each Playback a single Toggle button.

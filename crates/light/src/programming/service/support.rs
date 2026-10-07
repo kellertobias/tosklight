@@ -100,6 +100,7 @@ pub(super) fn selection_replace_error(error: SelectionReplaceError) -> ActionErr
 pub(super) struct Snapshot {
     pub(super) command_line: CommandLineState,
     pub(super) selection_revision: u64,
+    pub(super) alignment: light_programmer::ProgrammerAlignmentProjection,
     pub(super) capture_mode: ProgrammerCaptureMode,
     pub(super) values_content: super::super::values_projection::ProgrammingValuesContent,
     pub(super) preload_values_generation: u64,
@@ -148,6 +149,7 @@ impl Snapshot {
         Ok(Self {
             command_line: version.command_line,
             selection_revision: version.selection_revision,
+            alignment: version.alignment,
             capture_mode: version.capture_mode,
             values_content: if include_values {
                 super::super::values_projection::ProgrammingValuesContent::read_for_diff(

@@ -516,3 +516,224 @@ fn the_shipped_directory_installs_and_offers_three_stage_decks() {
     drop(library);
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn source_fingerprint_excludes_only_library_revision_and_preserves_order() {
+    let mut profile = FixtureProfile::blank();
+    let mut second_mode = profile.modes[0].clone();
+    second_mode.id = Uuid::new_v4();
+    second_mode.name = "Second".into();
+    profile.modes.push(second_mode);
+    let expected = fixture_profile_source_fingerprint(&profile).unwrap();
+    assert!(expected.starts_with("v1:sha256:"));
+    assert_eq!(expected.len(), "v1:sha256:".len() + 64);
+
+    let mut revision = profile.clone();
+    revision.revision += 1;
+    assert_eq!(
+        fixture_profile_source_fingerprint(&revision).unwrap(),
+        expected
+    );
+    let roundtrip: FixtureProfile =
+        serde_json::from_str(&serde_json::to_string_pretty(&profile).unwrap()).unwrap();
+    assert_eq!(
+        fixture_profile_source_fingerprint(&roundtrip).unwrap(),
+        expected
+    );
+
+    let mut metadata = profile.clone();
+    metadata.notes = "Measured on the bench".into();
+    assert_ne!(
+        fixture_profile_source_fingerprint(&metadata).unwrap(),
+        expected
+    );
+    let mut identity = profile.clone();
+    identity.modes[0].id = Uuid::new_v4();
+    assert_ne!(
+        fixture_profile_source_fingerprint(&identity).unwrap(),
+        expected
+    );
+    let mut reordered = profile.clone();
+    reordered.modes.reverse();
+    assert_ne!(
+        fixture_profile_source_fingerprint(&reordered).unwrap(),
+        expected
+    );
+    let mut subset = profile.clone();
+    subset.modes.truncate(1);
+    assert_ne!(
+        fixture_profile_source_fingerprint(&subset).unwrap(),
+        expected
+    );
+    let mut physical = profile.clone();
+    physical.physical.width_millimetres = Some(123.0);
+    assert_ne!(
+        fixture_profile_source_fingerprint(&physical).unwrap(),
+        expected
+    );
+}
+
+#[test]
+fn source_attachment_records_evidence_and_edits_do_not_recertify_copied_archives() {
+    let library = FixtureLibrary::open(":memory:").unwrap();
+    let mut draft = FixtureProfile::blank();
+    draft.manufacturer = "Acme".into();
+    draft.name = "Original Source".into();
+    let first = library.save_profile(draft, 0).unwrap();
+    assert!(
+        !library
+            .set_profile_source_gdtf(first.id, 99, b"missing")
+            .unwrap()
+    );
+    assert!(
+        library
+            .set_profile_source_gdtf(first.id, first.revision, b"original")
+            .unwrap()
+    );
+    let original = library
+        .source_gdtf_with_evidence(first.id, first.revision)
+        .unwrap()
+        .unwrap();
+    assert_eq!(original.data, b"original");
+    assert_eq!(
+        original.profile_fingerprint,
+        Some(fixture_profile_source_fingerprint(&first).unwrap())
+    );
+
+    let second = library.save_profile(first.clone(), first.revision).unwrap();
+    let copied = library
+        .source_gdtf_with_evidence(second.id, second.revision)
+        .unwrap()
+        .unwrap();
+    assert_eq!(copied, original);
+    assert_eq!(
+        copied.profile_fingerprint,
+        Some(fixture_profile_source_fingerprint(&second).unwrap())
+    );
+
+    let mut changed = second.clone();
+    changed.notes = "Recalibrated".into();
+    let third = library.save_profile(changed, second.revision).unwrap();
+    let copied = library
+        .source_gdtf_with_evidence(third.id, third.revision)
+        .unwrap()
+        .unwrap();
+    assert_eq!(copied, original);
+    assert_ne!(
+        copied.profile_fingerprint,
+        Some(fixture_profile_source_fingerprint(&third).unwrap())
+    );
+
+    assert!(
+        library
+            .set_profile_source_gdtf(third.id, third.revision, b"new explicit attachment")
+            .unwrap()
+    );
+    let attached = library
+        .source_gdtf_with_evidence(third.id, third.revision)
+        .unwrap()
+        .unwrap();
+    assert_eq!(attached.data, b"new explicit attachment");
+    assert_eq!(
+        attached.profile_fingerprint,
+        Some(fixture_profile_source_fingerprint(&third).unwrap())
+    );
+    assert_eq!(
+        library
+            .source_gdtf_with_evidence(first.id, first.revision)
+            .unwrap()
+            .unwrap(),
+        original
+    );
+}
+
+#[test]
+fn old_source_rows_migrate_without_guessing_an_association() {
+    // A shared in-memory database keeps the pre-upgrade schema alive across library opens.
+    let uri = format!(
+        "file:fixture-source-{}?mode=memory&cache=shared",
+        Uuid::new_v4()
+    );
+    let connection = Connection::open(&uri).unwrap();
+    connection.execute_batch("CREATE TABLE fixture_profile_sources(profile_id TEXT NOT NULL,profile_revision INTEGER NOT NULL,source_gdtf BLOB NOT NULL,PRIMARY KEY(profile_id,profile_revision));").unwrap();
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Acme".into();
+    profile.name = "Old Source".into();
+    connection
+        .execute(
+            "INSERT INTO fixture_profile_sources VALUES(?1,1,?2)",
+            params![profile.id.0.to_string(), b"old source".as_slice()],
+        )
+        .unwrap();
+    {
+        let library = FixtureLibrary::open(&uri).unwrap();
+        let first = library.save_profile(profile, 0).unwrap();
+        let old = library
+            .source_gdtf_with_evidence(first.id, 1)
+            .unwrap()
+            .unwrap();
+        assert_eq!(old.data, b"old source");
+        assert_eq!(old.profile_fingerprint, None);
+        let second = library.save_profile(first, 1).unwrap();
+        assert_eq!(
+            library
+                .source_gdtf_with_evidence(second.id, 2)
+                .unwrap()
+                .unwrap(),
+            old
+        );
+    }
+    let reopened = FixtureLibrary::open(&uri).unwrap();
+    for profile in reopened.profiles().unwrap() {
+        assert_eq!(
+            reopened
+                .source_gdtf_with_evidence(profile.id, profile.revision)
+                .unwrap()
+                .unwrap()
+                .profile_fingerprint,
+            None
+        );
+    }
+}
+
+#[test]
+fn legacy_definition_source_remains_available_without_fingerprint_evidence() {
+    let library = FixtureLibrary::open(":memory:").unwrap();
+    let fixture = definition(1);
+    library
+        .import_json_with_source(
+            &serde_json::to_string(&fixture).unwrap(),
+            Some(b"legacy source"),
+        )
+        .unwrap();
+    let source = library
+        .source_gdtf_with_evidence(fixture.id, fixture.revision)
+        .unwrap()
+        .unwrap();
+    assert_eq!(source.data, b"legacy source");
+    assert_eq!(source.profile_fingerprint, None);
+}
+
+#[test]
+fn published_import_revision_is_exact_idempotent_and_never_overwrites() {
+    let path = std::env::temp_dir().join(format!("fixture-publication-{}.sqlite", Uuid::new_v4()));
+    let library = FixtureLibrary::open(&path).unwrap();
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Import".into();
+    profile.name = "Reserved".into();
+    profile.short_name = "Reserved".into();
+    profile.revision = 7;
+    assert!(library.publish_profile_revision(&profile).unwrap());
+    assert!(!library.publish_profile_revision(&profile).unwrap());
+    let mut conflict = profile.clone();
+    conflict.notes = "Different source meaning".into();
+    assert!(library.publish_profile_revision(&conflict).is_err());
+    assert_eq!(
+        library.profile(profile.id, 7).unwrap().unwrap().notes,
+        profile.notes
+    );
+    assert_eq!(library.profile_revisions(profile.id).unwrap(), vec![7]);
+    let saved = library.save_profile(conflict, 7).unwrap();
+    assert_eq!(saved.revision, 8);
+    let _ = std::fs::remove_file(path);
+}

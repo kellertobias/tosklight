@@ -504,7 +504,7 @@ describe("server event routing", () => {
 		}
 	});
 
-	it("routes attached ALIGN to the active parameter controller", () => {
+	it("does not re-execute attached ALIGN in browser listeners", () => {
 		const received: unknown[] = [];
 		const listener = ((event: CustomEvent<unknown>) => {
 			received.push(event.detail);
@@ -520,12 +520,7 @@ describe("server event routing", () => {
 				session,
 				{} as ServerState,
 			);
-			expect(received).toEqual([
-				expect.objectContaining({
-					action: "align",
-					request_id: "align-gesture-1",
-				}),
-			]);
+			expect(received).toEqual([]);
 		} finally {
 			window.removeEventListener("light:align-action", listener);
 		}

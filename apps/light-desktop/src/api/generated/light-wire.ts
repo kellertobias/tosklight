@@ -2,7 +2,7 @@
 // Do not edit it by hand.
 
 export type AttributeEncoderGroup = "intensity" | "color" | "position" | "beam" | "shapers" | "focus" | "control" | "media";
-export type AttributeValueType = "continuous" | "color" | "indexed" | "control";
+export type AttributeValueType = "continuous" | "color" | "position" | "indexed" | "control";
 export type CustomAttributeLifecycle = "active" | "retired";
 export type AttributeBounds = { min: number, max: number, };
 export type CustomAttributeDescriptor = { id: string, label: string, value_type: AttributeValueType, display_unit: string | null, physical_unit: string | null, normalized_bounds: AttributeBounds | null, domain_bounds: AttributeBounds | null, cyclic: boolean, recordable: boolean, lifecycle: CustomAttributeLifecycle, };
@@ -43,8 +43,29 @@ delta_uv: number | null,
 /**
  * The chosen colour system's calibration revision; absent for inferred systems.
  */
-calibration_revision: number | null, };
-export type ColorIntentReport = { color_model: ColorProgrammingModel, heads: Array<ColorIntentHeadReport>, };
+calibration_revision: number | null,
+/**
+ * TL-550: the head's UV result, reported separately from the visible match. Present only
+ * in the accepted-frame report for a lamp head; absent for Media and the legacy report.
+ */
+uv?: ColorIntentUvReport | null,
+/**
+ * TL-554: the head's Direct replay status when it shows a Direct (native) value.
+ */
+direct?: ColorIntentDirectReport | null,
+/**
+ * TL-552: how the head shows colour without a profile colour model (controls parked at
+ * neutral, shared controls left at default, a nominal hue/saturation grid, white only), or
+ * why it has no colour model at all. Absent when there is nothing to say.
+ */
+note?: string | null, };
+export type ColorIntentReport = { color_model: ColorProgrammingModel, heads: Array<ColorIntentHeadReport>,
+/**
+ * Present only when the report is read from the accepted output frame (the family
+ * adapters are engaged). Heads are then only those with an active requested colour in that
+ * frame; nothing is reported against an invented white. Absent for the legacy report.
+ */
+accepted_frame?: ColorIntentAcceptedFrame | null, };
 export type ConfiguredAttributeDescriptor = { id: string, label: string, encoder_group: AttributeEncoderGroup, encoder_page: number, encoder_slot: number, value_type: AttributeValueType, display_unit: string | null, physical_unit: string | null, normalized_min: number | null, normalized_max: number | null, domain_min: number | null, domain_max: number | null, cyclic: boolean, recordable: boolean, built_in: boolean, retired: boolean, activation_group_id: string | null, push_turn_of: string | null, };
 export type AttributeConfigurationSnapshot = { show_id: string | null, show_revision: number, object_revision: number, configuration: AttributeConfiguration, recommended_configuration: AttributeConfiguration, descriptors: Array<ConfiguredAttributeDescriptor>, validation_error: string | null, };
 export type AttributeConfigurationPatch = { custom_attributes?: Array<CustomAttributeDescriptor> | null, placements?: Array<AttributePlacement> | null, activation_groups?: Array<AttributeActivationGroup> | null, color_model?: ColorProgrammingModel | null, };
@@ -84,7 +105,11 @@ export type ControlDeskConfigurationAction = { "type": "update", patch: ControlD
 export type ControlDeskConfigurationPatch = { hardware_led_brightness: number | null, hardware_gooseneck_brightness: number | null, hardware_gooseneck_color: number | null, name: string | null, columns: number | null, rows: number | null, buttons: number | null, playback_layout: RuntimePlaybackSurfaceLayout | null, };
 export type ControlDeskConfigurationActionOutcome = { request_id: string, replayed: boolean, desk: RuntimeControlDesk, removed: boolean, page: number | null, event_sequence: number | null, page_creation_event_sequence: number | null, };
 export type ConfigurationUpdateRequest = { request_id: string, patch: ConfigurationPatch, };
-export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, timecode_source?: TimecodeSourceSelectionConfiguration | null, timecode_frame_rate?: TimecodeFrameRateConfiguration | null | null, timecode_external_loss_policy?: ExternalTimecodeLossPolicyConfiguration | null, timecode_external_loss_timeout_millis?: number, osc_timecode?: OscTimecodeConfiguration | null | null, timecode_audio_output_device?: string | null | null, timecode_audio_latency_trim_micros_by_output?: { [key in string]: bigint } | null, internal_audio_library_roots?: { [key in string]: string } | null, internal_audio_output_devices?: { [key in string]: string } | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, command_line_at_uses_programmer_fade?: boolean | null, sequence_master_fade_millis?: number, release_fade_millis?: number, cuelist_auto_off_at_zero_default?: boolean | null, cuelist_auto_off_flash_release_default?: boolean | null, color_programming_model_default?: ColorProgrammingModel | null, start_after_first_recording?: boolean | null, preload_programmer_changes?: boolean | null, preload_physical_playback_actions?: boolean | null, preload_virtual_playback_actions?: boolean | null, patch_preview_highlight_dmx?: boolean | null, highlight_look?: HighlightLookConfiguration | null, matter_enabled?: boolean | null, pool_presentation?: PoolPresentationConfiguration | null, file_manager_system_picker_fallback?: boolean | null, file_manager_roots?: Array<FileManagerRoot> | null, };
+export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, timecode_source?: TimecodeSourceSelectionConfiguration | null, timecode_frame_rate?: TimecodeFrameRateConfiguration | null | null, timecode_external_loss_policy?: ExternalTimecodeLossPolicyConfiguration | null, timecode_external_loss_timeout_millis?: number, osc_timecode?: OscTimecodeConfiguration | null | null, timecode_audio_output_device?: string | null | null, timecode_audio_latency_trim_micros_by_output?: { [key in string]: bigint } | null, internal_audio_library_roots?: { [key in string]: string } | null, internal_audio_output_devices?: { [key in string]: string } | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, command_line_at_uses_programmer_fade?: boolean | null, sequence_master_fade_millis?: number, release_fade_millis?: number, cuelist_auto_off_at_zero_default?: boolean | null, cuelist_auto_off_flash_release_default?: boolean | null, color_programming_model_default?: ColorProgrammingModel | null, start_after_first_recording?: boolean | null, preload_programmer_changes?: boolean | null, preload_physical_playback_actions?: boolean | null, preload_virtual_playback_actions?: boolean | null, patch_preview_highlight_dmx?: boolean | null, highlight_look?: HighlightLookConfiguration | null, matter_enabled?: boolean | null, pool_presentation?: PoolPresentationConfiguration | null,
+/**
+ * Per-desk Easy/Advanced Color encoder presentation; never stored in a show.
+ */
+color_presentation?: ColorEncoderPresentation | null, file_manager_system_picker_fallback?: boolean | null, file_manager_roots?: Array<FileManagerRoot> | null, };
 export type HighlightLookConfiguration = { intensity: number, color?: HighlightLookColor | null, iris?: number | null, zoom?: number | null, focus?: number | null, frost?: number | null, compatibility: HighlightLookCompatibility, };
 export type HighlightLookColor = "white" | "red" | "green" | "blue" | "cyan" | "magenta" | "amber";
 export type HighlightLookCompatibility = "semantic" | "legacy_raw" | "needs_review";
@@ -155,7 +180,26 @@ export type DynamicSpatialPreviewResponse = { show_id: string, show_revision: nu
  */
 projected_positions: Array<GroupProjectedPositionProjection>, ranks: Array<GroupSpatialRankProjection>, rank_count: number, warnings: Array<GroupSpatialWarningProjection>, };
 export type DynamicTargetBindingProjection = { "type": "live_group", group_id: string, } | { "type": "frozen_targets", targets: Array<string>, } | { "type": "targetless" };
-export type DynamicLaneProjection = { id: string, attribute: string, mode: DynamicLaneModeProjection, keyframes: DynamicKeyframeConfigurationProjection, max_min: DynamicMaxMinConfigurationProjection, middle_amplitude: DynamicMiddleAmplitudeConfigurationProjection, speed_multiplier: DynamicRationalProjection, width: number, random_group_id?: string | null, phase?: DynamicPhaseDistributionProjection | null, };
+export type DynamicLaneProjection = { id: string, speed_multiplier: DynamicRationalProjection, width: number, random_group_id?: string | null, phase?: DynamicPhaseDistributionProjection | null, } & (DynamicLegacyScalarLaneProjection | { programming: DynamicProgrammingLaneProjection, });
+export type DynamicLaneBodyProjection = DynamicLegacyScalarLaneProjection | { programming: DynamicProgrammingLaneProjection, };
+export type DynamicLegacyScalarLaneProjection = { attribute: string, mode: DynamicLaneModeProjection, keyframes: DynamicKeyframeConfigurationProjection, max_min: DynamicMaxMinConfigurationProjection, middle_amplitude: DynamicMiddleAmplitudeConfigurationProjection, };
+export type DynamicRandomRangeProjection = { low: DynamicScalarSourceProjection, high: DynamicScalarSourceProjection, } | { programming_range: DynamicProgrammingRandomRangeProjection, };
+export type DynamicSemanticColorBasisProjection = "retain" | "recipe" | "hue_saturation" | "whole";
+export type DynamicFamilyRepresentationProjection = { "kind": "angles" } | { "kind": "target", reference: ProgrammingTargetReference | null, } | { "kind": "semantic_color", basis: DynamicSemanticColorBasisProjection, } | { "kind": "direct_color", source: ProgrammingNativeColorIdentity, } | { "kind": "focus" } | { "kind": "zoom", convention: ProgrammingOpeningConvention, };
+export type DynamicValueAddressProjection = { representation: DynamicFamilyRepresentationProjection, component: ProgrammingComponent | null, };
+export type DynamicValueProjection = { "kind": "scalar", "value": number } | { "kind": "native", "value": number } | { "kind": "family", "value": ProgrammingAttributeValue };
+export type DynamicValueFallbackProjection = { target: string, value: DynamicValueProjection, };
+export type DynamicPresetTemplateProjection = { universal?: ProgrammingAttributeValue | null, groups?: Array<DynamicPresetGroupTemplateProjection>, fixtures?: Array<DynamicPresetFixtureTemplateProjection>, fallback?: DynamicPresetTemplateProjection | null, };
+export type DynamicPresetGroupTemplateProjection = { group_id: string, value: ProgrammingAttributeValue, };
+export type DynamicPresetFixtureTemplateProjection = { fixture_id: string, value: ProgrammingAttributeValue, };
+export type DynamicValueSourceProjection = { "kind": "current" } | { "kind": "value", value: DynamicValueProjection, } | { "kind": "preset", preset_id: string, address: DynamicValueAddressProjection, last_valid_by_target: Array<DynamicValueFallbackProjection>, retained?: DynamicPresetTemplateProjection | null, };
+export type DynamicProgrammingLaneProjection = { address: DynamicValueAddressProjection, configuration: DynamicProgrammingLaneConfigurationProjection, };
+export type DynamicProgrammingLaneConfigurationProjection = { "mode": "keyframes", "configuration": DynamicProgrammingKeyframesProjection } | { "mode": "max_min", "configuration": DynamicProgrammingMaxMinProjection } | { "mode": "middle_amplitude", "configuration": DynamicProgrammingMiddleAmplitudeProjection } | { "mode": "random" };
+export type DynamicProgrammingKeyframesProjection = { points: Array<DynamicProgrammingKeyframeProjection>, size: number, };
+export type DynamicProgrammingKeyframeProjection = { position: number, source: DynamicValueSourceProjection, interpolation: DynamicScalarInterpolationProjection, };
+export type DynamicProgrammingMaxMinProjection = { minimum: DynamicValueSourceProjection, maximum: DynamicValueSourceProjection, function: DynamicPeriodicFunctionProjection, size: number, pwm: DynamicPwmShapeProjection, };
+export type DynamicProgrammingMiddleAmplitudeProjection = { middle: DynamicValueSourceProjection, amplitude: DynamicValueProjection, function: DynamicPeriodicFunctionProjection, size: number, pwm: DynamicPwmShapeProjection, invert_waveform: boolean, };
+export type DynamicProgrammingRandomRangeProjection = { low: DynamicValueSourceProjection, high: DynamicValueSourceProjection, };
 export type DynamicLaneModeProjection = "keyframes" | "max_min" | "middle_amplitude" | "random";
 export type DynamicPhaseSpreadModeProjection = "uniform" | "per_lane";
 export type DynamicKeyframeConfigurationProjection = { points: Array<DynamicKeyframeProjection>, size: number, };
@@ -167,7 +211,7 @@ export type DynamicTargetScalarFallbackProjection = { target: string, value: num
 export type DynamicScalarInterpolationProjection = "linear" | "ease_in" | "ease_out" | "ease_in_out" | "hold" | "drop";
 export type DynamicPeriodicFunctionProjection = "sinus" | "cosinus" | "linear_up" | "linear_down" | "pwm";
 export type DynamicPwmShapeProjection = { attack: number, on: number, decay: number, off: number, attack_interpolation: DynamicScalarInterpolationProjection, decay_interpolation: DynamicScalarInterpolationProjection, };
-export type DynamicRandomGroupProjection = { id: string, seed: number, low: DynamicScalarSourceProjection, high: DynamicScalarSourceProjection, decision_interval_millis: number, start_probability: number, mean_duration_millis: number, duration_spread_millis: number, attack_ratio: number, decay_ratio: number, };
+export type DynamicRandomGroupProjection = { id: string, seed: number, decision_interval_millis: number, start_probability: number, mean_duration_millis: number, duration_spread_millis: number, attack_ratio: number, decay_ratio: number, } & ({ low: DynamicScalarSourceProjection, high: DynamicScalarSourceProjection, } | { programming_range: DynamicProgrammingRandomRangeProjection, });
 export type DynamicPhaseDistributionProjection = { ordering: DynamicPhaseOrderingProjection, offset_degrees: number, span_degrees: number, block_size: number, repeats: number, wings: boolean, anchors_degrees: Array<number>, };
 export type DynamicPhaseOrderingProjection = { "type": "selection" } | { "type": "grid_linear", angle_degrees: number, } | { "type": "radial_out", center_x: number, center_z: number, } | { "type": "radial_in", center_x: number, center_z: number, } | { "type": "axial", center_x: number, center_z: number, } | { "type": "random_each_loop", seed: number, };
 export type DynamicSpeedProjection = { "type": "fixed", duration_millis: number, } | { "type": "speed_group", group: DynamicSpeedGroupProjection, beats_per_cycle: DynamicRationalProjection, };
@@ -185,7 +229,11 @@ export type DynamicControllerValueActionRequest = { request_id: string, value: n
 export type DynamicFixAtActionRequest = { request_id: string, targets: Array<string>, attribute: string, value: number, timing: DynamicValueTimingProjection, };
 export type DynamicInstanceActionOutcome = { request_id: string, runtime_instance_id: string, controller_id: string, targets: Array<string>, started: boolean, };
 export type DynamicControllerActionOutcome = { request_id: string, controller_id: string, changed: boolean, };
-export type DynamicRuntimeSnapshotProjection = { global_paused: boolean, instances: Array<DynamicRuntimeInstanceProjection>, definitions: Array<DynamicDefinitionStatusProjection>,
+export type DynamicRuntimeSnapshotProjection = {
+/**
+ * Programmer addressed by this desk/session; imported authored links need this scope.
+ */
+programmer_id?: string, global_paused: boolean, instances: Array<DynamicRuntimeInstanceProjection>, definitions: Array<DynamicDefinitionStatusProjection>,
 /**
  * The beat transport of every Speed Group A-E, sampled with the instances, so an editor
  * can show the authoritative beat even while no instance of its Dynamic is running.
@@ -202,7 +250,11 @@ effective_bpm: number,
 beat_phase: number, phase_advancing: boolean, paused: boolean, };
 export type DynamicDefinitionStatusProjection = { dynamic_id: string, target_count: number, compatible_target_count: number, missing_target_count: number, unpatched_target_count: number, lane_count: number, supported_address_count: number, skipped_address_count: number, warning?: string | null, };
 export type DynamicRuntimeInstanceProjection = { instance_id: string, dynamic_id: string, pool_number: number, name: string, targets: Array<string>, pending: boolean, pending_until_millis: bigint | null, paused: boolean, speed_source: string, activation_boundary: DynamicActivationBoundaryProjection, effective_cycle_millis: bigint, effective_bpm: number | null, beat_phase: number | null, phase_advancing: boolean, aliasing_warning: string | null, controllers: Array<DynamicRuntimeControllerProjection>, };
-export type DynamicRuntimeControllerProjection = { controller_id: string, source: string, priority: number, size: number, speed_multiplier: number, phase_offset_degrees: number, paused: boolean, winning: boolean, releasing: boolean, activation_mix: number, };
+export type DynamicRuntimeControllerProjection = { controller_id: string, programmer_id?: string,
+/**
+ * Authored Programmer link, distinct from its scoped runtime controller ID.
+ */
+programmer_instance_link?: string, source: string, priority: number, size: number, speed_multiplier: number, phase_offset_degrees: number, paused: boolean, winning: boolean, releasing: boolean, activation_mix: number, };
 export type DynamicStartLiveActionRequest = { dynamic_id: string, request: DynamicStartActionRequest, };
 export type DynamicOffLiveActionRequest = { controller_id: string, request: DynamicOffActionRequest, };
 export type DynamicControllerLiveActionRequest = { controller_id: string, request: DynamicControllerValueActionRequest, };
@@ -215,7 +267,7 @@ definition: unknown, };
 export type DynamicPoolActionRequest = { request_id: string, expected_revision: number, pool_number: number, };
 export type DynamicDeleteActionRequest = { request_id: string, expected_revision: number, };
 export type DynamicUpdateActionRequest = { request_id: string, expected_revision: number, mutation_group?: string | null, intent: DynamicUpdateIntent, };
-export type DynamicUpdateIntent = { "type": "set_name", name: string, } | { "type": "set_color", color: string | null, } | { "type": "set_icon", icon: string | null, } | { "type": "set_target_binding", target_binding: unknown, } | { "type": "set_spatial_mapping", spatial_mapping: DynamicSpatialMappingOverrideProjection, } | { "type": "add_lane", lane: unknown, index: number | null, } | { "type": "replace_lane", lane_id: string, lane: unknown, } | { "type": "delete_lane", lane_id: string, } | { "type": "move_lane", lane_id: string, index: number, } | { "type": "set_phase", phase: unknown, } | { "type": "set_phase_mode", phase_mode: DynamicPhaseSpreadModeProjection, } | { "type": "set_speed", speed: unknown, } | { "type": "set_overall_speed_multiplier", multiplier: DynamicRationalProjection, } | { "type": "set_run_mode", run_mode: DynamicRunModeProjection, } | { "type": "set_activation", activation: unknown, } | { "type": "set_activation_boundary", boundary: DynamicActivationBoundaryProjection, } | { "type": "add_random_group", group: unknown, } | { "type": "replace_random_group", group_id: string, group: unknown, } | { "type": "delete_random_group", group_id: string, };
+export type DynamicUpdateIntent = { "type": "set_name", name: string, } | { "type": "set_color", color: string | null, } | { "type": "set_icon", icon: string | null, } | { "type": "set_target_binding", target_binding: unknown, } | { "type": "set_spatial_mapping", spatial_mapping: DynamicSpatialMappingOverrideProjection, } | { "type": "add_lane", lane: DynamicLaneProjection, index: number | null, } | { "type": "replace_lane", lane_id: string, lane: DynamicLaneProjection, } | { "type": "delete_lane", lane_id: string, } | { "type": "move_lane", lane_id: string, index: number, } | { "type": "set_phase", phase: unknown, } | { "type": "set_phase_mode", phase_mode: DynamicPhaseSpreadModeProjection, } | { "type": "set_speed", speed: unknown, } | { "type": "set_overall_speed_multiplier", multiplier: DynamicRationalProjection, } | { "type": "set_run_mode", run_mode: DynamicRunModeProjection, } | { "type": "set_activation", activation: unknown, } | { "type": "set_activation_boundary", boundary: DynamicActivationBoundaryProjection, } | { "type": "add_random_group", group: DynamicRandomGroupProjection, } | { "type": "replace_random_group", group_id: string, group: DynamicRandomGroupProjection, } | { "type": "delete_random_group", group_id: string, };
 export type EventCapability = "programmer" | "playback" | "show" | "desk" | "output" | "system";
 export type EventClass = "transition" | "projection" | "command_outcome" | "error" | "safety" | "telemetry";
 export type EventDeliveryPolicy = "lossless" | "replaceable";
@@ -241,6 +293,66 @@ export type TextDocumentUpdateRequest = { request_id: string, path: string, text
 export type FileOperationKind = "create_file" | "create_folder" | "rename" | "copy" | "move" | "trash" | "delete";
 export type FileConflictChoice = "replace" | "keep_both" | "skip";
 export type FileOperationRequest = { request_id: string, operation: FileOperationKind, sources: Array<string>, destination: string | null, destination_root_id: string | null, name: string | null, replace: boolean, conflict: FileConflictChoice | null, apply_to_all: boolean, };
+export type ProgrammingColorXyz = { x: number, y: number, z: number, };
+export type ProgrammingPhysicalDataQuality = "unknown" | "estimated" | "manufacturer" | "measured";
+export type ProgrammingOpeningConvention = "beam" | "field";
+export type ProgrammingNativeColorBinding = { channel_id: string, function_id: string, };
+export type ProgrammingNativeColorValue = { channel_id: string, function_id: string,
+/**
+ * Premaster native value. u32 preserves every supported channel width exactly.
+ */
+raw: number, };
+export type ProgrammingNativeColorIdentity = { profile_id: string, profile_revision: number, profile_digest: string, mode_id: string, head_id: string, path_id: string, model_revision: number, native_layout_signature: string, };
+export type ProgrammingScalarDomain = { "kind": "finite" } | { "kind": "bounded", bounds: ProgrammingAttributeBounds, } | { "kind": "cyclic", bounds: ProgrammingAttributeBounds, };
+export type ProgrammingScalarInterpolation = "linear" | "shortest_arc" | "reciprocal";
+export type ProgrammingScalarIntent = { "kind": "value", "value": number } | { "kind": "spread", "value": Array<number> };
+export type ProgrammingOwner = "color" | "position" | "focus" | "zoom";
+export type ProgrammingColorComponent = "red" | "green" | "blue" | "amber" | "hue" | "saturation" | "white_blend" | "temperature" | "duv" | "uv" | "relative_output";
+export type ProgrammingComponent = { "kind": "color", "component": ProgrammingColorComponent } | { "kind": "color_wheel", "component": number } | { "kind": "native_color", "component": ProgrammingNativeColorBinding } | { "kind": "pan" } | { "kind": "tilt" } | { "kind": "target_reference" } | { "kind": "target_x" } | { "kind": "target_y" } | { "kind": "target_z" } | { "kind": "focus" } | { "kind": "zoom" };
+export type ProgrammingComponentRole = "color_recipe" | "color_coordinate" | "color_orthogonal" | "color_wheel" | "native_color" | "angle" | "target" | "focus" | "zoom";
+export type ProgrammingComponentUnit = "percent" | "degrees" | "metres" | "kelvin" | "duv" | "factor" | "native_integer" | "selection";
+export type ProgrammingAuthoringCapability = "semantic_intent" | "verified_native_control" | "focus_parameter";
+export type ProgrammingComponentDescriptor = { owner: ProgrammingOwner, role: ProgrammingComponentRole, unit: ProgrammingComponentUnit, domain: ProgrammingScalarDomain | null, step: number, fine_step: number, display_scale: number, interpolation: ProgrammingScalarInterpolation, capability: ProgrammingAuthoringCapability, spread: boolean, align: boolean, dynamics: boolean, };
+export type ProgrammingScalarEdit = { "kind": "set", "value": ProgrammingScalarIntent } | { "kind": "relative", "value": number };
+export type ProgrammingNativeColorEdit = { "kind": "set", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "relative", "value": number };
+export type ProgrammingComponentEdit = { "kind": "activate_angles" } | { "kind": "scalar", component: ProgrammingComponent, operation: ProgrammingScalarEdit, } | { "kind": "target", reference: ProgrammingTargetReference, } | { "kind": "coordinates", xyz: ProgrammingColorXyz, } | { "kind": "native", binding: ProgrammingNativeColorBinding, operation: ProgrammingNativeColorEdit, };
+export type ProgrammingVirtualColorRecipe = { version: number, rgb: [number, number, number], amber: number,
+/**
+ * Advanced coordinates can be retained while the Easy controls show an approximation.
+ */
+approximate: boolean, };
+export type ProgrammingWhiteTarget = { kelvin: number, duv: number, };
+export type ProgrammingUvIntent = { amount: number, };
+export type ProgrammingColorAllocation = "preserve_recipe" | "prefer_white" | "prefer_colored_emitters";
+export type ProgrammingColorWheelConstraint = { source: ProgrammingNativeColorIdentity, value: ProgrammingNativeColorValue, };
+export type ProgrammingColorComponentSpread = { component: ProgrammingColorComponent, points: Array<number>, };
+export type ProgrammingColorIntent = {
+/**
+ * Authoritative base XYZ in the pinned virtual engine. Zero is black, not D65 white.
+ */
+base_xyz: ProgrammingColorXyz, recipe: ProgrammingVirtualColorRecipe, white_blend: number, white_target: ProgrammingWhiteTarget, uv: ProgrammingUvIntent, relative_output: number, allocation: ProgrammingColorAllocation, wheel_constraints?: Array<ProgrammingColorWheelConstraint>, spreads?: Array<ProgrammingColorComponentSpread>, };
+export type ProgrammingNativeColorRecipe = { source: ProgrammingNativeColorIdentity, channels: Array<ProgrammingNativeColorValue>,
+/**
+ * Exact endpoints for profile-declared continuous native controls. Resolve before source
+ * prediction so each destination fits the varying recipe rather than a frozen estimate.
+ */
+spreads?: Array<ProgrammingNativeColorSpread>, };
+export type ProgrammingNativeColorSpread = { binding: ProgrammingNativeColorBinding, points: Array<number>, };
+export type ProgrammingNativeColorComponentDescriptor = { binding: ProgrammingNativeColorBinding, raw_from: number, raw_to: number, continuous: boolean, };
+export type ProgrammingPortableVisibleColor = { xyz: ProgrammingColorXyz, relative_output: number, };
+export type ProgrammingPortableUv = { amount: number, quality: ProgrammingPhysicalDataQuality, };
+export type ProgrammingPortableColorEstimate = { model_revision: number,
+/**
+ * None means unknown, independently of the other component. Some(zero) means known black.
+ */
+visible: ProgrammingPortableVisibleColor | null, uv: ProgrammingPortableUv | null, quality: ProgrammingPhysicalDataQuality, limitations: Array<string>, };
+export type ProgrammingColorProgram = { "kind": "semantic", intent: ProgrammingColorIntent, } | { "kind": "direct", recipe: ProgrammingNativeColorRecipe, portable: ProgrammingPortableColorEstimate, };
+export type ProgrammingTargetReference = { "kind": "origin" } | { "kind": "point", point_id: string, };
+export type ProgrammingPositionIntent = { "kind": "angles", pan_degrees: ProgrammingScalarIntent, tilt_degrees: ProgrammingScalarIntent, } | { "kind": "target", reference: ProgrammingTargetReference, offset_metres: [ProgrammingScalarIntent, ProgrammingScalarIntent, ProgrammingScalarIntent], };
+export type ProgrammingZoomIntent = { opening_degrees: ProgrammingScalarIntent, convention: ProgrammingOpeningConvention, };
+export type ProgrammingAttributeBounds = { min: number, max: number, };
+export type ProgrammingGroupFamilyAssignment = { owner: ProgrammingOwner, template: ProgrammingAttributeValue, members?: { [key in string]: ProgrammingAttributeValue }, };
+export type ProgrammingAttributeValue = { "kind": "normalized", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "discrete", "value": string } | { "kind": "color_xyz", "value": ProgrammingColorXyz } | { "kind": "color_program", "value": ProgrammingColorProgram } | { "kind": "position", "value": ProgrammingPositionIntent } | { "kind": "zoom", "value": ProgrammingZoomIntent } | { "kind": "group_family", "value": ProgrammingGroupFamilyAssignment } | { "kind": "raw_dmx", "value": number } | { "kind": "raw_dmx_exact", "value": number };
 export type ProgrammingLifecycleSession = { session_id: string, };
 export type ProgrammingLifecycleProgrammer = { programmer_id: string, connected: boolean, selected_fixture_count: number, normal_value_count: number,
 /**
@@ -259,11 +371,10 @@ export type ProgrammerPriorityActionState = { "status": "changed", event_sequenc
 export type ProgrammerPriorityActionOutcome = { request_id: string, correlation_id: string, projection: ProgrammerPriorityProjection, replayed: boolean, warning?: string | null, } & ({ "status": "changed", event_sequence: number, } | { "status": "no_change" });
 export type ProgrammerPriorityErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 export type ProgrammerPriorityErrorResponse = { kind: ProgrammerPriorityErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
-export type ProgrammingColorXyz = { x: number, y: number, z: number, };
-export type ProgrammingAttributeValue = { "kind": "normalized", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "discrete", "value": string } | { "kind": "color_xyz", "value": ProgrammingColorXyz } | { "kind": "raw_dmx", "value": number } | { "kind": "raw_dmx_exact", "value": number };
 export type ProgrammingFixtureValue = { fixture_id: string, attribute: string, value: ProgrammingAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
 export type ProgrammingGroupValue = { group_id: string, attribute: string, value: ProgrammingAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
-export type ProgrammingDynamicSemanticValue = { "type": "static", value: ProgrammingAttributeValue, timing: DynamicValueTimingProjection, } | { "type": "dynamic_on", instance_link: string, dynamic: DynamicReferenceProjection, lane_id: string, overrides: DynamicInstanceOverridesProjection, timing: DynamicValueTimingProjection, } | { "type": "dynamic_off", instance_link: string, timing: DynamicValueTimingProjection, } | { "type": "fix_at", value: number, timing: DynamicValueTimingProjection, } | { "type": "release" };
+export type ProgrammingDynamicSemanticValue = { "type": "static", value: ProgrammingAttributeValue, timing: DynamicValueTimingProjection, } | { "type": "dynamic_on", instance_link: string, dynamic: DynamicReferenceProjection, lane_id: string, overrides: DynamicInstanceOverridesProjection, timing: DynamicValueTimingProjection, } | { "type": "dynamic_off", instance_link: string, timing: DynamicValueTimingProjection, } | { "type": "fix_at", value: number, timing: DynamicValueTimingProjection, } | { "type": "programming_fix_at", mask: ProgrammingFamilyFixAt, timing: DynamicValueTimingProjection, } | { "type": "programming_release", component: ProgrammingComponent | null, } | { "type": "release" };
+export type ProgrammingFamilyFixAt = { address: DynamicValueAddressProjection, family: ProgrammingAttributeValue, };
 export type ProgrammingDynamicValue = { fixture_id: string, attribute: string, value: ProgrammingDynamicSemanticValue, programmer_order: number, changed_at_millis: number, };
 export type ProgrammingCaptureModeProjection = { revision: number, blind: boolean, preview: boolean, preload_capture_programmer: boolean, };
 export type ProgrammingCaptureModeChange = { projection: ProgrammingCaptureModeProjection, };
@@ -274,16 +385,16 @@ export type ProgrammingValuesProjection = { revision: number, fixture_values: Ar
  */
 dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, };
 export type ProgrammingFixtureValueAddress = { fixture_id: string, attribute: string, };
-export type ProgrammingDynamicValueAddress = { fixture_id: string, attribute: string, instance_link?: string | null, };
+export type ProgrammingDynamicValueAddress = { fixture_id: string, attribute: string, instance_link?: string | null, lane_id?: string | null, component?: ProgrammingComponent | null, };
 export type ProgrammingGroupValueAddress = { group_id: string, attribute: string, };
 export type ProgrammingValuesChange = { revision: number, fixture_values: Array<ProgrammingFixtureValue>, removed_fixture_values: Array<ProgrammingFixtureValueAddress>, group_values: Array<ProgrammingGroupValue>, removed_group_values: Array<ProgrammingGroupValueAddress>, dynamic_definitions?: Array<DynamicDefinitionProjection>, dynamic_values: Array<ProgrammingDynamicValue>, removed_dynamic_values: Array<ProgrammingDynamicValueAddress>, };
 export type ProgrammingValuesSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingValuesProjection, };
 export type ProgrammingPickerColor = { hue: number, saturation: number, };
 export type ProgrammingValueTiming = { fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
-export type ProgrammingValueOperation = { "type": "absolute_set", value: ProgrammingAttributeValue, } | { "type": "relative_step", delta: number, };
+export type ProgrammingValueOperation = { "type": "component_edits", edits: Array<ProgrammingComponentEdit>, } | { "type": "absolute_set", value: ProgrammingAttributeValue, } | { "type": "relative_step", delta: number, };
 export type ProgrammingValueMutation = { "type": "set_selection", fixture_ids: Array<string>, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "set_selection_color_range", fixture_ids: Array<string>, start: ProgrammingPickerColor, end: ProgrammingPickerColor, hue_travel: number, brightness: number, timing: ProgrammingValueTiming, } | { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_group", group_id: string, attribute: string, };
 export type ProgrammingIndexedPresetTarget = { fixture_id: string, function_id: string, expected_profile_revision: number, };
-export type ProgrammingValuesAction = { "type": "apply_intent", fixture_ids: Array<string>,
+export type ProgrammingValuesAction = { "type": "finish_gesture", attribute: string, undo_group: string, } | { "type": "apply_intent", fixture_ids: Array<string>,
 /**
  * Live Group target. Exactly one of `fixture_ids` or `group_id` must be supplied.
  */
@@ -292,14 +403,38 @@ group_id?: string | null, attribute: string, operation: ProgrammingValueOperatio
  * Optional identity shared by samples from one continuous encoder gesture. The server
  * keeps all samples in one Programmer undo entry; taps and wheel ticks omit it.
  */
-undo_group?: string | null, timing: ProgrammingValueTiming, } | { "type": "apply_indexed_preset", expected_selection_revision: number, attribute: string, targets: Array<ProgrammingIndexedPresetTarget>, } | { "type": "set_selection", fixture_ids: Array<string>, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_group", group_id: string, attribute: string, } | { "type": "set_selection_color_range", fixture_ids: Array<string>, start: ProgrammingPickerColor, end: ProgrammingPickerColor, hue_travel: number, brightness: number, timing: ProgrammingValueTiming, } | { "type": "batch", mutations: Array<ProgrammingValueMutation>, } | { "type": "clear" };
+undo_group?: string | null, timing: ProgrammingValueTiming,
+/**
+ * TL-594: the exact accepted source the surface displayed. First-edit adoption uses
+ * only that leased source and holds quietly when it is gone; omitted, the edit keeps
+ * the latest-accepted adoption (OSC and HTTP integrators).
+ */
+displayed_source?: DisplayedSourceRef | null,
+/**
+ * TL-554: the reference head a Direct (`native`) edit names. Absent, the server takes
+ * the first verified head of the ordered selection.
+ */
+native_reference?: NativeColorReferenceRef | null,
+/**
+ * TL-554: the operator's explicit starting colour when the first semantic edit of a
+ * Direct value cannot adopt its (unknown) visible appearance.
+ */
+explicit_color_start?: ExplicitColorStart | null, } | { "type": "apply_indexed_preset", expected_selection_revision: number, attribute: string, targets: Array<ProgrammingIndexedPresetTarget>, } | { "type": "set_selection", fixture_ids: Array<string>, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingAttributeValue, timing: ProgrammingValueTiming, } | { "type": "release_group", group_id: string, attribute: string, } | { "type": "set_selection_color_range", fixture_ids: Array<string>, start: ProgrammingPickerColor, end: ProgrammingPickerColor, hue_travel: number, brightness: number, timing: ProgrammingValueTiming, } | { "type": "batch", mutations: Array<ProgrammingValueMutation>, } | { "type": "clear" };
 export type ProgrammingValuesActionRequest = { request_id: string, expected_revision: number, expected_capture_mode_revision: number, action: ProgrammingValuesAction, };
 export type ProgrammingValuesActionState = { "status": "changed", projection: ProgrammingValuesProjection, event_sequence: number, } | { "status": "no_change" };
-export type ProgrammingValuesActionOutcome = { request_id: string, correlation_id: string, revision: number, capture_mode_revision: number, replayed: boolean, warning?: string | null, } & ({ "status": "changed", projection: ProgrammingValuesProjection, event_sequence: number, } | { "status": "no_change" });
+export type ProgrammingValuesActionOutcome = { request_id: string, correlation_id: string, revision: number, capture_mode_revision: number, replayed: boolean,
+/**
+ * TL-594: present when an edit that named a displayed source was held quietly.
+ */
+hold?: ProgrammingValuesHoldReason | null,
+/**
+ * TL-554: the first semantic edit of a Direct value adopted this starting value.
+ */
+color_adoption?: ColorAdoptionReport | null, warning?: string | null, } & ({ "status": "changed", projection: ProgrammingValuesProjection, event_sequence: number, } | { "status": "no_change" });
 export type ProgrammingValuesErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 export type ProgrammingValuesErrorResponse = { kind: ProgrammingValuesErrorKind, error: string, current_revision?: number | null, current_capture_mode_revision?: number | null, retryable: boolean, };
 export type ProgrammingPreloadColorXyz = { x: number, y: number, z: number, };
-export type ProgrammingPreloadAttributeValue = { "kind": "normalized", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "discrete", "value": string } | { "kind": "color_xyz", "value": ProgrammingPreloadColorXyz } | { "kind": "raw_dmx", "value": number } | { "kind": "raw_dmx_exact", "value": number };
+export type ProgrammingPreloadAttributeValue = { "kind": "normalized", "value": number } | { "kind": "spread", "value": Array<number> } | { "kind": "discrete", "value": string } | { "kind": "color_xyz", "value": ProgrammingPreloadColorXyz } | { "kind": "color_program", "value": ProgrammingColorProgram } | { "kind": "position", "value": ProgrammingPositionIntent } | { "kind": "zoom", "value": ProgrammingZoomIntent } | { "kind": "group_family", "value": ProgrammingGroupFamilyAssignment } | { "kind": "raw_dmx", "value": number } | { "kind": "raw_dmx_exact", "value": number };
 export type ProgrammingPreloadFixtureValue = { fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
 export type ProgrammingPreloadGroupValue = { group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
 export type ProgrammingPreloadValuesProjection = { revision: number, fixture_values: Array<ProgrammingPreloadFixtureValue>, group_values: Array<ProgrammingPreloadGroupValue>, dynamic_values: Array<ProgrammingDynamicValue>, };
@@ -307,11 +442,35 @@ export type ProgrammingPreloadValuesChange = { projection: ProgrammingPreloadVal
 export type ProgrammingPreloadValuesSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingPreloadValuesProjection, };
 export type ProgrammingPreloadValueTiming = { fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
 export type ProgrammingPreloadValueMutation = { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_group", group_id: string, attribute: string, };
-export type ProgrammingPreloadValueOperation = { "type": "absolute_set", value: ProgrammingPreloadAttributeValue, } | { "type": "relative_step", delta: number, };
-export type ProgrammingPreloadValuesAction = { "type": "apply_intent", fixture_ids: Array<string>, group_id?: string | null, attribute: string, operation: ProgrammingPreloadValueOperation, undo_group?: string | null, timing: ProgrammingPreloadValueTiming, } | { "type": "apply_indexed_preset", expected_selection_revision: number, attribute: string, targets: Array<ProgrammingIndexedPresetTarget>, } | { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_group", group_id: string, attribute: string, } | { "type": "batch", mutations: Array<ProgrammingPreloadValueMutation>, };
+export type ProgrammingPreloadValueOperation = { "type": "component_edits", edits: Array<ProgrammingComponentEdit>, } | { "type": "absolute_set", value: ProgrammingPreloadAttributeValue, } | { "type": "relative_step", delta: number, };
+export type ProgrammingPreloadValuesAction = { "type": "finish_gesture", attribute: string, undo_group: string, } | { "type": "apply_intent", fixture_ids: Array<string>, group_id?: string | null, attribute: string, operation: ProgrammingPreloadValueOperation, undo_group?: string | null, timing: ProgrammingPreloadValueTiming,
+/**
+ * TL-594: the exact accepted source the surface displayed. First-edit adoption uses
+ * only that leased source and holds quietly when it is gone; omitted, the edit keeps
+ * the latest-accepted adoption (OSC and HTTP integrators).
+ */
+displayed_source?: DisplayedSourceRef | null,
+/**
+ * TL-554: the reference head a Direct (`native`) edit names. Absent, the server takes
+ * the first verified head of the ordered selection.
+ */
+native_reference?: NativeColorReferenceRef | null,
+/**
+ * TL-554: the operator's explicit starting colour when the first semantic edit of a
+ * Direct value cannot adopt its (unknown) visible appearance.
+ */
+explicit_color_start?: ExplicitColorStart | null, } | { "type": "apply_indexed_preset", expected_selection_revision: number, attribute: string, targets: Array<ProgrammingIndexedPresetTarget>, } | { "type": "set_fixture", fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_fixture", fixture_id: string, attribute: string, } | { "type": "set_group", group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, timing: ProgrammingPreloadValueTiming, } | { "type": "release_group", group_id: string, attribute: string, } | { "type": "batch", mutations: Array<ProgrammingPreloadValueMutation>, };
 export type ProgrammingPreloadValuesActionRequest = { request_id: string, expected_revision: number, expected_capture_mode_revision: number, action: ProgrammingPreloadValuesAction, };
 export type ProgrammingPreloadValuesActionState = { "status": "changed", projection: ProgrammingPreloadValuesProjection, event_sequence: number, } | { "status": "no_change" };
-export type ProgrammingPreloadValuesActionOutcome = { request_id: string, correlation_id: string, revision: number, capture_mode_revision: number, replayed: boolean, warning?: string | null, } & ({ "status": "changed", projection: ProgrammingPreloadValuesProjection, event_sequence: number, } | { "status": "no_change" });
+export type ProgrammingPreloadValuesActionOutcome = { request_id: string, correlation_id: string, revision: number, capture_mode_revision: number, replayed: boolean,
+/**
+ * TL-594: present when an edit that named a displayed source was held quietly.
+ */
+hold?: ProgrammingValuesHoldReason | null,
+/**
+ * TL-554: the first semantic edit of a Direct value adopted this starting value.
+ */
+color_adoption?: ColorAdoptionReport | null, warning?: string | null, } & ({ "status": "changed", projection: ProgrammingPreloadValuesProjection, event_sequence: number, } | { "status": "no_change" });
 export type ProgrammingPreloadValuesErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 export type ProgrammingPreloadValuesErrorResponse = { kind: ProgrammingPreloadValuesErrorKind, error: string, current_revision?: number | null, current_capture_mode_revision?: number | null, retryable: boolean, };
 export type ProgrammingPreloadPlaybackAction = "toggle" | "go" | "back" | "off" | "on" | "temporary_on" | "temporary_off" | "dynamic_pause" | "dynamic_restart" | "dynamic_double_speed" | "dynamic_half_speed" | "dynamic_learn_speed" | { "fader": { value_permyriad: number, } };
@@ -462,7 +621,7 @@ export type ProgrammingUpdateTargetIdentity = { family: ProgrammingUpdateTargetF
 export type ProgrammingUpdateObjectKind = "cue_list" | "preset" | "group";
 export type ProgrammingUpdateObjectIdentity = { kind: ProgrammingUpdateObjectKind, object_id: string, object_revision: number, };
 export type ProgrammingUpdateTargetFilter = "eligible_for_update_existing" | "show_all_active";
-export type ProgrammingUpdateAddress = { "type": "fixture_attribute", fixture_id: string, attribute: string, } | { "type": "group_attribute", group_id: string, attribute: string, } | { "type": "dynamic_attribute", fixture_id: string, attribute: string, instance_link?: string | null, } | { "type": "group_membership", fixture_id: string, };
+export type ProgrammingUpdateAddress = { "type": "fixture_attribute", fixture_id: string, attribute: string, } | { "type": "group_attribute", group_id: string, attribute: string, } | { "type": "dynamic_attribute", fixture_id: string, attribute: string, instance_link?: string | null, lane_id?: string | null, component?: ProgrammingComponent | null, } | { "type": "group_membership", fixture_id: string, };
 export type ProgrammingUpdateCueSource = { cue_id: string, cue_number: string, cue_index: number, };
 export type ProgrammingUpdateIgnoreReason = "new_address" | "not_in_current_cue" | "not_in_active_tracked_state" | "new_group_member";
 export type ProgrammingUpdateItemOutcome = { "outcome": "change_at_source", source: ProgrammingUpdateCueSource, } | { "outcome": "change_in_current_cue", cue: ProgrammingUpdateCueSource, } | { "outcome": "add_to_current_cue", cue: ProgrammingUpdateCueSource, } | { "outcome": "add_new_to_current_cue", cue: ProgrammingUpdateCueSource, } | { "outcome": "update_existing" } | { "outcome": "add_new" } | { "outcome": "unchanged", source?: ProgrammingUpdateCueSource | null, } | { "outcome": "ignored", reason: ProgrammingUpdateIgnoreReason, };
@@ -546,6 +705,42 @@ export type OutputRuntimeActionState = { "status": "changed", event_sequence: nu
 export type OutputRuntimeActionOutcome = { request_id: string, correlation_id: string, projection: OutputRuntimeProjection, replayed: boolean, durability: OutputRuntimeDurability, warning?: string | null, } & ({ "status": "changed", event_sequence: number, } | { "status": "no_change", });
 export type OutputRuntimeErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 export type OutputRuntimeErrorResponse = { kind: OutputRuntimeErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
+export type OutputFrameIdentity = { generation: number, sequence: number,
+/**
+ * Evaluation timestamp in RFC3339 format.
+ */
+sampled_at: string,
+/**
+ * Tracking inputs captured with this output frame, when the producer supplies them.
+ */
+tracking?: OutputTrackingIdentity | null, };
+export type OutputTrackingIdentity = { show_id: string | null, configuration_generation: number, point_generation: number, source_generation: number, accepted_sequence: number, sampled_at_millis: number, };
+export type OutputDmxSnapshot = { native_protocol: number, revision: number,
+/**
+ * Absent for producers that do not publish evaluated frame identities yet.
+ */
+frame: OutputFrameIdentity | null, universes: Array<OutputDmxUniverse>, overrides: Array<OutputDmxOverride>, points: Array<OutputPointPose>, native: OutputNativeLane | null, preload: OutputNativeLane | null,
+/**
+ * Present only when the Preload lane is read from the accepted Pending publication (the
+ * family adapters are engaged). It names the Pending episode whose ticket stamps
+ * `preload.frame`, or says passively why no Pending frame is published. Absent for
+ * legacy servers and for the legacy Preload projection.
+ */
+preload_status?: OutputPreloadStatus | null, };
+export type OutputDmxUniverse = { universe: number, slots: Array<number>, };
+export type OutputDmxOverride = { universe: number, address: number, value: number, };
+export type OutputPointPose = { fixture_id: string, offset_metres: [number, number, number], rotation_degrees: [number, number, number], };
+export type OutputNativeLane = { show_id: string | null, revision: number,
+/**
+ * Identifies this lane's own evaluation; independent Preload must not inherit Live's stamp.
+ */
+frame: OutputFrameIdentity | null, instances: Array<OutputNativeInstance>, points: Array<OutputPointPose>, };
+export type OutputNativeInstance = { fixture_id: string, instance_id: string, native_identity: string, raw: Array<number>,
+/**
+ * Preload only: true channels replace Live; false channels retain actual Live native/DMX.
+ * None is a complete native row (including older native-protocol-1 servers).
+ */
+owned_channels: Array<boolean> | null, };
 export type DmxOverrideRequest = { request_id: string, universe: number, address: number, value?: number | null, };
 export type HighlightAction = "on" | "off" | "toggle" | "next" | "previous" | "all";
 export type HighlightActionRequest = { request_id: string, action: HighlightAction, };
@@ -725,6 +920,10 @@ export type EventPayload = { "type": "programming_interaction_changed", change: 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 export type EventClientMessage = { "type": "subscribe", filter: EventSubscriptionFilter, after_sequence?: number | null, capacity?: number | null, rate_limits: Array<EventRateLimit>, } | { "type": "repair", cursor: EventSnapshotCursor, };
 export type EventServerMessage = { "type": "ready", cursor: EventSnapshotCursor, } | { "type": "event", event: EventEnvelope, } | { "type": "gap", gap: SequenceGap, } | { "type": "repaired", cursor: EventSnapshotCursor, } | { "type": "error", error: string, };
+export type FixtureGdtfPreviewRequest = { source_base64: string, };
+export type FixtureGdtfDiagnostic = { node: string, message: string, };
+export type FixtureGdtfPreview = { profile: unknown, diagnostics: Array<FixtureGdtfDiagnostic>, unknown_attributes: Array<FixtureImportRequirement>, };
+export type FixtureGdtfImportRequest = { request_id: string, expected_revision: number, source_base64: string, attribute_mappings: Array<FixtureAttributeMapping>, };
 export type FixtureDefinitionsSnapshot = { definitions: unknown[], };
 export type FixtureProfilesSnapshot = { profiles: unknown[], };
 export type FixtureLibraryWarningsSnapshot = { warnings: Array<string>, };
@@ -838,12 +1037,25 @@ export type PatchInstalledLightSource = { "type": "profile_default" } | { "type"
 export type PatchGelDefinitionSnapshot = { number: string, name: string, display_srgb: string, visualizer_srgb: string, };
 export type PatchGelAssignment = { "type": "open_white" } | { "type": "built_in", catalog_id: string, entry_id: string, embedded_fallback: PatchGelDefinitionSnapshot, } | { "type": "custom", name: string, color_srgb: string, note: string | null, };
 export type PatchInstalledFixtureAppearance = { light_source: PatchInstalledLightSource, color_temperature_kelvin: number | null, luminous_output_lumens: number | null, gel: PatchGelAssignment, shaper_angles_degrees: [number, number, number, number], };
+export type PatchCalibrationQuality = "unknown" | "estimated" | "manufacturer" | "measured";
+export type PatchPositionCalibration = { revision: number, quality: PatchCalibrationQuality, source?: string | null, pan_zero_degrees: number, tilt_zero_degrees: number, axis_overrides?: PatchAxisOverrides | null, };
+export type PatchAxisOverrides = { version: number, source_identity: PatchPositionCalibrationIdentity, axes: Array<PatchAxisCalibration>, };
+export type PatchAxisCalibration = { node_id: string, zero_degrees: number, invert: boolean, };
+export type PatchPositionCalibrationIdentity = { profile_id: string, mode_id: string, geometry_digest: string, };
+export type PatchColorCalibration = { version: number, revision: number, paths: Array<PatchColorPathCalibration>, };
+export type PatchColorPathCalibration = { source_identity: PatchNativeColorIdentity, emitters: Array<PatchEmitterCalibration>, measurements: Array<PatchColorRecipeMeasurement>, };
+export type PatchNativeColorIdentity = { profile_id: string, profile_revision: number, profile_digest: string, mode_id: string, head_id: string, path_id: string, model_revision: number, native_layout_signature: string, };
+export type PatchEmitterCalibration = { emitter_id: string, output_gain: number, provenance: PatchOpticalProvenance, };
+export type PatchOpticalProvenance = { quality: PatchCalibrationQuality, source?: string | null, revision: number, };
+export type PatchColorRecipeMeasurement = { recipe: Array<PatchNativeColorValue>, xyz: PatchColorXyz, provenance: PatchOpticalProvenance, };
+export type PatchNativeColorValue = { channel_id: string, function_id: string, raw: number, };
+export type PatchColorXyz = { x: number, y: number, z: number, };
 export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation,
 /**
  * The size a generated Venue object was placed at, in millimetres, like every other
  * measurement the patch carries. Absent means the profile's own default.
  */
-scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, };
+scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, position_calibration?: PatchPositionCalibration | null, color_calibration?: PatchColorCalibration | null, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, };
 export type PatchHighlightOverrideInput = { channel_id: string, raw_value: number, };
 export type PatchFixtureInput = {
 /**
@@ -877,7 +1089,7 @@ note?: string | null,
  * The 3D Point this fixture is slaved to. Omitted by a client that does not use points, and
  * by every request written before they existed.
  */
-position_master?: string | null, multipatch: Array<PatchMultiPatchInput>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean,
+position_master?: string | null, multipatch: Array<PatchMultiPatchInput>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, position_calibration?: PatchPositionCalibration | null, color_calibration?: PatchColorCalibration | null,
 /**
  * Degrees the mounting bracket is set to, positive nose-down. A mechanical setting the desk
  * cannot drive, recorded so the visualizer draws the rig as it actually hangs.
@@ -928,12 +1140,12 @@ export type PatchFixturePolicyActionRequest = { request_id: string, } & ({ "acti
  * Absent targets the root physical fixture; present targets one multi-patch instance.
  */
 multipatch_instance_id: string | null, });
-export type PatchFixtureUpdateAction = { "action": "set_masters", group_masters_enabled: boolean, grand_master_enabled: boolean, } | { "action": "set_pan_tilt", invert_pan: boolean, invert_tilt: boolean, } | { "action": "set_move_in_black", enabled: boolean, delay_millis: number, } | { "action": "set_location_axis", axis: PatchVectorAxis, millimetres: number, } | { "action": "set_rotation_axis", axis: PatchVectorAxis, degrees: number, } | { "action": "set_bracket_angle", degrees: number, } | { "action": "set_shaper_module_rotation", degrees: number | null, } | { "action": "set_static_shaper_angle", element: number, degrees: number, } | { "action": "set_installed_appearance", appearance: PatchInstalledFixtureAppearance, };
+export type PatchFixtureUpdateAction = { "action": "set_masters", group_masters_enabled: boolean, grand_master_enabled: boolean, } | { "action": "set_pan_tilt", invert_pan: boolean, invert_tilt: boolean, } | { "action": "set_position_calibration", calibration: PatchPositionCalibration | null, } | { "action": "set_color_calibration", calibration: PatchColorCalibration | null, } | { "action": "set_move_in_black", enabled: boolean, delay_millis: number, } | { "action": "set_location_axis", axis: PatchVectorAxis, millimetres: number, } | { "action": "set_rotation_axis", axis: PatchVectorAxis, degrees: number, } | { "action": "set_bracket_angle", degrees: number, } | { "action": "set_shaper_module_rotation", degrees: number | null, } | { "action": "set_static_shaper_angle", element: number, degrees: number, } | { "action": "set_installed_appearance", appearance: PatchInstalledFixtureAppearance, };
 export type PatchFixtureUpdateRequest = { request_id: string, expected_fixture_revision: number, expected_patch_revision: number, expected_show_revision: number,
 /**
  * Absent targets the root physical fixture; present targets exactly one multi-patch copy.
  */
-multipatch_instance_id: string | null, } & ({ "action": "set_masters", group_masters_enabled: boolean, grand_master_enabled: boolean, } | { "action": "set_pan_tilt", invert_pan: boolean, invert_tilt: boolean, } | { "action": "set_move_in_black", enabled: boolean, delay_millis: number, } | { "action": "set_location_axis", axis: PatchVectorAxis, millimetres: number, } | { "action": "set_rotation_axis", axis: PatchVectorAxis, degrees: number, } | { "action": "set_bracket_angle", degrees: number, } | { "action": "set_shaper_module_rotation", degrees: number | null, } | { "action": "set_static_shaper_angle", element: number, degrees: number, } | { "action": "set_installed_appearance", appearance: PatchInstalledFixtureAppearance, });
+multipatch_instance_id: string | null, } & ({ "action": "set_masters", group_masters_enabled: boolean, grand_master_enabled: boolean, } | { "action": "set_pan_tilt", invert_pan: boolean, invert_tilt: boolean, } | { "action": "set_position_calibration", calibration: PatchPositionCalibration | null, } | { "action": "set_color_calibration", calibration: PatchColorCalibration | null, } | { "action": "set_move_in_black", enabled: boolean, delay_millis: number, } | { "action": "set_location_axis", axis: PatchVectorAxis, millimetres: number, } | { "action": "set_rotation_axis", axis: PatchVectorAxis, degrees: number, } | { "action": "set_bracket_angle", degrees: number, } | { "action": "set_shaper_module_rotation", degrees: number | null, } | { "action": "set_static_shaper_angle", element: number, degrees: number, } | { "action": "set_installed_appearance", appearance: PatchInstalledFixtureAppearance, });
 export type PatchErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };
 export type PatchLogicalHeadProjection = {
 /**
@@ -945,7 +1157,7 @@ export type PatchMultiPatchProjection = { id: string, name: string, split_patche
  * The size a generated Venue object was placed at, in millimetres, like every other
  * measurement the patch carries. Absent means the profile's own default.
  */
-scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, };
+scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotation, invert_pan: boolean, invert_tilt: boolean, position_calibration?: PatchPositionCalibration | null, color_calibration?: PatchColorCalibration | null, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, };
 export type PatchHighlightOverrideProjection = { channel_id: string, raw_value: number, };
 export type PatchFixtureFreezeFamily = "intensity" | "color" | "position" | "beam";
 export type PatchFixtureFreezeTargetProjection = { fixture_id: string, full: boolean, families: Array<PatchFixtureFreezeFamily>, };
@@ -973,9 +1185,9 @@ note?: string | null,
  * The 3D Point this fixture is slaved to. A client that cannot read this back could not tell
  * a slaved fixture from a loose one.
  */
-position_master?: string | null, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, freeze_targets: Array<PatchFixtureFreezeTargetProjection>, };
+position_master?: string | null, logical_heads: Array<PatchLogicalHeadProjection>, multipatch: Array<PatchMultiPatchProjection>, group_masters_enabled: boolean, grand_master_enabled: boolean, invert_pan: boolean, invert_tilt: boolean, position_calibration?: PatchPositionCalibration | null, color_calibration?: PatchColorCalibration | null, bracket_angle: number, shaper_angle: number | null, installed_appearance: PatchInstalledFixtureAppearance, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideProjection>, freeze_targets: Array<PatchFixtureFreezeTargetProjection>, };
 export type PatchModeSplitProjection = { split: number, footprint: number, };
-export type PatchModeProjection = { mode_id: string, name: string, splits: Array<PatchModeSplitProjection>, };
+export type PatchModeProjection = { mode_id: string, name: string, splits: Array<PatchModeSplitProjection>, native_color_identities?: Array<PatchNativeColorIdentity>, position_calibration_identity?: PatchPositionCalibrationIdentity | null, };
 export type PatchProfileRevisionProjection = { profile_id: string, profile_revision: number, content_digest: string, manufacturer: string, name: string, fixture_type: string, patch_policy: PatchProfilePolicy,
 /**
  * Only modes referenced by fixtures in the containing snapshot or delta, never the catalog.
@@ -1052,6 +1264,32 @@ group: string, port: number,
  */
 interface?: string | null, stale_after_millis: number, calibration: PsnCalibrationProjection, bindings: Array<PsnBindingProjection>, zones: Array<PsnZoneProjection>, };
 export type PsnHealthProjection = { "state": "silent" } | { "state": "receiving" } | { "state": "stale", silent_for_millis: number, };
+export type PsnAcceptedSampleProjection = { source: string, source_generation: number, source_epoch: number, sequence: number, frame_id: number,
+/**
+ * Sender-relative send time, not a synchronized wall-clock time or freshness clock.
+ */
+sender_timestamp_micros: number,
+/**
+ * Receiver monotonic time when all accepted parts were available. A particular tracker
+ * may have arrived in an earlier part: retain its independent age_millis for freshness.
+ */
+accepted_at_millis: number, };
+export type PsnIngressDiagnosticsProjection = { duplicate_datagrams: number, rejected_datagrams: number, incomplete_frames: number, ambiguous_datagrams: number, invalid_positions: number, };
+export type PsnSourceProjection = { source: string, accepted_sample?: PsnAcceptedSampleProjection | null, diagnostics: PsnIngressDiagnosticsProjection, };
+export type PsnReceiverDiagnosticsProjection = { source_count: number, source_capacity: number,
+/**
+ * New-source datagrams dropped at capacity; already-held sources are never evicted.
+ */
+rejected_source_datagrams: number,
+/**
+ * Current raw finite positions whose calibration could not produce finite show coordinates.
+ */
+invalid_calibrated_positions: number,
+/**
+ * Stored rows withheld because their binding UUID is repeated, including disabled rows.
+ * Independent binding identities continue to track; the stored configuration is preserved.
+ */
+conflicting_binding_rows: number, };
 export type PsnTrackerProjection = { tracker_id: number,
 /**
  * What the sender calls it. A data packet carries only the number, so a source heard for less
@@ -1065,7 +1303,11 @@ position_metres?: [number, number, number] | null, age_millis: number, stale: bo
 /**
  * Which sender this came from, as address and port.
  */
-source: string, };
+source: string,
+/**
+ * Last finite positional sample; may be older than the source's latest accepted frame.
+ */
+accepted_sample?: PsnAcceptedSampleProjection | null, };
 export type PsnPlacementProjection = { binding_id: string, point_fixture_id: string, position_metres: [number, number, number],
 /**
  * The marker is further from where the point was patched than a 3D Point can reach, so the
@@ -1080,7 +1322,12 @@ listening_on?: string | null, health?: PsnHealthProjection | null,
 /**
  * What the senders call themselves, once their info packets have said.
  */
-system_names: Array<string>, trackers: Array<PsnTrackerProjection>, placements: Array<PsnPlacementProjection>, occupied_zone_ids: Array<string>, frames: number,
+system_names: Array<string>, trackers: Array<PsnTrackerProjection>,
+/**
+ * Optional for older receivers. Observational ingress metadata, never an output-frame
+ * identity to join onto independently retained DMX, Point poses or physical values.
+ */
+sources?: Array<PsnSourceProjection> | null, diagnostics?: PsnReceiverDiagnosticsProjection | null, placements: Array<PsnPlacementProjection>, occupied_zone_ids: Array<string>, frames: number,
 /**
  * Datagrams on the group that were not PSN, or could not be read. A steady climb here with
  * frames also arriving means something else is talking on the group.
@@ -1318,6 +1565,12 @@ acknowledgements: boolean,
  */
 include_dynamic_stack: boolean,
 /**
+ * Carry every resolved attribute in `values`. Stage consumers receive only the
+ * attributes the Stage draws; a Preset pool compares every stored attribute, such as
+ * the semantic Position owner and Beam attributes, against the effective values.
+ */
+complete_values: boolean,
+/**
  * Permit deltas to omit an unchanged Dynamic stack. Missing means
  * retain the previously installed stack; an explicit empty array
  * still clears it. Older clients leave this disabled and continue to
@@ -1329,14 +1582,37 @@ sparse_dynamic_stack: boolean,
  * a single JSON array/WebSocket frame. Older clients leave this
  * disabled and continue to receive one JSON object per frame.
  */
-batched_messages: boolean, } | { "type": "unsubscribe", lanes: Array<VisualizationLane>, } | { "type": "resynchronize", lane: VisualizationLane, } | { "type": "acknowledge", sequence: number, };
+batched_messages: boolean,
+/**
+ * TL-594: claim typed readouts for these owners from the same accepted Normal
+ * source as the lane messages. A new Subscribe replaces the claim.
+ */
+readouts?: VisualizationReadoutClaim | null, } | { "type": "unsubscribe", lanes: Array<VisualizationLane>, } | { "type": "resynchronize", lane: VisualizationLane, } | { "type": "acknowledge", sequence: number, };
 export type VisualizationValue = { fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, };
 export type VisualizationValueKey = { fixture_id: string, attribute: string, };
 export type VisualizationStackEntryType = "ordinary_static" | "dynamic" | "fix_at" | "dynamic_off" | "static";
 export type VisualizationDynamicStackEntry = { fixture_id: string, attribute: string, entry_type: VisualizationStackEntryType, priority: number, changed_at_millis: number, source: string, dynamic_id?: string | null, pool_number?: number | null, name: string, runtime_instance_id?: string | null, controller_id?: string | null, lane_id?: string | null, size?: number | null, activation_mix?: number | null, paused: boolean, hidden: boolean, pending: boolean, winning: boolean, value?: ProgrammingPreloadAttributeValue | null, resolved_value?: ProgrammingPreloadAttributeValue | null, };
 export type VisualizationLaneSnapshot = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, dynamic_stack?: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, };
 export type VisualizationLaneDelta = { scope: VisualizationScope, revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, removed_values: Array<VisualizationValueKey>, dynamic_stack?: Array<VisualizationDynamicStackEntry> | null, profile_output_values: Array<VisualizationValue>, removed_profile_output_values: Array<VisualizationValueKey>, };
-export type VisualizationServerMessage = { "type": "hello", protocol_version: number, max_rate_hz: number, lanes: Array<VisualizationLane>, scope: VisualizationScope, } | { "type": "snapshot", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, snapshot: VisualizationLaneSnapshot, } | { "type": "delta", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, delta: VisualizationLaneDelta, } | { "type": "heartbeat", scope: VisualizationScope, sequence: number, published_at: string, } | { "type": "structural_invalidation", scope: VisualizationScope, revision: number, } | { "type": "error", code: string, message: string, };
+export type VisualizationServerMessage = { "type": "hello", protocol_version: number, max_rate_hz: number, lanes: Array<VisualizationLane>, scope: VisualizationScope, } | { "type": "snapshot", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, snapshot: VisualizationLaneSnapshot,
+/**
+ * TL-594: opaque session-scoped lease of this delivered accepted source. Absent for a
+ * lane that has no accepted source to lease (Preload until TL-548 publishes one).
+ */
+lease?: number | null,
+/**
+ * TL-594: the Pending episode and ticket of a gated Preload lane message.
+ */
+pending?: VisualizationPendingStamp | null, } | { "type": "delta", lane: VisualizationLane, scope: VisualizationScope, sequence: number, source_frame: number, source_timestamp: string, published_at: string, delta: VisualizationLaneDelta,
+/**
+ * TL-594: opaque session-scoped lease of this delivered accepted source. Absent for a
+ * lane that has no accepted source to lease (Preload until TL-548 publishes one).
+ */
+lease?: number | null,
+/**
+ * TL-594: the Pending episode and ticket of a gated Preload lane message.
+ */
+pending?: VisualizationPendingStamp | null, } | { "type": "readouts", sequence: number, source_frame: number, readouts: OutputReadoutSnapshot, } | { "type": "heartbeat", scope: VisualizationScope, sequence: number, published_at: string, } | { "type": "structural_invalidation", scope: VisualizationScope, revision: number, } | { "type": "error", code: string, message: string, };
 export type VisualizerViewMode = "top_down" | "left_to_right" | "right_to_left" | "front_to_back" | "back_to_front" | "lines_3d" | "simple_3d" | "full_3d";
 export type VisualizerRenderQuality = "draft" | "standard" | "high" | "ultra";
 export type VisualizerCamera = { position: [number, number, number], target: [number, number, number], up: [number, number, number],
@@ -1473,8 +1749,8 @@ export type ProgrammerSelectionRule = { "type": "all" } | { "type": "odd" } | { 
 export type ProgrammerSelectionReference = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "remove_fixture", fixture_id: string, } | { "type": "remove_live_group", group_id: string, };
 export type ProgrammerSelectionExpression = { "type": "static" } | { "type": "live_group", group_id: string, rule: ProgrammerSelectionRule, } | { "type": "playback_contents", items: Array<ProgrammerSelectionReference>, } | { "type": "sources", items: Array<ProgrammerSelectionReference>, };
 export type ProgrammerSelectionProjection = { selected: Array<string>, expression: ProgrammerSelectionExpression | null, revision: number, gesture_open: boolean, };
-export type ProgrammingInteractionProjection = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, };
-export type ProgrammingInteractionChange = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, } | { desk_id: string, command_line: CommandLineResponse, } | { desk_id: string, selection: ProgrammerSelectionProjection, };
+export type ProgrammingInteractionProjection = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, alignment: ProgrammingAlignmentProjection, };
+export type ProgrammingInteractionChange = { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, alignment: ProgrammingAlignmentProjection, } | { desk_id: string, command_line: CommandLineResponse, alignment: ProgrammingAlignmentProjection, } | { desk_id: string, selection: ProgrammerSelectionProjection, alignment: ProgrammingAlignmentProjection, } | { desk_id: string, alignment: ProgrammingAlignmentProjection, } | { desk_id: string, command_line: CommandLineResponse, selection: ProgrammerSelectionProjection, } | { desk_id: string, command_line: CommandLineResponse, } | { desk_id: string, selection: ProgrammerSelectionProjection, };
 export type ProgrammingInteractionSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingInteractionProjection, };
 export type ProgrammingSelectionGestureSource = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "dereferenced_group", group_id: string, };
 export type ProgrammingSelectionAction = { "action": "replace", fixtures: Array<string>, expected_revision: number, } | { "action": "gesture", source: ProgrammingSelectionGestureSource, remove: boolean, } | { "action": "select_group", group_id: string, frozen: boolean, rule: ProgrammerSelectionRule, expected_revision: number, } | { "action": "apply_rule", rule: ProgrammerSelectionRule, };
@@ -1501,9 +1777,13 @@ export type ProgrammerCaptureModeLiveActionRequest = { request_id: string, blind
 export type ProgrammerCaptureModeHttpActionRequest = { blind: boolean | null, preview: boolean | null, active_context?: string | null, };
 export type ProgrammerCaptureModeOutcome = { request_id: string, blind: boolean, preview: boolean, active_context: string | null, };
 export type ProgrammingAlignMode = "off" | "left" | "right" | "out" | "in";
-export type ProgrammingAlignLiveActionRequest = { request_id: string, mode: ProgrammingAlignMode, };
-export type ProgrammingAlignHttpActionRequest = { mode: ProgrammingAlignMode, };
-export type ProgrammingAlignOutcome = { request_id: string, mode: ProgrammingAlignMode, revision: number | null, bound_attribute: string | null, fixture_count: number, };
+export type ProgrammingAlignAction = "off" | "left" | "right" | "out" | "in" | "cycle";
+export type ProgrammingAlignLiveActionRequest = { request_id: string, mode: ProgrammingAlignAction, };
+export type ProgrammingAlignHttpActionRequest = { mode: ProgrammingAlignAction, };
+export type ProgrammingAlignOutcome = { request_id: string, mode: ProgrammingAlignMode, revision: number | null, bound_attribute: string | null, fixture_count: number, alignment: ProgrammingAlignmentProjection, };
+export type ProgrammingAlignmentProjection = { revision: number, mode: ProgrammingAlignMode, binding: ProgrammingAlignmentBinding | null, fixture_count: number, };
+export type ProgrammingAlignmentBinding = { "kind": "attribute", attribute: string, } | { "kind": "family", component: ProgrammingComponent, lane: ProgrammingAlignmentLane, group_id: string | null, };
+export type ProgrammingAlignmentLane = "normal" | "preload";
 export type FixtureControlLiveActionRequest = { request_id: string, fixture_id: string, action_id: string, active: boolean, };
 export type FixtureControlHttpActionRequest = { fixture_id: string, action_id: string, active: boolean, };
 export type FixtureControlTarget = { fixture_id: string, action_id: string, expected_profile_revision: number, };
@@ -1581,3 +1861,230 @@ export type TimecodeCueListClipExecution = { lane_id: string, cue_list_id: strin
  */
 level: number, message: string | null, };
 export type TimecodeTransportSnapshot = { timecode_id: string, revision: number, state: TimecodeTransportState, frame: number, duration_frame: number, audio_linked: boolean, cue_list_clips: Array<TimecodeCueListClipExecution>, };
+export type DisplayedSourceRef = { lane: VisualizationLane, lease: number, };
+export type OutputReadoutUnavailable = "no_accepted_frame" | "no_accepted_preload" | "show_changed" | "stale_generation";
+export type ProgrammingValuesHoldReason = "displayed_source_unavailable" | "native_color_unavailable" | "explicit_color_start_required" | "zoom_unavailable";
+export type OutputPositionCommandReadout = { destination: string, emitter_id: string, pan_degrees: number, tilt_degrees: number, };
+export type OutputCommonAngles = { pan_degrees: number, tilt_degrees: number, };
+export type OutputPositionReadout = {
+/**
+ * False when the owner has no complete commanded pose in this source.
+ */
+available: boolean,
+/**
+ * Every copy/emitter pair, root first; divergent copies stay distinct rows.
+ */
+commands: Array<OutputPositionCommandReadout>,
+/**
+ * `None` on divergence or unavailability. Never an average or the root's pair.
+ */
+common?: OutputCommonAngles | null, };
+export type OutputOwnerReadout = { fixture_id: string,
+/**
+ * The typed requested Position intent of the same frame. Presentation is client-side.
+ */
+requested?: ProgrammingPreloadAttributeValue | null,
+/**
+ * TL-657: the typed Color the same frame resolves for the owner (a running Cue or Playback,
+ * or the Programmer): exactly the colour a first semantic Color edit starts from when the
+ * Programmer holds none. Absent when the frame gives the owner no colour; the open-white
+ * start then applies. Presentation is client-side.
+ */
+color?: ProgrammingPreloadAttributeValue | null, position: OutputPositionReadout, };
+export type OutputReadoutSnapshot = { lane: VisualizationLane, scope: VisualizationScope, frame?: OutputFrameIdentity | null,
+/**
+ * Opaque, session-scoped lease of exactly this source. Absent when unavailable.
+ */
+lease?: number | null,
+/**
+ * Show revision of the source.
+ */
+revision: number, unavailable?: OutputReadoutUnavailable | null, owners: Array<OutputOwnerReadout>, };
+export type VisualizationReadoutClaim = { fixture_ids: Array<string>, };
+export type VisualizationPendingStamp = { status: OutputPreloadStatus, frame?: OutputFrameIdentity | null, };
+export type ColorEncoderPresentation = "easy_rgbw" | "easy_rgbwauv" | "advanced";
+export type FamilyEncoderFamily = "position" | "color" | "focus";
+export type FamilyEncoderLimitsSource = "descriptor" | "selection" | "mixed" | "unknown" | "unbounded";
+export type FamilyEncoderEditKind = "scalar" | "target_reference" | "unavailable";
+export type FamilyEncoderComponentSlot = {
+/**
+ * Stable slot id, for example `position.pan`, `position.target.x`, `color.white_blend`.
+ */
+id: string, label: string, component: ProgrammingComponent,
+/**
+ * The compiled runtime descriptor of `component`, unchanged.
+ */
+descriptor: ProgrammingComponentDescriptor,
+/**
+ * The selection's common limits in descriptor units, when known.
+ */
+limits?: ProgrammingAttributeBounds | null, limits_source: FamilyEncoderLimitsSource,
+/**
+ * Zoom only: the selection's common opening convention, when every profile declares it.
+ */
+convention?: ProgrammingOpeningConvention | null, edit: FamilyEncoderEditKind,
+/**
+ * Requested fixtures that carry this component's owner, in request order.
+ */
+fixture_ids: Array<string>, };
+export type FamilyEncoderSlot = { "kind": "component" } & FamilyEncoderComponentSlot | { "kind": "attribute", attribute: string, label: string, };
+export type FamilyEncoderPage = {
+/**
+ * 1-based page number within the family.
+ */
+number: number, label: string,
+/**
+ * Four slots in encoder order; `null` is the standard empty encoder.
+ */
+slots: Array<FamilyEncoderSlot | null>, };
+export type FamilyEncoderReservation = "native_color";
+export type FamilyEncoderReservedPage = { number: number, reason: FamilyEncoderReservation, };
+export type FamilyEncoderGroup = { family: FamilyEncoderFamily,
+/**
+ * Backend owners authored from this family's pages (Focus: `focus` and `zoom`).
+ */
+owners: Array<ProgrammingOwner>,
+/**
+ * Requested fixtures carrying at least one owner of this family, in request order.
+ */
+fixture_ids: Array<string>,
+/**
+ * Registry attributes these pages replace exactly.
+ */
+replaces_attributes: Array<string>,
+/**
+ * Registry attribute prefixes these pages replace (Color: `color.`).
+ */
+replaces_attribute_prefixes: Array<string>, pages: Array<FamilyEncoderPage>,
+/**
+ * Page numbers kept for later content; a client renders nothing for them yet.
+ */
+reserved_pages: Array<FamilyEncoderReservedPage>, };
+export type FamilyEncoderPagesSnapshot = {
+/**
+ * True only when the runtime supports the semantic programming contract. A client uses
+ * `families` only then; otherwise its legacy normalized pages stay in force.
+ */
+semantic: boolean, supported_programming_contract: number,
+/**
+ * The contract version the semantic pages require.
+ */
+semantic_programming_contract: number,
+/**
+ * The per-desk presentation the Color pages were laid out with.
+ */
+color_presentation: ColorEncoderPresentation, show_revision: number,
+/**
+ * The requested fixtures, in request order (duplicates kept).
+ */
+fixture_ids: Array<string>, families: Array<FamilyEncoderGroup>, };
+export type NativeColorReferenceRef = { fixture_id: string, head_id: string, };
+export type ExplicitColorStart = { rgb: [number, number, number], };
+export type ColorAdoptionStart = "approximate" | "explicit";
+export type ColorAdoptionFixture = { fixture_id: string, start: ColorAdoptionStart,
+/**
+ * UV was unknown and adopted off.
+ */
+uv_unknown: boolean, };
+export type ColorAdoptionReport = { fixtures: Array<ColorAdoptionFixture>, limitations: Array<string>, };
+export type NativeColorResolution = "8bit" | "16bit" | "24bit" | "32bit";
+export type NativeColorFunctionDescriptor = { function_id: string,
+/**
+ * Display label only (for example a wheel slot name); never an identity.
+ */
+label: string, raw_from: number, raw_to: number,
+/**
+ * Continuous functions take relative and spread edits; discrete ones are choices.
+ */
+continuous: boolean, };
+export type NativeColorControlDescriptor = {
+/**
+ * Stable slot id `native.<channel_id>`.
+ */
+id: string, channel_id: string,
+/**
+ * Display label only; never an identity.
+ */
+label: string,
+/**
+ * Full-width raw maximum (U8 255 … U32 4294967295).
+ */
+raw_max: number, resolution: NativeColorResolution,
+/**
+ * The profile declares an ultraviolet emitter on this control.
+ */
+ultraviolet: boolean, functions: Array<NativeColorFunctionDescriptor>, };
+export type NativeColorPage = {
+/**
+ * Color family page number (3 or 4).
+ */
+number: number, controls: Array<NativeColorControlDescriptor | null>, };
+export type NativeColorReference = { fixture_id: string, fixture_number: number | null, fixture_name: string, head_id: string, head_name: string,
+/**
+ * True when the operator chose it; false for the first verified head of the selection.
+ */
+chosen: boolean, identity: ProgrammingNativeColorIdentity, };
+export type NativeColorReferenceCandidate = { fixture_id: string, fixture_number: number | null, fixture_name: string, head_id: string, head_name: string, };
+export type NativeColorReplayPreview = "exact" | "fallback";
+export type NativeColorFixturePreview = { fixture_id: string, replay: NativeColorReplayPreview, };
+export type NativeColorPagesUnavailable = "contract" | "no_verified_head";
+export type NativeColorValueReadout = { channel_id: string, function_id: string, raw: number, };
+export type NativeColorValues = { frame: OutputFrameIdentity, controls: Array<NativeColorValueReadout>, };
+export type NativeColorPagesSnapshot = { semantic: boolean, show_revision: number,
+/**
+ * The requested fixtures, in request order (duplicates kept).
+ */
+fixture_ids: Array<string>, unavailable?: NativeColorPagesUnavailable | null, reference?: NativeColorReference | null,
+/**
+ * Verified reference heads of the selection, in selection order.
+ */
+candidates: Array<NativeColorReferenceCandidate>,
+/**
+ * Pages 3 and 4: at most eight controls in path order.
+ */
+pages: Array<NativeColorPage>,
+/**
+ * Every further control, in path order, for the full Color modal. Nothing is omitted.
+ */
+overflow: Array<NativeColorControlDescriptor>,
+/**
+ * Predicted replay of the reference recipe on each selected Color fixture.
+ */
+fixtures: Array<NativeColorFixturePreview>,
+/**
+ * The reference head's values in the latest accepted frame, when it outputs Color.
+ */
+values?: NativeColorValues | null, };
+export type ColorIntentDirectReplay = "exact" | "fallback" | "native_only";
+export type ColorIntentDirectCompatibility = "compatible" | "no_native_color" | "different_source" | "changed_layout" | "unknown";
+export type ColorIntentDirectUv = "apply" | "park_off";
+export type ColorIntentDirectOrigin = "forward" | "recorded";
+export type ColorIntentDriveLimit = "within" | "above_model_maximum" | "unknown";
+export type ColorIntentDirectReport = { replay: ColorIntentDirectReplay,
+/**
+ * Fallback only: why the head is not an exact replay.
+ */
+compatibility?: ColorIntentDirectCompatibility | null,
+/**
+ * Fallback only: the UV decision, independent of the visible one.
+ */
+uv?: ColorIntentDirectUv | null, origin: ColorIntentDirectOrigin, drive_limit: ColorIntentDriveLimit, limitations: Array<string>, };
+export type OutputPreloadStatus = { state: OutputPreloadState,
+/**
+ * The Pending episode of the published lane. A new episode restarts its tickets, so the
+ * lane's `frame.sequence` is ordered only within one episode.
+ */
+episode?: string | null, };
+export type OutputPreloadState = "published" | "not_yet_available" | "idle" | "queue_preview_unavailable";
+export type ColorIntentAcceptedFrame = { state: ColorIntentFrameState,
+/**
+ * The published output frame whose Color results the heads report.
+ */
+frame?: OutputFrameIdentity | null, };
+export type ColorIntentFrameState = "accepted" | "not_yet_available";
+export type ColorIntentUvReport = { status: ColorIntentUvStatus,
+/**
+ * The requested amount was limited by the emitter's drive range.
+ */
+clipped: boolean, };
+export type ColorIntentUvStatus = "not_requested" | "applied" | "unsupported";

@@ -1,6 +1,6 @@
 import { Button, ModalFrame } from "@tosklight/ui";
 import { EncoderSection, type EncoderSectionItem } from "@tosklight/ui/encoders";
-import { type ReactNode, useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ParameterFamilyTabs } from "../../components/control/parameterControls/ParameterFamilyTabs";
 import type { ParameterFamily } from "../../components/control/parameterControls/model";
 import type { ParameterController } from "../../components/control/parameterControls/useParameterController";
@@ -25,26 +25,21 @@ import "./fixtureAbstractionMockup.css";
 
 export type MockupView = "easy" | "extended" | "advanced" | "mixed-magenta" | "mixed-warm-white" | "angles" | "fixed" | "tracked" | "configuration" | "beam" | "media";
 export interface FixtureAbstractionMockupProps {
+ renderCommandSection: (programmer: ReactNode, hardware: boolean) => ReactNode;
  initialView?: MockupView; surface?: MockupSurface;
  colorMode?: "easy" | "advanced"; easyLayout?: "rgbw" | "rgbwauv";
  fixtureCapability?: "mixed" | "rgbw" | "rgbwauv" | "rgbal" | "cmy" | "wheel";
  mountLift?: number; mountYaw?: number; performerOffset?: number;
 }
 
-/** Supplies the desk's control section around the mockup's programmer area. */
-export type MockupControlRenderer = (control: { hardware: boolean; programmer: ReactNode }) => ReactNode;
-
-/**
- * Local illustration composed inside the production shell; no show or hardware transport.
- * The caller provides application state, show objects and the control section.
- */
-export function FixtureAbstractionMockup(props: FixtureAbstractionMockupProps & { renderControl: MockupControlRenderer }) {
+/** Local illustration composed inside the production shell; no show or hardware transport. */
+export function FixtureAbstractionMockup(props: FixtureAbstractionMockupProps) {
 	return <VisibleEncoderCountProvider count={4}>
-		<MockupDesk {...props} />
-	</VisibleEncoderCountProvider>;
+			<MockupDesk {...props} />
+		</VisibleEncoderCountProvider>;
 }
 
-function MockupDesk({ initialView = "easy", surface = "touch", colorMode, easyLayout, fixtureCapability, mountLift = 0, mountYaw = 0, performerOffset = 0, renderControl }: FixtureAbstractionMockupProps & { renderControl: MockupControlRenderer }) {
+function MockupDesk({ renderCommandSection, initialView = "easy", surface = "touch", colorMode, easyLayout, fixtureCapability, mountLift = 0, mountYaw = 0, performerOffset = 0 }: FixtureAbstractionMockupProps) {
 	const { state } = useApp();
 	const positionView = ["angles", "fixed", "tracked"].includes(initialView);
 	const media = initialView === "media";
@@ -175,7 +170,7 @@ function MockupDesk({ initialView = "easy", surface = "touch", colorMode, easyLa
 	</div>;
 	return <div className="fixture-abstraction-mockup" data-testid="fixture-abstraction-mockup">
 		<AppShellView dock={<LeftDock presentation={{ showIdentity: "Festival", clock: <span className="dock-clock">20:15:00</span>, showIndicator: { className: "show-status-connected", connected: true, label: "Festival", detail: "Local review desk" } }} />}
-			control={renderControl({ hardware: surface === "hardware", programmer })}
+			control={renderCommandSection(programmer, surface === "hardware")}
 			workspace={<ProgrammingWorkspace mixedSelection={mixed} />} />
 		{configuration && <ModalFrame title="Fixture configuration" ariaLabel="Fixture configuration" closeLabel="Close fixture configuration" onClose={() => setConfiguration(false)} dialogClassName="fixture-abstraction-panel fam-configuration-modal" className="fixture-abstraction-layer"><div className="fam-modal-body"><FixtureConfigurationMockup /></div></ModalFrame>}
 	</div>;

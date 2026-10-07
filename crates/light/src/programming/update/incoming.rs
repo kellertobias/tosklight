@@ -35,7 +35,9 @@ impl IncomingValue<'_> {
             Self::Dynamic(value) => UpdateAddress::DynamicAttribute {
                 fixture_id: value.fixture_id,
                 attribute: value.attribute.clone(),
-                instance_link: dynamic_instance_link(&value.value),
+                instance_link: value.value.track_key().instance_link,
+                lane_id: value.value.track_key().lane_id,
+                component: value.value.track_key().component,
             },
         }
     }
@@ -100,22 +102,15 @@ pub(super) fn incoming_preset_values<'a>(
         .collect()
 }
 
-fn dynamic_instance_link(value: &DynamicSemanticValue) -> Option<uuid::Uuid> {
-    match value {
-        DynamicSemanticValue::DynamicOn { instance_link, .. }
-        | DynamicSemanticValue::DynamicOff { instance_link, .. } => Some(*instance_link),
-        DynamicSemanticValue::Static { .. }
-        | DynamicSemanticValue::FixAt { .. }
-        | DynamicSemanticValue::Release => None,
-    }
-}
-
 fn dynamic_timing(value: &DynamicSemanticValue) -> DynamicValueTiming {
     match value {
         DynamicSemanticValue::Static { timing, .. }
         | DynamicSemanticValue::DynamicOn { timing, .. }
         | DynamicSemanticValue::DynamicOff { timing, .. }
         | DynamicSemanticValue::FixAt { timing, .. } => *timing,
-        DynamicSemanticValue::Release => DynamicValueTiming::default(),
+        DynamicSemanticValue::ProgrammingFixAt { timing, .. } => *timing,
+        DynamicSemanticValue::Release | DynamicSemanticValue::ProgrammingRelease { .. } => {
+            DynamicValueTiming::default()
+        }
     }
 }

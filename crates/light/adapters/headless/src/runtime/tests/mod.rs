@@ -26,14 +26,18 @@ fn v2_show_object_get(
 
 #[path = "active_show_cue_preload_tests.rs"]
 mod active_show_cue_preload_tests;
+mod active_show_lifecycle_ordering_tests;
 #[path = "active_show_playback_object_tests.rs"]
 mod active_show_playback_object_tests;
 #[path = "active_show_programmer_object_tests.rs"]
 mod active_show_programmer_object_tests;
 #[path = "active_show_route_tests.rs"]
 mod active_show_route_tests;
+#[path = "aim_point_tests.rs"]
+mod aim_point_tests;
 #[path = "attribute_configuration_route_tests.rs"]
 mod attribute_configuration_route_tests;
+mod captured_visualization_sources_tests;
 #[path = "color_model_route_tests.rs"]
 mod color_model_route_tests;
 #[path = "command_http_tests.rs"]
@@ -48,6 +52,8 @@ mod cue_media_preview_route_tests;
 mod cue_thumbnail_route_tests;
 #[path = "discovery_route_tests.rs"]
 mod discovery_route_tests;
+#[path = "dynamics_controller_identity_tests.rs"]
+mod dynamics_controller_identity_tests;
 #[path = "engine_selection_refresh_tests.rs"]
 mod engine_selection_refresh_tests;
 #[path = "event_transport_route_tests.rs"]
@@ -56,6 +62,7 @@ mod event_transport_route_tests;
 mod extension_control_tests;
 #[path = "internal_audio_configuration_tests.rs"]
 mod internal_audio_configuration_tests;
+mod live_legacy_write_gate_tests;
 #[path = "macro_playback_convergence_tests.rs"]
 mod macro_playback_convergence_tests;
 #[path = "macro_semantic_preflight_tests.rs"]
@@ -74,8 +81,12 @@ mod playback_topology_route_tests;
 mod playback_v2_route_tests;
 #[path = "playback_ws_action_tests.rs"]
 mod playback_ws_action_tests;
+#[path = "prepared_output_tests.rs"]
+mod prepared_output_tests;
 #[path = "programmer_values_ws_action_tests.rs"]
 mod programmer_values_ws_action_tests;
+#[path = "programming_contract_recovery_tests.rs"]
+mod programming_contract_recovery_tests;
 #[path = "programming_interaction_ws_action_tests.rs"]
 mod programming_interaction_ws_action_tests;
 #[path = "programming_update_route_tests.rs"]
@@ -90,6 +101,11 @@ mod schedules_v2_route_tests;
 mod screen_configuration_v2_tests;
 #[path = "selective_import_route_tests.rs"]
 mod selective_import_route_tests;
+pub(in crate::runtime) mod semantic_contract_startup_support;
+mod semantic_contract_startup_tests;
+mod show_activation_checkpoint_tests;
+#[path = "show_activation_configuration_tests.rs"]
+mod show_activation_configuration_tests;
 mod show_description_tests;
 #[path = "show_library_v2_route_tests.rs"]
 mod show_library_v2_route_tests;
@@ -99,6 +115,10 @@ mod show_object_intents_v2_route_tests;
 mod show_object_v2_route_tests;
 #[path = "show_patch_route_tests.rs"]
 mod show_patch_route_tests;
+#[path = "show_recovery_route_tests.rs"]
+mod show_recovery_route_tests;
+#[path = "show_recovery_write_tests.rs"]
+mod show_recovery_write_tests;
 #[path = "speed_group_v2_tests.rs"]
 mod speed_group_v2_tests;
 
@@ -165,3 +185,17 @@ mod show_revision_source_tests;
 
 #[path = "show_save_destination_tests.rs"]
 mod show_save_destination_tests;
+
+mod mvr_import_route_tests;
+#[path = "tl560_mvr_reimport_tests.rs"]
+mod tl560_mvr_reimport_tests;
+
+#[path = "native_output_route_tests.rs"]
+mod native_output_route_tests;
+
+#[path = "pending_preload_reader_tests.rs"]
+mod pending_preload_reader_tests;
+
+mod show_activation_caller_tests;
+mod show_activation_cancellation_tests;
+include!("family_encoder_pages_tests.rs");

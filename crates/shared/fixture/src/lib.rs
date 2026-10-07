@@ -2,6 +2,8 @@
 //! Fixture definitions, portable fixture library, color calibration, patching, and DMX encoding.
 
 pub mod body_catalogue;
+mod color_calibration;
+mod compiled_interner;
 mod definition;
 mod definition_model;
 mod encoding;
@@ -9,14 +11,19 @@ mod error;
 pub mod gdtf;
 mod highlight_look;
 mod library;
+pub mod media_color;
 mod package;
 mod patch;
 mod patch_model;
 mod patch_validation;
 mod portable_patch;
+mod position_calibration;
+mod position_freeze;
 mod profile;
 mod scenery_options;
 
+pub use color_calibration::*;
+pub use compiled_interner::{CompiledModelInterner, SharedByIdentity};
 pub use definition::*;
 pub use definition_model::*;
 pub use encoding::*;
@@ -28,6 +35,8 @@ pub use patch::*;
 pub use patch_model::*;
 pub use patch_validation::*;
 pub use portable_patch::*;
+pub use position_calibration::*;
+pub use position_freeze::*;
 pub use profile::*;
 pub use scenery_options::*;
 

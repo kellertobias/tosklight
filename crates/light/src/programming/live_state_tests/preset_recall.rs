@@ -103,6 +103,7 @@ impl RecallSetup {
             "future_extension":{"retain":true},
         });
         let environment = ProgrammingPresetRecallEnvironment {
+            supported_programming_contract: light_core::programming::PROGRAMMING_CONTRACT_VERSION,
             show_id,
             show_revision: PortableShowRevision::from_value(11),
             object_id: address.storage_key(),
@@ -110,6 +111,7 @@ impl RecallSetup {
             address,
             raw_body: Arc::new(raw_body),
             preset: Arc::new(preset),
+            resolved_aim: None,
             groups: Arc::new(HashMap::from([(
                 "5".into(),
                 GroupDefinition {
@@ -123,6 +125,7 @@ impl RecallSetup {
                 (fixtures[0], vec![fixtures[0]]),
                 (fixtures[1], vec![fixtures[1]]),
             ])),
+            stage_positions: Arc::new(HashMap::new()),
             programmer_fade_millis: 900,
         };
         Self {
@@ -234,6 +237,68 @@ fn preset_recall_is_one_atomic_ordered_values_transition_with_one_timestamp_and_
     assert_eq!(*setup.ports.environment_reads.lock(), 2);
     assert_eq!(setup.ports.persisted.lock().len(), 1);
     assert_eq!(setup.events.latest_sequence(), 1);
+}
+
+#[test]
+fn unavailable_semantic_recall_is_atomic_in_both_lanes_and_empty_selection_can_select_targets() {
+    use light_core::programming::{PositionIntent, ProgrammingOwner};
+    for target in [
+        ProgrammingPresetRecallTarget::Programmer,
+        ProgrammingPresetRecallTarget::Preload,
+    ] {
+        let mut setup = RecallSetup::new();
+        setup.ports.environment.supported_programming_contract = 0;
+        let preset = Arc::make_mut(&mut setup.ports.environment.preset);
+        preset.group_values.clear();
+        preset.values.clear();
+        preset.values.insert(
+            setup.fixtures[0],
+            [(
+                ProgrammingOwner::Position.key(),
+                AttributeValue::Position(Arc::new(PositionIntent::angles(90.0, 45.0))),
+            )]
+            .into(),
+        );
+        let session = SessionId(setup.context.session_id.unwrap());
+        if target == ProgrammingPresetRecallTarget::Preload {
+            assert!(setup.registry.arm_preload(session, true));
+            setup.request.expected_capture_mode_revision =
+                exact(setup.registry.capture_mode_revision());
+        }
+        let before = serde_json::to_value(setup.registry.get(session).unwrap()).unwrap();
+        let error = setup
+            .service
+            .handle_preset_recall(
+                ActionEnvelope {
+                    context: setup.context.clone().with_request_id("unsupported"),
+                    command: setup.request.clone(),
+                },
+                &setup.ports,
+            )
+            .unwrap_err();
+        assert!(error.message.contains("programming contract"));
+        assert_eq!(
+            serde_json::to_value(setup.registry.get(session).unwrap()).unwrap(),
+            before
+        );
+        assert_eq!(setup.events.latest_sequence(), 0);
+        assert!(setup.ports.persisted.lock().is_empty());
+        let empty = setup.clear_selection_request();
+        setup.apply("select-only", empty);
+        assert_eq!(
+            setup.registry.get(session).unwrap().selected.as_slice(),
+            &[setup.fixtures[0]]
+        );
+        assert!(setup.registry.get(session).unwrap().values.is_empty());
+        assert!(
+            setup
+                .registry
+                .get(session)
+                .unwrap()
+                .preload_pending
+                .is_empty()
+        );
+    }
 }
 
 #[test]
@@ -675,4 +740,71 @@ fn a_preset_recall_reaches_every_surface_of_the_desk() {
 
 const fn exact(revision: u64) -> ProgrammingPresetRecallRevisionExpectation {
     ProgrammingPresetRecallRevisionExpectation::Exact(revision)
+}
+
+#[test]
+fn preset_without_applicable_values_preserves_context_history_and_events() {
+    let mut setup = RecallSetup::new();
+    Arc::make_mut(&mut setup.ports.environment.preset)
+        .values
+        .clear();
+    Arc::make_mut(&mut setup.ports.environment.preset)
+        .group_values
+        .clear();
+    let session = SessionId(setup.context.session_id.unwrap());
+    setup.registry.set_modes(
+        session,
+        None,
+        None,
+        None,
+        Some(Some("existing-context".into())),
+    );
+    let before = setup.registry.get(session).unwrap();
+    let result = setup.apply("empty-recall", setup.request.clone());
+    assert!(matches!(
+        result.outcome,
+        ProgrammingPresetRecallOutcome::NoChange { .. }
+    ));
+    assert_eq!(result.active_context, before.active_context);
+    assert!(result.warning.is_none());
+    let after = setup.registry.get(session).unwrap();
+    assert_eq!(after.undo.len(), before.undo.len());
+    assert_eq!(
+        serde_json::to_value(after).unwrap(),
+        serde_json::to_value(before).unwrap()
+    );
+    assert_eq!(setup.events.latest_sequence(), 0);
+    assert!(setup.ports.persisted.lock().is_empty());
+}
+
+#[test]
+fn preset_recall_keeps_an_intentionally_empty_group_as_the_owner() {
+    let mut setup = RecallSetup::new();
+    let session = SessionId(setup.context.session_id.unwrap());
+    Arc::make_mut(&mut setup.ports.environment.groups)
+        .get_mut("5")
+        .unwrap()
+        .fixtures
+        .clear();
+    let revision = setup.registry.select_expression(
+        session,
+        vec![],
+        light_programmer::SelectionExpression::LiveGroup {
+            group_id: "5".into(),
+            rule: light_programmer::SelectionRule::All,
+        },
+    );
+    setup.request.expected_selection_revision = exact(revision);
+    let result = setup.apply("empty-group-recall", setup.request.clone());
+    assert!(matches!(
+        result.outcome,
+        ProgrammingPresetRecallOutcome::Changed { .. }
+    ));
+    assert_eq!(result.selected_targets, 0);
+    let current = setup.registry.get(session).unwrap();
+    assert!(current.selected.is_empty());
+    assert_eq!(
+        current.group_values["5"][AttributeKey::intensity_ref()].value,
+        AttributeValue::Normalized(0.8)
+    );
 }

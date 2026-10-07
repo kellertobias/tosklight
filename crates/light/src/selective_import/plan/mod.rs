@@ -227,7 +227,7 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
         let (profiles, profile_previews, profile_map) = self.plan_profiles();
         let (managed_assets, asset_copies) = self.plan_assets();
         let identities = self.identities();
-        let writes = self.rewrite_writes(&identities, &profile_map);
+        let writes = self.rewrite_writes(&identities, &profile_map, &profiles);
         let writes = self.merge_scoped_stage_writes(writes);
         let preview = self.preview(profile_previews, managed_assets);
         ImportPlan {

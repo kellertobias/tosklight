@@ -67,6 +67,15 @@ mod group_recording_ports;
 mod group_recording_routes;
 #[path = "command_http/group_recording_wire.rs"]
 mod group_recording_wire;
+#[path = "command_http/intent_wire.rs"]
+mod intent_wire;
+pub(crate) use intent_wire::ToIntentWire;
+#[path = "command_http/displayed_source_wire.rs"]
+mod displayed_source_wire;
+use displayed_source_wire::{displayed_source, hold_reason};
+#[path = "command_http/native_color_wire.rs"]
+mod native_color_wire;
+use native_color_wire::{color_adoption_report, color_adoption_request};
 #[path = "command_http/interaction_wire.rs"]
 mod interaction_wire;
 #[path = "command_http/lifecycle_routes.rs"]
@@ -144,8 +153,8 @@ mod wire;
 
 pub(super) use adapter::{
     ExistingCommandOutcome, execute_existing_command, ordered_ui_command_policy,
-    prevalidate_external_command, prevalidate_typed_command, route_osc_command_gesture_outcome,
-    route_osc_command_key_outcome, run_service_with_source,
+    prevalidate_external_command, prevalidate_typed_command, publish_osc_rejection,
+    route_osc_command_gesture_outcome, route_osc_command_key_outcome, run_service_with_source,
 };
 pub(super) use color_attributes::{
     ColorAttributeIndex, ColorTarget, authored_color_attribute_index, color_attribute_index,
@@ -157,7 +166,7 @@ pub(crate) use cue_recording_osc::{
 };
 pub(crate) use cue_transfer_ports::ServerProgrammingCueTransferPorts;
 pub(crate) use events::publish_service_result;
-pub(super) use interaction_wire::interaction_change;
+pub(super) use interaction_wire::{alignment_projection, interaction_change};
 pub(super) use lifecycle_wire::lifecycle_change;
 pub(crate) use preload_lifecycle_wire::{
     command as preload_lifecycle_command, outcome as preload_lifecycle_outcome,
@@ -165,7 +174,8 @@ pub(crate) use preload_lifecycle_wire::{
 pub(super) use preload_playback_queue_wire::change as preload_playback_queue_change;
 pub(super) use preload_values_wire::change as preload_values_change;
 pub(crate) use preload_values_wire::{
-    command as preload_values_command, outcome as preload_values_outcome,
+    attribute_value as preload_attribute_value_wire, command as preload_values_command,
+    outcome as preload_values_outcome,
 };
 pub(crate) use preset_recall_wire::outcome as preset_recall_outcome;
 pub(crate) use preset_recording_wire::address as preset_address;

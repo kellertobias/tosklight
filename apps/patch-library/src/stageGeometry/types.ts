@@ -17,13 +17,8 @@ export type { FixtureChannel, FixtureMode, GeometryEmitter, Vector3Value };
  * that is not patched anywhere and has no output to show.
  */
 
-export type AttributeValue =
-	| { kind: "normalized"; value: number }
-	| { kind: "spread"; value: number[] }
-	| { kind: "discrete"; value: string }
-	| { kind: "color_xyz"; value: { x: number; y: number; z: number } }
-	| { kind: "raw_dmx"; value: number }
-	| { kind: "raw_dmx_exact"; value: number };
+export type { ProgrammingAttributeValue as AttributeValue } from "../generated/programming-values";
+import type { ProgrammingAttributeValue as AttributeValue } from "../generated/programming-values";
 
 /**
  * Kept so a saved layout that carries one decodes without complaint; what is in a beam is decided

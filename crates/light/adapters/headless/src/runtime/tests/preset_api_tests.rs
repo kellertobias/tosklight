@@ -170,7 +170,7 @@ async fn typed_recording_persists_default_family_preset_under_its_bare_address()
     state.programming.set(
         light_core::SessionId(Uuid::parse_str(&session_id).unwrap()),
         fixture,
-        light_core::AttributeKey("pan".into()),
+        light_core::AttributeKey("gobo.1".into()),
         light_core::AttributeValue::Normalized(0.41),
     );
 
@@ -208,7 +208,7 @@ async fn typed_recording_persists_default_family_preset_under_its_bare_address()
     assert_eq!(objects.len(), 1);
     assert_eq!(objects[0]["id"], "197");
     assert_eq!(objects[0]["body"]["family"], "Mixed");
-    assert!(objects[0]["body"]["values"][&fixture_key]["pan"].is_object());
+    assert!(objects[0]["body"]["values"][&fixture_key]["gobo.1"].is_object());
 
     let fetched = app
         .oneshot(v2_show_object_get(&token, show_id, "preset", Some("197")))

@@ -145,8 +145,15 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
                 handle_highlight_osc(state, address, arguments, source.as_deref());
                 measured_action_succeeded |=
                     handle_dynamics_osc(state, address, arguments, source.as_deref());
-                measured_action_succeeded |=
-                    handle_programmer_osc(state, address, arguments, source.as_deref());
+                measured_action_succeeded |= super::osc_family_values::handle_family_values_osc(
+                    state,
+                    address,
+                    arguments,
+                    source.as_deref(),
+                )
+                .unwrap_or_else(|| {
+                    handle_programmer_osc(state, address, arguments, source.as_deref())
+                });
                 handle_encoder_osc(state, address, arguments, source.as_deref());
             }
         }

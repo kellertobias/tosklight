@@ -7,6 +7,11 @@ use std::sync::Arc;
 pub(crate) const HISTORY_LIMIT: usize = 100;
 
 impl ProgrammerState {
+    pub(crate) fn end_value_gesture(&mut self) {
+        self.active_value_undo_group = None;
+        self.value_gesture_epoch = self.value_gesture_epoch.wrapping_add(1);
+    }
+
     pub(crate) fn snapshot(&self) -> ProgrammerSnapshot {
         ProgrammerSnapshot {
             selected: self.selected.clone(),
@@ -22,6 +27,7 @@ impl ProgrammerState {
             preload_group_pending: self.preload_group_pending.clone(),
             preload_group_active: self.preload_group_active.clone(),
             preload_group_release_pending: self.preload_group_release_pending.clone(),
+            preload_released_colors: Arc::clone(&self.preload_released_colors),
             preload_group_release_active: self.preload_group_release_active.clone(),
             preload_playback_pending: self.preload_playback_pending.clone(),
             command_line: self.command_line.clone(),
@@ -46,6 +52,7 @@ impl ProgrammerState {
         self.preload_group_pending = snapshot.preload_group_pending;
         self.preload_group_active = snapshot.preload_group_active;
         self.preload_group_release_pending = snapshot.preload_group_release_pending;
+        self.preload_released_colors = snapshot.preload_released_colors;
         self.preload_group_release_active = snapshot.preload_group_release_active;
         self.preload_playback_pending = snapshot.preload_playback_pending;
         self.command_line = snapshot.command_line;
@@ -55,10 +62,11 @@ impl ProgrammerState {
         self.highlight = false;
         self.active_context = snapshot.active_context;
         self.last_activity = now;
-        self.active_value_undo_group = None;
+        self.end_value_gesture();
     }
 
     pub(crate) fn checkpoint(&mut self) {
+        self.end_value_gesture();
         self.undo.push(Arc::new(self.snapshot()));
         if self.undo.len() > HISTORY_LIMIT {
             self.undo.remove(0);
@@ -83,6 +91,9 @@ impl ProgrammerRegistry {
         let Some(state) = states.as_mut() else {
             return false;
         };
+        // Show-object recording is a history boundary even when there was nothing to redo.
+        // Later encoder samples must not coalesce across Record/Update/selective import.
+        state.end_value_gesture();
         let changed = !state.redo.is_empty();
         state.redo.clear();
         changed
@@ -104,6 +115,7 @@ impl ProgrammerRegistry {
                 || state.group_release_values != previous.group_release_values
                 || state.dynamic_values != previous.dynamic_values;
             let preload_values_changed = state.preload_pending != previous.preload_pending
+                || state.preload_released_colors != previous.preload_released_colors
                 || state.preload_group_pending != previous.preload_group_pending
                 || state.preload_group_release_pending != previous.preload_group_release_pending
                 || state.preload_dynamic_pending != previous.preload_dynamic_pending;
@@ -148,9 +160,12 @@ impl ProgrammerRegistry {
             };
             let values_changed = state.values != next.values
                 || state.group_values != next.group_values
+                || state.group_release_values != next.group_release_values
                 || state.dynamic_values != next.dynamic_values;
             let preload_values_changed = state.preload_pending != next.preload_pending
+                || state.preload_released_colors != next.preload_released_colors
                 || state.preload_group_pending != next.preload_group_pending
+                || state.preload_group_release_pending != next.preload_group_release_pending
                 || state.preload_dynamic_pending != next.preload_dynamic_pending;
             let queue_changed = state.preload_playback_pending != next.preload_playback_pending;
             state.undo.push(Arc::new(state.snapshot()));

@@ -187,6 +187,16 @@ fn preset_store_modes_are_explicit() {
 }
 
 #[test]
+fn shutter_and_strobe_are_intensity_preset_attributes() {
+    let key = |name: &str| AttributeKey(name.into());
+    assert!(PresetFamily::Intensity.accepts(&key("shutter")));
+    assert!(PresetFamily::Intensity.accepts(&key("strobe")));
+    assert!(!PresetFamily::Beam.accepts(&key("shutter")));
+    assert!(!PresetFamily::Beam.accepts(&key("strobe")));
+    assert!(PresetFamily::Beam.accepts(&key("zoom")));
+}
+
+#[test]
 fn preset_addresses_use_pool_local_numbers() {
     let color = PresetAddress::new(PresetFamily::Color, 1).unwrap();
     let position = PresetAddress::new(PresetFamily::Position, 1).unwrap();

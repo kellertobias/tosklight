@@ -275,7 +275,15 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 
 function usePlaybackConfigurationObjects() {
 	const groups = usePortableGroups();
-	const dynamics = useDynamics();
+	const storedDynamics = useDynamics();
+	// Pool order, so a new Dynamic assignment starts from the first Dynamic in the pool.
+	const dynamics = useMemo(
+		() =>
+			[...storedDynamics].sort(
+				(left, right) => left.body.pool_number - right.body.pool_number,
+			),
+		[storedDynamics],
+	);
 	const cueListObjects = useCueLists();
 	const playbackDefinitions = usePlaybackDefinitions();
 	const cueListNumbers = useMemo(() => {

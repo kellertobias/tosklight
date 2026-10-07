@@ -209,24 +209,18 @@ function policyFixture(): PatchedFixture {
 			id: "intensity-channel",
 			fixture_attribute: "intensity",
 			attribute: "intensity",
-			reacts_to_group_master: true,
-			reacts_to_grand_master: true,
 		},
 		{
 			...base,
 			id: "pan-channel",
 			fixture_attribute: "pan",
 			attribute: "pan",
-			reacts_to_group_master: false,
-			reacts_to_grand_master: false,
 		},
 		{
 			...base,
 			id: "tilt-channel",
 			fixture_attribute: "tilt",
 			attribute: "tilt",
-			reacts_to_group_master: false,
-			reacts_to_grand_master: false,
 		},
 	];
 	fixture.group_masters_enabled = true;
@@ -1443,7 +1437,7 @@ describe("selected split selection and SET editing", () => {
 		const onOpenStageWindow = vi.fn();
 		const rendered = render(
 			<FixturePatchSetup
-				onMedia={vi.fn()}
+				onView={vi.fn()}
 				onOpenStageWindow={onOpenStageWindow}
 			/>,
 		);
@@ -1470,7 +1464,9 @@ describe("selected split selection and SET editing", () => {
 				.map((tab) => [tab.textContent, tab.getAttribute("aria-selected")]),
 		).toEqual([
 			["Fixtures", "true"],
+			["Points", "false"],
 			["Media Servers", "false"],
+			["Tracking", "false"],
 		]);
 		expect(
 			[
@@ -1486,7 +1482,7 @@ describe("selected split selection and SET editing", () => {
 			["Open Stage Renderer"],
 			["+ Add layer", "+ Add fixture", "+ Add multi-patch"],
 			["Delete"],
-			["Fixtures", "Media Servers"],
+			["Fixtures", "Points", "Media Servers", "Tracking"],
 		]);
 		fireEvent.click(screen.getByRole("button", { name: "Open Stage Renderer" }));
 		expect(onOpenStageWindow).toHaveBeenCalledOnce();
@@ -1510,7 +1506,7 @@ describe("selected split selection and SET editing", () => {
 		programming.selection.selected = ["fixture-split"];
 		rendered.rerender(
 			<FixturePatchSetup
-				onMedia={vi.fn()}
+				onView={vi.fn()}
 				onOpenStageWindow={onOpenStageWindow}
 			/>,
 		);
@@ -2403,9 +2399,6 @@ describe("Position Reference column", () => {
 			invert: false,
 			snap: false,
 			reacts_to_virtual_intensity: false,
-			reacts_to_sequence_master: false,
-			reacts_to_group_master: false,
-			reacts_to_grand_master: false,
 			behavior: "controlled",
 			functions: [],
 		}));
@@ -3358,4 +3351,94 @@ describe("CSV patch import", () => {
 			screen.getByRole("dialog", { name: /Import CSV/ }),
 		).toBeInTheDocument();
 	});
+});
+
+
+describe("installed Position calibration", () => {
+	it.each([false, true])("clears only the selected physical calibration (copy=%s)", async (copy) => {
+		const calibration = { revision: 1, quality: "estimated" as const, source: null, pan_zero_degrees: 90, tilt_zero_degrees: -12 };
+		const fixture = policyFixture();
+		fixture.position_calibration = calibration;
+		fixture.multipatch![0].position_calibration = { ...calibration, pan_zero_degrees: -90 };
+		server.patch.fixtures = [fixture];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+		fireEvent.click(screen.getByRole("button", { name: copy ? "Pan and Tilt Opposite hang" : "Pan and Tilt 17" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Position calibration…" }));
+		const dialog = await screen.findByRole("dialog", { name: copy ? "Position calibration Opposite hang" : "Position calibration 17" });
+		expect(within(dialog).getByLabelText("Pan zero offset (°)")).toHaveValue(copy ? "-90" : "90");
+		fireEvent.click(within(dialog).getByRole("button", { name: "Clear calibration" }));
+		fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+		await waitFor(() => expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith("fixture-split", copy ? "physical-copy" : null, {
+			type: "set_position_calibration", calibration: null,
+		}));
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	});
+
+	it.each([false, true])("authors saved-only calibration for the exact physical target (copy=%s)", async (copy) => {
+		server.patch.fixtures = [policyFixture()];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+		fireEvent.click(screen.getByRole("button", { name: copy ? "Pan and Tilt Opposite hang" : "Pan and Tilt 17" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Position calibration…" }));
+		const dialog = await screen.findByRole("dialog", { name: copy ? "Position calibration Opposite hang" : "Position calibration 17" });
+		expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+		expect(within(dialog).getByText(/They correct how\s+Position Angles and Target values reach its DMX/)).toBeInTheDocument();
+		fireEvent.change(within(dialog).getByLabelText("Pan zero offset (°)"), { target: { value: "-720.5" } });
+		fireEvent.change(within(dialog).getByLabelText("Tilt zero offset (°)"), { target: { value: "12.25" } });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Calibration quality" }));
+		fireEvent.click(await screen.findByRole("option", { name: "Measured" }));
+		expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+		fireEvent.change(within(dialog).getByLabelText("Calibration source"), { target: { value: "Rig record" } });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+		await waitFor(() => expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith("fixture-split", copy ? "physical-copy" : null, {
+			type: "set_position_calibration", calibration: { revision: 0, quality: "measured", source: "Rig record", pan_zero_degrees: -720.5, tilt_zero_degrees: 12.25 },
+		}));
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+		expect(server.patch.fixtures[0].position_calibration).toBeUndefined();
+		expect(server.patch.fixtures[0].multipatch?.[0].invert_tilt).toBe(true);
+	});
+});
+
+
+describe("installed Color calibration through setup", () => {
+ it.each([false, true])("saves and reopens the exact lamp and rejects a changed source while open (copy=%s)", async (copy) => {
+  const fixture = appearanceFixture();
+  const mode = fixture.definition.profile_snapshot!.modes[0];
+  mode.heads[0].name = "Main";
+  const pathId = crypto.randomUUID();
+  mode.color_physical = {version:1,revision:0,paths:[{id:pathId,head_id:mode.heads[0].id,controls:[],source:{type:"unknown"},filters:[],measurements:[]}]};
+  const identity = {profile_id:crypto.randomUUID(),profile_revision:1,profile_digest:"a".repeat(64),mode_id:crypto.randomUUID(),head_id:mode.heads[0].id,path_id:pathId,model_revision:0,native_layout_signature:"b".repeat(64)};
+  fixture.definition.color_calibration_context = {mode,identities:[identity]};
+  server.patch.fixtures = [fixture];
+  patchFeature.updateFixtureIntent.mockImplementation(async (_fixtureId, instanceId, action) => {
+   const physical = instanceId ? fixture.multipatch![0] : fixture;
+   physical.color_calibration = action.calibration;
+   return true;
+  });
+  state.patchSetArmed = true;
+  const view = render(<FixturePatchSetup />);
+  fireEvent.click(screen.getByRole("button", {name:copy ? /Light source Opposite hang:/ : /Light source 17:/}));
+  fireEvent.click(await screen.findByRole("button", {name:"Color calibration…"}));
+  const name = copy ? "Color calibration Opposite hang" : "Color calibration 17";
+  const dialog = await screen.findByRole("dialog", {name});
+  fireEvent.click(within(dialog).getByRole("button", {name:"Add Main whole-path observation"}));
+  fireEvent.change(within(dialog).getByLabelText("Main observation 1 X"), {target:{value:"0.31"}});
+  fireEvent.change(within(dialog).getByLabelText("Main observation 1 Y"), {target:{value:"0.42"}});
+  fireEvent.click(within(dialog).getByRole("button", {name:"Save"}));
+  await waitFor(() => expect(screen.queryByRole("dialog", {name})).not.toBeInTheDocument());
+  expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith("fixture-split", copy ? "physical-copy" : null, {type:"set_color_calibration",calibration:expect.objectContaining({paths:[expect.objectContaining({source_identity:identity,measurements:[expect.objectContaining({xyz:{x:0.31,y:0.42,z:0}})]})]})});
+  expect((copy ? fixture : fixture.multipatch![0]).color_calibration).toBeUndefined();
+  expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", {name:"Color calibration…"}));
+  const reopened = await screen.findByRole("dialog", {name});
+  expect(within(reopened).getByLabelText("Main observation 1 Y")).toHaveValue("0.42");
+  fixture.definition.color_calibration_context = {mode,identities:[{...identity,profile_revision:2,profile_digest:"c".repeat(64)}]};
+  view.rerender(<FixturePatchSetup />);
+  expect(within(reopened).getByRole("status")).toHaveTextContent("inactive");
+  expect(within(reopened).getByRole("button", {name:"Save"})).toBeDisabled();
+  expect((copy ? fixture.multipatch![0] : fixture).color_calibration!.paths[0].source_identity.profile_revision).toBe(1);
+  fireEvent.click(within(reopened).getByRole("button", {name:"Close Color calibration"}));
+  expect(screen.queryByRole("dialog", {name})).not.toBeInTheDocument();
+ });
 });

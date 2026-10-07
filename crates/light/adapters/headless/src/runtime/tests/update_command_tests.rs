@@ -11,7 +11,7 @@ fn update_undo_snapshot(
     let mut second = light_playback::Cue::new(cue("2"));
     second.changes.push(light_playback::CueChange::set(
         fixture,
-        light_core::AttributeKey("color.red".into()),
+        light_core::AttributeKey("color.wheel.1".into()),
         light_core::AttributeValue::Normalized(0.3),
     ));
     let cue_list = light_playback::CueList {
@@ -338,7 +338,7 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
     state.programming.set(
         session.id,
         fixture,
-        light_core::AttributeKey("color.red".into()),
+        light_core::AttributeKey("color.wheel.1".into()),
         light_core::AttributeValue::Normalized(0.7),
     );
     let target = UpdateApiTarget {

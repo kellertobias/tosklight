@@ -1918,6 +1918,13 @@ button.large-action:disabled {
 .gdtf-import-modal {
 	width: min(560px, calc(100vw - 30px)) !important;
 }
+.gdtf-import-modal .gdtf-import-diagnostics {
+	max-height: min(30vh, 240px);
+	overflow: auto;
+	overflow-wrap: anywhere;
+	padding: 8px 12px;
+	border: 1px solid var(--border);
+}
 .fixture-package-import-modal {
 	width: min(720px, calc(100vw - 30px)) !important;
 }

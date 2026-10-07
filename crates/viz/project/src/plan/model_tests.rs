@@ -23,6 +23,8 @@ fn patched(fixture_type: &str, optics: ProfileOptics) -> PatchedFixture {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            color_calibration: None,
+            position_calibration: None,
             model_scale: 1.0,
             scenery_options: Default::default(),
             scenery_size_metres: None,
@@ -80,9 +82,6 @@ fn camera_fixture(name: &str, address: u16) -> PatchedFixture {
                 snap: false,
                 reacts_to_virtual_intensity: false,
                 virtual_intensity_inverted: false,
-                reacts_to_sequence_master: false,
-                reacts_to_group_master: false,
-                reacts_to_grand_master: false,
                 behavior: ChannelBehavior::Controlled,
                 functions: Vec::new(),
             },
@@ -125,6 +124,8 @@ fn embedded_robin_dls_open_shutter_band_stays_lit_on_stage() {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            color_calibration: None,
+            position_calibration: None,
             model_scale: 1.0,
             scenery_options: Default::default(),
             scenery_size_metres: None,
@@ -206,6 +207,8 @@ fn shipped_jbled_a7_home_shutter_is_steady_and_open_on_stage() {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            color_calibration: None,
+            position_calibration: None,
             model_scale: 1.0,
             scenery_options: Default::default(),
             scenery_size_metres: None,
@@ -273,6 +276,8 @@ fn shipped_moving_light_models_apply_the_profile_head_offset() {
             profile: Arc::new(profile),
             mode_id,
             instances: vec![PhysicalInstance {
+                color_calibration: None,
+                position_calibration: None,
                 model_scale: 1.0,
                 scenery_options: Default::default(),
                 scenery_size_metres: None,
@@ -384,9 +389,6 @@ fn a_multipatch_instance_reads_the_fixture_it_shares_its_programming_with() {
         snap: false,
         reacts_to_virtual_intensity: false,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: false,
-        reacts_to_group_master: false,
-        reacts_to_grand_master: false,
         behavior: ChannelBehavior::Controlled,
         functions: Vec::new(),
     }];
@@ -517,9 +519,6 @@ fn canonical_cct_identity_aliases_bind_each_physical_channel_once() {
         snap: false,
         reacts_to_virtual_intensity: false,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: false,
-        reacts_to_group_master: false,
-        reacts_to_grand_master: false,
         behavior: ChannelBehavior::Controlled,
         functions: Vec::new(),
     })
@@ -577,9 +576,6 @@ fn canonical_softness_alias_binds_the_physical_frost_channel_once() {
         snap: false,
         reacts_to_virtual_intensity: false,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: false,
-        reacts_to_group_master: false,
-        reacts_to_grand_master: false,
         behavior: ChannelBehavior::Controlled,
         functions: Vec::new(),
     }];

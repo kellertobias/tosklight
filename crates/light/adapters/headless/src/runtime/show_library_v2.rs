@@ -52,6 +52,31 @@ async fn show_library_action(
     TolerantJson(request): TolerantJson<wire::ShowLibraryActionRequest>,
 ) -> Result<Json<wire::ShowLibraryActionOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    let may_activate = matches!(
+        &request.action,
+        wire::ShowLibraryAction::Open { .. }
+            | wire::ShowLibraryAction::OpenDefault { .. }
+            | wire::ShowLibraryAction::Rollback { .. }
+            | wire::ShowLibraryAction::OpenRevision { .. }
+            | wire::ShowLibraryAction::ApplyMvr { .. }
+            | wire::ShowLibraryAction::ImportFromDesk { open: true, .. }
+            | wire::ShowLibraryAction::ImportFromVisualizer { open: true, .. }
+    );
+    if may_activate {
+        return await_owned_activation_action(async move {
+            run_show_library_action(state, headers, request, session).await
+        })
+        .await;
+    }
+    run_show_library_action(state, headers, request, session).await
+}
+
+async fn run_show_library_action(
+    state: AppState,
+    headers: HeaderMap,
+    request: wire::ShowLibraryActionRequest,
+    session: Session,
+) -> Result<Json<wire::ShowLibraryActionOutcome>, ApiError> {
     let remote_save = matches!(
         &request.action,
         wire::ShowLibraryAction::SaveCopyToPeer { .. }
@@ -90,6 +115,7 @@ async fn show_library_action(
     if let Some(outcome) = state.replay.lookup_show_library(&key, &signature).await? {
         return Ok(Json(outcome));
     }
+    check_activation_request_cancelled()?;
     let result = execute_action(&state, &headers, &request.request_id, request.action).await?;
     let outcome = wire::ShowLibraryActionOutcome {
         request_id: request.request_id,
@@ -103,6 +129,29 @@ async fn show_library_action(
     Ok(Json(outcome))
 }
 
+/// Show recovery preserves the failed show's file: library actions that rewrite it in place are
+/// refused for it (see `ensure_not_recovering_show`).
+fn ensure_library_action_spares_recovering_show(
+    state: &AppState,
+    action: &wire::ShowLibraryAction,
+) -> Result<(), ApiError> {
+    use wire::ShowLibraryAction as Action;
+    match action {
+        Action::SetDescription { show_id, .. } | Action::Rename { show_id, .. } => {
+            ensure_not_recovering_show(state, *show_id)
+        }
+        Action::Overwrite {
+            destination_show_id,
+            ..
+        }
+        | Action::UpdateDocument {
+            destination_show_id,
+            ..
+        } => ensure_not_recovering_show(state, *destination_show_id),
+        _ => Ok(()),
+    }
+}
+
 async fn execute_action(
     state: &AppState,
     headers: &HeaderMap,
@@ -110,6 +159,7 @@ async fn execute_action(
     action: wire::ShowLibraryAction,
 ) -> Result<wire::ShowLibraryActionResult, ApiError> {
     use wire::ShowLibraryAction as Action;
+    ensure_library_action_spares_recovering_show(state, &action)?;
     match action {
         Action::SetDescription {
             show_id,
@@ -509,7 +559,7 @@ async fn execute_open(
         State(state.clone()),
         Path(show_id),
         headers.clone(),
-        Json(open_input(transition, transition_millis)),
+        TolerantJson(open_input(transition, transition_millis)),
     )
     .await?;
     Ok(show_result(show))
@@ -524,7 +574,7 @@ async fn execute_open_default(
     let Json(show) = open_clean_default_show(
         State(state.clone()),
         headers.clone(),
-        Json(open_input(transition, transition_millis)),
+        TolerantJson(open_input(transition, transition_millis)),
     )
     .await?;
     Ok(show_result(show))
@@ -539,7 +589,7 @@ async fn execute_rollback(
     let Json(show) = rollback_show(
         State(state.clone()),
         headers.clone(),
-        Json(open_input(transition, transition_millis)),
+        TolerantJson(open_input(transition, transition_millis)),
     )
     .await?;
     Ok(show_result(show))
@@ -606,7 +656,7 @@ async fn execute_open_revision(
         State(state.clone()),
         Path((show_id, revision)),
         headers.clone(),
-        Json(open_input(transition, transition_millis)),
+        TolerantJson(open_input(transition, transition_millis)),
     )
     .await?;
     Ok(show_result(show))
@@ -880,6 +930,7 @@ async fn execute_document_update(
             .as_ref()
             .is_some_and(|active| active.id == entry.id)
         {
+            super::show_programming_contract::require_for_path(state, &staged)?;
             Some(
                 state
                     .output
@@ -905,17 +956,20 @@ async fn execute_document_update(
         };
         if let Some(prepared) = prepared {
             let context = operator_action_context(&session, light_application::ActionSource::Http);
-            install_prepared_snapshot_with_selection_refresh(
-                state,
-                &context,
-                prepared,
-                None,
-                PlaybackInstallPolicy::Preserve,
-                HighlightInstallPolicy::Reconcile,
-            );
+            state.programming.run_value_gesture_boundary(&context, || {
+                install_prepared_snapshot_with_selection_refresh(
+                    state,
+                    &context,
+                    prepared,
+                    None,
+                    PlaybackInstallPolicy::Preserve,
+                    HighlightInstallPolicy::Reconcile,
+                );
+            });
             invalidate_active_show_document(state);
             state.active_show.replace_current(Some(updated.clone()));
             state.attributes.install_entry(Some(&updated));
+            super::psn_http::install_current_show(state);
             state
                 .output
                 .engine()

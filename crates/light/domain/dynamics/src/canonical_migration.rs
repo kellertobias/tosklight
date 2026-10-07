@@ -10,7 +10,10 @@ use std::collections::HashMap;
 pub fn migrate_canonical_attributes(definition: &mut DynamicDefinition) -> Result<bool, String> {
     validate_definition(definition).map_err(|error| error.to_string())?;
     let mut targets = HashMap::new();
-    for lane in &definition.lanes {
+    for common in &definition.lanes {
+        let Some(lane) = common.legacy() else {
+            continue;
+        };
         let source = &*lane.attribute.0;
         let target =
             canonical_attribute_migration_id(source).map_or(source, |migration| migration.0);
@@ -32,7 +35,10 @@ pub fn migrate_canonical_attributes(definition: &mut DynamicDefinition) -> Resul
     let mut migrated_random_groups = HashMap::new();
     let mut additions = Vec::new();
     let mut changed = false;
-    for lane in &mut definition.lanes {
+    for common in &mut definition.lanes {
+        let crate::DynamicLaneBody::LegacyScalar(lane) = &mut common.body else {
+            continue;
+        };
         let Some((target, transform)) = canonical_attribute_migration_id(&lane.attribute.0) else {
             continue;
         };
@@ -51,7 +57,7 @@ pub fn migrate_canonical_attributes(definition: &mut DynamicDefinition) -> Resul
         if transform == CanonicalAttributeTransform::InvertNormalized {
             lane.middle_amplitude.invert_waveform = !lane.middle_amplitude.invert_waveform;
         }
-        if let Some(group_id) = lane.random_group_id {
+        if let Some(group_id) = common.random_group_id {
             let key = (group_id, target.0.clone());
             let migrated_id = if let Some(id) = migrated_random_groups.get(&key) {
                 *id
@@ -61,13 +67,16 @@ pub fn migrate_canonical_attributes(definition: &mut DynamicDefinition) -> Resul
                 })?;
                 group.id =
                     uuid::Uuid::new_v5(&group.id, format!("canonical:{}", target.0).as_bytes());
-                migrate_scalar_source(&mut group.low, &source, &target, transform)?;
-                migrate_scalar_source(&mut group.high, &source, &target, transform)?;
+                let crate::DynamicRandomRange::LegacyScalar { low, high } = &mut group.range else {
+                    return Err("scalar lane references a typed Random range".into());
+                };
+                migrate_scalar_source(low, &source, &target, transform)?;
+                migrate_scalar_source(high, &source, &target, transform)?;
                 migrated_random_groups.insert(key, group.id);
                 additions.push(group.clone());
                 group.id
             };
-            lane.random_group_id = Some(migrated_id);
+            common.random_group_id = Some(migrated_id);
         }
         lane.attribute = target;
     }

@@ -37,7 +37,9 @@ pub(super) fn runtime_error(error: DynamicRuntimeError) -> ActionError {
         | DynamicRuntimeError::InvalidController
         | DynamicRuntimeError::InvalidSpatialMapping(_)
         | DynamicRuntimeError::InvalidDefinition(_)
-        | DynamicRuntimeError::InvalidSnapshot(_) => ActionErrorKind::Invalid,
+        | DynamicRuntimeError::InvalidSnapshot(_)
+        | DynamicRuntimeError::InvalidReplay(_)
+        | DynamicRuntimeError::InvalidSample(_) => ActionErrorKind::Invalid,
     };
     ActionError::new(kind, error.to_string())
 }

@@ -7,6 +7,70 @@ use light_playback::{
 use uuid::Uuid;
 
 #[test]
+fn prepared_batch_dependency_rejection_leaves_playback_unchanged_and_does_not_install() {
+    let engine = playback_engine();
+    let prepared = prepare_batch(&engine, PlaybackBatchAction::On);
+    let installed = std::cell::Cell::new(false);
+    let result = engine.install_prepared_playback_batch_with(
+        prepared,
+        |candidate| {
+            assert!(
+                candidate
+                    .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+                    .is_some_and(|status| status.playback.enabled)
+            );
+            Err::<(), _>("dependent projection rejected".to_owned())
+        },
+        |()| installed.set(true),
+    );
+    assert_eq!(result.unwrap_err(), "dependent projection rejected");
+    assert!(!installed.get());
+    assert!(engine.playback_runtime().is_empty());
+
+    let prepared = prepare_batch(&engine, PlaybackBatchAction::On);
+    let result = engine
+        .install_prepared_playback_batch_with(
+            prepared,
+            |candidate| {
+                Ok(candidate
+                    .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+                    .unwrap())
+            },
+            |projection| {
+                installed.set(true);
+                projection
+            },
+        )
+        .unwrap();
+    assert!(installed.get());
+    assert_eq!(
+        serde_json::to_value(
+            engine
+                .playback_runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+                .unwrap()
+        )
+        .unwrap(),
+        serde_json::to_value(result).unwrap(),
+    );
+}
+
+#[test]
+fn stale_prepared_batch_skips_dependent_preparation_and_installation() {
+    let engine = playback_engine();
+    let prepared = prepare_batch(&engine, PlaybackBatchAction::On);
+    let mut replacement = (*engine.snapshot()).clone();
+    replacement.revision += 1;
+    engine.replace_snapshot(replacement).unwrap();
+    let result = engine.install_prepared_playback_batch_with(
+        prepared,
+        |_| -> Result<(), String> { panic!("stale generation cannot prepare dependencies") },
+        |()| panic!("stale generation cannot install dependencies"),
+    );
+    assert!(result.is_err());
+    assert!(engine.playback_runtime().is_empty());
+}
+
+#[test]
 fn prepared_batch_is_isolated_until_one_typed_install() {
     let engine = playback_engine();
     let started_at = chrono::Utc::now();
@@ -666,7 +730,7 @@ fn prepared_virtual_batch_keeps_page_identity_and_exclusions_atomic() {
                 number: 1_001,
                 page: Some(1),
                 action: PlaybackBatchAction::On,
-                exclusion_zones: vec![vec![1_001, 1_002]].into(),
+                exclusion_zones: vec![vec![1_001, 1_002], vec![1_301, 1_302]].into(),
                 activation_origin: None,
             }],
             chrono::Utc::now(),

@@ -17,6 +17,8 @@ pub enum BenchmarkProfile {
     #[serde(rename = "low_power_8")]
     LowPower8,
     HeadlessStress,
+    /// TL-596: a TL-564 semantic workload through the production Live transaction.
+    SemanticWorkload,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -69,6 +71,7 @@ pub struct Arguments {
     pub sustained_show: bool,
     pub headless_stress_fixtures: Option<usize>,
     pub fixture_package_dir: Option<String>,
+    pub semantic: super::semantic_arguments::SemanticArguments,
 }
 
 pub enum ParseOutcome {
@@ -126,7 +129,7 @@ impl BenchmarkProfile {
                 rate_hz: 40,
                 fixtures_per_universe: 1,
             },
-            Self::HeadlessStress => ProfileConfig {
+            Self::HeadlessStress | Self::SemanticWorkload => ProfileConfig {
                 profile: self,
                 expectation: Expectation::InformationalCapacity,
                 universes: 1,
@@ -164,6 +167,7 @@ impl Default for Arguments {
             sustained_show: false,
             headless_stress_fixtures: None,
             fixture_package_dir: None,
+            semantic: Default::default(),
         }
     }
 }
@@ -237,12 +241,17 @@ impl Arguments {
                 "--headless-stress-fixtures" => {
                     let value = parse_bounded_u64(
                         &required_value(&mut arguments, &argument)?,
-                        2_000,
+                        650,
                         4_000,
                         "headless stress fixtures",
                     )? as usize;
-                    if value != 2_000 && value != 4_000 {
-                        return Err("headless stress fixtures must be exactly 2000 or 4000".into());
+                    if !crate::light_benchmark::headless_stress_show::SUPPORTED_FIXTURE_COUNTS
+                        .contains(&value)
+                    {
+                        return Err(
+                            "headless stress fixtures must be exactly 650, 1000, 2000 or 4000"
+                                .into(),
+                        );
                     }
                     parsed.headless_stress_fixtures = Some(value);
                 }
@@ -254,6 +263,7 @@ impl Arguments {
                     parsed.fixture_package_dir = Some(path);
                 }
                 "--help" | "-h" => return Ok(ParseOutcome::Help),
+                _ if parsed.semantic.parse_option(&argument, &mut arguments)? => {}
                 _ => return Err(format!("unknown argument: {argument}")),
             }
         }
@@ -268,10 +278,20 @@ impl Arguments {
                     .into(),
             );
         }
+        parsed
+            .semantic
+            .validate(parsed.sustained_show || parsed.headless_stress_fixtures.is_some())?;
+        if parsed.semantic.start_latency && parsed.headless_stress_fixtures.is_none() {
+            return Err("--start-latency needs --headless-stress-fixtures".into());
+        }
         Ok(ParseOutcome::Run(parsed))
     }
 
-    pub const fn help() -> &'static str {
+    pub fn help() -> String {
+        Self::established_help().to_owned() + super::semantic_arguments::SemanticArguments::HELP
+    }
+
+    const fn established_help() -> &'static str {
         "Usage: light-benchmark [OPTIONS]\n\
          \n\
          Release-only render-through-protocol-encoding benchmark. JSON is written to stdout.\n\
@@ -287,7 +307,7 @@ impl Arguments {
           --universes N                Override the profile universe count (1-512)\n\
           --rate-hz N                  Scheduled output target, 1-240\n\
           --sustained-show             Use the mixed-fixture sustained benchmark show\n\
-          --headless-stress-fixtures N Run the informational mixed-mode headless tier (2000 or 4000)\n\
+          --headless-stress-fixtures N Run the informational mixed-mode headless tier (650, 1000, 2000 or 4000)\n\
           --fixture-package-dir PATH   Fixture packages used by shipped-mode workloads\n\
           --mutation-gate              Run the large-show incremental mutation gate\n\
           --patch-gate                 Run the real persisted Patch transaction gate\n\
@@ -431,6 +451,60 @@ mod tests {
         let arguments = parsed(&["--headless-stress-fixtures", "2000"]);
         assert_eq!(arguments.headless_stress_fixtures, Some(2_000));
         assert!(Arguments::parse(["--headless-stress-fixtures".into(), "3000".into(),]).is_err());
+        assert_eq!(
+            parsed(&["--headless-stress-fixtures", "1000"]).headless_stress_fixtures,
+            Some(1_000)
+        );
+        assert!(Arguments::parse(["--headless-stress-fixtures".into(), "999".into()]).is_err());
+        assert_eq!(
+            parsed(&["--headless-stress-fixtures", "650"]).headless_stress_fixtures,
+            Some(650)
+        );
+        assert!(Arguments::parse(["--headless-stress-fixtures".into(), "700".into()]).is_err());
+        let probe = parsed(&[
+            "--headless-stress-fixtures",
+            "1000",
+            "--semantic",
+            "--start-latency",
+        ]);
+        assert!(probe.semantic.start_latency);
+        assert_eq!(probe.semantic.start_latency_cycles, 0);
+        let cycles = parsed(&[
+            "--headless-stress-fixtures",
+            "1000",
+            "--semantic",
+            "--start-latency",
+            "--start-latency-cycles",
+            "20",
+        ]);
+        assert_eq!(cycles.semantic.start_latency_cycles, 20);
+        assert!(
+            Arguments::parse([
+                "--headless-stress-fixtures".into(),
+                "1000".into(),
+                "--semantic".into(),
+                "--start-latency-cycles".into(),
+                "20".into()
+            ])
+            .is_err(),
+            "cycles need the start-latency probe"
+        );
+        assert!(
+            Arguments::parse([
+                "--semantic".into(),
+                "--sustained-show".into(),
+                "--start-latency".into()
+            ])
+            .is_err()
+        );
+        assert!(
+            Arguments::parse([
+                "--headless-stress-fixtures".into(),
+                "1000".into(),
+                "--start-latency".into()
+            ])
+            .is_err()
+        );
         assert!(
             Arguments::parse([
                 "--sustained-show".into(),

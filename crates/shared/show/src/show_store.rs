@@ -172,7 +172,20 @@ impl ShowStore {
         body: &serde_json::Value,
         expected: Revision,
     ) -> Result<Revision, StoreError> {
-        portable::put_legacy_object(&self.conn, kind, id, body, expected)
+        portable::put_legacy_object(&self.conn, kind, id, body, expected, 0)
+    }
+
+    /// [`Self::put_object`] by a runtime writing at `writer_contract`: a write of authored
+    /// programming at contract ≥ 1 also stamps the programming-contract marker atomically.
+    pub fn put_object_at_contract(
+        &self,
+        kind: &str,
+        id: &str,
+        body: &serde_json::Value,
+        expected: Revision,
+        writer_contract: u16,
+    ) -> Result<Revision, StoreError> {
+        portable::put_legacy_object(&self.conn, kind, id, body, expected, writer_contract)
     }
 
     /// Applies related versioned object writes/deletes in one SQLite transaction. Playback slot
@@ -182,7 +195,18 @@ impl ShowStore {
         writes: &[AtomicObjectWrite<'_>],
         deletes: &[AtomicObjectDelete<'_>],
     ) -> Result<Vec<Revision>, StoreError> {
-        portable::mutate_legacy_objects(&self.conn, writes, deletes)
+        portable::mutate_legacy_objects(&self.conn, writes, deletes, 0)
+    }
+
+    /// [`Self::mutate_objects_atomically`] by a runtime writing at `writer_contract` (stamps the
+    /// programming-contract marker in the same transaction; see [`Self::put_object_at_contract`]).
+    pub fn mutate_objects_atomically_at_contract(
+        &self,
+        writes: &[AtomicObjectWrite<'_>],
+        deletes: &[AtomicObjectDelete<'_>],
+        writer_contract: u16,
+    ) -> Result<Vec<Revision>, StoreError> {
+        portable::mutate_legacy_objects(&self.conn, writes, deletes, writer_contract)
     }
 
     pub fn undo_object(
@@ -244,7 +268,17 @@ impl ShowStore {
     }
 
     pub fn delete_object(&self, kind: &str, id: &str) -> Result<bool, StoreError> {
-        portable::delete_legacy_object(&self.conn, kind, id)
+        portable::delete_legacy_object(&self.conn, kind, id, 0)
+    }
+
+    /// [`Self::delete_object`] by a runtime writing at `writer_contract`.
+    pub fn delete_object_at_contract(
+        &self,
+        kind: &str,
+        id: &str,
+        writer_contract: u16,
+    ) -> Result<bool, StoreError> {
+        portable::delete_legacy_object(&self.conn, kind, id, writer_contract)
     }
 
     /// The desk's saved layout.

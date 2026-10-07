@@ -22,7 +22,6 @@ export {
 	FIXTURE_TYPES,
 	parseHeadDrafts,
 } from "./fixtureLibrary/definitions";
-export { importGdtf, importGdtfData } from "./fixtureLibrary/gdtf";
 
 export function FixtureLibrarySetup({
 	query: controlledQuery,
@@ -101,6 +100,7 @@ export function FixtureLibrarySetup({
 				setSelectedModeKey={setSelectedModeKey}
 			/>
 			<FixtureImportDialogs
+				pendingGdtf={transfers.pendingGdtf}
 				busy={transfers.busy}
 				error={transfers.error}
 				modal={transfers.modal}

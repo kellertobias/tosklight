@@ -10,7 +10,7 @@ fn profile_visualization_uses_the_exact_calibrated_and_mastered_channel_result()
     let rendered = engine.render(options).unwrap();
     let frame = &rendered.universes[&1];
     let projected = engine
-        .profile_visualization_values(&engine.resolved_values(), options)
+        .profile_visualization_values(rendered.resolved_values.values(), options)
         .unwrap();
     let AttributeValue::Normalized(intensity) = projected[&(fixture_id, AttributeKey::intensity())]
     else {
@@ -23,7 +23,8 @@ fn profile_visualization_uses_the_exact_calibrated_and_mastered_channel_result()
 
     assert_eq!(frame[0], 64);
     assert!((intensity - frame[0] as f32 / 255.0).abs() < 0.000_001);
-    assert_eq!(frame[1], 210);
+    // The Grand Master scales Intensity only (2026-10-05); the inverted Red is not a level.
+    assert_eq!(frame[1], 75);
     assert!((color.x - ((255 - frame[1]) as f32 / 255.0).powi(2)).abs() < 0.000_001);
     assert!((color.y - frame[2] as f32 / 255.0).abs() < 0.000_001);
     assert!((color.z - frame[3] as f32 / 255.0).abs() < 0.000_001);
@@ -111,6 +112,8 @@ fn calibrated_visual_fixture(fixture_id: FixtureId) -> PatchedFixture {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -135,10 +138,10 @@ fn calibrated_visual_definition() -> FixtureDefinition {
     let green_id = uuid::Uuid::new_v4();
     let blue_id = uuid::Uuid::new_v4();
     mode.channels = vec![
-        calibrated_channel(intensity_id, head_id, "intensity", true, true, false),
-        calibrated_channel(red_id, head_id, "color.red", true, true, true),
-        calibrated_channel(green_id, head_id, "color.green", false, false, false),
-        calibrated_channel(blue_id, head_id, "color.blue", false, false, false),
+        calibrated_channel(intensity_id, head_id, "intensity", false),
+        calibrated_channel(red_id, head_id, "color.red", true),
+        calibrated_channel(green_id, head_id, "color.green", false),
+        calibrated_channel(blue_id, head_id, "color.blue", false),
     ];
     mode.color_systems = vec![light_fixture::HeadColorSystem {
         calibration: Default::default(),
@@ -187,8 +190,6 @@ fn calibrated_channel(
     id: uuid::Uuid,
     head_id: uuid::Uuid,
     attribute: &str,
-    group: bool,
-    grand: bool,
     invert: bool,
 ) -> FixtureChannel {
     FixtureChannel {
@@ -209,9 +210,6 @@ fn calibrated_channel(
         snap: false,
         reacts_to_virtual_intensity: false,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: false,
-        reacts_to_group_master: group,
-        reacts_to_grand_master: grand,
         behavior: ChannelBehavior::Controlled,
         functions: vec![ChannelFunction::continuous(
             attribute,
@@ -236,3 +234,20 @@ fn emitter(
         visible: true,
     }
 }
+
+#[path = "native_raw.rs"]
+mod native_raw;
+#[path = "physical_forward.rs"]
+mod physical_forward;
+
+#[path = "preload_families.rs"]
+mod preload_families;
+#[path = "preload_frames.rs"]
+mod preload_frames;
+#[path = "preview_ownership.rs"]
+mod preview_ownership;
+#[path = "source_trace.rs"]
+mod source_trace;
+
+#[path = "native_position_raw.rs"]
+mod native_position_raw;

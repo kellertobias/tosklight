@@ -34,7 +34,11 @@ export function WorkspaceView() {
 					aria-label={`${state.builtIn} built-in`}
 					onPointerDown={(event) => startBuiltInWindowDrag(event, desktop)}
 				>
-					<Window builtIn patchView={state.patchBuiltInView} />
+					<Window
+						builtIn
+						patchView={state.patchBuiltInView}
+						patchRequest={state.patchBuiltInRequest}
+					/>
 				</main>
 			</>
 		);

@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import type { ScalarDynamicLane } from "../../../features/dynamics/laneModel";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -151,7 +152,7 @@ describe("DynamicDefinitionEncoderSurface", () => {
 			definition: "dynamic-201",
 			lane: "lane-intensity",
 		});
-		dynamic.lanes[0].max_min.function = "pwm";
+		(dynamic.lanes[0] as ScalarDynamicLane).max_min.function = "pwm";
 		dynamic.lanes[0].width = 0.4;
 		const onLaneChange = vi.fn().mockResolvedValue(undefined);
 

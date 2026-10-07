@@ -1,25 +1,57 @@
 use super::*;
-use crate::{DynamicEvaluationContext, DynamicEvaluator, project_phase};
+use crate::programming::UnavailableProgrammingSources;
+use crate::{
+    DynamicEvaluationContext, DynamicEvaluator, DynamicValueSourceResolver,
+    ProgrammingEvaluationContext, project_phase,
+};
 use light_core::{FrameAddress, FrameAddressResolver};
+
+struct ObservedScalarSources<'a> {
+    inner: &'a dyn ScalarSourceResolver,
+    used_current: std::cell::Cell<bool>,
+}
+
+impl ScalarSourceResolver for ObservedScalarSources<'_> {
+    fn current(&self, target: FixtureId, attribute: &light_core::AttributeKey) -> Option<f32> {
+        let value = self.inner.current(target, attribute);
+        if value.is_some() {
+            self.used_current.set(true);
+        }
+        value
+    }
+
+    fn current_occurrence(
+        &self,
+        target: FixtureId,
+        attribute: &light_core::AttributeKey,
+    ) -> Option<crate::DynamicSourceOccurrenceId> {
+        self.inner.current_occurrence(target, attribute)
+    }
+
+    fn preset(
+        &self,
+        preset_id: &str,
+        target: FixtureId,
+        attribute: &light_core::AttributeKey,
+    ) -> Option<f32> {
+        self.inner.preset(preset_id, target, attribute)
+    }
+}
+
+mod staged;
+pub(super) use staged::SamplingWorkBuffers;
+pub use staged::{
+    CompletedChunk, CompletedDynamicSamples, DeferredTypedSampling, DynamicSamplingScratch,
+    InstanceWorkers,
+};
 
 struct SamplingFrame {
     definition: Arc<DynamicDefinition>,
     controllers: Vec<DynamicController>,
-    targets: Vec<FixtureId>,
+    /// Shared by this frame's emission witnesses; one allocation per pinned frame.
+    targets: Arc<[FixtureId]>,
     elapsed: u64,
     synchronized_resume_mix: Option<f32>,
-}
-
-struct SampleEnvironment<'a> {
-    /// Indexed by `target_index * lanes + lane_index`; empty when nobody asked for addresses.
-    addresses: Arc<[Option<FrameAddress>]>,
-    instance_id: Uuid,
-    now_millis: u64,
-    cycle_duration_millis: u64,
-    output_interval_millis: u64,
-    sources: &'a dyn ScalarSourceResolver,
-    evaluator: &'a DynamicEvaluator<'a>,
-    random_phases: &'a HashMap<Uuid, HashMap<FixtureId, f32>>,
 }
 
 enum SamplingPreparation {
@@ -37,6 +69,28 @@ impl DynamicRuntime {
         output_interval_millis: u64,
         sources: &dyn ScalarSourceResolver,
     ) -> Result<Vec<DynamicRuntimeSample>, DynamicRuntimeError> {
+        self.sample_programming(
+            instance_id,
+            now_millis,
+            cycle_duration_millis,
+            output_interval_millis,
+            sources,
+            &UnavailableProgrammingSources,
+        )
+    }
+
+    /// Both source views belong to the same immutable pre-Dynamic frame.
+    pub fn sample_programming(
+        &mut self,
+        instance_id: Uuid,
+        now_millis: u64,
+        cycle_duration_millis: u64,
+        output_interval_millis: u64,
+        sources: &dyn ScalarSourceResolver,
+        programming_sources: &dyn DynamicValueSourceResolver,
+    ) -> Result<Vec<DynamicRuntimeSample>, DynamicRuntimeError> {
+        self.begin_sample_boundary();
+        self.sampling_buffers.retain_instances(&self.instances);
         let (samples, completed) = self.sample_with_transport(
             instance_id,
             now_millis,
@@ -44,11 +98,13 @@ impl DynamicRuntime {
             output_interval_millis,
             None,
             sources,
+            programming_sources,
             None,
         )?;
         if completed {
             self.complete_one_shot(instance_id);
         }
+        self.finish_sample_boundary(now_millis, DynamicSampleScope::Instance(instance_id));
         Ok(samples)
     }
 
@@ -61,12 +117,16 @@ impl DynamicRuntime {
         output_interval_millis: u64,
         transport: Option<DynamicSpeedTransport>,
         sources: &dyn ScalarSourceResolver,
+        programming_sources: &dyn DynamicValueSourceResolver,
         addresses: Option<&dyn FrameAddressResolver>,
     ) -> Result<(Vec<DynamicRuntimeSample>, bool), DynamicRuntimeError> {
         let instance = self
             .instances
             .get_mut(&instance_id)
             .ok_or(DynamicRuntimeError::MissingInstance)?;
+        if let Some(undo) = &mut self.output_frame_undo {
+            undo.sampling(instance);
+        }
         let frame = match prepare_sampling(instance, now_millis, cycle_duration_millis, transport)?
         {
             SamplingPreparation::Idle => return Ok((Vec::new(), false)),
@@ -77,17 +137,32 @@ impl DynamicRuntime {
             || Arc::from([]),
             |resolver| instance.frame_addresses(resolver),
         );
-        let samples = collect_samples(
+        self.sampling_buffers.begin_frame();
+        let mut plan = staged::pin_samples(
             instance,
             instance_id,
             now_millis,
             cycle_duration_millis,
             output_interval_millis,
             sources,
-            &frame,
+            programming_sources,
+            frame,
             addresses,
+            &mut self.sampling_buffers,
+            self.output_frame_undo.as_mut().map(transaction::journal),
+        )?;
+        let mut samples = Vec::new();
+        let result = staged::complete_samples(
+            instance,
+            &mut plan,
+            programming_sources,
+            &mut samples,
+            None,
+            self.output_frame_undo.as_mut().map(transaction::journal),
+            &mut || None,
         );
-        finish_synchronized_resume(instance, frame.synchronized_resume_mix);
+        self.sampling_buffers.recycle(plan);
+        result?;
         Ok((samples, false))
     }
 
@@ -120,7 +195,9 @@ impl DynamicRuntime {
         sources: &dyn ScalarSourceResolver,
         addresses: Option<&dyn FrameAddressResolver>,
     ) -> Vec<DynamicRuntimeSample> {
+        self.begin_sample_boundary();
         self.remove_completed_releases(now_millis);
+        let mut complete = true;
         let mut samples = Vec::new();
         let instances = self
             .instances
@@ -137,15 +214,61 @@ impl DynamicRuntime {
                 output_interval_millis,
                 transport,
                 sources,
+                &UnavailableProgrammingSources,
                 addresses,
             ) {
                 samples.append(&mut instance_samples);
                 if completed {
                     self.complete_one_shot(instance_id);
                 }
+            } else {
+                complete = false;
             }
         }
+        if complete {
+            self.finish_sample_boundary(now_millis, DynamicSampleScope::WholeRuntime);
+        }
         samples
+    }
+
+    /// Typed output preserves expressions for the authoritative family compositor.
+    /// Arithmetic failures are returned to the caller; unavailable sources omit a lane.
+    #[allow(clippy::too_many_arguments)]
+    pub fn sample_all_programming_addressed(
+        &mut self,
+        now_millis: u64,
+        output_interval_millis: u64,
+        speed_groups: &[DynamicSpeedTransport; 5],
+        sources: &dyn ScalarSourceResolver,
+        programming_sources: &dyn DynamicValueSourceResolver,
+        addresses: Option<&dyn FrameAddressResolver>,
+    ) -> Result<Vec<DynamicRuntimeSample>, DynamicRuntimeError> {
+        self.begin_sample_boundary();
+        self.remove_completed_releases(now_millis);
+        let instances = self
+            .instances
+            .iter()
+            .map(|(id, instance)| (*id, instance.definition.speed.clone()))
+            .collect::<Vec<_>>();
+        let mut samples = Vec::new();
+        for (instance_id, speed) in instances {
+            let (mut instance_samples, completed) = self.sample_with_transport(
+                instance_id,
+                now_millis,
+                cycle_duration(&speed, speed_groups),
+                output_interval_millis,
+                speed_group_transport(&speed, speed_groups),
+                sources,
+                programming_sources,
+                addresses,
+            )?;
+            samples.append(&mut instance_samples);
+            if completed {
+                self.complete_one_shot(instance_id);
+            }
+        }
+        self.finish_sample_boundary(now_millis, DynamicSampleScope::WholeRuntime);
+        Ok(samples)
     }
 
     fn complete_one_shot(&mut self, instance_id: Uuid) {
@@ -176,6 +299,7 @@ impl DynamicRuntime {
         for (instance_id, controller_id) in completed {
             let _ = self.off_controller(instance_id, controller_id, now_millis, 0, 0);
         }
+        self.sampling_buffers.retain_instances(&self.instances);
     }
 }
 
@@ -222,7 +346,7 @@ fn prepare_sampling(
     Ok(SamplingPreparation::Ready(SamplingFrame {
         definition,
         controllers,
-        targets: instance.targets.clone(),
+        targets: Arc::from(instance.targets.as_slice()),
         elapsed,
         synchronized_resume_mix: synchronized_resume_mix(instance, now_millis),
     }))
@@ -282,12 +406,22 @@ fn activation_elapsed(
             };
             (now_millis >= boundary).then(|| effective_now.saturating_sub(boundary))
         }
-        _ => Some(
-            effective_now
+        _ => {
+            let elapsed = effective_now
                 .saturating_sub(instance.started_at_millis)
                 .saturating_sub(instance.paused_elapsed_millis)
-                .saturating_sub(instance.speed_paused_elapsed_millis),
-        ),
+                .saturating_sub(instance.speed_paused_elapsed_millis);
+            if instance.activation_policy == crate::ActivationPolicy::JoinSyncNow {
+                if instance.paused_at_millis.is_some() {
+                    instance
+                        .synchronized_hold_elapsed_millis
+                        .get_or_insert(elapsed);
+                } else {
+                    instance.last_synchronized_elapsed_millis = Some(elapsed);
+                }
+            }
+            Some(elapsed)
+        }
     }
 }
 
@@ -345,44 +479,6 @@ fn synchronized_resume_mix(instance: &DynamicInstance, now_millis: u64) -> Optio
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-fn collect_samples(
-    instance: &mut DynamicInstance,
-    instance_id: Uuid,
-    now_millis: u64,
-    cycle_duration_millis: u64,
-    output_interval_millis: u64,
-    sources: &dyn ScalarSourceResolver,
-    frame: &SamplingFrame,
-    addresses: Arc<[Option<FrameAddress>]>,
-) -> Vec<DynamicRuntimeSample> {
-    let evaluator = DynamicEvaluator::new(&frame.definition);
-    let random_phases = random_phase_by_lane_target(
-        &frame.definition,
-        &frame.targets,
-        frame.elapsed,
-        cycle_duration_millis,
-    );
-    let environment = SampleEnvironment {
-        addresses,
-        instance_id,
-        now_millis,
-        cycle_duration_millis,
-        output_interval_millis,
-        sources,
-        evaluator: &evaluator,
-        random_phases: &random_phases,
-    };
-    let mut samples = Vec::new();
-    for controller in &frame.controllers {
-        if controller.size == 0.0 {
-            continue;
-        }
-        collect_controller_samples(instance, frame, controller, &environment, &mut samples);
-    }
-    samples
-}
-
 fn random_phase_by_lane_target(
     definition: &DynamicDefinition,
     targets: &[FixtureId],
@@ -417,123 +513,223 @@ fn random_phase_by_lane_target(
         .collect()
 }
 
-fn collect_controller_samples(
-    instance: &mut DynamicInstance,
-    frame: &SamplingFrame,
-    controller: &DynamicController,
-    environment: &SampleEnvironment<'_>,
-    samples: &mut Vec<DynamicRuntimeSample>,
-) {
-    let transition = instance
-        .controller_transitions
-        .get(&controller.id)
-        .copied()
-        .unwrap_or(DynamicControllerTransitionSnapshot {
-            controller_id: controller.id,
-            activation_started_at_millis: controller.activated_at_millis,
-            ..Default::default()
-        });
-    let activation_mix = transition_mix(transition, environment.now_millis);
-    let lanes = frame.definition.lanes.len();
-    for (target_index, target) in frame.targets.iter().enumerate() {
-        for (lane_index, lane) in frame.definition.lanes.iter().enumerate() {
-            let phase = environment
-                .random_phases
-                .get(&lane.id)
-                .and_then(|phases| phases.get(target))
-                .or_else(|| instance.phase_by_lane_target.get(&(lane.id, *target)))
-                .copied()
-                .unwrap_or(0.0)
-                + controller.phase_offset_degrees;
-            let random_envelope = lane.random_group_id.and_then(|group_id| {
-                frame
-                    .definition
-                    .random_groups
-                    .iter()
-                    .find(|group| group.id == group_id)
-                    .map(|group| {
-                        let stream = instance
-                            .random_streams
-                            .entry((group_id, *target))
-                            .or_default();
-                        random_envelope(
-                            stream,
-                            group,
-                            environment.instance_id,
-                            *target,
-                            frame.elapsed,
-                            random_group_speed_factor(&frame.definition, group_id),
-                            environment.output_interval_millis,
-                        )
-                    })
-            });
-            let Some(value) = environment.evaluator.sample_lane(
-                lane,
-                DynamicEvaluationContext {
-                    instance_id: environment.instance_id,
-                    target: *target,
-                    elapsed_millis: frame.elapsed,
-                    cycle_duration_millis: environment.cycle_duration_millis,
-                    phase_degrees: phase,
-                    output_interval_millis: environment.output_interval_millis,
-                    random_envelope,
-                    sources: environment.sources,
-                },
-            ) else {
-                continue;
-            };
-            let value = if controller.size == 1.0 {
-                value
-            } else {
-                environment
-                    .sources
-                    .current(*target, &lane.attribute)
-                    .map_or(value, |base| base + (value - base) * controller.size)
-            };
-            let sample_key = (controller.id, *target, lane.id);
-            let value =
-                held_or_live_value(instance, sample_key, value, frame.synchronized_resume_mix);
-            instance.last_sample_values.insert(sample_key, value);
-            samples.push(DynamicRuntimeSample {
-                instance_id: environment.instance_id,
-                controller_id: controller.id,
-                target: *target,
-                lane_id: lane.id,
-                attribute: lane.attribute.clone(),
-                value,
-                priority: controller.priority,
-                activated_at_millis: controller.activated_at_millis,
-                activation_mix,
-                address: environment
-                    .addresses
-                    .get(target_index * lanes + lane_index)
-                    .copied()
-                    .flatten(),
-            });
+fn angle_current_address(lane: &crate::DynamicLane) -> Option<&crate::DynamicValueAddress> {
+    let crate::DynamicLaneBody::Programming(body) = &lane.body else {
+        return None;
+    };
+    lane.is_angle_current_passthrough().then_some(&body.address)
+}
+
+/// Folding both axes is safe only when the complete old/live Angle membership and
+/// source roles agree. A hot edit or a nested interrupted branch must remain zipped.
+fn same_angle_sources(
+    instance: &DynamicInstance,
+    definition: &DynamicDefinition,
+    controller: Uuid,
+    target: FixtureId,
+    held: &[(Uuid, &DynamicSampleExpression)],
+) -> bool {
+    for (lane_id, expression) in held {
+        let Some(lane) = definition.lanes.iter().find(|lane| {
+            lane.id == *lane_id && instance.lane_is_active(controller, target, lane.id)
+        }) else {
+            return false;
+        };
+        let crate::DynamicLaneBody::Programming(body) = &lane.body else {
+            return false;
+        };
+        let same = if let Some(address) = expression.angle_current_address() {
+            angle_current_address(lane) == Some(address)
+        } else if let Some((address, _)) = expression.programming_leaf() {
+            angle_current_address(lane).is_none() && &body.address == address
+        } else {
+            false
+        };
+        if !same {
+            return false;
         }
+    }
+    held.len()
+        == definition
+            .lanes
+            .iter()
+            .filter(|lane| {
+                lane.is_programming_angles() && instance.lane_is_active(controller, target, lane.id)
+            })
+            .count()
+}
+
+fn expression_address(
+    expression: &DynamicSampleExpression,
+    lane: &crate::DynamicLane,
+    cached: Option<FrameAddress>,
+) -> Option<FrameAddress> {
+    if expression
+        .legacy_leaf()
+        .is_some_and(|(attribute, _)| attribute == lane.output_owner_ref())
+        || expression
+            .programming_leaf()
+            .is_some_and(|(address, _)| address.owner().key_ref() == lane.output_owner_ref())
+    {
+        cached
+    } else {
+        None
     }
 }
 
-fn held_or_live_value(
+#[allow(clippy::too_many_arguments)]
+fn emit_sample(
     instance: &mut DynamicInstance,
+    controller: &DynamicController,
+    instance_id: Uuid,
+    target: FixtureId,
+    lane_id: Uuid,
+    expression: DynamicSampleExpression,
+    activation_mix: f32,
+    address: Option<FrameAddress>,
+    samples: &mut Vec<DynamicRuntimeSample>,
+) -> Result<(), DynamicRuntimeError> {
+    instance
+        .last_sample_values
+        .insert((controller.id, target, lane_id), expression.clone());
+    append_sample(
+        controller,
+        instance_id,
+        target,
+        lane_id,
+        expression,
+        activation_mix,
+        address,
+        samples,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_sample(
+    controller: &DynamicController,
+    instance_id: Uuid,
+    target: FixtureId,
+    lane_id: Uuid,
+    expression: DynamicSampleExpression,
+    activation_mix: f32,
+    address: Option<FrameAddress>,
+    samples: &mut Vec<DynamicRuntimeSample>,
+) -> Result<(), DynamicRuntimeError> {
+    // Keep passthrough Current symbolic, including while paused. Preparation validates its
+    // value and proof against the final captured frame, after scalar Point output is known.
+    // An early availability read would cache adoption against obsolete geometry or remove a
+    // required partner before the complete Position cohort can report its requirement.
+    let expression = if let Some(address) = expression.angle_current_address() {
+        if address.representation != crate::DynamicFamilyRepresentation::Angles {
+            return Err(DynamicRuntimeError::InvalidSample(
+                "Angle Current requires an Angle address".into(),
+            ));
+        }
+        address
+            .validate()
+            .map_err(|error| DynamicRuntimeError::InvalidSample(error.to_string()))?;
+        expression
+    } else if expression.legacy_leaf().is_some() || expression.programming_leaf().is_some() {
+        expression
+            .into_shallow()
+            .map_err(|error| DynamicRuntimeError::InvalidSample(error.to_string()))?
+    } else {
+        expression
+    };
+    samples.push(DynamicRuntimeSample {
+        instance_id,
+        controller_id: controller.id,
+        target,
+        lane_id,
+        expression,
+        priority: controller.priority,
+        activated_at_millis: controller.activated_at_millis,
+        activation_mix,
+        address,
+    });
+    Ok(())
+}
+
+fn held_or_live_value(
+    instance: &DynamicInstance,
     sample_key: (Uuid, FixtureId, Uuid),
-    value: f32,
+    value: DynamicSampleExpression,
     synchronized_resume_mix: Option<f32>,
-) -> f32 {
+    preserve_angle_branches: bool,
+) -> Option<DynamicSampleExpression> {
     if instance.paused_at_millis.is_some()
         && instance.activation_policy == crate::ActivationPolicy::JoinSyncNow
     {
-        *instance
-            .synchronized_hold_values
-            .entry(sample_key)
-            .or_insert(value)
+        Some(
+            instance
+                .synchronized_hold_values
+                .get(&sample_key)
+                .cloned()
+                .unwrap_or(value),
+        )
     } else if let Some(resume_mix) = synchronized_resume_mix {
-        instance
-            .synchronized_hold_values
-            .get(&sample_key)
-            .map_or(value, |held| held + (value - held) * resume_mix)
+        if resume_mix >= 1.0 {
+            return Some(value);
+        }
+        let held = instance.synchronized_hold_values.get(&sample_key);
+        let reason = crate::DynamicTransitionReason::Resume {
+            occurrence_id: instance
+                .synchronized_resume_transition
+                .expect("resume mix has a transition")
+                .occurrence_id,
+        };
+        if preserve_angle_branches {
+            // A sibling axis may have changed its address or become a new Current
+            // partner. Keep this common branch boundary until both pairs are built.
+            return Some(DynamicSampleExpression::Transition {
+                from: held.cloned().map(Arc::new),
+                to: Some(Arc::new(value)),
+                progress: resume_mix,
+                reason,
+            });
+        }
+        let Some(held) = held else { return Some(value) };
+        if let Some(address) = value.angle_current_address()
+            && held.angle_current_address() == Some(address)
+        {
+            return Some(value);
+        }
+        if resume_mix <= 0.0 {
+            return Some(held.clone());
+        }
+        if let Some(blended) = instance
+            .programming_lanes
+            .get(&sample_key.2)
+            .and_then(|lane| {
+                if held.has_source_occurrences() || value.has_source_occurrences() {
+                    None
+                } else {
+                    lane.blend_components(held, &value, resume_mix)
+                }
+            })
+        {
+            return Some(blended);
+        }
+        if let (Some((a, from)), Some((b, to))) = (held.legacy_leaf(), value.legacy_leaf())
+            && a == b
+            && !held.has_source_occurrences()
+            && !value.has_source_occurrences()
+        {
+            return Some(DynamicSampleExpression::LegacyScalar {
+                attribute: a.clone(),
+                value: from + (to - from) * resume_mix,
+                occurrence: None,
+                dependency_occurrence: None,
+            });
+        }
+        Some(DynamicSampleExpression::Transition {
+            from: Some(Arc::new(held.clone())),
+            to: Some(Arc::new(value)),
+            progress: resume_mix,
+            reason,
+        })
     } else {
-        value
+        Some(value)
     }
 }
 
@@ -544,6 +740,12 @@ fn finish_synchronized_resume(
     if synchronized_resume_mix.is_some_and(|mix| mix >= 1.0) {
         instance.synchronized_resume_transition = None;
         instance.synchronized_hold_elapsed_millis = None;
-        instance.synchronized_hold_values.clear();
+        instance.synchronized_hold_captured = false;
+        instance
+            .synchronized_hold_values
+            .retain(|key, _| instance.unavailable_samples.contains_key(key));
+        instance
+            .synchronized_hold_angle_sources
+            .retain(|key| instance.unavailable_samples.contains_key(key));
     }
 }

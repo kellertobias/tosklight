@@ -251,14 +251,15 @@ fn handle_record_osc(
     source: Option<SocketAddr>,
     pressed: bool,
 ) -> bool {
-    // The desk gate covers the lock check and the gesture transition only. Routing the Record key
-    // re-enters the Programming service, which takes the user Programmer before the desk gate, so
-    // it has to run once this gate is released.
+    // Arm/Settings mutate the Programmer command line, so take its reentrant gate before the
+    // desk gate. Routing Record enters the Programming service and must run after both are
+    // released, rather than re-entering the non-reentrant desk gate.
     enum RecordOutcome {
         Handled(bool),
         RouteRecord,
     }
-    let outcome = state.programming.run_desk_operation(session.desk.id, || {
+    let outcome = state.programming.programmers().serialized(|| {
+        state.programming.run_desk_operation(session.desk.id, || {
         if read_desk_lock(state).locked {
             return RecordOutcome::Handled(true);
         }
@@ -292,6 +293,7 @@ fn handle_record_osc(
                 || subscriber.shifted
                 || subscriber.shift_held,
         )
+        })
     });
     match outcome {
         RecordOutcome::Handled(handled) => handled,
@@ -422,6 +424,9 @@ fn route_programmer_osc_action(
     action: &str,
     request_id: Option<&str>,
 ) -> bool {
+    if action == "align" {
+        return apply_align_osc(state, session, request_id, false);
+    }
     if action == "set"
         && state.programming.get(session.id).is_some_and(|programmer| {
             matches!(programmer.command_line.trim(), "" | "FIXTURE" | "GROUP")
@@ -435,7 +440,7 @@ fn route_programmer_osc_action(
         true
     } else if matches!(
         action,
-        "align" | "escape" | "menu" | "prog-playback" | "off" | "page-up" | "page-down" | "diff"
+        "escape" | "menu" | "prog-playback" | "off" | "page-up" | "page-down" | "diff"
     ) {
         emit(
             state,
@@ -446,6 +451,37 @@ fn route_programmer_osc_action(
     } else {
         command_http::route_osc_command_key_outcome(state, session, path, action, request_id)
             .unwrap_or(false)
+    }
+}
+
+fn apply_align_osc(
+    state: &AppState,
+    session: &Session,
+    request_id: Option<&str>,
+    off: bool,
+) -> bool {
+    let Ok(_activation) = state.active_show.try_acquire() else {
+        command_http::publish_osc_rejection(
+            state,
+            session,
+            "the active show is changing; retry Align".into(),
+        );
+        return false;
+    };
+    attach_session_command_context(state, session);
+    let context = programming_context(session, light_application::ActionSource::Osc, request_id);
+    let ports = command_http::ServerProgrammingPorts::new(state, session, "osc", true);
+    let result = if off {
+        state.programming.set_alignment(&context, &ports, None)
+    } else {
+        state.programming.cycle_alignment(&context, &ports)
+    };
+    match result {
+        Ok(_) => true,
+        Err(error) => {
+            command_http::publish_osc_rejection(state, session, error.message);
+            false
+        }
     }
 }
 
@@ -489,6 +525,12 @@ pub(super) fn handle_programmer_osc(
     }
     if !pressed {
         return false;
+    }
+    if (subscriber.shifted || subscriber.shift_held) && action == "align" {
+        if let Some(source) = source {
+            state.integrations.clear_shift(source);
+        }
+        return apply_align_osc(state, &session, request_id, true);
     }
     if (subscriber.shifted || subscriber.shift_held)
         && (action.starts_with("digit-")

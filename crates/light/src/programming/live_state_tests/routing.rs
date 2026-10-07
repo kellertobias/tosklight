@@ -109,6 +109,7 @@ fn interaction_change_rejects_empty_and_cross_desk_components() {
         desk_id,
         command_line: Default::default(),
         selection: Default::default(),
+        alignment: Default::default(),
     };
     assert!(ProgrammingInteractionChange::between(&before, &before).is_none());
     let mut other_desk = before.clone();

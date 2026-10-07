@@ -42,6 +42,8 @@ fn environment(
         .current()
         .clone()
         .ok_or_else(|| not_found("no active Show is loaded"))?;
+    // Show recovery: the failed show's Presets are not recalled.
+    ports.state().active_show.ensure_content_writable()?;
     if active.id != request.show_id {
         return Err(conflict("the requested Show is not active"));
     }
@@ -58,8 +60,41 @@ fn environment(
     // lock keeps it current through the mutation, while deriving Groups here prevents a stale or
     // independently replaced engine snapshot from changing recall membership.
     let groups = decode_groups(&document)?;
+    let mut stage_positions = HashMap::new();
+    for object in document.objects_of_kind("stage_layout") {
+        let layout: light_application::StageLayout = serde_json::from_value(object.body().clone())
+            .map_err(|error| {
+                conflict(format!(
+                    "stored Stage layout {} is invalid: {error}",
+                    object.key().id()
+                ))
+            })?;
+        stage_positions.extend(layout.fixture_spatial_positions().into_iter().map(
+            |(id, point)| {
+                (
+                    id,
+                    light_dynamics::Position3d {
+                        x: f64::from(point.x),
+                        y: f64::from(point.y),
+                        z: f64::from(point.z),
+                    },
+                )
+            },
+        ));
+    }
     let (selectable_targets, target_expansions) = selectable_targets(ports);
+    // Resolve/validate an explicit Aim before the service's empty-selection branch. Both
+    // HTTP and WebSocket consume this same captured application environment.
+    let resolved_aim = preset
+        .aim_at_fixture_number
+        .map(|_| {
+            super::super::programmer_aim_command::resolve_aim_preset(ports.state(), &preset)
+                .map(Arc::new)
+                .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))
+        })
+        .transpose()?;
     Ok(ProgrammingPresetRecallEnvironment {
+        supported_programming_contract: ports.state().output.supported_programming_contract(),
         show_id: document.id(),
         show_revision: document.revision(),
         object_id: object.key().id().to_owned(),
@@ -67,7 +102,9 @@ fn environment(
         address: request.address,
         raw_body: Arc::new(object.body().clone()),
         preset: Arc::new(preset),
+        resolved_aim,
         groups: Arc::new(groups),
+        stage_positions: Arc::new(stage_positions),
         selectable_targets: Arc::new(selectable_targets),
         target_expansions: Arc::new(target_expansions),
         programmer_fade_millis: ports

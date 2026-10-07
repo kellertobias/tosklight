@@ -1,11 +1,14 @@
-use crate::{ActionError, ActionErrorKind};
-use light_core::{AttributeKey, FixtureId};
+use crate::ActionError;
+use light_core::{AttributeKey, AttributeValue, FixtureId, NativeColorIdentity, programming::*};
+use light_dynamics::DynamicNativeModelResolver;
 use light_programmer::{
     NormalProgrammerValueMutation, NormalProgrammerValueTiming, PreloadProgrammerValueMutation,
     PreloadProgrammerValueTiming, Preset, ProgrammerSelection, SelectionExpression,
-    SelectionReference, SelectionRule,
 };
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 pub(super) struct PresetTargetPlan {
     pub(super) selected: Vec<FixtureId>,
@@ -72,14 +75,7 @@ pub(super) fn target_selection(
         missing_fixture_targets,
         missing_group_members,
         &missing_groups,
-    )
-    .or_else(|| {
-        (preset.is_universal() && requested.is_empty()).then(|| {
-            "This universal Color preset applies to whatever is selected: select fixtures, then \
-             recall it."
-                .to_owned()
-        })
-    });
+    );
     PresetTargetPlan { selected, warning }
 }
 
@@ -132,40 +128,256 @@ fn target_warning(
     ))
 }
 
-pub(super) fn plan(
+pub(super) fn plan_with_positions(
     selection: &ProgrammerSelection,
     preset: &Preset,
     groups: &HashMap<String, light_programmer::GroupDefinition>,
+    positions: &HashMap<FixtureId, light_dynamics::Position3d>,
     fade_millis: u64,
 ) -> Result<Vec<NormalProgrammerValueMutation>, ActionError> {
-    if selection.selected.is_empty() {
-        return Err(ActionError::new(
-            ActionErrorKind::Invalid,
-            "Preset recall requires a current selection",
-        ));
-    }
+    plan_with_positions_and_native_models(selection, preset, groups, positions, fade_millis, None)
+}
+
+fn plan_with_positions_and_native_models(
+    selection: &ProgrammerSelection,
+    preset: &Preset,
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    positions: &HashMap<FixtureId, light_dynamics::Position3d>,
+    fade_millis: u64,
+    native_models: Option<&dyn DynamicNativeModelResolver>,
+) -> Result<Vec<NormalProgrammerValueMutation>, ActionError> {
+    preset.validate_programming().map_err(invalid_intent)?;
     let live_groups = live_group_targets(selection);
-    let expanded_groups = expanded_group_memberships(preset, groups, &live_groups);
+    if selection.selected.is_empty() && live_groups.is_empty() {
+        return Ok(Vec::new());
+    }
     let timing = NormalProgrammerValueTiming {
         fade: true,
         fade_millis: Some(fade_millis),
         delay_millis: None,
     };
     let mut planned = Vec::new();
-    for fixture_id in &selection.selected {
-        // A universal colour reaches every selected fixture; values the preset names for this
-        // fixture come after it, so they win.
-        if live_groups.is_empty() {
-            append_universal_values(&mut planned, preset, *fixture_id, timing);
+    if live_groups.is_empty() {
+        for attribute in sorted_attributes(&preset.universal_values) {
+            let native = native_for_spread(&preset.universal_values[attribute], native_models)
+                .map_err(invalid_intent)?;
+            let mut context = virtual_context();
+            context.native_model = native
+                .as_deref()
+                .map(|model| model as &dyn NativeColorEditModel);
+            let ranked = compile_programming_spread(
+                &preset.universal_values[attribute],
+                selection.selected.len(),
+                &context,
+            )
+            .map_err(invalid_intent)?;
+            for (rank, fixture_id) in selection.selected.iter().enumerate() {
+                planned.push(NormalProgrammerValueMutation::SetFixture {
+                    fixture_id: *fixture_id,
+                    attribute: attribute.clone(),
+                    value: ranked
+                        .at_rank(rank)
+                        .expect("selection rank compiled")
+                        .clone(),
+                    timing,
+                });
+            }
         }
+    }
+    for fixture_id in &selection.selected {
         append_fixture_values(&mut planned, preset, *fixture_id, timing);
-        append_expanded_group_values(&mut planned, preset, &expanded_groups, *fixture_id, timing);
+    }
+    let selected = selection.selected.iter().copied().collect::<HashSet<_>>();
+    let mut ids = preset
+        .group_values
+        .keys()
+        .filter(|id| !live_groups.contains(id))
+        .collect::<Vec<_>>();
+    ids.sort();
+    for id in ids {
+        let Ok(resolved) = light_programmer::resolve_group_spatial(id, groups, positions) else {
+            continue;
+        };
+        let ranking = resolved.ranked_selection;
+        // Sampling retains the full Group rank domain even when only some members are selected.
+        let members = ranking
+            .ordered_fixture_ids
+            .iter()
+            .filter(|id| selected.contains(id))
+            .map(|id| (*id, ranking.rank_by_fixture[id]))
+            .collect::<Vec<_>>();
+        for attribute in sorted_attributes(&preset.group_values[id]) {
+            let value = &preset.group_values[id][attribute];
+            let native =
+                group_native_models(value, &members, native_models).map_err(invalid_intent)?;
+            let values =
+                compile_group_member_values(value, &members, ranking.rank_count, |value| {
+                    let mut context = virtual_context();
+                    if let Some(source) = direct_spread_source(value) {
+                        context.native_model = native
+                            .iter()
+                            .find(|(identity, _)| identity == source)
+                            .map(|(_, model)| model.as_ref() as &dyn NativeColorEditModel);
+                    }
+                    Ok(context)
+                })
+                .map_err(invalid_intent)?;
+            for (fixture_id, value) in values {
+                planned.push(NormalProgrammerValueMutation::SetFixture {
+                    fixture_id,
+                    attribute: attribute.clone(),
+                    value,
+                    timing,
+                });
+            }
+        }
     }
     append_live_group_values(&mut planned, preset, &live_groups, timing);
-    Ok(retain_last_address(planned))
+    let mut planned = retain_last_address(planned);
+    let order = selection
+        .selected
+        .iter()
+        .enumerate()
+        .map(|(rank, id)| (*id, rank))
+        .collect::<HashMap<_, _>>();
+    // Rank compilation is batched by source, but mutations retain the operator's selection
+    // order and the established per-fixture last-source precedence.
+    planned.sort_by_key(|mutation| match mutation {
+        NormalProgrammerValueMutation::SetFixture { fixture_id, .. }
+        | NormalProgrammerValueMutation::ReleaseFixture { fixture_id, .. } => {
+            order.get(fixture_id).copied().unwrap_or(usize::MAX)
+        }
+        _ => usize::MAX,
+    });
+    Ok(planned)
 }
 
-pub(super) fn as_preload(
+fn direct_spread_source(value: &AttributeValue) -> Option<&NativeColorIdentity> {
+    if value.spread_control_points() == 0 {
+        return None;
+    }
+    match value {
+        AttributeValue::ColorProgram(program) => match program.as_ref() {
+            ColorProgram::Direct { recipe, .. } => Some(&recipe.source),
+            ColorProgram::Semantic { .. } => None,
+        },
+        _ => None,
+    }
+}
+
+fn native_for_spread(
+    value: &AttributeValue,
+    resolver: Option<&dyn DynamicNativeModelResolver>,
+) -> Result<Option<Arc<dyn NativeColorEditModel + Send + Sync>>, IntentError> {
+    let Some(source) = direct_spread_source(value) else {
+        return Ok(None);
+    };
+    let Some(resolver) = resolver else {
+        // The original entry point keeps its previous behavior: Direct spreads fail in
+        // compile_programming_spread with its established missing-model error.
+        return Ok(None);
+    };
+    let model = resolver.resolve(source)?;
+    if model.source() != source {
+        return Err(IntentError("native spread source identity changed".into()));
+    }
+    Ok(Some(model))
+}
+
+fn group_native_models(
+    value: &AttributeValue,
+    members: &[(FixtureId, usize)],
+    resolver: Option<&dyn DynamicNativeModelResolver>,
+) -> Result<
+    Vec<(
+        NativeColorIdentity,
+        Arc<dyn NativeColorEditModel + Send + Sync>,
+    )>,
+    IntentError,
+> {
+    let mut native = Vec::new();
+    for (fixture_id, _) in members {
+        let member = match value {
+            AttributeValue::GroupFamily(assignment) => assignment
+                .members
+                .get(&fixture_id.0)
+                .unwrap_or(&assignment.template),
+            _ => value,
+        };
+        let Some(source) = direct_spread_source(member) else {
+            continue;
+        };
+        if native.iter().any(|(identity, _)| identity == source) {
+            continue;
+        }
+        if let Some(model) = native_for_spread(member, resolver)? {
+            native.push((source.clone(), model));
+        }
+    }
+    Ok(native)
+}
+
+fn virtual_context() -> FamilyEditContext<'static> {
+    FamilyEditContext {
+        color_model: Some(&VirtualColorAuthoringV1),
+        ..Default::default()
+    }
+}
+fn invalid_intent(error: IntentError) -> ActionError {
+    ActionError::new(crate::ActionErrorKind::Invalid, error.to_string())
+}
+
+/// Shared materialization for FixAT and other fixture-scoped consumers of stored Group presets.
+pub fn materialize_preset_fixture_values(
+    preset: &Preset,
+    targets: &[FixtureId],
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    positions: &HashMap<FixtureId, light_dynamics::Position3d>,
+) -> Result<Vec<NormalProgrammerValueMutation>, ActionError> {
+    let selection = ProgrammerSelection {
+        selected: targets.to_vec(),
+        ..Default::default()
+    };
+    plan_with_positions(&selection, preset, groups, positions, 0)
+}
+
+/// Materialize Direct native spreads against the immutable original source named by the stored
+/// recipe. The resolver must never substitute a selected fixture or current library revision.
+pub fn materialize_preset_fixture_values_with_native_models(
+    preset: &Preset,
+    targets: &[FixtureId],
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    positions: &HashMap<FixtureId, light_dynamics::Position3d>,
+    native_models: &dyn DynamicNativeModelResolver,
+) -> Result<Vec<NormalProgrammerValueMutation>, ActionError> {
+    let selection = ProgrammerSelection {
+        selected: targets.to_vec(),
+        ..Default::default()
+    };
+    plan_with_positions_and_native_models(
+        &selection,
+        preset,
+        groups,
+        positions,
+        0,
+        Some(native_models),
+    )
+}
+
+/// Plan a command recall using the same spread, precedence and live Group ownership as v2
+/// recall. The caller captures the selection/geometry before entering its existing atomic
+/// command transaction; this function never changes Programmer state or bakes output values.
+pub fn plan_preset_selection_values(
+    selection: &ProgrammerSelection,
+    preset: &Preset,
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    positions: &HashMap<FixtureId, light_dynamics::Position3d>,
+    fade_millis: u64,
+) -> Result<Vec<NormalProgrammerValueMutation>, ActionError> {
+    plan_with_positions(selection, preset, groups, positions, fade_millis)
+}
+
+pub fn as_preload(
     mutations: &[NormalProgrammerValueMutation],
 ) -> Vec<PreloadProgrammerValueMutation> {
     mutations
@@ -220,63 +432,11 @@ const fn preload_timing(timing: NormalProgrammerValueTiming) -> PreloadProgramme
 }
 
 fn live_group_targets(selection: &ProgrammerSelection) -> Vec<String> {
-    match &selection.expression {
-        Some(SelectionExpression::LiveGroup {
-            group_id,
-            rule: SelectionRule::All,
-        }) => vec![group_id.clone()],
-        Some(SelectionExpression::Sources { items })
-            if items
-                .iter()
-                .all(|item| matches!(item, SelectionReference::LiveGroup { .. })) =>
-        {
-            items
-                .iter()
-                .filter_map(|item| match item {
-                    SelectionReference::LiveGroup { group_id } => Some(group_id.clone()),
-                    _ => None,
-                })
-                .collect()
-        }
-        _ => Vec::new(),
-    }
-}
-
-fn expanded_group_memberships(
-    preset: &Preset,
-    groups: &HashMap<String, light_programmer::GroupDefinition>,
-    live_groups: &[String],
-) -> Vec<(String, HashSet<FixtureId>)> {
-    let mut ids = preset
-        .group_values
-        .keys()
-        .filter(|id| !live_groups.contains(id))
-        .cloned()
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.into_iter()
-        .filter_map(|group_id| {
-            light_programmer::resolve_group(&group_id, groups)
-                .ok()
-                .map(|members| (group_id, members.into_iter().collect()))
-        })
-        .collect()
-}
-
-fn append_universal_values(
-    planned: &mut Vec<NormalProgrammerValueMutation>,
-    preset: &Preset,
-    fixture_id: FixtureId,
-    timing: NormalProgrammerValueTiming,
-) {
-    for attribute in sorted_attributes(&preset.universal_values) {
-        planned.push(NormalProgrammerValueMutation::SetFixture {
-            fixture_id,
-            attribute: attribute.clone(),
-            value: preset.universal_values[attribute].clone(),
-            timing,
-        });
-    }
+    selection
+        .expression
+        .as_ref()
+        .map(SelectionExpression::live_group_owners)
+        .unwrap_or_default()
 }
 
 fn append_fixture_values(
@@ -295,29 +455,6 @@ fn append_fixture_values(
             value: attributes[attribute].clone(),
             timing,
         });
-    }
-}
-
-fn append_expanded_group_values(
-    planned: &mut Vec<NormalProgrammerValueMutation>,
-    preset: &Preset,
-    groups: &[(String, HashSet<FixtureId>)],
-    fixture_id: FixtureId,
-    timing: NormalProgrammerValueTiming,
-) {
-    for (group_id, members) in groups {
-        if !members.contains(&fixture_id) {
-            continue;
-        }
-        let attributes = &preset.group_values[group_id];
-        for attribute in sorted_attributes(attributes) {
-            planned.push(NormalProgrammerValueMutation::SetFixture {
-                fixture_id,
-                attribute: attribute.clone(),
-                value: attributes[attribute].clone(),
-                timing,
-            });
-        }
     }
 }
 
@@ -399,383 +536,17 @@ fn address(mutation: &NormalProgrammerValueMutation) -> PlannedAddress {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use light_core::AttributeValue;
-    use light_programmer::{GroupDefinition, PresetFamily};
-
-    fn red() -> AttributeValue {
-        AttributeValue::ColorXyz(light_core::Xyz {
-            x: 0.4124,
-            y: 0.2126,
-            z: 0.0193,
-        })
-    }
-
-    fn blue() -> AttributeValue {
-        AttributeValue::ColorXyz(light_core::Xyz {
-            x: 0.1805,
-            y: 0.0722,
-            z: 0.9505,
-        })
-    }
-
-    #[test]
-    fn a_universal_colour_reaches_selected_fixtures_the_preset_never_named() {
-        let named = FixtureId::new();
-        let unnamed = FixtureId::new();
-        let preset = Preset {
-            family: PresetFamily::Color,
-            number: 1,
-            universal_values: HashMap::from([(AttributeKey::color(), red())]),
-            ..Preset::default()
-        };
-        let planned = plan(
-            &selection(vec![named, unnamed]),
-            &preset,
-            &HashMap::new(),
-            0,
-        )
-        .unwrap();
-        assert_eq!(
-            fixture_writes(&planned),
-            vec![
-                (named, "color".into(), red()),
-                (unnamed, "color".into(), red()),
-            ]
-        );
-    }
-
-    #[test]
-    fn fixture_specific_colours_never_extend_to_unrelated_fixtures() {
-        let first = FixtureId::new();
-        let second = FixtureId::new();
-        let unrelated = FixtureId::new();
-        let mut preset = Preset {
-            family: PresetFamily::Color,
-            number: 2,
-            values: HashMap::from([
-                (first, HashMap::from([(AttributeKey::color(), red())])),
-                (second, HashMap::from([(AttributeKey::color(), blue())])),
-            ]),
-            ..Preset::default()
-        };
-        preset.consolidate_universal_color();
-        assert!(
-            !preset.is_universal(),
-            "differing colours stay fixture-specific"
-        );
-        let planned = plan(
-            &selection(vec![first, second, unrelated]),
-            &preset,
-            &HashMap::new(),
-            0,
-        )
-        .unwrap();
-        assert_eq!(
-            fixture_writes(&planned),
-            vec![
-                (first, "color".into(), red()),
-                (second, "color".into(), blue()),
-            ],
-            "the unrelated fixture receives nothing"
-        );
-    }
-
-    #[test]
-    fn a_named_fixture_keeps_its_own_colour_over_the_universal_one() {
-        let named = FixtureId::new();
-        let other = FixtureId::new();
-        let preset = Preset {
-            family: PresetFamily::Color,
-            number: 3,
-            values: HashMap::from([(named, HashMap::from([(AttributeKey::color(), blue())]))]),
-            universal_values: HashMap::from([(AttributeKey::color(), red())]),
-            ..Preset::default()
-        };
-        let planned = plan(&selection(vec![named, other]), &preset, &HashMap::new(), 0).unwrap();
-        assert_eq!(
-            fixture_writes(&planned),
-            vec![
-                (named, "color".into(), blue()),
-                (other, "color".into(), red())
-            ]
-        );
-    }
-
-    #[test]
-    fn a_universal_preset_selects_nothing_and_says_why_without_a_selection() {
-        let preset = Preset {
-            family: PresetFamily::Color,
-            number: 1,
-            universal_values: HashMap::from([(AttributeKey::color(), red())]),
-            ..Preset::default()
-        };
-        let fixture = FixtureId::new();
-        let plan = target_selection(
-            &preset,
-            &HashMap::new(),
-            &[fixture],
-            &HashMap::from([(fixture, vec![fixture])]),
-        );
-        assert!(plan.selected.is_empty());
-        assert!(plan.warning.unwrap().contains("universal Color preset"));
-    }
-
-    #[test]
-    fn overlapping_fixture_and_group_values_have_deterministic_last_source_precedence() {
-        let first = FixtureId::new();
-        let second = FixtureId::new();
-        let intensity = AttributeKey::intensity();
-        let pan = AttributeKey("pan".into());
-        let preset = Preset {
-            family: PresetFamily::Mixed,
-            aim_at_fixture_number: None,
-            number: 1,
-            values: HashMap::from([
-                (
-                    first,
-                    HashMap::from([
-                        (intensity.clone(), normalized(0.1)),
-                        (pan.clone(), normalized(0.4)),
-                    ]),
-                ),
-                (
-                    second,
-                    HashMap::from([(intensity.clone(), normalized(0.2))]),
-                ),
-            ]),
-            group_values: HashMap::from([
-                (
-                    "10".into(),
-                    HashMap::from([(intensity.clone(), normalized(0.6))]),
-                ),
-                (
-                    "2".into(),
-                    HashMap::from([(intensity.clone(), normalized(0.8))]),
-                ),
-            ]),
-            ..Preset::default()
-        };
-        let groups = HashMap::from([
-            ("10".into(), group("10", vec![first, second])),
-            ("2".into(), group("2", vec![first, second])),
-        ]);
-        let selection = selection(vec![second, first]);
-
-        let planned = plan(&selection, &preset, &groups, 750).unwrap();
-
-        assert_eq!(
-            fixture_writes(&planned),
-            vec![
-                (second, "intensity".into(), normalized(0.8)),
-                (first, "pan".into(), normalized(0.4)),
-                (first, "intensity".into(), normalized(0.8)),
-            ]
-        );
-        assert!(
-            planned
-                .iter()
-                .all(|mutation| timing(mutation).is_some_and(|timing| timing.fade
-                    && timing.fade_millis == Some(750)
-                    && timing.delay_millis.is_none()))
-        );
-    }
-
-    #[test]
-    fn missing_empty_and_unresolved_groups_do_not_perturb_selection_order() {
-        let first = FixtureId::new();
-        let second = FixtureId::new();
-        let attribute = AttributeKey::intensity();
-        let preset = Preset {
-            family: PresetFamily::Intensity,
-            aim_at_fixture_number: None,
-            number: 1,
-            values: HashMap::from([
-                (first, HashMap::from([(attribute.clone(), normalized(0.1))])),
-                (
-                    second,
-                    HashMap::from([(attribute.clone(), normalized(0.2))]),
-                ),
-            ]),
-            group_values: HashMap::from([
-                (
-                    "missing".into(),
-                    HashMap::from([(attribute.clone(), normalized(0.3))]),
-                ),
-                (
-                    "empty".into(),
-                    HashMap::from([(attribute.clone(), normalized(0.4))]),
-                ),
-                (
-                    "cycle".into(),
-                    HashMap::from([(attribute.clone(), normalized(0.5))]),
-                ),
-            ]),
-            ..Preset::default()
-        };
-        let groups = HashMap::from([
-            ("empty".into(), group("empty", Vec::new())),
-            (
-                "cycle".into(),
-                GroupDefinition {
-                    id: "cycle".into(),
-                    derived_from: Some(light_programmer::DerivedGroup {
-                        source_group_id: "cycle".into(),
-                        rule: SelectionRule::All,
-                    }),
-                    ..GroupDefinition::default()
-                },
-            ),
-        ]);
-
-        let planned = plan(&selection(vec![second, first]), &preset, &groups, 100).unwrap();
-
-        assert_eq!(
-            fixture_writes(&planned),
-            vec![
-                (second, "intensity".into(), normalized(0.2)),
-                (first, "intensity".into(), normalized(0.1)),
-            ]
-        );
-    }
-
-    #[test]
-    fn target_selection_expands_parents_deduplicates_unions_and_uses_desk_order() {
-        let parent = FixtureId::new();
-        let head_a = FixtureId::new();
-        let head_b = FixtureId::new();
-        let standalone = FixtureId::new();
-        let missing = FixtureId::new();
-        let intensity = AttributeKey::intensity();
-        let preset = Preset {
-            family: PresetFamily::Mixed,
-            aim_at_fixture_number: None,
-            number: 1,
-            values: HashMap::from([
-                (
-                    parent,
-                    HashMap::from([(intensity.clone(), normalized(0.1))]),
-                ),
-                (
-                    standalone,
-                    HashMap::from([(intensity.clone(), normalized(0.2))]),
-                ),
-                (
-                    missing,
-                    HashMap::from([(intensity.clone(), normalized(0.3))]),
-                ),
-            ]),
-            group_values: HashMap::from([
-                (
-                    "front".into(),
-                    HashMap::from([(intensity.clone(), normalized(0.4))]),
-                ),
-                ("gone".into(), HashMap::from([(intensity, normalized(0.5))])),
-            ]),
-            ..Preset::default()
-        };
-        let groups = HashMap::from([("front".into(), group("front", vec![standalone, head_b]))]);
-        let desk_order = vec![head_b, standalone, head_a];
-        let expansions = HashMap::from([
-            (parent, vec![head_a, head_b]),
-            (head_a, vec![head_a]),
-            (head_b, vec![head_b]),
-            (standalone, vec![standalone]),
-        ]);
-
-        let planned = target_selection(&preset, &groups, &desk_order, &expansions);
-
-        assert_eq!(planned.selected, desk_order);
-        let warning = planned.warning.unwrap();
-        assert!(warning.contains("1 missing fixture target"));
-        assert!(warning.contains("1 missing Group (gone)"));
-    }
-
-    #[test]
-    fn target_selection_ignores_empty_values_and_empty_groups_without_warning() {
-        let fixture = FixtureId::new();
-        let preset = Preset {
-            values: HashMap::from([(fixture, HashMap::new())]),
-            group_values: HashMap::from([("empty".into(), HashMap::new())]),
-            aim_at_fixture_number: None,
-            ..Preset::default()
-        };
-        let expansions = HashMap::from([(fixture, vec![fixture])]);
-
-        let planned = target_selection(&preset, &HashMap::new(), &[fixture], &expansions);
-
-        assert!(planned.selected.is_empty());
-        assert_eq!(planned.warning, None);
-    }
-
-    #[test]
-    fn target_selection_is_shared_by_color_position_and_mixed_presets() {
-        let fixture = FixtureId::new();
-        let expansions = HashMap::from([(fixture, vec![fixture])]);
-
-        for (family, attribute) in [
-            (PresetFamily::Color, AttributeKey("red".into())),
-            (PresetFamily::Position, AttributeKey("pan".into())),
-            (PresetFamily::Mixed, AttributeKey::intensity()),
-        ] {
-            let preset = Preset {
-                family,
-                values: HashMap::from([(fixture, HashMap::from([(attribute, normalized(0.5))]))]),
-                aim_at_fixture_number: None,
-                ..Preset::default()
-            };
-
-            let planned = target_selection(&preset, &HashMap::new(), &[fixture], &expansions);
-
-            assert_eq!(planned.selected, vec![fixture]);
-            assert_eq!(planned.warning, None);
-        }
-    }
-
-    fn selection(selected: Vec<FixtureId>) -> ProgrammerSelection {
-        ProgrammerSelection {
-            selected,
-            expression: Some(SelectionExpression::Static),
-            revision: 7,
-            gesture_open: false,
-        }
-    }
-
-    fn group(id: &str, fixtures: Vec<FixtureId>) -> GroupDefinition {
-        GroupDefinition {
-            id: id.into(),
-            fixtures,
-            ..GroupDefinition::default()
-        }
-    }
-
-    fn normalized(value: f32) -> AttributeValue {
-        AttributeValue::Normalized(value)
-    }
-
-    fn fixture_writes(
-        planned: &[NormalProgrammerValueMutation],
-    ) -> Vec<(FixtureId, String, AttributeValue)> {
-        planned
-            .iter()
-            .filter_map(|mutation| match mutation {
-                NormalProgrammerValueMutation::SetFixture {
-                    fixture_id,
-                    attribute,
-                    value,
-                    ..
-                } => Some((*fixture_id, attribute.0.to_string(), value.clone())),
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn timing(mutation: &NormalProgrammerValueMutation) -> Option<NormalProgrammerValueTiming> {
-        match mutation {
-            NormalProgrammerValueMutation::SetFixture { timing, .. }
-            | NormalProgrammerValueMutation::SetGroup { timing, .. } => Some(*timing),
-            _ => None,
-        }
-    }
+fn plan(
+    selection: &ProgrammerSelection,
+    preset: &Preset,
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    fade: u64,
+) -> Result<Vec<NormalProgrammerValueMutation>, ActionError> {
+    plan_with_positions(selection, preset, groups, &HashMap::new(), fade)
 }
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod family_tests;

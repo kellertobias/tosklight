@@ -567,6 +567,16 @@ export class ApiDriver {
     return this.commandLineOperation("keys", { key, phase, request_id: requestId });
   }
 
+  /** Presses `key` on the Shift layer, exactly as the software keypad sends `[^key]`. */
+  async sendShiftedCommandKey(key: SoftwareKey, requestId = crypto.randomUUID()): Promise<CommandOperationResponse> {
+    return this.commandLineOperation("keys", {
+      key,
+      phase: "press",
+      request_id: requestId,
+      gesture: { kind: "regular", shifted: true },
+    });
+  }
+
   async executeCommandLineRaw(command?: string, requestId = crypto.randomUUID()): Promise<CommandOperationResponse> {
     return this.commandLineOperation("execute", { command, request_id: requestId });
   }

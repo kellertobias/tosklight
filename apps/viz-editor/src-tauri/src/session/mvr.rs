@@ -14,31 +14,7 @@ pub fn export_mvr(session: tauri::State<'_, Session>, path: String) -> Answer<us
 /// What the archive holds and how it lands here, before anything is written.
 #[tauri::command]
 pub fn preview_mvr(session: tauri::State<'_, Session>, path: String) -> Answer<MvrPreviewDto> {
-    session.with(|document| {
-        let archive = read_archive(&path)?;
-        let preview = document
-            .preview_mvr(&archive)
-            .map_err(|error| error.to_string())?;
-        Ok(MvrPreviewDto {
-            fixtures: preview
-                .fixtures
-                .into_iter()
-                .map(|fixture| MvrPreviewFixtureDto {
-                    uuid: fixture.uuid.to_string(),
-                    name: fixture.name,
-                    gdtf_spec: fixture.gdtf_spec,
-                    gdtf_mode: fixture.gdtf_mode,
-                    universe: fixture.universe,
-                    address: fixture.address,
-                    matched: fixture.matched,
-                    conflicted: fixture.conflicted,
-                })
-                .collect(),
-            scenery: preview.scenery,
-            missing_profiles: preview.missing_profiles,
-            address_conflicts: preview.address_conflicts,
-        })
-    })
+    session.prepare_mvr(&path)
 }
 
 /// Imports the archive, with whatever the operator decided about the fixtures that needed a
@@ -48,26 +24,22 @@ pub fn import_mvr(
     app: tauri::AppHandle,
     window: tauri::Window,
     session: tauri::State<'_, Session>,
-    path: String,
+    token: String,
     resolutions: HashMap<String, ResolutionDto>,
 ) -> Answer<MvrImportReport> {
-    let resolutions = decode_resolutions(resolutions)?;
-    let report = session.change(|document| {
-        let archive = read_archive(&path)?;
-        let outcome = document
-            .import_mvr(archive, resolutions.clone())
-            .map_err(|error| error.to_string())?;
-        Ok(MvrImportReport {
-            imported_fixtures: outcome.imported_fixtures,
-            unresolved_fixtures: outcome.unresolved_fixtures,
-            warnings: outcome.warnings,
-        })
-    })?;
-    announce_document_change(&app, &window)?;
-    Ok(report)
+    let report = session.apply_mvr(&token, decode_resolutions(resolutions)?)?;
+    Ok(super::mvr_preview::after_notification(
+        report,
+        announce_document_change(&app, &window),
+    ))
 }
 
-fn read_archive(path: &str) -> Answer<light_mvr::MvrDocument> {
+#[tauri::command]
+pub fn cancel_mvr_preview(session: tauri::State<'_, Session>, token: String) {
+    session.cancel_mvr(&token);
+}
+
+pub(super) fn read_archive(path: &str) -> Answer<light_mvr::MvrDocument> {
     let data = std::fs::read(Path::new(path)).map_err(|error| error.to_string())?;
     PlanningDocument::read_mvr(&data).map_err(|error| error.to_string())
 }
@@ -108,6 +80,8 @@ pub struct ResolutionDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MvrPreviewDto {
+    pub token: String,
+    pub warnings: Vec<String>,
     pub fixtures: Vec<MvrPreviewFixtureDto>,
     pub scenery: usize,
     pub missing_profiles: Vec<String>,

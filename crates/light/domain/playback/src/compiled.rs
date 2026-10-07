@@ -8,6 +8,8 @@ use crate::*;
 /// `cue_count * tracked_attribute_count`.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct CompiledCueList {
+    /// Identity of immutable authored data, preserved by frame-address-only COW updates.
+    source_generation: Arc<()>,
     attributes: Vec<CompiledAttribute>,
     by_address: HashMap<AttributeAddress, usize>,
     by_fixture: HashMap<FixtureId, Vec<usize>>,
@@ -33,12 +35,18 @@ pub(crate) struct CompiledAttribute {
 #[derive(Clone, Debug)]
 struct CompiledChange {
     cue_index: usize,
+    cue_id: Uuid,
+    /// Generated restoration and expanded Group rows have no proven original author mapping.
+    source_unknown: bool,
     value: Option<AttributeValue>,
     fade_millis: Option<u64>,
     delay_millis: Option<u64>,
 }
 
 impl CompiledCueList {
+    pub(crate) fn source_generation(&self) -> &Arc<()> {
+        &self.source_generation
+    }
     // @tour cue-tracking-and-goto:20 Compile authored changes into tracking history
     // The runtime indexes sparse authored changes by fixture and attribute instead of cloning a
     // full stage for every Cue. These immutable histories support arbitrary tracked lookup.
@@ -46,7 +54,7 @@ impl CompiledCueList {
         let mut compiled = Self::default();
         for (cue_index, cue) in cue_list.cues.iter().enumerate() {
             for change in &cue.changes {
-                compiled.push_change(cue_index, change);
+                compiled.push_change(cue_index, cue.id, !cue.group_changes.is_empty(), change);
             }
         }
         compiled
@@ -113,7 +121,13 @@ impl CompiledCueList {
         self.attributes[*index].value(cue_index, tracking_wrap)
     }
 
-    fn push_change(&mut self, cue_index: usize, change: &CueChange) {
+    fn push_change(
+        &mut self,
+        cue_index: usize,
+        cue_id: Uuid,
+        group_origin_unknown: bool,
+        change: &CueChange,
+    ) {
         let address = change.address();
         let attribute_index = if let Some(index) = self.by_address.get(&address) {
             *index
@@ -142,6 +156,8 @@ impl CompiledCueList {
             .history
             .push(CompiledChange {
                 cue_index,
+                cue_id,
+                source_unknown: change.automatic_restore || group_origin_unknown,
                 value: change.value.clone(),
                 fade_millis: change.fade_millis,
                 delay_millis: change.delay_millis,
@@ -150,6 +166,14 @@ impl CompiledCueList {
 }
 
 impl CompiledAttribute {
+    pub(crate) fn author(
+        &self,
+        cue_index: usize,
+        tracking_wrap: bool,
+    ) -> Option<(usize, Uuid, bool)> {
+        self.effective_change(cue_index, tracking_wrap)
+            .map(|change| (change.cue_index, change.cue_id, change.source_unknown))
+    }
     pub(crate) fn fixture_id(&self) -> FixtureId {
         self.fixture_id
     }

@@ -980,3 +980,21 @@ glTF and GLB are read in metres with Y up, as glTF defines. A model is drawn at 
 built, so a 20 m hall is 20 m wide, and it may have at most 2,000,000 triangles and 64 MB once
 packed together. Surface colours are drawn and textures are not. A file that breaks any of these
 rules, or names a file that is not beside it, is refused with the reason, and nothing is added.
+
+
+## Review an MVR before importing
+
+**Import MVR** previews the exact embedded fixture files and modes. Native ToskLight profiles take
+precedence; a broken embedded GDTF cannot silently use an installed fixture with the same name.
+Read **Import limitations** before applying. Fixtures without usable profiles can be kept unresolved
+for recovery or skipped; choosing a different DMX address cannot resolve missing profile data.
+
+Apply uses the data captured by the preview, even if the picked file changes. Opening another
+show or preparing another archive replaces that preview. If the destination patch changes, preview
+again. An invalid address leaves the preview available so you can correct it. Reimporting the same
+fixture does not conflict with its own existing address. The planning patch sheet continues to
+show intentional address overlaps; resolve them before running the show on a control desk.
+
+Source, additional DMX-break and unsupported-scenery warnings remain visible after a successful
+import until **Done**. The portable show retains its imported profiles and source evidence without
+requiring them to be installed in this machine's fixture library.

@@ -8,7 +8,7 @@
 //! Deliberately free of any renderer type. The desk answers this while programming, long before
 //! anything is drawn, and a visualizer being open is not a precondition for pointing a light.
 
-/// A point in desk world space, in metres.
+/// A point in desk world space (X across, Y upstage, Z up), in metres.
 pub type Point = [f32; 3];
 
 /// Where a fixture is and which way it is hung.
@@ -35,11 +35,14 @@ pub fn pan_tilt_towards(mount: Mount, target: Point) -> Option<(f32, f32)> {
         target[2] - mount.position[2],
     ];
     let length = (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt();
-    if length < 1e-6 {
+    if !length.is_finite() || length < 1e-6 {
         return None;
     }
     let direction = [delta[0] / length, delta[1] / length, delta[2] / length];
-    let local = unrotate(direction, mount.rotation_degrees);
+    let desk = crate::spatial::RigidTransform::euler_xyz(mount.rotation_degrees.map(f64::from))?;
+    let local = crate::spatial::RigidTransform::DESK_TO_PROFILE
+        .direction(desk.inverse().direction(direction.map(f64::from)))
+        .map(|v| v as f32);
     // From `Ry(pan) * Rx(tilt) * (0, -1, 0)`, the local aim is
     // `(-sin(tilt)sin(pan), -cos(tilt), -sin(tilt)cos(pan))`.
     let tilt = (-local[1]).clamp(-1.0, 1.0).acos();
@@ -49,24 +52,19 @@ pub fn pan_tilt_towards(mount: Mount, target: Point) -> Option<(f32, f32)> {
     Some((pan.to_degrees(), tilt.to_degrees()))
 }
 
-/// Bring a world direction into the fixture's own frame by undoing `Rx * Ry * Rz`.
-fn unrotate(direction: [f32; 3], rotation_degrees: [f32; 3]) -> [f32; 3] {
-    let [x, y, z] = rotation_degrees;
-    let after_x = rotate_x(direction, -x.to_radians());
-    let after_y = rotate_y(after_x, -y.to_radians());
-    rotate_z(after_y, -z.to_radians())
-}
-
+#[cfg(test)]
 fn rotate_x(v: [f32; 3], angle: f32) -> [f32; 3] {
     let (sin, cos) = angle.sin_cos();
     [v[0], v[1] * cos - v[2] * sin, v[1] * sin + v[2] * cos]
 }
 
+#[cfg(test)]
 fn rotate_y(v: [f32; 3], angle: f32) -> [f32; 3] {
     let (sin, cos) = angle.sin_cos();
     [v[0] * cos + v[2] * sin, v[1], -v[0] * sin + v[2] * cos]
 }
 
+#[cfg(test)]
 fn rotate_z(v: [f32; 3], angle: f32) -> [f32; 3] {
     let (sin, cos) = angle.sin_cos();
     [v[0] * cos - v[1] * sin, v[0] * sin + v[1] * cos, v[2]]
@@ -85,7 +83,7 @@ mod tests {
 
     #[test]
     fn a_lantern_aims_straight_down_at_what_is_directly_beneath_it() {
-        let (pan, tilt) = pan_tilt_towards(hung([0.0, 6.0, 0.0]), [0.0, 0.0, 0.0]).unwrap();
+        let (pan, tilt) = pan_tilt_towards(hung([0.0, 0.0, 6.0]), [0.0, 0.0, 0.0]).unwrap();
         // Straight down is the rest position: no tilt, and pan does not matter.
         assert!(tilt.abs() < 1e-3, "tilt was {tilt}");
         assert!(pan.is_finite());
@@ -93,16 +91,16 @@ mod tests {
 
     #[test]
     fn a_lantern_tilts_a_quarter_turn_to_look_level() {
-        let (_, tilt) = pan_tilt_towards(hung([0.0, 6.0, 0.0]), [0.0, 6.0, -10.0]).unwrap();
+        let (_, tilt) = pan_tilt_towards(hung([0.0, 0.0, 6.0]), [0.0, 10.0, 6.0]).unwrap();
         assert!((tilt - 90.0).abs() < 1e-3, "tilt was {tilt}");
     }
 
     #[test]
     fn pan_follows_the_target_around_the_fixture() {
-        let level_upstage = pan_tilt_towards(hung([0.0, 6.0, 0.0]), [0.0, 6.0, -10.0])
+        let level_upstage = pan_tilt_towards(hung([0.0, 0.0, 6.0]), [0.0, 10.0, 6.0])
             .unwrap()
             .0;
-        let level_stage_right = pan_tilt_towards(hung([0.0, 6.0, 0.0]), [10.0, 6.0, 0.0])
+        let level_stage_right = pan_tilt_towards(hung([0.0, 0.0, 6.0]), [10.0, 0.0, 6.0])
             .unwrap()
             .0;
         // Ninety degrees apart, whichever way round the convention runs.
@@ -117,6 +115,7 @@ mod tests {
             rotate_x([0.0, -1.0, 0.0], tilt.to_radians()),
             pan.to_radians(),
         );
+        let local = [local[0], -local[2], local[1]];
         let [rx, ry, rz] = mount.rotation_degrees;
         rotate_x(
             rotate_y(rotate_z(local, rz.to_radians()), ry.to_radians()),
@@ -161,7 +160,7 @@ mod tests {
             ] {
                 assert_hits(
                     Mount {
-                        position: [0.0, 6.0, 0.0],
+                        position: [0.0, 0.0, 6.0],
                         rotation_degrees: rotation,
                     },
                     target,

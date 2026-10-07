@@ -1,3 +1,6 @@
+#[path = "dynamics_wire/programming.rs"]
+mod programming;
+use super::intent_wire::ToIntentWire;
 use light_dynamics as domain;
 use light_wire::v2::dynamics as wire;
 
@@ -46,6 +49,18 @@ fn semantic_value(
             value: *value,
             timing: timing_projection(*timing),
         },
+        domain::DynamicSemanticValue::ProgrammingFixAt { mask, timing } => Wire::ProgrammingFixAt {
+            mask: light_wire::v2::programming::ProgrammingFamilyFixAt {
+                address: programming::address(&mask.address),
+                family: super::values_wire::attribute_value(&mask.family),
+            },
+            timing: timing_projection(*timing),
+        },
+        domain::DynamicSemanticValue::ProgrammingRelease { component } => {
+            Wire::ProgrammingRelease {
+                component: component.as_ref().map(ToIntentWire::to_intent_wire),
+            }
+        }
         domain::DynamicSemanticValue::Release => Wire::Release,
     }
 }
@@ -220,42 +235,61 @@ fn target_binding(value: &domain::DynamicTargetBinding) -> wire::DynamicTargetBi
 fn lane(value: &domain::DynamicLane) -> wire::DynamicLaneProjection {
     wire::DynamicLaneProjection {
         id: value.id,
-        attribute: value.attribute.0.to_string(),
-        mode: match value.mode {
-            domain::DynamicLaneMode::Keyframes => wire::DynamicLaneModeProjection::Keyframes,
-            domain::DynamicLaneMode::MaxMin => wire::DynamicLaneModeProjection::MaxMin,
-            domain::DynamicLaneMode::MiddleAmplitude => {
-                wire::DynamicLaneModeProjection::MiddleAmplitude
+        body: match &value.body {
+            domain::DynamicLaneBody::Programming(body) => {
+                wire::DynamicLaneBodyProjection::Programming {
+                    programming: programming::lane(body),
+                }
             }
-            domain::DynamicLaneMode::Random => wire::DynamicLaneModeProjection::Random,
-        },
-        keyframes: wire::DynamicKeyframeConfigurationProjection {
-            points: value
-                .keyframes
-                .points
-                .iter()
-                .map(|point| wire::DynamicKeyframeProjection {
-                    position: point.position,
-                    source: scalar_source(&point.source),
-                    interpolation: interpolation(point.interpolation),
-                })
-                .collect(),
-            size: value.keyframes.size,
-        },
-        max_min: wire::DynamicMaxMinConfigurationProjection {
-            minimum: scalar_source(&value.max_min.minimum),
-            maximum: scalar_source(&value.max_min.maximum),
-            function: periodic_function(value.max_min.function),
-            size: value.max_min.size,
-            pwm: pwm(value.max_min.pwm),
-        },
-        middle_amplitude: wire::DynamicMiddleAmplitudeConfigurationProjection {
-            middle: scalar_source(&value.middle_amplitude.middle),
-            amplitude: value.middle_amplitude.amplitude,
-            function: periodic_function(value.middle_amplitude.function),
-            size: value.middle_amplitude.size,
-            pwm: pwm(value.middle_amplitude.pwm),
-            invert_waveform: value.middle_amplitude.invert_waveform.then_some(true),
+            domain::DynamicLaneBody::LegacyScalar(body) => {
+                wire::DynamicLaneBodyProjection::LegacyScalar(
+                    wire::DynamicLegacyScalarLaneProjection {
+                        attribute: body.attribute.0.to_string(),
+                        mode: match body.mode {
+                            domain::DynamicLaneMode::Keyframes => {
+                                wire::DynamicLaneModeProjection::Keyframes
+                            }
+                            domain::DynamicLaneMode::MaxMin => {
+                                wire::DynamicLaneModeProjection::MaxMin
+                            }
+                            domain::DynamicLaneMode::MiddleAmplitude => {
+                                wire::DynamicLaneModeProjection::MiddleAmplitude
+                            }
+                            domain::DynamicLaneMode::Random => {
+                                wire::DynamicLaneModeProjection::Random
+                            }
+                        },
+                        keyframes: wire::DynamicKeyframeConfigurationProjection {
+                            points: body
+                                .keyframes
+                                .points
+                                .iter()
+                                .map(|point| wire::DynamicKeyframeProjection {
+                                    position: point.position,
+                                    source: scalar_source(&point.source),
+                                    interpolation: interpolation(point.interpolation),
+                                })
+                                .collect(),
+                            size: body.keyframes.size,
+                        },
+                        max_min: wire::DynamicMaxMinConfigurationProjection {
+                            minimum: scalar_source(&body.max_min.minimum),
+                            maximum: scalar_source(&body.max_min.maximum),
+                            function: periodic_function(body.max_min.function),
+                            size: body.max_min.size,
+                            pwm: pwm(body.max_min.pwm),
+                        },
+                        middle_amplitude: wire::DynamicMiddleAmplitudeConfigurationProjection {
+                            middle: scalar_source(&body.middle_amplitude.middle),
+                            amplitude: body.middle_amplitude.amplitude,
+                            function: periodic_function(body.middle_amplitude.function),
+                            size: body.middle_amplitude.size,
+                            pwm: pwm(body.middle_amplitude.pwm),
+                            invert_waveform: body.middle_amplitude.invert_waveform.then_some(true),
+                        },
+                    },
+                )
+            }
         },
         speed_multiplier: rational(value.speed_multiplier),
         width: value.width,
@@ -326,8 +360,22 @@ fn random_group(value: &domain::DynamicRandomGroup) -> wire::DynamicRandomGroupP
     wire::DynamicRandomGroupProjection {
         id: value.id,
         seed: value.seed,
-        low: scalar_source(&value.low),
-        high: scalar_source(&value.high),
+        range: match &value.range {
+            domain::DynamicRandomRange::LegacyScalar { low, high } => {
+                wire::DynamicRandomRangeProjection::LegacyScalar {
+                    low: scalar_source(low),
+                    high: scalar_source(high),
+                }
+            }
+            domain::DynamicRandomRange::Programming { low, high } => {
+                wire::DynamicRandomRangeProjection::Programming {
+                    programming_range: wire::DynamicProgrammingRandomRangeProjection {
+                        low: programming::source(low),
+                        high: programming::source(high),
+                    },
+                }
+            }
+        },
         decision_interval_millis: value.decision_interval_millis,
         start_probability: value.start_probability,
         mean_duration_millis: value.mean_duration_millis,

@@ -58,6 +58,23 @@ pub fn measure(
     })
 }
 
+/// Semantic scenarios render only through the Live transaction; a direct engine render of their
+/// typed programming would measure a path production never takes.
+pub fn not_run_for_semantic() -> SampledContributionReport {
+    SampledContributionReport {
+        batches_per_render: 0,
+        samples_per_render: 0,
+        replacements_per_render: 0,
+        source_selection: "not run",
+        measured_renders: 0,
+        elapsed_seconds: 0.0,
+        achieved_renders_per_second: 0.0,
+        engine_render_combined: None,
+        measurement_mode: "not run: semantic scenarios render only through the production Live transaction",
+        included_in_required_floor: false,
+    }
+}
+
 fn set_logical_time(scenario: &BenchmarkScenario, tick: u64, rate_hz: u16) {
     scenario.clock.set(logical_time(scenario, tick, rate_hz));
 }

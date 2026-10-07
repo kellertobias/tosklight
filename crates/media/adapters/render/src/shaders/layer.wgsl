@@ -14,9 +14,9 @@ struct Layer {
     rotation: vec2<f32>,
     // The output's pixel dimensions.
     output: vec2<f32>,
-    // Layer tint in rgb; layer dimmer in a.
+    // Linear layer tint in rgb; layer dimmer in a.
     tint: vec4<f32>,
-    // x: grayscale amount. y, z, w: reserved for the effect slice.
+    // x: White Blend (the grayscale control), clamped to 0..1. y, z, w: reserved.
     controls: vec4<f32>,
     blur: vec4<f32>,
     // x, y: the mask's own scale about the layer centre. z: 1 when inverted. w: mask opacity,
@@ -89,8 +89,42 @@ fn vertex(@builtin(vertex_index) index: u32) -> VertexOutput {
     return out;
 }
 
-// The weights the legacy renderer used, kept so a migrated show's grayscale looks the same.
+// The weights the legacy renderer used. Masks and effects still read luminance with them; the
+// color stage below does not.
 const LUMINANCE = vec3<f32>(0.299, 0.587, 0.114);
+
+// Rec.709 / linear sRGB coefficients for White Blend. They apply to linear light only.
+const REC709_LUMINANCE = vec3<f32>(0.2126, 0.7152, 0.0722);
+
+// Sources, the program target and the output all carry sRGB-encoded values; nothing upstream
+// converts them. The color stage is the single place that decodes (here) and re-encodes (below),
+// matching media_domain::color::{srgb_to_linear, linear_to_srgb}.
+fn srgb_to_linear(encoded: vec3<f32>) -> vec3<f32> {
+    let value = max(encoded, vec3<f32>(0.0));
+    return select(
+        pow((value + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4)),
+        value / 12.92,
+        value <= vec3<f32>(0.04045),
+    );
+}
+
+fn linear_to_srgb(linear: vec3<f32>) -> vec3<f32> {
+    let value = max(linear, vec3<f32>(0.0));
+    return select(
+        1.055 * pow(value, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055),
+        value * 12.92,
+        value <= vec3<f32>(0.0031308),
+    );
+}
+
+// media_domain::color::MediaColor::apply_encoded: decode once, mix toward Rec.709 luminance by
+// White Blend, multiply by the linear tint, encode once. The tint stays active at 100% White Blend.
+fn media_colour(encoded: vec3<f32>, tint: vec3<f32>, white_blend: f32) -> vec3<f32> {
+    let linear = srgb_to_linear(encoded);
+    let gray = dot(linear, REC709_LUMINANCE);
+    let blended = mix(linear, vec3<f32>(gray), white_blend);
+    return linear_to_srgb(blended * tint);
+}
 
 fn hash21(value: vec2<f32>) -> f32 {
     return fract(sin(dot(value, vec2<f32>(127.1, 311.7))) * 43758.5453123);
@@ -828,9 +862,7 @@ fn layer_colour(in: VertexOutput) -> vec4<f32> {
     }
     sampled = vec4<f32>(sampled.rgb * coordinates.validity, sampled.a);
 
-    let gray = dot(sampled.rgb, LUMINANCE);
-    let desaturated = mix(sampled.rgb, vec3<f32>(gray, gray, gray), layer.controls.x);
-    let tinted = desaturated * layer.tint.rgb;
+    let tinted = media_colour(sampled.rgb, layer.tint.rgb, layer.controls.x);
 
     // Layer dimmer becomes the alpha of the layer tint, so a dimmed layer reveals what is beneath
     // it rather than turning black.

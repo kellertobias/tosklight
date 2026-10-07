@@ -6,9 +6,7 @@ type ProgrammerState = {
 	values: Array<{
 		fixture_id: string;
 		attribute: string;
-		value:
-			| number
-			| { value?: number; values?: Array<number | { value?: number }> };
+		value: Parameters<typeof normalized>[0];
 	}>;
 	group_values: Record<string, unknown>;
 };
@@ -29,7 +27,8 @@ export class BrowserAttachedEncoders {
 			) => {
 				await hardware.send(`/light/${alias}/nav`, [value]);
 				await expect(
-					this.page.getByRole("button", { name: family, exact: true }),
+					// A family tab counts its pages when it has more than one (e.g. Direct Color).
+					this.page.getByRole("button", { name: new RegExp(`^${family}( \\d+ of \\d+)?$`) }),
 				).toHaveClass(/active/);
 			};
 			for (const family of [
@@ -51,16 +50,15 @@ export class BrowserAttachedEncoders {
 			await navigate("down", "Position");
 
 			const tilt = this.page.getByRole("button", {
-				name: /^Encoder 2: Tilt,/,
+				name: /^Encoder 2: Tilt(?: · Resolved)?,/,
 			});
-			const displayedPercent = async () =>
-				Number.parseInt(
-					(await tilt.locator("strong").first().textContent()) ?? "",
-					10,
-				);
-			// Tilt reads out from home, so one coarse detent above centre is +20, not 60.
+			const displayedDegrees = async () =>
+				(await tilt.locator("strong").first().textContent()) ?? "";
+			// Tilt is an Angle in degrees (TL-552, help: Position encoders). The idle Profile Moving
+			// Light sits at its declared default pose, +0.5° (DMX 128 on a nominal 270° travel), and
+			// one coarse detent moves ten 1° steps.
 			await hardware.send(`/light/${alias}/encode/2`, ["right"]);
-			await expect.poll(displayedPercent).toBe(20);
+			await expect.poll(displayedDegrees).toBe("10.5°");
 			await hardware.send(`/light/${alias}/encode/2`, ["press"]);
 			const dialog = this.page.getByRole("dialog", {
 				name: "Encoder 2 value",
@@ -95,15 +93,21 @@ export class BrowserAttachedEncoders {
 		});
 	}
 
+	/**
+	 * Since the TL-552 cutover Pan is an Angle in degrees: the old 100 % THRU 0 % THRU 100 % is
+	 * +270° THRU −270° THRU +270° over a 540° travel centred on home.
+	 */
 	async expectMultiPointPanSpread(): Promise<void> {
 		await this.expectSpread({
 			family: "Position",
 			label: "Pan",
-			expression: ["1", "0", "0", "THRU", "0", "THRU", "1", "0", "0"],
+			expression: ["2", "7", "0", "THRU", "−", "2", "7", "0", "THRU", "2", "7", "0"],
 			fixtures: [101, 102, 103, 104, 105],
-			attribute: "pan",
-			values: [1, 0.5, 0, 0.5, 1],
-			display: "0%...100%",
+			attribute: "position",
+			values: [270, 0, -270, 0, 270],
+			// Differing requested angles read as their real range, never an average or a bare
+			// Mixed (TL-652, docs/testing/34 POSITION-CONTROLS-005 and PROG-002).
+			display: "-270°...270°",
 		});
 	}
 
@@ -122,7 +126,7 @@ export class BrowserAttachedEncoders {
 				.click();
 			await this.page
 				.getByRole("button", {
-					name: new RegExp(`^Encoder 1: ${options.label},`),
+					name: new RegExp(`^Encoder 1: ${options.label}(?: · Resolved)?,`),
 				})
 				.click();
 			const dialog = this.page.getByRole("dialog", {
@@ -231,10 +235,19 @@ export class BrowserAttachedEncoders {
 function normalized(
 	value:
 		| number
-		| { value?: number; values?: Array<number | { value?: number }> }
+		| {
+				kind?: string;
+				value?: number | { kind?: string; pan_degrees?: { value?: number } };
+				values?: Array<number | { value?: number }>;
+		  }
 		| undefined,
 ) {
 	if (typeof value === "number") return value;
+	// A semantic Position value reads as its Pan Angle in degrees.
+	if (value?.kind === "position" && typeof value.value === "object")
+		return value.value.kind === "angles"
+			? value.value.pan_degrees?.value
+			: undefined;
 	const first = value?.values?.[0];
 	if (typeof first === "number") return first;
 	return first?.value ?? value?.value;

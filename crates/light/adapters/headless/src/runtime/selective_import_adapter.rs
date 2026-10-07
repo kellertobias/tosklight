@@ -1,5 +1,6 @@
 //! Server-owned storage and runtime ports for selective show import.
 
+use super::PreparedOutputSnapshot;
 use super::{ActiveShowRepository, AppState, ServerActiveShowPorts, ServerActiveShowUnitOfWork};
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowPorts,
@@ -7,7 +8,7 @@ use light_application::{
     SelectiveShowImportPorts,
 };
 use light_core::ShowId;
-use light_engine::{EngineSnapshot, PreparedEngineSnapshot};
+use light_engine::EngineSnapshot;
 use light_show::{PortableShowDocument, PortableShowObjectUndo, StoreError};
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -60,7 +61,7 @@ impl ServerSelectiveImportPorts {
 
 impl ActiveShowPorts for ServerSelectiveImportPorts {
     type UnitOfWork = ServerActiveShowUnitOfWork;
-    type PreparedRuntime = PreparedEngineSnapshot;
+    type PreparedRuntime = PreparedOutputSnapshot;
 
     fn run_active_show_lifecycle<T>(
         &self,
@@ -69,10 +70,10 @@ impl ActiveShowPorts for ServerSelectiveImportPorts {
         operation: impl FnOnce() -> Result<T, ActionError>,
     ) -> Result<T, ActionError> {
         if self.within_programming_interaction {
-            return operation();
+            return self.state.programming.run_active_show_boundary(operation);
         }
         let _activation = self.state.active_show.acquire_blocking();
-        operation()
+        self.state.programming.run_active_show_boundary(operation)
     }
 
     fn begin_active_show(
@@ -105,6 +106,15 @@ impl ActiveShowPorts for ServerSelectiveImportPorts {
         snapshot: EngineSnapshot,
     ) -> Result<Self::PreparedRuntime, ActionError> {
         self.active.prepare_runtime(snapshot)
+    }
+
+    fn finalize_runtime<T>(
+        &self,
+        context: &ActionContext,
+        prepared: Self::PreparedRuntime,
+        persist: impl FnOnce() -> Result<T, ActionError>,
+    ) -> Result<T, ActionError> {
+        self.active.finalize_runtime(context, prepared, persist)
     }
 
     fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime) {

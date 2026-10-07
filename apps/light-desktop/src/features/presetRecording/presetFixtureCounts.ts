@@ -1,3 +1,4 @@
+import { sameAttributeValue } from "../programmerValues/projectionValue";
 import type { StoredPreset, VisualizationSnapshot } from "../../api/types";
 import type { AttributeValue } from "../../api/types/playback";
 import { resolveSpread } from "../../components/control/parameterControls/parameterValueMutations";
@@ -73,7 +74,9 @@ export function presetFixtureTargets(
 					attribute,
 					spread
 						? { kind: "normalized", value: spread[index] ?? 0 }
-						: value,
+						: value.kind === "group_family"
+                            ? value.value.members?.[fixtureId] ?? value.value.template
+                            : value,
 				);
 			});
 		}
@@ -149,6 +152,10 @@ function asAttributeValue(raw: unknown): AttributeValue | null {
 			return typeof value === "string" ? (raw as AttributeValue) : null;
 		case "spread":
 			return Array.isArray(value) ? (raw as AttributeValue) : null;
+		case "group_family":
+		case "color_program":
+		case "position":
+		case "zoom":
 		case "color_xyz":
 			return value && typeof value === "object" ? (raw as AttributeValue) : null;
 		default:
@@ -179,9 +186,37 @@ function sameEffectiveValue(stored: AttributeValue, effective: AttributeValue) {
 			);
 		case "discrete":
 			return effective.kind === "discrete" && effective.value === stored.value;
+		case "group_family":
+			return sameAttributeValue(stored, effective);
+		case "color_program":
+		case "position":
+		case "zoom":
+			// Requested semantic intent, never the achieved output: equal intents match even when
+			// the stored and resolved spellings differ in float width.
+			return effective.kind === stored.kind && sameIntent(stored.value, effective.value);
 		default:
 			return (
 				effective.kind === stored.kind && near(stored.value, effective.value)
 			);
 	}
+}
+
+function sameIntent(stored: unknown, effective: unknown): boolean {
+	if (typeof stored === "number" && typeof effective === "number")
+		return near(stored, effective);
+	if (Array.isArray(stored))
+		return (
+			Array.isArray(effective) &&
+			stored.length === effective.length &&
+			stored.every((item, index) => sameIntent(item, effective[index]))
+		);
+	if (!stored || typeof stored !== "object" || !effective || typeof effective !== "object")
+		return stored === effective;
+	const left = stored as Record<string, unknown>;
+	const right = effective as Record<string, unknown>;
+	const keys = Object.keys(left);
+	return (
+		keys.length === Object.keys(right).length &&
+		keys.every((key) => key in right && sameIntent(left[key], right[key]))
+	);
 }

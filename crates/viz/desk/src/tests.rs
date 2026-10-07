@@ -279,8 +279,10 @@ fn a_shipped_moving_head_becomes_a_beam_emitter_with_real_pan_and_tilt_travel() 
     assert_eq!(emitter.kind, EmitterKind::Beam);
     let pan = emitter.pan.expect("the profile declares pan motion");
     let tilt = emitter.tilt.expect("the profile declares tilt motion");
+    // The runtime projection's derived Position model (TL-552) centres the Sharpy's declared
+    // Pan 540° and Tilt 250° on home, so the Stage proxy and the fitted DMX share one travel.
     assert_eq!((pan.min_degrees, pan.max_degrees), (-270.0, 270.0));
-    assert_eq!((tilt.min_degrees, tilt.max_degrees), (-135.0, 135.0));
+    assert_eq!((tilt.min_degrees, tilt.max_degrees), (-125.0, 125.0));
     // A beam fixture keeps a narrow cone even without emitter geometry.
     assert!(emitter.beam_angle_degrees <= 10.0);
     // The fixture is unplaced by the stage layout, so its patch location is used.
@@ -596,14 +598,16 @@ fn venue_objects_are_accepted_as_scenery() {
             .iter()
             .any(|object| object.name == "Riser")
     );
-    assert_eq!(
-        plan.scene
-            .scenery
-            .iter()
-            .find(|object| object.name == "Riser")
-            .map(|object| object.rotation_degrees),
-        Some(glam::Vec3::new(0.0, 0.0, 90.0))
-    );
+    let riser = plan
+        .scene
+        .scenery
+        .iter()
+        .find(|object| object.name == "Riser")
+        .unwrap();
+    let rotation = viz_scene::euler_degrees(riser.rotation_degrees);
+    // Desk +Y is renderer -Z, so its positive quarter turn carries +X towards -Y.
+    assert!((rotation * glam::Vec3::X + glam::Vec3::Y).length() < 1e-5);
+    assert!((rotation * glam::Vec3::Z - glam::Vec3::Z).length() < 1e-5);
 }
 
 /// A generated Venue object slaved to a 3D Point follows the point exactly as a lantern does: the

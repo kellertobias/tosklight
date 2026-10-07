@@ -1,5 +1,7 @@
 import type {
 	FixtureAttributeMapping,
+	FixtureGdtfImportPreview,
+	FixtureGdtfImportInput,
 	FixturePackageImportOutcome,
 	FixtureSourceMapping,
 	GelCatalog,
@@ -80,6 +82,8 @@ export interface ServerFixtureContext {
 		revision: number,
 		source: Uint8Array,
 	) => Promise<boolean>;
+	previewFixtureGdtf: (source: Uint8Array) => Promise<FixtureGdtfImportPreview>;
+	importFixtureGdtf: (input: FixtureGdtfImportInput) => Promise<FixtureProfile>;
 	importFixturePackage: (
 		source: Uint8Array,
 		attributeMappings?: FixtureAttributeMapping[],

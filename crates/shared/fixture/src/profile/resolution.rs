@@ -245,17 +245,10 @@ pub(super) fn scale_channel_raw(
                 virtual_intensity
             };
         }
-        if channel.reacts_to_sequence_master {
-            scale *= f64::from(scales.sequence_master.clamp(0.0, 1.0));
-        }
-        if channel.reacts_to_group_master {
-            scale *= f64::from(scales.group_master.clamp(0.0, 1.0));
-        }
-    }
-    // Grand Master is the only ordinary master above transient Highlight. Blackout and hazardous
-    // safe values are enforced by the engine after this channel resolution.
-    if channel.reacts_to_grand_master {
-        scale *= f64::from(scales.grand_master.clamp(0.0, 1.0));
+    } else if channel.attribute.is_level() || channel.fixture_attribute.is_level() {
+        // Grand Master is the only master above transient Highlight. Blackout and hazardous safe
+        // values are enforced by the engine after this channel resolution.
+        scale *= f64::from(scales.highlight_master.clamp(0.0, 1.0));
     }
     match resolved {
         ResolvedChannelRaw::Semantic { raw, from, to } => {

@@ -49,6 +49,7 @@ mod values_actions;
 #[derive(Default)]
 struct LivePorts {
     authorization_error: Mutex<Option<crate::ActionError>>,
+    preload_error: Mutex<Option<String>>,
     selection: Mutex<Vec<FixtureId>>,
     reconciled_selection: Mutex<Option<Vec<FixtureId>>>,
     reconciliations: Mutex<Vec<ProgrammingReconciliation>>,
@@ -99,7 +100,7 @@ impl ProgrammingPorts for LivePorts {
     }
 
     fn commit_preload(&self, _context: &ActionContext) -> Result<Option<String>, String> {
-        Ok(None)
+        self.preload_error.lock().clone().map_or(Ok(None), Err)
     }
 }
 
@@ -189,6 +190,8 @@ fn escape_clear_record_and_legacy_preload_deactivate_align_without_reverting_val
             )
             .unwrap();
 
+        let cursor = setup.events.latest_sequence();
+
         setup.press(key);
 
         assert!(
@@ -197,7 +200,91 @@ fn escape_clear_record_and_legacy_preload_deactivate_align_without_reverting_val
                 .is_none(),
             "{key:?} must deactivate Align",
         );
+        let EventReplay::Events(events) = setup.events.replay(
+            cursor,
+            &EventFilter::default()
+                .with_object(EventObject::programming_alignment(setup.context.desk_id)),
+        ) else {
+            panic!("Align events retained")
+        };
+        assert_eq!(events.len(), 1, "{key:?} publishes committed Off once");
+        let ApplicationEvent::Programming(ProgrammingEvent::InteractionChanged(change)) =
+            &events[0].payload
+        else {
+            panic!("interaction")
+        };
+        assert_eq!(change.alignment().unwrap().mode, None);
     }
+}
+
+#[test]
+fn rejected_preload_go_keeps_align_projection_and_emits_no_off() {
+    let setup = LiveSetup::new(16);
+    let registry = setup.ports.registry.as_ref().unwrap();
+    let session = SessionId(setup.context.session_id.unwrap());
+    registry.select(session, [FixtureId::new()]);
+    registry.arm_preload(session, false);
+    setup
+        .service
+        .set_alignment(
+            &setup.context,
+            &setup.ports,
+            Some(ProgrammerAlignmentMode::Left),
+        )
+        .unwrap();
+    let before = registry.alignment_projection();
+    let cursor = setup.events.latest_sequence();
+    *setup.ports.preload_error.lock() = Some("test commit failure".into());
+    let result = setup.press(CommandKey::Preload);
+    assert!(matches!(
+        result.outcome,
+        ProgrammingOutcome::Rejected { .. }
+    ));
+    assert_eq!(registry.alignment_projection(), before);
+    let EventReplay::Events(events) = setup.events.replay(
+        cursor,
+        &EventFilter::default()
+            .with_object(EventObject::programming_alignment(setup.context.desk_id)),
+    ) else {
+        panic!("Align events retained")
+    };
+    assert!(events.is_empty());
+}
+
+#[test]
+fn committed_show_boundary_publishes_off_even_when_topology_and_selection_are_unchanged() {
+    let setup = LiveSetup::new(16);
+    let registry = setup.ports.registry.as_ref().unwrap();
+    let session = SessionId(setup.context.session_id.unwrap());
+    registry.select(session, [FixtureId::new()]);
+    setup
+        .service
+        .set_alignment(
+            &setup.context,
+            &setup.ports,
+            Some(ProgrammerAlignmentMode::Left),
+        )
+        .unwrap();
+    let selected = registry.selection(session);
+    let before = registry.alignment_projection();
+    let cursor = setup.events.latest_sequence();
+    setup
+        .service
+        .run_value_gesture_boundary(&setup.context, || {
+            setup.service.run_selection_refresh(&setup.context, || ());
+        });
+    assert_eq!(registry.selection(session), selected);
+    let after = registry.alignment_projection();
+    assert_eq!(after.mode, None);
+    assert!(after.revision > before.revision);
+    let EventReplay::Events(events) = setup.events.replay(
+        cursor,
+        &EventFilter::default()
+            .with_object(EventObject::programming_alignment(setup.context.desk_id)),
+    ) else {
+        panic!("Align events retained")
+    };
+    assert_eq!(events.len(), 1);
 }
 
 #[test]

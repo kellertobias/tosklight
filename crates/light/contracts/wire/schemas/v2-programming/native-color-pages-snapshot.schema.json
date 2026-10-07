@@ -1,0 +1,512 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NativeColorPagesSnapshot",
+  "description": "`GET /api/v2/programming/color/native-pages?fixture_ids=…[&reference=…&head=…]` response.\nReading it changes nothing: no history, no intent, no lease.",
+  "type": "object",
+  "properties": {
+    "candidates": {
+      "description": "Verified reference heads of the selection, in selection order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NativeColorReferenceCandidate"
+      }
+    },
+    "fixture_ids": {
+      "description": "The requested fixtures, in request order (duplicates kept).",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "fixtures": {
+      "description": "Predicted replay of the reference recipe on each selected Color fixture.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NativeColorFixturePreview"
+      }
+    },
+    "overflow": {
+      "description": "Every further control, in path order, for the full Color modal. Nothing is omitted.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NativeColorControlDescriptor"
+      }
+    },
+    "pages": {
+      "description": "Pages 3 and 4: at most eight controls in path order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NativeColorPage"
+      }
+    },
+    "reference": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NativeColorReference"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "semantic": {
+      "type": "boolean"
+    },
+    "show_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "unavailable": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NativeColorPagesUnavailable"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "values": {
+      "description": "The reference head's values in the latest accepted frame, when it outputs Color.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NativeColorValues"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "semantic",
+    "show_revision",
+    "fixture_ids",
+    "candidates",
+    "pages",
+    "overflow",
+    "fixtures"
+  ],
+  "$defs": {
+    "NativeColorControlDescriptor": {
+      "description": "One native control of the reference head's optical path.",
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NativeColorFunctionDescriptor"
+          }
+        },
+        "id": {
+          "description": "Stable slot id `native.<channel_id>`.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Display label only; never an identity.",
+          "type": "string"
+        },
+        "raw_max": {
+          "description": "Full-width raw maximum (U8 255 … U32 4294967295).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "resolution": {
+          "$ref": "#/$defs/NativeColorResolution"
+        },
+        "ultraviolet": {
+          "description": "The profile declares an ultraviolet emitter on this control.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "channel_id",
+        "label",
+        "raw_max",
+        "resolution",
+        "ultraviolet",
+        "functions"
+      ]
+    },
+    "NativeColorFixturePreview": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "replay": {
+          "$ref": "#/$defs/NativeColorReplayPreview"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "replay"
+      ]
+    },
+    "NativeColorFunctionDescriptor": {
+      "description": "One recordable function of a native control (service/control functions are excluded).",
+      "type": "object",
+      "properties": {
+        "continuous": {
+          "description": "Continuous functions take relative and spread edits; discrete ones are choices.",
+          "type": "boolean"
+        },
+        "function_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "label": {
+          "description": "Display label only (for example a wheel slot name); never an identity.",
+          "type": "string"
+        },
+        "raw_from": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "raw_to": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "function_id",
+        "label",
+        "raw_from",
+        "raw_to",
+        "continuous"
+      ]
+    },
+    "NativeColorPage": {
+      "description": "One native encoder page: four slots in encoder order; `null` is an empty encoder.",
+      "type": "object",
+      "properties": {
+        "controls": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/NativeColorControlDescriptor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "number": {
+          "description": "Color family page number (3 or 4).",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "number",
+        "controls"
+      ]
+    },
+    "NativeColorPagesUnavailable": {
+      "description": "Why no native pages are published.",
+      "oneOf": [
+        {
+          "description": "The runtime does not support the semantic programming contract (legacy pages stay).",
+          "type": "string",
+          "const": "contract"
+        },
+        {
+          "description": "No selected head has a verified native Color identity. Quiet, not an error.",
+          "type": "string",
+          "const": "no_verified_head"
+        }
+      ]
+    },
+    "NativeColorReference": {
+      "description": "The clearly identified reference head of the native pages.",
+      "type": "object",
+      "properties": {
+        "chosen": {
+          "description": "True when the operator chose it; false for the first verified head of the selection.",
+          "type": "boolean"
+        },
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fixture_name": {
+          "type": "string"
+        },
+        "fixture_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "head_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "head_name": {
+          "type": "string"
+        },
+        "identity": {
+          "$ref": "#/$defs/ProgrammingNativeColorIdentity"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "fixture_number",
+        "fixture_name",
+        "head_id",
+        "head_name",
+        "chosen",
+        "identity"
+      ]
+    },
+    "NativeColorReferenceCandidate": {
+      "description": "A selectable reference head of the ordered selection.",
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fixture_name": {
+          "type": "string"
+        },
+        "fixture_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "head_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "head_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "fixture_number",
+        "fixture_name",
+        "head_id",
+        "head_name"
+      ]
+    },
+    "NativeColorReplayPreview": {
+      "description": "How a selected fixture will replay a Direct value of the reference head.",
+      "oneOf": [
+        {
+          "description": "Verified identical identity and native layout: the recipe replays exactly.",
+          "type": "string",
+          "const": "exact"
+        },
+        {
+          "description": "Any other head: best-effort match from the recipe's portable estimate.",
+          "type": "string",
+          "const": "fallback"
+        }
+      ]
+    },
+    "NativeColorResolution": {
+      "description": "Width of a native control, from its full-width raw maximum.",
+      "type": "string",
+      "enum": [
+        "8bit",
+        "16bit",
+        "24bit",
+        "32bit"
+      ]
+    },
+    "NativeColorValueReadout": {
+      "description": "One current premaster native value of the reference head (read-only inspection).",
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "function_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "raw": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "channel_id",
+        "function_id",
+        "raw"
+      ]
+    },
+    "NativeColorValues": {
+      "description": "The reference head's premaster values in one accepted Live frame.",
+      "type": "object",
+      "properties": {
+        "controls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NativeColorValueReadout"
+          }
+        },
+        "frame": {
+          "$ref": "#/$defs/OutputFrameIdentity"
+        }
+      },
+      "required": [
+        "frame",
+        "controls"
+      ]
+    },
+    "OutputFrameIdentity": {
+      "description": "Identity of one evaluated output observation, independent of the show revision.",
+      "type": "object",
+      "properties": {
+        "generation": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sampled_at": {
+          "description": "Evaluation timestamp in RFC3339 format.",
+          "type": "string"
+        },
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tracking": {
+          "description": "Tracking inputs captured with this output frame, when the producer supplies them.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputTrackingIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "generation",
+        "sequence",
+        "sampled_at"
+      ]
+    },
+    "OutputTrackingIdentity": {
+      "description": "Receiver and Point epochs of the tracking input held by one evaluated output frame.",
+      "type": "object",
+      "properties": {
+        "accepted_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "configuration_generation": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "point_generation": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sampled_at_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "show_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "source_generation": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "show_id",
+        "configuration_generation",
+        "point_generation",
+        "source_generation",
+        "accepted_sequence",
+        "sampled_at_millis"
+      ]
+    },
+    "ProgrammingNativeColorIdentity": {
+      "type": "object",
+      "properties": {
+        "head_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "model_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "native_layout_signature": {
+          "type": "string"
+        },
+        "path_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_digest": {
+          "type": "string"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "profile_id",
+        "profile_revision",
+        "profile_digest",
+        "mode_id",
+        "head_id",
+        "path_id",
+        "model_revision",
+        "native_layout_signature"
+      ]
+    }
+  }
+}

@@ -55,24 +55,7 @@ pub fn apply_virtual_dimmer(channels: &mut [f32], emitter_indices: &[usize], int
     }
 }
 
-pub fn srgb_to_xyz(red: f32, green: f32, blue: f32) -> Xyz {
-    let linear = |value: f32| {
-        let value = value.clamp(0.0, 1.0);
-        if value <= 0.04045 {
-            value / 12.92
-        } else {
-            ((value + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    let r = linear(red);
-    let g = linear(green);
-    let b = linear(blue);
-    Xyz {
-        x: 0.412_456_4 * r + 0.357_576_1 * g + 0.180_437_5 * b,
-        y: 0.212_672_9 * r + 0.715_152_2 * g + 0.072_175 * b,
-        z: 0.019_333_9 * r + 0.119_192 * g + 0.950_304_1 * b,
-    }
-}
+pub use light_core::srgb_to_xyz;
 
 /// Finds bounded emitter levels using projected gradient descent. This supports arbitrary RGBW/A/UV
 /// emitter sets without assuming that extra emitters are merely white-channel extraction.

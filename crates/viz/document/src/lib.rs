@@ -30,7 +30,7 @@ pub use media::{
     MediaProjector, MediaServer, MediaSource, MediaSurface, MediaSurfaceSection,
     MediaSurfaceSectionKind, MediaTransform, ProjectionScreenMaterial, VersionedMediaObject,
 };
-pub use mvr::{MvrExport, MvrImportOutcome, MvrPreview, MvrPreviewFixture};
+pub use mvr::{MvrExport, MvrImportOutcome, MvrPreview, MvrPreviewFixture, PreparedMvrImport};
 pub use ports::{PlanningPorts, PlanningUnitOfWork};
 
 use light_application::{

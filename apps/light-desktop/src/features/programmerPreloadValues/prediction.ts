@@ -13,7 +13,9 @@ export function predictProgrammerPreloadValues(
 	action: ProgrammerPreloadValuesCommand,
 ): ProgrammerPreloadValuesOptimisticReducer {
 	if (action.action === "apply_intent") {
-		if (action.operation.type === "relative_step") return (current) => current;
+		// Relative steps and semantic component edits are resolved by the server; only a
+		// whole absolute value can be predicted without flattening sibling components.
+		if (action.operation.type !== "absolute_set") return (current) => current;
 		const value = action.operation.value;
 		const mutations: ProgrammerPreloadValuesMutation[] = action.groupId
 			? [

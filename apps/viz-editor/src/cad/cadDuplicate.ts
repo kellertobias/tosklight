@@ -56,6 +56,8 @@ export function duplicateFixtures(
 		return [
 			{
 				...original,
+				colorCalibration: null,
+                positionCalibration: null,
 				fixtureId: newId(),
 				fixtureRevision: 0,
 				fixtureNumber: claimAbove(numbers, original.fixtureNumber),
@@ -64,6 +66,8 @@ export function duplicateFixtures(
 				location: moved(original.location, offset),
 				multipatch: original.multipatch.map((copy) => ({
 					...copy,
+					colorCalibration: null,
+                positionCalibration: null,
 					id: newId(),
 					splitPatches: unpatched(copy.splitPatches),
 					location: moved(copy.location, offset),

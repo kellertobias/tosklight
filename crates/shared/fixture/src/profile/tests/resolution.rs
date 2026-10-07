@@ -41,6 +41,8 @@ fn exact_raw_values_encode_msb_first_at_every_supported_resolution() {
             }],
             channels: vec![fixture_channel.clone()],
             color_systems: vec![],
+            color_physical: None,
+            position_physical: None,
             control_actions: vec![],
             geometry: GeometryGraph::default(),
             emitter_heads: Vec::new(),
@@ -73,8 +75,6 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
     let head_id = Uuid::new_v4();
     let mut fixture_channel = channel(head_id, ChannelResolution::U8, vec![]);
     fixture_channel.highlight_raw = 240;
-    fixture_channel.reacts_to_group_master = true;
-    fixture_channel.reacts_to_grand_master = true;
     fixture_channel.functions = vec![
         ChannelFunction {
             id: Uuid::new_v4(),
@@ -83,6 +83,7 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
             dmx_to: 127,
             attribute: AttributeKey::intensity(),
             priority: 0,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Continuous {
                 physical_min: 0.0,
@@ -97,6 +98,7 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
             dmx_to: 255,
             attribute: AttributeKey("shutter".into()),
             priority: 10,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Fixed {
                 semantic_id: "open".into(),
@@ -120,6 +122,8 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
         }],
         channels: vec![fixture_channel.clone()],
         color_systems: vec![],
+        color_physical: None,
+        position_physical: None,
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
@@ -162,13 +166,11 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
             Some(220),
             ChannelScales {
                 virtual_intensity: Some(0.0),
-                sequence_master: 0.0,
-                group_master: 0.5,
-                grand_master: 0.5,
+                highlight_master: 0.5,
             },
         ),
         110,
-        "Highlight bypasses virtual intensity, sequence masters, and Group Masters; Grand Master remains above it"
+        "Highlight bypasses the virtual intensity; the Grand Master remains above it"
     );
 
     fixture_channel.behavior = ChannelBehavior::Static;
@@ -176,9 +178,6 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
     fixture_channel.highlight_raw = 211;
     fixture_channel.invert = true;
     fixture_channel.reacts_to_virtual_intensity = true;
-    fixture_channel.reacts_to_sequence_master = true;
-    fixture_channel.reacts_to_group_master = true;
-    fixture_channel.reacts_to_grand_master = true;
     assert_eq!(
         mode.resolve_channel_raw(
             &fixture_channel,
@@ -187,9 +186,7 @@ fn multi_function_priority_release_static_and_highlight_are_deterministic() {
             None,
             ChannelScales {
                 virtual_intensity: Some(0.0),
-                sequence_master: 0.0,
-                group_master: 0.0,
-                grand_master: 0.0,
+                highlight_master: 0.0,
             },
         ),
         37,
@@ -237,9 +234,6 @@ fn inverted_virtual_intensity_reaction_scales_by_the_complement() {
     )];
     fixture_channel.reacts_to_virtual_intensity = true;
     fixture_channel.virtual_intensity_inverted = true;
-    fixture_channel.reacts_to_sequence_master = false;
-    fixture_channel.reacts_to_group_master = false;
-    fixture_channel.reacts_to_grand_master = false;
     mode.channels = vec![fixture_channel.clone()];
     let mode = mode.clone();
     let values = HashMap::from([(

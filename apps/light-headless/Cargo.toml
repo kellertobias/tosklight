@@ -9,6 +9,8 @@ authors.workspace = true
 [features]
 default = ["native-audio-output"]
 e2e-embedded-ui = ["light-headless-runtime/e2e-embedded-ui"]
+# Retained no-op since TL-552 (E2E semantic test server only); see crates/light/adapters/headless/src/runtime/e2e_semantic_contract.rs.
+e2e-semantic-contract = ["light-headless-runtime/e2e-semantic-contract"]
 native-audio-output = ["light-headless-runtime/native-audio-output"]
 
 [dependencies]

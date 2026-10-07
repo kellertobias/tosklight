@@ -1,5 +1,4 @@
 use super::*;
-use std::sync::Arc;
 
 pub(super) type PlaybackIdentity = light_application::PlaybackRuntimeIdentity;
 pub(super) type PlaybackProjection = light_application::PlaybackRuntimeProjection;
@@ -10,7 +9,6 @@ pub(super) struct PreparedPreloadCommit {
     pub(super) programmer_fade_millis: u64,
     pub(super) prepared_playback: light_engine::PreparedPlaybackBatch,
     pub(super) staged_actions: Vec<StagedPreloadPlaybackAction>,
-    pub(super) identities: Vec<PlaybackIdentity>,
     pub(super) before: Vec<(PlaybackIdentity, PlaybackProjection)>,
     pub(super) context: light_application::ActionContext,
 }
@@ -24,8 +22,12 @@ pub(super) fn prepare_preload_commit(
     validate_playback_definitions(&pending, &state.output.snapshot())?;
     let committed_at = state.programming.clock().now();
     let programmer_fade_millis = state.installation.configuration().programmer_fade_millis;
-    let mut commands = preload_batch_commands(&pending)?;
-    attach_shared_exclusions(state, session, committed_at, &pending, &mut commands);
+    let zones = VirtualPlaybackExclusionResolver::read(state)
+        .map(|resolver| resolver.zone_numbers())
+        .unwrap_or_default()
+        .into();
+    let playback_context = CapturedPreloadPlaybackContext::new(zones, session.desk.id);
+    let commands = playback_context.commands(&pending, committed_at)?;
     let prepared_playback =
         state
             .output
@@ -39,7 +41,6 @@ pub(super) fn prepare_preload_commit(
         programmer_fade_millis,
         prepared_playback,
         staged_actions,
-        identities,
         before,
         context,
     })
@@ -100,55 +101,6 @@ fn validate_playback_definitions(
     Ok(())
 }
 
-fn attach_shared_exclusions(
-    state: &AppState,
-    session: &Session,
-    committed_at: chrono::DateTime<chrono::Utc>,
-    pending: &[light_programmer::PreloadPlaybackAction],
-    commands: &mut [light_engine::PlaybackBatchCommand],
-) {
-    let zones: Arc<[Vec<u16>]> = VirtualPlaybackExclusionResolver::read(state)
-        .map(|resolver| resolver.zone_numbers())
-        .unwrap_or_default()
-        .into();
-    for (pending, command) in pending.iter().zip(commands) {
-        let desk_id = pending.origin_desk_id.unwrap_or(session.desk.id);
-        let applies = zones
-            .iter()
-            .any(|zone| zone.contains(&pending.playback_number));
-        command.exclusion_zones = Arc::clone(&zones);
-        command.activation_origin = Some(light_playback::PlaybackActivationOrigin {
-            at: committed_at,
-            desk_id: Some(desk_id),
-            surface: activation_surface(pending.surface),
-            exclusion_scope: if applies {
-                light_playback::PlaybackExclusionScope::Show
-            } else {
-                light_playback::PlaybackExclusionScope::None
-            },
-        });
-    }
-}
-
-const fn activation_surface(
-    surface: light_programmer::PreloadPlaybackQueueSurface,
-) -> light_playback::PlaybackActivationSurface {
-    match surface {
-        light_programmer::PreloadPlaybackQueueSurface::Physical => {
-            light_playback::PlaybackActivationSurface::Physical
-        }
-        light_programmer::PreloadPlaybackQueueSurface::Virtual => {
-            light_playback::PlaybackActivationSurface::Virtual
-        }
-        light_programmer::PreloadPlaybackQueueSurface::Osc => {
-            light_playback::PlaybackActivationSurface::Osc
-        }
-        light_programmer::PreloadPlaybackQueueSurface::Matter => {
-            light_playback::PlaybackActivationSurface::Matter
-        }
-    }
-}
-
 fn changed_identities(prepared: &light_engine::PreparedPlaybackBatch) -> Vec<PlaybackIdentity> {
     let mut identities = prepared
         .changed_playback_numbers()
@@ -161,9 +113,9 @@ fn changed_identities(prepared: &light_engine::PreparedPlaybackBatch) -> Vec<Pla
         {
             identities.push(PlaybackIdentity::Virtual(address));
         }
-        if let Some(page) = outcome.page {
+        if outcome.page.is_some() {
             identities.extend(outcome.released_playbacks.iter().filter_map(|number| {
-                light_playback::VirtualPlaybackAddress::new(page, *number)
+                light_playback::VirtualPlaybackAddress::from_number(*number)
                     .ok()
                     .map(PlaybackIdentity::Virtual)
             }));

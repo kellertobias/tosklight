@@ -18,14 +18,18 @@ export type BenchUiContext = BenchContractContext &
 	Pick<TestFixtures, "desk"> &
 	Pick<PlaywrightTestArgs, "page">;
 
-const extendedTest = base.extend<TestFixtures>({
-	bench: async (
-		// biome-ignore lint/correctness/noEmptyPattern: Playwright fixture callbacks require destructuring.
-		{},
-		use,
-		testInfo,
-	) => {
-		const bench = new LightBench();
+export interface BenchWorkerOptions {
+	/**
+	 * Run every bench of this project on the E2E semantic test server (contract 1 opt-in). Set only
+	 * by `playwright.e2e-semantic.config.ts`; the default projects keep the production contract.
+	 */
+	semanticProgrammingContract: boolean;
+}
+
+const extendedTest = base.extend<TestFixtures, BenchWorkerOptions>({
+	semanticProgrammingContract: [false, { option: true, scope: "worker" }],
+	bench: async ({ semanticProgrammingContract }, use, testInfo) => {
+		const bench = new LightBench({ semanticProgrammingContract });
 		await bench.start(testInfo.workerIndex);
 		try {
 			await use(bench);

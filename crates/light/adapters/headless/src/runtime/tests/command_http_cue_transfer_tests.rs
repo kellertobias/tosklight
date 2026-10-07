@@ -14,6 +14,46 @@ struct PendingTransfer {
     command_revision: u64,
 }
 
+#[tokio::test]
+async fn standalone_cue_transfer_waits_for_activation_before_programmer_and_keeps_completion() {
+    let scenario = CueTransferRouteScenario::new();
+    let pending = scenario.open_copy_choice().await;
+    let body = scenario.request("activation-ordered-transfer", pending);
+    let baseline = scenario.state.events.latest_sequence();
+    let compatibility = scenario.compatibility_count();
+    scenario.state.installation.delete_session(scenario.session.id).unwrap();
+    let app = scenario.app.clone();
+    let request = Request::post("/api/v2/cues/transfer")
+        .header("x-tosk-show", &scenario.show_id)
+        .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+        .header(header::IF_MATCH, pending.show_revision.to_string())
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let response = super::active_show_lifecycle_ordering_tests::request_waiting_for_activation_keeps_programmer_available(
+        &scenario.state,
+        async move { app.oneshot(request).await.unwrap() },
+    ).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let outcome: light_wire::v2::cue_transfer::CueTransferOutcome =
+        serde_json::from_value(json(response).await).unwrap();
+    let light_wire::v2::cue_transfer::CueTransferOutcome::Changed {
+        show_revision, interaction_event_sequence, command_line, persistence_warning, ..
+    } = outcome;
+    assert_eq!(show_revision, pending.show_revision + 1);
+    assert_eq!(interaction_event_sequence, Some(baseline + 2));
+    assert!(command_line.pending_choice.is_none());
+    assert!(persistence_warning.is_none());
+    assert_one_cue_transfer_show_event(&scenario.state, baseline);
+    assert_eq!(scenario.compatibility_count(), compatibility);
+    let persisted = scenario.state.installation.persisted_sessions().unwrap()
+        .into_iter().find(|entry| entry.id == scenario.session.id)
+        .expect("standalone completion must persist Programmer despite inherited activation");
+    let programmer: light_programmer::ProgrammerState = serde_json::from_str(&persisted.programmer_json).unwrap();
+    assert_eq!(programmer.command_line, scenario.state.programming.get(scenario.session.id).unwrap().command_line);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
 impl CueTransferRouteScenario {
     fn new() -> Self {
         let fixture = CueTransferScenario::new();
@@ -361,7 +401,7 @@ async fn cue_transfer_route_returns_one_authoritative_batch_and_replays_without_
 }
 
 #[tokio::test]
-async fn cue_transfer_route_rejects_forged_scope_and_reports_both_revision_authorities() {
+async fn cue_transfer_route_rejects_foreign_show_and_reports_both_revision_authorities() {
     let scenario = CueTransferRouteScenario::new();
     let pending = scenario.open_copy_choice().await;
     let request = scenario.request("secure-transfer", pending);
@@ -390,21 +430,6 @@ async fn cue_transfer_route_rejects_forged_scope_and_reports_both_revision_autho
             .status(),
         StatusCode::BAD_REQUEST
     );
-    let mut forged = request.clone();
-    forged["user_id"] = serde_json::json!(Uuid::new_v4());
-    assert_eq!(
-        scenario
-            .transfer(
-                &scenario.show_id,
-                Some(&scenario.token),
-                Some(pending.show_revision),
-                forged,
-            )
-            .await
-            .status(),
-        StatusCode::BAD_REQUEST
-    );
-
     let mut stale_command = request.clone();
     stale_command["expected_command_line_revision"] = (pending.command_revision - 1).into();
     let response = scenario
@@ -453,6 +478,37 @@ async fn cue_transfer_route_rejects_forged_scope_and_reports_both_revision_autho
         StatusCode::CONFLICT
     );
     assert_exact_cue_transfer_authority(&scenario);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn cue_transfer_route_tolerates_extra_fields_but_rejects_invalid_known_fields() {
+    let scenario = CueTransferRouteScenario::new();
+    let pending = scenario.open_copy_choice().await;
+    let baseline = scenario.state.events.latest_sequence();
+    let mut request = scenario.request("tolerant-transfer", pending);
+    // These are ignored extensions, never alternative sources of authority.
+    request["show_id"] = serde_json::json!(Uuid::new_v4());
+    request["user_id"] = serde_json::json!(Uuid::new_v4());
+    request["future_option"] = serde_json::json!({"enabled": true});
+    let mut invalid = request.clone();
+    invalid["expected_command_line_revision"] = serde_json::json!("invalid");
+    let response = scenario.transfer(
+        &scenario.show_id, Some(&scenario.token), Some(pending.show_revision), invalid,
+    ).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(json(response).await["error"].as_str().unwrap().contains("expected_command_line_revision"));
+    assert_eq!(scenario.state.events.latest_sequence(), baseline);
+
+    let response = scenario.transfer(
+        &scenario.show_id, Some(&scenario.token), Some(pending.show_revision), request,
+    ).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json(response).await;
+    assert_eq!(body["status"], "changed");
+    assert_eq!(body["show_id"], scenario.show_id);
+    assert_eq!(body["show_revision"], pending.show_revision + 1);
+    assert_one_cue_transfer_show_event(&scenario.state, baseline);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

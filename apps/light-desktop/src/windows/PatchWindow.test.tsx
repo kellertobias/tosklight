@@ -19,12 +19,12 @@ vi.mock("../components/setup/FixturePatchSetup", () => ({
 		active,
 		csvImportRequest,
 		onOpenStageWindow,
-		onMedia,
+		onView,
 	}: {
 		active?: boolean;
 		csvImportRequest?: number;
 		onOpenStageWindow?: () => void;
-		onMedia?: () => void;
+		onView?: (view: string) => void;
 	}) => (
 		<div
 			data-testid="patch-content"
@@ -34,7 +34,7 @@ vi.mock("../components/setup/FixturePatchSetup", () => ({
 			<button type="button" onClick={onOpenStageWindow}>
 				Open Stage Renderer
 			</button>
-			<button type="button" onClick={onMedia}>
+			<button type="button" onClick={() => onView?.("media")}>
 				Media Servers
 			</button>
 		</div>
@@ -54,6 +54,32 @@ vi.mock("../components/setup/MediaServerSetup", () => ({
 vi.mock("../components/setup/PsnSetup", () => ({
 	PsnSetup: () => <div>Tracking setup</div>,
 }));
+
+const pointManagement = vi.hoisted(() => ({
+	create: vi.fn(async () => "point-1"),
+	canCreate: true,
+}));
+
+vi.mock("../components/setup/points/usePointManagement", async (original) => {
+	const actual =
+		await original<typeof import("../components/setup/points/usePointManagement")>();
+	return {
+		...actual,
+		usePointManagement: () => ({
+			points: [],
+			bindings: new Map(),
+			createdId: null,
+			busy: false,
+			message: null,
+			error: false,
+			canCreate: pointManagement.canCreate,
+			create: pointManagement.create,
+			rename: vi.fn(),
+			move: vi.fn(),
+			remove: vi.fn(),
+		}),
+	};
+});
 
 vi.mock("../components/setup/fixturePatch/ShowPatchSettings", () => ({
 	PATCH_IMPORT_CSV_EVENT: "light:patch-import-csv",
@@ -143,6 +169,7 @@ describe("Show Patch Media Servers and Tracking header", () => {
 		render(<PatchWindow patchView="media" />);
 		expect(tabs()).toEqual([
 			["Fixtures", "false"],
+			["Points", "false"],
 			["Media Servers", "true"],
 			["Tracking", "false"],
 		]);
@@ -155,6 +182,7 @@ describe("Show Patch Media Servers and Tracking header", () => {
 		fireEvent.click(screen.getByRole("tab", { name: "Tracking" }));
 		expect(tabs()).toEqual([
 			["Fixtures", "false"],
+			["Points", "false"],
 			["Media Servers", "false"],
 			["Tracking", "true"],
 		]);
@@ -257,6 +285,47 @@ describe("Show Patch Media Servers and Tracking header", () => {
 	it("leaves Settings to the pane when the Show Patch is a pane", () => {
 		render(<PatchWindow patchView="media" compact />);
 		expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
-		expect(tabs()).toHaveLength(3);
+		expect(tabs()).toHaveLength(4);
+	});
+});
+
+describe("Show Patch Points view (TL-651)", () => {
+	it("shows Points with + Create Point beside the view switch", () => {
+		pointManagement.create.mockClear();
+		render(<PatchWindow patchView="points" />);
+		expect(screen.getByRole("tab", { name: "Points" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+		expect(screen.getByText(/No Points yet/)).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "+ Create Point" }));
+		expect(pointManagement.create).toHaveBeenCalledOnce();
+	});
+
+	it("creates exactly one Point per Create Point request, even after leaving and returning", () => {
+		pointManagement.create.mockClear();
+		const { rerender } = render(<PatchWindow patchView="fixtures" />);
+		rerender(
+			<PatchWindow
+				patchView="points"
+				patchRequest={{ id: 1, kind: "create_point" }}
+			/>,
+		);
+		expect(screen.getByRole("tab", { name: "Points" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+		expect(pointManagement.create).toHaveBeenCalledOnce();
+		fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
+		fireEvent.click(screen.getByRole("button", { name: "Media Servers" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Points" }));
+		expect(pointManagement.create).toHaveBeenCalledOnce();
+		rerender(
+			<PatchWindow
+				patchView="points"
+				patchRequest={{ id: 2, kind: "create_point" }}
+			/>,
+		);
+		expect(pointManagement.create).toHaveBeenCalledTimes(2);
 	});
 });

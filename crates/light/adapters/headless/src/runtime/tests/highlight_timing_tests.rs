@@ -21,14 +21,14 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
     state.sessions.insert_session(session.clone());
 
     let (mut fixture, action_id, channel_ids) = schema_v2_direct_fixture();
-    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].control_actions[0].kind =
+    fixture.definition.profile_snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().modes[0].control_actions[0].kind =
         light_fixture::ControlActionKind::TimedPulse;
-    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].control_actions[0]
+    fixture.definition.profile_snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().modes[0].control_actions[0]
         .duration_millis = Some(750);
-    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].control_actions[0].semantic =
+    fixture.definition.profile_snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().modes[0].control_actions[0].semantic =
         light_fixture::ControlActionSemantic::LampOn;
     let fan_action_id = Uuid::new_v4();
-    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0]
+    fixture.definition.profile_snapshot.as_mut().map(std::sync::Arc::make_mut).unwrap().modes[0]
         .control_actions
         .push(light_fixture::ControlAction {
             id: fan_action_id,

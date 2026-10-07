@@ -54,6 +54,7 @@ pub(crate) struct ServerProgrammingPorts<'a> {
     session: &'a Session,
     source: &'static str,
     require_unlocked: bool,
+    persist: bool,
 }
 
 impl<'a> ServerProgrammingPorts<'a> {
@@ -68,7 +69,15 @@ impl<'a> ServerProgrammingPorts<'a> {
             session,
             source,
             require_unlocked,
+            persist: true,
         }
+    }
+
+    /// For a values action inside a staged command line: the command flow persists the
+    /// committed Programmer, so the action itself must not persist the staged copy.
+    pub(crate) const fn without_persistence(mut self) -> Self {
+        self.persist = false;
+        self
     }
 
     pub(super) const fn state(&self) -> &'a AppState {
@@ -165,11 +174,7 @@ impl<'a> ServerProgrammingPorts<'a> {
             .ok()
             .flatten()?;
         let result = self.execute_preset_recording(programmers, context, address, command);
-        Some(self.recording_execution(
-            context,
-            command,
-            result.map(|(warning, replayed)| (1, warning, replayed)),
-        ))
+        Some(self.recording_execution(context, command, result))
     }
 
     fn execute_group_recording(
@@ -215,7 +220,7 @@ impl<'a> ServerProgrammingPorts<'a> {
         context: &ActionContext,
         address: light_programmer::PresetAddress,
         raw_command: &str,
-    ) -> Result<(Option<String>, bool), String> {
+    ) -> Result<(usize, Option<String>, bool), String> {
         let show_id = self.active_show_id()?;
         let context = recording_context(context, "preset-record");
         let command = light_application::ProgrammingPresetRecordRequest {
@@ -227,22 +232,56 @@ impl<'a> ServerProgrammingPorts<'a> {
                 light_application::ProgrammingPresetRevisionExpectation::Current,
             expected_show_revision: None,
         };
-        let result = self
-            .state
-            .programming
-            .record_preset_within_interaction(
-                ActionEnvelope {
-                    context: context.clone(),
-                    command,
-                },
-                self,
-            )
-            .map_err(|error| error.message)?;
+        let action = ActionEnvelope {
+            context: context.clone(),
+            command,
+        };
+        let result = if let Some(number) = super::adapter::preset_record_aim_target(raw_command)? {
+            if address.family != light_programmer::PresetFamily::Position {
+                return Err("only a Position preset can aim at a fixture".into());
+            }
+            let mut position = light_programmer::Preset {
+                family: light_programmer::PresetFamily::Position,
+                number: address.number,
+                ..Default::default()
+            };
+            if self.state.output.supported_programming_contract()
+                >= light_core::programming::PROGRAMMING_CONTRACT_VERSION
+            {
+                let Some(intent) =
+                    super::super::programmer_aim_command::aim_target_intent(self.state, number)?
+                else {
+                    clear_command_line(programmers, self.session)?;
+                    return Ok((
+                        0,
+                        self.accepted_recording_command(&context, raw_command, 0),
+                        false,
+                    ));
+                };
+                position.universal_values.insert(
+                    light_core::programming::ProgrammingOwner::Position.key(),
+                    light_core::AttributeValue::Position(std::sync::Arc::new(intent)),
+                );
+            } else {
+                // Validate the explicit target even if no source fixtures are selected.
+                super::super::programmer_aim_command::aim_selection(self.state, &[], number)?;
+                position.aim_at_fixture_number = Some(number);
+            }
+            self.state
+                .programming
+                .record_position_preset_within_interaction(action, self, position)
+        } else {
+            self.state
+                .programming
+                .record_preset_within_interaction(action, self)
+        }
+        .map_err(|error| error.message)?;
         if result.replayed {
-            return Ok((None, true));
+            return Ok((1, None, true));
         }
         clear_command_line(programmers, self.session)?;
         Ok((
+            1,
             self.accepted_recording_command(&context, raw_command, 1),
             false,
         ))
@@ -459,6 +498,11 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         }
         let policy = match policy {
             ExecutionPolicy::AtomicProgrammer => ExistingCommandPolicy::AtomicProgrammer,
+            // A typed family value submits Programmer value actions, which take the desk gate the
+            // compatibility caller already holds; it is a pure Programmer edit, so it stages.
+            ExecutionPolicy::Compatibility if typed_family_value_command(command) => {
+                ExistingCommandPolicy::AtomicProgrammer
+            }
             ExecutionPolicy::Compatibility => ExistingCommandPolicy::Compatibility,
         };
         match execute_existing_command(
@@ -500,7 +544,39 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         Ok(super::values_environment::values_environment(self.state))
     }
 
+    fn prepare_family_edit_context(
+        &self,
+        _context: &ActionContext,
+        preload: bool,
+        intent: &light_application::ProgrammingValueIntent,
+        environment: &mut ProgrammingValuesEnvironment,
+    ) -> Result<(), ActionError> {
+        super::values_environment::prepare_family_edit_context(
+            self.state,
+            self.session.id,
+            preload,
+            intent,
+            environment,
+        );
+        Ok(())
+    }
+
+    fn native_color_model(
+        &self,
+        _context: &ActionContext,
+        source: &light_core::NativeColorIdentity,
+    ) -> Option<std::sync::Arc<dyn light_core::programming::NativeColorEditModel + Send + Sync>>
+    {
+        crate::runtime::output_scheduler::physical_adapters::color::native_seed::native_source_model(
+            &self.state.output.engine().snapshot(),
+            source,
+        )
+    }
+
     fn persist(&self, context: &ActionContext, operation: &'static str) -> Option<String> {
+        if !self.persist {
+            return None;
+        }
         persist_with_warning(
             self.state,
             self.session,
@@ -533,6 +609,23 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
                 .output
                 .set_highlight_layers(self.state.highlight.output_layers());
         }
+    }
+
+    fn undo_fixture_freeze(&self, context: &ActionContext) -> Result<Option<bool>, ActionError> {
+        super::super::fixture_freeze::undo_latest(self.state, self.session, context).map_err(
+            |error| {
+                let kind = match error.status {
+                    axum::http::StatusCode::BAD_REQUEST => ActionErrorKind::Invalid,
+                    axum::http::StatusCode::CONFLICT => ActionErrorKind::Conflict,
+                    axum::http::StatusCode::NOT_FOUND => ActionErrorKind::NotFound,
+                    axum::http::StatusCode::FORBIDDEN => ActionErrorKind::Forbidden,
+                    axum::http::StatusCode::UNAUTHORIZED => ActionErrorKind::Unauthorized,
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE => ActionErrorKind::Unavailable,
+                    _ => ActionErrorKind::Internal,
+                };
+                ActionError::new(kind, error.message)
+            },
+        )
     }
 
     fn undo_show_recording(
@@ -653,4 +746,19 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
             })
             .filter(|warning| !warning.is_empty()))
     }
+}
+
+/// `… AT COLOR|POSITION|FOCUS …` with a typed value rather than a preset.
+fn typed_family_value_command(command: &str) -> bool {
+    let tokens = command
+        .split_whitespace()
+        .map(str::to_ascii_uppercase)
+        .collect::<Vec<_>>();
+    tokens
+        .iter()
+        .position(|token| token == "AT")
+        .is_some_and(|at| {
+            super::super::programmer_family_values::family_value_keyword(&tokens[at + 1..])
+                .is_some()
+        })
 }

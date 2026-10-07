@@ -90,6 +90,7 @@ function expectedRoutes(
 					},
 				]
 			: []),
+		...(components.alignment ? [{ capability: "desk" as const, id: `programming-alignment:${deskId}` }] : []),
 	];
 }
 
@@ -115,7 +116,8 @@ function assertSubscribedComponent(
 ) {
 	if (
 		!(components.commandLine && scope.commandLine) &&
-		!(components.selection && scope.selection)
+		!(components.selection && scope.selection) &&
+		!(components.alignment && scope.alignment)
 	)
 		throw new WireValidationError(
 			"$.event.payload.change",

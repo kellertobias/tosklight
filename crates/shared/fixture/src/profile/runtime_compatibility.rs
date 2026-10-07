@@ -6,8 +6,18 @@ use light_core::AttributeKey;
 /// The immutable profile bytes and digest stored in a show remain untouched. Callers apply this
 /// only after identity and digest verification, or after reading the already-verified patch API.
 /// Keeping the rules here gives the desk engine and every Stage consumer the same interpretation.
+///
+/// Modes without an authored physical Color model also get their nominal or uncalibrated one
+/// here ([`super::apply_derived_color_physical`]), so semantic Color output, the Stage/preview
+/// prediction and the colour report evaluate the same forward model.
+/// Modes with Pan and Tilt channels but no authored Position model get a nominal, estimated one
+/// ([`super::apply_derived_position_physical`]) for the same reason: Live output, Stage/preview
+/// prediction and readouts then share one Position graph.
 pub fn apply_runtime_profile_compatibility(profile: &mut FixtureProfile) {
     apply_jbled_a7_shutter_compatibility(profile);
+    super::apply_derived_color_physical(profile);
+    super::apply_derived_position_physical(profile);
+    super::apply_derived_zoom_physical(profile);
 }
 
 fn apply_jbled_a7_shutter_compatibility(profile: &mut FixtureProfile) {
@@ -45,6 +55,7 @@ fn jbled_a7_shutter_functions(channel: &FixtureChannel) -> Vec<ChannelFunction> 
         dmx_to: to,
         attribute: AttributeKey("shutter".into()),
         priority: 0,
+        physical_mapping: None,
         angular_motion: None,
         behavior: ChannelFunctionBehavior::Fixed {
             semantic_id: semantic.into(),
@@ -59,6 +70,7 @@ fn jbled_a7_shutter_functions(channel: &FixtureChannel) -> Vec<ChannelFunction> 
         dmx_to: to,
         attribute: AttributeKey("shutter".into()),
         priority: 0,
+        physical_mapping: None,
         angular_motion: None,
         behavior: ChannelFunctionBehavior::Continuous {
             physical_min: 0.6,

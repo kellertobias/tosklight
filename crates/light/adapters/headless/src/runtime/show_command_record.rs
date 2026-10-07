@@ -289,7 +289,22 @@ fn record_preset(
         // the heads point would be one too many.
         preset.values.clear();
         preset.group_values.clear();
-        preset.aim_at_fixture_number = Some(target);
+        preset.universal_values.clear();
+        if state.output.supported_programming_contract()
+            >= light_core::programming::PROGRAMMING_CONTRACT_VERSION
+        {
+            let Some(intent) = super::programmer_aim_command::aim_target_intent(state, target)?
+            else {
+                return Ok(0);
+            };
+            preset.universal_values.insert(
+                light_core::programming::ProgrammingOwner::Position.key(),
+                light_core::AttributeValue::Position(Arc::new(intent)),
+            );
+            preset.aim_at_fixture_number = None;
+        } else {
+            preset.aim_at_fixture_number = Some(target);
+        }
     } else if preset.values.is_empty() && preset.group_values.is_empty() {
         return Err("the programmer has no values to record".into());
     } else if state.attributes.color_model() == light_core::ColorProgrammingModel::Intent {

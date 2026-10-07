@@ -519,8 +519,10 @@ describe("schema-v2 hierarchy and logical-head rendering", () => {
 			(node) => node.motion?.attribute === "tilt",
 		);
 		expect(
-			scene.getObjectByName(`geometry-node:${pan.id}`)?.rotation.y,
-		).toBeCloseTo(THREE.MathUtils.degToRad(135));
+			scene.getObjectByName(`geometry-node:${pan.id}`)!.quaternion.angleTo(
+				new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(135)),
+			),
+		).toBeCloseTo(0);
 		expect(
 			scene.getObjectByName(`geometry-node:${tilts[0].id}`)?.rotation.x,
 		).toBeCloseTo(THREE.MathUtils.degToRad(-67.5));
@@ -1139,8 +1141,10 @@ describe("fixture profile model mounting", () => {
 		expect(tiltPart.getObjectByName("TiltVisual")).toBeTruthy();
 		expect(scene.getObjectByName(`geometry-part:${pan.id}`)).toBeUndefined();
 		expect(
-			scene.getObjectByName(`geometry-node:${pan.id}`)?.rotation.y,
-		).toBeCloseTo(THREE.MathUtils.degToRad(135));
+			scene.getObjectByName(`geometry-node:${pan.id}`)!.quaternion.angleTo(
+				new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(135)),
+			),
+		).toBeCloseTo(0);
 	});
 
 	it("mounts a metre-authored model at the model scale it was placed at", () => {

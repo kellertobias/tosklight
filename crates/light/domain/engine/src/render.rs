@@ -1,10 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
-
-use light_core::Universe;
+use std::sync::Arc;
 
 use super::{
-    AxisInversion, ContributionBatch, Engine, EngineError, RenderOptions, RenderResult,
-    RuntimeGeneration, encode_profile_split, resolve_profile_fixture,
+    ContributionBatch, Engine, EngineError, RenderOptions, RenderResult, RuntimeGeneration,
 };
 
 impl Engine {
@@ -18,11 +15,24 @@ impl Engine {
         options: RenderOptions,
         sampled: &[ContributionBatch],
     ) -> Result<RenderResult, EngineError> {
-        self.advance_group_master_transitions();
-        let generation = self.generation.load_full();
-        self.render_generation(&generation, options, sampled)
+        let frame = self.prepare_output_frame(options);
+        self.render_prepared(&frame, sampled)
     }
 
+    /// Commit one final lane evaluation. Speculative observations of this capture never consume
+    /// its Live continuity or automatic Playback transitions.
+    pub fn render_prepared(
+        &self,
+        frame: &crate::PreparedOutputFrame,
+        sampled: &[ContributionBatch],
+    ) -> Result<RenderResult, EngineError> {
+        crate::timed(crate::RenderPhase::RenderTotal, || {
+            let static_frame = self.prepare_static_family_frame_with_trace(frame, sampled, false);
+            self.finish_static_family_frame(frame, static_frame)
+        })
+    }
+
+    #[cfg(test)]
     fn render_generation(
         &self,
         generation: &RuntimeGeneration,
@@ -34,68 +44,105 @@ impl Engine {
         })
     }
 
+    #[cfg(test)]
     fn render_generation_inner(
         &self,
         generation: &RuntimeGeneration,
         options: RenderOptions,
         sampled: &[ContributionBatch],
     ) -> Result<RenderResult, EngineError> {
-        let options = RenderOptions {
-            color_model: self.color_model(),
-            ..options
-        };
-        let snapshot = generation.snapshot();
+        let sampled_at = self.clock.now();
         let mut resolved =
-            self.resolved_attributes_for_render(generation, self.clock.now(), sampled);
+            self.resolved_attributes_for_render(generation, sampled_at.clone(), sampled);
+        finalize_output_parameters(
+            generation,
+            options,
+            &self.group_master_flashes.read(),
+            &mut resolved,
+        );
+        self.project_resolved_frame(
+            generation,
+            sampled_at,
+            resolved,
+            &self.capture_output_overlays(options),
+            self.tracking_frame(),
+            &mut Default::default(),
+            None,
+            &Default::default(),
+        )
+    }
+
+    pub(crate) fn project_resolved_frame(
+        &self,
+        generation: &RuntimeGeneration,
+        sampled_at: chrono::DateTime<chrono::Utc>,
+        mut resolved: crate::ResolvedAttributes,
+        overlays: &crate::prepared_frame::CapturedOutputOverlays,
+        tracking: Arc<crate::TrackedInputFrame>,
+        mount_workspace: &mut crate::mount_projection::MountTransformWorkspace,
+        geometry: Option<crate::PreparedFrameGeometry>,
+        position_native: &crate::native_position_projection::NativePositionProjection,
+    ) -> Result<RenderResult, EngineError> {
+        let options = overlays.options;
+        let snapshot = generation.snapshot();
         crate::timed(crate::RenderPhase::FixtureFreezes, || {
             apply_fixture_freezes(&snapshot.fixtures, &mut resolved)
         });
         // Named values for the boundary and for schema-v1 fixtures. Nothing is materialised until
         // one of them actually asks, and a show of schema-v2 fixtures never asks here at all.
-        let sequence_masters = std::mem::take(&mut resolved.sequence_masters);
         let named_values = resolved.named_values();
+        let (points, mounts) = match geometry {
+            Some(geometry) => (geometry.points, geometry.mounts),
+            None => {
+                let points = Arc::new(generation.point_projection().resolve(&named_values));
+                let mounts = generation
+                    .mount_projection()
+                    .resolve(&points, mount_workspace);
+                (points, mounts)
+            }
+        };
         let profile_values = crate::timed(crate::RenderPhase::ValueIndexBuild, || {
-            crate::ProfileValueIndex::new(
-                &named_values,
-                &sequence_masters,
-                generation.channel_slots(),
-            )
+            crate::ProfileValueIndex::new(&named_values, generation.channel_slots())
         });
-        let group_masters = generation.group_masters();
-        let group_master_flashes = self.group_master_flashes.read();
-        let highlight_layers = self.highlight_layers.read();
-        let highlight_look = self.highlight_look.read();
+        let highlight_layers = &overlays.highlights;
+        let highlight_look = &overlays.highlight_look;
         let mut universes = self.universe_pool.take();
         let mut patched_slots = self.patched_slot_pool.take();
         let mut profile_visualization_values = self.visualization_pool.take();
         // One buffer for every fixture of this frame, rather than two vectors per fixture.
-        let mut output = crate::ResolvedProfileFixtureOutput::default();
-        let inputs = ProjectionInputs {
+        let mut output = self.profile_scratch_pool.take();
+        let mut physical = generation.physical_projection().take_frame();
+        physical.bind_generation(generation.identity());
+        let inputs = crate::render_fixtures::ProjectionInputs {
+            position_native,
             values: &profile_values,
             options,
-            group_masters,
-            group_master_flashes: &group_master_flashes,
             highlight_layers: &highlight_layers,
             highlight_look: &highlight_look,
         };
-        crate::timed(
-            crate::RenderPhase::FixtureProjection,
-            || -> Result<(), EngineError> {
-                for fixture in snapshot.fixtures.iter() {
-                    project_fixture(
-                        fixture,
-                        generation,
-                        &inputs,
-                        &mut output,
-                        &mut universes,
-                        &mut patched_slots,
-                        &mut profile_visualization_values,
-                    )?;
-                }
-                Ok(())
-            },
-        )?;
+        crate::timed(crate::RenderPhase::FixtureProjection, || {
+            crate::render_fixtures::project_fixtures(
+                generation,
+                &inputs,
+                &mut output,
+                &mut crate::render_fixtures::ProjectionWrites {
+                    universes: &mut universes,
+                    patched_slots: &mut patched_slots,
+                    visualization: &mut profile_visualization_values,
+                    physical: &mut physical,
+                },
+                self.output_pool().as_deref(),
+                &self.render_chunks,
+            )
+        })?;
         Ok(RenderResult {
+            source_snapshot: generation.snapshot_arc(),
+            tracking,
+            generation: generation.identity(),
+            sampled_at,
+            points,
+            mounts,
+            physical: Arc::new(physical),
             universes,
             resolved_values: named_values,
             profile_visualization_values: Arc::new(profile_visualization_values),
@@ -118,141 +165,84 @@ impl Engine {
     }
 }
 
-/// Everything a fixture's projection reads and none of what it writes. Bundled because the render
-/// resolves each of these once for the whole frame, and threading seven borrows through one call
-/// per fixture said nothing the frame did not already say.
-struct ProjectionInputs<'a> {
-    values: &'a crate::ProfileValueIndex<'a>,
+/// The output-parameter stage, applied exactly once to every resolution that becomes output,
+/// visualization or a Freeze capture: the masters scale the level parameters (Intensity,
+/// Volume) before DMX, then a Freeze holds its parameters, which no master changes afterwards.
+pub(crate) fn finalize_output_parameters(
+    generation: &crate::RuntimeGeneration,
     options: RenderOptions,
-    group_masters: &'a crate::GroupMasterIndex,
-    group_master_flashes: &'a HashMap<String, f32>,
-    highlight_layers: &'a HashMap<light_core::FixtureId, light_programmer::HighlightOutputLayer>,
-    highlight_look: &'a light_fixture::HighlightLook,
-}
-
-/// Resolve one patched fixture and write it to every destination it is patched to.
-fn project_fixture(
-    fixture: &light_fixture::PatchedFixture,
-    generation: &RuntimeGeneration,
-    inputs: &ProjectionInputs<'_>,
-    output: &mut crate::ResolvedProfileFixtureOutput,
-    universes: &mut HashMap<Universe, light_output::DmxFrame>,
-    patched_slots: &mut HashMap<Universe, u16>,
-    visualization: &mut crate::ResolvedValues,
-) -> Result<(), EngineError> {
-    let profile = fixture
-        .definition
-        .profile_snapshot
-        .as_deref()
-        .ok_or_else(|| {
-            EngineError::Invalid("schema-v2 fixture is missing its profile snapshot".into())
-        })?;
-    let mode_id = fixture.definition.mode_id.ok_or_else(|| {
-        EngineError::Invalid("schema-v2 fixture is missing its mode identity".into())
-    })?;
-    let mode = profile
-        .mode(mode_id)
-        .ok_or_else(|| EngineError::Invalid("schema-v2 fixture mode is missing".into()))?;
-    let projection = generation
-        .profile_projection(fixture.fixture_id)
-        .ok_or_else(|| {
-            EngineError::Invalid("schema-v2 fixture projection plan is missing".into())
-        })?;
-    let resolve = |inversion, output: &mut crate::ResolvedProfileFixtureOutput| {
-        resolve_profile_fixture(
-            fixture,
-            mode,
-            projection,
-            None,
-            inputs.values,
-            inputs.options,
-            inputs.group_masters,
-            inputs.group_master_flashes,
-            inputs.highlight_layers,
-            inputs.highlight_look,
-            inversion,
-            output,
-        )
-    };
-    if profile.patch_policy != light_fixture::PatchPolicy::Dmx {
-        resolve(AxisInversion::default(), output)?;
-        insert_profile_visualization_values(visualization, output);
-        insert_raw_channel_values(visualization, fixture, mode, output);
-        return Ok(());
-    }
-    let encoding = generation
-        .profile_encoding(fixture.fixture_id)
-        .ok_or_else(|| EngineError::Invalid("schema-v2 fixture encoding plan is missing".into()))?;
-    resolve(
-        AxisInversion {
-            pan: fixture.invert_pan,
-            tilt: fixture.invert_tilt,
-        },
-        output,
-    )?;
-    insert_profile_visualization_values(visualization, output);
-    encode_profile_destination(
-        &fixture.split_patches,
-        fixture.universe,
-        fixture.address,
-        encoding,
-        output,
-        universes,
-        patched_slots,
-    )?;
-    for instance in &fixture.multipatch {
-        resolve(
-            AxisInversion {
-                pan: instance.invert_pan,
-                tilt: instance.invert_tilt,
-            },
-            output,
-        )?;
-        encode_profile_destination(
-            &instance.split_patches,
-            instance.universe,
-            instance.address,
-            encoding,
-            output,
-            universes,
-            patched_slots,
-        )?;
-    }
-    Ok(())
-}
-
-/// A non-DMX profile publishes its resolved channels for visualization, since nothing encodes them.
-fn insert_raw_channel_values(
-    visualization: &mut crate::ResolvedValues,
-    fixture: &light_fixture::PatchedFixture,
-    mode: &light_fixture::FixtureMode,
-    output: &crate::ResolvedProfileFixtureOutput,
+    flashes: &std::collections::HashMap<String, f32>,
+    resolved: &mut super::ResolvedAttributes,
 ) {
-    for (channel_index, raw) in &output.channels {
-        // The resolved channel says which one of the mode it is, so this is an index rather than a
-        // scan of every channel per channel.
-        let Some(channel) = mode.channels.get(*channel_index as usize) else {
-            continue;
-        };
-        let Some((head_index, head)) = mode
-            .heads
-            .iter()
-            .enumerate()
-            .find(|(_, head)| head.id == channel.head_id)
-        else {
-            continue;
-        };
-        visualization.insert(
-            (
-                crate::fixture::profile_head_owner(fixture, head_index, head),
-                channel.attribute.clone(),
-            ),
-            light_core::AttributeValue::RawDmxExact(*raw),
-        );
-    }
+    let fixtures = &generation.snapshot().fixtures;
+    apply_level_masters(
+        fixtures,
+        generation.slots(),
+        generation.group_masters(),
+        options,
+        flashes,
+        resolved,
+    );
+    apply_fixture_freezes(fixtures, resolved);
 }
 
-fn apply_fixture_freezes(
+/// Group Master × Grand Master (0 under Blackout) on every level parameter, honoring a patched
+/// fixture's opt-outs. A level nobody programmed is its profile default and is mastered too.
+/// Changes nothing when every master is at full.
+pub(crate) fn apply_level_masters(
+    fixtures: &[light_fixture::PatchedFixture],
+    slots: &crate::SlotTable,
+    group_masters: &crate::GroupMasterIndex,
+    options: RenderOptions,
+    flashes: &std::collections::HashMap<String, f32>,
+    resolved: &mut super::ResolvedAttributes,
+) {
+    let grand = if options.blackout {
+        0.0
+    } else {
+        options.grand_master.clamp(0.0, 1.0)
+    };
+    if grand == 1.0 && group_masters.is_empty() {
+        return;
+    }
+    let mut roots: Option<std::collections::HashMap<light_core::FixtureId, usize>> = None;
+    let mut factor = |owner: light_core::FixtureId, root: Option<u32>| -> f32 {
+        let fixture = match root {
+            Some(root) => fixtures.get(root as usize),
+            None => {
+                let roots = roots.get_or_insert_with(|| {
+                    fixtures
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(index, fixture)| {
+                            std::iter::once(fixture.fixture_id)
+                                .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
+                                .map(move |owner| (owner, index))
+                        })
+                        .collect()
+                });
+                roots.get(&owner).and_then(|index| fixtures.get(*index))
+            }
+        };
+        let Some(fixture) = fixture else {
+            return 1.0;
+        };
+        let grand = if fixture.grand_master_enabled || options.blackout {
+            grand
+        } else {
+            1.0
+        };
+        let group = if fixture.group_masters_enabled {
+            group_masters.scale(owner, flashes)
+        } else {
+            1.0
+        };
+        grand * group
+    };
+    resolved.scale_levels(slots, &mut factor);
+}
+
+pub(crate) fn apply_fixture_freezes(
     fixtures: &[light_fixture::PatchedFixture],
     resolved: &mut super::ResolvedAttributes,
 ) {
@@ -263,86 +253,6 @@ fn apply_fixture_freezes(
                 // would allow a Cue master to alter the held value after the Freeze was taken.
                 resolved.override_value(*fixture_id, attribute, value.clone(), None);
             }
-        }
-    }
-}
-
-fn encode_profile_destination(
-    patches: &[light_fixture::SplitPatch],
-    legacy_universe: Option<Universe>,
-    legacy_address: Option<light_core::DmxAddress>,
-    encoding: &light_fixture::FixtureModeEncodingPlan,
-    output: &crate::profile_projection::ResolvedProfileFixtureOutput,
-    universes: &mut HashMap<Universe, light_output::DmxFrame>,
-    patched_slots: &mut HashMap<Universe, u16>,
-) -> Result<(), EngineError> {
-    if patches.is_empty() {
-        return encode_profile_patch(
-            1,
-            legacy_universe,
-            legacy_address,
-            encoding,
-            output,
-            universes,
-            patched_slots,
-        );
-    }
-    for patch in patches {
-        encode_profile_patch(
-            patch.split,
-            patch.universe,
-            patch.address,
-            encoding,
-            output,
-            universes,
-            patched_slots,
-        )?;
-    }
-    Ok(())
-}
-
-fn encode_profile_patch(
-    split: u16,
-    universe: Option<Universe>,
-    address: Option<light_core::DmxAddress>,
-    encoding: &light_fixture::FixtureModeEncodingPlan,
-    output: &crate::profile_projection::ResolvedProfileFixtureOutput,
-    universes: &mut HashMap<Universe, light_output::DmxFrame>,
-    patched_slots: &mut HashMap<Universe, u16>,
-) -> Result<(), EngineError> {
-    let (Some(universe), Some(address)) = (universe, address) else {
-        return Ok(());
-    };
-    let footprint = encoding
-        .split_footprint(split)
-        .ok_or_else(|| EngineError::Invalid(format!("fixture split {split} has no footprint")))?;
-    let frame = universes.entry(universe).or_insert([0; 512]);
-    let last_slot = address
-        .saturating_sub(1)
-        .saturating_add(footprint)
-        .min(light_output::DMX_SLOTS as u16);
-    patched_slots
-        .entry(universe)
-        .and_modify(|current| *current = (*current).max(last_slot))
-        .or_insert(last_slot);
-    encode_profile_split(frame, encoding, split, address, output)?;
-    Ok(())
-}
-
-fn insert_profile_visualization_values(
-    values: &mut crate::ResolvedValues,
-    output: &crate::profile_projection::ResolvedProfileFixtureOutput,
-) {
-    for head in &output.heads {
-        values.insert(
-            (head.owner, light_core::AttributeKey::intensity()),
-            light_core::AttributeValue::Normalized(head.intensity),
-        );
-        if let Some(color) = head.color {
-            values.insert(
-                (head.owner, light_core::AttributeKey::color()),
-                light_core::AttributeValue::ColorXyz(color),
-            );
         }
     }
 }

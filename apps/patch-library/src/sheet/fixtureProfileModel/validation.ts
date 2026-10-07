@@ -1,9 +1,12 @@
+import {positionPhysicalErrors} from "./positionPhysical";
 import type {
 	FixtureChannel,
 	FixtureMode,
 	FixtureProfile,
 } from "../../wire";
 import { derivePrimarySlots } from "./channels";
+import { colorPhysicalErrors } from "./colorPhysical";
+import { physicalMappingErrors } from "./physicalMapping";
 import { validatePrecision } from "./physicalPrecision";
 import { maxRaw } from "./rawValues";
 
@@ -70,6 +73,8 @@ function validateFunctionRanges(
 		(left, right) => left.dmx_from - right.dmx_from,
 	);
 	sorted.forEach((fn, index) => {
+		for (const message of physicalMappingErrors(fn, maximum))
+			errors.push(`${mode.name}: ${fn.name || "function"}: ${message}`);
 		if (fn.dmx_from < 0 || fn.dmx_to > maximum || fn.dmx_from > fn.dmx_to) {
 			errors.push(
 				`${mode.name}: ${fn.name || "function"} has an invalid DMX range`,
@@ -149,6 +154,7 @@ function validateMode(
 	}
 	validateChannels(mode, headIds, splitNumbers, errors);
 	validateHueSaturationSystems(mode, errors);
+	errors.push(...colorPhysicalErrors(mode).map((message) => `${mode.name}: ${message}`));
 	if (
 		profile.patch_policy === "visual_only" &&
 		(mode.channels.length ||
@@ -221,7 +227,7 @@ function validateHueSaturationSystems(mode: FixtureMode, errors: string[]) {
 }
 
 export function validateProfile(profile: FixtureProfile) {
-	const errors: string[] = [];
+	const errors: string[] = positionPhysicalErrors(profile);
 	if (!profile.manufacturer.trim()) errors.push("Manufacturer is required");
 	if (!profile.name.trim()) errors.push("Fixture name is required");
 	if (!profile.modes.length) errors.push("At least one mode is required");

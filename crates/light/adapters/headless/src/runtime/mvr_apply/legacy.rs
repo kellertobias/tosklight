@@ -20,7 +20,8 @@ pub(super) async fn apply_legacy_mvr_import(
         entry,
         document,
         definitions,
-        new_definitions,
+        new_profiles,
+        warnings: source_warnings,
         resolutions,
     } = import;
     let mut entry = entry;
@@ -34,7 +35,12 @@ pub(super) async fn apply_legacy_mvr_import(
     source_store
         .backup_to(&temporary)
         .map_err(ApiError::store)?;
-    let result = apply_to_temporary_show(&temporary, &entry, &document, &definitions, &resolutions);
+    // Closing an old WAL connection after renaming a replacement can checkpoint old pages over
+    // the imported database. Release it before preparing and replacing the destination file.
+    drop(source_store);
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    let result =
+        apply_to_temporary_show(&temporary, context, &document, &definitions, &resolutions);
     let (imported, unresolved, mut warnings) = match result {
         Ok(result) => result,
         Err(error) => {
@@ -42,6 +48,7 @@ pub(super) async fn apply_legacy_mvr_import(
             return Err(error);
         }
     };
+    warnings.splice(0..0, source_warnings.clone());
     let show_change = state.active_show.acquire_show_change().await;
     let activation = state.active_show.acquire().await;
     if active_show_is(state, entry.id) {
@@ -54,7 +61,8 @@ pub(super) async fn apply_legacy_mvr_import(
                 entry,
                 document,
                 definitions,
-                new_definitions,
+                new_profiles,
+                warnings: source_warnings,
                 resolutions,
             },
         )
@@ -67,18 +75,20 @@ pub(super) async fn apply_legacy_mvr_import(
     if !is_new {
         backup_show(state, &entry)?;
     }
+    {
+        let destination = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
+        destination
+            .checkpoint_for_replacement()
+            .map_err(ApiError::store)?;
+    }
     std::fs::rename(&temporary, &entry.path).map_err(ApiError::io)?;
     drop(activation);
-    publish_mvr_definitions(state, new_definitions, &mut warnings);
+    publish_mvr_profiles(state, new_profiles, &mut warnings);
     if open_after {
         let output_runtime = load_output_runtime_for_show(state, entry.id)?;
-        let compiled = load_engine_snapshot(&entry).map_err(ApiError::bad_request)?;
+        let prepared = prepare_show_activation_for_runtime(state, &entry)?;
         let context = operator_action_context(&session, light_application::ActionSource::Http);
-        let prepared = state
-            .output
-            .prepare_snapshot(compiled)
-            .map_err(|error| ApiError::internal(error.to_string()))?;
-        activate_prepared_show(
+        entry = activate_prepared_show(
             state,
             prepared,
             &context,
@@ -86,20 +96,21 @@ pub(super) async fn apply_legacy_mvr_import(
             None,
             entry.clone(),
             output_runtime,
+            ActivationCompletion::Mvr {
+                imported,
+                unresolved,
+            },
+            show_change,
         )
         .await?;
-        state
-            .installation
-            .set_active_show(Some(entry.id))
-            .map_err(ApiError::store)?;
-        entry = record_explicit_show_load(state, entry.id)?;
+    } else {
+        emit(
+            state,
+            "mvr_imported",
+            serde_json::json!({"show":entry,"fixtures":imported,"unresolved":unresolved,"scenery":0}),
+        );
+        drop(show_change);
     }
-    drop(show_change);
-    emit(
-        state,
-        "mvr_imported",
-        serde_json::json!({"show":entry,"fixtures":imported,"unresolved":unresolved,"scenery":0}),
-    );
     Ok(Json(ApplyMvrResult {
         show: entry,
         imported_fixtures: imported,
@@ -129,22 +140,18 @@ fn ensure_source_revision(
 
 fn apply_to_temporary_show(
     temporary: &FsPath,
-    entry: &ShowEntry,
+    context: light_application::ActionContext,
     document: &light_mvr::MvrDocument,
-    definitions: &[light_fixture::FixtureDefinition],
+    definitions: &HashMap<Uuid, light_fixture::FixtureDefinition>,
     resolutions: &HashMap<Uuid, MvrResolution>,
 ) -> Result<(usize, usize, Vec<String>), ApiError> {
     let store = ActiveShowRepository::open(temporary).map_err(ApiError::store)?;
-    let applied = apply_mvr_to_store(&store, document, definitions, resolutions)?;
+    let applied = apply_mvr_to_store(&store, context, document, definitions, resolutions)?;
+    store
+        .checkpoint_for_replacement()
+        .map_err(ApiError::store)?;
+    drop(store);
     validate_show_file(temporary).map_err(ApiError::store)?;
-    let probe = ShowEntry {
-        path: temporary.display().to_string(),
-        ..entry.clone()
-    };
-    load_engine_snapshot(&probe)
-        .map_err(ApiError::bad_request)?
-        .validate()
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
     Ok(applied)
 }
 

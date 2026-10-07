@@ -39,7 +39,9 @@ save/reopen round trip, and MVR export.
 Two behaviors are worth knowing because they are easy to assume otherwise:
 
 - **Overlapping DMX addresses are accepted.** Double-patching is legitimate rigging, so this
-  boundary stores it; surfacing the clash to the operator is the patch sheet's job, as on the desk.
-- **A profile with no retained source GDTF is embedded as a generated GDTF**, counted in
-  `MvrExportSummary::generated_profiles`. Only a profile that cannot be described at all is
-  referenced without a file and reported in `MvrExportSummary::missing_profiles`.
+  boundary stores it and the patch sheet exposes the clash. Structural fixture data and
+  per-instance address bounds are validated before commit; the live desk still rejects overlaps.
+- **Only a source GDTF associated with the unchanged exported profile snapshot is reused.**
+  Missing, changed or unverified source associations use generated GDTF, counted in
+  `MvrExportSummary::generated_profiles`. Unsupported physical functions/curves retain a specific warning and are
+  referenced without a standard GDTF file and reported in `MvrExportSummary::missing_profiles`.

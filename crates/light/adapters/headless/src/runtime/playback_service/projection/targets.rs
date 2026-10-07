@@ -123,11 +123,12 @@ pub(super) fn group_projection(
     group_id: &str,
     identity: Option<light_playback::PlaybackIdentity>,
 ) -> Result<PlaybackTargetProjection, ActionError> {
-    snapshot
-        .groups
-        .iter()
-        .find(|group| group.id == group_id)
-        .ok_or_else(|| invalid("group does not exist"))?;
+    // An absent Group is a per-item fact, not a snapshot failure: a stale identity (a Group
+    // deleted, or one named by the previous show) projects as Missing while every other
+    // requested identity still hydrates. A stored Group, even an empty one, is never Missing.
+    if !snapshot.groups.iter().any(|group| group.id == group_id) {
+        return Ok(PlaybackTargetProjection::Missing);
+    }
     let master = ports
         .state
         .output

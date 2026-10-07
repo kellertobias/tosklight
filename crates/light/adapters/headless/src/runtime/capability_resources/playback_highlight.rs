@@ -94,10 +94,6 @@ impl PlaybackRenderCapability {
         self.telemetry
             .completed_frame(engine, show_id, show_revision, at)
     }
-
-    pub(in crate::runtime) fn publish(&self, event: light_application::EventDraft) {
-        self.service.events().publish(event);
-    }
 }
 
 impl HighlightResource {

@@ -2,6 +2,54 @@ use super::*;
 use std::sync::Barrier;
 
 #[test]
+fn source_occurrence_watermark_survives_generation_changes_without_active_playbacks() {
+    for release in [false, true] {
+        let engine = Engine::new(ProgrammerRegistry::default());
+        let cue_list = test_cue_list("Historical sources", vec![]);
+        let playback = test_playback(1, cue_list.id);
+        engine
+            .replace_snapshot(playback_snapshot(&cue_list, &playback, 1))
+            .unwrap();
+        engine.reserve_playback_source_occurrence_watermark(81);
+        let before = engine.generation.load_full().playback_arc();
+        let next = playback_snapshot(&cue_list, &playback, 2);
+        if release {
+            engine.replace_snapshot_releasing_playback(next).unwrap();
+        } else {
+            engine.replace_snapshot(next).unwrap();
+        }
+        assert!(!Arc::ptr_eq(
+            &before,
+            &engine.generation.load_full().playback_arc()
+        ));
+        assert!(engine.playback_runtime().is_empty());
+        assert_eq!(engine.playback_source_occurrence_watermark(), 81);
+        engine.reserve_playback_source_occurrence_watermark(2);
+        execute_pool(&engine, 1, PoolPlaybackAction::On);
+        assert!(engine.playback_source_occurrence_watermark() > 81);
+    }
+}
+
+#[test]
+fn exhausted_source_occurrence_watermark_survives_generation_replacement() {
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine.reserve_playback_source_occurrence_watermark(u64::MAX);
+    let cue_list = test_cue_list("Exhausted sources", vec![]);
+    let playback = test_playback(1, cue_list.id);
+    engine
+        .replace_snapshot(playback_snapshot(&cue_list, &playback, 1))
+        .unwrap();
+    assert_eq!(engine.playback_source_occurrence_watermark(), u64::MAX);
+    execute_pool(&engine, 1, PoolPlaybackAction::On);
+    assert_eq!(engine.playback_source_occurrence_watermark(), u64::MAX);
+    assert_eq!(
+        engine.active_playbacks().len(),
+        1,
+        "exhausted evidence must not stop Playback"
+    );
+}
+
+#[test]
 fn invalid_snapshot_preparation_does_not_change_live_state() {
     let engine = Engine::new(ProgrammerRegistry::default());
     engine.replace_snapshot(snapshot(1)).unwrap();
@@ -252,6 +300,83 @@ fn render_retains_one_generation_across_concurrent_installation() {
     assert_eq!(rendered.routes[0].destination_universe, 1);
     assert_eq!(engine.snapshot().revision, 2);
     assert_eq!(engine.output_routes()[0].destination_universe, 2);
+}
+
+#[test]
+fn point_pose_and_output_retain_the_captured_generation() {
+    let engine = Arc::new(Engine::new(ProgrammerRegistry::default()));
+    let (mut point, point_id) = schema_v2_fixture(&[("point.position.x", false, false)]);
+    point.location.x = 1_000;
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![point.clone()].into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let before_generation = engine.generation.load_full().identity();
+    let mut moved_point = point;
+    moved_point.location.x = 2_000;
+    let loaded = Arc::new(Barrier::new(2));
+    let resume = Arc::new(Barrier::new(2));
+    let render_engine = Arc::clone(&engine);
+    let render_loaded = Arc::clone(&loaded);
+    let render_resume = Arc::clone(&resume);
+    let rendering = std::thread::spawn(move || {
+        render_engine
+            .render_with_generation_hook(RenderOptions::default(), || {
+                render_loaded.wait();
+                render_resume.wait();
+            })
+            .unwrap()
+    });
+
+    loaded.wait();
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![moved_point].into(),
+            revision: 2,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    resume.wait();
+    let rendered = rendering.join().unwrap();
+    assert_eq!(rendered.revision, 1);
+    assert_eq!(rendered.source_snapshot.revision, 1);
+    assert_eq!(rendered.generation, before_generation);
+    assert_eq!(rendered.points.len(), 1);
+    assert_eq!(rendered.points[0].fixture_id, point_id);
+    assert_eq!(rendered.points[0].origin_metres, [1.0, 0.0, 0.0]);
+    assert!(!rendered.resolved_values.materialised_by_name());
+
+    let next = engine.render(RenderOptions::default()).unwrap();
+    assert_eq!(next.revision, 2);
+    assert_ne!(next.generation, rendered.generation);
+    assert_eq!(next.points[0].origin_metres, [2.0, 0.0, 0.0]);
+}
+
+#[test]
+fn point_index_reuses_fixture_shape_across_nonfixture_replacement() {
+    let engine = Engine::new(ProgrammerRegistry::default());
+    let (point, _) = schema_v2_fixture(&[("point.position.x", false, false)]);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![point].into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let before = engine.generation.load_full();
+    let mut next_snapshot = (*engine.snapshot()).clone();
+    next_snapshot.revision = 2;
+    engine.replace_snapshot(next_snapshot).unwrap();
+    let after = engine.generation.load_full();
+    assert_ne!(before.identity(), after.identity());
+    assert_eq!(before.slots().generation(), after.slots().generation());
+    assert!(std::ptr::eq(
+        before.point_projection(),
+        after.point_projection()
+    ));
 }
 
 fn snapshot_with_route(revision: u64, destination_universe: u16) -> EngineSnapshot {

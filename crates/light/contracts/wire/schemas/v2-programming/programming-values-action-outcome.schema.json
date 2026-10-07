@@ -9,9 +9,31 @@
       "format": "uint64",
       "minimum": 0
     },
+    "color_adoption": {
+      "description": "TL-554: the first semantic edit of a Direct value adopted this starting value.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ColorAdoptionReport"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "correlation_id": {
       "type": "string",
       "format": "uuid"
+    },
+    "hold": {
+      "description": "TL-594: present when an edit that named a displayed source was held quietly.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProgrammingValuesHoldReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "replayed": {
       "type": "boolean"
@@ -75,6 +97,65 @@
     "replayed"
   ],
   "$defs": {
+    "ColorAdoptionFixture": {
+      "description": "One fixture adopted from Direct by the first semantic edit.",
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "start": {
+          "$ref": "#/$defs/ColorAdoptionStart"
+        },
+        "uv_unknown": {
+          "description": "UV was unknown and adopted off.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "start",
+        "uv_unknown"
+      ]
+    },
+    "ColorAdoptionReport": {
+      "description": "Outcome field: the first semantic edit of a Direct value adopted a semantic starting value.",
+      "type": "object",
+      "properties": {
+        "fixtures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ColorAdoptionFixture"
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "fixtures",
+        "limitations"
+      ]
+    },
+    "ColorAdoptionStart": {
+      "description": "Where the semantic starting value of an adopted Direct value came from.",
+      "oneOf": [
+        {
+          "description": "The Direct value's modelled appearance; the virtual recipe is an approximation.",
+          "type": "string",
+          "const": "approximate"
+        },
+        {
+          "description": "Visible appearance was unknown: the operator's explicit starting colour was used.",
+          "type": "string",
+          "const": "explicit"
+        }
+      ]
+    },
     "DynamicActivationBoundaryProjection": {
       "type": "string",
       "enum": [
@@ -181,6 +262,105 @@
         "activation_boundary"
       ]
     },
+    "DynamicFamilyRepresentationProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "angles"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target"
+            },
+            "reference": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ProgrammingTargetReference"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "reference"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "basis": {
+              "$ref": "#/$defs/DynamicSemanticColorBasisProjection"
+            },
+            "kind": {
+              "type": "string",
+              "const": "semantic_color"
+            }
+          },
+          "required": [
+            "kind",
+            "basis"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "direct_color"
+            },
+            "source": {
+              "$ref": "#/$defs/ProgrammingNativeColorIdentity"
+            }
+          },
+          "required": [
+            "kind",
+            "source"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "focus"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "convention": {
+              "$ref": "#/$defs/ProgrammingOpeningConvention"
+            },
+            "kind": {
+              "type": "string",
+              "const": "zoom"
+            }
+          },
+          "required": [
+            "kind",
+            "convention"
+          ]
+        }
+      ]
+    },
     "DynamicInstanceOverridesProjection": {
       "type": "object",
       "properties": {
@@ -213,7 +393,8 @@
         },
         "size": {
           "type": "number",
-          "format": "float"
+          "format": "float",
+          "default": 1.0
         }
       },
       "required": [
@@ -253,24 +434,9 @@
     "DynamicLaneProjection": {
       "type": "object",
       "properties": {
-        "attribute": {
-          "type": "string"
-        },
         "id": {
           "type": "string",
           "format": "uuid"
-        },
-        "keyframes": {
-          "$ref": "#/$defs/DynamicKeyframeConfigurationProjection"
-        },
-        "max_min": {
-          "$ref": "#/$defs/DynamicMaxMinConfigurationProjection"
-        },
-        "middle_amplitude": {
-          "$ref": "#/$defs/DynamicMiddleAmplitudeConfigurationProjection"
-        },
-        "mode": {
-          "$ref": "#/$defs/DynamicLaneModeProjection"
         },
         "phase": {
           "anyOf": [
@@ -297,15 +463,53 @@
           "format": "float"
         }
       },
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DynamicLegacyScalarLaneProjection"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "programming": {
+              "$ref": "#/$defs/DynamicProgrammingLaneProjection"
+            }
+          },
+          "required": [
+            "programming"
+          ]
+        }
+      ],
       "required": [
         "id",
+        "speed_multiplier",
+        "width"
+      ]
+    },
+    "DynamicLegacyScalarLaneProjection": {
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "keyframes": {
+          "$ref": "#/$defs/DynamicKeyframeConfigurationProjection"
+        },
+        "max_min": {
+          "$ref": "#/$defs/DynamicMaxMinConfigurationProjection"
+        },
+        "middle_amplitude": {
+          "$ref": "#/$defs/DynamicMiddleAmplitudeConfigurationProjection"
+        },
+        "mode": {
+          "$ref": "#/$defs/DynamicLaneModeProjection"
+        }
+      },
+      "required": [
         "attribute",
         "mode",
         "keyframes",
         "max_min",
-        "middle_amplitude",
-        "speed_multiplier",
-        "width"
+        "middle_amplitude"
       ]
     },
     "DynamicMaxMinConfigurationProjection": {
@@ -321,11 +525,20 @@
           "$ref": "#/$defs/DynamicScalarSourceProjection"
         },
         "pwm": {
-          "$ref": "#/$defs/DynamicPwmShapeProjection"
+          "$ref": "#/$defs/DynamicPwmShapeProjection",
+          "default": {
+            "attack": 0.0,
+            "attack_interpolation": "linear",
+            "decay": 0.0,
+            "decay_interpolation": "linear",
+            "off": 0.5,
+            "on": 0.5
+          }
         },
         "size": {
           "type": "number",
-          "format": "float"
+          "format": "float",
+          "default": 1.0
         }
       },
       "required": [
@@ -356,11 +569,20 @@
           "$ref": "#/$defs/DynamicScalarSourceProjection"
         },
         "pwm": {
-          "$ref": "#/$defs/DynamicPwmShapeProjection"
+          "$ref": "#/$defs/DynamicPwmShapeProjection",
+          "default": {
+            "attack": 0.0,
+            "attack_interpolation": "linear",
+            "decay": 0.0,
+            "decay_interpolation": "linear",
+            "off": 0.5,
+            "on": 0.5
+          }
         },
         "size": {
           "type": "number",
-          "format": "float"
+          "format": "float",
+          "default": 1.0
         }
       },
       "required": [
@@ -386,6 +608,7 @@
       "properties": {
         "anchors_degrees": {
           "type": "array",
+          "default": [],
           "items": {
             "type": "number",
             "format": "float"
@@ -552,6 +775,287 @@
         "per_lane"
       ]
     },
+    "DynamicPresetFixtureTemplateProjection": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "value": {
+          "$ref": "#/$defs/ProgrammingAttributeValue"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "value"
+      ]
+    },
+    "DynamicPresetGroupTemplateProjection": {
+      "type": "object",
+      "properties": {
+        "group_id": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/ProgrammingAttributeValue"
+        }
+      },
+      "required": [
+        "group_id",
+        "value"
+      ]
+    },
+    "DynamicPresetTemplateProjection": {
+      "type": "object",
+      "properties": {
+        "fallback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynamicPresetTemplateProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixtures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DynamicPresetFixtureTemplateProjection"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DynamicPresetGroupTemplateProjection"
+          }
+        },
+        "universal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammingAttributeValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "DynamicProgrammingKeyframeProjection": {
+      "type": "object",
+      "properties": {
+        "interpolation": {
+          "$ref": "#/$defs/DynamicScalarInterpolationProjection"
+        },
+        "position": {
+          "type": "number",
+          "format": "float"
+        },
+        "source": {
+          "$ref": "#/$defs/DynamicValueSourceProjection"
+        }
+      },
+      "required": [
+        "position",
+        "source",
+        "interpolation"
+      ]
+    },
+    "DynamicProgrammingKeyframesProjection": {
+      "type": "object",
+      "properties": {
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DynamicProgrammingKeyframeProjection"
+          }
+        },
+        "size": {
+          "type": "number",
+          "format": "float",
+          "default": 1.0
+        }
+      },
+      "required": [
+        "points",
+        "size"
+      ]
+    },
+    "DynamicProgrammingLaneConfigurationProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "configuration": {
+              "$ref": "#/$defs/DynamicProgrammingKeyframesProjection"
+            },
+            "mode": {
+              "type": "string",
+              "const": "keyframes"
+            }
+          },
+          "required": [
+            "mode",
+            "configuration"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "configuration": {
+              "$ref": "#/$defs/DynamicProgrammingMaxMinProjection"
+            },
+            "mode": {
+              "type": "string",
+              "const": "max_min"
+            }
+          },
+          "required": [
+            "mode",
+            "configuration"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "configuration": {
+              "$ref": "#/$defs/DynamicProgrammingMiddleAmplitudeProjection"
+            },
+            "mode": {
+              "type": "string",
+              "const": "middle_amplitude"
+            }
+          },
+          "required": [
+            "mode",
+            "configuration"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "random"
+            }
+          },
+          "required": [
+            "mode"
+          ]
+        }
+      ]
+    },
+    "DynamicProgrammingLaneProjection": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/DynamicValueAddressProjection"
+        },
+        "configuration": {
+          "$ref": "#/$defs/DynamicProgrammingLaneConfigurationProjection"
+        }
+      },
+      "required": [
+        "address",
+        "configuration"
+      ]
+    },
+    "DynamicProgrammingMaxMinProjection": {
+      "type": "object",
+      "properties": {
+        "function": {
+          "$ref": "#/$defs/DynamicPeriodicFunctionProjection"
+        },
+        "maximum": {
+          "$ref": "#/$defs/DynamicValueSourceProjection"
+        },
+        "minimum": {
+          "$ref": "#/$defs/DynamicValueSourceProjection"
+        },
+        "pwm": {
+          "$ref": "#/$defs/DynamicPwmShapeProjection",
+          "default": {
+            "attack": 0.0,
+            "attack_interpolation": "linear",
+            "decay": 0.0,
+            "decay_interpolation": "linear",
+            "off": 0.5,
+            "on": 0.5
+          }
+        },
+        "size": {
+          "type": "number",
+          "format": "float",
+          "default": 1.0
+        }
+      },
+      "required": [
+        "minimum",
+        "maximum",
+        "function",
+        "size",
+        "pwm"
+      ]
+    },
+    "DynamicProgrammingMiddleAmplitudeProjection": {
+      "type": "object",
+      "properties": {
+        "amplitude": {
+          "$ref": "#/$defs/DynamicValueProjection"
+        },
+        "function": {
+          "$ref": "#/$defs/DynamicPeriodicFunctionProjection"
+        },
+        "invert_waveform": {
+          "type": "boolean",
+          "default": false
+        },
+        "middle": {
+          "$ref": "#/$defs/DynamicValueSourceProjection"
+        },
+        "pwm": {
+          "$ref": "#/$defs/DynamicPwmShapeProjection",
+          "default": {
+            "attack": 0.0,
+            "attack_interpolation": "linear",
+            "decay": 0.0,
+            "decay_interpolation": "linear",
+            "off": 0.5,
+            "on": 0.5
+          }
+        },
+        "size": {
+          "type": "number",
+          "format": "float",
+          "default": 1.0
+        }
+      },
+      "required": [
+        "middle",
+        "amplitude",
+        "function",
+        "size",
+        "pwm",
+        "invert_waveform"
+      ]
+    },
+    "DynamicProgrammingRandomRangeProjection": {
+      "type": "object",
+      "properties": {
+        "high": {
+          "$ref": "#/$defs/DynamicValueSourceProjection"
+        },
+        "low": {
+          "$ref": "#/$defs/DynamicValueSourceProjection"
+        }
+      },
+      "required": [
+        "low",
+        "high"
+      ]
+    },
     "DynamicPwmShapeProjection": {
       "type": "object",
       "properties": {
@@ -608,15 +1112,9 @@
           "format": "uint64",
           "minimum": 0
         },
-        "high": {
-          "$ref": "#/$defs/DynamicScalarSourceProjection"
-        },
         "id": {
           "type": "string",
           "format": "uuid"
-        },
-        "low": {
-          "$ref": "#/$defs/DynamicScalarSourceProjection"
         },
         "mean_duration_millis": {
           "type": "integer",
@@ -633,11 +1131,37 @@
           "format": "float"
         }
       },
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "high": {
+              "$ref": "#/$defs/DynamicScalarSourceProjection"
+            },
+            "low": {
+              "$ref": "#/$defs/DynamicScalarSourceProjection"
+            }
+          },
+          "required": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "programming_range": {
+              "$ref": "#/$defs/DynamicProgrammingRandomRangeProjection"
+            }
+          },
+          "required": [
+            "programming_range"
+          ]
+        }
+      ],
       "required": [
         "id",
         "seed",
-        "low",
-        "high",
         "decision_interval_millis",
         "start_probability",
         "mean_duration_millis",
@@ -764,6 +1288,7 @@
             },
             "last_valid_by_target": {
               "type": "array",
+              "default": [],
               "items": {
                 "$ref": "#/$defs/DynamicTargetScalarFallbackProjection"
               }
@@ -883,6 +1408,15 @@
             "seed"
           ]
         }
+      ]
+    },
+    "DynamicSemanticColorBasisProjection": {
+      "type": "string",
+      "enum": [
+        "retain",
+        "recipe",
+        "hue_saturation",
+        "whole"
       ]
     },
     "DynamicSpatialMappingOverrideProjection": {
@@ -1171,6 +1705,169 @@
         "value"
       ]
     },
+    "DynamicValueAddressProjection": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammingComponent"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "representation": {
+          "$ref": "#/$defs/DynamicFamilyRepresentationProjection"
+        }
+      },
+      "required": [
+        "representation",
+        "component"
+      ]
+    },
+    "DynamicValueFallbackProjection": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "value": {
+          "$ref": "#/$defs/DynamicValueProjection"
+        }
+      },
+      "required": [
+        "target",
+        "value"
+      ]
+    },
+    "DynamicValueProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "scalar"
+            },
+            "value": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "native"
+            },
+            "value": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "family"
+            },
+            "value": {
+              "$ref": "#/$defs/ProgrammingAttributeValue"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        }
+      ]
+    },
+    "DynamicValueSourceProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "current"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "value"
+            },
+            "value": {
+              "$ref": "#/$defs/DynamicValueProjection"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "address": {
+              "$ref": "#/$defs/DynamicValueAddressProjection"
+            },
+            "kind": {
+              "type": "string",
+              "const": "preset"
+            },
+            "last_valid_by_target": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/DynamicValueFallbackProjection"
+              }
+            },
+            "preset_id": {
+              "type": "string"
+            },
+            "retained": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DynamicPresetTemplateProjection"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "preset_id",
+            "address",
+            "last_valid_by_target"
+          ]
+        }
+      ]
+    },
     "DynamicValueTimingProjection": {
       "type": "object",
       "properties": {
@@ -1309,6 +2006,70 @@
           "properties": {
             "kind": {
               "type": "string",
+              "const": "color_program"
+            },
+            "value": {
+              "$ref": "#/$defs/ProgrammingColorProgram"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "position"
+            },
+            "value": {
+              "$ref": "#/$defs/ProgrammingPositionIntent"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "zoom"
+            },
+            "value": {
+              "$ref": "#/$defs/ProgrammingZoomIntent"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "group_family"
+            },
+            "value": {
+              "$ref": "#/$defs/ProgrammingGroupFamilyAssignment"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
               "const": "raw_dmx"
             },
             "value": {
@@ -1343,6 +2104,162 @@
         }
       ]
     },
+    "ProgrammingColorAllocation": {
+      "type": "string",
+      "enum": [
+        "preserve_recipe",
+        "prefer_white",
+        "prefer_colored_emitters"
+      ]
+    },
+    "ProgrammingColorComponent": {
+      "type": "string",
+      "enum": [
+        "red",
+        "green",
+        "blue",
+        "amber",
+        "hue",
+        "saturation",
+        "white_blend",
+        "temperature",
+        "duv",
+        "uv",
+        "relative_output"
+      ]
+    },
+    "ProgrammingColorComponentSpread": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "$ref": "#/$defs/ProgrammingColorComponent"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          }
+        }
+      },
+      "required": [
+        "component",
+        "points"
+      ]
+    },
+    "ProgrammingColorIntent": {
+      "type": "object",
+      "properties": {
+        "allocation": {
+          "$ref": "#/$defs/ProgrammingColorAllocation",
+          "default": "preserve_recipe"
+        },
+        "base_xyz": {
+          "description": "Authoritative base XYZ in the pinned virtual engine. Zero is black, not D65 white.",
+          "$ref": "#/$defs/ProgrammingColorXyz"
+        },
+        "recipe": {
+          "$ref": "#/$defs/ProgrammingVirtualColorRecipe"
+        },
+        "relative_output": {
+          "type": "number",
+          "format": "float",
+          "default": 1.0
+        },
+        "spreads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingColorComponentSpread"
+          }
+        },
+        "uv": {
+          "$ref": "#/$defs/ProgrammingUvIntent",
+          "default": {
+            "amount": 0.0
+          }
+        },
+        "wheel_constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingColorWheelConstraint"
+          }
+        },
+        "white_blend": {
+          "type": "number",
+          "format": "float"
+        },
+        "white_target": {
+          "$ref": "#/$defs/ProgrammingWhiteTarget"
+        }
+      },
+      "required": [
+        "base_xyz",
+        "recipe",
+        "white_blend",
+        "white_target",
+        "uv",
+        "relative_output",
+        "allocation"
+      ]
+    },
+    "ProgrammingColorProgram": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "intent": {
+              "$ref": "#/$defs/ProgrammingColorIntent"
+            },
+            "kind": {
+              "type": "string",
+              "const": "semantic"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "intent"
+          ]
+        },
+        {
+          "description": "The complete recipe and its pinned source prediction form one atomic recorded value.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "direct"
+            },
+            "portable": {
+              "$ref": "#/$defs/ProgrammingPortableColorEstimate"
+            },
+            "recipe": {
+              "$ref": "#/$defs/ProgrammingNativeColorRecipe"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "recipe",
+            "portable"
+          ]
+        }
+      ]
+    },
+    "ProgrammingColorWheelConstraint": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/ProgrammingNativeColorIdentity"
+        },
+        "value": {
+          "$ref": "#/$defs/ProgrammingNativeColorValue"
+        }
+      },
+      "required": [
+        "source",
+        "value"
+      ]
+    },
     "ProgrammingColorXyz": {
       "type": "object",
       "properties": {
@@ -1363,6 +2280,157 @@
         "x",
         "y",
         "z"
+      ]
+    },
+    "ProgrammingComponent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "$ref": "#/$defs/ProgrammingColorComponent"
+            },
+            "kind": {
+              "type": "string",
+              "const": "color"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "color_wheel"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "$ref": "#/$defs/ProgrammingNativeColorBinding"
+            },
+            "kind": {
+              "type": "string",
+              "const": "native_color"
+            }
+          },
+          "required": [
+            "kind",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "pan"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "tilt"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_reference"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_x"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_y"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target_z"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "focus"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "zoom"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
       ]
     },
     "ProgrammingDynamicSemanticValue": {
@@ -1466,6 +2534,49 @@
         {
           "type": "object",
           "properties": {
+            "mask": {
+              "$ref": "#/$defs/ProgrammingFamilyFixAt"
+            },
+            "timing": {
+              "$ref": "#/$defs/DynamicValueTimingProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "programming_fix_at"
+            }
+          },
+          "required": [
+            "type",
+            "mask",
+            "timing"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ProgrammingComponent"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "programming_release"
+            }
+          },
+          "required": [
+            "type",
+            "component"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "type": {
               "type": "string",
               "const": "release"
@@ -1507,6 +2618,22 @@
         "value",
         "programmer_order",
         "changed_at_millis"
+      ]
+    },
+    "ProgrammingFamilyFixAt": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/DynamicValueAddressProjection"
+        },
+        "family": {
+          "$ref": "#/$defs/ProgrammingAttributeValue"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "address",
+        "family"
       ]
     },
     "ProgrammingFixtureValue": {
@@ -1555,6 +2682,29 @@
         "fade"
       ]
     },
+    "ProgrammingGroupFamilyAssignment": {
+      "description": "Complete member exceptions remain scoped to the live Group. Nested assignments are invalid.",
+      "type": "object",
+      "properties": {
+        "members": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ProgrammingAttributeValue"
+          }
+        },
+        "owner": {
+          "$ref": "#/$defs/ProgrammingOwner"
+        },
+        "template": {
+          "$ref": "#/$defs/ProgrammingAttributeValue"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "template"
+      ]
+    },
     "ProgrammingGroupValue": {
       "type": "object",
       "properties": {
@@ -1600,6 +2750,410 @@
         "fade"
       ]
     },
+    "ProgrammingNativeColorBinding": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "function_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "channel_id",
+        "function_id"
+      ]
+    },
+    "ProgrammingNativeColorIdentity": {
+      "type": "object",
+      "properties": {
+        "head_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "model_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "native_layout_signature": {
+          "type": "string"
+        },
+        "path_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_digest": {
+          "type": "string"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "profile_id",
+        "profile_revision",
+        "profile_digest",
+        "mode_id",
+        "head_id",
+        "path_id",
+        "model_revision",
+        "native_layout_signature"
+      ]
+    },
+    "ProgrammingNativeColorRecipe": {
+      "type": "object",
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingNativeColorValue"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/ProgrammingNativeColorIdentity"
+        },
+        "spreads": {
+          "description": "Exact endpoints for profile-declared continuous native controls. Resolve before source\nprediction so each destination fits the varying recipe rather than a frozen estimate.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProgrammingNativeColorSpread"
+          }
+        }
+      },
+      "required": [
+        "source",
+        "channels"
+      ]
+    },
+    "ProgrammingNativeColorSpread": {
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ProgrammingNativeColorBinding"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        }
+      },
+      "required": [
+        "binding",
+        "points"
+      ]
+    },
+    "ProgrammingNativeColorValue": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "function_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "raw": {
+          "description": "Premaster native value. u32 preserves every supported channel width exactly.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "channel_id",
+        "function_id",
+        "raw"
+      ]
+    },
+    "ProgrammingOpeningConvention": {
+      "type": "string",
+      "enum": [
+        "beam",
+        "field"
+      ]
+    },
+    "ProgrammingOwner": {
+      "type": "string",
+      "enum": [
+        "color",
+        "position",
+        "focus",
+        "zoom"
+      ]
+    },
+    "ProgrammingPhysicalDataQuality": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "estimated",
+        "manufacturer",
+        "measured"
+      ]
+    },
+    "ProgrammingPortableColorEstimate": {
+      "type": "object",
+      "properties": {
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "model_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "quality": {
+          "$ref": "#/$defs/ProgrammingPhysicalDataQuality"
+        },
+        "uv": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammingPortableUv"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "visible": {
+          "description": "None means unknown, independently of the other component. Some(zero) means known black.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgrammingPortableVisibleColor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "model_revision",
+        "visible",
+        "uv",
+        "quality",
+        "limitations"
+      ]
+    },
+    "ProgrammingPortableUv": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "number",
+          "format": "float"
+        },
+        "quality": {
+          "$ref": "#/$defs/ProgrammingPhysicalDataQuality"
+        }
+      },
+      "required": [
+        "amount",
+        "quality"
+      ]
+    },
+    "ProgrammingPortableVisibleColor": {
+      "type": "object",
+      "properties": {
+        "relative_output": {
+          "type": "number",
+          "format": "float"
+        },
+        "xyz": {
+          "$ref": "#/$defs/ProgrammingColorXyz"
+        }
+      },
+      "required": [
+        "xyz",
+        "relative_output"
+      ]
+    },
+    "ProgrammingPositionIntent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "angles"
+            },
+            "pan_degrees": {
+              "$ref": "#/$defs/ProgrammingScalarIntent"
+            },
+            "tilt_degrees": {
+              "$ref": "#/$defs/ProgrammingScalarIntent"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "pan_degrees",
+            "tilt_degrees"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "target"
+            },
+            "offset_metres": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProgrammingScalarIntent"
+              },
+              "maxItems": 3,
+              "minItems": 3
+            },
+            "reference": {
+              "$ref": "#/$defs/ProgrammingTargetReference"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "reference",
+            "offset_metres"
+          ]
+        }
+      ]
+    },
+    "ProgrammingScalarIntent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "value"
+            },
+            "value": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "spread"
+            },
+            "value": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "float"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        }
+      ]
+    },
+    "ProgrammingTargetReference": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "origin"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "point"
+            },
+            "point_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "point_id"
+          ]
+        }
+      ]
+    },
+    "ProgrammingUvIntent": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "amount"
+      ]
+    },
+    "ProgrammingValuesHoldReason": {
+      "description": "Why an edit that named a displayed source was held quietly. The surface re-reads its\nreadout and starts the next gesture from the fresh lease; nothing was mutated.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "displayed_source_unavailable"
+          ]
+        },
+        {
+          "description": "TL-554: a Direct (native) edit has no verified reference head, original model or\npublished premaster output to adopt. Nothing changed; the pages show why passively.",
+          "type": "string",
+          "const": "native_color_unavailable"
+        },
+        {
+          "description": "TL-554: the first semantic edit of a Direct value whose visible appearance is unknown.\nResend with `explicit_color_start`; no white is ever invented.",
+          "type": "string",
+          "const": "explicit_color_start_required"
+        },
+        {
+          "description": "TL-637 follow-up: a Zoom edit has no seed in degrees. Nothing is authored and the\ndisplayed output's opening is not measurable in a known convention (unknown or\nunsupported optics model). The surface shows its quiet unsupported state.",
+          "type": "string",
+          "const": "zoom_unavailable"
+        }
+      ]
+    },
     "ProgrammingValuesProjection": {
       "description": "Full retained projection of the Programmer's normal, recordable values.",
       "type": "object",
@@ -1640,6 +3194,72 @@
         "fixture_values",
         "group_values",
         "dynamic_values"
+      ]
+    },
+    "ProgrammingVirtualColorRecipe": {
+      "type": "object",
+      "properties": {
+        "amber": {
+          "type": "number",
+          "format": "float"
+        },
+        "approximate": {
+          "description": "Advanced coordinates can be retained while the Easy controls show an approximation.",
+          "type": "boolean"
+        },
+        "rgb": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "version",
+        "rgb",
+        "amber",
+        "approximate"
+      ]
+    },
+    "ProgrammingWhiteTarget": {
+      "type": "object",
+      "properties": {
+        "duv": {
+          "type": "number",
+          "format": "float"
+        },
+        "kelvin": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "kelvin",
+        "duv"
+      ]
+    },
+    "ProgrammingZoomIntent": {
+      "type": "object",
+      "properties": {
+        "convention": {
+          "$ref": "#/$defs/ProgrammingOpeningConvention"
+        },
+        "opening_degrees": {
+          "$ref": "#/$defs/ProgrammingScalarIntent"
+        }
+      },
+      "required": [
+        "opening_degrees",
+        "convention"
       ]
     }
   }

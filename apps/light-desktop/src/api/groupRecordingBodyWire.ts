@@ -1,9 +1,9 @@
+import { decodeAttributeValue } from "./programmerValuesWireProjection";
 import type { ShowObject } from "../features/showObjects/contracts";
 import {
 	arrayAt,
 	enumAt,
 	integerAt,
-	numberAt,
 	recordAt,
 } from "./playbackWirePrimitives";
 import { WireValidationError } from "./wireValidation";
@@ -94,42 +94,7 @@ function programmingAt(value: unknown, path: string) {
 		attributeValueAt(rawValue, `${path}.${attribute}`);
 }
 
-function attributeValueAt(value: unknown, path: string) {
-	const attribute = recordAt(value, path);
-	const kind = enumAt(attribute.kind, `${path}.kind`, [
-		"normalized",
-		"spread",
-		"discrete",
-		"color_xyz",
-		"raw_dmx",
-		"raw_dmx_exact",
-	]);
-	if (kind === "normalized") numberAt(attribute.value, `${path}.value`);
-	else if (kind === "spread")
-		arrayAt(attribute.value, `${path}.value`).forEach((item, index) => {
-			numberAt(item, `${path}.value[${index}]`);
-		});
-	else if (kind === "discrete") stringValueAt(attribute.value, `${path}.value`);
-	else if (kind === "color_xyz") xyzAt(attribute.value, `${path}.value`);
-	else
-		boundedIntegerAt(
-			attribute.value,
-			`${path}.value`,
-			kind === "raw_dmx" ? 255 : 4_294_967_295,
-		);
-}
-
-function xyzAt(value: unknown, path: string) {
-	const xyz = recordAt(value, path);
-	for (const coordinate of ["x", "y", "z"])
-		numberAt(xyz[coordinate], `${path}.${coordinate}`);
-}
-
-function boundedIntegerAt(value: unknown, path: string, maximum: number) {
-	const decoded = integerAt(value, path);
-	if (decoded > maximum) invalid(path, `integer at most ${maximum}`, value);
-	return decoded;
-}
+function attributeValueAt(value: unknown, path: string) { return decodeAttributeValue(value, path, "group"); }
 
 function nullableStringAt(value: unknown, path: string) {
 	if (value != null) stringValueAt(value, path);

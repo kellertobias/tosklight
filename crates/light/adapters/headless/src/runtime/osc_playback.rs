@@ -235,15 +235,14 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
     };
     let context =
         light_application::ActionContext::system(desk.id, light_application::ActionSource::Osc);
-    let completed = state
-        .playback
-        .run_unit_of_work(playback_service::ChangePage {
-            state,
-            show: &show,
-            context,
-            desk_id: desk.id,
-            page,
-        });
+    let completed = playback_service::ChangePage {
+        state,
+        show: &show,
+        context,
+        desk_id: desk.id,
+        page,
+    }
+    .run();
     if !completed
         .output
         .is_ok_and(|availability| availability.available())

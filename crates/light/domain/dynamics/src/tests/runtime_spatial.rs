@@ -40,7 +40,7 @@ fn random_each_loop_is_recomputed_per_lane_without_reordering_uniform_lanes() {
             .unwrap()
             .into_iter()
             .filter(|sample| sample.lane_id == lane_id)
-            .map(|sample| (sample.target, sample.value))
+            .map(|sample| (sample.target, sample.legacy().expect("scalar sample").value))
             .collect::<HashMap<_, _>>()
     };
     let stable_first = values(&mut runtime, stable_id, 0);
@@ -102,7 +102,7 @@ fn uniform_random_each_loop_shares_one_permutation_across_different_lane_speeds(
             samples
                 .iter()
                 .filter(|sample| sample.lane_id == lane_id)
-                .map(|sample| (sample.target, sample.value))
+                .map(|sample| (sample.target, sample.legacy().expect("scalar sample").value))
                 .collect::<HashMap<_, _>>()
         };
         assert_eq!(
@@ -235,9 +235,9 @@ fn lane_width_compresses_the_curve_without_stretching_its_value_range() {
 #[test]
 fn pwm_always_uses_the_full_curve_width() {
     let mut pwm = lane();
-    pwm.mode = DynamicLaneMode::MaxMin;
+    pwm.legacy_mut().unwrap().mode = DynamicLaneMode::MaxMin;
     pwm.width = 0.25;
-    pwm.max_min.function = PeriodicFunction::Pwm;
+    pwm.legacy_mut().unwrap().max_min.function = PeriodicFunction::Pwm;
     let definition = definition(pwm.clone());
     let evaluator = DynamicEvaluator::new(&definition);
     let value = evaluator
@@ -290,7 +290,7 @@ fn random_each_loop_reorders_targets_at_runtime_loop_boundaries() {
             .sample(instance, now, 1_000, 10, &Sources { current: 0.0 })
             .unwrap()
             .into_iter()
-            .map(|sample| (sample.target, sample.value))
+            .map(|sample| (sample.target, sample.legacy().expect("scalar sample").value))
             .collect::<HashMap<_, _>>()
     };
 
@@ -304,15 +304,17 @@ fn random_each_loop_reorders_targets_at_runtime_loop_boundaries() {
 #[test]
 fn random_groups_are_repeatable_per_instance_and_independent_between_instances() {
     let mut lane = lane();
-    lane.mode = DynamicLaneMode::Random;
+    lane.legacy_mut().unwrap().mode = DynamicLaneMode::Random;
     let group_id = Uuid::new_v4();
     lane.random_group_id = Some(group_id);
     let mut definition = definition(lane.clone());
     definition.random_groups.push(DynamicRandomGroup {
         id: group_id,
         seed: 7,
-        low: source(0.0),
-        high: source(1.0),
+        range: crate::DynamicRandomRange::LegacyScalar {
+            low: source(0.0),
+            high: source(1.0),
+        },
         decision_interval_millis: 100,
         start_probability: 0.5,
         mean_duration_millis: 80,
@@ -350,15 +352,17 @@ fn random_groups_are_repeatable_per_instance_and_independent_between_instances()
 #[test]
 fn runtime_random_pulses_cross_decision_boundaries_without_overlapping_restart() {
     let mut random_lane = lane();
-    random_lane.mode = DynamicLaneMode::Random;
+    random_lane.legacy_mut().unwrap().mode = DynamicLaneMode::Random;
     let group_id = Uuid::new_v4();
     random_lane.random_group_id = Some(group_id);
     let mut definition = definition(random_lane);
     definition.random_groups.push(DynamicRandomGroup {
         id: group_id,
         seed: 11,
-        low: source(0.0),
-        high: source(1.0),
+        range: crate::DynamicRandomRange::LegacyScalar {
+            low: source(0.0),
+            high: source(1.0),
+        },
         decision_interval_millis: 100,
         start_probability: 1.0,
         mean_duration_millis: 250,
@@ -383,6 +387,8 @@ fn runtime_random_pulses_cross_decision_boundaries_without_overlapping_restart()
         runtime
             .sample(instance, elapsed, 1_000, 10, &Sources { current: 0.0 })
             .unwrap()[0]
+            .legacy()
+            .expect("scalar sample")
             .value
     };
     assert_eq!(at(&mut runtime, 0), 1.0);
@@ -400,15 +406,17 @@ fn runtime_random_pulses_cross_decision_boundaries_without_overlapping_restart()
 #[test]
 fn runtime_snapshot_round_trip_preserves_epoch_pause_controllers_and_random_index() {
     let mut random_lane = lane();
-    random_lane.mode = DynamicLaneMode::Random;
+    random_lane.legacy_mut().unwrap().mode = DynamicLaneMode::Random;
     let group_id = Uuid::new_v4();
     random_lane.random_group_id = Some(group_id);
     let mut definition = definition(random_lane);
     definition.random_groups.push(DynamicRandomGroup {
         id: group_id,
         seed: 19,
-        low: source(0.0),
-        high: source(1.0),
+        range: crate::DynamicRandomRange::LegacyScalar {
+            low: source(0.0),
+            high: source(1.0),
+        },
         decision_interval_millis: 100,
         start_probability: 0.75,
         mean_duration_millis: 180,
@@ -547,13 +555,15 @@ fn preload_definition_pin_keeps_live_revision_until_atomic_unpin() {
         runtime
             .sample(instance, 0, 1_000, 10, &Sources { current: 0.0 })
             .unwrap()[0]
+            .legacy()
+            .expect("scalar sample")
             .value
     };
     assert_eq!(sample(&mut runtime), 0.0);
 
     let mut edited = original;
     edited.revision = 2;
-    for point in &mut edited.lanes[0].keyframes.points {
+    for point in &mut edited.lanes[0].legacy_mut().unwrap().keyframes.points {
         point.source = source(1.0);
     }
     runtime.set_definitions_pinned(true);
@@ -607,7 +617,7 @@ fn speed_group_join_and_next_boundary_use_authoritative_transport_phase() {
     };
     let joined = runtime.sample_all(1_250, 10, &[transport; 5], &Sources { current: 0.0 });
     assert!(
-        (joined[0].value - 0.625).abs() < 0.001,
+        (joined[0].legacy().expect("scalar sample").value - 0.625).abs() < 0.001,
         "Join sync now must sample the Speed Group epoch instead of a local start epoch"
     );
 
@@ -650,5 +660,5 @@ fn speed_group_join_and_next_boundary_use_authoritative_transport_phase() {
         }; 5],
         &Sources { current: 0.0 },
     );
-    assert_eq!(boundary[0].value, 0.0);
+    assert_eq!(boundary[0].legacy().expect("scalar sample").value, 0.0);
 }

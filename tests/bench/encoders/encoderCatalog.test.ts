@@ -8,6 +8,7 @@ import {
 	PositionAttribute,
 	ProgrammerToken,
 	ShapersAttribute,
+	degreesEncoderValue,
 	encoderCatalogEntry,
 	normalizedEncoderValue,
 } from "./encoderCatalog";
@@ -24,9 +25,29 @@ describe("encoder catalog", () => {
 		expect(
 			encoderCatalogEntry(EncoderGroup.Position, PositionAttribute.Pan),
 		).toMatchObject({
-			attribute: "pan",
+			attribute: "position",
 			label: "Pan",
+			semantic: { owner: "position", component: { kind: "pan" }, unit: "degrees" },
 		});
+		expect(
+			encoderCatalogEntry(EncoderGroup.Color, ColorAttribute.White),
+		).toMatchObject({
+			attribute: "color",
+			label: "White Blend",
+			semantic: {
+				owner: "color",
+				component: { kind: "color", component: "white_blend" },
+				unit: "percent",
+			},
+		});
+	});
+
+	it("types Position entries in degrees, including negative angles and spreads", () => {
+		expect(degreesEncoderValue(-54)).toEqual({ kind: "value", value: -54 });
+		expect(
+			degreesEncoderValue([-90, ProgrammerToken.Thru, 90]),
+		).toEqual({ kind: "spread", value: [-90, 90] });
+		expect(() => degreesEncoderValue([ProgrammerToken.Thru, 5])).toThrow(/lead/);
 	});
 
 	it("normalizes single, two-point, and multi-point expressions", () => {

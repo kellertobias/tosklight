@@ -92,6 +92,7 @@ impl ProgrammingService {
         operation: impl FnOnce() -> ProgrammingLifecycleCompletion<T>,
     ) -> Result<ProgrammingLifecycleResult<T>, ActionError> {
         self.assert_lifecycle_target(&target)?;
+        let before_alignment = self.programmers.alignment_projection();
         let lifecycle_before = self.active_lifecycle_programmer();
         let before_values =
             ProgrammingValuesContent::read(&self.programmers, target.current_session_id)?;
@@ -110,6 +111,20 @@ impl ProgrammingService {
             target.current_session_id,
         )?;
         let completion = operation();
+        self.programmers
+            .deactivate_alignment(target.current_session_id);
+        let after_alignment = self.programmers.alignment_projection();
+        if before_alignment != after_alignment {
+            self.publish_interaction(
+                actor_context,
+                super::ProgrammingInteractionChange::with_alignment(
+                    actor_context.desk_id,
+                    None,
+                    None,
+                    Some(after_alignment),
+                ),
+            );
+        }
         self.invalidate_values_replay();
         self.invalidate_preload_values_replay();
         self.invalidate_priority_replay();

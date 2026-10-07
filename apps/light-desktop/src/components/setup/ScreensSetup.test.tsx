@@ -190,6 +190,38 @@ describe("additional screen settings", () => {
 		});
 	});
 
+	it("removes a screen only after the saves queued before Remove have landed", async () => {
+		const order: string[] = [];
+		let finishSave: () => void = () => undefined;
+		const save = vi.fn(
+			(value: ScreenConfiguration) =>
+				new Promise<void>((resolve) => {
+					finishSave = () => {
+						order.push(`save open=${value.desired_open}`);
+						resolve();
+					};
+				}),
+		);
+		const remove = vi.fn(async () => {
+			order.push("remove");
+		});
+		render(
+			<ScreenSettingsCard
+				screen={configuredScreen}
+				displays={[]}
+				save={save}
+				remove={remove}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Close Screen" }));
+		fireEvent.click(screen.getByRole("button", { name: "Remove Screen" }));
+		await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+		expect(remove).not.toHaveBeenCalled();
+		finishSave();
+		await waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
+		expect(order).toEqual(["save open=false", "remove"]);
+	});
+
 	it("lays the Layout switches out as one form without framed sections", () => {
 		render(
 			<ScreenSettingsCard

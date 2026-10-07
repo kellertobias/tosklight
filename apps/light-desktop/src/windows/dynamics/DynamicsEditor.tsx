@@ -1,4 +1,6 @@
 import { ErrorAlert } from "@tosklight/ui";
+import { type ScalarDynamicLane } from "../../features/dynamics/laneModel";
+import { createDynamicLane } from "../../features/dynamics/editableLane";
 import { Button } from "@tosklight/ui";
 import { ModalFrame } from "@tosklight/ui/modals";
 import {
@@ -14,7 +16,6 @@ import type {
 	DynamicLaneModeProjection,
 	DynamicLaneProjection,
 	DynamicPhaseOrderingProjection,
-	DynamicRandomGroupProjection,
 	DynamicRuntimeSnapshotProjection,
 	DynamicScalarSourceProjection,
 	DynamicSpatialMappingOverrideProjection,
@@ -39,7 +40,6 @@ export type DynamicEditorView = "curves" | "projection" | "phase" | "speed";
 
 export const sourceCurrent: DynamicScalarSourceProjection = { type: "current" };
 const sourceZero: DynamicScalarSourceProjection = { type: "value", value: 0 };
-const sourceFull: DynamicScalarSourceProjection = { type: "value", value: 1 };
 export const curveComposerMethods = [
 	{ value: "keyframes", label: "Keyframes" },
 	{ value: "max_min", label: "Max / min" },
@@ -616,9 +616,7 @@ export function LaneAttributeModal({
 		else grouped.push({ family, attributes: [attribute] });
 		return grouped;
 	}, []);
-	const selectedGroup = groups.find(
-		(group) => group.family === selectedFamily,
-	);
+	const selectedGroup = groups.find((group) => group.family === selectedFamily);
 	return (
 		<ModalFrame
 			id={id}
@@ -632,10 +630,7 @@ export function LaneAttributeModal({
 				{selectedGroup ? (
 					<div className="dynamic-attribute-choice-stage">
 						<div className="dynamic-attribute-choice-toolbar">
-							<Button
-								disabled={busy}
-								onClick={() => setSelectedFamily(null)}
-							>
+							<Button disabled={busy} onClick={() => setSelectedFamily(null)}>
 								Back to attribute groups
 							</Button>
 							<h3>{selectedGroup.family}</h3>
@@ -740,74 +735,15 @@ export function createDefaultDynamicDefinition(
 	};
 }
 
+/**
+ * A new lane for a lane-chooser key. Pan, Tilt, Zoom and Color components are typed family lanes
+ * in their descriptor units (programming contract 1); other attributes are scalar 0–1 lanes.
+ */
 export function createDefaultDynamicLane(
 	attribute: string,
 	id: string = crypto.randomUUID(),
 ): DynamicLaneProjection {
-	return {
-		id,
-		attribute,
-		mode: "max_min",
-		keyframes: {
-			points: [
-				{
-					position: 0,
-					source: sourceZero,
-					interpolation: "ease_in_out",
-				},
-				{
-					position: 0.5,
-					source: sourceFull,
-					interpolation: "ease_in_out",
-				},
-			],
-			size: 1,
-		},
-		max_min: {
-			minimum: sourceZero,
-			maximum: sourceFull,
-			function: "sinus",
-			size: 1,
-			pwm: defaultPwm(),
-		},
-		middle_amplitude: {
-			middle: { type: "value", value: 0.5 },
-			amplitude: 0.5,
-			function: "sinus",
-			size: 1,
-			pwm: defaultPwm(),
-		},
-		speed_multiplier: { numerator: 1, denominator: 1 },
-		width: 1,
-		random_group_id: null,
-		phase: null,
-	};
-}
-
-function defaultPwm() {
-	return {
-		attack: 0,
-		on: 0.5,
-		decay: 0,
-		off: 0.5,
-		attack_interpolation: "linear" as const,
-		decay_interpolation: "linear" as const,
-	};
-}
-
-export function defaultRandomGroup(): DynamicRandomGroupProjection {
-	return {
-		id: crypto.randomUUID(),
-		seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 0,
-		low: sourceZero,
-		high: sourceFull,
-		decision_interval_millis: 250,
-		start_probability: 0.25,
-		mean_duration_millis: 500,
-		duration_spread_millis: 100,
-		attack_ratio: 0.1,
-		decay_ratio: 0.1,
-	};
+	return createDynamicLane(attribute, id);
 }
 
 export function largestKeyframeGapMidpoint(
@@ -875,7 +811,7 @@ export function modeLabel(mode: DynamicLaneModeProjection) {
 }
 
 export function lanePreview(
-	lane: DynamicLaneProjection,
+	lane: ScalarDynamicLane,
 	lanes: readonly DynamicLaneProjection[],
 ) {
 	const slowest = Math.min(
@@ -1016,7 +952,7 @@ export function wrappedIndex(value: number, length: number) {
 	return ((rounded % length) + length) % length;
 }
 
-export function laneShapeLabel(lane: DynamicLaneProjection) {
+export function laneShapeLabel(lane: ScalarDynamicLane) {
 	if (lane.mode === "keyframes") return "Keyframes";
 	if (lane.mode === "random") return "Random";
 	const value =
@@ -1046,13 +982,13 @@ const interpolations = [
 	"drop",
 ] as const;
 
-export function primaryInterpolationIndex(lane: DynamicLaneProjection) {
+export function primaryInterpolationIndex(lane: ScalarDynamicLane) {
 	return interpolations.indexOf(
 		lane.keyframes.points[0]?.interpolation ?? "ease_in_out",
 	);
 }
 
-export function primaryInterpolationLabel(lane: DynamicLaneProjection) {
+export function primaryInterpolationLabel(lane: ScalarDynamicLane) {
 	if (lane.mode !== "keyframes") return "Unavailable";
 	const value = lane.keyframes.points[0]?.interpolation ?? "ease_in_out";
 	switch (value) {
@@ -1072,9 +1008,9 @@ export function primaryInterpolationLabel(lane: DynamicLaneProjection) {
 }
 
 export function setPrimaryInterpolation(
-	lane: DynamicLaneProjection,
+	lane: ScalarDynamicLane,
 	value: number,
-): DynamicLaneProjection {
+): ScalarDynamicLane {
 	if (lane.mode !== "keyframes") return lane;
 	const interpolation =
 		interpolations[wrappedIndex(value, interpolations.length)];

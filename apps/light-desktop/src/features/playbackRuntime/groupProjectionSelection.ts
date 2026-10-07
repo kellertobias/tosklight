@@ -18,7 +18,10 @@ export function selectGroupProjections(
 			(candidate) =>
 				candidate.target === "group" && candidate.group_id === groupId,
 		);
-		if (!projection) ready = false;
+		// A Missing projection is the server's authoritative answer that the active show does
+		// not hold this Group (deleted, or named by the previous show): resolved, no runtime.
+		const absent = candidates?.some((candidate) => candidate.target === "missing");
+		if (!projection && !absent) ready = false;
 		projections.set(groupId, projection);
 	}
 	return { ready, projections };

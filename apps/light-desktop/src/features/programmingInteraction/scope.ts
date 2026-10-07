@@ -7,6 +7,7 @@ export class ProgrammingViewScope {
 	private readonly references: Record<ProgrammingCapability, number> = {
 		commandLine: 0,
 		selection: 0,
+		alignment: 0,
 	};
 
 	activate(capability: ProgrammingCapability) {
@@ -22,13 +23,18 @@ export class ProgrammingViewScope {
 	}
 
 	hasViews() {
-		return this.references.commandLine > 0 || this.references.selection > 0;
+		return (
+			this.references.commandLine > 0 ||
+			this.references.selection > 0 ||
+			this.references.alignment > 0
+		);
 	}
 
 	includesChange(change: ProgrammingChange) {
 		return (
 			("commandLine" in change && this.references.commandLine > 0) ||
-			("selection" in change && this.references.selection > 0)
+			("selection" in change && this.references.selection > 0) ||
+			("alignment" in change && this.references.alignment > 0)
 		);
 	}
 
@@ -36,6 +42,7 @@ export class ProgrammingViewScope {
 		return {
 			commandLine: this.references.commandLine > 0,
 			selection: this.references.selection > 0,
+			alignment: this.references.alignment > 0,
 		};
 	}
 
@@ -46,5 +53,6 @@ export class ProgrammingViewScope {
 	clear() {
 		this.references.commandLine = 0;
 		this.references.selection = 0;
+		this.references.alignment = 0;
 	}
 }

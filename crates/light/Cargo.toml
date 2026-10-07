@@ -5,6 +5,7 @@ edition.workspace = true
 license-file.workspace = true
 
 [dependencies]
+base64.workspace = true
 chrono.workspace = true
 jiff.workspace = true
 light-core = { path = "../shared/core" }
@@ -28,7 +29,6 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-base64.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 
 [lints]

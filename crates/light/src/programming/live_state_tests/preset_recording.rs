@@ -78,6 +78,7 @@ impl ProgrammingPresetRecordingPorts for PresetPorts {
         let raw_body = serde_json::to_value(&preset).unwrap();
         Ok(ProgrammingPresetCommitResult {
             changed,
+            created: changed && current.is_none(),
             projection: ProgrammingPresetProjection {
                 show_id: show.show_id,
                 object_id: commit.address.storage_key(),
@@ -227,7 +228,7 @@ fn fixture_and_group_capture_returns_one_authoritative_projection() {
     };
     let projected: Preset = serde_json::from_value(projection.raw_body.as_ref().clone()).unwrap();
     assert_eq!(
-        projected.values[&fixture][&AttributeKey::intensity()],
+        projected.values[&fixture][AttributeKey::intensity_ref()],
         AttributeValue::Normalized(0.7)
     );
     assert_eq!(
@@ -684,7 +685,7 @@ fn core_owned_store_modes_cover_fixture_and_group_semantics() {
         .merged_with(Some(&existing))
         .unwrap();
     assert_eq!(
-        merged.values[&fixture][&AttributeKey::intensity()],
+        merged.values[&fixture][AttributeKey::intensity_ref()],
         AttributeValue::Normalized(0.8)
     );
     assert!(merged.values[&fixture].contains_key(&AttributeKey("pan".into())));

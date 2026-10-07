@@ -578,7 +578,7 @@ fn dispatch_dynamic_fix_at(
     request: DynamicFixAtActionRequest,
 ) -> Result<serde_json::Value, String> {
     let ports = super::dynamics_adapter::ServerDynamicsPorts { state, session };
-    state
+    let applied = state
         .dynamics
         .fix_at(
             context,
@@ -595,12 +595,14 @@ fn dispatch_dynamic_fix_at(
             &ports,
         )
         .map_err(|error| error.message)?;
-    persist_programmer(state, session).map_err(|error| error.message)?;
-    persist_output_runtime(state).map_err(|error| error.message)?;
+    if applied > 0 {
+        persist_programmer(state, session).map_err(|error| error.message)?;
+        persist_output_runtime(state).map_err(|error| error.message)?;
+    }
     serde_json::to_value(DynamicControllerActionOutcome {
         request_id: request.request_id,
         controller_id: uuid::Uuid::nil(),
-        changed: true,
+        changed: applied > 0,
     })
     .map_err(|error| error.to_string())
 }

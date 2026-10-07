@@ -4,7 +4,7 @@ async fn fixture_profile_api_rejects_invalid_discrete_wheel_before_storing_revis
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let (fixture, _, channel_ids) = schema_v2_direct_fixture();
-    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
     let profile_id = profile.id;
     let head_id = profile.modes[0].heads[0].id;
     profile.modes[0].color_systems = vec![light_fixture::HeadColorSystem {
@@ -276,7 +276,7 @@ async fn fixture_import_requires_explicit_mapping_for_retired_placeholder_attrib
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let (fixture, _, _) = schema_v2_direct_fixture();
-    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
     let retired = light_core::AttributeKey("beam".into());
     profile.modes[0].channels[0].fixture_attribute = retired.clone();
     profile.modes[0].channels[0].attribute = retired.clone();
@@ -319,7 +319,7 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let (fixture, _, _) = schema_v2_direct_fixture();
-    let mut profile = *fixture.definition.profile_snapshot.unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
     let unknown = light_core::AttributeKey("vendor.test.feature".into());
     profile.modes[0].channels[0].fixture_attribute = unknown.clone();
     profile.modes[0].channels[0].attribute = unknown.clone();
@@ -513,6 +513,8 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
         rotation: Default::default(),
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -540,7 +542,7 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
     }
 
     let (mut multi_split, _, _) = schema_v2_direct_fixture();
-    let mut profile = *multi_split.definition.profile_snapshot.take().unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(multi_split.definition.profile_snapshot.take().unwrap());
     let mode_id = profile.modes[0].id;
     profile.modes[0].splits.push(light_fixture::FixtureSplit {
         number: 2,
@@ -575,6 +577,8 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
         rotation: Default::default(),
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -828,5 +832,60 @@ async fn fixture_library_v2_is_replay_safe_and_preserves_package_and_gdtf_bytes(
         assert!(json(response).await[field].is_array());
     }
 
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+
+#[tokio::test]
+async fn canonical_gdtf_preview_and_import_preserve_precision_and_retry_identity() {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let (fixture, _, _) = schema_v2_direct_fixture();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
+    // A single well-defined continuous channel, with the fine byte separated by a spare slot.
+    let mode = &mut profile.modes[0];
+    mode.color_systems.clear();
+    mode.channels.truncate(1);
+    mode.channels[0].attribute = light_core::AttributeKey("pan".into());
+    mode.channels[0].fixture_attribute = light_core::AttributeKey("pan".into());
+    mode.channels[0].resolution = light_fixture::ChannelResolution::U16;
+    mode.channels[0].secondary_slots = vec![3];
+    mode.channels[0].default_raw = 32769;
+    mode.channels[0].highlight_raw = 65534;
+    mode.channels[0].functions = vec![light_fixture::ChannelFunction::continuous("Pan", light_core::AttributeKey("pan".into()), 65535)];
+    mode.channels[0].functions[0].behavior = light_fixture::ChannelFunctionBehavior::Continuous { physical_min: 540.0, physical_max: -540.0, unit: Some("degrees".into()) };
+    mode.splits[0].footprint = 3;
+    let source = light_fixture::gdtf::profile::package_profile(&profile).unwrap();
+    let encoded = STANDARD.encode(&source);
+    let request = |path: &str, body: serde_json::Value| Request::post(path)
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string())).unwrap();
+    let response = app.clone().oneshot(request("/api/v2/fixture-library/gdtf/preview", serde_json::json!({"source_base64":encoded,"future_option":true}))).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let preview = json(response).await;
+    assert!(preview["profile"].get("source_gdtf").is_none(), "preview must not echo the client's archive");
+    assert_eq!(preview["profile"]["modes"][0]["channels"][0]["default_raw"], 32769);
+    assert!(preview["diagnostics"].as_array().is_some_and(|items| !items.is_empty()));
+    assert!(state.installation.fixture_profile(profile.id, 1).unwrap().is_none());
+    let path = format!("/api/v2/fixture-library/profiles/{}/update", profile.id.0);
+    let body = serde_json::json!({"request_id":"canonical-gdtf-retry","source_base64":encoded,"expected_revision":0,"attribute_mappings":[],"future_option":true});
+    let (first, retry) = tokio::join!(app.clone().oneshot(request(&path, body.clone())), app.clone().oneshot(request(&path, body.clone())));
+    let first = first.unwrap(); let retry = retry.unwrap();
+    assert_eq!(first.status(), StatusCode::OK); assert_eq!(retry.status(), StatusCode::OK);
+    let first = json(first).await; let retry = json(retry).await;
+    assert_eq!(first["result"], retry["result"]);
+    assert_eq!(first["replayed"], false); assert_eq!(retry["replayed"], true);
+    let saved = state.installation.fixture_profile(profile.id, 1).unwrap().unwrap();
+    let retained = saved.source_gdtf.as_ref().unwrap();
+    assert_eq!(retained.decoded_archive().unwrap(), source);
+    assert!(retained.matches_profile(&saved).unwrap());
+    assert_eq!(saved.modes[0].channels[0].secondary_slots, vec![3]);
+    assert!(state.installation.fixture_profile(profile.id, 2).unwrap().is_none());
+    let mut changed = body; changed["expected_revision"] = 1.into();
+    let response = app.oneshot(request(&path, changed)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
     let _ = std::fs::remove_dir_all(data_dir);
 }

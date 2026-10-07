@@ -147,6 +147,12 @@ impl OutputRuntimePorts for ServerOutputRuntimePorts<'_> {
         }
         Ok(OutputRuntimeApplication::durable())
     }
+
+    fn reassert(&self, _context: &ActionContext, command: OutputRuntimeCommand) {
+        self.state
+            .output
+            .reassert_runtime_control(command.grand_master.is_some(), command.blackout.is_some());
+    }
 }
 
 pub(super) fn action_error(error: ActionError) -> ApiError {

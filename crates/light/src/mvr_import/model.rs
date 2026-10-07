@@ -19,7 +19,8 @@ pub enum MvrImportResolution {
 pub struct ApplyActiveMvrImportCommand {
     pub show_id: ShowId,
     pub document: light_mvr::MvrDocument,
-    pub definitions: Vec<FixtureDefinition>,
+    /// Exact MVR fixture UUID to previewed profile/mode, never a name lookup at apply time.
+    pub definitions: HashMap<Uuid, FixtureDefinition>,
     pub resolutions: HashMap<Uuid, MvrImportResolution>,
 }
 
@@ -69,5 +70,6 @@ pub(super) struct PlannedPatchChange {
 pub(super) struct PlannedFixture {
     pub profile: light_fixture::PatchedFixtureProfileReference,
     pub patch: light_fixture::PatchedFixturePatch,
-    pub profile_projection: crate::PatchProfileRevisionProjection,
+    pub profile_projection: std::sync::Arc<crate::PatchProfileRevisionProjection>,
+    pub record: serde_json::Value,
 }

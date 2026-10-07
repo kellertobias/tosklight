@@ -212,6 +212,52 @@ impl ActiveShowResource {
         self.patch_lifecycle.pause_if_armed();
     }
 
+    #[cfg(test)]
+    pub(in crate::runtime) fn activation_before_admission_probe(
+        &self,
+    ) -> Arc<ActiveShowLifecyclePause> {
+        Arc::clone(&self.activation_before_admission)
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn pause_activation_before_admission_if_armed(&self) {
+        self.activation_before_admission.pause_if_armed();
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn activation_after_admission_probe(
+        &self,
+    ) -> Arc<ActiveShowLifecyclePause> {
+        Arc::clone(&self.activation_after_admission)
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn pause_activation_after_admission_if_armed(&self) {
+        self.activation_after_admission.pause_if_armed();
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn activation_completed_probe(&self) -> Arc<ActiveShowLifecyclePause> {
+        Arc::clone(&self.activation_completed)
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn pause_activation_completed_if_armed(&self) {
+        self.activation_completed.pause_if_armed();
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn activation_before_commit_probe(
+        &self,
+    ) -> Arc<ActiveShowLifecyclePause> {
+        Arc::clone(&self.activation_before_commit)
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn pause_activation_before_commit_if_armed(&self) {
+        self.activation_before_commit.pause_if_armed();
+    }
+
     pub(in crate::runtime) async fn acquire(&self) -> ActiveShowPermit {
         self.activation.acquire().await
     }
@@ -257,6 +303,33 @@ impl ActiveShowResource {
 
     pub(in crate::runtime) fn error(&self) -> Option<String> {
         self.error.read().clone()
+    }
+
+    /// Show recovery keeps the failed show as the active entry (the recovery dialog names it and
+    /// its file stays untouched), but none of it runs: the engine holds an empty show. Routes
+    /// that read the stored show answer as for an empty one, so no client derives runtime
+    /// identities (Groups, Playbacks, Pages, fixtures) from a show the engine does not hold.
+    pub(in crate::runtime) fn in_recovery(&self) -> bool {
+        self.error.read().is_some()
+    }
+
+    /// The one gate for every change to the active show's content in show recovery.
+    ///
+    /// The failed show stays named so the operator can recover it, so a write would land in the
+    /// preserved original — a show the engine does not run. Every show-content mutation (the
+    /// active-show unit of work, and the routes that write the store directly) asks here first
+    /// and changes nothing when refused. Desk settings, the show library and the recovery actions
+    /// do not change the active show's content and are not gated.
+    pub(in crate::runtime) fn ensure_content_writable(
+        &self,
+    ) -> Result<(), light_application::ActionError> {
+        if self.in_recovery() {
+            return Err(light_application::ActionError::new(
+                light_application::ActionErrorKind::Conflict,
+                SHOW_RECOVERY_WRITE_REFUSED,
+            ));
+        }
+        Ok(())
     }
 
     pub(in crate::runtime) fn set_error(&self, error: Option<String>) {

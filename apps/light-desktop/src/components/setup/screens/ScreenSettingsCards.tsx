@@ -722,6 +722,7 @@ export function ScreenSettingsCard({
 		setRemoving(true);
 		setRemoveError(null);
 		try {
+			await saveQueue.current;
 			await updateProgrammerOwner({ assign_to_main: true });
 			await remove(draftRef.current);
 		} catch (error) {
@@ -747,7 +748,11 @@ export function ScreenSettingsCard({
 				copyState={copyState}
 				openConfiguration={() => setConfigurationOpen(true)}
 				remove={() =>
-					programmerOwner ? setRemoveConfirmationOpen(true) : void remove(draft)
+					programmerOwner
+						? setRemoveConfirmationOpen(true)
+						: // Removal waits for this card's queued saves; a save landing after it would
+							// write the removed screen back.
+							void saveQueue.current.then(() => remove(draftRef.current))
 				}
 			/>
 			{saveError && !configurationOpen && (

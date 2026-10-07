@@ -125,8 +125,14 @@ async fn runtime_snapshot(
                 snapshot.global_paused,
             )
         })
+        .filter(|instance| !instance.controllers.is_empty())
         .collect();
     Ok(Json(DynamicRuntimeSnapshotProjection {
+        programmer_id: state
+            .programming
+            .programmers()
+            .programmer_id()
+            .map(|id| id.0),
         global_paused: snapshot.global_paused,
         instances,
         definitions,
@@ -178,69 +184,17 @@ fn runtime_instance_projection(
         * instance.definition.overall_speed_multiplier.factor())
     .max(f64::EPSILON);
     let (speed_source, effective_cycle_millis, effective_bpm, beat_phase, transport_advancing) =
-        match instance.definition.speed {
-            DynamicSpeed::Fixed { duration_millis } => (
-                "Fixed".to_owned(),
-                ((duration_millis as f64 / combined_speed_multiplier)
-                    .round()
-                    .max(1.0)) as u64,
-                None,
-                None,
-                true,
-            ),
-            DynamicSpeed::SpeedGroup {
-                group,
-                beats_per_cycle,
-            } => {
-                let transport = speed_groups[speed_group_index(group)];
-                let cycle_millis = if transport.effective_bpm > f64::EPSILON {
-                    (beats_per_cycle.factor() * 60_000.0
-                        / transport.effective_bpm
-                        / combined_speed_multiplier)
-                        .round()
-                        .max(1.0) as u64
-                } else {
-                    0
-                };
-                (
-                    format!("Speed Group {}", speed_group_label(group)),
-                    cycle_millis,
-                    Some(transport.effective_bpm),
-                    Some(transport.beat_phase),
-                    transport.phase_advancing,
-                )
-            }
-        };
-    let transitions = instance
-        .controller_transitions
-        .iter()
-        .map(|transition| (transition.controller_id, *transition))
-        .collect::<std::collections::HashMap<_, _>>();
-    let controllers = instance
-        .controllers
-        .into_iter()
-        .map(|controller| {
-            let transition = transitions.get(&controller.id).copied().unwrap_or(
-                light_dynamics::DynamicControllerTransitionSnapshot {
-                    controller_id: controller.id,
-                    activation_started_at_millis: controller.activated_at_millis,
-                    ..Default::default()
-                },
-            );
-            DynamicRuntimeControllerProjection {
-                controller_id: controller.id,
-                source: dynamic_source_label(&controller.source),
-                priority: controller.priority,
-                size: controller.size,
-                speed_multiplier: controller.speed_multiplier,
-                phase_offset_degrees: controller.phase_offset_degrees,
-                paused: controller.paused,
-                winning: winning_id == Some(controller.id),
-                releasing: transition.release_started_at_millis.is_some(),
-                activation_mix: runtime_transition_mix(transition, now_millis),
-            }
-        })
-        .collect();
+        instance_speed_transport(
+            &instance.definition.speed,
+            combined_speed_multiplier,
+            speed_groups,
+        );
+    let controllers = runtime_controller_projections(
+        instance.controllers,
+        &instance.controller_transitions,
+        winning_id,
+        now_millis,
+    );
     let aliasing_warning = light_dynamics::aliasing_warning(
                 &instance.definition,
                 effective_cycle_millis,
@@ -289,6 +243,102 @@ fn runtime_instance_projection(
     }
 }
 
+/// Speed source label, cycle length, BPM, beat phase and transport advance for one instance.
+fn instance_speed_transport(
+    speed: &DynamicSpeed,
+    combined_speed_multiplier: f64,
+    speed_groups: &[light_control::speed::SpeedSnapshot; 5],
+) -> (String, u64, Option<f64>, Option<f64>, bool) {
+    match *speed {
+        DynamicSpeed::Fixed { duration_millis } => (
+            "Fixed".to_owned(),
+            ((duration_millis as f64 / combined_speed_multiplier)
+                .round()
+                .max(1.0)) as u64,
+            None,
+            None,
+            true,
+        ),
+        DynamicSpeed::SpeedGroup {
+            group,
+            beats_per_cycle,
+        } => {
+            let transport = speed_groups[speed_group_index(group)];
+            let cycle_millis = if transport.effective_bpm > f64::EPSILON {
+                (beats_per_cycle.factor() * 60_000.0
+                    / transport.effective_bpm
+                    / combined_speed_multiplier)
+                    .round()
+                    .max(1.0) as u64
+            } else {
+                0
+            };
+            (
+                format!("Speed Group {}", speed_group_label(group)),
+                cycle_millis,
+                Some(transport.effective_bpm),
+                Some(transport.beat_phase),
+                transport.phase_advancing,
+            )
+        }
+    }
+}
+
+fn runtime_controller_projections(
+    controllers: Vec<light_dynamics::DynamicController>,
+    controller_transitions: &[light_dynamics::DynamicControllerTransitionSnapshot],
+    winning_id: Option<uuid::Uuid>,
+    now_millis: u64,
+) -> Vec<DynamicRuntimeControllerProjection> {
+    let transitions = controller_transitions
+        .iter()
+        .map(|transition| (transition.controller_id, *transition))
+        .collect::<std::collections::HashMap<_, _>>();
+    controllers
+        .into_iter()
+        // Covered sources keep an internal clock but are no longer an editable On in this
+        // Programmer. Do not offer an Off/update action which cannot address an active source.
+        .filter(|controller| {
+            !transitions
+                .get(&controller.id)
+                .is_some_and(|transition| transition.output_gate.is_some_and(|gate| gate.to == 0.0))
+        })
+        .map(|controller| {
+            let transition = transitions.get(&controller.id).copied().unwrap_or(
+                light_dynamics::DynamicControllerTransitionSnapshot {
+                    controller_id: controller.id,
+                    activation_started_at_millis: controller.activated_at_millis,
+                    ..Default::default()
+                },
+            );
+            DynamicRuntimeControllerProjection {
+                controller_id: controller.id,
+                programmer_id: match controller.source {
+                    light_dynamics::DynamicControllerSource::Programmer {
+                        programmer_id, ..
+                    } => Some(programmer_id),
+                    _ => None,
+                },
+                programmer_instance_link: match controller.source {
+                    light_dynamics::DynamicControllerSource::Programmer {
+                        instance_link, ..
+                    } => instance_link,
+                    _ => None,
+                },
+                source: dynamic_source_label(&controller.source),
+                priority: controller.priority,
+                size: controller.size,
+                speed_multiplier: controller.speed_multiplier,
+                phase_offset_degrees: controller.phase_offset_degrees,
+                paused: controller.paused,
+                winning: winning_id == Some(controller.id),
+                releasing: transition.release_started_at_millis.is_some(),
+                activation_mix: runtime_transition_mix(transition, now_millis),
+            }
+        })
+        .collect()
+}
+
 fn dynamic_definition_status(
     snapshot: &light_engine::EngineSnapshot,
     definition: &light_dynamics::DynamicDefinition,
@@ -323,7 +373,7 @@ fn dynamic_definition_status(
                             .heads
                             .iter()
                             .flat_map(|head| &head.parameters)
-                            .any(|parameter| parameter.attribute == lane.attribute)
+                            .any(|parameter| parameter.attribute == lane.output_owner())
                     })
                 })
                 .map(|fixture| fixture.fixture_id)
@@ -380,13 +430,28 @@ pub(super) fn dynamic_source_label(source: &light_dynamics::DynamicControllerSou
     match source {
         light_dynamics::DynamicControllerSource::Programmer { .. } => "Programmer".into(),
         light_dynamics::DynamicControllerSource::Cue { .. } => "Cue".into(),
-        light_dynamics::DynamicControllerSource::Playback { playback_number } => {
-            format!("Playback {playback_number}")
-        }
+        light_dynamics::DynamicControllerSource::Playback {
+            playback_number,
+            virtual_page: None,
+        } => format!("Playback {playback_number}"),
+        light_dynamics::DynamicControllerSource::Playback {
+            playback_number,
+            virtual_page: Some(page),
+        } => format!("Virtual Playback {playback_number} (page {page})"),
     }
 }
 
 pub(super) fn runtime_transition_mix(
+    transition: light_dynamics::DynamicControllerTransitionSnapshot,
+    now_millis: u64,
+) -> f32 {
+    runtime_ungated_transition_mix(transition, now_millis)
+        * transition
+            .output_gate
+            .map_or(1.0, |gate| gate.mix_at(now_millis))
+}
+
+fn runtime_ungated_transition_mix(
     transition: light_dynamics::DynamicControllerTransitionSnapshot,
     now_millis: u64,
 ) -> f32 {
@@ -647,7 +712,7 @@ async fn fix_at(
     show.verify(&state)?;
     run_fire_and_forget_http_programming_action(state, session, move |state, session| {
         let ports = ServerDynamicsPorts { state, session };
-        state
+        let applied = state
             .dynamics
             .fix_at(
                 &context(session),
@@ -660,11 +725,13 @@ async fn fix_at(
                 &ports,
             )
             .map_err(|error| error.message)?;
-        persist_programmer(state, session).map_err(|error| error.message)?;
-        persist_output_runtime(state).map_err(|error| error.message)?;
+        if applied > 0 {
+            persist_programmer(state, session).map_err(|error| error.message)?;
+            persist_output_runtime(state).map_err(|error| error.message)?;
+        }
         Ok(DynamicControllerHttpActionOutcome {
             controller_id: Uuid::nil(),
-            changed: true,
+            changed: applied > 0,
         })
     })
     .await

@@ -1,0 +1,67 @@
+/* Position Special Dialog. Keeps the standard ModalFrame border, background and title chrome. */
+.ui-modal-stack-layer.position-dialog-layer > .position-dialog[role="dialog"] {
+	display: grid;
+	grid-template-rows: 54px minmax(0, 1fr);
+	width: min(800px, calc(100vw - 24px));
+	min-width: 0;
+	max-height: calc(100dvh - 24px);
+	padding: 0;
+	overflow: hidden;
+	color: var(--text);
+}
+.position-dialog > .ui-modal-titlebar { margin: 0; padding: 0; border-radius: 5px 5px 0 0; flex-shrink: 0; }
+.position-dialog .position-dialog-body { display: grid; gap: 16px; padding: 16px 22px 18px; overflow: auto; min-height: 0; }
+.position-dialog .position-dialog-layout { display: grid; grid-template-columns: minmax(250px, 290px) minmax(0, 1fr); gap: 24px; align-items: center; }
+.position-dialog .position-dialog-angle-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; }
+
+/* Pan: unwrapped multi-turn circle, −90°/Reset/+90° and the turn count. */
+.position-dialog .position-dialog-pan { display: grid; grid-template-rows: 220px 44px 18px; gap: 6px; min-width: 0; }
+.position-dialog .position-dialog-pan svg { width: 220px; height: 220px; justify-self: center; touch-action: none; cursor: grab; outline-offset: -2px; }
+.position-dialog .position-dialog-pan svg:active { cursor: grabbing; }
+.position-dialog .position-dialog-pan svg[aria-disabled="true"] { cursor: default; opacity: .5; }
+.position-dialog .position-dialog-pan-ring { fill: #0b151d; stroke: #3e596d; stroke-width: 3; }
+.position-dialog .position-dialog-pan-tick { stroke: #7893a7; stroke-width: 2; }
+.position-dialog .position-dialog-pan-zero, .position-dialog .position-dialog-pan-label { fill: #a4b4c0; font-size: 12px; }
+.position-dialog .position-dialog-pan-direction { stroke: var(--cyan); stroke-width: 3; }
+.position-dialog .position-dialog-pan-handle { fill: var(--cyan); stroke: #c9faff; stroke-width: 2; }
+.position-dialog .position-dialog-pan-center { fill: #111b23; stroke: #344452; }
+.position-dialog .position-dialog-pan-value { fill: var(--text); font-size: 22px; font-weight: 700; }
+.position-dialog svg .position-dialog-value-caption { fill: #a4b4c0; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.position-dialog output .position-dialog-value-caption { color: #a4b4c0; font-size: 10px; font-weight: 400; text-transform: uppercase; letter-spacing: .04em; }
+.position-dialog .position-dialog-pan-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.position-dialog .position-dialog-pan-actions .ui-button { min-height: 44px; padding-inline: 8px; }
+.position-dialog .position-dialog-turns { display: block; text-align: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Tilt: the shared touch fader, laid out horizontally. */
+.position-dialog .position-dialog-tilt { display: grid; gap: 10px; min-width: 0; }
+.position-dialog .position-dialog-tilt-field { position: relative; min-width: 0; }
+.position-dialog .vertical-touch-fader.position-dialog-tilt-fader { height: 72px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; cursor: ew-resize; }
+.position-dialog .vertical-touch-fader.position-dialog-tilt-fader::before { background: linear-gradient(90deg, #103039, #176777); transform: none; }
+.position-dialog .vertical-touch-fader.position-dialog-tilt-fader > span { color: white; font-size: 12px; width: fit-content; padding: 2px 5px; background: #101820c9; border-radius: 3px; text-shadow: 0 1px 2px #000; }
+.position-dialog .vertical-touch-fader.position-dialog-tilt-fader > strong { margin: 0; padding: 0 5px; font-size: 21px; font-variant-numeric: tabular-nums; background: #101820c9; border-radius: 3px; }
+.position-dialog .vertical-touch-fader.position-dialog-tilt-fader input { writing-mode: horizontal-tb; direction: ltr; cursor: ew-resize; }
+.position-dialog .position-dialog-tilt-fader:focus-within { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.position-dialog .position-dialog-tilt-handle { position: absolute; z-index: 3; bottom: 10px; width: 20px; height: 20px; transform: translateX(-50%); border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #10202b, 0 1px 4px #000; color: white; background: #152735cc; display: grid; place-items: center; font-style: normal; font-size: 11px; pointer-events: none; }
+.position-dialog .position-dialog-tilt-handle::before { content: ""; position: absolute; left: 7px; top: -9px; height: 7px; border-left: 2px solid white; filter: drop-shadow(0 0 1px #000); }
+.position-dialog .position-dialog-tilt-limits { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+
+/* Joystick: square, gentle-center rate control. */
+.position-dialog .position-dialog-aim { display: grid; gap: 8px; min-width: 0; }
+.position-dialog .position-dialog-aim > p { margin: 0; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.position-dialog .position-dialog-aim > .position-dialog-home { min-height: 44px; justify-self: stretch; }
+.position-dialog .position-dialog-joystick { position: relative; width: 100%; aspect-ratio: 1; min-width: 0; border: 1px solid #3b596a; border-radius: 6px; background: linear-gradient(0deg, transparent calc(50% - .5px), #29414f calc(50% - .5px), #29414f calc(50% + .5px), transparent calc(50% + .5px)), linear-gradient(90deg, transparent calc(50% - .5px), #29414f calc(50% - .5px), #29414f calc(50% + .5px), transparent calc(50% + .5px)), #0b1921; touch-action: none; cursor: crosshair; }
+.position-dialog .position-dialog-joystick.is-held { border-color: var(--cyan); }
+.position-dialog .position-dialog-joystick.is-disabled { cursor: default; opacity: .5; }
+.position-dialog .position-dialog-joystick-ring { position: absolute; inset: 8%; border: 1px dashed #375463; border-radius: 50%; pointer-events: none; }
+.position-dialog .position-dialog-joystick-neutral { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border: 1px solid #597a8b; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.position-dialog .position-dialog-joystick-marker { position: absolute; width: 22px; height: 22px; border: 2px solid #c8faff; border-radius: 50%; background: var(--cyan); transform: translate(-50%, -50%); pointer-events: none; }
+.position-dialog .position-dialog-joystick:not(.is-held) .position-dialog-joystick-marker { transition: left 100ms ease-out, top 100ms ease-out; }
+.position-dialog .position-dialog-joystick-label { position: absolute; left: 12px; top: 10px; color: var(--muted); font-size: 12px; pointer-events: none; }
+
+@media (max-width: 620px) {
+	.position-dialog .position-dialog-body { padding: 12px; gap: 12px; }
+	.position-dialog .position-dialog-layout { grid-template-columns: 230px minmax(0, 1fr); gap: 16px; }
+}
+@media (max-width: 440px) {
+	.position-dialog .position-dialog-layout { grid-template-columns: 1fr; gap: 16px; }
+}

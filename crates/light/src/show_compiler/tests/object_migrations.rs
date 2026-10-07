@@ -971,42 +971,46 @@ fn dynamics_compile_preset_sources_into_per_target_sampler_fallbacks() {
         },
         lanes: vec![light_dynamics::DynamicLane {
             id: Uuid::new_v4(),
-            attribute: light_core::AttributeKey::intensity(),
-            mode: light_dynamics::DynamicLaneMode::Keyframes,
-            keyframes: light_dynamics::KeyframeConfiguration {
-                points: vec![
-                    light_dynamics::DynamicKeyframe {
-                        position: 0.0,
-                        source: light_dynamics::ScalarSource::Preset {
-                            preset_id: "1.1".into(),
-                            attribute: light_core::AttributeKey::intensity(),
-                            last_valid_by_target: Vec::new(),
-                        },
-                        interpolation: light_dynamics::ScalarInterpolation::Linear,
+            body: light_dynamics::DynamicLaneBody::LegacyScalar(
+                light_dynamics::LegacyScalarLaneBody {
+                    attribute: light_core::AttributeKey::intensity(),
+                    mode: light_dynamics::DynamicLaneMode::Keyframes,
+                    keyframes: light_dynamics::KeyframeConfiguration {
+                        points: vec![
+                            light_dynamics::DynamicKeyframe {
+                                position: 0.0,
+                                source: light_dynamics::ScalarSource::Preset {
+                                    preset_id: "1.1".into(),
+                                    attribute: light_core::AttributeKey::intensity(),
+                                    last_valid_by_target: Vec::new(),
+                                },
+                                interpolation: light_dynamics::ScalarInterpolation::Linear,
+                            },
+                            light_dynamics::DynamicKeyframe {
+                                position: 0.5,
+                                source: light_dynamics::ScalarSource::Value { value: 1.0 },
+                                interpolation: light_dynamics::ScalarInterpolation::Linear,
+                            },
+                        ],
+                        size: 1.0,
                     },
-                    light_dynamics::DynamicKeyframe {
-                        position: 0.5,
-                        source: light_dynamics::ScalarSource::Value { value: 1.0 },
-                        interpolation: light_dynamics::ScalarInterpolation::Linear,
+                    max_min: light_dynamics::MaxMinConfiguration {
+                        minimum: light_dynamics::ScalarSource::Value { value: 0.0 },
+                        maximum: light_dynamics::ScalarSource::Value { value: 1.0 },
+                        function: light_dynamics::PeriodicFunction::Sinus,
+                        size: 1.0,
+                        pwm: light_dynamics::PwmShape::default(),
                     },
-                ],
-                size: 1.0,
-            },
-            max_min: light_dynamics::MaxMinConfiguration {
-                minimum: light_dynamics::ScalarSource::Value { value: 0.0 },
-                maximum: light_dynamics::ScalarSource::Value { value: 1.0 },
-                function: light_dynamics::PeriodicFunction::Sinus,
-                size: 1.0,
-                pwm: light_dynamics::PwmShape::default(),
-            },
-            middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
-                middle: light_dynamics::ScalarSource::Current,
-                amplitude: 0.5,
-                function: light_dynamics::PeriodicFunction::Sinus,
-                size: 1.0,
-                pwm: light_dynamics::PwmShape::default(),
-                invert_waveform: false,
-            },
+                    middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
+                        middle: light_dynamics::ScalarSource::Current,
+                        amplitude: 0.5,
+                        function: light_dynamics::PeriodicFunction::Sinus,
+                        size: 1.0,
+                        pwm: light_dynamics::PwmShape::default(),
+                        invert_waveform: false,
+                    },
+                },
+            ),
             speed_multiplier: light_dynamics::Rational::ONE,
             width: 1.0,
             phase: None,
@@ -1074,7 +1078,12 @@ fn dynamics_compile_preset_sources_into_per_target_sampler_fallbacks() {
     let light_dynamics::ScalarSource::Preset {
         last_valid_by_target,
         ..
-    } = &snapshot.dynamics[0].lanes[0].keyframes.points[0].source
+    } = &snapshot.dynamics[0].lanes[0]
+        .legacy()
+        .unwrap()
+        .keyframes
+        .points[0]
+        .source
     else {
         panic!("expected Preset source")
     };
@@ -1103,42 +1112,46 @@ fn dynamics_persist_preset_fallbacks_losslessly_before_the_preset_is_deleted() {
         },
         lanes: vec![light_dynamics::DynamicLane {
             id: Uuid::new_v4(),
-            attribute: light_core::AttributeKey::intensity(),
-            mode: light_dynamics::DynamicLaneMode::Keyframes,
-            keyframes: light_dynamics::KeyframeConfiguration {
-                points: vec![
-                    light_dynamics::DynamicKeyframe {
-                        position: 0.0,
-                        source: light_dynamics::ScalarSource::Preset {
-                            preset_id: "1.1".into(),
-                            attribute: light_core::AttributeKey::intensity(),
-                            last_valid_by_target: Vec::new(),
-                        },
-                        interpolation: light_dynamics::ScalarInterpolation::Linear,
+            body: light_dynamics::DynamicLaneBody::LegacyScalar(
+                light_dynamics::LegacyScalarLaneBody {
+                    attribute: light_core::AttributeKey::intensity(),
+                    mode: light_dynamics::DynamicLaneMode::Keyframes,
+                    keyframes: light_dynamics::KeyframeConfiguration {
+                        points: vec![
+                            light_dynamics::DynamicKeyframe {
+                                position: 0.0,
+                                source: light_dynamics::ScalarSource::Preset {
+                                    preset_id: "1.1".into(),
+                                    attribute: light_core::AttributeKey::intensity(),
+                                    last_valid_by_target: Vec::new(),
+                                },
+                                interpolation: light_dynamics::ScalarInterpolation::Linear,
+                            },
+                            light_dynamics::DynamicKeyframe {
+                                position: 0.5,
+                                source: light_dynamics::ScalarSource::Value { value: 1.0 },
+                                interpolation: light_dynamics::ScalarInterpolation::Linear,
+                            },
+                        ],
+                        size: 1.0,
                     },
-                    light_dynamics::DynamicKeyframe {
-                        position: 0.5,
-                        source: light_dynamics::ScalarSource::Value { value: 1.0 },
-                        interpolation: light_dynamics::ScalarInterpolation::Linear,
+                    max_min: light_dynamics::MaxMinConfiguration {
+                        minimum: light_dynamics::ScalarSource::Value { value: 0.0 },
+                        maximum: light_dynamics::ScalarSource::Value { value: 1.0 },
+                        function: light_dynamics::PeriodicFunction::Sinus,
+                        size: 1.0,
+                        pwm: light_dynamics::PwmShape::default(),
                     },
-                ],
-                size: 1.0,
-            },
-            max_min: light_dynamics::MaxMinConfiguration {
-                minimum: light_dynamics::ScalarSource::Value { value: 0.0 },
-                maximum: light_dynamics::ScalarSource::Value { value: 1.0 },
-                function: light_dynamics::PeriodicFunction::Sinus,
-                size: 1.0,
-                pwm: light_dynamics::PwmShape::default(),
-            },
-            middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
-                middle: light_dynamics::ScalarSource::Current,
-                amplitude: 0.5,
-                function: light_dynamics::PeriodicFunction::Sinus,
-                size: 1.0,
-                pwm: light_dynamics::PwmShape::default(),
-                invert_waveform: false,
-            },
+                    middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
+                        middle: light_dynamics::ScalarSource::Current,
+                        amplitude: 0.5,
+                        function: light_dynamics::PeriodicFunction::Sinus,
+                        size: 1.0,
+                        pwm: light_dynamics::PwmShape::default(),
+                        invert_waveform: false,
+                    },
+                },
+            ),
             speed_multiplier: light_dynamics::Rational::ONE,
             width: 1.0,
             phase: None,
@@ -1214,7 +1227,12 @@ fn dynamics_persist_preset_fallbacks_losslessly_before_the_preset_is_deleted() {
     let light_dynamics::ScalarSource::Preset {
         last_valid_by_target,
         ..
-    } = &snapshot.dynamics[0].lanes[0].keyframes.points[0].source
+    } = &snapshot.dynamics[0].lanes[0]
+        .legacy()
+        .unwrap()
+        .keyframes
+        .points[0]
+        .source
     else {
         panic!("expected Preset source")
     };
@@ -1886,8 +1904,10 @@ fn legacy_cmy_dynamic_waveforms_migrate_exactly_across_every_lane_mode() {
     legacy.random_groups = vec![light_dynamics::DynamicRandomGroup {
         id: random_group_id,
         seed: 7,
-        low: light_dynamics::ScalarSource::Value { value: 0.15 },
-        high: light_dynamics::ScalarSource::Value { value: 0.75 },
+        range: light_dynamics::DynamicRandomRange::LegacyScalar {
+            low: light_dynamics::ScalarSource::Value { value: 0.15 },
+            high: light_dynamics::ScalarSource::Value { value: 0.75 },
+        },
         decision_interval_millis: 100,
         start_probability: 1.0,
         mean_duration_millis: 100,
@@ -1921,11 +1941,17 @@ fn legacy_cmy_dynamic_waveforms_migrate_exactly_across_every_lane_mode() {
         migrated
             .lanes
             .iter()
-            .map(|lane| &*lane.attribute.0)
+            .map(|lane| &*lane.legacy().unwrap().attribute.0)
             .collect::<Vec<_>>(),
         ["color.red", "color.green", "color.blue", "color.red"]
     );
-    assert!(migrated.lanes[2].middle_amplitude.invert_waveform);
+    assert!(
+        migrated.lanes[2]
+            .legacy()
+            .unwrap()
+            .middle_amplitude
+            .invert_waveform
+    );
     assert_ne!(
         migrated.lanes[3].random_group_id,
         Some(random_group_id),
@@ -1960,7 +1986,7 @@ fn legacy_cmy_dynamic_waveforms_migrate_exactly_across_every_lane_mode() {
             assert!(
                 (after - (1.0 - before)).abs() < 1.0e-5,
                 "{:?} at {elapsed_millis}: {before} did not migrate inversely to {after}",
-                legacy_lane.mode
+                legacy_lane.mode()
             );
         }
     }
@@ -2013,45 +2039,47 @@ fn cmy_lane(
 ) -> light_dynamics::DynamicLane {
     light_dynamics::DynamicLane {
         id: Uuid::new_v4(),
-        attribute: light_core::AttributeKey(attribute.into()),
-        mode,
-        keyframes: light_dynamics::KeyframeConfiguration {
-            points: vec![
-                light_dynamics::DynamicKeyframe {
-                    position: 0.0,
-                    source: light_dynamics::ScalarSource::Value { value: 0.2 },
-                    interpolation: light_dynamics::ScalarInterpolation::EaseInOut,
-                },
-                light_dynamics::DynamicKeyframe {
-                    position: 0.5,
-                    source: light_dynamics::ScalarSource::Value { value: 0.8 },
-                    interpolation: light_dynamics::ScalarInterpolation::Linear,
-                },
-            ],
-            size: 0.8,
-        },
-        max_min: light_dynamics::MaxMinConfiguration {
-            minimum: light_dynamics::ScalarSource::Value { value: 0.1 },
-            maximum: light_dynamics::ScalarSource::Value { value: 0.9 },
-            function: light_dynamics::PeriodicFunction::Cosinus,
-            size: 0.7,
-            pwm: light_dynamics::PwmShape::default(),
-        },
-        middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
-            middle: light_dynamics::ScalarSource::Value { value: 0.45 },
-            amplitude: 0.3,
-            function: light_dynamics::PeriodicFunction::Pwm,
-            size: 0.6,
-            pwm: light_dynamics::PwmShape {
-                attack: 0.1,
-                on: 0.35,
-                decay: 0.2,
-                off: 0.35,
-                attack_interpolation: light_dynamics::ScalarInterpolation::EaseIn,
-                decay_interpolation: light_dynamics::ScalarInterpolation::EaseOut,
+        body: light_dynamics::DynamicLaneBody::LegacyScalar(light_dynamics::LegacyScalarLaneBody {
+            attribute: light_core::AttributeKey(attribute.into()),
+            mode,
+            keyframes: light_dynamics::KeyframeConfiguration {
+                points: vec![
+                    light_dynamics::DynamicKeyframe {
+                        position: 0.0,
+                        source: light_dynamics::ScalarSource::Value { value: 0.2 },
+                        interpolation: light_dynamics::ScalarInterpolation::EaseInOut,
+                    },
+                    light_dynamics::DynamicKeyframe {
+                        position: 0.5,
+                        source: light_dynamics::ScalarSource::Value { value: 0.8 },
+                        interpolation: light_dynamics::ScalarInterpolation::Linear,
+                    },
+                ],
+                size: 0.8,
             },
-            invert_waveform: false,
-        },
+            max_min: light_dynamics::MaxMinConfiguration {
+                minimum: light_dynamics::ScalarSource::Value { value: 0.1 },
+                maximum: light_dynamics::ScalarSource::Value { value: 0.9 },
+                function: light_dynamics::PeriodicFunction::Cosinus,
+                size: 0.7,
+                pwm: light_dynamics::PwmShape::default(),
+            },
+            middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
+                middle: light_dynamics::ScalarSource::Value { value: 0.45 },
+                amplitude: 0.3,
+                function: light_dynamics::PeriodicFunction::Pwm,
+                size: 0.6,
+                pwm: light_dynamics::PwmShape {
+                    attack: 0.1,
+                    on: 0.35,
+                    decay: 0.2,
+                    off: 0.35,
+                    attack_interpolation: light_dynamics::ScalarInterpolation::EaseIn,
+                    decay_interpolation: light_dynamics::ScalarInterpolation::EaseOut,
+                },
+                invert_waveform: false,
+            },
+        }),
         speed_multiplier: light_dynamics::Rational::ONE,
         width: 1.0,
         phase: None,
@@ -2062,35 +2090,37 @@ fn cmy_lane(
 fn strobe_lane(attribute: light_core::AttributeKey) -> light_dynamics::DynamicLane {
     light_dynamics::DynamicLane {
         id: Uuid::new_v4(),
-        attribute: attribute.clone(),
-        mode: light_dynamics::DynamicLaneMode::Keyframes,
-        keyframes: light_dynamics::KeyframeConfiguration {
-            points: vec![light_dynamics::DynamicKeyframe {
-                position: 0.0,
-                source: light_dynamics::ScalarSource::Preset {
-                    preset_id: "1.1".into(),
-                    attribute,
-                    last_valid_by_target: Vec::new(),
-                },
-                interpolation: light_dynamics::ScalarInterpolation::Linear,
-            }],
-            size: 1.0,
-        },
-        max_min: light_dynamics::MaxMinConfiguration {
-            minimum: light_dynamics::ScalarSource::Value { value: 0.0 },
-            maximum: light_dynamics::ScalarSource::Value { value: 1.0 },
-            function: light_dynamics::PeriodicFunction::Sinus,
-            size: 1.0,
-            pwm: light_dynamics::PwmShape::default(),
-        },
-        middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
-            middle: light_dynamics::ScalarSource::Current,
-            amplitude: 0.5,
-            function: light_dynamics::PeriodicFunction::Sinus,
-            size: 1.0,
-            pwm: light_dynamics::PwmShape::default(),
-            invert_waveform: false,
-        },
+        body: light_dynamics::DynamicLaneBody::LegacyScalar(light_dynamics::LegacyScalarLaneBody {
+            attribute: attribute.clone(),
+            mode: light_dynamics::DynamicLaneMode::Keyframes,
+            keyframes: light_dynamics::KeyframeConfiguration {
+                points: vec![light_dynamics::DynamicKeyframe {
+                    position: 0.0,
+                    source: light_dynamics::ScalarSource::Preset {
+                        preset_id: "1.1".into(),
+                        attribute,
+                        last_valid_by_target: Vec::new(),
+                    },
+                    interpolation: light_dynamics::ScalarInterpolation::Linear,
+                }],
+                size: 1.0,
+            },
+            max_min: light_dynamics::MaxMinConfiguration {
+                minimum: light_dynamics::ScalarSource::Value { value: 0.0 },
+                maximum: light_dynamics::ScalarSource::Value { value: 1.0 },
+                function: light_dynamics::PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: light_dynamics::PwmShape::default(),
+            },
+            middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
+                middle: light_dynamics::ScalarSource::Current,
+                amplitude: 0.5,
+                function: light_dynamics::PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: light_dynamics::PwmShape::default(),
+                invert_waveform: false,
+            },
+        }),
         speed_multiplier: light_dynamics::Rational::ONE,
         width: 1.0,
         phase: None,

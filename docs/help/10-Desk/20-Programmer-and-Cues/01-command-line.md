@@ -225,9 +225,11 @@ Now that you understand how we can make a selection and record groups, we use `<
 
 Alternatively, you can also select the fixtures or groups and then turn the intensity encoder. This sets the value as well. Encoders work incrementally/ decrementally; They do not set the absolute value of all fixtures, but usually increase the value the fixture currently has by 1 per ratchet. If you want to do finer adjustments, hold `[^]` while turning the encoder. Increasing / Decreasing intensity also works via command line: `<selection>[AT][+] 10` adds 10% to the current values of intensity of the selected fixtures, while `<selection>[AT][-] 10` removes 10%.
 
-You can set more than just dimmer values. If you switch the encoder to the encoder attribute group of e.g. "color", the first encoder is usually the value for "red", the second the value for "green", then "blue", and so on. Clicking the encoder attribute group again sometimes reveals more pages. For color this for example could be a color wheel.
+You can set more than just dimmer values. If you switch the encoder to the encoder attribute group of e.g. "color", the first encoders are "Red", "Green" and "Blue", followed by "White Blend". Clicking the encoder attribute group again sometimes reveals more pages: depending on the desk's Color setting this is Amber and UV, or Temperature, Duv and the color wheels (see [Color Intent](05-color-intent.md#easy-and-advanced)). Pages 3 and 4 are the reference head's own colour controls (see [Direct Color](07-direct-color.md)); paging there changes nothing until you turn one.
 
 You can also access other encoder attribute groups by pressing and holding `[^0]` through `[^9]`. The fastest way however is still the touch buttons.
+
+A valid `AT`, `FixAT`, Release or Aim command, an encoder turn, a Color pick or a preset recall with no applicable fixture selected changes nothing and shows no message: it leaves the Programmer, Undo and the selection as they were. Invalid syntax and a preset or aim target that does not exist are still rejected.
 
 Whenever you changed a value, the selection phase of the command is over and when you now select a group or fixture via either UI or command line, this starts a new selection.
 
@@ -237,6 +239,16 @@ The default after `[AT]` is the intensity value. You however also can set other 
 
 Here you can also increase/ decrease: `<selection> [AT][^2] [+] 10 [DIV][+] 0 [DIV][-] 10` adds 10 to red, does not change green and subtracts 10 from blue.
 
+The values follow the first encoder page of each family, in the units that encoder shows:
+
+| Key    | Command line | Values, in encoder order |
+| ---    | ---          | ---                      |
+| `[^2]` | `COLOR`      | Red, Green, Blue, White Blend in percent |
+| `[^3]` | `POSITION`   | Pan, Tilt in degrees |
+| `[^7]` | `FOCUS`      | Focus in percent, Zoom in degrees |
+
+For example, `1 [AT][^3] 45 [DIV] 30 [ENT]` displays `#> F1 AT POSITION 45 DIV 30` and points fixture 1 to Pan 45° and Tilt 30°. Two `[DIV]` in a row show as `OFFSET`; after a family key they still separate two values, so `[AT][^2] [DIV][DIV] 100` displays `AT COLOR OFFSET 100` and sets blue. A leading `[-]` subtracts, so enter a negative angle with two minus keys: `[AT][^3] [-][-] 90` sets Pan to -90°. The value is the same Programmer edit an encoder makes: Position values are Angles, Color values are Color Intent, and a first Pan or Tilt value on a Target takes over the pose you were shown. A fixture without that family, or a Zoom without a declared beam or field convention, is left unchanged, as on the encoders. A live Group stores the value as its own, and in Preload the value goes into the pending Preload.
+
 ### Value Ranges
 
 If you want to spread values across multiple selected fixtures, you can use the `[THRU]` keyword: `<selection> [AT] 10 [THRU] 40` sets the first fixture in the selection to 10% and the last to 40% and the fixtures in between to levels between. You can also chain multiple `THRU` blocks, e.g. `<selection> [AT] 10 [THRU] 100 [THRU] 10`. This sets the outermost selected fixtures to 10% and the innermost to 100%.
@@ -244,7 +256,7 @@ If you want to spread values across multiple selected fixtures, you can use the 
 
 What's important is that every value you provide in a spread range always is taken by at least one lamp. This means that you cannot provide more values than lamps.
 
-You can also use spread ranges for other values, e.g. `<selection>[AT][^2] 100 [DIV] 0 [DIV] 0 [THRU] 0 [DIV] 100 [DIV] 0`. This lets the lamps range from red via yellow to green.
+You can also use spread ranges for other values, e.g. `<selection>[AT][^2] 100 [DIV] 0 [DIV] 0 [THRU] 0 [DIV] 100 [DIV] 0`. This lets the lamps range from red via yellow to green. Each `[THRU]` point gives the same values in the same order. A value left empty in every point stays unchanged; a value given in one point must be given in all of them, and a spread takes absolute values only, never `[+]` or `[-]`.
 
 ### Releasing Values
 
@@ -263,7 +275,7 @@ Now that we have created a look, we might want to be able to recall this look la
 
 There are two different types of presets:
 - "All Presets" store all attribute types that are currently in the programmer. This can be used to store full looks.
-- "Attribute Group Presets" (e.g. a Color Preset or Intensity Preset) only store attributes of the given attribute group. That means that e.g. a color preset only stores color values, but never intensity values.
+- "Attribute Group Presets" (e.g. a Color Preset or Intensity Preset) only store attributes of the given attribute group. That means that e.g. a color preset only stores color values, but never intensity values. A color preset stores either a Color Intent or a Direct recipe, exactly as programmed (see [Direct Color](07-direct-color.md)).
 
 After you have set the fixtures onto the values you want to store, you can record your preset with `[REC]` and then touching a preset tile in one of the preset pools. Alternatively you can use `[REC][^2] 22` for e.g. storing the color preset 22. When the preset is already recorded, the touch version asks you if you want to overwrite the existing preset, while the command line version directly overwrites it. If you wan to merge/ append, use `[REC][+][^2] 22` this adds.
 
@@ -517,11 +529,11 @@ The full Dynamic editor, target ordering, phases, lanes, speed behavior, and the
 
 ## Freezing Fixtures and Fixture Attributes
 
-Freeze captures the resolved output of a fixture or attribute family and keeps it unchanged while later programmer, Cue, Dynamic, direct-control, Group Master, Grand Master, and Blackout values change underneath it.
+Freeze captures the parameters of a fixture or attribute family as the lamp has them, before they are calculated to DMX, and keeps them unchanged while later programmer, Cue, Dynamic, direct-control, Group Master, Grand Master, and Blackout values change underneath it. Masters work on parameters and never change a frozen one, in a full or a partial Freeze. A parameter that is not frozen still follows them: with only Color frozen, a Cue master, Group Master, Grand Master and Blackout still dim the fixture through its unfrozen Intensity. A lamp without a dimmer channel (virtual dimmer) follows the masters through its colour emitters.
 
 Press `[^CLR]`, enter a Fixture or Group selection, and press `[ENT]` to apply a full Freeze. A Group resolves to its current fixtures; Freeze is stored on those targets, not on the Group object. Removing Freeze immediately reveals the current underlying state without rewriting it.
 
-Press `[^CLR][^CLR]` to enter **UNFREEZE**, then enter the selection and press `[ENT]`. To Freeze or Unfreeze only specific attribute families, add the corresponding second-layer family keys before `[ENT]`: `[^1]` Intensity, `[^2]` Color, `[^3]` Position, and `[^4]` Beam.
+Press `[^CLR][^CLR]` to enter **UNFREEZE**, then enter the selection and press `[ENT]`. To Freeze or Unfreeze only specific attribute families, add the corresponding second-layer family keys before `[ENT]`: `[^1]` Intensity, `[^2]` Color, `[^3]` Position, and `[^4]` Beam. A multi-head fixture's own Master channels are frozen together with its heads, and Shutter and Strobe belong to Intensity.
 
 The Fixture Sheet marks a full Freeze as `❄ FREEZE`. A partial Freeze shows the same marker together with its frozen family names. `[UND]` restores the state from before the most recent Freeze or Unfreeze action; Freeze has no separate Redo action.
 

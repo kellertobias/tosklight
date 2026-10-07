@@ -1,3 +1,5 @@
+import {GeometryPhysicalContractEditor} from "./geometryPhysicalContract";
+import {PositionPhysicalBindings} from "./positionPhysicalBindings";
 import type {
 	AttributeDescriptor,
 	FixtureMode,
@@ -200,6 +202,8 @@ export function ModeEditor({
 						)}
 						{modeTab === "emitters" && (
 							<div className="fixture-mode-geometry-bindings">
+                                {editedMode.geometry.nodes.length>0&&<GeometryPhysicalContractEditor geometry={editedMode.geometry} onChange={geometry=>onChange({...editedMode,geometry})}/>}
+                                <PositionPhysicalBindings mode={editedMode} geometry={editedMode.geometry.nodes.length?editedMode.geometry:geometry} onChange={onChange}/>
 								<EmitterBindings
 									mode={editedMode}
 									geometry={geometry}

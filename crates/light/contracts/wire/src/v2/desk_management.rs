@@ -109,6 +109,10 @@ pub struct ConfigurationPatch {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub pool_presentation: Option<PoolPresentationConfiguration>,
+    /// Per-desk Easy/Advanced Color encoder presentation; never stored in a show.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub color_presentation: Option<super::family_encoders::ColorEncoderPresentation>,
     #[serde(default)]
     #[ts(optional = nullable)]
     pub file_manager_system_picker_fallback: Option<bool>,

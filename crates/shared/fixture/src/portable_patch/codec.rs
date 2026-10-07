@@ -244,11 +244,19 @@ fn validate_record_body(
     if representation == RecordRepresentation::LegacyInline {
         let fixture =
             serde_json::from_value::<PatchedFixture>(body.clone()).map_err(invalid_record)?;
+        crate::validate_position_calibration(fixture.position_calibration.as_ref())
+            .map_err(PortablePatchError::InvalidRecord)?;
+        crate::validate_color_calibration(fixture.color_calibration.as_ref())
+            .map_err(PortablePatchError::InvalidRecord)?;
         fixture
             .installed_appearance
             .validate()
             .map_err(PortablePatchError::InvalidRecord)?;
         for instance in &fixture.multipatch {
+            crate::validate_position_calibration(instance.position_calibration.as_ref())
+                .map_err(PortablePatchError::InvalidRecord)?;
+            crate::validate_color_calibration(instance.color_calibration.as_ref())
+                .map_err(PortablePatchError::InvalidRecord)?;
             instance
                 .installed_appearance
                 .validate()
@@ -264,11 +272,19 @@ fn validate_record_body(
         }
         let patch =
             serde_json::from_value::<PatchedFixturePatch>(body.clone()).map_err(invalid_record)?;
+        crate::validate_position_calibration(patch.position_calibration.as_ref())
+            .map_err(PortablePatchError::InvalidRecord)?;
+        crate::validate_color_calibration(patch.color_calibration.as_ref())
+            .map_err(PortablePatchError::InvalidRecord)?;
         patch
             .installed_appearance
             .validate()
             .map_err(PortablePatchError::InvalidRecord)?;
         for instance in &patch.multipatch {
+            crate::validate_position_calibration(instance.position_calibration.as_ref())
+                .map_err(PortablePatchError::InvalidRecord)?;
+            crate::validate_color_calibration(instance.color_calibration.as_ref())
+                .map_err(PortablePatchError::InvalidRecord)?;
             instance
                 .installed_appearance
                 .validate()

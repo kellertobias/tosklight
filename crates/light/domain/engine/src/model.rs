@@ -14,6 +14,15 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EngineSnapshot {
+    /// Cold-compiled original source revisions retained by this show, including profiles no
+    /// longer patched. Runtime caches never cross JSON; deserialization requires preparation
+    /// from the portable document before native source resolution is available.
+    #[serde(skip)]
+    pub native_color_sources: Arc<crate::NativeColorSourceCatalog>,
+    /// Portable content absent from the runtime projection (notably presets) may still require
+    /// the semantic contract. The compiler derives this value; it is not a profile schema marker.
+    #[serde(default)]
+    pub required_programming_contract: u16,
     pub fixtures: Arc<Vec<PatchedFixture>>,
     pub cue_lists: Arc<Vec<CueList>>,
     #[serde(default)]
@@ -33,6 +42,45 @@ pub struct EngineSnapshot {
 }
 
 impl EngineSnapshot {
+    pub fn required_programming_contract(&self) -> u16 {
+        self.changed_programming_contract(None)
+    }
+
+    /// Only changed immutable projections need rescanning at an activation boundary.
+    pub(crate) fn changed_programming_contract(&self, previous: Option<&Self>) -> u16 {
+        let cue_lists = if previous.is_some_and(|p| Arc::ptr_eq(&self.cue_lists, &p.cue_lists)) {
+            &[][..]
+        } else {
+            self.cue_lists.as_slice()
+        };
+        let groups = if previous.is_some_and(|p| Arc::ptr_eq(&self.groups, &p.groups)) {
+            &[][..]
+        } else {
+            self.groups.as_slice()
+        };
+        let dynamics = if previous.is_some_and(|p| Arc::ptr_eq(&self.dynamics, &p.dynamics)) {
+            &[][..]
+        } else {
+            self.dynamics.as_slice()
+        };
+        cue_lists
+            .iter()
+            .map(CueList::required_programming_contract)
+            .chain(
+                groups
+                    .iter()
+                    .flat_map(|g| g.programming.values())
+                    .map(AttributeValue::required_programming_contract),
+            )
+            .chain([self.required_programming_contract])
+            .chain(
+                dynamics
+                    .iter()
+                    .map(DynamicDefinition::required_programming_contract),
+            )
+            .max()
+            .unwrap_or(0)
+    }
     pub fn validate(&self) -> Result<(), EngineError> {
         self.validate_changed(None)
     }
@@ -208,6 +256,21 @@ impl Default for RenderOptions {
 /// lets go, so it is handed on rather than copied.
 #[derive(Debug)]
 pub struct RenderResult {
+    /// The immutable show projection from which this entire output frame was resolved.
+    pub source_snapshot: Arc<EngineSnapshot>,
+    /// Receiver inputs retained with the output they produced; never joined from a later GET.
+    pub tracking: Arc<crate::TrackedInputFrame>,
+    /// Runtime generation identity, independent of dense slot numbering or show revision.
+    pub generation: u64,
+    /// The single clock sample used for semantic resolution of this frame.
+    pub sampled_at: chrono::DateTime<chrono::Utc>,
+    /// Point poses resolved from the same generation and semantic values as the DMX output.
+    pub points: Arc<crate::Pooled<Vec<crate::ResolvedPointPose>>>,
+    /// Root/copy body transforms carried by those exact final Point poses, in desk world axes.
+    /// Physical lens predictions remain profile-local and retain their installation calibration.
+    pub mounts: Arc<crate::Pooled<crate::FixtureMountFrame>>,
+    /// Physical predictions for each root/copy from this exact output frame, including UV and uncertainty.
+    pub physical: Arc<crate::Pooled<crate::PhysicalForwardFrame>>,
     /// Borrowed from the engine and returned when the last reader lets go, so publishing a frame's
     /// output costs no allocation.
     pub universes: crate::Pooled<HashMap<Universe, DmxFrame>>,
@@ -270,6 +333,9 @@ pub struct MoveInBlackDiagnostic {
 
 #[derive(Debug, Error)]
 pub enum EngineError {
+    /// An expected concurrent runtime reset; scheduler retains the previous frame and retries.
+    #[error("prepared output frame was superseded")]
+    StalePreparedFrame,
     #[error("snapshot validation failed: {0}")]
     Invalid(String),
     #[error(transparent)]

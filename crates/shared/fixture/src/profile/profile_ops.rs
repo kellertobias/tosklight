@@ -25,6 +25,7 @@ impl FixtureProfile {
             photograph_asset: None,
             stage_icon_asset: None,
             model_asset: None,
+            source_gdtf: None,
             body_model: None,
             // Geometry belongs to the fixture, so a new profile starts with it here.
             geometry: GeometryGraph::template(GeometryTemplate::Fixed, &[head_id]),
@@ -55,6 +56,8 @@ impl FixtureProfile {
                 }],
                 channels: Vec::new(),
                 color_systems: Vec::new(),
+                color_physical: None,
+                position_physical: None,
                 control_actions: Vec::new(),
                 emitter_heads: Vec::new(),
                 motion_attributes: Vec::new(),

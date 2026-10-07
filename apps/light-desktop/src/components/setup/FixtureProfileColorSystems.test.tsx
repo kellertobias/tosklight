@@ -295,7 +295,7 @@ describe("per-head color systems", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Copy to other heads" }),
 		);
-		const sections = document.querySelectorAll(".fixture-color-editor > section");
+		const sections = document.querySelectorAll(".fixture-color-editor > section:not(.fixture-color-physical)");
 		expect(sections).toHaveLength(3);
 		const second = within(sections[2] as HTMLElement);
 		expect(second.getAllByLabelText("Emitter name")).toHaveLength(3);

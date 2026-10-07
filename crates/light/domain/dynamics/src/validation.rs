@@ -9,8 +9,10 @@ pub enum DynamicValidationError {
     PoolNumber,
     #[error("Dynamic revision must be positive")]
     Revision,
-    #[error("Dynamic needs at least one scalar lane")]
+    #[error("Dynamic needs at least one lane")]
     Empty,
+    #[error("typed Dynamic configuration is invalid: {0}")]
+    Programming(String),
     #[error("Dynamic lane IDs and Random group IDs must be unique")]
     DuplicateIdentity,
     #[error("attribute {0} is not a known recordable continuous scalar")]
@@ -46,30 +48,24 @@ pub fn aliasing_warning(
         .lanes
         .iter()
         .filter_map(|lane| {
-            let fraction = match lane.mode {
-                DynamicLaneMode::Keyframes => lane
-                    .keyframes
-                    .points
-                    .windows(2)
-                    .map(|pair| pair[1].position - pair[0].position)
-                    .chain(
-                        lane.keyframes
-                            .points
-                            .last()
-                            .map(|point| 1.0 - point.position),
-                    )
-                    .filter(|fraction| *fraction > 0.0)
-                    .reduce(f32::min),
-                DynamicLaneMode::MaxMin => shortest_pwm_segment(lane.max_min.pwm),
-                DynamicLaneMode::MiddleAmplitude => shortest_pwm_segment(lane.middle_amplitude.pwm),
-                DynamicLaneMode::Random => definition
-                    .random_groups
-                    .iter()
-                    .find(|group| Some(group.id) == lane.random_group_id)
-                    .map(|group| {
-                        group.decision_interval_millis as f32 / effective_cycle_millis.max(1) as f32
-                    }),
-            }?;
+            let fraction = match &lane.body {
+                DynamicLaneBody::LegacyScalar(body) => legacy_shortest_fraction(body),
+                DynamicLaneBody::Programming(body) => programming_shortest_fraction(body),
+            }
+            .or_else(|| {
+                (lane.mode() == DynamicLaneMode::Random)
+                    .then(|| {
+                        definition
+                            .random_groups
+                            .iter()
+                            .find(|group| Some(group.id) == lane.random_group_id)
+                            .map(|group| {
+                                group.decision_interval_millis as f32
+                                    / effective_cycle_millis.max(1) as f32
+                            })
+                    })
+                    .flatten()
+            })?;
             let lane_speed = lane.speed_multiplier.factor().max(f64::EPSILON);
             Some(
                 (effective_cycle_millis as f64 * f64::from(fraction) / lane_speed)
@@ -84,6 +80,42 @@ pub fn aliasing_warning(
         output_interval_millis,
         samples_per_segment: samples,
     })
+}
+
+fn legacy_shortest_fraction(lane: &LegacyScalarLaneBody) -> Option<f32> {
+    match lane.mode {
+        DynamicLaneMode::Keyframes => lane
+            .keyframes
+            .points
+            .windows(2)
+            .map(|pair| pair[1].position - pair[0].position)
+            .chain(
+                lane.keyframes
+                    .points
+                    .last()
+                    .map(|point| 1.0 - point.position),
+            )
+            .filter(|fraction| *fraction > 0.0)
+            .reduce(f32::min),
+        DynamicLaneMode::MaxMin => shortest_pwm_segment(lane.max_min.pwm),
+        DynamicLaneMode::MiddleAmplitude => shortest_pwm_segment(lane.middle_amplitude.pwm),
+        DynamicLaneMode::Random => None,
+    }
+}
+
+fn programming_shortest_fraction(lane: &ProgrammingLaneBody) -> Option<f32> {
+    match &lane.configuration {
+        ProgrammingLaneConfiguration::Keyframes(config) => config
+            .points
+            .windows(2)
+            .map(|pair| pair[1].position - pair[0].position)
+            .chain(config.points.last().map(|point| 1.0 - point.position))
+            .filter(|fraction| *fraction > 0.0)
+            .reduce(f32::min),
+        ProgrammingLaneConfiguration::MaxMin(config) => shortest_pwm_segment(config.pwm),
+        ProgrammingLaneConfiguration::MiddleAmplitude(config) => shortest_pwm_segment(config.pwm),
+        ProgrammingLaneConfiguration::Random => None,
+    }
 }
 
 fn shortest_pwm_segment(shape: PwmShape) -> Option<f32> {
@@ -136,6 +168,39 @@ pub fn validate_definition(definition: &DynamicDefinition) -> Result<(), Dynamic
         }
         validate_lane(lane, &random_ids)?;
     }
+    validate_dynamic_value_addresses(definition.lanes.iter().filter_map(|lane| match &lane.body {
+        DynamicLaneBody::Programming(body) => Some(&body.address),
+        _ => None,
+    }))
+    .map_err(|e| DynamicValidationError::Programming(e.to_string()))?;
+    definition.validate_angle_pair()?;
+    let owners = definition
+        .lanes
+        .iter()
+        .filter_map(|lane| match &lane.body {
+            DynamicLaneBody::Programming(body) => Some(body.address.owner()),
+            _ => None,
+        })
+        .collect::<HashSet<_>>();
+    if definition
+        .lanes
+        .iter()
+        .filter_map(DynamicLane::legacy)
+        .any(|lane| {
+            owners.iter().any(|owner| {
+                lane.attribute == owner.key()
+                    || light_core::programming::independent_programming_component(
+                        &lane.attribute,
+                        *owner,
+                    )
+            })
+        })
+    {
+        return Err(DynamicValidationError::Programming(
+            "a Dynamic cannot mix typed and independent scalar writers for the same family".into(),
+        ));
+    }
+    crate::lane::validate_random_members(definition)?;
     if !valid_phase(&definition.phase)
         || definition
             .lanes
@@ -169,15 +234,29 @@ fn validate_lane(
     lane: &DynamicLane,
     random_ids: &HashSet<uuid::Uuid>,
 ) -> Result<(), DynamicValidationError> {
+    if !valid_rational(lane.speed_multiplier) || !lane.width.is_finite() || lane.width < 0.0 {
+        return Err(DynamicValidationError::Lane("numeric bounds"));
+    }
+    if lane.mode() == DynamicLaneMode::Random
+        && lane
+            .random_group_id
+            .is_none_or(|id| !random_ids.contains(&id))
+    {
+        return Err(DynamicValidationError::Random);
+    }
+    match &lane.body {
+        DynamicLaneBody::LegacyScalar(body) => validate_legacy_lane(body),
+        DynamicLaneBody::Programming(body) => body.validate(),
+    }
+}
+
+fn validate_legacy_lane(lane: &LegacyScalarLaneBody) -> Result<(), DynamicValidationError> {
     if !attribute_descriptor(&lane.attribute).supports_dynamics() {
         return Err(DynamicValidationError::UnsupportedAttribute(
             lane.attribute.0.to_string(),
         ));
     }
-    if !valid_rational(lane.speed_multiplier)
-        || !lane.width.is_finite()
-        || lane.width < 0.0
-        || !valid_size(lane.keyframes.size)
+    if !valid_size(lane.keyframes.size)
         || !valid_size(lane.max_min.size)
         || !valid_size(lane.middle_amplitude.size)
         || !lane.middle_amplitude.amplitude.is_finite()
@@ -185,19 +264,7 @@ fn validate_lane(
     {
         return Err(DynamicValidationError::Lane("numeric bounds"));
     }
-    if lane.keyframes.points.len() < 2
-        || lane.keyframes.points.first().map(|point| point.position) != Some(0.0)
-        || lane
-            .keyframes
-            .points
-            .windows(2)
-            .any(|pair| pair[0].position >= pair[1].position)
-        || lane
-            .keyframes
-            .points
-            .last()
-            .is_none_or(|point| point.position >= 1.0)
-    {
+    if !valid_keyframes(&lane.keyframes) {
         return Err(DynamicValidationError::Lane("keyframe positions"));
     }
     for source in lane_sources(lane) {
@@ -205,17 +272,23 @@ fn validate_lane(
     }
     validate_pwm(lane.max_min.pwm)?;
     validate_pwm(lane.middle_amplitude.pwm)?;
-    if lane.mode == DynamicLaneMode::Random
-        && lane
-            .random_group_id
-            .is_none_or(|id| !random_ids.contains(&id))
-    {
-        return Err(DynamicValidationError::Random);
-    }
     Ok(())
 }
 
-fn lane_sources(lane: &DynamicLane) -> impl Iterator<Item = &ScalarSource> {
+pub(crate) fn valid_keyframes<S>(config: &KeyframeConfiguration<S>) -> bool {
+    config.points.len() >= 2
+        && config.points.first().map(|p| p.position) == Some(0.0)
+        && config
+            .points
+            .iter()
+            .all(|p| p.position.is_finite() && (0.0..1.0).contains(&p.position))
+        && config
+            .points
+            .windows(2)
+            .all(|pair| pair[0].position < pair[1].position)
+}
+
+fn lane_sources(lane: &LegacyScalarLaneBody) -> impl Iterator<Item = &ScalarSource> {
     lane.keyframes
         .points
         .iter()
@@ -224,7 +297,7 @@ fn lane_sources(lane: &DynamicLane) -> impl Iterator<Item = &ScalarSource> {
         .chain([&lane.middle_amplitude.middle])
 }
 
-fn validate_source(
+pub(crate) fn validate_source(
     source: &ScalarSource,
     lane_attribute: &light_core::AttributeKey,
 ) -> Result<(), DynamicValidationError> {
@@ -263,7 +336,7 @@ fn validate_random(group: &DynamicRandomGroup) -> Result<(), DynamicValidationEr
     Ok(())
 }
 
-fn validate_pwm(shape: PwmShape) -> Result<(), DynamicValidationError> {
+pub(crate) fn validate_pwm(shape: PwmShape) -> Result<(), DynamicValidationError> {
     let values = [shape.attack, shape.on, shape.decay, shape.off];
     if values
         .iter()
@@ -291,6 +364,6 @@ fn valid_rational(value: Rational) -> bool {
     value.numerator > 0 && value.denominator > 0
 }
 
-fn valid_size(value: f32) -> bool {
+pub(crate) fn valid_size(value: f32) -> bool {
     value.is_finite() && value >= 0.0
 }

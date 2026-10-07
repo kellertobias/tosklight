@@ -1,3 +1,4 @@
+import type { OutputReadoutSnapshot } from "../../api/familyEncoderModels";
 import type { VisualizationSnapshot } from "../../api/types";
 import { frontendPerformanceDiagnostics } from "../frontendWarmup/diagnostics";
 import type {
@@ -18,6 +19,7 @@ interface LaneRuntime {
 			intervalMillis: number;
 			consumerId: string;
 			includeDynamicStack: boolean;
+			completeValues: boolean;
 		}
 	>;
 	generation: number;
@@ -47,6 +49,9 @@ export class VisualizationRuntimeSession {
 	private lifecycle = 0;
 	private stopped = false;
 	private stream: VisualizationRuntimeStream | null = null;
+	private readonly readoutClaims = new ReadoutClaims((fixtureIds) =>
+		this.stream?.updateReadoutClaim?.(fixtureIds),
+	);
 
 	constructor(options: VisualizationRuntimeSessionOptions) {
 		this.scope = options.scope;
@@ -60,6 +65,7 @@ export class VisualizationRuntimeSession {
 		intervalMillis: number,
 		consumerId = "anonymous",
 		includeDynamicStack = false,
+		completeValues = false,
 	) {
 		assertInterval(intervalMillis);
 		if (this.stopped || !this.store.matchesScope(this.scope)) return () => {};
@@ -70,6 +76,7 @@ export class VisualizationRuntimeSession {
 			intervalMillis,
 			consumerId,
 			includeDynamicStack,
+			completeValues,
 		});
 		this.recordClaims();
 		if (first) {
@@ -87,6 +94,28 @@ export class VisualizationRuntimeSession {
 			if (!active) return;
 			active = false;
 			this.release(lane, claimId);
+		};
+	}
+
+	/**
+	 * TL-594: claims stream readouts of `fixtureIds` for one consumer. The Normal lane is claimed
+	 * with it (the server answers readouts with Normal lane publications). Claims of all consumers
+	 * are merged, bounded to {@link MAX_READOUT_CLAIM} owners, and released on return.
+	 */
+	claimReadouts(
+		fixtureIds: readonly string[],
+		listener: (snapshot: OutputReadoutSnapshot) => void,
+		consumerId = "readouts",
+	): (() => void) | null {
+		// Without a stream there is nothing to claim; the caller reads over HTTP instead.
+		if (this.stopped || !this.transport.openStream) return null;
+		const releaseLane = this.activate("normal", 400, consumerId);
+		const releaseClaim = this.readoutClaims.add(fixtureIds, listener);
+		this.readoutClaims.publish();
+		return () => {
+			releaseClaim();
+			this.readoutClaims.publish();
+			releaseLane();
 		};
 	}
 
@@ -214,7 +243,7 @@ export class VisualizationRuntimeSession {
 			(lane) => this.lanes[lane].claims.size > 0,
 		);
 		if (!claimedLanes.length) {
-			this.stream?.updateClaims([], 10, false);
+			this.stream?.updateClaims([], 10, false, false);
 			this.stream?.close();
 			this.stream = null;
 			return;
@@ -231,6 +260,10 @@ export class VisualizationRuntimeSession {
 					this.store.installStreamed(lane, snapshot, this.store.captureScope());
 					this.onError?.(null);
 				},
+				readouts: (snapshot) => {
+					if (this.stopped || !this.store.matchesScope(this.scope)) return;
+					this.readoutClaims.deliver(snapshot);
+				},
 				error: (error) => {
 					for (const lane of lanes()) {
 						if (this.lanes[lane].claims.size)
@@ -246,14 +279,16 @@ export class VisualizationRuntimeSession {
 				),
 			]),
 		);
+		this.readoutClaims.publish(true);
+		const claimed = (detail: "includeDynamicStack" | "completeValues") =>
+			claimedLanes.some((lane) =>
+				[...this.lanes[lane].claims.values()].some((claim) => claim[detail]),
+			);
 		this.stream?.updateClaims(
 			claimedLanes,
 			Math.max(1, Math.min(10, Math.ceil(1_000 / fastest))),
-			claimedLanes.some((lane) =>
-				[...this.lanes[lane].claims.values()].some(
-					(claim) => claim.includeDynamicStack,
-				),
-			),
+			claimed("includeDynamicStack"),
+			claimed("completeValues"),
 		);
 	}
 
@@ -264,6 +299,64 @@ export class VisualizationRuntimeSession {
 			owners("normal"),
 			owners("preload"),
 		);
+	}
+}
+
+/** Owners per stream readout claim; matches the server's bound. */
+export const MAX_READOUT_CLAIM = 512;
+
+/** Merged, bounded readout claims of every consumer of one session. */
+class ReadoutClaims {
+	private readonly claims = new Map<
+		number,
+		{
+			fixtureIds: readonly string[];
+			listener: (snapshot: OutputReadoutSnapshot) => void;
+		}
+	>();
+	private nextId = 0;
+	private published: string | null = null;
+
+	constructor(
+		private readonly send: (fixtureIds: readonly string[] | null) => void,
+	) {}
+
+	add(
+		fixtureIds: readonly string[],
+		listener: (snapshot: OutputReadoutSnapshot) => void,
+	) {
+		const id = ++this.nextId;
+		this.claims.set(id, { fixtureIds, listener });
+		return () => {
+			this.claims.delete(id);
+		};
+	}
+
+	/** Union in first-claim order, deduplicated and bounded. */
+	merged() {
+		const merged: string[] = [];
+		const seen = new Set<string>();
+		for (const { fixtureIds } of this.claims.values())
+			for (const id of fixtureIds) {
+				if (merged.length >= MAX_READOUT_CLAIM) return merged;
+				if (seen.has(id)) continue;
+				seen.add(id);
+				merged.push(id);
+			}
+		return merged;
+	}
+
+	/** Sends the merged claim when it changed (or always, for a fresh stream). */
+	publish(force = false) {
+		const merged = this.merged();
+		const key = merged.join(",");
+		if (!force && key === this.published) return;
+		this.published = key;
+		this.send(merged.length ? merged : null);
+	}
+
+	deliver(snapshot: OutputReadoutSnapshot) {
+		for (const { listener } of this.claims.values()) listener(snapshot);
 	}
 }
 

@@ -240,10 +240,12 @@ mod tests {
     #[test]
     fn output_resource_operates_without_the_server_state_bag() {
         let events = EventBus::default();
+        let engine = Arc::new(Engine::new(ProgrammerRegistry::default()));
+        let dynamic_snapshot = Arc::new(DynamicSnapshotPublication::new(engine.snapshot()));
         let output = OutputResource::new(
             OutputRuntimeService::new(events.clone()),
             SpeedGroupService::new(events),
-            Arc::new(Engine::new(ProgrammerRegistry::default())),
+            engine,
             Arc::new(std::sync::Mutex::new(OutputHealth::default())),
             Arc::new(AtomicU16::new(44)),
             OutputControlCapability::new(Arc::new(Mutex::new(OutputControl::default()))),
@@ -262,6 +264,10 @@ mod tests {
                 .unwrap()
             }))),
             Arc::new(Mutex::new(light_dynamics::DynamicRuntime::default())),
+            dynamic_snapshot,
+            Arc::new(arc_swap::ArcSwap::from_pointee(
+                crate::runtime::dynamic_source_origins::DynamicSourceOrigins::default(),
+            )),
             Arc::new(Mutex::new(Vec::new())),
             Arc::new(super::visualization_frame::VisualizationFrameHub::default()),
         );
@@ -390,6 +396,94 @@ mod tests {
                 .command_line,
             "FIXTURE 1"
         );
+    }
+
+    #[test]
+    fn staged_family_service_owns_only_staged_state_and_does_not_publish_before_commit() {
+        use light_application::*;
+        use light_core::{AttributeValue, FixtureId};
+        struct Ports(FixtureId);
+        impl ProgrammingPorts for Ports {
+            fn execute(
+                &self,
+                _: &ProgrammerRegistry,
+                _: &ActionContext,
+                _: &str,
+                _: ExecutionPolicy,
+            ) -> ProgrammingExecution {
+                panic!("typed values")
+            }
+            fn values_environment(
+                &self,
+                _: &ActionContext,
+            ) -> Result<ProgrammingValuesEnvironment, ActionError> {
+                Ok(ProgrammingValuesEnvironment {
+                    fixture_ids: [self.0].into_iter().collect(),
+                    ..Default::default()
+                })
+            }
+            fn persist(&self, _: &ActionContext, _: &'static str) -> Option<String> {
+                None
+            }
+            fn reconcile(&self, _: &ActionContext, _: ProgrammingReconciliation) {}
+            fn commit_preload(&self, _: &ActionContext) -> Result<Option<String>, String> {
+                Ok(None)
+            }
+        }
+        let registry = ProgrammerRegistry::default();
+        let events = EventBus::default();
+        let service = ProgrammingService::new(
+            registry.clone(),
+            events.clone(),
+            Arc::new(HighlightRegistry::default()),
+        );
+        let resource = ProgrammingResource::new(registry, service);
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        resource.start(session);
+        let action = ActionEnvelope {
+            context: ActionContext::operator(Uuid::new_v4(), session.0, ActionSource::Http)
+                .with_request_id("staged-family")
+                .with_expected_revision(0),
+            command: ProgrammingValuesRequest {
+                expected_capture_mode_revision: 0,
+                command: ProgrammingValuesCommand::SetFixture {
+                    fixture_id: fixture,
+                    attribute: light_core::programming::ProgrammingOwner::Position.key(),
+                    value: AttributeValue::Position(Arc::new(
+                        light_core::programming::PositionIntent::angles(450.0, 20.0),
+                    )),
+                    timing: Default::default(),
+                },
+            },
+        };
+        for commit in [false, true] {
+            let result = resource.with_staged_command(session, |staged| {
+                staged
+                    .handle_values(action.clone(), &Ports(fixture))
+                    .unwrap();
+                assert!(
+                    resource.get(session).unwrap().values.is_empty(),
+                    "live state is isolated"
+                );
+                assert_eq!(staged.get(session).unwrap().values.len(), 1);
+                assert_eq!(
+                    events.latest_sequence(),
+                    0,
+                    "only the outer authority may publish the commit"
+                );
+                if commit {
+                    Ok(())
+                } else {
+                    Err("later rejection".to_owned())
+                }
+            });
+            assert_eq!(result.is_ok(), commit);
+            assert_eq!(
+                resource.get(session).unwrap().values.len(),
+                usize::from(commit)
+            );
+        }
     }
 
     #[tokio::test]

@@ -4,11 +4,11 @@ import { expectProgrammer, selectedNumbers } from "./support/catalog";
 test.use({ viewport: { width: 1600, height: 1000 } });
 
 test.describe("docs/testing/23-quiet-no-op-feedback.md", () => {
-	test("NOTICE-001 @ui › Align with nothing selected shows a brief notice instead of a desk error", async ({
+	test("NOTICE-001 @ui › Align with nothing selected stays silent and leaves controls usable", async ({
 		api,
 		desk,
 		page,
-	}) => {
+	}, testInfo) => {
 		await api.executeCommandLine("FIXTURE 999");
 		await expectProgrammer(api, (programmer) =>
 			expect(programmer.selected).toEqual([]),
@@ -19,12 +19,7 @@ test.describe("docs/testing/23-quiet-no-op-feedback.md", () => {
 		const notice = page.getByLabel("Desk notice");
 		await align.click();
 
-		await expect(notice).toHaveText(
-			/No fixtures selected\. Align stays Off; nothing changed\./u,
-		);
-		await expect(
-			page.getByRole("status").filter({ has: notice }),
-		).toHaveAttribute("aria-live", "polite");
+		await expect(notice).toHaveCount(0);
 		await expect(align).toHaveAccessibleName("Align Off");
 		await expect(page.getByText("Desk needs attention")).toHaveCount(0);
 		await expect(page.getByRole("alert", { name: "Desk failure" })).toHaveCount(
@@ -34,14 +29,10 @@ test.describe("docs/testing/23-quiet-no-op-feedback.md", () => {
 		await expectProgrammer(api, (programmer) =>
 			expect(programmer.values).toEqual([]),
 		);
-		// The notice leaves the encoder controls usable and focus where the operator left it.
+		// No notice or modal steals focus, and a repeated no-op stays silent.
 		await expect(align).toBeFocused();
-		await expect(notice).toBeHidden({ timeout: 6_000 });
-
 		await align.click();
-		await expect(notice).toBeVisible();
-		await page.getByRole("button", { name: "Dismiss notice" }).click();
-		await expect(notice).toBeHidden();
+		await expect(notice).toHaveCount(0);
 
 		await api.executeCommandLine("FIXTURE 10 THRU 11");
 		await expect.poll(() => selectedNumbers(api)).toEqual([10, 11]);
@@ -51,5 +42,19 @@ test.describe("docs/testing/23-quiet-no-op-feedback.md", () => {
 		).toBeVisible();
 		await expect(notice).toHaveCount(0);
 		await expect(page.getByText("Desk needs attention")).toHaveCount(0);
+
+		// Another control surface changes the same desk modifier; reconnect hydrates it.
+		await api.alignProgrammerSelection("right");
+		await expect(page.getByRole("button", { name: "Align Right" }).first()).toBeVisible();
+		await page.reload();
+		const right = page.getByRole("button", { name: "Align Right" }).first();
+		await expect(right).toBeVisible();
+		await right.click();
+		const out = page.getByRole("button", { name: "Align Out" }).first();
+		await expect(out).toBeVisible();
+		await page.screenshot({ path: testInfo.outputPath("align-authority.png") });
+		await out.click({ modifiers: ["Shift"] });
+		await expect(page.getByRole("button", { name: "Align Off" }).first()).toBeVisible();
+		await expect(notice).toHaveCount(0);
 	});
 });

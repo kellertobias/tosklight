@@ -16,14 +16,34 @@ impl PlaybackEngine {
     /// Cue-only restoration can deliberately reveal the previous state.
     pub fn active_cue_dynamic_values(&self) -> Vec<ActiveCueDynamicValue> {
         let mut projected = Vec::new();
-        for playback in self.active.values().filter(|playback| playback.enabled) {
+        let sources = self
+            .active
+            .values()
+            .map(|playback| {
+                (
+                    playback,
+                    CueDynamicSourceKey::Normal {
+                        source: playback.sequence_master_source(),
+                    },
+                )
+            })
+            .chain(self.temporary.iter().map(|((_, kind), playback)| {
+                (
+                    playback,
+                    CueDynamicSourceKey::Temporary {
+                        source: playback.sequence_master_source(),
+                        kind: *kind,
+                    },
+                )
+            }));
+        for (playback, source_key) in sources.filter(|(playback, _)| playback.enabled) {
             let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
                 continue;
             };
             let Some(current_index) = current_cue_index(playback, cue_list) else {
                 continue;
             };
-            type DynamicAddress = (FixtureId, AttributeKey, Option<Uuid>);
+            type DynamicAddress = (FixtureId, AttributeKey, light_dynamics::DynamicTrackKey);
             let tracked_capacity = cue_list
                 .cues
                 .iter()
@@ -31,49 +51,79 @@ impl PlaybackEngine {
                 .map(|cue| cue.dynamic_changes.len())
                 .sum();
             let mut tracked = Vec::<
-                Option<(DynamicAddress, light_dynamics::DynamicSemanticValue)>,
+                Option<(DynamicAddress, Uuid, light_dynamics::DynamicSemanticValue)>,
             >::with_capacity(tracked_capacity);
             let mut tracked_indices =
                 HashMap::<DynamicAddress, usize>::with_capacity(tracked_capacity);
+            let mut off_indices = HashMap::<Uuid, DynamicAddress>::new();
             for cue in cue_list.cues.iter().take(current_index + 1) {
                 for change in &cue.dynamic_changes {
-                    let instance_link = match &change.value {
-                        light_dynamics::DynamicSemanticValue::DynamicOn {
-                            instance_link, ..
+                    let key = change.value.track_key();
+                    let address = (change.fixture_id, change.attribute.clone(), key);
+                    if key.lane_id.is_some() {
+                        let off = key
+                            .instance_link
+                            .and_then(|instance| off_indices.remove(&instance));
+                        if let Some(off) = off.and_then(|off| tracked_indices.remove(&off)) {
+                            tracked[off] = None;
                         }
-                        | light_dynamics::DynamicSemanticValue::DynamicOff {
-                            instance_link, ..
-                        } => Some(*instance_link),
-                        light_dynamics::DynamicSemanticValue::Static { .. }
-                        | light_dynamics::DynamicSemanticValue::FixAt { .. }
-                        | light_dynamics::DynamicSemanticValue::Release => None,
-                    };
-                    let address = (change.fixture_id, change.attribute.clone(), instance_link);
-                    if matches!(change.value, light_dynamics::DynamicSemanticValue::Release) {
-                        if let Some(index) = tracked_indices.remove(&address) {
-                            tracked[index] = None;
-                        }
+                    } else if key.instance_link.is_some() {
+                        off_indices
+                            .insert(key.instance_link.expect("instance Off"), address.clone());
+                        tracked_indices.retain(|existing, index| {
+                            let superseded = existing != &address
+                                && existing.2.instance_link == key.instance_link;
+                            if superseded {
+                                tracked[*index] = None;
+                            }
+                            !superseded
+                        });
+                    }
+                    if change.value.is_programming_release() {
+                        tracked_indices.retain(|existing, index| {
+                            let remove = change.value.replaces_address(
+                                change.fixture_id,
+                                &change.attribute,
+                                existing.2,
+                                existing.0,
+                                &existing.1,
+                            );
+                            if remove {
+                                tracked[*index] = None;
+                            }
+                            !remove
+                        });
                     } else if let Some(index) = tracked_indices.get(&address).copied() {
-                        let (_, value) = tracked[index]
+                        let (_, authored_cue_id, value) = tracked[index]
                             .as_mut()
                             .expect("tracked Dynamic address index remains occupied");
+                        *authored_cue_id = cue.id;
                         *value = change.value.clone();
                     } else {
                         let index = tracked.len();
                         tracked_indices.insert(address.clone(), index);
-                        tracked.push(Some((address, change.value.clone())));
+                        tracked.push(Some((address, cue.id, change.value.clone())));
                     }
                 }
             }
             let current_cue = &cue_list.cues[current_index];
             let changed_at_millis =
                 u64::try_from(playback.activated_at.timestamp_millis()).unwrap_or_default();
+            let (sequence_master, snap_sequence_master) = playback.sequence_masters();
             projected.extend(tracked.into_iter().flatten().map(
-                |((fixture_id, attribute, _), value)| ActiveCueDynamicValue {
+                |((fixture_id, attribute, _), authored_cue_id, value)| ActiveCueDynamicValue {
+                    source: playback.sequence_master_source(),
+                    source_key,
+                    output_enabled: !self.playback_source_suppressed(playback),
+                    sequence_master,
+                    snap_sequence_master,
                     playback_number: playback.playback_number,
                     cue_list_id: cue_list.id,
+                    authored_cue_id,
                     current_cue_id: current_cue.id,
                     priority: cue_list.priority,
+                    changed_at: playback.activated_at,
+                    transition_ordinal: playback.transition_ordinal,
                     changed_at_millis,
                     fixture_id,
                     attribute,
@@ -520,15 +570,16 @@ fn move_in_black_values(
         .attributes_for_fixture(fixture_id)
         .filter(|attribute| attribute.attribute().is_position())
         .filter_map(|attribute| {
+            let semantic = attribute.attribute().0.as_ref() == "position";
             let current = attribute
                 .value(current_index, false)
                 .cloned()
-                .unwrap_or(AttributeValue::Normalized(0.0));
+                .or_else(|| (!semantic).then_some(AttributeValue::Normalized(0.0)));
             let target = attribute
                 .value(target_index, false)
                 .cloned()
-                .unwrap_or(AttributeValue::Normalized(0.0));
-            (current != target).then(|| MoveInBlackTargetValue {
+                .or_else(|| (!semantic).then_some(AttributeValue::Normalized(0.0)))?;
+            (current.as_ref() != Some(&target)).then(|| MoveInBlackTargetValue {
                 attribute: attribute.attribute().clone(),
                 current,
                 target,

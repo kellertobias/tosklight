@@ -33,7 +33,9 @@ export interface WindowProps {
 	stage2dSide?: import("../types").Stage2dSide;
 	followPreload?: boolean;
 	cueListTab?: "pool" | "cues";
-	patchView?: "fixtures" | "media";
+	patchView?: import("../types").AppState["patchBuiltInView"];
+	/** A one-shot Show Patch request, such as Create Point from the Point encoder (TL-651). */
+	patchRequest?: import("../types").AppState["patchBuiltInRequest"];
 	presetFamily?: PresetFamily;
 	presetPoolColors?: boolean;
 	poolColumns?: number;

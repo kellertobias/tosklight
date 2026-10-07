@@ -60,6 +60,8 @@ fn grand_master_and_blackout_affect_intensity() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
+            required_programming_contract: 0,
+            native_color_sources: Default::default(),
             fixtures: vec![fixture].into(),
             cue_lists: vec![].into(),
             dynamics: vec![].into(),
@@ -99,7 +101,7 @@ fn grand_master_and_blackout_affect_intensity() {
 }
 
 #[test]
-fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
+fn partial_intensity_freeze_is_not_changed_by_group_grand_master_or_blackout() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
     programmers.start(session);
@@ -108,6 +110,7 @@ fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
         targets: HashMap::from([(
             logical,
             FrozenFixtureTarget {
+                position_native: None,
                 full: false,
                 families: vec![FreezeFamily::Intensity],
                 values: HashMap::from([(
@@ -138,6 +141,8 @@ fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
         })
         .unwrap();
 
+    // Masters never change a frozen parameter (2026-10-05): 0.8 stays 0.8 under a 50 % Group
+    // Master and a 50 % Grand Master.
     assert_eq!(
         engine
             .render(RenderOptions {
@@ -146,7 +151,7 @@ fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
             })
             .unwrap()
             .universes[&1][0],
-        51
+        204
     );
     programmers.set(
         session,
@@ -162,7 +167,74 @@ fn partial_freeze_holds_the_family_before_group_grand_master_and_blackout() {
             })
             .unwrap()
             .universes[&1][0],
-        0
+        204,
+        "Blackout does not change a frozen Intensity either"
+    );
+}
+
+#[test]
+fn held_parameters_show_a_freeze_as_held_and_never_apply_a_master() {
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session);
+    let (unfrozen, logical) = fixture();
+    let mut frozen = unfrozen.clone();
+    frozen.freeze = FixtureFreezeState {
+        targets: HashMap::from([(
+            logical,
+            FrozenFixtureTarget {
+                position_native: None,
+                full: false,
+                families: vec![FreezeFamily::Intensity],
+                values: HashMap::from([(
+                    AttributeKey::intensity(),
+                    AttributeValue::Normalized(0.8),
+                )]),
+            },
+        )]),
+    };
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.1),
+    );
+    let engine = Engine::new(programmers.clone());
+    let install = |fixture: PatchedFixture| {
+        engine
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture].into(),
+                playbacks: vec![group_playback(1, "front", 0.5)].into(),
+                groups: vec![GroupDefinition {
+                    id: "front".into(),
+                    fixtures: vec![logical],
+                    ..Default::default()
+                }]
+                .into(),
+                ..Default::default()
+            })
+            .unwrap();
+    };
+    let intensity =
+        |values: &crate::ResolvedValues| values.get(&(logical, AttributeKey::intensity())).cloned();
+
+    // The Fixture Sheet shows what the lamp holds: the frozen parameter, not the Programmer
+    // value underneath it, which the raw resolution keeps for relative command-line edits.
+    install(frozen);
+    assert_eq!(
+        intensity(&engine.held_parameter_values()),
+        Some(AttributeValue::Normalized(0.8))
+    );
+    assert_eq!(
+        intensity(&engine.resolved_values()),
+        Some(AttributeValue::Normalized(0.1))
+    );
+
+    // Masters are output-only: the 50 % Group Master scales DMX, not the shown parameter.
+    install(unfrozen);
+    assert_eq!(
+        intensity(&engine.held_parameter_values()),
+        Some(AttributeValue::Normalized(0.1))
     );
 }
 
@@ -176,6 +248,7 @@ fn full_freeze_bypasses_every_master_and_resumes_underlying_state_when_removed()
         targets: HashMap::from([(
             logical,
             FrozenFixtureTarget {
+                position_native: None,
                 full: true,
                 families: Vec::new(),
                 values: HashMap::from([(
@@ -590,9 +663,6 @@ fn logical_head_master_does_not_limit_sibling_heads() {
                 snap: false,
                 reacts_to_virtual_intensity: false,
                 virtual_intensity_inverted: false,
-                reacts_to_sequence_master: true,
-                reacts_to_group_master: true,
-                reacts_to_grand_master: true,
                 behavior: ChannelBehavior::Controlled,
                 functions: vec![ChannelFunction::continuous(
                     "intensity",
@@ -639,6 +709,8 @@ fn logical_head_master_does_not_limit_sibling_heads() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -674,4 +746,193 @@ fn logical_head_master_does_not_limit_sibling_heads() {
     let frame = &rendered.universes[&1];
     assert_eq!(frame[0], 102);
     assert_eq!(frame[1], 204);
+}
+
+/// An unprogrammed lamp holds its profile defaults, and the masters act on its level parameters
+/// all the same (2026-10-05): a conventional dimmer and the virtual dimmer of an RGB head whose
+/// emitters Follow it.
+#[test]
+fn masters_scale_the_default_level_of_an_unprogrammed_dimmer_and_virtual_dimmer_head() {
+    fn redefine(fixture: &mut PatchedFixture, edit: impl FnOnce(&mut FixtureProfile)) {
+        let mut profile = fixture
+            .definition
+            .profile_snapshot
+            .as_deref()
+            .unwrap()
+            .clone();
+        let mode = fixture.definition.mode_id.unwrap();
+        edit(&mut profile);
+        fixture.definition = profile.resolved_definition(mode).unwrap();
+    }
+    let (mut dimmer, dimmer_id) = schema_v2_fixture(&[("intensity", false, false)]);
+    redefine(&mut dimmer, |profile| {
+        profile.modes[0].channels[0].default_raw = 204;
+    });
+    let (mut rgb, rgb_id) = schema_v2_fixture(&[
+        ("color.red", false, true),
+        ("color.green", false, true),
+        ("color.blue", false, true),
+    ]);
+    redefine(&mut rgb, |profile| {
+        for channel in &mut profile.modes[0].channels {
+            channel.default_raw = 255;
+        }
+    });
+    rgb.fixture_number = Some(2);
+    rgb.address = Some(10);
+    assert!(
+        rgb.definition.heads[0]
+            .parameters
+            .iter()
+            .any(|parameter| parameter.virtual_dimmer && parameter.attribute.is_intensity()),
+        "the RGB head carries the abstract virtual-dimmer Intensity"
+    );
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![dimmer, rgb].into(),
+            playbacks: vec![test_group_playback_with_master(3, "front", 0.5)].into(),
+            groups: vec![GroupDefinition {
+                id: "front".into(),
+                name: "Front".into(),
+                fixtures: vec![dimmer_id, rgb_id],
+                ..Default::default()
+            }]
+            .into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let near = |actual: u8, expected: u8, what: &str| {
+        assert!(
+            (i16::from(actual) - i16::from(expected)).abs() <= 1,
+            "{what}: DMX {actual}, expected {expected}"
+        );
+    };
+    for (options, dimmer_dmx, rgb_dmx, what) in [
+        (RenderOptions::default(), 102, 128, "Group Master 0.5"),
+        (
+            RenderOptions {
+                grand_master: 0.5,
+                ..Default::default()
+            },
+            51,
+            64,
+            "Group Master 0.5 x Grand Master 0.5",
+        ),
+        (
+            RenderOptions {
+                blackout: true,
+                ..Default::default()
+            },
+            0,
+            0,
+            "Blackout",
+        ),
+    ] {
+        let frame = engine.render(options).unwrap();
+        let universe = &frame.universes[&1];
+        near(universe[0], dimmer_dmx, what);
+        for emitter in 9..12 {
+            near(universe[emitter], rgb_dmx, what);
+        }
+        for owner in [dimmer_id, rgb_id] {
+            let values = &frame.resolved_values;
+            assert!(
+                values
+                    .value(owner, &AttributeKey::intensity())
+                    .is_some_and(|value| value.normalized().is_some()),
+                "{what}: the mastered default is the level parameter"
+            );
+            assert!(
+                values
+                    .contribution_origin(owner, &AttributeKey::intensity())
+                    .is_none(),
+                "{what}: a mastered default has no source"
+            );
+            assert!(
+                values
+                    .changed_at(owner, &AttributeKey::intensity())
+                    .is_none(),
+                "{what}: a mastered default was never changed by anyone"
+            );
+        }
+    }
+}
+
+/// With every master at full an unprogrammed level stays absent: nothing is written.
+#[test]
+fn full_masters_leave_an_unprogrammed_level_absent() {
+    let (mut dimmer, dimmer_id) = schema_v2_fixture(&[("intensity", false, false)]);
+    let mut profile = dimmer
+        .definition
+        .profile_snapshot
+        .as_deref()
+        .unwrap()
+        .clone();
+    profile.modes[0].channels[0].default_raw = 204;
+    dimmer.definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![dimmer].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let frame = engine.render(RenderOptions::default()).unwrap();
+    assert_eq!(frame.universes[&1][0], 204);
+    assert!(
+        frame
+            .resolved_values
+            .value(dimmer_id, &AttributeKey::intensity())
+            .is_none()
+    );
+}
+
+/// A head with an Intensity channel whose default is not full, and a colour channel following its
+/// virtual intensity. Unprogrammed, the virtual intensity is the Intensity default whether the
+/// masters are full (nothing written) or a hair below (the mastered default is written): no jump.
+#[test]
+fn unprogrammed_virtual_intensity_is_continuous_between_full_and_almost_full_masters() {
+    let (mut fixture, _) =
+        schema_v2_fixture(&[("intensity", false, false), ("color.red", false, true)]);
+    let mut profile = fixture
+        .definition
+        .profile_snapshot
+        .as_deref()
+        .unwrap()
+        .clone();
+    profile.modes[0].channels[0].default_raw = 128;
+    profile.modes[0].channels[1].default_raw = 255;
+    fixture.definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let full = engine.render(RenderOptions::default()).unwrap();
+    let almost = engine
+        .render(RenderOptions {
+            grand_master: 0.999,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(full.universes[&1][0], 128);
+    assert!((i16::from(almost.universes[&1][0]) - 128).abs() <= 1);
+    // Red follows the Intensity default (128/255), not a full virtual intensity.
+    assert!(
+        (i16::from(full.universes[&1][1]) - 128).abs() <= 1,
+        "Red at full masters: {}",
+        full.universes[&1][1]
+    );
+    assert!(
+        (i16::from(full.universes[&1][1]) - i16::from(almost.universes[&1][1])).abs() <= 1,
+        "Red jumps from {} to {}",
+        full.universes[&1][1],
+        almost.universes[&1][1]
+    );
 }

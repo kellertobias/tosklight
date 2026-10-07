@@ -71,7 +71,7 @@ Highlight, Group-Master limitation, and patch state. `❄ FREEZE` is a full-outp
 `❄ FREEZE · Intensity · Color` (with the applicable family names) is a partial Freeze. A master row
 shown without its frozen subheads adds `INSIDE` so the state is not hidden by the head filter.
 
-A column only reports attributes the lantern actually carries. A fixture without colour or without Position shows **—** in that column with no colour swatch and no position crosshair, so a frost-only or dimmer-only lantern is never given a preview it cannot honour. Where the lantern does carry the group and nothing drives it, the column shows the profile home value: physical white for colour and centre for absolute Pan and Tilt.
+A column only reports attributes the lantern actually carries. A fixture without colour or without Position shows **—** in that column with no colour swatch and no position crosshair, so a frost-only or dimmer-only lantern is never given a preview it cannot honour. Where the lantern does carry the group and nothing drives it, the column shows the profile home value: physical white for colour and the default pose for Pan and Tilt. Pan and Tilt read in degrees as the pose the fixture is actually commanded to, the same value the Pan and Tilt encoders show; where that pose is not known the column shows **—** rather than a channel percentage.
 
 **Pane configuration:** **Fixture Sheet → Compact mode** has exactly **Off**, **Icon only**, and **Text only**. Off keeps the detailed 43 px presentation. Icon only uses deterministic 32 px rows, retains graphical base/Preload summaries, and removes ordinary value text. Text only uses the same 32 px rows, retains concise semantic base/Preload text, and removes decorative value graphics. Both compact modes narrow the ID column to 64 px and use a shorter 26 px table header; Icon only draws a smaller 20 px intensity meter with 4 px of space above and below it. Both compact modes keep Dynamic identities, source ownership, Group-master/Highlight status, fixture type, selection, and step markers. Configured columns are never dropped at a breakpoint; a small pane scrolls horizontally when the selected set still cannot fit. Each pane, the full built-in, and each fixed external Fixture Sheet persist their own desk-local mode, defaulting to Off without changing portable show data.
 
@@ -171,6 +171,8 @@ does, because a desk has to answer "how bright is this" with the same picture ev
 rig down has to look like taking a rig down, across the whole of the fader rather than the bottom
 of it. The **Exposure** trim is the operator's own multiplier over that.
 
+With fixture labels enabled, **UV** beside a fixture number means native UV drive is active. A small steady triangle means its visible color prediction is estimated or incomplete. These optional marks include every head, including a UV-only head. Stage shows known visible output; it does not replace ultraviolet with purple or simulate fluorescence. The marks do not open messages or interrupt programming.
+
 Stage receives authoritative Live and Preload output from the engine. A disconnected view freezes its last coherent state and reconnects without blocking Programmer, Playback, command handling, or physical output.
 
 ![Stage pane](../../assets/screenshots/panes/stage.png)
@@ -205,7 +207,9 @@ selection, or Shift-click to edit it; use **SET** followed by a Playback to assi
 shows **Lanes**, **Phase**, and **Speed** for attribute curves, target spreading, and BPM/Speed
 Group control. **Take Selection** stores a target (a single Group stays live; other selections are
 frozen); a stored target takes precedence over any active selection. **Clear Selection** removes
-it. Use a Stage pane for Live or Follow Preload visualization.
+it. A Dynamic without a stored target never runs on every fixture by itself: with nothing
+selected, the first tap selects every fixture that can run it (a fixture with a channel one of
+its lanes drives) and starts nothing; the second tap starts it on that selection. Use a Stage pane for Live or Follow Preload visualization.
 
 **Pane configuration:** only common size and removal controls.
 

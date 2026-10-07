@@ -35,6 +35,13 @@ async fn thumbnail_index(
 ) -> Result<Json<wire::CueThumbnailIndex>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
+    // Show recovery: the failed show's Cues do not run, so none of their previews are listed.
+    if state.active_show.in_recovery() {
+        return Ok(Json(wire::CueThumbnailIndex {
+            show_id: show_id.0,
+            entries: Vec::new(),
+        }));
+    }
     let entry = active_entry(&state, show_id)?;
     let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let entries = store.cue_thumbnail_index().map_err(ApiError::store)?;
@@ -67,6 +74,9 @@ async fn cue_thumbnail(
 ) -> Result<Response, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
+    if state.active_show.in_recovery() {
+        return Err(ApiError::not_found("cue preview"));
+    }
     let entry = active_entry(&state, show_id)?;
     let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let stored = store
@@ -100,7 +110,7 @@ async fn update_thumbnails(
 ) -> Result<Json<wire::CueThumbnailUpdateOutcome>, ApiError> {
     let session = authenticate(&state, &headers)?;
     validate_request(&request)?;
-    let show_id = context.resolve(&state)?;
+    let show_id = context.resolve_writable(&state)?;
     let key = ReplayKey {
         session_id: session.id.0,
         show_id: show_id.0,

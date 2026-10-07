@@ -277,6 +277,120 @@ fn snapshot_returns_the_exact_identity_and_pre_read_cursor() {
     assert!(snapshot.projection.blackout);
 }
 
+#[test]
+fn fresh_equal_value_command_reasserts_after_validation_without_applying() {
+    let events = crate::EventBus::new(4);
+    let service = OutputRuntimeService::new(events.clone());
+    let ports = FakePorts::default();
+    let show_id = ports.projection().scope.show_id;
+    let commands = [
+        OutputRuntimeCommand::exact(show_id, 0, level(1.0), None),
+        OutputRuntimeCommand::new(None, Some(false)),
+        OutputRuntimeCommand::new(level(1.0), Some(false)),
+        OutputRuntimeCommand::new(None, None),
+    ];
+    for command in commands {
+        let result = service
+            .handle(envelope(context(ActionSource::Http), command), &ports)
+            .unwrap();
+        assert_eq!(result.outcome, OutputRuntimeOutcome::NoChange);
+        assert_eq!(result.event_sequence, None);
+        assert_eq!(result.projection, ports.projection());
+    }
+    assert_eq!(ports.reasserts(), commands.to_vec());
+    assert_eq!(ports.applies(), 0);
+    assert_eq!(ports.projection().revision, 0);
+    assert_eq!(events.latest_sequence(), 0);
+}
+
+#[test]
+fn replayed_rejected_and_changed_commands_never_reassert() {
+    let events = crate::EventBus::new(4);
+    let service = OutputRuntimeService::new(events.clone());
+    let ports = FakePorts::default();
+    let show_id = ports.projection().scope.show_id;
+    let request_context = context(ActionSource::UserInterface).with_request_id("equal-master");
+    let equal = OutputRuntimeCommand::new(level(1.0), None);
+    service
+        .handle(envelope(request_context.clone(), equal), &ports)
+        .unwrap();
+    assert_eq!(ports.reasserts().len(), 1);
+
+    let replay = service
+        .handle(envelope(request_context.clone(), equal), &ports)
+        .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.outcome, OutputRuntimeOutcome::NoChange);
+    let collision = service
+        .handle(
+            envelope(
+                request_context,
+                OutputRuntimeCommand::new(None, Some(false)),
+            ),
+            &ports,
+        )
+        .unwrap_err();
+    assert_eq!(collision.kind, ActionErrorKind::Conflict);
+    for stale in [
+        OutputRuntimeCommand::exact(show_id, 3, level(1.0), None),
+        OutputRuntimeCommand::exact(Uuid::from_u128(99), 0, level(1.0), None),
+    ] {
+        let error = service
+            .handle(envelope(context(ActionSource::Http), stale), &ports)
+            .unwrap_err();
+        assert_eq!(error.kind, ActionErrorKind::Conflict);
+    }
+    ports.deny(true);
+    let denied = service
+        .handle(envelope(context(ActionSource::Http), equal), &ports)
+        .unwrap_err();
+    assert_eq!(denied.kind, ActionErrorKind::Unauthorized);
+    ports.deny(false);
+    let changed = service
+        .handle(
+            envelope(
+                context(ActionSource::Http),
+                OutputRuntimeCommand::new(level(0.5), Some(false)),
+            ),
+            &ports,
+        )
+        .unwrap();
+    assert_eq!(changed.outcome, OutputRuntimeOutcome::Applied);
+
+    assert_eq!(ports.reasserts().len(), 1);
+    assert_eq!(ports.applies(), 1);
+    assert_eq!(events.latest_sequence(), 1);
+}
+
+#[test]
+fn exhausted_revision_still_reasserts_equal_values_but_rejects_changes() {
+    let events = crate::EventBus::new(4);
+    let service = OutputRuntimeService::new(events.clone());
+    let ports = FakePorts::default();
+    ports.set_revision(u64::MAX);
+    let equal = OutputRuntimeCommand::new(level(1.0), Some(false));
+    let result = service
+        .handle(envelope(context(ActionSource::Http), equal), &ports)
+        .unwrap();
+    assert_eq!(result.outcome, OutputRuntimeOutcome::NoChange);
+    assert_eq!(result.projection.revision, u64::MAX);
+
+    let error = service
+        .handle(
+            envelope(
+                context(ActionSource::Http),
+                OutputRuntimeCommand::new(level(0.5), None),
+            ),
+            &ports,
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Internal);
+    assert_eq!(error.current_revision, Some(u64::MAX));
+    assert_eq!(ports.reasserts(), vec![equal]);
+    assert_eq!(ports.applies(), 0);
+    assert_eq!(events.latest_sequence(), 0);
+}
+
 fn context(source: ActionSource) -> ActionContext {
     ActionContext::system(Uuid::from_u128(1), source)
 }
@@ -297,6 +411,8 @@ struct FakePorts {
     applies: Mutex<usize>,
     application: Mutex<OutputRuntimeApplication>,
     malformation: Mutex<Option<AppliedMalformation>>,
+    reasserts: Mutex<Vec<OutputRuntimeCommand>>,
+    denied: Mutex<bool>,
 }
 
 impl Default for FakePorts {
@@ -314,6 +430,8 @@ impl Default for FakePorts {
             applies: Mutex::new(0),
             application: Mutex::new(OutputRuntimeApplication::durable()),
             malformation: Mutex::new(None),
+            reasserts: Mutex::default(),
+            denied: Mutex::new(false),
         }
     }
 }
@@ -325,6 +443,18 @@ impl FakePorts {
 
     fn projection(&self) -> OutputRuntimeProjection {
         *self.projection.lock()
+    }
+
+    fn reasserts(&self) -> Vec<OutputRuntimeCommand> {
+        self.reasserts.lock().clone()
+    }
+
+    fn deny(&self, denied: bool) {
+        *self.denied.lock() = denied;
+    }
+
+    fn set_revision(&self, revision: u64) {
+        self.projection.lock().revision = revision;
     }
 
     fn set_scope(&self, scope: OutputRuntimeScope) {
@@ -349,6 +479,20 @@ enum AppliedMalformation {
 }
 
 impl OutputRuntimePorts for FakePorts {
+    fn authorize(&self, _context: &ActionContext) -> Result<(), ActionError> {
+        if *self.denied.lock() {
+            return Err(ActionError::new(
+                ActionErrorKind::Unauthorized,
+                "invalid session",
+            ));
+        }
+        Ok(())
+    }
+
+    fn reassert(&self, _context: &ActionContext, command: OutputRuntimeCommand) {
+        self.reasserts.lock().push(command);
+    }
+
     fn projection(
         &self,
         _context: &ActionContext,

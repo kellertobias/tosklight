@@ -270,6 +270,7 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
 fn adopt_provider_values(current: &mut SceneValues, mut next: SceneValues, physics_bodies: usize) {
     next.selected_fixtures = std::mem::take(&mut current.selected_fixtures);
     next.retain_visual_motion_runtime_from(current);
+    next.take_calibrated_runtime_from(current);
     next.retain_physics_runtime_from(current, physics_bodies);
     *current = next;
 }
@@ -622,7 +623,11 @@ impl PaneState {
             .as_secs_f32()
             .min(0.25);
         self.last_tick = now;
+        let motion_was_active = self
+            .values
+            .is_time_driven(&viz_scene::PersistencePreference::default());
         self.values.apply_physical_motion(elapsed);
+        self.values.apply_calibrated_motion(&self.scene, elapsed);
         let time = epoch.elapsed().as_secs_f32();
         self.physics.run(
             &self.scene,
@@ -635,7 +640,8 @@ impl PaneState {
             decay_seconds: 0.0,
             ..viz_scene::PersistencePreference::default()
         };
-        let time_driven = crate::redraw::is_time_driven(&self.values, &self.view, &persistence);
+        let time_driven = motion_was_active
+            || crate::redraw::is_time_driven(&self.values, &self.view, &persistence);
         let overlay_inputs = crate::redraw::LabelInputs::new(
             self.scene.revision,
             &self.values,

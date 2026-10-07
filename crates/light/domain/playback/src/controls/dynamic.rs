@@ -220,9 +220,11 @@ impl PlaybackEngine {
         let mut control_changed = false;
         if physical {
             if !self.control_states.contains_key(&identity) {
+                // Like a Cuelist master, a fader only has to pick up a running Dynamic's value.
                 let authoritative = self
                     .active_dynamics
                     .get(&target_id)
+                    .filter(|active| active.enabled)
                     .map(|active| active.fader_value);
                 self.control_states.insert(
                     identity,

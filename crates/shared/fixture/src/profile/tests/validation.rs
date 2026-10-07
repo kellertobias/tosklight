@@ -49,6 +49,8 @@ fn derives_primary_slots_around_reserved_component_bytes() {
         }],
         channels: vec![first.clone(), second.clone(), third.clone()],
         color_systems: vec![],
+        color_physical: None,
+        position_physical: None,
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
@@ -72,6 +74,7 @@ fn rejects_duplicate_components_and_overlapping_functions() {
         dmx_to: 200,
         attribute: AttributeKey("strobe".into()),
         priority: 100,
+        physical_mapping: None,
         angular_motion: None,
         behavior: ChannelFunctionBehavior::Fixed {
             semantic_id: "strobe".into(),
@@ -98,6 +101,8 @@ fn rejects_duplicate_components_and_overlapping_functions() {
         }],
         channels: vec![first, second],
         color_systems: vec![],
+        color_physical: None,
+        position_physical: None,
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
@@ -302,6 +307,7 @@ fn legacy_migration_derives_invert_aware_full_white_and_open_wheel_highlight() {
         })
         .collect::<Vec<_>>();
     let definition = FixtureDefinition {
+        runtime_color_context: None,
         schema_version: 1,
         id: FixtureId::new(),
         revision: 1,

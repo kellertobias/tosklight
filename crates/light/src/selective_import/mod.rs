@@ -8,12 +8,13 @@ mod service;
 pub use model::{
     AppliedImportObject, ApplySelectiveShowImportCommand, ImportBlocker, ImportConflict,
     ImportConflictResolution, ImportDependency, ImportDependencyDisposition, ImportIdentityFormat,
-    ImportLoadMode, ImportManagedAssetAction, ImportManagedAssetPreview, ImportObjectAction,
-    ImportObjectDescriptor, ImportObjectReference, ImportOwnedIdentity, ImportProfileAction,
-    ImportProfileConflictResolution, ImportProfileKey, ImportProfilePreview,
-    ImportReferenceLocation, SelectiveShowImportChange, SelectiveShowImportPreview,
-    SelectiveShowImportRequest, SelectiveShowImportResult, SelectiveShowImportUndoObject,
-    SelectiveShowImportUndoTarget, SelectiveShowObjectChange, SelectiveShowProfileChange,
+    ImportLoadMode, ImportManagedAssetAction, ImportManagedAssetPreview,
+    ImportNativeColorReference, ImportObjectAction, ImportObjectDescriptor, ImportObjectReference,
+    ImportOwnedIdentity, ImportProfileAction, ImportProfileConflictResolution, ImportProfileKey,
+    ImportProfilePreview, ImportReferenceLocation, SelectiveShowImportChange,
+    SelectiveShowImportPreview, SelectiveShowImportRequest, SelectiveShowImportResult,
+    SelectiveShowImportUndoObject, SelectiveShowImportUndoTarget, SelectiveShowObjectChange,
+    SelectiveShowProfileChange,
 };
 pub use ports::SelectiveShowImportPorts;
 pub use service::SelectiveShowImportService;

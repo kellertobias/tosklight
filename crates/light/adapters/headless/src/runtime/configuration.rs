@@ -307,6 +307,10 @@ pub(super) struct DeskConfiguration {
     pub(super) matter_enabled: bool,
     /// Pool colors are a desk presentation preference, never portable show content.
     pub(super) pool_presentation: PoolPresentationConfiguration,
+    /// Easy/Advanced Color encoder presentation: a per-desk preference, never show content.
+    /// Installations written before it existed read as the Easy RGBW default.
+    #[serde(default)]
+    pub(super) color_presentation: light_wire::v2::family_encoders::ColorEncoderPresentation,
     /// Workflow defaults belong to the desk rather than to portable show data.
     #[serde(default)]
     pub(super) update_settings: update::UpdateSettings,
@@ -381,6 +385,7 @@ impl Default for DeskConfiguration {
             highlight_legacy_overrides_acknowledged: false,
             matter_enabled: false,
             pool_presentation: PoolPresentationConfiguration::default(),
+            color_presentation: Default::default(),
             update_settings: update::UpdateSettings::default(),
             update_settings_by_desk: HashMap::new(),
             file_manager_system_picker_fallback: false,

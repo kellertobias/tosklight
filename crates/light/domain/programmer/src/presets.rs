@@ -57,6 +57,10 @@ impl PresetFamily {
                     || *attribute.0 == *"dimmer"
                     || attribute.0.ends_with(".dimmer")
                     || class == AttributeClass::Intensity
+                    || attribute
+                        .0
+                        .split('.')
+                        .any(|part| matches!(part, "shutter" | "strobe"))
             }
             Self::Color => {
                 class == AttributeClass::Color
@@ -72,16 +76,7 @@ impl PresetFamily {
                 ) || attribute.0.split('.').any(|part| {
                     matches!(
                         part,
-                        "beam"
-                            | "focus"
-                            | "zoom"
-                            | "iris"
-                            | "gobo"
-                            | "prism"
-                            | "frost"
-                            | "shaper"
-                            | "shutter"
-                            | "strobe"
+                        "beam" | "focus" | "zoom" | "iris" | "gobo" | "prism" | "frost" | "shaper"
                     )
                 })
             }
@@ -167,6 +162,16 @@ pub struct Preset {
 }
 
 impl Preset {
+    pub fn required_programming_contract(&self) -> u16 {
+        self.universal_values
+            .values()
+            .chain(self.values.values().flat_map(|v| v.values()))
+            .chain(self.group_values.values().flat_map(|v| v.values()))
+            .map(AttributeValue::required_programming_contract)
+            .max()
+            .unwrap_or(0)
+    }
+
     pub fn reconcile_address(&mut self, storage_key: &str) -> Result<PresetAddress, String> {
         let address = PresetAddress::from_storage_key(storage_key, self.family)?;
         if address.family != self.family {
@@ -216,6 +221,35 @@ impl Preset {
     /// Group, is the same whole colour (or matches the colour the preset is already universal
     /// for). Anything else — differing colours, native channels, other attributes — keeps its
     /// explicit per-fixture form, so deliberately different colours never auto-extend.
+    pub fn validate_programming(&self) -> Result<(), light_core::programming::IntentError> {
+        use light_core::programming::{ProgrammingValueScope, validate_programming_entries};
+        validate_programming_entries(ProgrammingValueScope::Universal, &self.universal_values)?;
+        for values in self.values.values() {
+            validate_programming_entries(ProgrammingValueScope::Fixture, values)?;
+        }
+        for values in self.group_values.values() {
+            validate_programming_entries(ProgrammingValueScope::LiveGroup, values)?;
+        }
+        Ok(())
+    }
+
+    /// New complete Color owners consolidate independently of the legacy show-wide color mode.
+    pub fn consolidate_universal_color_program(&mut self) {
+        if self
+            .universal_values
+            .values()
+            .chain(self.values.values().flat_map(|values| values.values()))
+            .chain(
+                self.group_values
+                    .values()
+                    .flat_map(|values| values.values()),
+            )
+            .all(|value| matches!(value, AttributeValue::ColorProgram(_)))
+        {
+            self.consolidate_universal_color();
+        }
+    }
+
     pub fn consolidate_universal_color(&mut self) {
         if self.family != PresetFamily::Color {
             return;
@@ -235,7 +269,10 @@ impl Preset {
             let Some(value) = attributes.get(&color) else {
                 return;
             };
-            if !matches!(value, AttributeValue::ColorXyz(_)) {
+            if !matches!(
+                value,
+                AttributeValue::ColorXyz(_) | AttributeValue::ColorProgram(_)
+            ) {
                 return;
             }
             match shared {

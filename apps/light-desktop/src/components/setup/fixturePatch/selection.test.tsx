@@ -121,6 +121,7 @@ describe("Patch scoped selection", () => {
 		expect(loadSnapshot).toHaveBeenCalledOnce();
 		expect(transport.subscriptions[0]?.scope).toEqual({
 			commandLine: false,
+			alignment: false,
 			selection: true,
 		});
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Euler, Quaternion, Vector3 } from "three";
 import { audienceOutline } from "./audienceOutline";
 import {
 	CHAIN_PITCH,
@@ -16,6 +17,7 @@ import {
 	parseProjection,
 	projectionViewForCad,
 	rotateDeskPoint,
+	rotateModelPoint,
 } from "./projection";
 import { trussBays, trussParts } from "./trussPlan";
 import type { CadDrawing, CadEntity, CadStairHandrails, CadViewDirection } from "./types";
@@ -1257,4 +1259,20 @@ describe("CAD plan projections", () => {
 		expect(plan.bottom).toBeCloseTo(-500, 3);
 		expect(plan.top).toBeCloseTo(500, 3);
 	});
+});
+
+
+describe("physical desk coordinate contract", () => {
+    it("rotates model vectors through the desk XYZ basis once, including compound and gimbal poses", () => {
+        for (const degrees of [[23, -38, 71], [34, 90, 75], [34, -90, 75], [0, 90, 0]]) {
+            const desk = new Quaternion().setFromEuler(new Euler(...degrees.map(v => v * Math.PI / 180) as [number, number, number], "XYZ"));
+            for (const model of [[1,0,0], [0,1,0], [0,0,1]] as const) {
+                const wanted = new Vector3(model[0], -model[2], model[1]).applyQuaternion(desk);
+                const actual = rotateModelPoint(model, degrees as [number, number, number]);
+                expect(actual[0]).toBeCloseTo(wanted.x, 10);
+                expect(actual[1]).toBeCloseTo(wanted.z, 10);
+                expect(actual[2]).toBeCloseTo(-wanted.y, 10);
+            }
+        }
+    });
 });

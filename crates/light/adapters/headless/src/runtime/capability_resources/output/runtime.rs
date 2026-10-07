@@ -124,7 +124,9 @@ impl OutputResource {
     pub(in crate::runtime) fn restore_runtime_control(&self, runtime: &PersistedOutputRuntime) {
         let mut control = self.control.lock();
         control.options.grand_master = runtime.grand_master;
+        control.grand_master_write = Arc::new(());
         control.options.blackout = runtime.blackout;
+        control.blackout_write = Arc::new(());
         control.revision = runtime.revision;
     }
 
@@ -142,12 +144,29 @@ impl OutputResource {
         })?;
         if let Some(grand_master) = grand_master {
             control.options.grand_master = grand_master;
+            control.grand_master_write = Arc::new(());
         }
         if let Some(blackout) = blackout {
             control.options.blackout = blackout;
+            control.blackout_write = Arc::new(());
         }
         control.revision = next_revision;
         Ok(next_revision)
+    }
+
+    /// Refreshes only the write identities of explicitly reasserted base controls. Values,
+    /// revision and persistence stay unchanged; a later destination merge keeps these fields.
+    pub(in crate::runtime) fn reassert_runtime_control(&self, grand_master: bool, blackout: bool) {
+        if !grand_master && !blackout {
+            return;
+        }
+        let mut control = self.control.lock();
+        if grand_master {
+            control.grand_master_write = Arc::new(());
+        }
+        if blackout {
+            control.blackout_write = Arc::new(());
+        }
     }
 
     pub(in crate::runtime) fn set_transition_hold(&self, hold: bool) {
@@ -155,11 +174,15 @@ impl OutputResource {
     }
 
     pub(in crate::runtime) fn set_transition_blackout(&self, blackout: bool) {
-        self.control.lock().options.blackout = blackout;
+        let mut control = self.control.lock();
+        control.options.blackout = blackout;
+        control.blackout_write = Arc::new(());
     }
 
     pub(in crate::runtime) fn set_transition_grand_master(&self, grand_master: f32) {
-        self.control.lock().options.grand_master = grand_master;
+        let mut control = self.control.lock();
+        control.options.grand_master = grand_master;
+        control.grand_master_write = Arc::new(());
     }
 
     pub(in crate::runtime) fn set_grand_master_flash(&self, pressed: bool) -> bool {
@@ -199,23 +222,40 @@ impl OutputResource {
             .copied()
     }
 
-    pub(in crate::runtime) fn dmx_snapshot(&self, revision: u64) -> serde_json::Value {
+    pub(in crate::runtime) fn dmx_snapshot(
+        &self,
+    ) -> (
+        light_wire::v2::output_control::OutputDmxSnapshot,
+        Option<Arc<super::super::super::visualization_frame::PublishedVisualizationFrame>>,
+    ) {
+        use light_wire::v2::output_control::*;
         let control = self.control.lock();
+        let source = self.visualization_frames.latest();
         let mut universes = control
             .last_frames
             .iter()
-            .map(|(&universe, frame)| {
-                serde_json::json!({"universe":universe,"slots":frame.to_vec()})
+            .map(|(&universe, frame)| OutputDmxUniverse {
+                universe,
+                slots: frame.to_vec(),
             })
             .collect::<Vec<_>>();
-        universes.sort_by_key(|universe| universe["universe"].as_u64().unwrap_or_default());
-        serde_json::json!({
-            "revision": revision,
-            "universes": universes,
-            "overrides": control.raw_overrides.iter().map(|(&(universe,address),&value)| {
-                serde_json::json!({"universe":universe,"address":address,"value":value})
-            }).collect::<Vec<_>>()
-        })
+        universes.sort_by_key(|u| u.universe);
+        let output = OutputDmxSnapshot {
+            native_protocol: 1,
+            revision: source.as_ref().map_or(0, |s| s.show_revision),
+            universes,
+            overrides: control
+                .raw_overrides
+                .iter()
+                .map(|(&(universe, address), &value)| OutputDmxOverride {
+                    universe,
+                    address,
+                    value,
+                })
+                .collect(),
+            ..Default::default()
+        };
+        (output, source)
     }
 
     pub(in crate::runtime) fn configure_timecode(
@@ -252,13 +292,14 @@ impl OutputResource {
 
     pub(in crate::runtime) fn render_frames_and_publish(
         &self,
-        rendered: &light_engine::RenderResult,
+        completed: &RenderedSemanticFrame,
         visualization_scope: light_wire::v2::visualization::VisualizationScope,
     ) -> HashMap<light_core::Universe, light_output::DmxFrame> {
         let mut control = self.control.lock();
-        if control.hold {
+        if control.effective_hold() {
             return control.last_frames.clone();
         }
+        let rendered = &completed.rendered;
         let mut frames = rendered.universes.clone();
         for (&(universe, address), &value) in &control.raw_overrides {
             if let Some(frame) = frames.get_mut(&universe) {
@@ -266,9 +307,29 @@ impl OutputResource {
             }
         }
         control.last_frames = frames.clone();
-        self.visualization_frames
-            .publish(rendered, control.render_options(), visualization_scope);
+        control.last_routes = Arc::clone(&rendered.routes);
+        control
+            .last_patched_slots
+            .clone_from(&rendered.patched_slots);
+        self.visualization_frames.publish(
+            completed,
+            visualization_scope,
+            self.engine().output_pool().as_deref(),
+        );
         frames
+    }
+
+    pub(in crate::runtime) async fn send_retained_output(&self) -> Result<u64, std::io::Error> {
+        let (routes, frames, patched_slots) = {
+            let control = self.control.lock();
+            (
+                Arc::clone(&control.last_routes),
+                control.last_frames.clone(),
+                control.last_patched_slots.clone(),
+            )
+        };
+        self.send_network_routes(&routes, &frames, &patched_slots)
+            .await
     }
 
     pub(in crate::runtime) async fn send_network_routes(

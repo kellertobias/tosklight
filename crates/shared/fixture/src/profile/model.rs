@@ -123,6 +123,8 @@ pub struct FixtureProfile {
     pub stage_icon_asset: Option<String>,
     #[serde(default)]
     pub model_asset: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_gdtf: Option<super::ProfileGdtfSource>,
     /// The fixture's parts, axes and emitters.
     ///
     /// Geometry belongs to the lantern rather than to one of its personalities: a moving head has
@@ -268,6 +270,8 @@ struct FixtureProfileCanonical {
     #[serde(default)]
     model_asset: Option<String>,
     #[serde(default)]
+    source_gdtf: Option<super::ProfileGdtfSource>,
+    #[serde(default)]
     body_model: Option<String>,
     #[serde(default)]
     geometry: GeometryGraph,
@@ -379,6 +383,14 @@ fn geometry_content(graph: &GeometryGraph) -> (Vec<String>, Vec<String>) {
 /// a curtain whose modes are its widths — and they are resolved by reworking the fixture, not by a
 /// reader picking one mode's geometry and discarding the rest.
 fn lift_geometry_to_the_fixture(profile: &mut FixtureProfile) {
+    // New contracts refer to stable geometry IDs. Do not lift/rekey an authored graph.
+    if profile
+        .modes
+        .iter()
+        .any(|mode| mode.geometry.physical_contract.is_some() || mode.position_physical.is_some())
+    {
+        return;
+    }
     if !profile.geometry.nodes.is_empty() || profile.modes.is_empty() {
         return;
     }
@@ -541,6 +553,7 @@ impl<'de> Deserialize<'de> for FixtureProfile {
             photograph_asset: canonical.photograph_asset,
             stage_icon_asset: canonical.stage_icon_asset,
             model_asset: canonical.model_asset,
+            source_gdtf: canonical.source_gdtf,
             body_model: canonical.body_model,
             geometry: canonical.geometry,
             model_units: canonical.model_units,
@@ -1049,6 +1062,10 @@ pub struct FixtureMode {
     pub channels: Vec<FixtureChannel>,
     #[serde(default)]
     pub color_systems: Vec<HeadColorSystem>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_physical: Option<super::ColorPhysicalModel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_physical: Option<super::PositionPhysicalModel>,
     #[serde(default)]
     pub control_actions: Vec<ControlAction>,
     #[serde(default)]

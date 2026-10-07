@@ -29,6 +29,7 @@ import { definitionSplits } from "./patchModel";
 import { usePatchSelection } from "./selection";
 import { positionReferenceColumnAvailable } from "./positionReference";
 import { DEFAULT_PATCH_SORT, type PatchSort, sortPatchFixtures } from "./tableSort";
+import type { ShowPatchView } from "./showPatchHeader";
 
 export type EditKind =
 	| "number"
@@ -84,8 +85,8 @@ export type PlacementBaseline = {
 
 export type FixturePatchSetupProps = {
 	active?: boolean;
-	onMedia?: () => void;
-	onTracking?: () => void;
+	/** Switches Show Patch to another view; without it the view switch is not shown (a pane). */
+	onView?: (view: Exclude<ShowPatchView, "fixtures">) => void;
 	stagePreviewOpen?: boolean;
 	stagePreviewClearance?: number;
 	onStagePreview?: () => void;
@@ -101,7 +102,8 @@ export type FixturePatchSetupProps = {
 	csvImportRequest?: number;
 };
 
-function usePatchUiState(csvImportRequest = 0) {
+/** Layer, browser, import and library-filter choices of the Fixtures screen. */
+function usePatchBrowseState(csvImportRequest: number) {
 	const [activeLayer, setActiveLayer] = useState("all");
 	const [selectedFixture, setSelectedFixture] = useState<string | null>(null);
 	const [browserOpen, setBrowserOpen] = useState(false);
@@ -119,52 +121,6 @@ function usePatchUiState(csvImportRequest = 0) {
 	const [manufacturer, setManufacturer] = useState("");
 	const [familyKey, setFamilyKey] = useState("");
 	const [definitionKey, setDefinitionKey] = useState("");
-	const [draft, setDraft] = useState({
-		name: "Fixture 1",
-		fixtureNumber: "1",
-		count: "1",
-		patch: "1.1",
-	});
-	const [splitDrafts, setSplitDrafts] = useState<Record<number, string>>({});
-	const [batchPatches, setBatchPatches] = useState(["1.1"]);
-	const [placementOverrides, setPlacementOverrides] = useState<
-		Record<number, string>
-	>({});
-	const [placementEmpty, setPlacementEmpty] = useState(false);
-	const [status, setStatus] = useState("");
-	const [busy, setBusy] = useState(false);
-	const [placementBaseline, setPlacementBaseline] =
-		useState<PlacementBaseline | null>(null);
-	const [placementCloseConfirm, setPlacementCloseConfirm] = useState(false);
-	const [edit, setEdit] = useState<EditKind>(null);
-	const [editText, setEditText] = useState("");
-	const [editSplitDrafts, setEditSplitDrafts] = useState<
-		Record<number, string>
-	>({});
-	const [editError, setEditError] = useState("");
-	const [vector, setVector] = useState({ x: 0, y: 0, z: 0 });
-	const [editAxis, setEditAxis] = useState<VectorAxis | null>(null);
-	const [pending, setPending] = useState<Partial<PatchedFixture> | null>(null);
-	const [blockedBy, setBlockedBy] = useState<PatchedFixture[]>([]);
-	const [multipatchEdit, setMultipatchEdit] = useState<MultiPatchEdit>(null);
-	const [appearanceEdit, setAppearanceEdit] =
-		useState<AppearanceEditTarget>(null);
-	const [physicalSelectionFixture, setPhysicalSelectionFixture] = useState<
-		string | null
-	>(null);
-	const [physicalSelectionIds, setPhysicalSelectionIds] = useState<string[]>(
-		[],
-	);
-	const [editCloseConfirm, setEditCloseConfirm] = useState<
-		"fixture" | "multipatch" | null
-	>(null);
-	const [deleteArmed, setDeleteArmed] = useState(false);
-	const [deleteConfirm, setDeleteConfirm] = useState<PatchedFixture | null>(
-		null,
-	);
-	const [editingSplit, setEditingSplit] = useState<number | null>(null);
-	const selectionAnchor = useRef<string | null>(null);
-	const physicalSelectionAnchor = useRef<string | null>(null);
 	return {
 		activeLayer,
 		setActiveLayer,
@@ -194,6 +150,29 @@ function usePatchUiState(csvImportRequest = 0) {
 		setFamilyKey,
 		definitionKey,
 		setDefinitionKey,
+	};
+}
+
+/** The placement draft and its confirmation state. */
+function usePatchPlacementState() {
+	const [draft, setDraft] = useState({
+		name: "Fixture 1",
+		fixtureNumber: "1",
+		count: "1",
+		patch: "1.1",
+	});
+	const [splitDrafts, setSplitDrafts] = useState<Record<number, string>>({});
+	const [batchPatches, setBatchPatches] = useState(["1.1"]);
+	const [placementOverrides, setPlacementOverrides] = useState<
+		Record<number, string>
+	>({});
+	const [placementEmpty, setPlacementEmpty] = useState(false);
+	const [status, setStatus] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [placementBaseline, setPlacementBaseline] =
+		useState<PlacementBaseline | null>(null);
+	const [placementCloseConfirm, setPlacementCloseConfirm] = useState(false);
+	return {
 		draft,
 		setDraft,
 		splitDrafts,
@@ -212,6 +191,43 @@ function usePatchUiState(csvImportRequest = 0) {
 		setPlacementBaseline,
 		placementCloseConfirm,
 		setPlacementCloseConfirm,
+	};
+}
+
+/** Inline edits, calibration/appearance targets, physical selection and deletion. */
+function usePatchEditState() {
+	const [edit, setEdit] = useState<EditKind>(null);
+	const [editText, setEditText] = useState("");
+	const [editSplitDrafts, setEditSplitDrafts] = useState<
+		Record<number, string>
+	>({});
+	const [editError, setEditError] = useState("");
+	const [vector, setVector] = useState({ x: 0, y: 0, z: 0 });
+	const [editAxis, setEditAxis] = useState<VectorAxis | null>(null);
+	const [pending, setPending] = useState<Partial<PatchedFixture> | null>(null);
+	const [blockedBy, setBlockedBy] = useState<PatchedFixture[]>([]);
+	const [multipatchEdit, setMultipatchEdit] = useState<MultiPatchEdit>(null);
+	const [positionCalibrationEdit, setPositionCalibrationEdit] = useState<AppearanceEditTarget>(null);
+	const [colorCalibrationEdit, setColorCalibrationEdit] = useState<AppearanceEditTarget>(null);
+	const [appearanceEdit, setAppearanceEdit] =
+		useState<AppearanceEditTarget>(null);
+	const [physicalSelectionFixture, setPhysicalSelectionFixture] = useState<
+		string | null
+	>(null);
+	const [physicalSelectionIds, setPhysicalSelectionIds] = useState<string[]>(
+		[],
+	);
+	const [editCloseConfirm, setEditCloseConfirm] = useState<
+		"fixture" | "multipatch" | null
+	>(null);
+	const [deleteArmed, setDeleteArmed] = useState(false);
+	const [deleteConfirm, setDeleteConfirm] = useState<PatchedFixture | null>(
+		null,
+	);
+	const [editingSplit, setEditingSplit] = useState<number | null>(null);
+	const selectionAnchor = useRef<string | null>(null);
+	const physicalSelectionAnchor = useRef<string | null>(null);
+	return {
 		edit,
 		setEdit,
 		editText,
@@ -230,6 +246,10 @@ function usePatchUiState(csvImportRequest = 0) {
 		setBlockedBy,
 		multipatchEdit,
 		setMultipatchEdit,
+		positionCalibrationEdit,
+		setPositionCalibrationEdit,
+		colorCalibrationEdit,
+		setColorCalibrationEdit,
 		appearanceEdit,
 		setAppearanceEdit,
 		physicalSelectionFixture,
@@ -246,6 +266,14 @@ function usePatchUiState(csvImportRequest = 0) {
 		setEditingSplit,
 		selectionAnchor,
 		physicalSelectionAnchor,
+	};
+}
+
+function usePatchUiState(csvImportRequest = 0) {
+	return {
+		...usePatchBrowseState(csvImportRequest),
+		...usePatchPlacementState(),
+		...usePatchEditState(),
 	};
 }
 
@@ -400,8 +428,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		ui,
 		data,
 		props: {
-			onMedia: props.onMedia,
-			onTracking: props.onTracking,
+			onView: props.onView,
 			stagePreviewOpen: props.stagePreviewOpen ?? false,
 			stagePreviewClearance: props.stagePreviewClearance ?? 0,
 			onStagePreview: props.onStagePreview,

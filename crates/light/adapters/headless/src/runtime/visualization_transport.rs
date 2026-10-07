@@ -321,6 +321,7 @@ impl ClientPublicationState {
                 };
                 responses.push(invalidation.clone());
                 replacement_responses.push(invalidation);
+                super::visualization_readouts::evict_on_invalidation(state, session, lane);
                 *previous = 0;
                 *previous_snapshot = None;
             }
@@ -351,14 +352,17 @@ impl ClientPublicationState {
             let published_at = chrono::Utc::now().to_rfc3339();
             let source_timestamp =
                 chrono::DateTime::<chrono::Utc>::from(snapshot.source_generated_at).to_rfc3339();
+            let stamp = super::visualization_readouts::lane_stamp(state, session, lane, &source);
             let snapshot_response = VisualizationServerMessage::Snapshot {
                 lane,
                 scope: source.scope,
                 sequence: self.outgoing_sequence,
-                source_frame: snapshot.lane_source_sequence,
+                source_frame: stamp.source_frame.unwrap_or(snapshot.lane_source_sequence),
                 source_timestamp: source_timestamp.clone(),
                 published_at: published_at.clone(),
                 snapshot: snapshot.snapshot.as_ref().clone(),
+                lease: stamp.lease,
+                pending: stamp.pending.clone(),
             };
             let response = if !self.force_snapshot && *previous != 0 && previous_snapshot.is_some()
             {
@@ -377,16 +381,31 @@ impl ClientPublicationState {
                     lane,
                     scope: source.scope,
                     sequence: self.outgoing_sequence,
-                    source_frame: snapshot.lane_source_sequence,
+                    source_frame: stamp.source_frame.unwrap_or(snapshot.lane_source_sequence),
                     source_timestamp,
                     published_at,
                     delta,
+                    lease: stamp.lease,
+                    pending: stamp.pending.clone(),
                 }
             } else {
                 snapshot_response.clone()
             };
             responses.push(response);
             replacement_responses.push(snapshot_response);
+            let normal_lease = stamp.lease.filter(|_| lane == VisualizationLane::Normal);
+            if let Some(readouts) = normal_lease.and_then(|lease| {
+                super::visualization_readouts::readouts_message(
+                    state,
+                    subscribed.readouts.as_deref(),
+                    &source,
+                    lease,
+                    &mut self.outgoing_sequence,
+                )
+            }) {
+                responses.push(readouts.clone());
+                replacement_responses.push(readouts);
+            }
             *previous = source.sequence;
             *previous_snapshot = Some(Arc::clone(&snapshot.snapshot));
             *previous_structure = Some((source.scope, source.show_revision));
@@ -472,13 +491,15 @@ async fn project_subscribed_lanes(
                             key,
                             &projection_source,
                             |refresh_dynamic_stack| {
-                                lane_snapshot(
-                                    &projection_state,
-                                    &projection_session,
-                                    lane,
-                                    &projection_source,
-                                    refresh_dynamic_stack,
-                                )
+                                claimed_lane_snapshot(key, refresh_dynamic_stack, |refresh| {
+                                    lane_snapshot(
+                                        &projection_state,
+                                        &projection_session,
+                                        lane,
+                                        &projection_source,
+                                        refresh,
+                                    )
+                                })
                             },
                         )
                     })
@@ -511,7 +532,11 @@ struct SubscriptionClaims {
     session_id: uuid::Uuid,
     lanes: HashSet<VisualizationLane>,
     include_dynamic_stack: bool,
+    /// Every resolved attribute rather than only those the Stage draws (Preset pools).
+    complete_values: bool,
     sparse_dynamic_stack: bool,
+    /// TL-594 readout claim (Normal lane); replaced by every Subscribe.
+    readouts: Option<Vec<light_core::FixtureId>>,
 }
 
 impl SubscriptionClaims {
@@ -521,12 +546,17 @@ impl SubscriptionClaims {
             session_id,
             lanes: HashSet::new(),
             include_dynamic_stack: false,
+            complete_values: false,
             sparse_dynamic_stack: false,
+            readouts: None,
         }
     }
 
-    fn set_include_dynamic_stack(&mut self, include_dynamic_stack: bool) {
-        if self.include_dynamic_stack == include_dynamic_stack {
+    /// Both details select the shared projection, so a change moves every claimed lane's claim.
+    fn set_projection_detail(&mut self, include_dynamic_stack: bool, complete_values: bool) {
+        if self.include_dynamic_stack == include_dynamic_stack
+            && self.complete_values == complete_values
+        {
             return;
         }
         let lanes = self.lanes.iter().copied().collect::<Vec<_>>();
@@ -535,6 +565,7 @@ impl SubscriptionClaims {
                 .change_visualization_projection_claim(self.key(*lane), -1);
         }
         self.include_dynamic_stack = include_dynamic_stack;
+        self.complete_values = complete_values;
         for lane in lanes {
             self.output
                 .change_visualization_projection_claim(self.key(lane), 1);
@@ -573,12 +604,14 @@ impl SubscriptionClaims {
             VisualizationLane::Normal => {
                 super::visualization_frame::VisualizationProjectionKey::Normal {
                     include_dynamic_stack: self.include_dynamic_stack,
+                    complete_values: self.complete_values,
                 }
             }
             VisualizationLane::Preload => {
                 super::visualization_frame::VisualizationProjectionKey::Preload {
                     session_id: self.session_id,
                     include_dynamic_stack: self.include_dynamic_stack,
+                    complete_values: self.complete_values,
                 }
             }
         }
@@ -587,21 +620,10 @@ impl SubscriptionClaims {
 
 impl Drop for SubscriptionClaims {
     fn drop(&mut self) {
-        for lane in self.lanes.drain() {
+        let lanes = self.lanes.drain().collect::<Vec<_>>();
+        for lane in lanes {
             self.output.change_visualization_subscribers(lane, -1);
-            let key = match lane {
-                VisualizationLane::Normal => {
-                    super::visualization_frame::VisualizationProjectionKey::Normal {
-                        include_dynamic_stack: self.include_dynamic_stack,
-                    }
-                }
-                VisualizationLane::Preload => {
-                    super::visualization_frame::VisualizationProjectionKey::Preload {
-                        session_id: self.session_id,
-                        include_dynamic_stack: self.include_dynamic_stack,
-                    }
-                }
-            };
+            let key = self.key(lane);
             self.output.change_visualization_projection_claim(key, -1);
         }
     }
@@ -691,8 +713,10 @@ async fn handle_socket_messages(
                                 max_rate_hz,
                                 acknowledgements,
                                 include_dynamic_stack,
+                                complete_values,
                                 sparse_dynamic_stack,
                                 batched_messages,
+                                readouts,
                             } => {
                                 if max_rate_hz == 0 || max_rate_hz > VISUALIZATION_MAX_RATE_HZ {
                                     let response = VisualizationServerMessage::Error {
@@ -705,8 +729,11 @@ async fn handle_socket_messages(
                                     publication.force_snapshot = true;
                                     continue;
                                 }
-                                subscribed.set_include_dynamic_stack(include_dynamic_stack);
+                                subscribed
+                                    .set_projection_detail(include_dynamic_stack, complete_values);
                                 subscribed.set_sparse_dynamic_stack(sparse_dynamic_stack);
+                                subscribed.readouts =
+                                    super::visualization_readouts::claimed_owners(readouts);
                                 outgoing.set_batched_messages(batched_messages);
                                 subscribed.subscribe(lanes);
                                 publication.set_acknowledgements(acknowledgements);
@@ -900,26 +927,56 @@ fn lane_snapshot(
     include_dynamic_stack: bool,
 ) -> Result<VisualizationLaneSnapshot, ApiError> {
     let preload = lane == VisualizationLane::Preload;
-    let mut snapshot: VisualizationLaneSnapshot =
-        serde_json::from_value(visualization_snapshot_for_session_content_from_resolved(
+    // TL-594: gated Preload content and its message stamp come from ONE publication read.
+    let content = match preload
+        .then(|| super::pending_preload_readers::published_preload(state))
+        .flatten()
+    {
+        Some(published) => {
+            super::visualization_readouts::gated_preload_content(state, session, source, published)
+        }
+        None => visualization_snapshot_for_session_content_from_resolved(
             state,
             session,
             preload,
             include_dynamic_stack,
             true,
-            Some(source.values.values()),
-            Some(source.profile_visualization_values.as_ref()),
-        )?)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
-    snapshot.scope = source.scope;
-    snapshot.revision = source.show_revision;
+            Some(source),
+        )?,
+    };
+    let mut snapshot: VisualizationLaneSnapshot =
+        serde_json::from_value(content).map_err(|error| ApiError::internal(error.to_string()))?;
     if !preload {
+        snapshot.scope = source.scope;
+        snapshot.revision = source.show_revision;
         snapshot.generated_at =
             chrono::DateTime::<chrono::Utc>::from(source.generated_at).to_rfc3339();
         snapshot.grand_master = source.options.grand_master;
         snapshot.blackout = source.options.blackout;
     }
-    if include_dynamic_stack {
+    Ok(snapshot)
+}
+
+/// One lane publication for one claim. `refresh_dynamic_stack` only decides whether this frame
+/// re-evaluates the Dynamic stack (the projection reuses the previous stack otherwise); what the
+/// client receives is decided by its claim alone, so values never come and go with the refresh
+/// cadence.
+fn claimed_lane_snapshot(
+    claim: super::visualization_frame::VisualizationProjectionKey,
+    refresh_dynamic_stack: bool,
+    build: impl FnOnce(bool) -> Result<VisualizationLaneSnapshot, ApiError>,
+) -> Result<VisualizationLaneSnapshot, ApiError> {
+    let mut snapshot = build(refresh_dynamic_stack)?;
+    trim_lane_snapshot(&mut snapshot, claim);
+    Ok(snapshot)
+}
+
+/// What one lane publication carries for its claim.
+fn trim_lane_snapshot(
+    snapshot: &mut VisualizationLaneSnapshot,
+    claim: super::visualization_frame::VisualizationProjectionKey,
+) {
+    if claim.includes_dynamic_stack() {
         // Fixture Sheet consumes Dynamic identity and state; live sampled and
         // resolved values belong to the DMX/output view. Do not make every
         // Stage publication carry ordinary static entries or duplicate values.
@@ -931,15 +988,17 @@ fn lane_snapshot(
             entry.resolved_value = None;
             entry.activation_mix = None;
         }
-    } else {
+    }
+    // A Preset pool compares every stored attribute, including the semantic Position owner and
+    // Beam attributes; the Stage draws only these. A Dynamic-stack claim alone does not widen it.
+    if !claim.complete_values() {
         snapshot
             .values
             .retain(|entry| stage_visualization_attribute(&entry.attribute));
-        snapshot
-            .profile_output_values
-            .retain(|entry| stage_visualization_attribute(&entry.attribute));
     }
-    Ok(snapshot)
+    snapshot
+        .profile_output_values
+        .retain(|entry| stage_visualization_attribute(&entry.attribute));
 }
 
 fn stage_visualization_attribute(attribute: &str) -> bool {

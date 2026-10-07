@@ -39,15 +39,7 @@ async fn group_settings(
         .resolve(&state)
         .map_err(GroupManagementHttpError::api)?;
     let _activation = state.active_show.acquire().await;
-    let entry = super::super::show_objects_v2::active_entry(&state, show_id)
-        .map_err(GroupManagementHttpError::api)?;
-    let store = ActiveShowRepository::open(&entry.path)
-        .map_err(ApiError::store)
-        .map_err(GroupManagementHttpError::api)?;
-    let (show_revision, object) =
-        super::super::object_api::exact_object_snapshot(&store, "group", &group_id)
-            .map_err(GroupManagementHttpError::api)?;
-    let object = object.ok_or_else(|| {
+    let not_found = || {
         GroupManagementHttpError::new(
             StatusCode::NOT_FOUND,
             GroupManagementErrorKind::NotFound,
@@ -56,7 +48,20 @@ async fn group_settings(
             None,
             false,
         )
-    })?;
+    };
+    // Show recovery: like an empty show, no Group exists.
+    if state.active_show.in_recovery() {
+        return Err(not_found());
+    }
+    let entry = super::super::show_objects_v2::active_entry(&state, show_id)
+        .map_err(GroupManagementHttpError::api)?;
+    let store = ActiveShowRepository::open(&entry.path)
+        .map_err(ApiError::store)
+        .map_err(GroupManagementHttpError::api)?;
+    let (show_revision, object) =
+        super::super::object_api::exact_object_snapshot(&store, "group", &group_id)
+            .map_err(GroupManagementHttpError::api)?;
+    let object = object.ok_or_else(not_found)?;
     let resolved_spatial =
         group_management_wire::resolved_spatial(&state.output.snapshot(), &group_id)
             .map_err(GroupManagementHttpError::application)?;
@@ -82,7 +87,7 @@ async fn manage_group(
 ) -> Result<Response, GroupManagementHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
     let show_id = show
-        .resolve(&state)
+        .resolve_writable(&state)
         .map_err(GroupManagementHttpError::api)?;
     let TolerantJson(request) = request.map_err(GroupManagementHttpError::json)?;
     super::routes::validate_request_id(&request.request_id)

@@ -1,10 +1,6 @@
 import { formatErrorDetails } from "@tosklight/ui";
-import { reportDeskNotice } from "../deskNotice/deskNotice";
 import type { ServerCapabilities } from "./capabilityContracts";
 import type { ServerController } from "./model";
-
-export const ALIGN_NO_SELECTION_NOTICE =
-	"No fixtures selected. Align stays Off; nothing changed.";
 
 export function createProgrammerAlignmentActions(
 	model: ServerController,
@@ -12,19 +8,19 @@ export function createProgrammerAlignmentActions(
 	const { api, setError } = model;
 	return {
 		alignSelection: async (mode) => {
+			const store = model.programmingInteractionStore;
+			const scope = store.captureScope();
 			let resulting: Awaited<ReturnType<typeof api.programming.align>>;
 			try {
 				resulting = await api.programming.align(mode);
+				store.installAlignment(resulting, scope);
 				setError(null);
 			} catch (reason) {
 				// Refusals and genuine desk failures keep the actionable error treatment.
 				setError(formatErrorDetails(reason));
 				throw reason;
 			}
-			// The server reports an activation that changed nothing (no selection) as Off.
-			if (mode !== "off" && resulting === "off")
-				reportDeskNotice(ALIGN_NO_SELECTION_NOTICE);
-			return resulting;
+			return resulting.mode;
 		},
 	};
 }

@@ -79,6 +79,50 @@
       "properties": {
         "action": {
           "type": "string",
+          "const": "set_position_calibration"
+        },
+        "calibration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchPositionCalibration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set_color_calibration"
+        },
+        "calibration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchColorCalibration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
           "const": "set_move_in_black"
         },
         "delay_millis": {
@@ -222,6 +266,185 @@
     "expected_show_revision"
   ],
   "$defs": {
+    "PatchAxisCalibration": {
+      "type": "object",
+      "properties": {
+        "invert": {
+          "type": "boolean"
+        },
+        "node_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "zero_degrees": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "node_id",
+        "zero_degrees",
+        "invert"
+      ]
+    },
+    "PatchAxisOverrides": {
+      "type": "object",
+      "properties": {
+        "axes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchAxisCalibration"
+          }
+        },
+        "source_identity": {
+          "$ref": "#/$defs/PatchPositionCalibrationIdentity"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "version",
+        "source_identity",
+        "axes"
+      ]
+    },
+    "PatchCalibrationQuality": {
+      "type": "string",
+      "enum": [
+        "unknown",
+        "estimated",
+        "manufacturer",
+        "measured"
+      ]
+    },
+    "PatchColorCalibration": {
+      "description": "Installed optical observations. Every path is bound to an immutable source profile.",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchColorPathCalibration"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint32",
+          "default": 0,
+          "minimum": 0
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "version",
+        "paths"
+      ]
+    },
+    "PatchColorPathCalibration": {
+      "type": "object",
+      "properties": {
+        "emitters": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PatchEmitterCalibration"
+          }
+        },
+        "measurements": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PatchColorRecipeMeasurement"
+          }
+        },
+        "source_identity": {
+          "$ref": "#/$defs/PatchNativeColorIdentity"
+        }
+      },
+      "required": [
+        "source_identity"
+      ]
+    },
+    "PatchColorRecipeMeasurement": {
+      "type": "object",
+      "properties": {
+        "provenance": {
+          "$ref": "#/$defs/PatchOpticalProvenance",
+          "default": {
+            "quality": "unknown",
+            "revision": 0
+          }
+        },
+        "recipe": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchNativeColorValue"
+          }
+        },
+        "xyz": {
+          "$ref": "#/$defs/PatchColorXyz"
+        }
+      },
+      "required": [
+        "recipe",
+        "xyz"
+      ]
+    },
+    "PatchColorXyz": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "float"
+        },
+        "y": {
+          "type": "number",
+          "format": "float"
+        },
+        "z": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "PatchEmitterCalibration": {
+      "type": "object",
+      "properties": {
+        "emitter_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "output_gain": {
+          "type": "number",
+          "format": "float"
+        },
+        "provenance": {
+          "$ref": "#/$defs/PatchOpticalProvenance",
+          "default": {
+            "quality": "unknown",
+            "revision": 0
+          }
+        }
+      },
+      "required": [
+        "emitter_id",
+        "output_gain"
+      ]
+    },
     "PatchGelAssignment": {
       "oneOf": [
         {
@@ -463,6 +686,160 @@
             "label"
           ]
         }
+      ]
+    },
+    "PatchNativeColorIdentity": {
+      "type": "object",
+      "properties": {
+        "head_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "model_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "native_layout_signature": {
+          "type": "string"
+        },
+        "path_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_digest": {
+          "type": "string"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "profile_id",
+        "profile_revision",
+        "profile_digest",
+        "mode_id",
+        "head_id",
+        "path_id",
+        "model_revision",
+        "native_layout_signature"
+      ]
+    },
+    "PatchNativeColorValue": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "function_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "raw": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "channel_id",
+        "function_id",
+        "raw"
+      ]
+    },
+    "PatchOpticalProvenance": {
+      "type": "object",
+      "properties": {
+        "quality": {
+          "$ref": "#/$defs/PatchCalibrationQuality",
+          "default": "unknown"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint32",
+          "default": 0,
+          "minimum": 0
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "PatchPositionCalibration": {
+      "description": "Saved installation zero correction for one physical fixture; live integration is separate.",
+      "type": "object",
+      "properties": {
+        "axis_overrides": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchAxisOverrides"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pan_zero_degrees": {
+          "type": "number",
+          "format": "float",
+          "default": 0.0
+        },
+        "quality": {
+          "$ref": "#/$defs/PatchCalibrationQuality",
+          "default": "unknown"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint32",
+          "default": 0,
+          "minimum": 0
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tilt_zero_degrees": {
+          "type": "number",
+          "format": "float",
+          "default": 0.0
+        }
+      }
+    },
+    "PatchPositionCalibrationIdentity": {
+      "type": "object",
+      "properties": {
+        "geometry_digest": {
+          "type": "string"
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "profile_id",
+        "mode_id",
+        "geometry_digest"
       ]
     },
     "PatchVectorAxis": {

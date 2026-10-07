@@ -1,6 +1,81 @@
 use super::*;
 
 #[tokio::test]
+async fn failed_finalization_preserves_selection_and_success_publishes_after_commit() {
+    let scenario = ActiveGroupScenario::new("Finalized Group selection").await;
+    let state = &scenario.state;
+    state.programming.select_expression(
+        scenario.peer.id,
+        vec![scenario.first],
+        light_programmer::SelectionExpression::LiveGroup {
+            group_id: "1".into(),
+            rule: light_programmer::SelectionRule::All,
+        },
+    );
+    let original = state.output.snapshot();
+    let mut destination = (*original).clone();
+    let mut groups = (*destination.groups).clone();
+    let group = groups.iter_mut().find(|group| group.id == "1").unwrap();
+    group.fixtures = vec![scenario.first, scenario.second];
+    group.source = Some(light_programmer::GroupFixtureSource::Explicit {
+        fixture_ids: group.fixtures.clone(),
+    });
+    destination.groups = Arc::new(groups);
+    let context = light_application::ActionContext::operator(
+        scenario.actor.desk.id,
+        scenario.actor.id.0,
+        light_application::ActionSource::Http,
+    );
+    let before = state.events.latest_sequence();
+    let prepared = state.output.prepare_snapshot(destination.clone()).unwrap();
+    let result: Result<(), light_application::ActionError> =
+        state.programming.run_active_show_boundary(|| {
+            super::super::engine_selection_refresh::finalize_prepared_snapshot_with_selection_refresh(
+                state, &context, prepared, None, || {
+                    assert!(Arc::ptr_eq(&state.output.snapshot(), &original));
+                    Err(light_application::ActionError::new(
+                        light_application::ActionErrorKind::Unavailable,
+                        "simulated persistence failure",
+                    ))
+                },
+            )
+        });
+    assert!(result.is_err());
+    assert!(Arc::ptr_eq(&state.output.snapshot(), &original));
+    assert_eq!(
+        state
+            .programming
+            .selection(scenario.peer.id)
+            .unwrap()
+            .selected,
+        vec![scenario.first]
+    );
+    assert!(selection_refresh_events(state, before).is_empty());
+
+    let prepared = state.output.prepare_snapshot(destination).unwrap();
+    let installed = state.programming.run_active_show_boundary(|| {
+        super::super::engine_selection_refresh::finalize_prepared_snapshot_with_selection_refresh(
+            state, &context, prepared, None, || {
+                assert!(Arc::ptr_eq(&state.output.snapshot(), &original));
+                assert!(selection_refresh_events(state, before).is_empty());
+                Ok(42)
+            },
+        )
+    }).unwrap();
+    assert_eq!(installed, 42);
+    assert_group_membership(state, &[scenario.first, scenario.second]);
+    assert_selection_refresh(
+        state,
+        &scenario.actor,
+        before,
+        &[scenario.first, scenario.second],
+        light_application::ActionSource::Http,
+        Some(context.correlation_id),
+    );
+    scenario.cleanup();
+}
+
+#[tokio::test]
 async fn active_group_put_and_undo_refresh_the_desk_once_without_deadlocking() {
     let scenario = ActiveGroupScenario::new("Desk Group refresh").await;
 

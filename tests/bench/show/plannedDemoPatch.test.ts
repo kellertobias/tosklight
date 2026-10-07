@@ -290,7 +290,7 @@ describe("overall demo show patch builder", () => {
 				{
 					targets: "601 primary THRU multipatch 7",
 					location: { x: "-2 THRU 2", y: "3", z: "4" },
-					rotation: { x: "0", y: "-21 THRU 21", z: "0" },
+					rotation: { x: "0", y: "21 THRU -21", z: "0" },
 				},
 			],
 			movingFixtureRotation: { x: 0, y: 0, z: 0 },
@@ -311,8 +311,9 @@ describe("overall demo show patch builder", () => {
 		expect(
 			[acl, ...acl.multipatch].map((fixture) => fixture.location.x),
 		).toEqual([-2000, -1429, -857, -286, 286, 857, 1429, 2000]);
+		// THRU runs from the first value to the last, so "21 THRU -21" descends.
 		expect(
 			[acl, ...acl.multipatch].map((fixture) => fixture.rotation.y),
-		).toEqual([-21, -15, -9, -3, 3, 9, 15, 21]);
+		).toEqual([21, 15, 9, 3, -3, -9, -15, -21]);
 	});
 });

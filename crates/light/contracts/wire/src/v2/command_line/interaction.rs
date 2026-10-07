@@ -11,12 +11,63 @@ pub struct ProgrammingInteractionProjection {
     pub desk_id: Uuid,
     pub command_line: CommandLineResponse,
     pub selection: ProgrammerSelectionProjection,
+    pub alignment: ProgrammingAlignmentProjection,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProgrammingAlignmentProjection {
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub mode: crate::v2::live_action::ProgrammingAlignMode,
+    pub binding: Option<ProgrammingAlignmentBinding>,
+    pub fixture_count: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProgrammingAlignmentBinding {
+    Attribute {
+        attribute: String,
+    },
+    Family {
+        component: crate::v2::programming_intent::ProgrammingComponent,
+        lane: ProgrammingAlignmentLane,
+        group_id: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgrammingAlignmentLane {
+    Normal,
+    Preload,
 }
 
 /// Sparse authoritative components changed by one semantic Programmer interaction.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(untagged)]
+#[serde(untagged, deny_unknown_fields)]
 pub enum ProgrammingInteractionChange {
+    All {
+        desk_id: Uuid,
+        command_line: CommandLineResponse,
+        selection: ProgrammerSelectionProjection,
+        alignment: ProgrammingAlignmentProjection,
+    },
+    CommandLineAlignment {
+        desk_id: Uuid,
+        command_line: CommandLineResponse,
+        alignment: ProgrammingAlignmentProjection,
+    },
+    SelectionAlignment {
+        desk_id: Uuid,
+        selection: ProgrammerSelectionProjection,
+        alignment: ProgrammingAlignmentProjection,
+    },
+    Alignment {
+        desk_id: Uuid,
+        alignment: ProgrammingAlignmentProjection,
+    },
     Both {
         desk_id: Uuid,
         command_line: CommandLineResponse,
@@ -148,6 +199,27 @@ mod tests {
             serde_json::from_value::<ProgrammingInteractionChange>(json).unwrap(),
             change
         );
+    }
+
+    #[test]
+    fn every_sparse_combination_preserves_alignment_including_committed_off() {
+        for mask in 1..8 {
+            let mut value = json!({ "desk_id": Uuid::from_u128(1) });
+            if mask & 1 != 0 {
+                value["command_line"] = serde_json::to_value(command_line()).unwrap();
+            }
+            if mask & 2 != 0 {
+                value["selection"] = serde_json::to_value(selection()).unwrap();
+            }
+            if mask & 4 != 0 {
+                value["alignment"] = json!({
+                    "revision": 9, "mode": "off", "binding": null, "fixture_count": 0
+                });
+            }
+            let change: ProgrammingInteractionChange =
+                serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(serde_json::to_value(change).unwrap(), value, "mask {mask}");
+        }
     }
 
     fn command_line() -> CommandLineResponse {

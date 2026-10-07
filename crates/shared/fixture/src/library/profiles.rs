@@ -1,4 +1,7 @@
-use super::{FixtureLibrary, LegacyFixtureProfileSource};
+use super::{
+    FixtureGdtfSource, FixtureLibrary, LegacyFixtureProfileSource,
+    fixture_profile_source_fingerprint,
+};
 use crate::profile::FIXTURE_PROFILE_SCHEMA_VERSION;
 use crate::{FixtureDefinition, FixtureError, FixtureProfile};
 use light_core::FixtureId;
@@ -34,7 +37,11 @@ impl FixtureLibrary {
     /// corresponding warning explains how to recover or repair them.
     pub fn patchable_definitions(&self) -> Result<Vec<FixtureDefinition>, FixtureError> {
         let mut definitions = Vec::new();
-        for profile in self.profiles()? {
+        for mut profile in self.profiles()? {
+            // Catalog projections are not the authoritative portable revision. Do not echo a
+            // source archive once per mode, or reparse it for every projection. Editor reads and
+            // portable patch resolution still retrieve the complete immutable profile.
+            profile.source_gdtf = None;
             for mode in &profile.modes {
                 definitions.push(
                     profile
@@ -161,31 +168,99 @@ impl FixtureLibrary {
         )?;
         if current > 0 {
             self.conn.execute(
-                "INSERT OR IGNORE INTO fixture_profile_sources(profile_id,profile_revision,source_gdtf) SELECT profile_id,?2,source_gdtf FROM fixture_profile_sources WHERE profile_id=?1 AND profile_revision=?3",
+                "INSERT OR IGNORE INTO fixture_profile_sources(profile_id,profile_revision,source_gdtf,source_profile_fingerprint) SELECT profile_id,?2,source_gdtf,source_profile_fingerprint FROM fixture_profile_sources WHERE profile_id=?1 AND profile_revision=?3",
                 params![profile.id.0.to_string(), profile.revision, current],
             )?;
         }
         Ok(profile)
     }
 
-    /// Retain the original GDTF archive independently from the normalized editable profile.
+    /// Publish a portable import at its already reserved revision. Unlike an editor save, this
+    /// never reallocates, normalizes, overwrites, or re-certifies retained source evidence.
+    /// Returns false for an identical revision already present.
+    pub fn publish_profile_revision(&self, profile: &FixtureProfile) -> Result<bool, FixtureError> {
+        if profile.revision == 0 {
+            return Err(FixtureError::Invalid(
+                "published profile revision must be positive".into(),
+            ));
+        }
+        profile
+            .validate()
+            .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+        let value = serde_json::to_value(profile)?;
+        let digest = crate::fixture_profile_content_digest(&value)
+            .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+        let transaction = self.conn.unchecked_transaction()?;
+        // The stored revision is compared as this schema reads it, the same way the incoming
+        // profile was read: a field the schema no longer has is not a content difference.
+        if let Some(existing) = self.profile(profile.id, profile.revision)? {
+            let existing_digest =
+                crate::fixture_profile_content_digest(&serde_json::to_value(existing)?)
+                    .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+            if existing_digest != digest {
+                return Err(FixtureError::Invalid(format!(
+                    "immutable profile {} revision {} already has different contents",
+                    profile.id.0, profile.revision
+                )));
+            }
+            return Ok(false);
+        }
+        self.conn.execute(
+            "INSERT INTO fixture_profiles(id,revision,manufacturer,name,profile_json,reserved_source) VALUES(?1,?2,?3,?4,?5,?6)",
+            params![profile.id.0.to_string(), profile.revision, profile.manufacturer, profile.name, serde_json::to_string(&value)?, profile.reserved_source],
+        )?;
+        // Source lives in this exact profile JSON. No association is recalculated here.
+        transaction.commit()?;
+        Ok(true)
+    }
+
+    /// Publish the profile and original source together. A failed source write cannot leave a
+    /// partially imported revision, and revision conflicts leave the existing source untouched.
+    pub fn save_profile_with_source_gdtf(
+        &self,
+        mut profile: FixtureProfile,
+        expected_revision: u32,
+        source: &[u8],
+    ) -> Result<FixtureProfile, FixtureError> {
+        // Associate the exact shape save_profile will publish; revision is excluded from the hash.
+        profile.schema_version = FIXTURE_PROFILE_SCHEMA_VERSION;
+        profile.reserved_source = None;
+        profile.source_gdtf = Some(
+            crate::ProfileGdtfSource::associate(&profile, source)
+                .map_err(|error| FixtureError::Invalid(error.to_string()))?,
+        );
+        let transaction = self.conn.unchecked_transaction()?;
+        let stored = self.save_profile(profile, expected_revision)?;
+        self.set_profile_source_gdtf(stored.id, stored.revision, source)?;
+        transaction.commit()?;
+        Ok(stored)
+    }
+
+    /// Explicitly associate an original archive with this immutable, complete typed profile.
+    /// Later revisions copy this association unchanged; editing never certifies old bytes anew.
     pub fn set_profile_source_gdtf(
         &self,
         id: FixtureId,
         revision: u32,
         source: &[u8],
     ) -> Result<bool, FixtureError> {
-        let exists = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM fixture_profiles WHERE id=?1 AND revision=?2)",
-            params![id.0.to_string(), revision],
-            |row| row.get::<_, bool>(0),
-        )?;
-        if !exists {
+        let Some(profile) = self.profile(id, revision)? else {
             return Ok(false);
+        };
+        let fingerprint = fixture_profile_source_fingerprint(&profile)?;
+        if let Some(embedded) = &profile.source_gdtf {
+            let retained = embedded
+                .decoded_archive()
+                .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+            if retained != source || embedded.profile_fingerprint.as_ref() != Some(&fingerprint) {
+                return Err(FixtureError::Invalid(
+                    "This immutable profile already carries its original GDTF source. Import the GDTF as a new profile revision to replace or re-associate it.".into(),
+                ));
+            }
         }
         self.conn.execute(
-            "INSERT INTO fixture_profile_sources(profile_id,profile_revision,source_gdtf) VALUES(?1,?2,?3) ON CONFLICT(profile_id,profile_revision) DO UPDATE SET source_gdtf=excluded.source_gdtf",
-            params![id.0.to_string(), revision, source],
+            "INSERT INTO fixture_profile_sources(profile_id,profile_revision,source_gdtf,source_profile_fingerprint) VALUES(?1,?2,?3,?4) ON CONFLICT(profile_id,profile_revision) DO UPDATE SET source_gdtf=excluded.source_gdtf,source_profile_fingerprint=excluded.source_profile_fingerprint",
+            params![id.0.to_string(), revision, source, fingerprint],
         )?;
         Ok(true)
     }
@@ -203,6 +278,36 @@ impl FixtureLibrary {
             )
             .optional()
             .map_err(Into::into)
+    }
+
+    /// Reads archive bytes and their association from the same row, so reattachment cannot mix
+    /// bytes from one source with evidence for another. Legacy definition sources are unverified.
+    pub fn source_gdtf_with_evidence(
+        &self,
+        id: FixtureId,
+        revision: u32,
+    ) -> Result<Option<FixtureGdtfSource>, FixtureError> {
+        let source = self.conn.query_row(
+            "SELECT source_gdtf,source_profile_fingerprint FROM fixture_profile_sources WHERE profile_id=?1 AND profile_revision=?2",
+            params![id.0.to_string(), revision],
+            |row| Ok(FixtureGdtfSource { data: row.get(0)?, profile_fingerprint: row.get(1)? }),
+        ).optional()?;
+        if source.is_some() {
+            return Ok(source);
+        }
+        let source = self
+            .conn
+            .query_row(
+                "SELECT source_gdtf FROM fixture_definitions WHERE id=?1 AND revision=?2",
+                params![id.0.to_string(), revision],
+                |row| row.get::<_, Option<Vec<u8>>>(0),
+            )
+            .optional()?
+            .flatten();
+        Ok(source.map(|data| FixtureGdtfSource {
+            data,
+            profile_fingerprint: None,
+        }))
     }
 
     pub fn migration_warnings(&self) -> Result<Vec<String>, FixtureError> {

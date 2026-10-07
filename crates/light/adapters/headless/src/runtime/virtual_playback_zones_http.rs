@@ -37,6 +37,13 @@ async fn snapshot(
     authenticate(&state, &headers)?;
     let _activation = state.active_show.acquire().await;
     let show_id = show.resolve(&state)?;
+    if state.active_show.in_recovery() {
+        return Ok(Json(VirtualPlaybackExclusionSnapshot {
+            show_id: show_id.0,
+            revision: 0,
+            zones: Vec::new(),
+        }));
+    }
     let stored = super::playback_api::read_virtual_playback_exclusions(&state, show_id)?;
     Ok(Json(VirtualPlaybackExclusionSnapshot {
         show_id: show_id.0,
@@ -62,7 +69,7 @@ async fn update_zones(
     };
 
     let _activation = state.active_show.acquire().await;
-    let show_id = show.resolve(&state)?;
+    let show_id = show.resolve_writable(&state)?;
     let action = ReplayAction {
         show_id: show_id.0,
         expected_revision: request.expected_revision,

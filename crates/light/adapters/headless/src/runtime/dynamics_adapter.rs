@@ -15,37 +15,50 @@ pub(super) fn controller_for_runtime_instance(
     session: &Session,
     runtime_or_controller_id: Uuid,
 ) -> Result<Uuid, String> {
-    let runtime = state.output.dynamic_runtime_snapshot();
-    if runtime.instances.iter().any(|instance| {
-        instance
-            .controllers
-            .iter()
-            .any(|controller| controller.id == runtime_or_controller_id)
-    }) {
-        return Ok(runtime_or_controller_id);
+    let programmer = state
+        .programming
+        .get(session.id)
+        .ok_or_else(|| "Programmer is unavailable".to_owned())?;
+    // Staged sources may not have a Live runtime instance yet. Both authored links and
+    // scoped controller IDs resolve against the actual local Programmer before runtime lookup.
+    if let Some(controller) = light_application::resolve_programmer_dynamic_controller(
+        &programmer,
+        runtime_or_controller_id,
+    ) {
+        return Ok(controller.controller_id);
     }
+    let runtime = state.output.dynamic_runtime_snapshot();
     let instance = runtime
         .instances
         .iter()
         .find(|instance| instance.id == runtime_or_controller_id)
         .ok_or_else(|| "Dynamic runtime instance does not exist".to_owned())?;
-    let programmer_id = state
-        .programming
-        .get(session.id)
-        .map(|programmer| programmer.id.0);
-    if let Some(controller) = instance.controllers.iter().find(|controller| {
-        matches!(
-            controller.source,
-            light_dynamics::DynamicControllerSource::Programmer {
-                programmer_id: source
-            } if Some(source) == programmer_id
-        )
-    }) {
-        return Ok(controller.id);
-    }
-    match instance.controllers.as_slice() {
-        [controller] => Ok(controller.id),
-        [] => Err("Dynamic runtime instance has no active controller".to_owned()),
+    let mut owned = instance
+        .controllers
+        .iter()
+        .filter_map(|controller| {
+            let light_dynamics::DynamicControllerSource::Programmer {
+                programmer_id,
+                instance_link,
+            } = controller.source
+            else {
+                return None;
+            };
+            if programmer_id != programmer.id.0 {
+                return None;
+            }
+            light_application::resolve_programmer_dynamic_controller(
+                &programmer,
+                instance_link.unwrap_or(controller.id),
+            )
+            .map(|source| source.controller_id)
+        })
+        .collect::<Vec<_>>();
+    owned.sort_unstable();
+    owned.dedup();
+    match owned.as_slice() {
+        [controller] => Ok(*controller),
+        [] => Err("Dynamic controller is not present in this Programmer".to_owned()),
         _ => Err(
             "Dynamic runtime instance has multiple controllers; use its exact running source"
                 .to_owned(),
@@ -54,6 +67,15 @@ pub(super) fn controller_for_runtime_instance(
 }
 
 impl DynamicsPorts for ServerDynamicsPorts<'_> {
+    fn supported_programming_contract(&self) -> u16 {
+        self.state.output.supported_programming_contract()
+    }
+
+    fn selection_changed(&self) {
+        // Like a Group playback selecting its members: callers persist the Programmer.
+        super::reconcile_highlight_selection(self.state, self.session, "dynamic_capable_selection");
+    }
+
     fn authorize(&self, context: &ActionContext) -> Result<(), ActionError> {
         if context.desk_id != self.session.desk.id || context.session_id != Some(self.session.id.0)
         {
@@ -92,6 +114,14 @@ impl DynamicsPorts for ServerDynamicsPorts<'_> {
                         .iter()
                         .any(|controller| controller.id == controller_id)
             })
+    }
+
+    fn runtime_controller_instance(&self, controller_id: Uuid) -> Option<Uuid> {
+        self.state.output.dynamic_controller_instance(controller_id)
+    }
+
+    fn reconcile_programmer_runtime(&self) {
+        self.state.output.reconcile_dynamic_runtime();
     }
 
     fn start_runtime(&self, request: DynamicStartRequest) -> Result<Uuid, DynamicRuntimeError> {

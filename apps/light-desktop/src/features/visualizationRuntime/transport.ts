@@ -1,3 +1,4 @@
+import type { OutputReadoutSnapshot } from "../../api/familyEncoderModels";
 import type { VisualizationSnapshot } from "../../api/types";
 import type {
 	VisualizationRuntimeLane,
@@ -22,6 +23,11 @@ export interface VisualizationRuntimeStreamObserver {
 		snapshot: VisualizationSnapshot,
 	): void;
 	error(error: Error): void;
+	/**
+	 * TL-594: typed readouts of the claimed owners, from the same accepted source and with the
+	 * same lease as the Normal lane message of that publication.
+	 */
+	readouts?(snapshot: OutputReadoutSnapshot, sourceFrame: number): void;
 }
 
 export interface VisualizationRuntimeStream {
@@ -29,7 +35,14 @@ export interface VisualizationRuntimeStream {
 		lanes: readonly VisualizationRuntimeLane[],
 		maxRateHz: number,
 		includeDynamicStack?: boolean,
+		/** Every resolved attribute rather than only those the Stage draws (Preset pools). */
+		completeValues?: boolean,
 	): void;
+	/**
+	 * Replaces the readout claim sent with the next Subscribe (`null` or empty clears it). The
+	 * server answers on the Normal lane only, so a claim needs a Normal lane claim to deliver.
+	 */
+	updateReadoutClaim?(fixtureIds: readonly string[] | null): void;
 	close(): void;
 }
 

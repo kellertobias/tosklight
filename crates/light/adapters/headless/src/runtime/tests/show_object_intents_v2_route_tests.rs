@@ -747,7 +747,7 @@ async fn dynamic_http_routes_use_runtime_instance_identity_and_project_authorita
 }
 
 #[tokio::test]
-async fn dynamic_runtime_is_show_scoped_and_restores_exactly_after_show_reload() {
+async fn dynamic_checkpoint_is_show_scoped_while_retained_programmer_reconciles() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -797,10 +797,40 @@ async fn dynamic_runtime_is_show_scoped_and_restores_exactly_after_show_reload()
         .await
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);
-    assert!(
-        state.output.dynamic_runtime_snapshot().instances.is_empty(),
-        "a show without persisted Dynamic runtime must not inherit another show's instances"
+    // The desk Programmer remains authoritative across show changes. Reconcile its
+    // authored fallback before the first frame, but never inherit the outgoing show's
+    // runtime instance or sample/history state into an empty destination checkpoint.
+    let destination_runtime = state.output.dynamic_runtime_snapshot();
+    assert_eq!(destination_runtime.instances.len(), 1);
+    let fresh = &destination_runtime.instances[0];
+    let saved = &before_reload.instances[0];
+    assert_ne!(
+        fresh.id, saved.id,
+        "outgoing runtime identity must not leak"
     );
+    assert_eq!(fresh.controllers.len(), saved.controllers.len());
+    for (current, original) in fresh.controllers.iter().zip(&saved.controllers) {
+        assert_eq!(current.id, original.id);
+        assert_eq!(current.source, original.source);
+        assert_eq!(current.priority, original.priority);
+        assert_eq!(current.size, original.size);
+        assert_eq!(current.speed_multiplier, original.speed_multiplier);
+        assert_eq!(current.phase_offset_degrees, original.phase_offset_degrees);
+        assert_eq!(current.paused, original.paused);
+    }
+    // A newly derived owner uses the authored row's current timing, not another show's
+    // historical controller activation timestamp. This rank is separate from the clock.
+    let session = authenticate_token(&state, &token).unwrap();
+    let authored = state.programming.get(session.id).unwrap();
+    assert_eq!(
+        fresh.controllers[0].activated_at_millis,
+        authored.dynamic_values[0].changed_at_millis
+    );
+    assert_eq!(fresh.targets, saved.targets);
+    assert_eq!(fresh.definition.id, saved.definition.id);
+    assert!(fresh.last_sample_values.is_empty());
+    assert!(fresh.synchronized_hold_values.is_empty());
+    assert!(fresh.random_streams.is_empty());
 
     let reopened = app
         .clone()
@@ -808,10 +838,15 @@ async fn dynamic_runtime_is_show_scoped_and_restores_exactly_after_show_reload()
         .await
         .unwrap();
     assert_eq!(reopened.status(), StatusCode::OK);
+    // Reconciliation refreshes the controller's LTP rank stamp from the current authored
+    // row. Its clock/transition origin, instance identity and retained history stay exact.
+    let mut expected = before_reload;
+    expected.instances[0].controllers[0].activated_at_millis =
+        authored.dynamic_values[0].changed_at_millis;
     assert_eq!(
         state.output.dynamic_runtime_snapshot(),
-        before_reload,
-        "show reload restores instance identity, controllers, epoch, and local overrides exactly"
+        expected,
+        "reload preserves the saved clock and history while refreshing authoritative LTP rank"
     );
 
     let _ = std::fs::remove_dir_all(data_dir);

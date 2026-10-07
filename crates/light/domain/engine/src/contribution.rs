@@ -1,33 +1,49 @@
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, MergeMode, TimedValue};
-use light_playback::{AutomaticPlaybackTransition, PlaybackContribution};
+use light_playback::{AutomaticPlaybackTransition, PlaybackContribution, SequenceMasterSource};
 use rustc_hash::FxHashMap;
 use std::collections::{HashMap, hash_map::Entry};
 
-pub(crate) fn value_for_ordered_position(
-    value: &AttributeValue,
-    index: usize,
-    count: usize,
-) -> AttributeValue {
-    let AttributeValue::Spread(points) = value else {
-        return value.clone();
-    };
-    if points.is_empty() {
-        return AttributeValue::Normalized(0.0);
-    }
-    // Shared deterministic anchor rule — every surface resolves stored spreads identically.
-    AttributeValue::Normalized(light_core::spread_position(points, index, count))
-}
-
-pub(crate) type ApplicableSequenceMaster = crate::ContributionSequenceMaster;
+mod offered_origin;
+mod parallel_offers;
+mod playback_evidence;
+pub(crate) use offered_origin::OfferedOrigin;
+pub(crate) use parallel_offers::OfferScratch;
+pub(crate) use playback_evidence::PlaybackEvidenceCache;
 
 pub(crate) struct EngineContribution {
     value: TimedValue,
     transition_ordinal: Option<u64>,
-    sequence_master: Option<ApplicableSequenceMaster>,
+    /// The Playback this value came from, for source replacement and tracing. None for every
+    /// other source.
+    playback_source: Option<SequenceMasterSource>,
     /// Where the producer already knows this pair lives; read by number when it belongs to the
     /// frame's generation, by name otherwise.
     address: Option<light_core::FrameAddress>,
+    origin: Option<std::sync::Arc<crate::contribution_batch::ContributionOrigin>>,
+    family_evidence: Option<std::sync::Arc<crate::ContributionFamilyEvidence>>,
+    /// Runtime-only live Position crossing behind the held value (TL-544 G1).
+    pending_transition: Option<std::sync::Arc<light_core::programming::PendingFamilyTransition>>,
+}
+
+#[cfg(test)]
+impl EngineContribution {
+    pub(crate) fn timed_value(&self) -> &TimedValue {
+        &self.value
+    }
+
+    /// Every field, for tests comparing two contribution lists in order.
+    pub(crate) fn describe(&self) -> String {
+        format!(
+            "{:?} {:?} {:?} {:?} {:?} {:?}",
+            self.value,
+            self.transition_ordinal,
+            self.playback_source,
+            self.address,
+            self.origin,
+            self.family_evidence
+        )
+    }
 }
 
 /// Borrowed arbitration result for intermediate lookups during one render.
@@ -62,8 +78,16 @@ impl<'a> IndexedContribution<'a> {
 
 impl<'a> ResolvedContributionIndex<'a> {
     pub(crate) fn new(values: &'a [EngineContribution]) -> Self {
+        Self::from_contributions(values.iter())
+    }
+
+    pub(crate) fn from_contributions(
+        values: impl IntoIterator<Item = &'a EngineContribution>,
+    ) -> Self {
+        let values = values.into_iter();
+        let (minimum, maximum) = values.size_hint();
         let mut index = Self {
-            winners: HashMap::with_capacity(values.len()),
+            winners: HashMap::with_capacity(maximum.unwrap_or(minimum)),
         };
         for candidate in values {
             index.add(IndexedContribution::Engine(candidate));
@@ -90,6 +114,31 @@ impl<'a> ResolvedContributionIndex<'a> {
             .map(|winner| &winner.value().value)
     }
 
+    /// Retain the exact winning underlay at a transition boundary. An independent sample
+    /// without producer evidence stays unknown, even if it equals a known authored value.
+    pub(crate) fn family_evidence(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<std::sync::Arc<crate::ContributionFamilyEvidence>> {
+        match self.winners.get(&(fixture_id, attribute))? {
+            IndexedContribution::Sample(sample) => sample.family_evidence().cloned(),
+            IndexedContribution::Engine(contribution) => contribution.family_evidence.clone(),
+        }
+    }
+
+    /// The live Position crossing behind the winning underlay, if it is still moving.
+    pub(crate) fn pending_transition(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&std::sync::Arc<light_core::programming::PendingFamilyTransition>> {
+        match self.winners.get(&(fixture_id, attribute))? {
+            IndexedContribution::Sample(_) => None,
+            IndexedContribution::Engine(contribution) => contribution.pending_transition.as_ref(),
+        }
+    }
+
     fn add(&mut self, candidate: IndexedContribution<'a>) {
         let value = candidate.value();
         let key = (value.fixture_id, &value.attribute);
@@ -112,9 +161,21 @@ impl EngineContribution {
         Self {
             value,
             transition_ordinal: None,
-            sequence_master: None,
+            playback_source: None,
             address: None,
+            origin: None,
+            family_evidence: None,
+            pending_transition: None,
         }
+    }
+
+    /// The live Position crossing behind this held value (TL-544 G1).
+    pub(crate) fn with_pending_transition(
+        mut self,
+        pending: Option<std::sync::Arc<light_core::programming::PendingFamilyTransition>>,
+    ) -> Self {
+        self.pending_transition = pending;
+        self
     }
 
     /// Say where this contribution's pair lives, when the producer knows.
@@ -123,15 +184,40 @@ impl EngineContribution {
         self
     }
 
-    pub(crate) fn from_playback(contribution: PlaybackContribution) -> Self {
+    pub(crate) fn with_origin(
+        mut self,
+        origin: Option<std::sync::Arc<crate::contribution_batch::ContributionOrigin>>,
+    ) -> Self {
+        self.origin = origin;
+        self
+    }
+
+    pub(crate) fn with_family_evidence(
+        mut self,
+        evidence: Option<std::sync::Arc<crate::ContributionFamilyEvidence>>,
+    ) -> Self {
+        self.family_evidence = evidence;
+        self
+    }
+
+    pub(crate) fn from_playback(
+        contribution: PlaybackContribution,
+        evidence_cache: &mut PlaybackEvidenceCache,
+    ) -> Self {
+        // Endpoint value proof cannot reconstruct historical authorship after restore, pause,
+        // manual crossfade or interruption. Only the producer's retained evidence qualifies.
+        let family_evidence = contribution
+            .family_evidence
+            .as_ref()
+            .map(|evidence| evidence_cache.project(evidence));
         Self {
             value: contribution.value,
             transition_ordinal: Some(contribution.transition_ordinal),
-            sequence_master: Some(ApplicableSequenceMaster::new(
-                contribution.source,
-                contribution.sequence_master,
-            )),
+            playback_source: Some(contribution.source),
             address: contribution.address,
+            origin: None,
+            family_evidence,
+            pending_transition: contribution.pending_transition,
         }
     }
 
@@ -142,6 +228,20 @@ impl EngineContribution {
     pub(crate) fn attribute(&self) -> &AttributeKey {
         &self.value.attribute
     }
+
+    pub(crate) fn replaced_by(&self, sampled: &[crate::ContributionBatch]) -> bool {
+        self.playback_source.is_some_and(|source| {
+            crate::replaces_source(
+                sampled,
+                &crate::ContributionSourceId::playback(source),
+                &self.value,
+            )
+        })
+    }
+
+    pub(crate) fn playback_value(&self) -> Option<(SequenceMasterSource, &TimedValue)> {
+        self.playback_source.map(|source| (source, &self.value))
+    }
 }
 
 #[derive(Default)]
@@ -151,7 +251,6 @@ pub(crate) struct ResolvedAttributes {
     /// the boundary, once, if anyone asks.
     pub(crate) values: ResolvedValues,
     pub(crate) changed_at: ResolvedChangedAt,
-    pub(crate) sequence_masters: FxHashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
     pub(crate) automatic_playback_transitions: Vec<AutomaticPlaybackTransition>,
     /// The frame these values were resolved into, kept so the render can read by slot rather than
     /// by name. Absent for callers that assemble a projection from maps they were handed.
@@ -173,6 +272,45 @@ impl ResolvedAttributes {
         }
     }
 
+    /// Master every level value (Intensity, Volume) by `factor(owner, fixture_index)`, on the
+    /// dense frame and on the map path alike.
+    ///
+    /// A level nobody contributed is its profile default, so where its factor is not full it is
+    /// held at default × factor, with no source. A full factor leaves the frame untouched.
+    pub(crate) fn scale_levels(
+        &mut self,
+        slots: &crate::SlotTable,
+        factor: &mut impl FnMut(FixtureId, Option<u32>) -> f32,
+    ) {
+        if let Some(frame) = self.frame.as_mut() {
+            frame.scale_levels(&mut *factor);
+            return;
+        }
+        for ((owner, attribute), value) in &mut self.values {
+            if attribute.is_level()
+                && let Some(level) = value.normalized()
+            {
+                *value = AttributeValue::Normalized(level * factor(*owner, None));
+            }
+        }
+        // The map path has no epochs: an unsourced level is simply a missing name.
+        for level in slots.level_slots() {
+            let Some(default) = level.default else {
+                continue;
+            };
+            let (owner, attribute) = slots.pair(level.slot);
+            let key = (owner, attribute.clone());
+            if self.values.contains_key(&key) {
+                continue;
+            }
+            let scale = factor(owner, Some(level.root));
+            if scale != 1.0 {
+                self.values
+                    .insert(key, AttributeValue::Normalized(default * scale));
+            }
+        }
+    }
+
     /// Take an attribute over after arbitration, as a Freeze and a Group colour do.
     ///
     /// Writes the frame and the maps together. Anything that changed only one of them would leave
@@ -184,12 +322,11 @@ impl ResolvedAttributes {
         value: AttributeValue,
         changed_at: Option<DateTime<Utc>>,
     ) {
-        // The holder of an attribute after an override is the override, so an underlying Cue
-        // master must not go on scaling what it no longer decides. `force` clears it on the dense
-        // path; the map path removes it here.
         if let Some(frame) = self.frame.as_mut() {
             if let Some(slot) = frame.slots().slot(fixture_id, attribute) {
                 frame.force_at(slot, value, changed_at);
+            } else {
+                frame.force_overflow(fixture_id, attribute, value, changed_at);
             }
             return;
         }
@@ -197,7 +334,6 @@ impl ResolvedAttributes {
         if let Some(changed_at) = changed_at {
             self.changed_at.insert(key.clone(), changed_at);
         }
-        self.sequence_masters.remove(&key);
         self.values.insert(key, value);
     }
 }
@@ -230,6 +366,84 @@ impl Drop for ResolvedFrame {
 }
 
 impl ResolvedFrame {
+    /// Borrow the actual winner without materializing a named frame, including unnumbered pairs.
+    pub(crate) fn winner(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&EngineWinner> {
+        match self.slots.slot(fixture, attribute) {
+            Some(slot) => self.state.as_ref()?.get(slot),
+            None => self
+                .overflow(fixture)
+                .iter()
+                .find(|(key, _)| key == attribute)
+                .map(|(_, winner)| winner),
+        }
+    }
+
+    /// A prepared family projection replaces the resolved payload without rerunning arbitration.
+    pub(crate) fn project_family(
+        &mut self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+        value: AttributeValue,
+        metadata: crate::FamilyProjectionMetadata,
+    ) -> bool {
+        if let Some(slot) = self.slots.slot(fixture, attribute) {
+            return self
+                .state
+                .as_mut()
+                .is_some_and(|state| state.project_family(slot, value, metadata));
+        }
+        let Some((_, winner)) = self
+            .overflow
+            .get_mut(&fixture)
+            .and_then(|values| values.iter_mut().find(|(key, _)| key == attribute))
+        else {
+            return false;
+        };
+        metadata.apply(winner, value);
+        true
+    }
+
+    pub(crate) fn origin(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&crate::contribution_batch::ContributionOrigin> {
+        self.slots
+            .slot(fixture, attribute)
+            .and_then(|slot| self.state.as_ref()?.get(slot)?.origin.as_deref())
+            .or_else(|| {
+                self.overflow(fixture)
+                    .iter()
+                    .find(|(key, _)| key == attribute)
+                    .and_then(|(_, winner)| winner.origin.as_deref())
+            })
+    }
+    pub(crate) fn family_evidence(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&std::sync::Arc<crate::ContributionFamilyEvidence>> {
+        self.slots
+            .slot(fixture, attribute)
+            .and_then(|slot| self.state.as_ref()?.get(slot)?.family_evidence.as_ref())
+            .or_else(|| {
+                self.overflow(fixture)
+                    .iter()
+                    .find(|(key, _)| key == attribute)
+                    .and_then(|(_, winner)| winner.family_evidence.as_ref())
+            })
+    }
+    pub(crate) fn pending_transition(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&std::sync::Arc<light_core::programming::PendingFamilyTransition>> {
+        self.winner(fixture, attribute)?.pending_transition.as_ref()
+    }
     /// Values this frame could not number, for one fixture.
     pub(crate) fn overflow(&self, fixture_id: FixtureId) -> &[(AttributeKey, EngineWinner)] {
         // Checked for emptiness before hashing: a show whose sources name attributes their
@@ -264,10 +478,18 @@ impl ResolvedFrame {
         self.state.as_ref()?.get(slot).map(|winner| &winner.value)
     }
 
-    /// The sequence master scaling a slot, if the winning source carried one.
+    /// The raw parameter holding a pair, before the output-parameter masters (Freeze included).
+    pub(crate) fn raw_value(
+        &self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&AttributeValue> {
+        self.winner(fixture, attribute)?.raw_value()
+    }
+
     /// When the value holding a slot last changed.
     pub(crate) fn changed_at(&self, slot: crate::Slot) -> Option<DateTime<Utc>> {
-        Some(self.state.as_ref()?.get(slot)?.changed_at)
+        self.state.as_ref()?.get(slot)?.output_changed_at()
     }
 
     /// Every slot this frame wrote, with the value that won it.
@@ -282,15 +504,46 @@ impl ResolvedFrame {
             .map_or(0, crate::FrameState::occupied_len)
     }
 
-    pub(crate) fn sequence_master(&self, slot: crate::Slot) -> Option<ApplicableSequenceMaster> {
-        self.state
-            .as_ref()?
-            .get(slot)
-            .and_then(|winner| winner.sequence_master)
-    }
-
     pub(crate) fn slots(&self) -> &crate::SlotTable {
         &self.slots
+    }
+
+    /// Master every level value (Intensity, Volume) by its fixture's factor, keeping who decided
+    /// it, and hold an unsourced level at its mastered profile default. `factor(owner, index)`.
+    ///
+    /// The unnumbered overflow only ever holds contributed values: every level a definition
+    /// declares is numbered, so an unsourced level always has a slot.
+    pub(crate) fn scale_levels(&mut self, mut factor: impl FnMut(FixtureId, Option<u32>) -> f32) {
+        if let Some(state) = self.state.as_mut() {
+            for level in self.slots.level_slots() {
+                let (owner, _) = self.slots.pair(level.slot);
+                let scale = factor(owner, Some(level.root));
+                if scale == 1.0 {
+                    continue;
+                }
+                if state.get(level.slot).is_some() {
+                    state.scale_level(level.slot, scale);
+                } else if let Some(default) = level.default {
+                    state.fill_unsourced_level(
+                        level.slot,
+                        AttributeValue::Normalized(default * scale),
+                    );
+                }
+            }
+        }
+        for (owner, values) in &mut self.overflow {
+            for (attribute, winner) in values.iter_mut() {
+                if attribute.is_level()
+                    && let Some(level) = winner.value.normalized()
+                {
+                    let scale = factor(*owner, None);
+                    if scale != 1.0 {
+                        winner.pre_master.get_or_insert(Some(winner.value.clone()));
+                        winner.value = AttributeValue::Normalized(level * scale);
+                    }
+                }
+            }
+        }
     }
 
     /// Write a value into a slot whatever holds it, as a Freeze does.
@@ -305,6 +558,31 @@ impl ResolvedFrame {
             state.force_at(slot, value, changed_at);
         }
     }
+
+    pub(crate) fn force_overflow(
+        &mut self,
+        fixture: FixtureId,
+        attribute: &AttributeKey,
+        value: AttributeValue,
+        changed_at: Option<DateTime<Utc>>,
+    ) {
+        let Some((_, winner)) = self
+            .overflow
+            .get_mut(&fixture)
+            .and_then(|values| values.iter_mut().find(|(key, _)| key == attribute))
+        else {
+            return;
+        };
+        winner.value = value;
+        if let Some(changed_at) = changed_at {
+            winner.changed_at = changed_at;
+            winner.projected_changed_at = None;
+        }
+        winner.origin = None;
+        winner.family_evidence = None;
+        winner.pending_transition = None;
+        winner.pre_master = None;
+    }
 }
 
 /// Arbitrates one frame's contributions into slot-addressed storage.
@@ -318,6 +596,7 @@ pub(crate) struct EngineContributionResolver<'a> {
     pool: Option<std::sync::Arc<crate::FramePool>>,
     frame: crate::FrameState,
     overflow: FxHashMap<(FixtureId, AttributeKey), EngineWinner>,
+    trace_sources: bool,
 }
 
 impl<'a> EngineContributionResolver<'a> {
@@ -338,6 +617,7 @@ impl<'a> EngineContributionResolver<'a> {
             pool: Some(std::sync::Arc::clone(pool)),
             frame,
             overflow: FxHashMap::default(),
+            trace_sources: false,
         }
     }
 
@@ -352,6 +632,7 @@ impl<'a> EngineContributionResolver<'a> {
             pool: None,
             frame,
             overflow: FxHashMap::default(),
+            trace_sources: false,
         }
     }
 
@@ -361,12 +642,44 @@ impl<'a> EngineContributionResolver<'a> {
         }
     }
 
+    pub(crate) fn extend_borrowed_contributions<'c>(
+        &mut self,
+        values: impl IntoIterator<Item = &'c EngineContribution>,
+    ) {
+        for candidate in values {
+            let value = &candidate.value;
+            let (origin, family_evidence) =
+                parallel_offers::contribution_trace(self.trace_sources, candidate);
+            self.add_borrowed(
+                value.fixture_id,
+                &value.attribute,
+                &value.value,
+                value.priority,
+                value.changed_at,
+                value.merge_mode,
+                candidate.transition_ordinal,
+                candidate.address,
+                origin,
+                family_evidence,
+                candidate.pending_transition.as_ref(),
+            );
+        }
+    }
+
+    pub(crate) fn tracing_sources(mut self) -> Self {
+        self.trace_sources = true;
+        self
+    }
+
     pub(crate) fn add_playback_unscaled(&mut self, value: TimedValue, transition_ordinal: u64) {
         self.add(EngineContribution {
             value,
             transition_ordinal: Some(transition_ordinal),
-            sequence_master: None,
+            playback_source: None,
             address: None,
+            origin: None,
+            family_evidence: None,
+            pending_transition: None,
         });
     }
 
@@ -376,6 +689,8 @@ impl<'a> EngineContributionResolver<'a> {
     ) {
         for sample in samples {
             let value = sample.value();
+            let (origin, family_evidence) =
+                parallel_offers::sample_trace(self.trace_sources, sample);
             self.add_borrowed(
                 value.fixture_id,
                 &value.attribute,
@@ -384,8 +699,10 @@ impl<'a> EngineContributionResolver<'a> {
                 value.changed_at,
                 value.merge_mode,
                 sample.transition_ordinal(),
-                sample.sequence_master(),
                 sample.address(),
+                origin,
+                family_evidence,
+                None,
             );
         }
     }
@@ -401,7 +718,17 @@ impl<'a> EngineContributionResolver<'a> {
         merge_mode: MergeMode,
     ) {
         self.add_borrowed(
-            fixture_id, attribute, value, priority, changed_at, merge_mode, None, None, None,
+            fixture_id,
+            attribute,
+            value,
+            priority,
+            changed_at,
+            merge_mode,
+            None,
+            None,
+            OfferedOrigin::None,
+            None,
+            None,
         );
     }
 
@@ -439,18 +766,15 @@ impl<'a> EngineContributionResolver<'a> {
         changed_at: DateTime<Utc>,
         merge_mode: MergeMode,
         transition_ordinal: Option<u64>,
-        sequence_master: Option<ApplicableSequenceMaster>,
         address: Option<light_core::FrameAddress>,
+        origin: OfferedOrigin<'_>,
+        family_evidence: Option<&std::sync::Arc<crate::ContributionFamilyEvidence>>,
+        pending_transition: Option<
+            &std::sync::Arc<light_core::programming::PendingFamilyTransition>,
+        >,
     ) {
-        // A number from this generation is trusted as it stands; anything else is a name.
-        let slot = match address {
-            Some(address) if address.generation == self.slots.generation() => {
-                Some(crate::Slot::from_index(address.slot as usize))
-            }
-            _ => self.slots.slot(fixture_id, attribute),
-        };
-        match slot {
-            Some(slot) => self.frame.offer(
+        match self.slot_for(fixture_id, attribute, address) {
+            Some(slot) => self.frame.offer_with_origin(
                 slot,
                 crate::Offer {
                     priority,
@@ -459,9 +783,10 @@ impl<'a> EngineContributionResolver<'a> {
                     transition_ordinal,
                     normalized: value.normalized().unwrap_or(0.0),
                 },
+                (origin, family_evidence),
                 |winner| {
                     winner.value = value.clone();
-                    winner.sequence_master = sequence_master;
+                    winner.pending_transition = pending_transition.cloned();
                 },
             ),
             None => self.offer_overflow(
@@ -471,9 +796,13 @@ impl<'a> EngineContributionResolver<'a> {
                     value: value.clone(),
                     priority,
                     changed_at,
+                    projected_changed_at: None,
                     merge_mode,
                     transition_ordinal,
-                    sequence_master,
+                    origin: origin.resolve(None),
+                    family_evidence: family_evidence.cloned(),
+                    pending_transition: pending_transition.cloned(),
+                    pre_master: None,
                 },
             ),
         }
@@ -483,9 +812,22 @@ impl<'a> EngineContributionResolver<'a> {
         let EngineContribution {
             value,
             transition_ordinal,
-            sequence_master,
+            playback_source,
             address,
+            mut origin,
+            family_evidence,
+            pending_transition,
         } = candidate;
+        if self.trace_sources && origin.is_none() {
+            origin = playback_source.map(|source| {
+                crate::contribution_batch::ContributionOrigin::with_transition_ordinal(
+                    crate::ContributionSourceId::playback(source),
+                    &value,
+                    transition_ordinal,
+                )
+            });
+        }
+        let family_evidence = self.trace_sources.then_some(family_evidence).flatten();
         let TimedValue {
             fixture_id,
             attribute,
@@ -504,7 +846,7 @@ impl<'a> EngineContributionResolver<'a> {
         match slot {
             Some(slot) => {
                 let level = value.normalized().unwrap_or(0.0);
-                let mut carried = Some(value);
+                let mut carried = Some((value, pending_transition));
                 self.frame.offer(
                     slot,
                     crate::Offer {
@@ -515,10 +857,12 @@ impl<'a> EngineContributionResolver<'a> {
                         normalized: level,
                     },
                     |winner| {
-                        if let Some(value) = carried.take() {
+                        if let Some((value, pending_transition)) = carried.take() {
                             winner.value = value;
+                            winner.pending_transition = pending_transition;
                         }
-                        winner.sequence_master = sequence_master;
+                        winner.origin = origin;
+                        winner.family_evidence = family_evidence;
                     },
                 );
             }
@@ -529,11 +873,31 @@ impl<'a> EngineContributionResolver<'a> {
                     value,
                     priority,
                     changed_at,
+                    projected_changed_at: None,
                     merge_mode,
                     transition_ordinal,
-                    sequence_master,
+                    origin,
+                    family_evidence,
+                    pending_transition,
+                    pre_master: None,
                 },
             ),
+        }
+    }
+
+    /// A pair's slot: a number from this generation is trusted as it stands; anything else is
+    /// a name.
+    fn slot_for(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+        address: Option<light_core::FrameAddress>,
+    ) -> Option<crate::Slot> {
+        match address {
+            Some(address) if address.generation == self.slots.generation() => {
+                Some(crate::Slot::from_index(address.slot as usize))
+            }
+            _ => self.slots.slot(fixture_id, attribute),
         }
     }
 
@@ -655,254 +1019,7 @@ pub type ResolvedValues = FxHashMap<(FixtureId, AttributeKey), AttributeValue>;
 pub type ResolvedChangedAt = FxHashMap<(FixtureId, AttributeKey), DateTime<Utc>>;
 
 #[cfg(test)]
-mod transition_order_tests {
-    use super::*;
-    use light_core::CueListId;
-    use light_playback::SequenceMasterSource;
-
-    /// A show of one fixture that declares the attributes these tests arbitrate.
-    fn resolved(
-        fixture_id: FixtureId,
-        attributes: &[&str],
-        contributions: impl IntoIterator<Item = EngineContribution>,
-    ) -> crate::FrameValues {
-        let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, attributes);
-        let slots =
-            std::sync::Arc::new(crate::SlotTable::compile(1, std::slice::from_ref(&fixture)));
-        let mut resolver = EngineContributionResolver::unpooled(&slots);
-        resolver.extend(contributions);
-        resolver.finish().named_values()
-    }
-
-    fn playback_value(
-        fixture_id: FixtureId,
-        value: f32,
-        merge_mode: MergeMode,
-        changed_at: DateTime<Utc>,
-        transition_ordinal: u64,
-    ) -> EngineContribution {
-        EngineContribution::from_playback(PlaybackContribution {
-            value: TimedValue {
-                fixture_id,
-                attribute: AttributeKey::intensity(),
-                value: AttributeValue::Normalized(value),
-                priority: 10,
-                changed_at,
-                programmer_order: 0,
-                merge_mode,
-                fade: false,
-                fade_millis: None,
-                delay_millis: None,
-            },
-            transition_ordinal,
-            sequence_master: 1.0,
-            source: SequenceMasterSource {
-                playback_number: None,
-                playback_identity: None,
-                cue_list_id: CueListId::new(),
-                temporary: false,
-            },
-            address: None,
-        })
-    }
-
-    /// A value the compiled patch could not number must still reach the boundary and projection,
-    /// and must not cost the rest of the frame its dense reading. One unrecognised name from a
-    /// hardware surface or an HTTP client is a lookup, not a slower desk.
-    /// The slot table is compiled from the patch and from nothing else, so an inbound surface —
-    /// OSC, HTTP, anything that names an attribute freely — cannot grow it. That is the bound the
-    /// item asks for, and it is zero rather than a limit: a name the patch never declared is an
-    /// overflow entry on the frame that made it, discarded with that frame.
-    #[test]
-    fn an_inbound_name_cannot_grow_the_slot_table() {
-        let fixture_id = FixtureId::new();
-        let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, &["intensity"]);
-        let slots =
-            std::sync::Arc::new(crate::SlotTable::compile(1, std::slice::from_ref(&fixture)));
-        let numbered = slots.len();
-        for index in 0..64 {
-            let mut resolver = EngineContributionResolver::unpooled(&slots);
-            resolver.add_borrowed_unscaled(
-                fixture_id,
-                &AttributeKey(format!("inbound{index}").into()),
-                &AttributeValue::Normalized(0.5),
-                0,
-                Utc::now(),
-                MergeMode::Ltp,
-            );
-            let _ = resolver.finish();
-        }
-        assert_eq!(
-            slots.len(),
-            numbered,
-            "sixty-four names the patch never declared leave the numbering exactly as it was"
-        );
-    }
-
-    #[test]
-    fn a_value_the_patch_never_numbered_costs_itself_a_lookup_not_the_frame() {
-        let fixture_id = FixtureId::new();
-        let undeclared = AttributeKey("neverPatched".into());
-        let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, &["intensity"]);
-        let slots =
-            std::sync::Arc::new(crate::SlotTable::compile(1, std::slice::from_ref(&fixture)));
-        let mut resolver = EngineContributionResolver::unpooled(&slots);
-        resolver.add_borrowed_unscaled(
-            fixture_id,
-            &undeclared,
-            &AttributeValue::Normalized(0.42),
-            0,
-            Utc::now(),
-            MergeMode::Ltp,
-        );
-        let mut resolved = resolver.finish();
-        let values = resolved.named_values();
-        assert_eq!(
-            values.value(fixture_id, &undeclared),
-            Some(&AttributeValue::Normalized(0.42)),
-            "an operator's value is never lost to a name the patch did not declare"
-        );
-        assert!(
-            values.is_dense(),
-            "one unnumbered name costs that value a lookup, not the whole frame its dense reading"
-        );
-        assert!(values.has_unnumbered_values());
-        assert_eq!(
-            values.values()[&(fixture_id, undeclared)],
-            AttributeValue::Normalized(0.42),
-            "and it is there when the boundary asks for everything by name"
-        );
-    }
-
-    #[test]
-    fn equal_timestamp_playback_ltp_uses_transition_order() {
-        let fixture_id = FixtureId::new();
-        let at = Utc::now();
-        let resolved = resolved(
-            fixture_id,
-            &["intensity"],
-            [
-                playback_value(fixture_id, 0.8, MergeMode::Ltp, at, 4),
-                playback_value(fixture_id, 0.2, MergeMode::Ltp, at, 5),
-            ],
-        );
-        assert_eq!(
-            resolved[&(fixture_id, AttributeKey::intensity())],
-            AttributeValue::Normalized(0.2)
-        );
-    }
-
-    #[test]
-    fn equal_timestamp_playback_htp_ignores_transition_order() {
-        let fixture_id = FixtureId::new();
-        let at = Utc::now();
-        let resolved = resolved(
-            fixture_id,
-            &["intensity"],
-            [
-                playback_value(fixture_id, 0.8, MergeMode::Htp, at, 4),
-                playback_value(fixture_id, 0.2, MergeMode::Htp, at, 5),
-            ],
-        );
-        assert_eq!(
-            resolved[&(fixture_id, AttributeKey::intensity())],
-            AttributeValue::Normalized(0.8)
-        );
-    }
-
-    #[test]
-    fn equal_timestamp_non_playback_ltp_does_not_use_playback_order() {
-        let fixture_id = FixtureId::new();
-        let at = Utc::now();
-        let value = |normalized| {
-            EngineContribution::unscaled(TimedValue {
-                fixture_id,
-                attribute: AttributeKey("pan".into()),
-                value: AttributeValue::Normalized(normalized),
-                priority: 10,
-                changed_at: at,
-                programmer_order: 0,
-                merge_mode: MergeMode::Ltp,
-                fade: false,
-                fade_millis: None,
-                delay_millis: None,
-            })
-        };
-        let resolved = resolved(fixture_id, &["pan"], [value(0.8), value(0.2)]);
-        assert_eq!(
-            resolved[&(fixture_id, AttributeKey("pan".into()))],
-            AttributeValue::Normalized(0.8)
-        );
-    }
-}
+mod transition_order_tests;
 
 #[cfg(test)]
-mod frame_address_tests {
-    use super::*;
-    use light_core::FrameAddressResolver;
-
-    fn sample(fixture_id: FixtureId, level: f32) -> crate::ContributionSample {
-        crate::ContributionSample::independent(TimedValue {
-            fixture_id,
-            attribute: AttributeKey::intensity(),
-            value: AttributeValue::Normalized(level),
-            priority: 10,
-            changed_at: Utc::now(),
-            programmer_order: 0,
-            merge_mode: MergeMode::Ltp,
-            fade: false,
-            fade_millis: None,
-            delay_millis: None,
-        })
-    }
-
-    /// A sample that says where its pair lives is read there, and lands where the name would.
-    #[test]
-    fn an_addressed_sample_lands_where_its_name_would() {
-        let fixture_id = FixtureId::new();
-        let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, &["intensity", "pan"]);
-        let slots =
-            std::sync::Arc::new(crate::SlotTable::compile(3, std::slice::from_ref(&fixture)));
-        let addresser = crate::FrameAddresser::new(std::sync::Arc::clone(&slots));
-        let address = addresser
-            .frame_address(fixture_id, &AttributeKey::intensity())
-            .expect("a declared pair has an address");
-        assert_eq!(address.generation, 3);
-        assert!(
-            addresser
-                .frame_address(fixture_id, &AttributeKey("zoom".into()))
-                .is_none(),
-            "an undeclared pair has none"
-        );
-
-        let mut resolver = EngineContributionResolver::unpooled(&slots);
-        resolver.extend_borrowed_samples([&sample(fixture_id, 0.75).at(Some(address))]);
-        let values = resolver.finish().named_values();
-        assert_eq!(
-            values.value(fixture_id, &AttributeKey::intensity()),
-            Some(&AttributeValue::Normalized(0.75))
-        );
-    }
-
-    /// A number from another patch generation is not trusted: the sample is read by name, as a
-    /// producer that has not caught up with a repatch would need.
-    #[test]
-    fn an_address_from_another_generation_falls_back_to_the_name() {
-        let fixture_id = FixtureId::new();
-        let fixture = crate::frame_slots::legacy_test_fixture(fixture_id, &["pan", "intensity"]);
-        let slots =
-            std::sync::Arc::new(crate::SlotTable::compile(4, std::slice::from_ref(&fixture)));
-        let stale = light_core::FrameAddress {
-            generation: 3,
-            slot: 0,
-        };
-        let mut resolver = EngineContributionResolver::unpooled(&slots);
-        resolver.extend_borrowed_samples([&sample(fixture_id, 0.5).at(Some(stale))]);
-        let values = resolver.finish().named_values();
-        assert_eq!(
-            values.value(fixture_id, &AttributeKey::intensity()),
-            Some(&AttributeValue::Normalized(0.5))
-        );
-        assert_eq!(values.value(fixture_id, &AttributeKey("pan".into())), None);
-    }
-}
+mod frame_address_tests;

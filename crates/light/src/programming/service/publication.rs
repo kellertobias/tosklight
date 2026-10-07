@@ -23,7 +23,7 @@ impl ProgrammingService {
             .sequence
     }
 
-    pub(super) fn publish_interaction(
+    pub(in crate::programming) fn publish_interaction(
         &self,
         context: &ActionContext,
         interaction: Option<ProgrammingInteractionChange>,

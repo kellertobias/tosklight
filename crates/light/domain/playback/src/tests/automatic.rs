@@ -351,6 +351,12 @@ fn deleting_the_active_cue_holds_output_and_anchors_navigation() {
     engine.go_at(id, started).unwrap();
     engine.go_at(id, started).unwrap();
     let mut replacement = list(vec![one, three]);
+    assert!(
+        engine
+            .contributions_with_context(started, None)
+            .iter()
+            .all(|contribution| contribution.authored_target)
+    );
     replacement.id = id;
     let active = engine.active_for_snapshot(&[replacement.clone()], started);
     assert_eq!(
@@ -361,6 +367,13 @@ fn deleting_the_active_cue_holds_output_and_anchors_navigation() {
     replaced.register(replacement).unwrap();
     replaced.restore_active(active);
     assert_eq!(contribution_level(&replaced, started, fixture), 0.6);
+    assert!(
+        replaced
+            .contributions_with_context(started, None)
+            .iter()
+            .all(|contribution| !contribution.authored_target),
+        "a deleted Cue hold has no complete historical family evidence"
+    );
     replaced.go_at(id, started).unwrap();
     assert_eq!(
         replaced.active()[0].current_cue_number,
@@ -384,12 +397,99 @@ fn deleting_the_active_cue_holds_output_and_anchors_navigation() {
         ),
         0.9
     );
+    assert!(
+        replaced
+            .contributions_with_context(started + ChronoDuration::milliseconds(500), None)
+            .iter()
+            .all(|contribution| !contribution.authored_target)
+    );
+    assert!(
+        replaced
+            .contributions_with_context(started + ChronoDuration::milliseconds(1_000), None)
+            .iter()
+            .all(|contribution| contribution.authored_target)
+    );
     replaced
         .back_at(id, started + ChronoDuration::milliseconds(1_000))
         .unwrap();
     assert_eq!(
         replaced.active()[0].current_cue_number,
         Some(cue_number(1.0))
+    );
+}
+
+#[test]
+fn deleting_active_cue_during_interrupted_fade_holds_the_actual_interior_value() {
+    let fixture = FixtureId::new();
+    let mut one = Cue::new(cue_number(1.0));
+    one.changes.push(value(fixture, "focus", 0.0));
+    let mut two = Cue::new(cue_number(2.0));
+    two.fade_millis = 1_000;
+    two.changes.push(value(fixture, "focus", 0.5));
+    let mut three = Cue::new(cue_number(3.0));
+    three.fade_millis = 1_000;
+    three.changes.push(value(fixture, "focus", 1.0));
+    let mut four = Cue::new(cue_number(4.0));
+    four.fade_millis = 1_000;
+    four.changes.push(value(fixture, "focus", 0.125));
+    let original = list(vec![one.clone(), two.clone(), three, four.clone()]);
+    let id = original.id;
+    let started = Utc::now();
+    let interrupted = started + ChronoDuration::milliseconds(500);
+    let deleted = started + ChronoDuration::milliseconds(1_000);
+    let focus_at = |engine: &PlaybackEngine, at| {
+        engine
+            .contributions_at(at)
+            .into_iter()
+            .find(|value| value.fixture_id == fixture && value.attribute.0.as_ref() == "focus")
+            .unwrap()
+            .value
+    };
+    let mut engine = PlaybackEngine::default();
+    engine.register(original).unwrap();
+    engine.go_at(id, started).unwrap();
+    engine.go_at(id, started).unwrap();
+    assert_eq!(
+        focus_at(&engine, interrupted),
+        AttributeValue::Normalized(0.25)
+    );
+    engine.go_at(id, interrupted).unwrap();
+    let before = focus_at(&engine, deleted);
+    assert_eq!(before, AttributeValue::Normalized(0.625));
+
+    let mut replacement = list(vec![one, two, four]);
+    replacement.id = id;
+    let active = engine.active_for_snapshot(&[replacement.clone()], deleted);
+    assert_eq!(
+        focus_at(&engine, deleted),
+        before,
+        "capture leaves Live unchanged"
+    );
+    assert_eq!(
+        active[0].deleted_cue_hold.as_ref().unwrap().contributions[0].value,
+        before
+    );
+    let mut replaced = PlaybackEngine::default();
+    replaced.register(replacement).unwrap();
+    replaced.restore_active(active);
+    assert_eq!(focus_at(&replaced, deleted), before);
+    let resumed = deleted + ChronoDuration::milliseconds(1_000);
+    assert_eq!(focus_at(&replaced, resumed), before);
+    assert!(
+        replaced
+            .contributions_with_context(resumed, None)
+            .iter()
+            .all(|contribution| !contribution.authored_target)
+    );
+    replaced.go_at(id, resumed).unwrap();
+    assert_eq!(focus_at(&replaced, resumed), before);
+    assert_eq!(
+        focus_at(&replaced, resumed + ChronoDuration::milliseconds(500)),
+        AttributeValue::Normalized(0.375)
+    );
+    assert_eq!(
+        focus_at(&replaced, resumed + ChronoDuration::milliseconds(1_000)),
+        AttributeValue::Normalized(0.125)
     );
 }
 

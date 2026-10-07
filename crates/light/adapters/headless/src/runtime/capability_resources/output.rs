@@ -1,6 +1,58 @@
 use super::*;
+use crate::runtime::dynamic_source_origins::{
+    DynamicRuntimeSourceCheckpoint, SharedDynamicSourceOrigins,
+};
+use crate::runtime::visualization_frame::{FrameDynamicSources, RenderedSemanticFrame};
+use light_core::programming::IntentError;
 
+mod activation;
+mod family_adapters;
+mod finalization;
+/// TL-548 C4 hook: Live handles for the Pending episode worker (own file).
+mod pending_episode_sources;
+mod preload_commit;
+mod restored_owners;
 mod runtime;
+mod transition;
+
+pub(in crate::runtime) use transition::{OutputTransitionLease, OutputTransitionOverlay};
+
+#[cfg(test)]
+mod transition_tests;
+
+pub(in crate::runtime) use activation::PreparedOutputActivation;
+
+#[cfg(test)]
+mod finalization_tests;
+#[cfg(test)]
+mod publication_tests;
+#[cfg(test)]
+mod restore_tests;
+
+/// Cold validation for both registries. Ordinary edits capture no advancing Dynamic state:
+/// they preserve current controllers/clocks at publication. Explicit show activation may attach
+/// a separately validated incoming checkpoint, intentionally replacing that state.
+#[must_use]
+pub(crate) struct PreparedOutputSnapshot {
+    engine: PreparedEngineSnapshot,
+    definitions: light_dynamics::PreparedDynamicDefinitions,
+    restored: Option<output_scheduler::RestoredDynamicCandidate>,
+}
+
+impl PreparedOutputSnapshot {
+    pub(in crate::runtime) fn snapshot(&self) -> &EngineSnapshot {
+        self.engine.snapshot()
+    }
+}
+
+impl std::fmt::Debug for PreparedOutputSnapshot {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PreparedOutputSnapshot")
+            .field("engine", &self.engine)
+            .finish_non_exhaustive()
+    }
+}
 
 #[derive(Clone)]
 pub(in crate::runtime) struct OutputResource {
@@ -19,12 +71,16 @@ pub(in crate::runtime) struct OutputResource {
     test_clock_lock: Arc<tokio::sync::Mutex<()>>,
     speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
     dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
+    dynamic_snapshot: Arc<DynamicSnapshotPublication>,
+    dynamic_source_origins: SharedDynamicSourceOrigins,
     programmer_reconciliation_cache: Arc<output_scheduler::ProgrammerReconciliationCache>,
-    visualization_dynamics: Arc<Mutex<Option<CachedVisualizationDynamics>>>,
+    family_adapters: Arc<output_scheduler::LiveFamilyAdapters>,
     visualization_ordinary: Arc<Mutex<Option<CachedVisualizationOrdinary>>>,
     dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackIdentity>>>,
     visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
     sound_capture_active: Arc<Mutex<[bool; 5]>>,
+    /// Injected accepted Pending Position source; empty until TL-548 installs one.
+    pending_position_readouts: crate::runtime::position_readout::PendingPositionReadoutSlot,
     #[cfg(test)]
     runtime_persistence_attempts: Arc<AtomicU64>,
     #[cfg(test)]
@@ -33,12 +89,6 @@ pub(in crate::runtime) struct OutputResource {
     speed_group_persistence_attempts: Arc<AtomicU64>,
     #[cfg(test)]
     speed_group_persistence_failure: Arc<std::sync::atomic::AtomicBool>,
-}
-
-#[derive(Clone)]
-pub(in crate::runtime) struct CachedVisualizationDynamics {
-    pub(in crate::runtime) runtime: light_dynamics::DynamicRuntimeSnapshot,
-    pub(in crate::runtime) samples: Vec<light_dynamics::DynamicRuntimeSample>,
 }
 
 pub(in crate::runtime) struct OutputSemanticRenderTiming {
@@ -118,6 +168,9 @@ impl TestClockDriver {
 }
 
 impl OutputResource {
+    pub(in crate::runtime) fn supported_programming_contract(&self) -> u16 {
+        self.engine().supported_programming_contract()
+    }
     pub(in crate::runtime) fn engine(&self) -> &Engine {
         &self.engine
     }
@@ -148,6 +201,8 @@ impl OutputResource {
         manual_clock: Option<Arc<ManualClock>>,
         speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
         dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
+        dynamic_snapshot: Arc<DynamicSnapshotPublication>,
+        dynamic_source_origins: SharedDynamicSourceOrigins,
         dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackIdentity>>>,
         visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
     ) -> Self {
@@ -167,14 +222,17 @@ impl OutputResource {
             test_clock_lock: Arc::default(),
             speed_groups,
             dynamics,
+            dynamic_snapshot,
+            dynamic_source_origins,
             programmer_reconciliation_cache: Arc::new(
                 output_scheduler::ProgrammerReconciliationCache::default(),
             ),
-            visualization_dynamics: Arc::new(Mutex::new(None)),
+            family_adapters: Arc::default(),
             visualization_ordinary: Arc::new(Mutex::new(None)),
             dynamic_auto_offs,
             visualization_frames,
             sound_capture_active: Arc::new(Mutex::new([false; 5])),
+            pending_position_readouts: Default::default(),
             #[cfg(test)]
             runtime_persistence_attempts: Arc::new(AtomicU64::new(0)),
             #[cfg(test)]
@@ -197,6 +255,13 @@ impl OutputResource {
         &self,
     ) -> Option<Arc<super::visualization_frame::PublishedVisualizationFrame>> {
         self.visualization_frames.latest()
+    }
+
+    /// Pending (Preload) Position readouts come only from this slot, never from Live frames.
+    pub(in crate::runtime) fn pending_position_readouts(
+        &self,
+    ) -> &crate::runtime::position_readout::PendingPositionReadoutSlot {
+        &self.pending_position_readouts
     }
 
     pub(in crate::runtime) fn sampled_visualization_frame(
@@ -308,7 +373,13 @@ impl OutputResource {
         &self,
         request: light_dynamics::DynamicStartRequest,
     ) -> Result<Uuid, light_dynamics::DynamicRuntimeError> {
-        self.dynamics.lock().start(request)
+        self.dynamics
+            .lock()
+            .apply_recorded_control(light_dynamics::TimedDynamicControl {
+                at_millis: request.now_millis,
+                control: light_dynamics::DynamicControl::Start(Box::new(request)),
+            })
+            .map(|outcome| outcome.instance_id.expect("Start selects an instance"))
     }
 
     pub(in crate::runtime) fn dynamic_runtime_snapshot(
@@ -317,11 +388,93 @@ impl OutputResource {
         self.dynamics.lock().snapshot()
     }
 
-    pub(in crate::runtime) fn restore_dynamic_runtime_snapshot(
+    /// Capture the complete persisted runtime and its provenance under one runtime lock.
+    /// The output lane publishes catalogue changes before releasing that same lock.
+    pub(in crate::runtime) fn dynamic_source_checkpoint(
         &self,
-        snapshot: light_dynamics::DynamicRuntimeSnapshot,
-    ) -> Result<(), light_dynamics::DynamicRuntimeError> {
-        self.dynamics.lock().restore_snapshot(snapshot)
+    ) -> Result<DynamicRuntimeSourceCheckpoint, IntentError> {
+        let dynamics = self.dynamics.lock();
+        let runtime = dynamics.snapshot();
+        let published = self.dynamic_source_origins.load_full();
+        let mut origins = (*published).clone();
+        // The full persistence snapshot is already available. Retire only unreachable
+        // historical records here, never during a frame; active bindings remain until the
+        // source assignment lifecycle explicitly unbinds them.
+        origins.prune_runtime(&runtime)?;
+        if !origins.shares_storage(&published) {
+            self.dynamic_source_origins.store(Arc::new(origins.clone()));
+        }
+        Ok(DynamicRuntimeSourceCheckpoint {
+            runtime,
+            origins: Some(origins.snapshot()),
+        })
+    }
+
+    /// Validate both sides before changing either. A failed runtime restore leaves the
+    /// published catalogue untouched; successful publication happens under the runtime lock.
+    pub(in crate::runtime) fn restore_dynamic_source_checkpoint(
+        &self,
+        checkpoint: DynamicRuntimeSourceCheckpoint,
+    ) -> Result<(), IntentError> {
+        Self::restore_dynamic_source_state(
+            &self.engine,
+            &self.dynamics,
+            &self.dynamic_source_origins,
+            &self.dynamic_snapshot,
+            checkpoint,
+        )
+    }
+
+    /// Shared cold restore seam for startup and show/runtime restore. Validate with the
+    /// current definitions and native models before reserving IDs. Playback and Dynamics
+    /// guards are never held together. The final restore rechecks any intervening definition
+    /// change; a rejected retry can only leave a conservative, monotonically higher reserve.
+    /// Production callers run before workers start or hold the exclusive show activation
+    /// permit through generation installation and this restore. That boundary also prevents a
+    /// generation swap from racing the Playback reservation; this helper does not acquire it.
+    pub(in crate::runtime) fn restore_dynamic_source_state(
+        engine: &Engine,
+        dynamics: &Mutex<light_dynamics::DynamicRuntime>,
+        published: &SharedDynamicSourceOrigins,
+        publication: &DynamicSnapshotPublication,
+        checkpoint: DynamicRuntimeSourceCheckpoint,
+    ) -> Result<(), IntentError> {
+        // Restoring historical native definitions can pin newly verified originals before a
+        // later payload fails validation. Prepare destination Preset tables on that same
+        // detached candidate; no fallible dependency work may follow publication.
+        let snapshot = engine.snapshot();
+        let prepared = output_scheduler::prepare_restored_dynamic_candidate(
+            &snapshot,
+            &dynamics.lock(),
+            checkpoint.clone(),
+        )
+        .map_err(|error| IntentError(error.to_string()))?;
+        engine.reserve_playback_source_occurrence_watermark(
+            prepared.playback_source_occurrence_watermark,
+        );
+        drop(prepared);
+        // Playback reservation must stay outside the Dynamics guard. Rebuild against current
+        // runtime state after reacquiring it; never overwrite intervening controls with the
+        // preflight fork. The caller's activation permit keeps the destination stable.
+        let snapshot = engine.snapshot();
+        let mut dynamics = dynamics.lock();
+        let prepared =
+            output_scheduler::prepare_restored_dynamic_candidate(&snapshot, &dynamics, checkpoint)
+                .map_err(|error| IntentError(error.to_string()))?;
+        *dynamics = prepared.runtime;
+        published.store(Arc::new(prepared.origins));
+        publication.installed(snapshot);
+        Ok(())
+    }
+
+    pub(in crate::runtime) fn dynamic_controller_instance(
+        &self,
+        controller_id: Uuid,
+    ) -> Option<Uuid> {
+        self.dynamics
+            .lock()
+            .controller(controller_id)
+            .map(|(instance_id, _)| instance_id)
     }
 
     pub(in crate::runtime) fn off_dynamic_controller(
@@ -331,12 +484,22 @@ impl OutputResource {
         release_delay_millis: u64,
         release_duration_millis: u64,
     ) -> Result<(Uuid, bool), light_dynamics::DynamicRuntimeError> {
-        self.dynamics.lock().off_controller_by_id(
-            controller_id,
-            now_millis,
-            release_delay_millis,
-            release_duration_millis,
-        )
+        self.dynamics
+            .lock()
+            .apply_recorded_control(light_dynamics::TimedDynamicControl {
+                at_millis: now_millis,
+                control: light_dynamics::DynamicControl::Off {
+                    controller: controller_id,
+                    delay: release_delay_millis,
+                    duration: release_duration_millis,
+                },
+            })
+            .map(|outcome| {
+                (
+                    outcome.instance_id.expect("Off resolves its instance"),
+                    outcome.instance_removed,
+                )
+            })
     }
 
     pub(in crate::runtime) fn update_dynamic_controller(
@@ -346,12 +509,20 @@ impl OutputResource {
         speed_multiplier: Option<f32>,
         phase_offset_degrees: Option<f32>,
     ) -> Result<(), light_dynamics::DynamicRuntimeError> {
-        self.dynamics.lock().update_controller(
-            controller_id,
-            size,
-            speed_multiplier,
-            phase_offset_degrees,
-        )
+        let now_millis =
+            u64::try_from(self.engine.application_time().timestamp_millis()).unwrap_or_default();
+        self.dynamics
+            .lock()
+            .apply_recorded_control(light_dynamics::TimedDynamicControl {
+                at_millis: now_millis,
+                control: light_dynamics::DynamicControl::Update {
+                    controller: controller_id,
+                    size,
+                    speed: speed_multiplier,
+                    phase: phase_offset_degrees,
+                },
+            })
+            .map(|_| ())
     }
 
     pub(in crate::runtime) fn is_dynamic_definition_running(&self, definition_id: Uuid) -> bool {
@@ -367,34 +538,54 @@ impl OutputResource {
         &self,
         snapshot: EngineSnapshot,
     ) -> Result<(), EngineError> {
-        let definitions = snapshot.dynamics.iter().cloned().collect::<Vec<_>>();
-        self.engine.replace_snapshot(snapshot)?;
-        self.dynamics
-            .lock()
-            .install_definitions(definitions)
-            .expect("Engine validation and Dynamic validation stay equivalent");
+        let prepared = self.prepare_snapshot(snapshot)?;
+        self.install_prepared_snapshot(prepared);
         Ok(())
     }
 
     pub(in crate::runtime) fn prepare_snapshot(
         &self,
         snapshot: EngineSnapshot,
-    ) -> Result<PreparedEngineSnapshot, EngineError> {
-        self.engine.prepare_snapshot(snapshot)
+    ) -> Result<PreparedOutputSnapshot, EngineError> {
+        let engine = self.engine.prepare_snapshot(snapshot)?;
+        let definitions = self
+            .dynamics
+            .lock()
+            .prepare_definitions(engine.snapshot().dynamics.iter().cloned())
+            .map_err(|error| EngineError::Invalid(error.to_string()))?;
+        Ok(PreparedOutputSnapshot {
+            engine,
+            definitions,
+            restored: None,
+        })
     }
 
-    pub(in crate::runtime) fn install_prepared_snapshot(&self, prepared: PreparedEngineSnapshot) {
-        let definitions = prepared
-            .snapshot()
-            .dynamics
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>();
-        self.engine.install_prepared_snapshot(prepared);
-        self.dynamics
-            .lock()
-            .install_definitions(definitions)
-            .expect("prepared Engine snapshot contains valid Dynamic definitions");
+    /// Prepare the incoming show's checkpoint before transition, selection or active-show
+    /// mutations. The token carries the exact validated destination runtime to publication;
+    /// there is no fallible restore after the Engine switches to that show.
+    pub(in crate::runtime) fn prepare_snapshot_restore(
+        &self,
+        mut prepared: PreparedOutputSnapshot,
+        checkpoint: DynamicRuntimeSourceCheckpoint,
+    ) -> Result<PreparedOutputSnapshot, IntentError> {
+        prepared.restored = Some(
+            output_scheduler::prepare_restored_dynamic_candidate(
+                prepared.snapshot(),
+                &self.dynamics.lock(),
+                checkpoint,
+            )
+            .map_err(|error| IntentError(error.to_string()))?,
+        );
+        Ok(prepared)
+    }
+
+    pub(in crate::runtime) fn install_prepared_snapshot(&self, prepared: PreparedOutputSnapshot) {
+        let _publication = self.dynamic_snapshot.begin_install();
+        let snapshot = prepared.engine.snapshot_arc();
+        self.engine.install_prepared_snapshot(prepared.engine);
+        let mut dynamics = self.dynamics.lock();
+        dynamics.install_prepared_definitions(prepared.definitions);
+        self.dynamic_snapshot.installed(snapshot);
     }
 
     pub(in crate::runtime) fn resolved_values(&self) -> light_engine::ResolvedValues {
@@ -412,7 +603,7 @@ impl OutputResource {
         {
             return Arc::clone(&cached.values);
         }
-        let values = Arc::new(self.engine.resolved_values());
+        let values = Arc::new(self.engine.held_parameter_values());
         *cached = Some(CachedVisualizationOrdinary {
             snapshot,
             captured_at: std::time::Instant::now(),
@@ -444,7 +635,10 @@ impl OutputResource {
         // transitions, so always operate on a clone and leave the authoritative
         // output scheduler responsible for mutating and publishing runtime state.
         let snapshot = self.engine.snapshot();
-        let mut visualization_runtime = light_dynamics::DynamicRuntime::default();
+        let mut visualization_runtime =
+            light_dynamics::DynamicRuntime::with_programming_contract_support(
+                self.engine.supported_programming_contract(),
+            );
         visualization_runtime
             .install_definitions(snapshot.dynamics.iter().cloned())
             .expect("Engine snapshot contains validated Dynamic definitions");
@@ -468,12 +662,6 @@ impl OutputResource {
         )
     }
 
-    pub(in crate::runtime) fn cached_visualization_dynamics(
-        &self,
-    ) -> Option<CachedVisualizationDynamics> {
-        self.visualization_dynamics.lock().clone()
-    }
-
     pub(in crate::runtime) fn dynamic_programmer_values(
         &self,
     ) -> Arc<Vec<(Uuid, i16, light_dynamics::DynamicAddressValue)>> {
@@ -490,13 +678,10 @@ impl OutputResource {
     /// without sending an output frame. Preload GO uses this inside the active-show exclusion
     /// boundary so the committed Programmer layer and its runtime identity share one timestamp.
     pub(in crate::runtime) fn reconcile_dynamic_runtime(&self) {
-        let _ = output_scheduler::dynamic_contributions(
+        output_scheduler::reconcile_dynamic_controllers(
             &self.engine,
             &self.dynamics,
-            &self.speed_groups,
-            &self.rate,
-            &[],
-            false,
+            &self.dynamic_snapshot,
         );
     }
 
@@ -572,7 +757,13 @@ impl OutputResource {
     pub(in crate::runtime) fn set_dynamic_runtime_paused(&self, paused: bool) {
         let now_millis =
             u64::try_from(self.engine.application_time().timestamp_millis()).unwrap_or_default();
-        self.dynamics.lock().set_global_paused(paused, now_millis);
+        self.dynamics
+            .lock()
+            .apply_recorded_control(light_dynamics::TimedDynamicControl {
+                at_millis: now_millis,
+                control: light_dynamics::DynamicControl::GlobalPause(paused),
+            })
+            .expect("Global pause outside sampling has no fallible input");
     }
 
     pub(in crate::runtime) fn active_playbacks(&self) -> Vec<light_playback::ActivePlayback> {
@@ -680,27 +871,33 @@ impl OutputResource {
 
     pub(in crate::runtime) fn install_prepared_snapshot_releasing_playback(
         &self,
-        prepared: PreparedEngineSnapshot,
+        prepared: PreparedOutputSnapshot,
     ) {
-        let definitions = prepared
-            .snapshot()
-            .dynamics
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>();
+        let _publication = self.dynamic_snapshot.begin_install();
+        let snapshot = prepared.engine.snapshot_arc();
+        if let Some(restored) = &prepared.restored {
+            self.engine.reserve_playback_source_occurrence_watermark(
+                restored.playback_source_occurrence_watermark,
+            );
+        }
         self.engine
-            .install_prepared_snapshot_releasing_playback(prepared);
-        self.dynamics
-            .lock()
-            .install_definitions(definitions)
-            .expect("prepared Engine snapshot contains valid Dynamic definitions");
+            .install_prepared_snapshot_releasing_playback(prepared.engine);
+        let mut dynamics = self.dynamics.lock();
+        if let Some(restored) = prepared.restored {
+            *dynamics = restored.runtime;
+            self.dynamic_source_origins
+                .store(Arc::new(restored.origins));
+        } else {
+            dynamics.install_prepared_definitions(prepared.definitions);
+        }
+        self.dynamic_snapshot.installed(snapshot);
     }
 
     pub(in crate::runtime) fn validate_snapshot_for_runtime(
         &self,
         snapshot: &EngineSnapshot,
     ) -> Result<(), EngineError> {
-        self.engine.validate_snapshot_for_runtime(snapshot)
+        self.prepare_snapshot(snapshot.clone()).map(|_| ())
     }
 
     #[cfg(test)]
@@ -783,7 +980,7 @@ impl OutputResource {
         active_show: &ActiveShowProjection,
         playback: &PlaybackRenderCapability,
         options: RenderOptions,
-    ) -> Result<light_engine::RenderResult, EngineError> {
+    ) -> Result<RenderedSemanticFrame, EngineError> {
         self.render_with_playback_events_timed(active_show, playback, options)
             .map(|(rendered, _)| rendered)
     }
@@ -793,36 +990,102 @@ impl OutputResource {
         active_show: &ActiveShowProjection,
         playback: &PlaybackRenderCapability,
         options: RenderOptions,
-    ) -> Result<(light_engine::RenderResult, OutputSemanticRenderTiming), EngineError> {
-        let dynamic_started = Instant::now();
-        let (sampled, runtime, samples) = output_scheduler::dynamic_contributions_cached(
-            &self.engine,
-            &self.dynamics,
-            &self.speed_groups,
-            &self.rate,
-            &[],
-            &self.programmer_reconciliation_cache,
-            true,
-        );
-        let dynamic = dynamic_started.elapsed();
-        *self.visualization_dynamics.lock() =
-            Some(CachedVisualizationDynamics { runtime, samples });
-        let engine_started = Instant::now();
-        let rendered = output_scheduler::render_with_playback_events(
-            &self.engine,
-            active_show,
-            playback,
-            options,
-            &sampled,
-            None,
-        )?;
-        Ok((
-            rendered,
-            OutputSemanticRenderTiming {
-                dynamic,
-                engine: engine_started.elapsed(),
-            },
-        ))
+    ) -> Result<(RenderedSemanticFrame, OutputSemanticRenderTiming), EngineError> {
+        self.render_with_playback_events_timed_with_capture(active_show, playback, options, |_| {})
+    }
+
+    /// The callback runs inside the same ordered Playback operation as the authoritative
+    /// capture. It may consume captured Cue actions, but must not enter another Playback UOW.
+    pub(in crate::runtime) fn render_with_playback_events_timed_with_capture(
+        &self,
+        active_show: &ActiveShowProjection,
+        playback: &PlaybackRenderCapability,
+        options: RenderOptions,
+        on_capture: impl FnOnce(&light_engine::PreparedOutputFrame),
+    ) -> Result<(RenderedSemanticFrame, OutputSemanticRenderTiming), EngineError> {
+        output_scheduler::ordered_output_operation(playback, || {
+            let dynamic_started = Instant::now();
+            let Some(prepared) = self.engine.try_prepare_output_frame(options) else {
+                return light_application::PlaybackOperation::new(Err(
+                    EngineError::StalePreparedFrame,
+                ));
+            };
+            let prepared =
+                crate::runtime::dynamic_snapshot_publication::RetainedFrameCapture::select(
+                    prepared,
+                    &self.dynamic_snapshot,
+                    dynamic_started,
+                );
+            let mut events = Vec::new();
+            let completed = output_scheduler::dynamic_output_frame(
+                &self.engine,
+                &prepared,
+                prepared.retained(),
+                &[],
+                &self.dynamics,
+                &self.dynamic_snapshot,
+                &self.dynamic_source_origins,
+                &self.speed_groups,
+                &self.rate,
+                &self.programmer_reconciliation_cache,
+                &self.family_adapters,
+                |source| {
+                    let dynamic = dynamic_started.elapsed();
+                    let engine_started = Instant::now();
+                    let operation = source.playback_operation(
+                        &self.engine,
+                        active_show,
+                        playback,
+                        &prepared,
+                        None,
+                    );
+                    events.extend(operation.events);
+                    operation.output.map(|rendered| {
+                        (
+                            rendered,
+                            OutputSemanticRenderTiming {
+                                dynamic,
+                                engine: engine_started.elapsed(),
+                            },
+                        )
+                    })
+                },
+            );
+            if completed.is_err() {
+                events.extend(output_scheduler::captured_playback_events(
+                    &self.engine,
+                    active_show,
+                    playback,
+                    &prepared,
+                    None,
+                    None,
+                ));
+            }
+            on_capture(&prepared);
+            let result = completed.map(|completed| {
+                self.dynamic_auto_offs.lock().extend(completed.auto_offs);
+                events.extend(completed.events);
+                let dynamics = Arc::new(FrameDynamicSources {
+                    sample_boundary: completed.sample_boundary,
+                    runtime: completed.runtime,
+                    samples: completed.samples,
+                    origins: completed.origins,
+                    programmer_values: Arc::clone(prepared.dynamic_programmer_values()),
+                    cue_values: prepared.cue_dynamic_values().into(),
+                    ordinary: completed.ordinary,
+                });
+                let (rendered, timing) = completed.output;
+                (
+                    RenderedSemanticFrame {
+                        rendered,
+                        options,
+                        dynamics: Some(dynamics),
+                    },
+                    timing,
+                )
+            });
+            light_application::PlaybackOperation::with_events(result, events)
+        })
     }
 
     #[cfg(test)]

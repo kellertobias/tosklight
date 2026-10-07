@@ -1,3 +1,15 @@
+import { type ScalarDynamicLane } from "../../features/dynamics/laneModel";
+import {
+	dynamicLaneDomain,
+	editableLane,
+	graphLane,
+	retargetDynamicLane,
+} from "../../features/dynamics/editableLane";
+import {
+	type DynamicLaneDomain,
+	formatLaneValue,
+} from "../../features/dynamics/laneDomain";
+import { ProgrammingLaneRow } from "./ProgrammingLaneView";
 import {
 	Button,
 	CyclingValueToggle,
@@ -12,13 +24,11 @@ import type {
 import type {
 	DynamicLaneProjection,
 	DynamicPeriodicFunctionProjection,
+	DynamicScalarSourceProjection,
 	DynamicUpdateIntent,
 } from "../../api/types";
 import type { ShowObject } from "../../features/showObjects/contracts";
-import {
-	curveFunctionSelectionGroups,
-	scalarSourceEncoderDisplay,
-} from "./CurveEncoderSlots";
+import { curveFunctionSelectionGroups } from "./CurveEncoderSlots";
 import { addKeyframeToLane, deleteKeyframeFromLane } from "./CurvesView";
 import {
 	curveComposerMethods,
@@ -44,7 +54,8 @@ interface DraggingKeyframe {
 
 interface CurvesSurfaceProps {
 	dynamic: DynamicObject;
-	lane: DynamicLaneProjection;
+	lane: ScalarDynamicLane;
+	domain: DynamicLaneDomain;
 	selectedLanes: ReadonlySet<string>;
 	shiftArmed: boolean;
 	attributes: readonly { id: string; label: string; family: string }[];
@@ -58,7 +69,7 @@ interface CurvesSurfaceProps {
 	selectedFunction: DynamicPeriodicFunctionProjection | "random";
 	onPrimaryKeyframeIndex(index: number): void;
 	onSelect(id: string, additive: boolean): void;
-	onReplace(next: DynamicLaneProjection): Promise<void>;
+	onReplace(next: ScalarDynamicLane): Promise<void>;
 	onMutate(
 		dynamic: DynamicObject,
 		intent: DynamicUpdateIntent,
@@ -69,7 +80,7 @@ interface CurvesSurfaceProps {
 	onCloseLaneMenu(): void;
 	onDraggingKeyframe(value: DraggingKeyframe | null): void;
 	onMoveKeyframe(
-		lane: DynamicLaneProjection,
+		lane: ScalarDynamicLane,
 		index: number,
 		clientX: number,
 		timeline: HTMLElement,
@@ -99,31 +110,50 @@ export function CurvesViewSurface(props: CurvesSurfaceProps) {
 function LaneOverviewList(props: CurvesSurfaceProps) {
 	return (
 		<ul className="dynamic-lane-overview-list" aria-label="Dynamic lanes">
-			{props.dynamic.body.lanes.map((candidate, index) => (
-				<LaneOverviewRow
-					key={candidate.id}
-					{...props}
-					candidate={candidate}
-					index={index}
-				/>
-			))}
+			{props.dynamic.body.lanes.map((lane, index) => {
+				const candidate = editableLane(lane);
+				const domain = dynamicLaneDomain(lane);
+				return candidate && domain ? (
+					<LaneOverviewRow
+						key={candidate.id}
+						{...props}
+						candidate={candidate}
+						candidateDomain={domain}
+						index={index}
+					/>
+				) : (
+					<ProgrammingLaneRow
+						key={lane.id}
+						lane={lane}
+						index={index}
+						selected={props.selectedLanes.has(lane.id)}
+						onSelect={props.onSelect}
+					/>
+				);
+			})}
 		</ul>
 	);
 }
 
 function LaneOverviewRow({
 	candidate,
+	candidateDomain,
 	index,
 	...props
 }: CurvesSurfaceProps & {
-	candidate: DynamicLaneProjection;
+	candidate: ScalarDynamicLane;
+	candidateDomain: DynamicLaneDomain;
 	index: number;
 }) {
 	const attribute =
 		props.attributes.find((item) => item.id === candidate.attribute) ?? null;
 	const selected = props.selectedLanes.has(candidate.id);
-	const preview = lanePreview(candidate, props.dynamic.body.lanes);
-	const label = attribute?.label ?? candidate.attribute;
+	// Curves draw on the lane's own descriptor range: degrees for an Angle, 0–100 % for a level.
+	const graph = graphLane(candidate, candidateDomain);
+	const preview = lanePreview(graph, props.dynamic.body.lanes);
+	const label =
+		attribute?.label ??
+		(candidateDomain.address ? candidateDomain.label : candidate.attribute);
 	return (
 		<li
 			aria-current={candidate.id === props.lane.id}
@@ -150,6 +180,7 @@ function LaneOverviewRow({
 				<LaneCurve
 					{...props}
 					candidate={candidate}
+					graph={graph}
 					label={label}
 					selected={selected}
 					preview={preview}
@@ -176,12 +207,14 @@ type LanePreview = ReturnType<typeof lanePreview>;
 
 function LaneCurve({
 	candidate,
+	graph,
 	label,
 	selected,
 	preview,
 	...props
 }: CurvesSurfaceProps & {
-	candidate: DynamicLaneProjection;
+	candidate: ScalarDynamicLane;
+	graph: ScalarDynamicLane;
 	label: string;
 	selected: boolean;
 	preview: LanePreview;
@@ -224,6 +257,7 @@ function LaneCurve({
 				<KeyframeMarks
 					{...props}
 					candidate={candidate}
+					graph={graph}
 					label={label}
 					preview={preview}
 				/>
@@ -264,11 +298,13 @@ function LaneCurveAnnotations({
 
 function KeyframeMarks({
 	candidate,
+	graph,
 	label,
 	preview,
 	...props
 }: CurvesSurfaceProps & {
-	candidate: DynamicLaneProjection;
+	candidate: ScalarDynamicLane;
+	graph: ScalarDynamicLane;
 	label: string;
 	preview: LanePreview;
 }) {
@@ -286,7 +322,7 @@ function KeyframeMarks({
 					style={
 						{
 							left: `${keyframePreviewPercent(point.position, preview.repetitions)}%`,
-							top: `${keyframePreviewTop(point.source)}%`,
+							top: `${keyframePreviewTop(graph.keyframes.points[pointIndex]?.source)}%`,
 						} as CSSProperties
 					}
 					onPointerDown={(event) =>
@@ -308,7 +344,7 @@ function KeyframeMarks({
 				className="loop-close"
 				style={{
 					left: `${keyframePreviewPercent(1, preview.repetitions)}%`,
-					top: `${keyframePreviewTop(candidate.keyframes.points[0]?.source)}%`,
+					top: `${keyframePreviewTop(graph.keyframes.points[0]?.source)}%`,
 				}}
 			>
 				<span>A′</span>
@@ -319,7 +355,7 @@ function KeyframeMarks({
 
 function beginKeyframeDrag(
 	event: ReactPointerEvent<HTMLButtonElement>,
-	candidate: DynamicLaneProjection,
+	candidate: ScalarDynamicLane,
 	index: number,
 	props: CurvesSurfaceProps,
 ) {
@@ -341,7 +377,7 @@ function beginKeyframeDrag(
 
 function continueKeyframeDrag(
 	event: ReactPointerEvent<HTMLButtonElement>,
-	candidate: DynamicLaneProjection,
+	candidate: ScalarDynamicLane,
 	index: number,
 	preview: LanePreview,
 	props: CurvesSurfaceProps,
@@ -372,7 +408,7 @@ function LaneMenu({
 	label,
 	...props
 }: CurvesSurfaceProps & {
-	candidate: DynamicLaneProjection;
+	candidate: ScalarDynamicLane;
 	label: string;
 }) {
 	return (
@@ -429,7 +465,7 @@ function AttributeLaneEditor(props: CurvesSurfaceProps) {
 			id={`change-lane-attribute-${props.attributeLane.id}`}
 			title="Change lane attribute"
 			details="Choose the attribute controlled by this lane"
-			currentAttribute={props.attributeLane.attribute}
+			currentAttribute={editableLane(props.attributeLane)?.attribute}
 			attributes={props.attributes}
 			onClose={() => props.onAttributeLane(null)}
 			onChoose={(attribute) => {
@@ -441,7 +477,7 @@ function AttributeLaneEditor(props: CurvesSurfaceProps) {
 				void props.onMutate(props.dynamic, {
 					type: "replace_lane",
 					lane_id: target.id,
-					lane: { ...target, attribute },
+					lane: retargetDynamicLane(target, attribute),
 				});
 			}}
 		/>
@@ -492,13 +528,13 @@ function KeyframeChoices(props: CurvesSurfaceProps) {
 					className="dynamic-keyframe-choice"
 					active={index === props.keyframeIndex}
 					aria-pressed={index === props.keyframeIndex}
-					aria-label={`${keyframeName(index)}, ${Math.round(point.position * 100)}%, ${scalarSourceEncoderDisplay(point.source)}`}
+					aria-label={`${keyframeName(index)}, ${Math.round(point.position * 100)}%, ${sourceLabel(point.source, props.domain)}`}
 					onClick={() => props.onPrimaryKeyframeIndex(index)}
 				>
 					<b aria-hidden="true">{keyframeName(index)}</b>
 					<span aria-hidden="true">{Math.round(point.position * 100)}%</span>
 					<small aria-hidden="true">
-						{scalarSourceEncoderDisplay(point.source)}
+						{sourceLabel(point.source, props.domain)}
 					</small>
 				</Button>
 			))}
@@ -560,4 +596,15 @@ function KeyframeActions(props: CurvesSurfaceProps) {
 			</Button>
 		</>
 	);
+}
+
+/** A keyframe source in descriptor units: `45°`, `80%`, `Current` or `Preset`. */
+export function sourceLabel(
+	source: DynamicScalarSourceProjection | undefined,
+	domain: DynamicLaneDomain,
+) {
+	if (!source) return "—";
+	if (source.type === "current") return "Current";
+	if (source.type === "preset") return "Preset";
+	return formatLaneValue(domain, source.value);
 }

@@ -1,7 +1,18 @@
 use crate::*;
 
 type GroupAddress = (String, AttributeKey);
-type DynamicTrackAddress = (FixtureId, AttributeKey, Option<Uuid>);
+type DynamicTrackAddress = (FixtureId, AttributeKey, light_dynamics::DynamicTrackKey);
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum DynamicRestoreScope {
+    Instance(Uuid),
+    Owner(FixtureId, AttributeKey),
+    Component(
+        FixtureId,
+        AttributeKey,
+        Option<light_core::programming::ProgrammingComponent>,
+    ),
+}
 
 pub(super) fn regenerate_automatic_restorations(cue_list: &mut CueList) {
     strip_automatic_restorations(cue_list);
@@ -9,6 +20,29 @@ pub(super) fn regenerate_automatic_restorations(cue_list: &mut CueList) {
     let mut group_state = HashMap::new();
     let mut dynamic_state = HashMap::new();
     for index in 0..cue_list.cues.len() {
+        // A preceding Cue-only event restores before this Cue's explicit events.
+        // Its restored baseline is also the baseline for consecutive Cue-only cues.
+        for change in cue_list.cues[index]
+            .changes
+            .iter()
+            .filter(|value| value.automatic_restore)
+        {
+            apply_fixture_changes(&mut fixture_state, std::slice::from_ref(change));
+        }
+        for change in cue_list.cues[index]
+            .group_changes
+            .iter()
+            .filter(|value| value.automatic_restore)
+        {
+            apply_group_changes(&mut group_state, std::slice::from_ref(change));
+        }
+        for change in cue_list.cues[index]
+            .dynamic_changes
+            .iter()
+            .filter(|value| value.automatic_restore)
+        {
+            apply_dynamic_changes(&mut dynamic_state, std::slice::from_ref(change));
+        }
         let restores = restorations_after(
             cue_list,
             index,
@@ -52,50 +86,121 @@ fn restorations_after(
 
 fn dynamic_restorations(
     cue: &Cue,
-    next: &Cue,
+    _next: &Cue,
     state: &HashMap<DynamicTrackAddress, light_dynamics::DynamicSemanticValue>,
 ) -> Vec<CueDynamicChange> {
-    let explicit = next
+    use light_dynamics::{DynamicSemanticValue, DynamicValueTiming};
+    let mut restored = Vec::new();
+    let mut visited = HashSet::new();
+    for change in cue
         .dynamic_changes
         .iter()
         .filter(|change| !change.automatic_restore)
-        .map(dynamic_address)
-        .collect::<HashSet<_>>();
-    cue.dynamic_changes
-        .iter()
-        .filter(|change| !change.automatic_restore && !explicit.contains(&dynamic_address(change)))
-        .filter_map(|change| {
-            let address = dynamic_address(change);
-            let value = state
-                .get(&address)
-                .cloned()
-                .or_else(|| absent_dynamic_restoration(&change.value))?;
-            Some(CueDynamicChange {
-                fixture_id: change.fixture_id,
-                attribute: change.attribute.clone(),
-                value,
+    {
+        let key = change.value.track_key();
+        // Off addresses the whole instance, including other fixtures and owners.
+        let owner_release = cue.dynamic_changes.iter().any(|candidate| {
+            !candidate.automatic_restore
+                && candidate.fixture_id == change.fixture_id
+                && candidate.attribute == change.attribute
+                && matches!(candidate.value, DynamicSemanticValue::Release)
+        });
+        let scope = match key.instance_link {
+            Some(instance) => DynamicRestoreScope::Instance(instance),
+            None if owner_release => {
+                DynamicRestoreScope::Owner(change.fixture_id, change.attribute.clone())
+            }
+            None => DynamicRestoreScope::Component(
+                change.fixture_id,
+                change.attribute.clone(),
+                key.component,
+            ),
+        };
+        if !visited.insert(scope.clone()) {
+            continue;
+        }
+        let same_scope = |address: &DynamicTrackAddress| match &scope {
+            DynamicRestoreScope::Instance(instance) => address.2.instance_link == Some(*instance),
+            DynamicRestoreScope::Owner(..) | DynamicRestoreScope::Component(..) => {
+                address.2.instance_link.is_none()
+                    && address.0 == change.fixture_id
+                    && address.1 == change.attribute
+                    && (matches!(scope, DynamicRestoreScope::Owner(..))
+                        || address.2.component == key.component)
+            }
+        };
+        let mut previous = state
+            .iter()
+            .filter(|(address, _)| same_scope(address))
+            .collect::<Vec<_>>();
+        previous.sort_by(|(a, _), (b, _)| {
+            a.0.0
+                .cmp(&b.0.0)
+                .then(a.1.0.cmp(&b.1.0))
+                .then(a.2.lane_id.cmp(&b.2.lane_id))
+                .then(a.2.component.cmp(&b.2.component))
+        });
+        if let Some(instance_link) = key.instance_link {
+            // A newly introduced lane requires a reset, then replay of the prior
+            // complete instance. Restorations precede the next explicit events.
+            let introduced_lane = cue.dynamic_changes.iter().any(|candidate| {
+                !candidate.automatic_restore
+                    && candidate.value.track_key().lane_id.is_some()
+                    && same_scope(&dynamic_address(candidate))
+                    && !state.contains_key(&dynamic_address(candidate))
+            });
+            let prior_off = previous
+                .iter()
+                .any(|(_, value)| matches!(value, DynamicSemanticValue::DynamicOff { .. }));
+            if introduced_lane && !prior_off {
+                restored.push(CueDynamicChange {
+                    fixture_id: change.fixture_id,
+                    attribute: change.attribute.clone(),
+                    value: DynamicSemanticValue::DynamicOff {
+                        instance_link,
+                        timing: DynamicValueTiming::default(),
+                    },
+                    automatic_restore: true,
+                });
+            }
+        } else {
+            let mut introduced = HashSet::new();
+            for candidate in cue.dynamic_changes.iter().filter(|candidate| {
+                !candidate.automatic_restore
+                    && !candidate.value.is_programming_release()
+                    && same_scope(&dynamic_address(candidate))
+                    && !state.contains_key(&dynamic_address(candidate))
+            }) {
+                let component = candidate.value.track_key().component;
+                if !introduced.insert(component) {
+                    continue;
+                }
+                let typed = matches!(
+                    candidate.value,
+                    DynamicSemanticValue::ProgrammingFixAt { .. }
+                );
+                restored.push(CueDynamicChange {
+                    fixture_id: candidate.fixture_id,
+                    attribute: candidate.attribute.clone(),
+                    value: if typed {
+                        DynamicSemanticValue::ProgrammingRelease { component }
+                    } else {
+                        DynamicSemanticValue::Release
+                    },
+                    automatic_restore: true,
+                });
+            }
+        }
+        restored.extend(previous.into_iter().map(|((fixture, owner, _), value)| {
+            CueDynamicChange {
+                fixture_id: *fixture,
+                attribute: owner.clone(),
+                value: value.clone(),
                 automatic_restore: true,
-            })
-        })
-        .collect()
-}
-
-fn absent_dynamic_restoration(
-    value: &light_dynamics::DynamicSemanticValue,
-) -> Option<light_dynamics::DynamicSemanticValue> {
-    use light_dynamics::{DynamicSemanticValue, DynamicValueTiming};
-    match value {
-        DynamicSemanticValue::DynamicOn { instance_link, .. } => {
-            Some(DynamicSemanticValue::DynamicOff {
-                instance_link: *instance_link,
-                timing: DynamicValueTiming::default(),
-            })
-        }
-        DynamicSemanticValue::FixAt { .. } | DynamicSemanticValue::Static { .. } => {
-            Some(DynamicSemanticValue::Release)
-        }
-        DynamicSemanticValue::DynamicOff { .. } | DynamicSemanticValue::Release => None,
+            }
+        }));
     }
+    restored
 }
 
 fn fixture_restorations(
@@ -158,7 +263,10 @@ fn append_restorations(
     };
     cue.changes.extend(restores.0);
     cue.group_changes.extend(restores.1);
-    cue.dynamic_changes.extend(restores.2);
+    // Restorations establish the previous set; the next Cue's explicit events win.
+    let explicit = std::mem::take(&mut cue.dynamic_changes);
+    cue.dynamic_changes = restores.2;
+    cue.dynamic_changes.extend(explicit);
 }
 
 fn apply_fixture_changes(
@@ -185,8 +293,17 @@ fn apply_dynamic_changes(
 ) {
     for change in changes {
         let address = dynamic_address(change);
+        state.retain(|existing, _| {
+            !change.value.replaces_address(
+                address.0,
+                &address.1,
+                existing.2,
+                existing.0,
+                &existing.1,
+            )
+        });
         match &change.value {
-            light_dynamics::DynamicSemanticValue::Release => {
+            value if value.is_programming_release() => {
                 state.remove(&address);
             }
             value => {
@@ -197,16 +314,11 @@ fn apply_dynamic_changes(
 }
 
 fn dynamic_address(change: &CueDynamicChange) -> DynamicTrackAddress {
-    let instance_link = match &change.value {
-        light_dynamics::DynamicSemanticValue::DynamicOn { instance_link, .. }
-        | light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. } => {
-            Some(*instance_link)
-        }
-        light_dynamics::DynamicSemanticValue::Static { .. }
-        | light_dynamics::DynamicSemanticValue::FixAt { .. }
-        | light_dynamics::DynamicSemanticValue::Release => None,
-    };
-    (change.fixture_id, change.attribute.clone(), instance_link)
+    (
+        change.fixture_id,
+        change.attribute.clone(),
+        change.value.track_key(),
+    )
 }
 
 fn apply_value<K: Eq + std::hash::Hash>(

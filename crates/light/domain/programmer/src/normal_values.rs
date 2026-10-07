@@ -69,6 +69,9 @@ impl ProgrammerRegistry {
         mutations: &[NormalProgrammerValueMutation],
         undo_group: Option<&str>,
     ) -> bool {
+        if mutations.is_empty() {
+            return false;
+        }
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
@@ -85,12 +88,16 @@ impl ProgrammerRegistry {
         if !changed.iter().any(|changed| *changed) {
             return false;
         }
-        let continues_group =
-            undo_group.is_some() && state.active_value_undo_group.as_deref() == undo_group;
+        let continues_group = undo_group.is_some_and(|group| {
+            state
+                .active_value_undo_group
+                .as_ref()
+                .is_some_and(|(preload_lane, existing)| *preload_lane == false && existing == group)
+        });
         if !continues_group {
             state.checkpoint();
         }
-        state.active_value_undo_group = undo_group.map(str::to_owned);
+        state.active_value_undo_group = undo_group.map(|group| (false, group.to_owned()));
         let changed_at = self.clock.now();
         let mut fixture_batch = FixtureValueBatch::default();
         for (mutation, changed) in mutations.iter().zip(changed) {
@@ -116,6 +123,8 @@ impl ProgrammerRegistry {
         let Some(state) = states.as_mut() else {
             return false;
         };
+        // Clear is an explicit touch boundary even after a neutral first sample.
+        state.end_value_gesture();
         if state.values.is_empty()
             && state.group_values.is_empty()
             && state.group_release_values.is_empty()
@@ -124,7 +133,6 @@ impl ProgrammerRegistry {
             return false;
         }
         state.checkpoint();
-        state.active_value_undo_group = None;
         Arc::make_mut(&mut state.values).clear();
         Arc::make_mut(&mut state.group_values).clear();
         state.group_release_values.clear();
@@ -165,7 +173,6 @@ impl ProgrammerRegistry {
             return Some(transition);
         }
         state.checkpoint();
-        state.active_value_undo_group = None;
         let changed_at = self.clock.now();
         let mut fixture_batch = FixtureValueBatch::default();
         for (mutation, changed) in mutations.iter().zip(changed) {
@@ -200,6 +207,9 @@ fn mutation_changes(
             fixture_index
                 .get(*fixture_id, attribute)
                 .is_none_or(|stored| !fixture_value_matches(stored, value, *timing))
+                || value.programming_owner().is_some_and(|owner| {
+                    fixture_index.has_independent_components(*fixture_id, owner)
+                })
                 || state.dynamic_values.iter().any(|stored| {
                     stored.fixture_id == *fixture_id
                         && stored.attribute == *attribute
@@ -209,14 +219,20 @@ fn mutation_changes(
         NormalProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
-        } => fixture_index.get(*fixture_id, attribute).is_some(),
+        } => {
+            fixture_index.get(*fixture_id, attribute).is_some()
+                || state.has_fixture_release(false, *fixture_id, attribute)
+        }
         NormalProgrammerValueMutation::ReleaseGroup {
             group_id,
             attribute,
-        } => state
-            .group_values
-            .get(group_id)
-            .is_some_and(|values| values.contains_key(attribute)),
+        } => {
+            state
+                .group_values
+                .get(group_id)
+                .is_some_and(|values| values.contains_key(attribute))
+                || state.has_group_release(false, group_id, attribute)
+        }
         NormalProgrammerValueMutation::SetGroup {
             group_id,
             attribute,
@@ -228,6 +244,13 @@ fn mutation_changes(
                 .get(group_id)
                 .and_then(|values| values.get(attribute))
                 .is_none_or(|stored| !group_value_matches(stored, value, *timing))
+                || value.programming_owner().is_some_and(|owner| {
+                    state.group_values.get(group_id).is_some_and(|values| {
+                        values.keys().any(|key| {
+                            light_core::programming::independent_programming_component(key, owner)
+                        })
+                    })
+                })
                 || state
                     .group_release_values
                     .iter()
@@ -290,7 +313,10 @@ fn apply_mutation(
         NormalProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
-        } => fixture_batch.release(*fixture_id, attribute),
+        } => {
+            fixture_batch.release(*fixture_id, attribute);
+            state.clear_fixture_release(false, *fixture_id, attribute);
+        }
         NormalProgrammerValueMutation::SetGroup {
             group_id,
             attribute,
@@ -307,7 +333,10 @@ fn apply_mutation(
         NormalProgrammerValueMutation::ReleaseGroup {
             group_id,
             attribute,
-        } => release_group(state, group_id, attribute),
+        } => {
+            release_group(state, group_id, attribute);
+            state.clear_group_release(false, group_id, attribute);
+        }
     }
 }
 
@@ -328,20 +357,25 @@ fn set_group(
     timing: NormalProgrammerValueTiming,
     changed_at: chrono::DateTime<chrono::Utc>,
 ) {
-    Arc::make_mut(&mut state.group_values)
+    let attributes = Arc::make_mut(&mut state.group_values)
         .entry(group_id.to_owned())
-        .or_default()
-        .insert(
-            attribute.clone(),
-            GroupProgrammerValue {
-                value: value.clone(),
-                changed_at,
-                programmer_order: registry.next_programmer_order(),
-                fade: timing.fade,
-                fade_millis: timing.fade_millis,
-                delay_millis: timing.delay_millis,
-            },
-        );
+        .or_default();
+    if let Some(owner) = value.programming_owner() {
+        attributes.retain(|key, _| {
+            !light_core::programming::independent_programming_component(key, owner)
+        });
+    }
+    attributes.insert(
+        attribute.clone(),
+        GroupProgrammerValue {
+            value: value.clone(),
+            changed_at,
+            programmer_order: registry.next_programmer_order(),
+            fade: timing.fade,
+            fade_millis: timing.fade_millis,
+            delay_millis: timing.delay_millis,
+        },
+    );
 }
 
 fn release_group(state: &mut crate::ProgrammerState, group_id: &str, attribute: &AttributeKey) {

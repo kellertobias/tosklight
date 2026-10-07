@@ -6,7 +6,7 @@ use viz_dmx::DMX_SLOTS;
 /// Emitter primaries in linear RGB, used to mix a fixture's own emitter set into a display colour.
 const WHITE: [f32; 3] = [1.0, 1.0, 1.0];
 const AMBER: [f32; 3] = [1.0, 0.62, 0.16];
-const ULTRAVIOLET: [f32; 3] = [0.35, 0.1, 1.0];
+const VIOLET: [f32; 3] = [0.35, 0.1, 1.0];
 const COLD_WHITE: [f32; 3] = [0.86, 0.93, 1.0];
 const WARM_WHITE: [f32; 3] = [1.0, 0.83, 0.62];
 
@@ -82,7 +82,7 @@ pub fn resolve(binding: &ColourBinding, frame: &dyn Fn(u16) -> [u8; DMX_SLOTS]) 
     add(read(&binding.blue), [0.0, 0.0, 1.0]);
     add(read(&binding.white), WHITE);
     add(read(&binding.amber), AMBER);
-    add(read(&binding.ultraviolet), ULTRAVIOLET);
+    // UV drive is reported separately. Unknown visible leakage is never invented.
     add(read(&binding.cold_white), COLD_WHITE);
     add(read(&binding.warm_white), WARM_WHITE);
 
@@ -161,8 +161,11 @@ pub fn named_colour(name: &str) -> [f32; 3] {
     if contains("cyan") || contains("aqua") {
         return [0.1, 0.95, 1.0];
     }
-    if contains("uv") || contains("purple") || contains("violet") {
-        return ULTRAVIOLET;
+    if normalised == "uv" || contains("ultraviolet") {
+        return [0.; 3];
+    }
+    if contains("purple") || contains("violet") {
+        return VIOLET;
     }
     if contains("lavender") {
         return [0.72, 0.6, 1.0];

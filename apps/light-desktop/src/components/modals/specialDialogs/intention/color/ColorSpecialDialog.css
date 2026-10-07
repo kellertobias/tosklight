@@ -1,0 +1,44 @@
+/* Production semantic Color dialog (TL-550). Shell geometry lives in ColorDialogLayout.css. */
+
+/* Inline: the compact dialog spans every encoder column of the measured lower area. */
+.parameter-surfaces > .semantic-color-inline { grid-column: 1 / -1; align-self: stretch; }
+
+.semantic-color-modal .color-dialog-blend-balance,
+.semantic-color-inline .color-white-balance { display: grid; gap: 12px; min-width: 0; }
+
+/* Passive per-fixture approximation: no status colours that read as an alarm. */
+.semantic-color-modal .color-approximation { display: grid; gap: 10px; min-width: 0; }
+.semantic-color-modal .color-approximation-requested { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.semantic-color-modal .color-approximation-swatch { width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0; }
+.semantic-color-modal .color-approximation-range { width: 140px; height: 14px; border-radius: 3px; border: 1px solid var(--border); }
+.semantic-color-modal .color-approximation-summary { margin: 0; color: var(--muted, var(--text)); font-size: 13px; }
+.semantic-color-modal .color-approximation-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.semantic-color-modal .color-approximation-table th,
+.semantic-color-modal .color-approximation-table td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--border); vertical-align: top; }
+.semantic-color-modal .color-approximation-table thead th { border-top: 0; font-weight: 600; }
+.semantic-color-modal .color-approximation-table tr[data-focused="true"] { background: color-mix(in srgb, var(--panel) 80%, var(--text) 8%); }
+
+/* Media preview: a fixed reference card under the shared tint and White Blend. */
+.media-color-preview { margin: 0; display: grid; gap: 8px; height: 100%; min-height: 0; }
+.media-color-preview-card { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; min-height: 96px; border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
+.media-color-preview-card > i { display: block; min-height: 30px; }
+.media-color-preview figcaption { font-size: 12px; color: var(--muted, var(--text)); }
+
+/* TL-554 Direct section and the explicit-start notice: passive, touch-sized, no alarm colours. */
+.semantic-color-modal .color-direct { display: grid; gap: 10px; min-width: 0; font-size: 13px; }
+.semantic-color-modal .color-direct-reference { margin: 0; font-weight: 600; }
+.semantic-color-modal .color-direct-quiet { margin: 0; color: var(--muted, var(--text)); }
+.semantic-color-modal .color-direct-candidates { display: flex; flex-wrap: wrap; gap: 8px; }
+.semantic-color-modal .color-direct-candidates > button { min-height: 44px; }
+.semantic-color-modal .color-direct-overflow { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.semantic-color-modal .color-direct-choices { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px; }
+.semantic-color-modal .color-direct-choices > li { display: flex; }
+.semantic-color-modal .color-direct-choices > li[data-current="true"] button { font-weight: 600; }
+.semantic-color-modal .color-direct-status { width: 100%; border-collapse: collapse; }
+.semantic-color-modal .color-direct-status th,
+.semantic-color-modal .color-direct-status td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--border); vertical-align: top; }
+.color-adoption-notice { display: grid; gap: 8px; }
+.color-adoption-notice > p,
+.color-adoption-report { margin: 0; font-size: 13px; }
+.color-adoption-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.color-adoption-choices > button { min-height: 44px; }

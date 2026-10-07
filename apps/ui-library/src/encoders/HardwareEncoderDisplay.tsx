@@ -38,6 +38,18 @@ export interface HardwareEncoderDisplayProps {
 	presets?: ModalNumberPresetConfig;
 	onPresetSelect?: (value: string) => void;
 	onRelease?: () => void;
+	/**
+	 * A choice display (the Position Point slot): without a typed value, touching it opens only
+	 * its choices.
+	 */
+	choices?: boolean;
+}
+
+/** Whether touching the display opens only its choices (a choice display without a typed edit). */
+export function hardwareEncoderChoiceOnly(
+	props: Pick<HardwareEncoderDisplayProps, "choices" | "onEdit" | "presets" | "onPresetSelect">,
+) {
+	return Boolean(props.choices && !props.onEdit && props.presets && props.onPresetSelect);
 }
 
 type EncoderEditorState = {
@@ -99,6 +111,7 @@ function HardwareEncoderEditor({
 	presets,
 	onPresetSelect,
 	onRelease,
+	choiceOnly,
 }: {
 	slot: number;
 	target: HardwareEncoderTarget;
@@ -114,6 +127,7 @@ function HardwareEncoderEditor({
 	presets?: ModalNumberPresetConfig;
 	onPresetSelect?: (value: string) => void;
 	onRelease?: () => void;
+	choiceOnly: boolean;
 }) {
 	const selectedTarget = editor.target === "secondary" ? secondary : target;
 	if (!selectedTarget) return null;
@@ -136,6 +150,7 @@ function HardwareEncoderEditor({
 				editor.target === "primary" ? onEditRange : onSecondaryEditRange,
 			)}
 			presets={presets}
+			presetsOnly={choiceOnly}
 			onPresetSelect={onPresetSelect}
 			beforeTitle={
 				editor.selectable && secondary ? (
@@ -188,6 +203,7 @@ export const HardwareEncoderDisplayView = forwardRef<
 		presets,
 		onPresetSelect,
 		onRelease,
+		choices,
 	},
 	ref,
 ) {
@@ -206,11 +222,13 @@ export const HardwareEncoderDisplayView = forwardRef<
 		},
 		[editValue, secondaryEditValue],
 	);
+	const choiceOnly = hardwareEncoderChoiceOnly({ choices, onEdit, presets, onPresetSelect });
 	const activate = useCallback(() => {
-		if (secondary && onSecondaryEdit)
+		if (choiceOnly) setEditor({ target: "primary", selectable: false });
+		else if (secondary && onSecondaryEdit)
 			openEditor(onEdit ? "primary" : "secondary", Boolean(onEdit));
 		else if (onEdit) openEditor("primary", false);
-	}, [onEdit, onSecondaryEdit, openEditor, secondary]);
+	}, [choiceOnly, onEdit, onSecondaryEdit, openEditor, secondary]);
 	useImperativeHandle(ref, () => ({ activate }), [activate]);
 	const submit = (candidate = editor ? inputValues[editor.target] : "") => {
 		if (!editor) return;
@@ -252,7 +270,7 @@ export const HardwareEncoderDisplayView = forwardRef<
 	};
 	return (
 		<>
-			{onEdit || onSecondaryEdit ? (
+			{onEdit || onSecondaryEdit || choiceOnly ? (
 				<Button
 					className={displayClassName}
 					aria-label={`Encoder ${slot}: ${target.label}, ${target.value}`}
@@ -284,6 +302,7 @@ export const HardwareEncoderDisplayView = forwardRef<
 					presets={presets}
 					onPresetSelect={onPresetSelect}
 					onRelease={onRelease}
+					choiceOnly={choiceOnly}
 				/>
 			)}
 		</>

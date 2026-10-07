@@ -1,4 +1,5 @@
 import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
+import { decodeOutputReadoutSnapshot } from "../features/programmerValues/displayedSource";
 import type {
 	VisualizationRuntimeLane,
 	VisualizationRuntimeScope,
@@ -148,6 +149,8 @@ class WebSocketVisualizationRuntimeStream
 	private claims = new Set<VisualizationRuntimeLane>();
 	private maxRateHz = 10;
 	private includeDynamicStack = false;
+	private completeValues = false;
+	private readoutClaim: readonly string[] | null = null;
 	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null =
 		null;
 	private reconnectDelay = 250;
@@ -177,11 +180,13 @@ class WebSocketVisualizationRuntimeStream
 		lanes: readonly VisualizationRuntimeLane[],
 		maxRateHz: number,
 		includeDynamicStack = false,
+		completeValues = false,
 	) {
 		const removed = [...this.claims].filter((lane) => !lanes.includes(lane));
 		this.claims = new Set(lanes);
 		this.maxRateHz = Math.max(1, Math.min(10, Math.floor(maxRateHz)));
 		this.includeDynamicStack = includeDynamicStack;
+		this.completeValues = completeValues;
 		if (!this.claims.size) {
 			if (removed.length) this.send({ type: "unsubscribe", lanes: removed });
 			this.closeSocket();
@@ -192,6 +197,13 @@ class WebSocketVisualizationRuntimeStream
 			if (removed.length) this.send({ type: "unsubscribe", lanes: removed });
 			this.sendSubscription();
 		}
+	}
+
+	updateReadoutClaim(fixtureIds: readonly string[] | null) {
+		const next = fixtureIds?.length ? [...fixtureIds] : null;
+		if (sameClaim(this.readoutClaim, next)) return;
+		this.readoutClaim = next;
+		if (this.socket) this.sendSubscription();
 	}
 
 	close() {
@@ -385,6 +397,10 @@ class WebSocketVisualizationRuntimeStream
 				this.acknowledge(sequence);
 				return;
 			}
+			if (type === "readouts") {
+				this.receiveReadouts(message);
+				return;
+			}
 			if (type === "error")
 				throw new VisualizationRuntimeProtocolError(
 					stringAt(message.message, "$.message"),
@@ -401,6 +417,25 @@ class WebSocketVisualizationRuntimeStream
 		}
 	}
 
+	/**
+	 * TL-594 `readouts`: it takes the next stream sequence (the gap check stays strict) and is
+	 * handed to the observer decoded; the snapshot's own scope must be this stream's Show.
+	 */
+	private receiveReadouts(message: Record<string, unknown>) {
+		const sequence = integerAt(message.sequence, "$.sequence");
+		const sourceFrame = integerAt(message.source_frame, "$.source_frame");
+		if (this.lastSequence && sequence !== this.lastSequence + 1)
+			for (const lane of this.claims) this.send({ type: "resynchronize", lane });
+		this.lastSequence = sequence;
+		const readouts = decodeOutputReadoutSnapshot(message.readouts);
+		this.assertExpectedScope(
+			decodeVisualizationScope(readouts.scope, "$.readouts.scope"),
+			"$.readouts.scope",
+		);
+		this.observer.readouts?.(readouts, sourceFrame);
+		this.acknowledge(sequence);
+	}
+
 	private sendSubscription() {
 		if (!this.claims.size) return;
 		this.send({
@@ -408,9 +443,13 @@ class WebSocketVisualizationRuntimeStream
 			lanes: [...this.claims],
 			max_rate_hz: this.maxRateHz,
 			include_dynamic_stack: this.includeDynamicStack,
+			complete_values: this.completeValues,
 			sparse_dynamic_stack: true,
 			batched_messages: true,
 			acknowledgements: this.acknowledgementBackpressure,
+			...(this.readoutClaim
+				? { readouts: { fixture_ids: [...this.readoutClaim] } }
+				: {}),
 		});
 	}
 
@@ -470,6 +509,15 @@ class WebSocketVisualizationRuntimeStream
 		this.socket = null;
 		socket?.close();
 	}
+}
+
+function sameClaim(
+	left: readonly string[] | null,
+	right: readonly string[] | null,
+) {
+	if (left === right) return true;
+	if (!left || !right || left.length !== right.length) return false;
+	return left.every((id, index) => id === right[index]);
 }
 
 function staleVisualizationSource(timestamp: string) {
@@ -613,7 +661,27 @@ export function decodeVisualizationRuntimeSnapshot(
 			snapshot.profile_output_values,
 			"$.profile_output_values",
 		).sort(compareVisualizationValues),
+		...(snapshot.commanded_positions === undefined
+			? {}
+			: {
+					commanded_positions: decodeCommandedPositions(
+						snapshot.commanded_positions,
+						"$.commanded_positions",
+					),
+				}),
 	};
+}
+
+/** The Fixture Sheet's commanded Pan/Tilt rows (TL-552). */
+function decodeCommandedPositions(value: unknown, path: string) {
+	return arrayAt(value, path).map((entry, index) => {
+		const row = recordAt(entry, `${path}[${index}]`);
+		return {
+			fixture_id: stringAt(row.fixture_id, `${path}[${index}].fixture_id`),
+			pan_degrees: numberAt(row.pan_degrees, `${path}[${index}].pan_degrees`),
+			tilt_degrees: numberAt(row.tilt_degrees, `${path}[${index}].tilt_degrees`),
+		};
+	});
 }
 
 function decodeVisualizationScope(value: unknown, path: string) {
@@ -771,7 +839,7 @@ function decodeVisualizationValue(
 	return {
 		fixture_id: stringAt(entry.fixture_id, `${path}.fixture_id`),
 		attribute: stringAt(entry.attribute, `${path}.attribute`),
-		value: decodeAttributeValue(entry.value, `${path}.value`),
+		value: decodeAttributeValue(entry.value, `${path}.value`, "fixture"),
 	};
 }
 

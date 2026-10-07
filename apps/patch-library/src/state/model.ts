@@ -4,7 +4,7 @@ import type {
 	PatchInstalledFixtureAppearance,
 	PatchProfileRevision,
 } from "../contracts";
-import { fixtureDefinitionFromProfileMode } from "../sheet/fixtureProfileModel";
+import { fixtureDefinitionFromProfileMode, modeGeometry } from "../sheet/fixtureProfileModel";
 import type {
 	FixtureDefinition,
 	FixtureProfile,
@@ -153,6 +153,8 @@ export function patchedFixtureCandidate(
 				rotation: instance.rotation,
 				invertPan: instance.invert_pan ?? false,
 				invertTilt: instance.invert_tilt ?? false,
+				positionCalibration: instance.position_calibration ?? null,
+				colorCalibration: instance.color_calibration ?? null,
 				bracketAngle: instance.bracket_angle ?? 0,
 				shaperAngle: instance.shaper_angle ?? null,
 				installedAppearance: patchAppearance(instance.installed_appearance),
@@ -161,6 +163,8 @@ export function patchedFixtureCandidate(
 			grandMasterEnabled: fixture.grand_master_enabled ?? true,
 			invertPan: fixture.invert_pan ?? false,
 			invertTilt: fixture.invert_tilt ?? false,
+			positionCalibration: fixture.position_calibration ?? null,
+			colorCalibration: fixture.color_calibration ?? null,
 			bracketAngle: fixture.bracket_angle ?? 0,
 			shaperAngle: fixture.shaper_angle ?? null,
 			installedAppearance: patchAppearance(fixture.installed_appearance),
@@ -234,7 +238,17 @@ export function projectionToPatchedFixture(
 		fixture_number: projection.fixtureNumber,
 		virtual_fixture_number: projection.virtualFixtureNumber,
 		name: projection.name,
-		definition,
+		definition: (() => {
+            const identities = profile.referencedModes.find((m) => m.modeId === projection.modeId)?.nativeColorIdentities;
+            const mode = profile.profileSnapshot?.modes.find((m) => m.id === projection.modeId);
+            // Never retain an earlier mode's calibration context through a fallback definition.
+            const { color_calibration_context: _oldContext, position_calibration_context: _oldPosition, ...base } = definition;
+            const identity=profile.referencedModes.find(m=>m.modeId===projection.modeId)?.positionCalibrationIdentity;
+            const geometry=mode&&profile.profileSnapshot?modeGeometry(profile.profileSnapshot,mode):null;
+            const bindings=mode?.position_physical?.bindings;
+            const axes=bindings?.filter((b,i)=>bindings.findIndex(a=>a.node_id===b.node_id)===i).map(b=>({node_id:b.node_id,role:b.role,name:geometry?.nodes.find(n=>n.id===b.node_id)?.name??"Axis"}));
+            return {...base,...(identities?.length&&mode?{color_calibration_context:{identities,mode}}:{}),...(identity&&axes?{position_calibration_context:{identity,axes}}:{})};
+        })(),
 		universe: primary?.universe ?? null,
 		address: primary?.address ?? null,
 		split_patches: [...projection.splitPatches],
@@ -267,6 +281,8 @@ export function projectionToPatchedFixture(
 				rotation: instance.rotation,
 				invert_pan: instance.invertPan ?? false,
 				invert_tilt: instance.invertTilt ?? false,
+				position_calibration: instance.positionCalibration ?? null,
+				color_calibration: instance.colorCalibration ?? null,
 				bracket_angle: instance.bracketAngle ?? 0,
 				shaper_angle: instance.shaperAngle ?? null,
 				installed_appearance: fixtureAppearance(instance.installedAppearance),
@@ -276,6 +292,8 @@ export function projectionToPatchedFixture(
 		grand_master_enabled: projection.grandMasterEnabled ?? true,
 		invert_pan: projection.invertPan ?? false,
 		invert_tilt: projection.invertTilt ?? false,
+		position_calibration: projection.positionCalibration ?? null,
+		color_calibration: projection.colorCalibration ?? null,
 		bracket_angle: projection.bracketAngle ?? 0,
 		shaper_angle: projection.shaperAngle ?? null,
 		installed_appearance: fixtureAppearance(projection.installedAppearance),

@@ -1,8 +1,71 @@
 use super::dynamic_projection::DynamicPlaybackControl;
 use super::*;
 
+mod cold;
+mod controls;
 mod flows;
 
+#[cfg(test)]
+mod owner_tests;
+#[cfg(test)]
+mod recording_tests;
+
+use cold::ReconciliationObserver;
+use cold::{
+    ColdDynamicReconciliationContext, ColdDynamicReconciliationFlow,
+    ColdDynamicReconciliationOperation,
+};
+pub(in crate::runtime) use cold::{
+    ColdDynamicReconciliationInputs, reconcile_cold_dynamic_candidate,
+};
+
+/// Current operational owner of an active Dynamic Playback row: its page-qualified Virtual
+/// assignment when the row carries one, otherwise its physical number.
+pub(in crate::runtime) fn dynamic_playback_owner(
+    active: &light_playback::ActiveDynamicPlayback,
+) -> light_dynamics::DynamicControllerSource {
+    match active.playback_identity {
+        Some(PlaybackIdentity::Virtual(address)) => {
+            light_dynamics::DynamicControllerSource::virtual_playback(
+                address.page(),
+                address.number().get(),
+            )
+        }
+        _ => light_dynamics::DynamicControllerSource::physical_playback(active.playback_number),
+    }
+}
+
+/// Release xfade of the controller's current owner. A Virtual owner resolves only on its own
+/// page and a physical owner only among physical Playbacks, so equal numbers never alias. An
+/// owner whose assignment is missing or deleted releases immediately (the explicit fallback).
+/// A legacy owner recorded before page qualification derives its page from the Virtual
+/// number bank; physical numbers never fall inside that bank.
+fn playback_release_millis(
+    snapshot: &light_engine::EngineSnapshot,
+    source: &light_dynamics::DynamicControllerSource,
+) -> u64 {
+    let light_dynamics::DynamicControllerSource::Playback {
+        playback_number,
+        virtual_page,
+    } = *source
+    else {
+        return 0;
+    };
+    let page =
+        virtual_page.or_else(|| light_playback::virtual_playback_page_for_number(playback_number));
+    match page {
+        Some(page) => snapshot
+            .playback_pages
+            .iter()
+            .find(|candidate| candidate.number == page)
+            .and_then(|page| page.virtual_playbacks.get(&playback_number)),
+        None => snapshot
+            .playbacks
+            .iter()
+            .find(|playback| playback.number == playback_number),
+    }
+    .map_or(0, |playback| playback.xfade_millis)
+}
 pub(super) use flows::*;
 
 fn release_stale_playback_controllers(
@@ -10,6 +73,7 @@ fn release_stale_playback_controllers(
     snapshot: &light_engine::EngineSnapshot,
     desired_ids: &HashSet<Uuid>,
     now_millis: u64,
+    observer: &mut ReconciliationObserver<'_>,
 ) {
     for (instance_id, controller) in dynamics.controllers() {
         if matches!(
@@ -17,16 +81,23 @@ fn release_stale_playback_controllers(
             light_dynamics::DynamicControllerSource::Playback { .. }
         ) && !desired_ids.contains(&controller.id)
         {
-            let release_millis = match controller.source {
-                light_dynamics::DynamicControllerSource::Playback { playback_number } => snapshot
-                    .playbacks
-                    .iter()
-                    .find(|playback| playback.number == playback_number)
-                    .map_or(0, |playback| playback.xfade_millis),
-                _ => 0,
-            };
-            let _ =
-                dynamics.off_controller(instance_id, controller.id, now_millis, 0, release_millis);
+            let release_millis = playback_release_millis(snapshot, &controller.source);
+            let released = controls::off(
+                dynamics,
+                instance_id,
+                controller.id,
+                now_millis,
+                0,
+                release_millis,
+            );
+            observer.observe(
+                &ColdDynamicReconciliationContext::released(
+                    ColdDynamicReconciliationFlow::Playback,
+                    &controller,
+                ),
+                ColdDynamicReconciliationOperation::Release,
+                released,
+            );
         }
     }
 }
@@ -75,14 +146,28 @@ fn dynamic_playback_controller_id(playback: &light_playback::ActiveDynamicPlayba
     Uuid::from_u128(0x4459_4e41_4d49_432d_504c_4159_4241_434b ^ address)
 }
 
+/// Typed outcome of resolving one top-level Live Group reference.
+///
+/// A Group absent from the show and a deliberately stored empty Group both resolve to no
+/// targets but remain distinguishable. Resolution failure of an existing Group (a missing nested
+/// reference, a cycle or an invalid spatial mapping) keeps the resolver's own context verbatim.
+pub(super) enum DynamicGroupScope {
+    Resolved {
+        targets: Vec<light_core::FixtureId>,
+        mapping: Option<light_dynamics::SpatialSelectionMapping>,
+    },
+    Missing,
+    Invalid(String),
+}
+
 fn resolve_dynamic_group(
     group_id: &str,
     groups: &HashMap<String, light_programmer::GroupDefinition>,
     snapshot: &light_engine::EngineSnapshot,
-) -> Option<(
-    Vec<light_core::FixtureId>,
-    Option<light_dynamics::SpatialSelectionMapping>,
-)> {
+) -> DynamicGroupScope {
+    if !groups.contains_key(group_id) {
+        return DynamicGroupScope::Missing;
+    }
     let positions = snapshot
         .dynamic_stage_positions
         .iter()
@@ -97,9 +182,13 @@ fn resolve_dynamic_group(
             )
         })
         .collect();
-    light_programmer::resolve_group_spatial(group_id, groups, &positions)
-        .ok()
-        .map(|resolved| (resolved.source_order, resolved.effective_mapping))
+    match light_programmer::resolve_group_spatial(group_id, groups, &positions) {
+        Ok(resolved) => DynamicGroupScope::Resolved {
+            targets: resolved.source_order,
+            mapping: resolved.effective_mapping,
+        },
+        Err(error) => DynamicGroupScope::Invalid(error),
+    }
 }
 
 fn release_inactive_cue_controllers(
@@ -107,6 +196,7 @@ fn release_inactive_cue_controllers(
     desired_ids: &HashSet<Uuid>,
     release_timings: &HashMap<Uuid, light_dynamics::DynamicValueTiming>,
     now_millis: u64,
+    observer: &mut ReconciliationObserver<'_>,
 ) {
     for (instance_id, controller) in dynamics.controllers() {
         if matches!(
@@ -118,23 +208,24 @@ fn release_inactive_cue_controllers(
                 .get(&controller.id)
                 .copied()
                 .unwrap_or_default();
-            let _ = dynamics.off_controller(
+            let released = controls::off(
+                dynamics,
                 instance_id,
                 controller.id,
                 now_millis,
                 timing.delay_millis.unwrap_or_default(),
                 timing.fade_millis.unwrap_or_default(),
             );
+            observer.observe(
+                &ColdDynamicReconciliationContext::released(
+                    ColdDynamicReconciliationFlow::Cue,
+                    &controller,
+                ),
+                ColdDynamicReconciliationOperation::Release,
+                released,
+            );
         }
     }
-}
-
-fn cue_dynamic_controller_id(cue_list_id: light_core::CueListId, instance_link: Uuid) -> Uuid {
-    Uuid::from_u128(
-        instance_link.as_u128()
-            ^ cue_list_id.0.as_u128().rotate_left(1)
-            ^ 0x4355_452d_4459_4e41_4d49_432d_4354_524c,
-    )
 }
 
 #[cfg(test)]
@@ -225,7 +316,150 @@ mod tests {
         assert_eq!(phases[&fixtures[1]], 180.0);
     }
 
-    fn group(fixtures: &[FixtureId]) -> GroupDefinition {
+    #[test]
+    fn programmer_scope_and_authored_off_order_preserve_independent_controllers_and_clocks() {
+        let fixture = FixtureId::new();
+        let definition = live_group_dynamic();
+        let link = Uuid::new_v4();
+        let programmers = [Uuid::new_v4(), Uuid::new_v4()];
+        let ids = programmers.map(|id| {
+            light_dynamics::programmer_dynamic_controller_id(light_core::ProgrammerId(id), link)
+        });
+        let value = DynamicAddressValue {
+            fixture_id: fixture,
+            attribute: AttributeKey::intensity(),
+            value: DynamicSemanticValue::DynamicOn {
+                instance_link: link,
+                dynamic: DynamicReference {
+                    dynamic_id: Some(definition.id),
+                    last_known_pool_number: definition.pool_number,
+                    embedded_fallback: DynamicDefinitionSnapshot {
+                        definition: Arc::new(definition.clone()),
+                    },
+                },
+                lane_id: definition.lanes[0].id,
+                overrides: DynamicInstanceOverrides {
+                    size: 1.0,
+                    speed_multiplier: Rational::ONE,
+                    phase_offset_degrees: 0.0,
+                },
+                timing: Default::default(),
+            },
+            programmer_order: 10,
+            changed_at_millis: 10,
+        };
+        let normal = programmers.map(|id| (id, 1, value.clone()));
+        let snapshot = light_engine::EngineSnapshot {
+            dynamics: vec![definition.clone()].into(),
+            groups: vec![group(&[fixture])].into(),
+            ..Default::default()
+        };
+        let mut runtime = light_dynamics::DynamicRuntime::default();
+        runtime.install_definitions([definition]).unwrap();
+        reconcile_programmer_dynamics(&mut runtime, 10, &snapshot, &normal, &[]);
+        assert_eq!(runtime.controllers().len(), 2);
+        let instance = runtime.controller(ids[0]).unwrap().0;
+        let mut off = value.clone();
+        off.programmer_order = 20;
+        off.changed_at_millis = 20;
+        off.value = DynamicSemanticValue::DynamicOff {
+            instance_link: link,
+            timing: DynamicValueTiming {
+                fade_millis: Some(100),
+                ..Default::default()
+            },
+        };
+        reconcile_programmer_dynamics(
+            &mut runtime,
+            20,
+            &snapshot,
+            &normal,
+            &[(programmers[0], 1, off.clone())],
+        );
+        assert!(
+            runtime
+                .snapshot()
+                .instances
+                .iter()
+                .flat_map(|instance| &instance.controller_transitions)
+                .any(|transition| transition.controller_id == ids[0]
+                    && transition.release_started_at_millis.is_none()
+                    && transition
+                        .output_gate
+                        .is_some_and(|gate| gate.started_at_millis == 20 && gate.to == 0.0))
+        );
+
+        // A later authored On wins even if an earlier Preload commit has a later wall time.
+        let mut next = value.clone();
+        next.programmer_order = 30;
+        next.changed_at_millis = 15;
+        if let DynamicSemanticValue::DynamicOn { overrides, .. } = &mut next.value {
+            overrides.size = 0.3;
+        }
+        reconcile_programmer_dynamics(
+            &mut runtime,
+            25,
+            &snapshot,
+            &normal,
+            &[(programmers[0], 1, off.clone()), (programmers[0], 1, next)],
+        );
+        let (same, controller) = runtime.controller(ids[0]).unwrap();
+        assert_eq!(same, instance);
+        assert_eq!(controller.size, 0.3);
+        assert_eq!(runtime.controller(ids[1]).unwrap().1.size, 1.0);
+        assert!(
+            runtime
+                .snapshot()
+                .instances
+                .iter()
+                .all(|instance| instance.started_at_millis == 10)
+        );
+        assert!(
+            runtime
+                .snapshot()
+                .instances
+                .iter()
+                .flat_map(|instance| &instance.controller_transitions)
+                .filter(|transition| transition.controller_id == ids[0])
+                .all(|transition| transition.release_started_at_millis.is_none()
+                    && transition.output_gate.is_none())
+        );
+
+        off.programmer_order = 40;
+        off.value = DynamicSemanticValue::DynamicOff {
+            instance_link: link,
+            timing: Default::default(),
+        };
+        reconcile_programmer_dynamics(
+            &mut runtime,
+            30,
+            &snapshot,
+            &normal,
+            &[(programmers[0], 1, off)],
+        );
+        assert_eq!(runtime.controller(ids[0]).unwrap().0, instance);
+        assert!(runtime.controller(ids[1]).is_some());
+        let muted = runtime.snapshot();
+        assert!(
+            muted
+                .instances
+                .iter()
+                .flat_map(|instance| &instance.controller_transitions)
+                .any(|transition| transition.controller_id == ids[0]
+                    && transition
+                        .output_gate
+                        .is_some_and(|gate| gate.mix_at(1_000) == 0.0))
+        );
+
+        // Removing the retained overlay restores the original controller. Removing every
+        // authored row retires it; runtime history alone never creates a hidden On.
+        reconcile_programmer_dynamics(&mut runtime, 1_000, &snapshot, &normal, &[]);
+        assert_eq!(runtime.controller(ids[0]).unwrap().0, instance);
+        reconcile_programmer_dynamics(&mut runtime, 1_100, &snapshot, &normal[1..], &[]);
+        assert!(runtime.controller(ids[0]).is_none());
+    }
+
+    pub(super) fn group(fixtures: &[FixtureId]) -> GroupDefinition {
         GroupDefinition {
             id: "front".into(),
             name: "Front".into(),
@@ -246,7 +480,7 @@ mod tests {
         }
     }
 
-    fn positions<const N: usize>(
+    pub(super) fn positions<const N: usize>(
         values: [(FixtureId, f32); N],
     ) -> HashMap<FixtureId, SpatialPosition> {
         values
@@ -255,7 +489,7 @@ mod tests {
             .collect()
     }
 
-    fn live_group_dynamic() -> DynamicDefinition {
+    pub(super) fn live_group_dynamic() -> DynamicDefinition {
         serde_json::from_value(serde_json::json!({
             "id": Uuid::new_v4(),
             "pool_number": 7,

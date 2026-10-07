@@ -29,9 +29,6 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
             snap: true,
             reacts_to_virtual_intensity: false,
             virtual_intensity_inverted: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: false,
-            reacts_to_grand_master: false,
             behavior: light_fixture::ChannelBehavior::Controlled,
             functions: vec![light_fixture::ChannelFunction {
                 id: Uuid::new_v4(),
@@ -40,6 +37,7 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
                 dmx_to: 127,
                 attribute: light_core::AttributeKey("gobo.1".into()),
                 priority: 100,
+                physical_mapping: None,
                 angular_motion: None,
                 behavior: light_fixture::ChannelFunctionBehavior::Indexed {
                     semantic_id: "gobo.dots".into(),
@@ -66,9 +64,6 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
             snap: true,
             reacts_to_virtual_intensity: false,
             virtual_intensity_inverted: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: false,
-            reacts_to_grand_master: false,
             behavior: light_fixture::ChannelBehavior::Controlled,
             functions: vec![],
         },
@@ -115,6 +110,8 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -193,7 +190,7 @@ fn highlight_multi_head_fixture() -> (light_fixture::PatchedFixture, [light_core
     let (mut fixture, _, _) = schema_v2_direct_fixture();
     fixture.fixture_number = Some(1);
     fixture.name = "Two-cell Highlight fixture".into();
-    let mut profile = *fixture.definition.profile_snapshot.take().unwrap();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.take().unwrap());
     let mode_id = profile.modes[0].id;
     profile.modes[0].heads.extend([
         light_fixture::FixtureHead {
@@ -238,6 +235,8 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -253,6 +252,8 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -349,6 +350,7 @@ fn schema_v2_direct_actions_are_channel_atomic_and_presets_are_opt_in_semantic_v
         .definition
         .profile_snapshot
         .as_mut()
+        .map(std::sync::Arc::make_mut)
         .unwrap()
         .modes[0]
         .control_actions[0];

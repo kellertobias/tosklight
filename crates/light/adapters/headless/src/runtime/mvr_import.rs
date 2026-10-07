@@ -7,28 +7,43 @@ pub(super) async fn preview_mvr_import(
     body: Bytes,
 ) -> Result<Json<MvrImportPreview>, ApiError> {
     let _session = authenticate(&state, &headers)?;
+    tokio::task::spawn_blocking(move || prepare_mvr_preview(&state, query, &body))
+        .await
+        .map_err(|error| ApiError::internal(format!("MVR preview task failed: {error}")))?
+        .map(Json)
+}
+
+fn prepare_mvr_preview(
+    state: &AppState,
+    query: MvrPreviewQuery,
+    body: &[u8],
+) -> Result<MvrImportPreview, ApiError> {
     let document =
         light_mvr::read(&body).map_err(|error| ApiError::bad_request(error.to_string()))?;
-    let (definitions, _) = mvr_definitions(&state, &document)?;
-    let mut existing = Vec::new();
+    let definitions = mvr_definitions(&state, &document)?;
+    let mut occupied = Vec::new();
+    let mut owners = HashMap::new();
     if let Some(id) = query.show_id
         && let Some(show) = state
             .installation
             .show(light_core::ShowId(id))
             .map_err(ApiError::store)?
     {
-        existing = ActiveShowRepository::open(show.path)
+        let destination = ActiveShowRepository::open(show.path)
             .map_err(ApiError::store)?
-            .objects("patched_fixture")
-            .map_err(ApiError::store)?
-            .into_iter()
-            .filter_map(|o| serde_json::from_value::<light_fixture::PatchedFixture>(o.body).ok())
-            .collect();
+            .portable_document()
+            .map_err(ApiError::store)?;
+        owners = light_application::mvr_import::mvr_destination_fixture_ids(
+            &destination,
+            &light_application::mvr_export::tosklight_mvr_fixture_metadata(&document),
+        );
+        occupied = light_application::mvr_import::occupied_patches(&destination)
+            .map_err(|error| ApiError::bad_request(error.message))?;
     }
     let missing_profiles = document
         .fixtures
         .iter()
-        .filter(|f| resolve_mvr_definition(&definitions, f).is_none())
+        .filter(|f| !definitions.definitions.contains_key(&f.uuid))
         .map(|f| format!("{} · {}", f.gdtf_spec, f.gdtf_mode))
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
@@ -38,16 +53,21 @@ pub(super) async fn preview_mvr_import(
         if let (Some(u), Some(a), Some(definition)) = (
             fixture.universe,
             fixture.address,
-            resolve_mvr_definition(&definitions, fixture),
+            definitions.definitions.get(&fixture.uuid),
         ) {
-            let end = a.saturating_add(definition.footprint.saturating_sub(1));
-            if existing.iter().any(|e| {
-                e.universe == Some(u)
-                    && e.address.is_some_and(|start| {
-                        start <= end
-                            && start.saturating_add(e.definition.footprint.saturating_sub(1)) >= a
-                    })
-            }) {
+            let end = a.saturating_add(
+                light_application::mvr_import::primary_footprint(definition).saturating_sub(1),
+            );
+            let owner = owners.get(&fixture.uuid).map(|id| id.0.to_string());
+            if occupied
+                .iter()
+                .any(|(other_universe, start, footprint, id)| {
+                    owner.as_ref() != Some(id)
+                        && *other_universe == u
+                        && *start <= end
+                        && start.saturating_add(footprint.saturating_sub(1)) >= a
+                })
+            {
                 address_conflicts.push(format!(
                     "{} conflicts at universe {} address {}-{}",
                     fixture.name, u, a, end
@@ -56,15 +76,7 @@ pub(super) async fn preview_mvr_import(
         }
     }
     let token = Uuid::new_v4();
-    let now = Instant::now();
-    state.active_show.stage_mvr_import(
-        token,
-        StagedMvrImport {
-            document: document.clone(),
-            created: now,
-        },
-    );
-    Ok(Json(MvrImportPreview {
+    let preview = MvrImportPreview {
         token,
         fixtures: document
             .fixtures
@@ -76,148 +88,84 @@ pub(super) async fn preview_mvr_import(
                 gdtf_mode: f.gdtf_mode.clone(),
                 universe: f.universe,
                 address: f.address,
-                matched: resolve_mvr_definition(&definitions, f).is_some(),
+                matched: definitions.definitions.contains_key(&f.uuid),
             })
             .collect(),
         scenery: document.geometry.len(),
         missing_profiles,
-        warnings: address_conflicts.clone(),
+        warnings: definitions
+            .warnings
+            .iter()
+            .cloned()
+            .chain(address_conflicts.iter().cloned())
+            .collect(),
         address_conflicts,
-    }))
+    };
+    state.active_show.stage_mvr_import(
+        token,
+        StagedMvrImport {
+            document,
+            definitions,
+            created: Instant::now(),
+        },
+    );
+    Ok(preview)
 }
 
-pub(super) fn resolve_mvr_definition(
-    definitions: &[light_fixture::FixtureDefinition],
-    fixture: &light_mvr::MvrFixture,
-) -> Option<light_fixture::FixtureDefinition> {
-    light_application::resolve_mvr_definition(definitions, fixture)
-}
-
-pub(super) type MvrDefinitions = (
-    Vec<light_fixture::FixtureDefinition>,
-    Vec<(light_fixture::FixtureDefinition, Vec<u8>)>,
-);
+/// Preview owns the exact source/mode binding. Both operator surfaces use the same parser.
+pub(super) use light_application::mvr_import::MvrDefinitions;
+mod profiles;
+pub(super) use profiles::prepare_mvr_profiles;
 
 pub(super) fn mvr_definitions(
     state: &AppState,
     document: &light_mvr::MvrDocument,
 ) -> Result<MvrDefinitions, ApiError> {
-    let mut definitions = state
+    let profiles = state
+        .installation
+        .fixture_profiles()
+        .map_err(ApiError::fixture)?;
+    let legacy = state
         .installation
         .fixture_definitions()
         .map_err(ApiError::fixture)?;
-    for fixture in light_application::mvr_export::tosklight_mvr_fixture_metadata(document)
-        .into_values()
-        .map(|embedded| embedded.fixture)
-    {
-        if !definitions.iter().any(|definition| {
-            definition.id == fixture.definition.id
-                && definition.revision == fixture.definition.revision
-        }) {
-            definitions.push(fixture.definition);
-        }
-    }
-    let mut imported = Vec::new();
-    for fixture in &document.fixtures {
-        if resolve_mvr_definition(&definitions, fixture).is_some() {
-            continue;
-        }
-        let name = fixture.gdtf_spec.to_ascii_lowercase();
-        let Some(bytes) = document.files.get(&name).or_else(|| {
-            document
-                .files
-                .iter()
-                .find(|(path, _)| path.ends_with(&format!("/{name}")))
-                .map(|(_, data)| data)
-        }) else {
-            continue;
-        };
-        let Ok(modes) = light_mvr::read_gdtf(bytes) else {
-            continue;
-        };
-        for mode in modes {
-            let footprint = mode
-                .channels
-                .iter()
-                .flat_map(|c| c.offsets.iter())
-                .max()
-                .copied()
-                .unwrap_or(0)
-                + 1;
-            let parameters = mode
-                .channels
+    light_application::mvr_import::bind_mvr_sources(
+        document,
+        &profiles,
+        &legacy,
+        |id, revision| {
+            let value = state
+                .installation
+                .fixture_profile_revision_document(id, revision)
+                .map_err(|e| {
+                    light_application::ActionError::new(
+                        light_application::ActionErrorKind::Invalid,
+                        e.to_string(),
+                    )
+                })?;
+            value.map(serde_json::from_value).transpose().map_err(|e| {
+                light_application::ActionError::new(
+                    light_application::ActionErrorKind::Invalid,
+                    e.to_string(),
+                )
+            })
+        },
+        |profile| {
+            super::fixture_api::unknown_canonical_attributes(state, profile)
                 .into_iter()
-                .map(|channel| {
-                    let normalized = channel
-                        .attribute
-                        .replace([' ', '_'], ".")
-                        .to_ascii_lowercase();
-                    light_fixture::Parameter {
-                        attribute: light_core::AttributeKey(normalized.as_str().into()),
-                        components: channel
-                            .offsets
-                            .into_iter()
-                            .map(|offset| light_fixture::ChannelComponent {
-                                offset,
-                                byte_order: light_fixture::ByteOrder::MsbFirst,
-                            })
-                            .collect(),
-                        default: 0.0,
-                        virtual_dimmer: false,
-                        metadata: light_fixture::ParameterMetadata {
-                            wrap: normalized.contains("pan"),
-                            ..Default::default()
-                        },
-                        capabilities: Vec::new(),
-                    }
-                })
-                .collect();
-            // A GDTF mode is read as the flat parameter list the file describes, then turned into
-            // a profile the way every other imported fixture is. What the desk patches is a
-            // schema-v2 fixture carrying its own profile snapshot; nothing downstream has to know
-            // this one came from GDTF.
-            let described = light_fixture::FixtureDefinition {
-                schema_version: 1,
-                id: light_core::FixtureId::new(),
-                revision: 1,
-                manufacturer: mode.manufacturer,
-                device_type: "other".into(),
-                name: mode.model.clone(),
-                model: mode.model,
-                mode: mode.name,
-                footprint,
-                heads: vec![light_fixture::LogicalHead {
-                    index: 0,
-                    name: "Main".into(),
-                    shared: true,
-                    parameters,
-                }],
-                color_calibration: None,
-                physical: Default::default(),
-                model_asset: None,
-                icon_asset: None,
-                hazardous: false,
-                direct_control_protocols: Vec::new(),
-                signal_loss_policy: light_fixture::SignalLossPolicy::HoldLast,
-                safe_values: Default::default(),
-                profile_id: None,
-                mode_id: None,
-                profile_snapshot: None,
-            };
-            let Ok(profile) =
-                light_fixture::FixtureProfile::from_flat_modes(std::slice::from_ref(&described))
-            else {
-                continue;
-            };
-            let Some(mode_id) = profile.modes.first().map(|mode| mode.id) else {
-                continue;
-            };
-            let Ok(definition) = profile.resolved_definition(mode_id) else {
-                continue;
-            };
-            definitions.push(definition.clone());
-            imported.push((definition, bytes.clone()));
-        }
+                .map(|(name, _)| name)
+                .collect()
+        },
+    )
+    .map_err(mvr_api_error)
+}
+pub(super) fn mvr_api_error(error: light_application::ActionError) -> ApiError {
+    ApiError {
+        status: if error.kind == light_application::ActionErrorKind::Conflict {
+            StatusCode::CONFLICT
+        } else {
+            StatusCode::BAD_REQUEST
+        },
+        message: error.message,
     }
-    Ok((definitions, imported))
 }

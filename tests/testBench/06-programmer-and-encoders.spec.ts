@@ -21,9 +21,9 @@ scenario(
 		await t.selection.fixtures.via.fixtureSheet.item(101);
 		await t.expect.selection(fixture(101));
 
-		// Pan reads out from home, so a typed 25 is a quarter of the travel one way rather than a
-		// quarter of the channel: home plus 25 of 100 is 62.5% of the channel, DMX 159.
-		await t.encoder.position.pan.via.ui.set(25);
+		// Pan is an Angle from home in degrees (TL-552): 67.5° is a quarter of the 270° from home to
+		// the end of a 540° travel, so 62.5% of the channel, DMX 159.
+		await t.encoder.position.pan.via.ui.set(67.5);
 		await t.clock.advanceBy("3s");
 		await t.expectFixtureDMX(dmxFixture(101), { Pan: 159 });
 	},
@@ -77,9 +77,11 @@ scenario(
 		await t.expect.selection(fixture(101));
 		await t.hardware.connect();
 		try {
+			// One detent is one 1° step (TL-552): from the default +0.53° to +1.53° of a nominal 270°
+			// Tilt travel centred on home, 50.6% of the channel, DMX 129.
 			await t.encoder.position.tilt.via.osc.add(1);
 			await t.clock.advanceBy("3s");
-			await t.expectFixtureDMX(dmxFixture(101), { Tilt: 131 });
+			await t.expectFixtureDMX(dmxFixture(101), { Tilt: 129 });
 		} finally {
 			await t.hardware.disconnect();
 		}

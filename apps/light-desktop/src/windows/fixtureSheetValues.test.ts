@@ -11,6 +11,7 @@ import {
 	FIXTURE_SHEET_ATTRIBUTE_GROUPS,
 	fixtureSheetGroupValues,
 	fixtureSheetValueIndex,
+	withCommandedPositions,
 } from "./fixtureSheetValues";
 
 const attributeGroups = [
@@ -123,9 +124,6 @@ function fixture(): PatchedFixture {
 								invert: false,
 								snap: true,
 								reacts_to_virtual_intensity: false,
-								reacts_to_sequence_master: false,
-								reacts_to_group_master: false,
-								reacts_to_grand_master: false,
 								behavior: "controlled",
 								functions: [
 									{
@@ -342,6 +340,101 @@ describe("Fixture Sheet attribute-group values", () => {
 		expect(groups.intensity.members[0]).toMatchObject({
 			text: "0%",
 			source: "playback",
+		});
+	});
+	it("shows native Red/Green/Blue output when the semantic registry publishes no Color descriptors", () => {
+		const target = fixtureSheetTargets(fixture())[0];
+		const semanticRegistry = registry.filter((descriptor) => !descriptor.id.startsWith("color."));
+		const groups = fixtureSheetGroupValues({
+			target,
+			registry: semanticRegistry,
+			values: new Map([["color.red", { kind: "normalized" as const, value: 0.5 }]]),
+			preloadValues: undefined,
+			programmerAttributes: new Set(["color"]),
+			dynamicStack: [],
+			preloadDynamicStack: [],
+		});
+		expect(groups.color.available).toBe(true);
+		expect(groups.color.members[0]).toMatchObject({
+			attribute: "color.red",
+			label: "Red",
+			text: "50%",
+			source: "programmer",
+		});
+	});
+	describe("Position reads the commanded pose in degrees (TL-552)", () => {
+		// Production Pan/Tilt descriptors carry degrees without a channel domain.
+		const angleRegistry = registry.map((descriptor) =>
+			descriptor.id === "pan"
+				? { ...descriptor, domain_min: null, domain_max: null }
+				: descriptor,
+		);
+		const empty = (): VisualizationSnapshot => ({
+			...snapshot("2026-08-02T10:00:00Z"),
+			values: [],
+			dynamic_stack: [],
+		});
+		const commanded = (
+			snapshot: VisualizationSnapshot,
+			rows: VisualizationSnapshot["commanded_positions"],
+		) => withCommandedPositions({ ...snapshot, commanded_positions: rows });
+		const pan = (
+			current: VisualizationSnapshot | null,
+			programmerAttributes = new Set<string>(),
+		) =>
+			fixtureSheetGroupValues({
+				target: fixtureSheetTargets(fixture())[0],
+				registry: angleRegistry,
+				values: fixtureSheetValueIndex(current).get("fixture-1"),
+				preloadValues: undefined,
+				programmerAttributes,
+				dynamicStack: [],
+				preloadDynamicStack: [],
+			}).position.members[0];
+
+		it("never labels a channel fraction as degrees", () => {
+			expect(pan(empty()).text).toBe("—");
+		});
+
+		it("shows an idle mover's commanded default pose as the encoders do", () => {
+			// DMX 128/255 on a nominal 540° Pan travel: the encoder reads Pan 1.1°.
+			const shown = commanded(empty(), [
+				{ fixture_id: "fixture-1", pan_degrees: 1.0588236, tilt_degrees: 0.5294118 },
+			]);
+			expect(pan(shown)).toMatchObject({ text: "1.1°", source: "default" });
+		});
+
+		it("prefers the commanded pose over the requested Angles and keeps the Programmer source", () => {
+			const requested = empty();
+			requested.values = [
+				{
+					fixture_id: "fixture-1",
+					attribute: "position",
+					value: {
+						kind: "position",
+						value: {
+							kind: "angles",
+							pan_degrees: { kind: "value", value: 30 },
+							tilt_degrees: { kind: "value", value: 10 },
+						},
+					},
+				},
+			];
+			const programmed = new Set(["position"]);
+			expect(pan(requested, programmed)).toMatchObject({
+				text: "30°",
+				source: "programmer",
+			});
+			const shown = commanded(requested, [
+				{ fixture_id: "fixture-1", pan_degrees: 29.5, tilt_degrees: 10 },
+			]);
+			expect(pan(shown, programmed).text).toBe("29.5°");
+		});
+
+		it("adds nothing when the server lists no common pose or there is no snapshot", () => {
+			// Divergent copies and owners without a pose are absent from the server's rows.
+			expect(pan(commanded(empty(), [])).text).toBe("—");
+			expect(withCommandedPositions(null)).toBeNull();
 		});
 	});
 });

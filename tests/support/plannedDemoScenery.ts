@@ -1,11 +1,19 @@
 import type { FixtureProfile } from "../../apps/light-desktop/src/api/types";
 import type { ApiDriver } from "../bench/core/api";
 import { ensurePlannedDemoFixtureLibrary } from "./plannedDemoFixtureLibrary";
+import {
+	PLANNED_DEMO_CONTROL_FIXTURES,
+	PLANNED_DEMO_PHYSICAL_INSTANCES,
+} from "./plannedDemoManifest";
 import { putPlannedDemoObject } from "./plannedDemoObjects";
 
 export const PLANNED_DEMO_SCENERY_FIXTURES = 58;
-export const PLANNED_DEMO_TOTAL_FIXTURE_RECORDS = 311;
-export const PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES = 344;
+// The finished demo is the control rig plus one Venue object per scenery item (no copies), as
+// the packaged asset holds it (76-packaged-demo-asset: 312 records).
+export const PLANNED_DEMO_TOTAL_FIXTURE_RECORDS =
+	PLANNED_DEMO_CONTROL_FIXTURES + PLANNED_DEMO_SCENERY_FIXTURES;
+export const PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES =
+	PLANNED_DEMO_PHYSICAL_INSTANCES + PLANNED_DEMO_SCENERY_FIXTURES;
 
 type Point = { x: number; y: number; z: number };
 type SceneryEntry = {
@@ -57,11 +65,15 @@ export async function installPlannedDemoScenery(
 		if (
 			existing &&
 			(existing.definition.manufacturer !== "Venue" ||
-				existing.definition.model !== entry.profile ||
-				existing.definition.mode !== mode.name)
+				// A patched definition carries the profile's short name as its model.
+				(existing.definition.model !== entry.profile &&
+					existing.definition.model !== (profile as any).short_name) ||
+				// A generated Venue object names its mode after the size it was placed at.
+				(existing.definition.mode !== mode.name &&
+					!(generated && existing.definition.mode === entry.mode)))
 		)
 			throw new Error(
-				`Venue fixture 0.${entry.number} is not the expected ${entry.profile} / ${entry.mode}`,
+				`Venue fixture 0.${entry.number} is not the expected ${entry.profile} / ${entry.mode} (found ${existing.definition.manufacturer} ${existing.definition.model} / ${existing.definition.mode})`,
 			);
 		return {
 			fixture_id: existing?.fixture_id ?? stableUuid(3, entry.number),

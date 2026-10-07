@@ -1,6 +1,7 @@
 mod errors;
 
 use self::errors::{engine_error, fixture_error, store_error};
+use super::PreparedOutputSnapshot;
 use super::{
     ActiveShowBackupKind, AppState, HighlightInstallPolicy, PlaybackInstallPolicy,
     ServerActiveShowUnitOfWork, install_prepared_snapshot_with_selection_refresh,
@@ -10,7 +11,7 @@ use light_application::{
     BackupIdentity, PatchChange, ShowPatchPorts,
 };
 use light_core::{FixtureId, Revision, ShowId};
-use light_engine::{EngineSnapshot, PreparedEngineSnapshot};
+use light_engine::EngineSnapshot;
 use light_show::{
     FixtureProfileRevision, PortableShowCommit, PortableShowDocument, PortableShowTransaction,
 };
@@ -141,7 +142,7 @@ impl ActiveShowUnitOfWork for ServerShowPatchUnitOfWork {
 
 impl ActiveShowPorts for ServerShowPatchPorts {
     type UnitOfWork = ServerShowPatchUnitOfWork;
-    type PreparedRuntime = PreparedEngineSnapshot;
+    type PreparedRuntime = PreparedOutputSnapshot;
 
     fn run_active_show_lifecycle<T>(
         &self,
@@ -152,10 +153,10 @@ impl ActiveShowPorts for ServerShowPatchPorts {
         #[cfg(test)]
         self.state.active_show.pause_patch_lifecycle_if_armed();
         if self.activation_held {
-            return operation();
+            return self.state.programming.run_active_show_boundary(operation);
         }
         let _activation = self.state.active_show.acquire_blocking();
-        operation()
+        self.state.programming.run_active_show_boundary(operation)
     }
 
     fn begin_active_show(
@@ -204,6 +205,22 @@ impl ActiveShowPorts for ServerShowPatchPorts {
             PlaybackInstallPolicy::Preserve,
             HighlightInstallPolicy::Reconcile,
         );
+    }
+
+    fn finalize_runtime<T>(
+        &self,
+        context: &ActionContext,
+        prepared: Self::PreparedRuntime,
+        persist: impl FnOnce() -> Result<T, ActionError>,
+    ) -> Result<T, ActionError> {
+        super::engine_selection_refresh::finalize_prepared_snapshot_with_selection_refresh(
+            &self.state,
+            context,
+            prepared,
+            None,
+            persist,
+        )
+        .map_err(|error| at_current_patch_revision(error, self.current_patch_revision()))
     }
 }
 

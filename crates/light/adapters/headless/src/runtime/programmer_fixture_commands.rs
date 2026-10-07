@@ -1,3 +1,4 @@
+use super::programmer_family_values::typed_family_command as typed_family;
 use super::*;
 
 fn fixture_selection(
@@ -101,6 +102,9 @@ fn fixture_level_values(
     value: &[String],
 ) -> Result<Vec<(light_core::FixtureId, f32)>, String> {
     let relative = value.len() == 2 && matches!(value[0].as_str(), "+" | "-");
+    if value.len() != if relative { 2 } else { 1 } {
+        return Err("unexpected tokens after level".into());
+    }
     let level = value
         .get(usize::from(relative))
         .ok_or("AT requires a level")?;
@@ -166,23 +170,87 @@ pub(super) fn execute_fixture_programmer_command(
         .unwrap_or(tokens.len());
     let (fixtures, expression) =
         fixture_selection(state, session, tokens, start, at_index, continuing)?;
-    state
-        .programming
-        .select_expression(session.id, fixtures.clone(), expression);
     if at_index == tokens.len() {
+        state
+            .programming
+            .select_expression(session.id, fixtures.clone(), expression);
+
         state
             .programming
             .set_command_line(session.id, command_line.to_owned());
         return Ok(fixtures.len());
     }
     let value = &tokens[at_index + 1..];
+    if let Some(n) = typed_family(state, session, value, &fixtures, Some(&expression), timing) {
+        return n;
+    }
     if let Some(target) = aim_target(value) {
+        let assignments = super::programmer_aim_command::aim_selection(state, &fixtures, target)?;
+        if assignments.is_empty() {
+            let live_group = state.output.supported_programming_contract()
+                >= light_core::programming::PROGRAMMING_CONTRACT_VERSION
+                && !expression.live_group_owners().is_empty();
+            if !live_group
+                || super::programmer_aim_command::aim_target_intent(state, target)?.is_none()
+            {
+                return Ok(0);
+            }
+        }
+        state
+            .programming
+            .select_expression(session.id, fixtures.clone(), expression);
         state
             .programming
             .set_command_line(session.id, command_line.to_owned());
-        let assignments = super::programmer_aim_command::aim_selection(state, &fixtures, target)?;
-        set_command_fixture_values(state, session, assignments, timing);
+        if state.output.supported_programming_contract()
+            >= light_core::programming::PROGRAMMING_CONTRACT_VERSION
+        {
+            super::programmer_aim_command::apply_semantic_aim(
+                state,
+                session,
+                assignments,
+                timing,
+                target,
+            )?;
+        } else {
+            set_command_fixture_values(state, session, assignments, timing);
+        }
     } else if value.len() == 3 && value[1] == "." {
+        // Validate the explicit preset before selection changes, even for an empty target list.
+        let address = command_preset_address(value)?;
+        let preset = load_command_preset(state, address)?;
+        let semantic_aim = preset.aim_at_fixture_number.is_some()
+            && state.output.supported_programming_contract()
+                >= light_core::programming::PROGRAMMING_CONTRACT_VERSION;
+        let preset = if semantic_aim {
+            super::programmer_aim_command::resolve_aim_preset(state, &preset)?
+        } else {
+            preset
+        };
+        let applicable = if let Some(target) = preset.aim_at_fixture_number {
+            !super::programmer_aim_command::aim_selection(state, &fixtures, target)?.is_empty()
+        } else {
+            let groups = state
+                .output
+                .snapshot()
+                .groups
+                .iter()
+                .map(|group| (group.id.clone(), group.clone()))
+                .collect();
+            super::command_presets::command_preset_has_values(
+                &preset,
+                &fixtures,
+                &expression.live_group_owners(),
+                &groups,
+                state.output.supported_programming_contract(),
+            )?
+        };
+        if !applicable {
+            return Ok(0);
+        }
+        state
+            .programming
+            .select_expression(session.id, fixtures.clone(), expression);
         apply_command_preset(
             state,
             session,
@@ -191,7 +259,13 @@ pub(super) fn execute_fixture_programmer_command(
         )?;
     } else if value.iter().any(|token| token == "THRU") {
         let points = parse_spread_points(value)?;
+        if fixtures.is_empty() {
+            return Ok(0);
+        }
         ensure_spread_fits(&points, fixtures.len())?;
+        state
+            .programming
+            .select_expression(session.id, fixtures.clone(), expression);
         let count = fixtures.len();
         set_command_fixture_intensities(
             state,
@@ -203,10 +277,16 @@ pub(super) fn execute_fixture_programmer_command(
             timing,
         );
     } else {
+        let values = fixture_level_values(state, &fixtures, value)?;
+        if values.is_empty() {
+            return Ok(0);
+        }
+        state
+            .programming
+            .select_expression(session.id, fixtures.clone(), expression);
         state
             .programming
             .set_command_line(session.id, command_line.to_owned());
-        let values = fixture_level_values(state, &fixtures, value)?;
         set_command_fixture_intensities(state, session, values, timing);
     }
     Ok(fixtures.len())

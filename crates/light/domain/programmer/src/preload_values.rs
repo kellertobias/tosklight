@@ -77,6 +77,19 @@ impl ProgrammerRegistry {
         session: SessionId,
         mutations: &[PreloadProgrammerValueMutation],
     ) -> bool {
+        self.apply_preload_values_grouped(session, mutations, None)
+    }
+
+    /// Pending encoder samples share one Undo checkpoint just like normal programming.
+    pub fn apply_preload_values_grouped(
+        &self,
+        session: SessionId,
+        mutations: &[PreloadProgrammerValueMutation],
+        undo_group: Option<&str>,
+    ) -> bool {
+        if mutations.is_empty() {
+            return false;
+        }
         let mutation_gate = self.mutation_gate();
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
@@ -96,7 +109,16 @@ impl ProgrammerRegistry {
         if !changed.iter().any(|changed| *changed) {
             return false;
         }
-        state.checkpoint();
+        let continues_group = undo_group.is_some_and(|group| {
+            state
+                .active_value_undo_group
+                .as_ref()
+                .is_some_and(|(preload, existing)| *preload && existing == group)
+        });
+        if !continues_group {
+            state.checkpoint();
+        }
+        state.active_value_undo_group = undo_group.map(|group| (true, group.to_owned()));
         let changed_at = self.clock.now();
         let mut fixture_batch = FixtureValueBatch::default();
         for (mutation, changed) in mutations.iter().zip(changed) {
@@ -198,6 +220,9 @@ fn mutation_changes(
             fixture_index
                 .get(*fixture_id, attribute)
                 .is_none_or(|stored| !fixture_value_matches(stored, value, *timing))
+                || value.programming_owner().is_some_and(|owner| {
+                    fixture_index.has_independent_components(*fixture_id, owner)
+                })
                 || state.preload_dynamic_pending.iter().any(|stored| {
                     stored.fixture_id == *fixture_id
                         && stored.attribute == *attribute
@@ -207,7 +232,10 @@ fn mutation_changes(
         PreloadProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
-        } => fixture_index.get(*fixture_id, attribute).is_some(),
+        } => {
+            fixture_index.get(*fixture_id, attribute).is_some()
+                || state.has_fixture_release(true, *fixture_id, attribute)
+        }
         PreloadProgrammerValueMutation::SetGroup {
             group_id,
             attribute,
@@ -219,6 +247,18 @@ fn mutation_changes(
                 .get(group_id)
                 .and_then(|values| values.get(attribute))
                 .is_none_or(|stored| !group_value_matches(stored, value, *timing))
+                || value.programming_owner().is_some_and(|owner| {
+                    state
+                        .preload_group_pending
+                        .get(group_id)
+                        .is_some_and(|values| {
+                            values.keys().any(|key| {
+                                light_core::programming::independent_programming_component(
+                                    key, owner,
+                                )
+                            })
+                        })
+                })
                 || state
                     .preload_group_release_pending
                     .iter()
@@ -227,10 +267,13 @@ fn mutation_changes(
         PreloadProgrammerValueMutation::ReleaseGroup {
             group_id,
             attribute,
-        } => state
-            .preload_group_pending
-            .get(group_id)
-            .is_some_and(|values| values.contains_key(attribute)),
+        } => {
+            state
+                .preload_group_pending
+                .get(group_id)
+                .is_some_and(|values| values.contains_key(attribute))
+                || state.has_group_release(true, group_id, attribute)
+        }
     }
 }
 
@@ -284,11 +327,15 @@ fn apply_mutation(
                     || stored.attribute != *attribute
                     || !matches!(stored.value, light_dynamics::DynamicSemanticValue::Release)
             });
+            state.prune_released_fixture_colors();
         }
         PreloadProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
-        } => fixture_batch.release(*fixture_id, attribute),
+        } => {
+            fixture_batch.release(*fixture_id, attribute);
+            state.clear_fixture_release(true, *fixture_id, attribute);
+        }
         PreloadProgrammerValueMutation::SetGroup {
             group_id,
             attribute,
@@ -301,11 +348,15 @@ fn apply_mutation(
             state
                 .preload_group_release_pending
                 .retain(|stored| stored.group_id != *group_id || stored.attribute != *attribute);
+            state.clear_released_group_color(group_id, attribute);
         }
         PreloadProgrammerValueMutation::ReleaseGroup {
             group_id,
             attribute,
-        } => release_group(state, group_id, attribute),
+        } => {
+            release_group(state, group_id, attribute);
+            state.clear_group_release(true, group_id, attribute);
+        }
     }
 }
 
@@ -326,21 +377,26 @@ fn set_group(
     timing: PreloadProgrammerValueTiming,
     changed_at: chrono::DateTime<chrono::Utc>,
 ) {
-    state
+    let attributes = state
         .preload_group_pending
         .entry(group_id.to_owned())
-        .or_default()
-        .insert(
-            attribute.clone(),
-            GroupProgrammerValue {
-                value: value.clone(),
-                changed_at,
-                programmer_order: registry.next_programmer_order(),
-                fade: timing.fade,
-                fade_millis: timing.fade_millis,
-                delay_millis: timing.delay_millis,
-            },
-        );
+        .or_default();
+    if let Some(owner) = value.programming_owner() {
+        attributes.retain(|key, _| {
+            !light_core::programming::independent_programming_component(key, owner)
+        });
+    }
+    attributes.insert(
+        attribute.clone(),
+        GroupProgrammerValue {
+            value: value.clone(),
+            changed_at,
+            programmer_order: registry.next_programmer_order(),
+            fade: timing.fade,
+            fade_millis: timing.fade_millis,
+            delay_millis: timing.delay_millis,
+        },
+    );
 }
 
 fn release_group(state: &mut crate::ProgrammerState, group_id: &str, attribute: &AttributeKey) {

@@ -31,6 +31,7 @@ import {
 } from "../features/deskSnapshot/DeskSnapshotState";
 import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
 import { DynamicMutationWriter } from "../features/dynamics/DynamicMutationWriter";
+import { dynamicLaneChoices } from "../features/dynamics/laneDomain";
 import { useDynamicsActions } from "../features/dynamics/DynamicsActionsContext";
 import {
 	useProgrammingCommandLineActions,
@@ -105,7 +106,7 @@ export function DynamicsWindow({
 		},
 		[closeEditor, selectedId],
 	);
-	const attributes = registry.filter(isDynamicLaneAttribute);
+	const attributes = useMemo(() => dynamicLaneChoices(registry), [registry]);
 	const { runtime, resyncRuntime } = useDynamicsRuntime(
 		active,
 		showId,
@@ -215,17 +216,6 @@ export function DynamicsWindow({
 			}
 			onClearShift={() => dispatch({ type: "SET_SHIFT_ARMED", value: false })}
 		/>
-	);
-}
-
-function isDynamicLaneAttribute(
-	attribute: NonNullable<ReturnType<typeof useAttributeRegistry>>[number],
-) {
-	return (
-		attribute.recordable &&
-		attribute.value_type === "continuous" &&
-		attribute.normalized_min != null &&
-		attribute.normalized_max != null
 	);
 }
 

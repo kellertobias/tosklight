@@ -35,11 +35,13 @@ pub(super) fn collect(
         })
         .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
     let group_master_levels = reconcile_group_master_levels(candidate)?;
+    let native = super::super::dynamic_presets::NativeTemplateValidator::new(candidate);
     candidate
         .objects()
         .filter_map(|object| {
             if object.key().kind() == "dynamic" {
-                migrate_dynamic_fallbacks(object, &presets, &groups).transpose()
+                migrate_dynamic_fallbacks(object, &presets, &groups, &|value| native.allows(value))
+                    .transpose()
             } else {
                 migrate_with_group_masters(object, &group_master_levels).transpose()
             }
@@ -51,6 +53,7 @@ fn migrate_dynamic_fallbacks(
     object: PortableShowCandidateObject<'_>,
     presets: &std::collections::HashMap<String, Preset>,
     groups: &std::collections::HashMap<String, GroupDefinition>,
+    verify_native: &dyn Fn(&light_core::AttributeValue) -> bool,
 ) -> Result<Option<ObjectUpdate>, ActionError> {
     let mut migrated = object.body().clone();
     super::attribute_aliases::migrate(object, &mut migrated)?;
@@ -61,7 +64,12 @@ fn migrate_dynamic_fallbacks(
         // them, so a best-effort fallback migration must not make the entire show unloadable.
         return Ok(None);
     };
-    super::super::objects::hydrate_dynamic_preset_fallbacks(&mut definition, presets, groups);
+    super::super::objects::hydrate_dynamic_preset_fallbacks(
+        &mut definition,
+        presets,
+        groups,
+        verify_native,
+    );
     let canonical =
         serde_json::to_value(definition).map_err(|error| invalid_object(object, error))?;
     copy_dynamic_fallbacks(&canonical, &mut migrated);
@@ -70,6 +78,7 @@ fn migrate_dynamic_fallbacks(
 }
 
 fn copy_dynamic_fallbacks(canonical: &Value, migrated: &mut Value) {
+    super::super::dynamic_presets::copy_typed_source_retention(canonical, migrated);
     let lane_count = canonical
         .pointer("/lanes")
         .and_then(Value::as_array)
@@ -153,14 +162,32 @@ fn migrate_with_group_masters(
 /// lossless write-through because their raw JSON bodies deliberately preserve unknown fields.
 fn migrate_embedded_dynamic_phase_orderings(value: &mut Value) {
     if looks_like_dynamic_definition(value)
-        && value.get("spatial_mapping").is_none()
         && let Ok(definition) =
             serde_json::from_value::<light_dynamics::DynamicDefinition>(value.clone())
         && let Ok(canonical) = serde_json::to_value(definition)
-        && let Some(mapping) = canonical.get("spatial_mapping")
         && let Some(body) = value.as_object_mut()
     {
-        body.insert("spatial_mapping".into(), mapping.clone());
+        if !body.contains_key("spatial_mapping")
+            && let Some(mapping) = canonical.get("spatial_mapping")
+        {
+            body.insert("spatial_mapping".into(), mapping.clone());
+        }
+        // Preserve unknown lane fields while writing the explicit Current partner into raw
+        // portable objects and embedded fallback definitions, including Undo/Preload bodies.
+        if let (Some(Value::Array(stored)), Some(Value::Array(lanes))) =
+            (body.get_mut("lanes"), canonical.get("lanes"))
+        {
+            let old = std::mem::take(stored);
+            *stored = lanes
+                .iter()
+                .map(|lane| {
+                    old.iter()
+                        .find(|candidate| candidate.get("id") == lane.get("id"))
+                        .unwrap_or(lane)
+                        .clone()
+                })
+                .collect();
+        }
     }
 
     match value {
@@ -681,7 +708,7 @@ fn migrate_targetless_dynamic_assignment(
             format!("virtual:{page}:{number}")
         }
     };
-    migrated.id = uuid::Uuid::new_v5(&original.id, name.as_bytes());
+    migrated.reidentify(uuid::Uuid::new_v5(&original.id, name.as_bytes()));
     migrated.target_binding = target_binding;
     assignment.dynamic.dynamic_id = None;
     assignment.dynamic.embedded_fallback.definition = std::sync::Arc::new(migrated);

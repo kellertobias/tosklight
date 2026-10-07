@@ -125,6 +125,7 @@ describe("PresetRecallProvider", () => {
 			cursor: 30,
 			projection: {
 				deskId: DESK_ID,
+				alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
 				commandLine: {
 					text: "FIXTURE",
 					target: "FIXTURE" as const,
@@ -242,6 +243,7 @@ describe("PresetRecallProvider", () => {
 		});
 		expect(programmingTransport.subscriptions[0].scope).toEqual({
 			commandLine: false,
+			alignment: false,
 			selection: true,
 		});
 		expect(recall).not.toHaveBeenCalled();

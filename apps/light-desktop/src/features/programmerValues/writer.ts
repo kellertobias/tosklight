@@ -1,10 +1,13 @@
 import type { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import type {
 	BatchProgrammerValuesInput,
+	FinishProgrammerValuesGestureInput,
 	ProgrammerValuesActionOutcome,
 	ProgrammerValuesActionRequest,
 	ProgrammerValuesActions,
 	ProgrammerValuesCommand,
+	ProgrammerValuesFinishGestureAction,
+	ProgrammerValuesRequestAction,
 	ProgrammerValuesScope,
 	ReleaseProgrammerFixtureValueInput,
 	ReleaseProgrammerGroupValueInput,
@@ -26,7 +29,7 @@ import {
 
 interface QueuedValuesWrite {
 	requestId: string;
-	action: ProgrammerValuesCommand;
+	action: ProgrammerValuesRequestAction;
 	expectedCaptureModeRevision: number;
 	resolve(outcome: ProgrammerValuesActionOutcome | null): void;
 }
@@ -49,6 +52,8 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 	private readonly queue: QueuedValuesWrite[] = [];
 	private readonly captureAuthority: ProgrammerValuesCaptureAuthority;
 	private storeScope: number | null = null;
+	/** The row whose request has been handed to `send`; cancellation never removes it. */
+	private dispatched: QueuedValuesWrite | null = null;
 	private running = false;
 	private stopped = false;
 	constructor(private readonly options: ProgrammerValuesWriterOptions) {
@@ -74,14 +79,13 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 		fixtureIds: readonly string[];
 		groupId?: string | null;
 		attribute: string;
-		operation:
-			| {
-					type: "absolute_set";
-					value: import("../../api/types/playback").AttributeValue;
-			  }
-			| { type: "relative_step"; delta: number };
+		operation: import("../../api/programmingComponentEditWire").ProgrammerValueIntentOperation<
+			import("../../api/types/playback").AttributeValue
+		>;
 		undoGroup?: string | null;
 		timing: import("./contracts").ProgrammerValueTiming;
+		displayedSource?: import("./displayedSource").DisplayedSource | null;
+		colorAdoption?: import("../../api/colorAdoptionWire").ColorAdoptionInput | null;
 	}) {
 		return this.enqueue(input.requestId, {
 			action: "apply_intent",
@@ -91,6 +95,10 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 			operation: input.operation,
 			undoGroup: input.undoGroup,
 			timing: input.timing,
+			...(input.displayedSource
+				? { displayedSource: input.displayedSource }
+				: {}),
+			...(input.colorAdoption ? { colorAdoption: input.colorAdoption } : {}),
 		});
 	}
 
@@ -147,6 +155,74 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 
 	clear(requestId: string) {
 		return this.enqueue(requestId, { action: "clear" });
+	}
+
+	/**
+	 * Locally drops the unsent `apply_intent` rows of one stopped gesture,
+	 * identified by its existing `undoGroup`. The dispatched row keeps its
+	 * request ID, expected revisions and optimistic correlation and settles
+	 * once with its own outcome. Other rows keep FIFO order and the writer
+	 * stays open. Dropped rows remove only their speculative store entry and
+	 * resolve quietly with `null`; no backend action or Undo change is made.
+	 */
+	cancelGesture(undoGroup: string) {
+		if (!undoGroup) return 0;
+		let removed = 0;
+		for (let index = this.queue.length - 1; index >= 0; index--) {
+			const write = this.queue[index];
+			if (
+				!write ||
+				write === this.dispatched ||
+				write.action.action !== "apply_intent" ||
+				write.action.undoGroup !== undoGroup
+			)
+				continue;
+			this.queue.splice(index, 1);
+			this.discard(write.requestId);
+			write.resolve(null);
+			removed++;
+		}
+		return removed;
+	}
+
+	/**
+	 * Ends one stopped gesture in this writer's captured desk/session/lane
+	 * scope. It first drops the gesture's unsent `apply_intent` rows (kept for
+	 * a completed discrete step, `keepAdmittedEdits`), then queues exactly one
+	 * `finish_gesture` behind any in-flight or kept edit on this same FIFO;
+	 * later fresh touches queue behind it. A gone or replaced
+	 * scope abandons the cleanup quietly. The Finish authors no optimistic
+	 * value and settles nothing into the store.
+	 */
+	finishGesture(input: FinishProgrammerValuesGestureInput) {
+		if (!input.requestId || !input.attribute || !input.undoGroup)
+			return this.refuse(
+				"A Programmer gesture finish needs a request ID, attribute and Undo group",
+			);
+		if (!this.scopesAreCurrent()) return Promise.resolve(null);
+		if (this.queue.some((write) => write.requestId === input.requestId))
+			return this.refuse(
+				`Programmer values request ${input.requestId} is already pending`,
+			);
+		// A completed discrete step keeps its admitted edits: they are the operator's request.
+		if (!input.keepAdmittedEdits) this.cancelGesture(input.undoGroup);
+		const action: ProgrammerValuesFinishGestureAction = {
+			action: "finish_gesture",
+			attribute: input.attribute,
+			undoGroup: input.undoGroup,
+		};
+		if (this.queue.some((write) => sameFinish(write.action, action)))
+			return Promise.resolve(null);
+		return new Promise<ProgrammerValuesActionOutcome | null>((resolve) => {
+			this.queue.push({
+				requestId: input.requestId,
+				action,
+				// Unused: Finish sends the capture-mode revision current at dispatch.
+				expectedCaptureModeRevision: -1,
+				resolve,
+			});
+			this.start();
+		});
 	}
 
 	stop() {
@@ -211,8 +287,16 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 		while (!this.stopped && this.queue.length) {
 			const write = this.queue[0];
 			if (!write) break;
-			const outcome = await this.send(write);
-			if (this.queue[0] === write) this.queue.shift();
+			this.dispatched = write;
+			const send =
+				write.action.action === "finish_gesture"
+					? this.sendFinish(write.requestId, write.action)
+					: this.send(write);
+			const outcome = await send.finally(() => {
+				this.dispatched = null;
+			});
+			const index = this.queue.indexOf(write);
+			if (index >= 0) this.queue.splice(index, 1);
 			write.resolve(outcome);
 		}
 		this.running = false;
@@ -261,6 +345,48 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 				this.expectedStoreScope(),
 			);
 			this.options.onError?.(reported);
+			return null;
+		}
+	}
+
+	/**
+	 * Finish-only dispatch: stale request/capture revisions are permitted, so
+	 * it sends the current ones and accepts the current revisions returned
+	 * with `no_change` (or the exact replayed original) without settling the
+	 * store. Late or failed responses of a replaced scope stay quiet; genuine
+	 * failures in the live scope are reported.
+	 */
+	private async sendFinish(
+		requestId: string,
+		action: ProgrammerValuesFinishGestureAction,
+	) {
+		if (!this.scopesAreCurrent()) return null;
+		const expectedRevision = this.options.store.authoritativeRevision(
+			this.expectedStoreScope(),
+		);
+		const captureMode = this.options.captureModeStore.getSnapshot().projection;
+		if (expectedRevision == null || !captureMode) return null;
+		try {
+			const outcome = await this.options.applyAction(this.options.scope, {
+				requestId,
+				expectedRevision,
+				expectedCaptureModeRevision: captureMode.revision,
+				action,
+			});
+			if (!this.scopesAreCurrent()) return null;
+			if (outcome.requestId !== requestId)
+				throw new ProgrammerValuesProtocolError(
+					"Programmer gesture finish response request identity does not match",
+				);
+			if (outcome.status !== "no_change")
+				throw new ProgrammerValuesProtocolError(
+					"Programmer gesture finish must not change values",
+				);
+			if (outcome.warning) this.options.onError?.(new Error(outcome.warning));
+			return outcome;
+		} catch (reason) {
+			if (this.scopesAreCurrent())
+				this.options.onError?.(programmerValuesError(reason));
 			return null;
 		}
 	}
@@ -382,6 +508,15 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 		return Promise.resolve(null);
 	}
 
+	/** Removes one unsent speculative entry without clearing an unrelated store error. */
+	private discard(requestId: string) {
+		const scope = this.expectedStoreScope();
+		if (!this.options.store.isScopeCurrent(scope)) return;
+		const error = this.options.store.getSnapshot().error;
+		if (error) this.options.store.rollback(requestId, error, scope);
+		else this.options.store.commit(requestId, undefined, scope);
+	}
+
 	private abandon(requestId: string) {
 		if (this.options.store.isScopeCurrent(this.expectedStoreScope()))
 			this.options.store.commit(
@@ -409,6 +544,17 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 	private expectedStoreScope() {
 		return this.storeScope ?? -1;
 	}
+}
+
+function sameFinish(
+	queued: ProgrammerValuesRequestAction,
+	finish: ProgrammerValuesFinishGestureAction,
+) {
+	return (
+		queued.action === "finish_gesture" &&
+		queued.undoGroup === finish.undoGroup &&
+		queued.attribute === finish.attribute
+	);
 }
 
 function timing(input: {

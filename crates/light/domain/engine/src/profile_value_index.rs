@@ -1,4 +1,3 @@
-use crate::contribution::ApplicableSequenceMaster;
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use rustc_hash::FxHashMap;
 
@@ -16,21 +15,18 @@ pub(crate) enum ProfileValueIndex<'a> {
     },
     Scanned {
         values: FxHashMap<FixtureId, Vec<(&'a AttributeKey, &'a AttributeValue)>>,
-        sequence_masters: FxHashMap<FixtureId, Vec<(&'a AttributeKey, ApplicableSequenceMaster)>>,
     },
 }
 
 impl<'a> ProfileValueIndex<'a> {
     pub(crate) fn new(
         values: &'a crate::FrameValues,
-        sequence_masters: &'a FxHashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
         channels: &'a crate::ChannelSlotIndex,
     ) -> Self {
         match values.frame() {
             Some(frame) => Self::Dense { frame, channels },
             None => Self::Scanned {
                 values: index_values(values.values()),
-                sequence_masters: index_sequence_masters(sequence_masters),
             },
         }
     }
@@ -57,25 +53,6 @@ impl<'a> ProfileValueIndex<'a> {
         self.value(head.owner, attribute)
     }
 
-    /// The sequence master scaling one of a channel's attributes, read the same way.
-    pub(crate) fn sequence_master_at(
-        &self,
-        head: HeadRead<'a>,
-        channel_index: usize,
-        which: light_fixture::ChannelAttribute,
-        attribute: &AttributeKey,
-    ) -> Option<ApplicableSequenceMaster> {
-        if let (Self::Dense { frame, .. }, Some(addresses)) = (self, head.addresses) {
-            if let Some(slot) = addresses.slot(channel_index, which) {
-                return frame.sequence_master(slot);
-            }
-            if !head.overflowed {
-                return None;
-            }
-        }
-        self.sequence_master(head.owner, attribute)
-    }
-
     /// Everything one head's channels need to know before reading, found once per head.
     ///
     /// Whether the head has to consider unnumbered values is decided here rather than per
@@ -93,6 +70,59 @@ impl<'a> ProfileValueIndex<'a> {
             owner,
             addresses,
             overflowed,
+        }
+    }
+
+    /// The value `values(fixture_id)` would hold for `attribute`, without building that map:
+    /// an unnumbered value wins over a numbered one, and the later of two unnumbered values wins.
+    pub(crate) fn head_value(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&'a AttributeValue> {
+        match self {
+            Self::Dense { frame, .. } => frame
+                .overflow(fixture_id)
+                .iter()
+                .rev()
+                .find(|(candidate, _)| candidate == attribute)
+                .map(|(_, winner)| &winner.value)
+                .or_else(|| {
+                    frame
+                        .slots()
+                        .slot(fixture_id, attribute)
+                        .and_then(|slot| frame.value(slot))
+                }),
+            Self::Scanned { values, .. } => values
+                .get(&fixture_id)?
+                .iter()
+                .rev()
+                .find_map(|(candidate, value)| (*candidate == attribute).then_some(*value)),
+        }
+    }
+
+    /// Every name `values(fixture_id)` would hold, possibly more than once.
+    pub(crate) fn for_each_head_attribute(
+        &self,
+        fixture_id: FixtureId,
+        mut visit: impl FnMut(&AttributeKey),
+    ) {
+        match self {
+            Self::Dense { frame, .. } => {
+                for slot in frame.slots().fixture_slots(fixture_id) {
+                    if frame.value(*slot).is_some() {
+                        visit(frame.slots().attribute_key(*slot));
+                    }
+                }
+                for (attribute, _) in frame.overflow(fixture_id) {
+                    visit(attribute);
+                }
+            }
+            Self::Scanned { values, .. } => {
+                for (attribute, _) in values.get(&fixture_id).into_iter().flatten() {
+                    visit(attribute);
+                }
+            }
         }
     }
 
@@ -151,16 +181,12 @@ impl<'a> ProfileValueIndex<'a> {
             return HeadCommon {
                 intensity: self.value_named(fixture_id, "intensity"),
                 color: self.value_named(fixture_id, "color"),
-                intensity_master: self.sequence_master_named(fixture_id, "intensity"),
             };
         };
         let common = frame.slots().common(fixture_id);
         HeadCommon {
             intensity: common.intensity.and_then(|slot| frame.value(slot)),
             color: common.color.and_then(|slot| frame.value(slot)),
-            intensity_master: common
-                .intensity
-                .and_then(|slot| frame.sequence_master(slot)),
         }
     }
 
@@ -188,82 +214,6 @@ impl<'a> ProfileValueIndex<'a> {
                 .find_map(|(candidate, value)| (&*candidate.0 == attribute).then_some(*value)),
         }
     }
-
-    pub(crate) fn sequence_masters(&self, fixture_id: FixtureId) -> crate::HeadSequenceMasters {
-        let mut masters = crate::HeadSequenceMasters::default();
-        match self {
-            Self::Dense { frame, .. } => {
-                for slot in frame.slots().fixture_slots(fixture_id) {
-                    if let Some(master) = frame.sequence_master(*slot) {
-                        masters.insert(frame.slots().attribute_key(*slot).clone(), master);
-                    }
-                }
-                for (attribute, winner) in frame.overflow(fixture_id) {
-                    if let Some(master) = winner.sequence_master {
-                        masters.insert(attribute.clone(), master);
-                    }
-                }
-            }
-            Self::Scanned {
-                sequence_masters, ..
-            } => {
-                for (attribute, master) in sequence_masters.get(&fixture_id).into_iter().flatten() {
-                    masters.insert((*attribute).clone(), *master);
-                }
-            }
-        }
-        masters
-    }
-
-    pub(crate) fn sequence_master(
-        &self,
-        fixture_id: FixtureId,
-        attribute: &AttributeKey,
-    ) -> Option<ApplicableSequenceMaster> {
-        match self {
-            Self::Dense { frame, .. } => match frame.slots().slot(fixture_id, attribute) {
-                Some(slot) => frame.sequence_master(slot),
-                None => frame
-                    .overflow(fixture_id)
-                    .iter()
-                    .find(|(candidate, _)| candidate == attribute)
-                    .and_then(|(_, winner)| winner.sequence_master),
-            },
-            Self::Scanned {
-                sequence_masters, ..
-            } => sequence_masters
-                .get(&fixture_id)?
-                .iter()
-                .find_map(|(candidate, master)| (*candidate == attribute).then_some(*master)),
-        }
-    }
-
-    pub(crate) fn sequence_master_named(
-        &self,
-        fixture_id: FixtureId,
-        attribute: &str,
-    ) -> Option<ApplicableSequenceMaster> {
-        match self {
-            Self::Dense { frame, .. } => {
-                for slot in frame.slots().fixture_slots(fixture_id) {
-                    if &*frame.slots().attribute_key(*slot).0 == attribute {
-                        return frame.sequence_master(*slot);
-                    }
-                }
-                frame
-                    .overflow(fixture_id)
-                    .iter()
-                    .find(|(candidate, _)| &*candidate.0 == attribute)
-                    .and_then(|(_, winner)| winner.sequence_master)
-            }
-            Self::Scanned {
-                sequence_masters, ..
-            } => sequence_masters
-                .get(&fixture_id)?
-                .iter()
-                .find_map(|(candidate, master)| (&*candidate.0 == attribute).then_some(*master)),
-        }
-    }
 }
 
 fn index_values(
@@ -275,19 +225,6 @@ fn index_values(
             .entry(*fixture_id)
             .or_default()
             .push((attribute, value));
-    }
-    indexed
-}
-
-fn index_sequence_masters(
-    masters: &FxHashMap<(FixtureId, AttributeKey), ApplicableSequenceMaster>,
-) -> FxHashMap<FixtureId, Vec<(&AttributeKey, ApplicableSequenceMaster)>> {
-    let mut indexed = FxHashMap::<FixtureId, Vec<_>>::default();
-    for ((fixture_id, attribute), master) in masters {
-        indexed
-            .entry(*fixture_id)
-            .or_default()
-            .push((attribute, *master));
     }
     indexed
 }
@@ -306,5 +243,7 @@ pub(crate) struct HeadRead<'a> {
 pub(crate) struct HeadCommon<'a> {
     pub(crate) intensity: Option<&'a AttributeValue>,
     pub(crate) color: Option<&'a AttributeValue>,
-    pub(crate) intensity_master: Option<ApplicableSequenceMaster>,
 }
+
+#[cfg(test)]
+mod tests;

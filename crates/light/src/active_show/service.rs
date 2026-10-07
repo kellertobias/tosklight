@@ -42,12 +42,14 @@ impl ActiveShowService {
             let prepared =
                 prepare_route_range(unit.document(), &envelope.command, previous.as_deref())?;
             let runtime = ports.prepare_runtime(prepared.snapshot)?;
-            unit.backup(&backup_identity(
-                &envelope.context,
-                envelope.command.show_id,
-                "route-range",
-            ))?;
-            let commit = unit.commit(prepared.transaction)?;
+            let commit = ports.finalize_runtime(&envelope.context, runtime, || {
+                unit.backup(&backup_identity(
+                    &envelope.context,
+                    envelope.command.show_id,
+                    "route-range",
+                ))?;
+                unit.commit(prepared.transaction)
+            })?;
             let changes = prepared
                 .routes
                 .into_iter()
@@ -69,7 +71,6 @@ impl ActiveShowService {
                         .any(|change| change.route_id == migrated.route_id)
                 })
                 .collect::<Vec<_>>();
-            ports.install_runtime(&envelope.context, runtime);
             let mut event_sequence = 0;
             for change in &changes {
                 event_sequence = self
@@ -110,12 +111,14 @@ impl ActiveShowService {
             let prepared =
                 prepare_route_mutation(unit.document(), &envelope.command, previous.as_deref())?;
             let runtime = ports.prepare_runtime(prepared.snapshot)?;
-            unit.backup(&backup_identity(
-                &envelope.context,
-                envelope.command.show_id,
-                "route",
-            ))?;
-            let commit = unit.commit(prepared.transaction)?;
+            let commit = ports.finalize_runtime(&envelope.context, runtime, || {
+                unit.backup(&backup_identity(
+                    &envelope.context,
+                    envelope.command.show_id,
+                    "route",
+                ))?;
+                unit.commit(prepared.transaction)
+            })?;
             let change = OutputRouteChange {
                 show_id: envelope.command.show_id,
                 show_revision: commit.revision(),
@@ -127,7 +130,6 @@ impl ActiveShowService {
             let migration_changes = migration_changes(&commit, &[]);
             let migrated_routes =
                 migrated_route_changes(envelope.command.show_id, &commit, Some(&change.route_id));
-            ports.install_runtime(&envelope.context, runtime);
             let event = self.events.publish(EventDraft::output_route_changed(
                 &envelope.context,
                 change.clone(),
@@ -271,12 +273,13 @@ impl ActiveShowService {
         operation: &str,
     ) -> Result<CommittedObjectChanges, ActionError> {
         let runtime = ports.prepare_runtime(prepared.snapshot)?;
-        unit.backup(&backup_identity(context, show_id, operation))?;
-        let commit = unit.commit(prepared.transaction)?;
+        let commit = ports.finalize_runtime(context, runtime, || {
+            unit.backup(&backup_identity(context, show_id, operation))?;
+            unit.commit(prepared.transaction)
+        })?;
         let show_revision = commit.revision();
         let migration_changes = migration_changes(&commit, &prepared.changes);
         let migrated_routes = migrated_route_changes(show_id, &commit, None);
-        ports.install_runtime(context, runtime);
         ports.reconcile_object_changes(&prepared.changes);
         let committed = self.publish_object_changes(
             context,
@@ -458,9 +461,10 @@ impl ActiveShowService {
                 PreparedActiveShowTransaction::PreparedCommit { prepared, state } => {
                     let (transaction, snapshot) = (*prepared).into_parts();
                     let runtime = ports.prepare_runtime(snapshot)?;
-                    unit.backup(&backup_identity(context, show_id, operation))?;
-                    let commit = unit.commit(transaction)?;
-                    ports.install_runtime(context, runtime);
+                    let commit = ports.finalize_runtime(context, runtime, || {
+                        unit.backup(&backup_identity(context, show_id, operation))?;
+                        unit.commit(transaction)
+                    })?;
                     Ok(complete(
                         &self.events,
                         ports,
@@ -543,7 +547,7 @@ fn migrated_route_changes(
 
 /// Object writes committed by staged compatibility migrations rather than the request itself.
 /// Reporting them keeps every persisted revision bump observable instead of silent.
-fn migration_changes(
+pub(crate) fn migration_changes(
     commit: &PortableShowCommit,
     requested: &[super::ActiveShowObjectChange],
 ) -> Vec<super::ActiveShowObjectChange> {

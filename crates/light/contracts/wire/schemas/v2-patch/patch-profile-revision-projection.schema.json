@@ -61,6 +61,22 @@
         "name": {
           "type": "string"
         },
+        "native_color_identities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchNativeColorIdentity"
+          }
+        },
+        "position_calibration_identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchPositionCalibrationIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "splits": {
           "type": "array",
           "items": {
@@ -93,6 +109,74 @@
       "required": [
         "split",
         "footprint"
+      ]
+    },
+    "PatchNativeColorIdentity": {
+      "type": "object",
+      "properties": {
+        "head_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "model_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "native_layout_signature": {
+          "type": "string"
+        },
+        "path_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_digest": {
+          "type": "string"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "profile_id",
+        "profile_revision",
+        "profile_digest",
+        "mode_id",
+        "head_id",
+        "path_id",
+        "model_revision",
+        "native_layout_signature"
+      ]
+    },
+    "PatchPositionCalibrationIdentity": {
+      "type": "object",
+      "properties": {
+        "geometry_digest": {
+          "type": "string"
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "profile_id",
+        "mode_id",
+        "geometry_digest"
       ]
     },
     "PatchProfilePolicy": {

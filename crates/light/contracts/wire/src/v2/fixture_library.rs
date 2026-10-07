@@ -12,6 +12,37 @@ use uuid::Uuid;
 
 pub use super::attribute_configuration::AttributeValueType;
 
+/// Read-only canonical import, including every loss/unsupported-data diagnostic.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureGdtfPreviewRequest {
+    pub source_base64: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureGdtfDiagnostic {
+    pub node: String,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureGdtfPreview {
+    #[ts(type = "unknown")]
+    pub profile: Value,
+    pub diagnostics: Vec<FixtureGdtfDiagnostic>,
+    pub unknown_attributes: Vec<FixtureImportRequirement>,
+}
+
+/// Import is an object intent. The server parses the source again and owns all mapping.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureGdtfImportRequest {
+    #[schemars(length(min = 1, max = 128))]
+    pub request_id: String,
+    pub expected_revision: u32,
+    pub source_base64: String,
+    #[serde(default)]
+    pub attribute_mappings: Vec<FixtureAttributeMapping>,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct FixtureDefinitionsSnapshot {
     #[ts(type = "unknown[]")]

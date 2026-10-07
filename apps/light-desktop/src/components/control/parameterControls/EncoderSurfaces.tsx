@@ -9,6 +9,7 @@ import {
 import { HardwareEncoderDisplay } from "../HardwareEncoderDisplay";
 import { domainStep, domainValue, normalizedValue } from "./attributeDomain";
 import { attributeScale } from "./attributeScale";
+import { FamilyEncoderSlotSurface } from "./familyEncoders/FamilyEncoderSlotSurface";
 import {
 	type IndexedPresetChoice,
 	indexedPresetChoices,
@@ -322,7 +323,14 @@ export function EncoderSurfaces({
 		);
 	return (
 		<>
-			{controller.encoderSlots.map((attribute, index) => (
+			{controller.encoderSlots.map((attribute, index) =>
+				controller.familyEncoders?.componentSlot(index) ? (
+					<FamilyEncoderSlotSurface
+						key={controller.familyEncoders?.componentSlot(index)?.id}
+						controller={controller}
+						index={index}
+					/>
+				) : (
 				<EncoderSurface
 					key={attribute ?? `empty-${index}`}
 					controller={controller}
@@ -334,7 +342,8 @@ export function EncoderSurfaces({
 						commandLineActions?.reset() ?? Promise.resolve(false)
 					}
 				/>
-			))}
+				),
+			)}
 		</>
 	);
 }

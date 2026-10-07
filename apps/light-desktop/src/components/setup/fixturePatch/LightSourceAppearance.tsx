@@ -165,6 +165,7 @@ function AppearanceEditor({
 						closeLabel="Close light source editor"
 						onClose={close}
 					/>
+                    <Button disabled={busy} onClick={() => controller.ui.setColorCalibrationEdit({ fixtureId: fixture.fixture_id, multipatchInstanceId: instance?.id ?? null })}>Color calibration…</Button>
 					<LightSourceAppearanceForm
 						draft={draft}
 						setDraft={setDraft}

@@ -40,7 +40,14 @@ impl FixtureProfile {
             mode.primary_slots()?
         };
         let snapshot = self.snapshot_for(mode, snapshot_scope);
-        Ok(build_definition(self, mode, &primary_slots, snapshot))
+        let mut definition = build_definition(self, mode, &primary_slots, snapshot);
+        if self.native_color_source(mode_id).is_some() {
+            definition.runtime_color_context = Some(std::sync::Arc::new(
+                crate::ColorCalibrationContext::new(self, mode_id)
+                    .map_err(ProfileError::Invalid)?,
+            ));
+        }
+        Ok(definition)
     }
 
     fn required_mode(&self, mode_id: Uuid) -> Result<&FixtureMode, ProfileError> {
@@ -57,7 +64,12 @@ impl FixtureProfile {
             SnapshotScope::SelectedMode if self.crowd.is_some() => self.modes.clone(),
             SnapshotScope::SelectedMode => vec![mode.clone()],
         };
-        self.snapshot_with_modes(modes)
+        let mut snapshot = self.snapshot_with_modes(modes);
+        if matches!(scope, SnapshotScope::SelectedMode) {
+            // Source archives belong to the portable immutable revision, not per-fixture render state.
+            snapshot.source_gdtf = None;
+        }
+        snapshot
     }
 
     fn snapshot_with_modes(&self, modes: Vec<FixtureMode>) -> FixtureProfile {
@@ -74,6 +86,7 @@ impl FixtureProfile {
             photograph_asset: self.photograph_asset.clone(),
             stage_icon_asset: self.stage_icon_asset.clone(),
             model_asset: self.model_asset.clone(),
+            source_gdtf: self.source_gdtf.clone(),
             body_model: self.body_model.clone(),
             geometry: self.geometry.clone(),
             model_units: self.model_units,
@@ -119,6 +132,7 @@ fn build_definition(
     snapshot: FixtureProfile,
 ) -> FixtureDefinition {
     FixtureDefinition {
+        runtime_color_context: None,
         schema_version: FIXTURE_PROFILE_SCHEMA_VERSION,
         id: profile.id,
         revision: profile.revision,
@@ -139,7 +153,7 @@ fn build_definition(
         safe_values: BTreeMap::new(),
         profile_id: Some(profile.id),
         mode_id: Some(mode.id),
-        profile_snapshot: Some(Box::new(snapshot)),
+        profile_snapshot: Some(std::sync::Arc::new(snapshot)),
     }
 }
 
@@ -158,21 +172,13 @@ fn logical_heads(
                 .filter(|channel| channel.head_id == head.id)
                 .map(|channel| parameter(channel, primary_slots, patch_policy))
                 .collect::<Vec<_>>();
-            // A head whose channels react to virtual intensity but that has no physical intensity
-            // channel (e.g. an RGB head whose intensity is derived) needs the abstract
-            // virtual-dimmer intensity parameter the operator controls. This reverses the
-            // legacy->profile migration, which drops that abstract intensity and instead marks the
-            // colour channels reacts_to_virtual_intensity; the resolved definition restores it so
-            // programmer surfaces expose the derived intensity. A channel reacting inversely still
-            // reacts, and needs the same intensity to react to.
-            let reacts_to_virtual = mode
-                .channels
-                .iter()
-                .any(|channel| channel.head_id == head.id && channel.reacts_to_virtual_intensity);
+            // A light-emitting head without an Intensity channel (e.g. an RGB head) has a virtual
+            // dimmer: the abstract Intensity the operator programs and the masters scale, which
+            // reaches the light through the channels following it, directly or inversely.
             let has_intensity = parameters
                 .iter()
                 .any(|parameter| parameter.attribute.is_intensity());
-            if reacts_to_virtual && !has_intensity {
+            if !has_intensity && mode.head_has_virtual_dimmer(head.id) {
                 parameters.insert(0, abstract_virtual_dimmer_intensity());
             }
             LogicalHead {

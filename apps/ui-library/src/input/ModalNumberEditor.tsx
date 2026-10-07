@@ -34,6 +34,16 @@ export interface ModalNumberPresetConfig {
 	presetsTabLabel?: string;
 	emptyMessage?: string;
 	showWhenEmpty?: boolean;
+	/** A line above the choices, e.g. why only some choices exist. */
+	note?: string;
+	/** Title actions beside the choices, e.g. Create Point; each closes the editor. */
+	actions?: readonly ModalNumberPresetAction[];
+}
+
+export interface ModalNumberPresetAction {
+	id: string;
+	label: string;
+	onPress(): void;
 }
 
 export interface ModalNumberEditorProps {
@@ -92,7 +102,6 @@ export function ModalNumberEditor({
 		presets && (presets.groups.length || presets.showWhenEmpty),
 	);
 	const hasUnsavedChanges = value !== initialValue || faderDirty;
-	const stay = () => setConfirmClose(false);
 	const requestClose = () => {
 		if (hasUnsavedChanges) {
 			setConfirmClose(true);
@@ -113,6 +122,7 @@ export function ModalNumberEditor({
 	const titleGroups = modalNumberTitleGroups({
 		hasPresets,
 		mode,
+		onClose,
 		onRelease,
 		presets,
 		presetsOnly,
@@ -203,7 +213,7 @@ export function ModalNumberEditor({
 					ariaLabel={`Unsaved ${ariaLabel} changes`}
 					onDiscard={discardAndClose}
 					onSave={saveAndClose}
-					onStay={stay}
+					onStay={() => setConfirmClose(false)}
 				/>
 			)}
 		</>
@@ -213,6 +223,7 @@ export function ModalNumberEditor({
 function modalNumberTitleGroups({
 	hasPresets,
 	mode,
+	onClose,
 	onRelease,
 	presets,
 	presetsOnly,
@@ -221,6 +232,7 @@ function modalNumberTitleGroups({
 }: {
 	hasPresets: boolean;
 	mode: "value" | "presets";
+	onClose(): void;
 	onRelease?: () => void;
 	presets?: ModalNumberPresetConfig;
 	presetsOnly: boolean;
@@ -238,6 +250,19 @@ function modalNumberTitleGroups({
 				{ id: "value", label: presets?.valueTabLabel ?? "Value" },
 				{ id: "presets", label: presets?.presetsTabLabel ?? "Presets" },
 			],
+		});
+	}
+	if (mode === "presets" && presets?.actions?.length) {
+		groups.push({
+			id: "preset-actions",
+			actions: presets.actions.map((action) => ({
+				id: action.id,
+				label: action.label,
+				onPress: () => {
+					action.onPress();
+					onClose();
+				},
+			})),
 		});
 	}
 	if (onRelease) {
@@ -397,6 +422,7 @@ function ModalNumberPresets({
 }) {
 	return (
 		<div className="ui-grouped-selection-groups modal-number-presets">
+			{config.note ? <p className="modal-number-presets-note">{config.note}</p> : null}
 			{config.groups.every((group) => group.options.length === 0) && (
 				<p>{config.emptyMessage ?? "No choices are available."}</p>
 			)}

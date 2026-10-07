@@ -29,13 +29,27 @@ pub(super) async fn apply_mvr_import(
             "choose exactly one MVR import destination",
         ));
     }
+    let worker_state = state.clone();
+    let worker_resolutions = resolutions.clone();
+    let bindings = tokio::task::spawn_blocking(move || {
+        let mut bindings = staged.definitions;
+        prepare_mvr_profiles(
+            &worker_state,
+            &mut bindings,
+            existing_show_id,
+            &worker_resolutions,
+        )?;
+        Ok::<_, ApiError>(bindings)
+    })
+    .await
+    .map_err(|error| ApiError::internal(format!("MVR profile planning failed: {error}")))??;
     let (entry, is_new, open_after) = import_destination(&state, new_show, existing_show_id)?;
-    let (definitions, new_definitions) = mvr_definitions(&state, &staged.document)?;
     let import = ActiveMvrImport {
         entry,
         document: staged.document,
-        definitions,
-        new_definitions,
+        definitions: bindings.definitions,
+        new_profiles: bindings.new_profiles,
+        warnings: bindings.warnings,
         resolutions,
     };
     if !is_new && active_show_is(&state, import.entry.id) {
@@ -70,14 +84,17 @@ fn import_destination(
         }
         initialise_show(&path, &new.name).map_err(ApiError::store)?;
         super::new_show_defaults::apply_new_show_defaults(state, &path)?;
-        Ok((
-            state
-                .installation
-                .upsert_show(&new.name, &path.display().to_string(), false)
-                .map_err(ApiError::store)?,
-            true,
-            new.open_after_import,
-        ))
+        let entry = state
+            .installation
+            .upsert_show(&new.name, &path.display().to_string(), false)
+            .map_err(ApiError::store)?;
+        // Installation entries and portable show documents must share one show identity.
+        ActiveShowRepository::open(&path)
+            .and_then(|store| {
+                store.set_identity(entry.id, &entry.name, entry.revision_copy.as_ref())
+            })
+            .map_err(ApiError::store)?;
+        Ok((entry, true, new.open_after_import))
     } else {
         let id = light_core::ShowId(existing_show_id.expect("destination was validated"));
         Ok((
@@ -106,6 +123,17 @@ impl light_application::mvr_export::GdtfSource for InstallationGdtf<'_> {
         self.0
             .installation
             .fixture_source_gdtf(profile, revision)
+            .map_err(ApiError::fixture)
+    }
+
+    fn source_gdtf_with_evidence(
+        &self,
+        profile: light_core::FixtureId,
+        revision: u32,
+    ) -> Result<Option<light_fixture::FixtureGdtfSource>, Self::Error> {
+        self.0
+            .installation
+            .fixture_source_gdtf_with_evidence(profile, revision)
             .map_err(ApiError::fixture)
     }
 }
@@ -205,4 +233,26 @@ pub(super) async fn export_mvr(
         data,
     )
         .into_response())
+}
+
+pub(super) fn application_mvr_resolutions(
+    resolutions: HashMap<Uuid, MvrResolution>,
+) -> HashMap<Uuid, light_application::MvrImportResolution> {
+    resolutions
+        .into_iter()
+        .map(|(id, resolution)| {
+            let resolution = match resolution {
+                MvrResolution::Import => light_application::MvrImportResolution::Import,
+                MvrResolution::Skip => light_application::MvrImportResolution::Skip,
+                MvrResolution::ImportUnpatched => {
+                    light_application::MvrImportResolution::ImportUnpatched
+                }
+                MvrResolution::Replace => light_application::MvrImportResolution::Replace,
+                MvrResolution::Address { universe, address } => {
+                    light_application::MvrImportResolution::Address { universe, address }
+                }
+            };
+            (id, resolution)
+        })
+        .collect()
 }

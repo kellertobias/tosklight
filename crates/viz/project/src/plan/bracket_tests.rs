@@ -15,6 +15,8 @@ fn fresnel(bracket_angle: f32, model_scale: f32) -> PatchedFixture {
         profile: Arc::new(profile),
         mode_id,
         instances: vec![PhysicalInstance {
+            color_calibration: None,
+            position_calibration: None,
             model_scale,
             scenery_options: Default::default(),
             scenery_size_metres: None,

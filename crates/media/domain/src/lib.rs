@@ -45,6 +45,9 @@ pub mod timeline;
 pub mod visualizer;
 pub mod visualizer_channels;
 
+#[cfg(test)]
+mod tests;
+
 pub use address::{AddressClass, AssetId, MediaAddress};
 pub use audio::{Analysis, Instrument, Instruments, Tuning};
 pub use blend::{BlendMode, LayerBlend, strobe_lit};
@@ -53,7 +56,7 @@ pub use catalog::{
     CatalogError, CatalogFolder, CatalogItem, CatalogLocation, CatalogSnapshot, ItemKind,
 };
 pub use clock::{MeasuredCadence, RenderClock};
-pub use color::{FlipMirror, Tint};
+pub use color::{FlipMirror, MediaColor, REC709_LUMINANCE, Tint, linear_to_srgb, srgb_to_linear};
 pub use command::{
     Command, CommandKind, CommandSource, ControlOwnership, LayerControls, MasterControls, Timestamp,
 };

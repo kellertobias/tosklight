@@ -18,13 +18,34 @@ pub(super) fn normalize_restored_virtual_playback_exclusions(
     let context = ActionContext::system(Uuid::nil(), ActionSource::System);
     state
         .playback
-        .run_unit_of_work(RestoredExclusionNormalization { state, context })
+        .run_unit_of_work(RestoredExclusionNormalization {
+            state,
+            context,
+            persist: true,
+        })
+        .output
+}
+
+/// Startup validates final Dynamic owners before allowing normalized Playback persistence.
+/// A successful deferred outcome uses persistence_pending to report changed unsaved rows.
+pub(super) fn normalize_restored_virtual_playback_exclusions_deferred(
+    state: &AppState,
+) -> Result<RestoredExclusionOutcome, ApiError> {
+    let context = ActionContext::system(Uuid::nil(), ActionSource::System);
+    state
+        .playback
+        .run_unit_of_work(RestoredExclusionNormalization {
+            state,
+            context,
+            persist: false,
+        })
         .output
 }
 
 struct RestoredExclusionNormalization<'a> {
     state: &'a AppState,
     context: ActionContext,
+    persist: bool,
 }
 
 impl PlaybackUnitOfWork for RestoredExclusionNormalization<'_> {
@@ -45,10 +66,12 @@ impl RestoredExclusionNormalization<'_> {
         let candidates = restored_exclusion_losers(self.state)?;
         let before = projections(self.state, &self.context, &candidates)?;
         let released = release_candidates(self.state, candidates)?;
-        let persistence_pending = persist_normalized_runtime(
-            self.state,
-            provenance_migrated || transition_order_migrated || !released.is_empty(),
-        );
+        let changed = provenance_migrated || transition_order_migrated || !released.is_empty();
+        let persistence_pending = if self.persist {
+            persist_normalized_runtime(self.state, changed)
+        } else {
+            changed
+        };
         let after = projections(self.state, &self.context, &released)?;
         let events = changed_events(&self.context, before, after);
         Ok((

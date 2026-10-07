@@ -17,8 +17,11 @@ describe("preset families", () => {
     expect(presetFamilyAcceptsAttribute("Color", "color.wheel.1")).toBe(true);
     expect(presetFamilyAcceptsAttribute("Color", "color.cyan")).toBe(true);
     expect(presetFamilyAcceptsAttribute("Position", "head.tilt")).toBe(true);
-    expect(presetFamilyAcceptsAttribute("Beam", "shutter")).toBe(true);
-    expect(presetFamilyAcceptsAttribute("Beam", "strobe")).toBe(true);
+    // Shutter and Strobe belong to Intensity (2026-10-05).
+    expect(presetFamilyAcceptsAttribute("Intensity", "shutter")).toBe(true);
+    expect(presetFamilyAcceptsAttribute("Intensity", "strobe")).toBe(true);
+    expect(presetFamilyAcceptsAttribute("Beam", "shutter")).toBe(false);
+    expect(presetFamilyAcceptsAttribute("Beam", "zoom")).toBe(true);
     expect(presetFamilyAcceptsAttribute("Color", "pan")).toBe(false);
     expect(presetFamilyAcceptsAttribute("Mixed", "custom.channel")).toBe(true);
   });

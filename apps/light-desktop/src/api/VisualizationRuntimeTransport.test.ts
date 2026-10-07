@@ -81,6 +81,26 @@ describe("HttpVisualizationRuntimeTransport", () => {
 		expect(socket?.readyState).toBe(3);
 	});
 
+	it("asks for complete values only while a consumer claims them", () => {
+		FakeWebSocket.instances = [];
+		const stream = createTransport(
+			vi.fn<typeof globalThis.fetch>(),
+			FakeWebSocket as unknown as typeof WebSocket,
+		).openStream(scope, { snapshot: vi.fn(), error: vi.fn() });
+		stream.updateClaims(["normal"], 10, false, true);
+		const socket = FakeWebSocket.instances[0];
+		socket?.open();
+		stream.updateClaims(["normal"], 10, false, false);
+
+		const subscriptions = (socket?.sent ?? [])
+			.map((message) => JSON.parse(message))
+			.filter((message) => message.type === "subscribe");
+		expect(subscriptions.map((message) => message.complete_values)).toEqual([
+			true,
+			false,
+		]);
+	});
+
 	it("loads only the exact v1 Visualization endpoint with authenticated headers", async () => {
 		const diagnosticCount =
 			frontendPerformanceDiagnostics.snapshot().stage.visualizationRequests
@@ -213,6 +233,7 @@ describe("HttpVisualizationRuntimeTransport", () => {
 			lanes: ["normal", "preload"],
 			max_rate_hz: 10,
 			include_dynamic_stack: false,
+			complete_values: false,
 			sparse_dynamic_stack: true,
 			batched_messages: true,
 			acknowledgements: false,
@@ -527,6 +548,29 @@ describe("decodeVisualizationRuntimeSnapshot", () => {
 			},
 		]);
 		expect(decoded.profile_output_values).toEqual(decoded.values);
+	});
+
+	it("decodes the Fixture Sheet's commanded Pan/Tilt rows and rejects a non-numeric angle", () => {
+		const row = { fixture_id: "fixture-1", pan_degrees: 1.06, tilt_degrees: 0.53 };
+		expect(
+			decodeVisualizationRuntimeSnapshot(
+				{ ...snapshot(false), commanded_positions: [row] },
+				"normal",
+			).commanded_positions,
+		).toEqual([row]);
+		expect(
+			decodeVisualizationRuntimeSnapshot(snapshot(false), "normal")
+				.commanded_positions,
+		).toBeUndefined();
+		expect(() =>
+			decodeVisualizationRuntimeSnapshot(
+				{
+					...snapshot(false),
+					commanded_positions: [{ ...row, pan_degrees: "1.06" }],
+				},
+				"normal",
+			),
+		).toThrow();
 	});
 
 	it("decodes the Dynamic stack emitted by the production endpoint", () => {

@@ -66,10 +66,11 @@ function routeDeskAction(
 			payload.desk_id === session.desk.id)
 	) {
 		if (payload.action === "align") {
-			window.dispatchEvent(new CustomEvent("light:align-action", { detail }));
+			// The desk executes hardware Align once and publishes its authoritative projection.
+			return;
 			return;
 		} else if (payload.action === "shift-align") {
-			window.dispatchEvent(new Event("light:align-off"));
+			return;
 			return;
 		} else if (payload.action === "prog-playback") {
 			window.dispatchEvent(new Event("light:control-mode-toggle"));

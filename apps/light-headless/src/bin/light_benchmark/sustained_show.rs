@@ -4,6 +4,11 @@ use crate::light_benchmark::{
         BenchmarkScenario, FixtureInventoryEntry, GROUP_ID, SLOTS_PER_UNIVERSE,
         ScenarioFixtureInventory,
     },
+    semantic_programming::{
+        SemanticBuild, intensity_starts, live_bench, set_semantic_bases, start_dynamics,
+    },
+    semantic_runner::{LiveScenario, LiveWorkloadDescription},
+    semantic_workload::OMITTED,
 };
 use chrono::{TimeZone, Utc};
 use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, SessionId};
@@ -22,6 +27,10 @@ use std::{fs, net::SocketAddr, path::Path, sync::Arc};
 use uuid::Uuid;
 
 const UNIVERSES: usize = 32;
+/// TL-639 round 8: the performance goal is capped at 24 universes (12,288 parameters). A
+/// sustained show of fewer universes keeps the 32-universe mix in proportion: every
+/// manufacturer quantity scales by `universes / 32` and the RGB PARs fill each universe.
+const CAPPED_UNIVERSES: usize = 24;
 const SUNSTRIP_QUANTITY: usize = 20;
 const LEDWASH_QUANTITY: usize = 40;
 const DLS_QUANTITY: usize = 32;
@@ -43,21 +52,46 @@ pub(super) struct DemoTemplates {
     pub(super) rgb_four: Arc<FixtureTemplate>,
 }
 
+#[derive(Clone, Copy)]
+struct Quantities {
+    sunstrip: usize,
+    ledwash: usize,
+    dls: usize,
+    ledbeam: usize,
+}
+
+impl Quantities {
+    fn for_universes(universes: usize) -> Self {
+        let scale = |quantity: usize| quantity * universes / UNIVERSES;
+        Self {
+            sunstrip: scale(SUNSTRIP_QUANTITY),
+            ledwash: scale(LEDWASH_QUANTITY),
+            dls: scale(DLS_QUANTITY),
+            ledbeam: scale(LEDBEAM_QUANTITY),
+        }
+    }
+}
+
 struct DemoLayout {
     templates: DemoTemplates,
     universes: Vec<Vec<Arc<FixtureTemplate>>>,
+    quantities: Quantities,
     manufacturer_fixture_slots: usize,
     rgb_three_count: usize,
     rgb_four_count: usize,
 }
 
 impl FixtureTemplate {
-    pub(super) fn load(
+    /// `semantic` applies the runtime profile compatibility the real patch compiler applies, so
+    /// derived Color and Position models exist exactly as on a desk. The legacy workloads keep
+    /// the raw resolved definition they were baselined with.
+    pub(super) fn load_with(
         package_dir: &Path,
         manufacturer: &'static str,
         name: &'static str,
         mode: &'static str,
         package: &'static str,
+        semantic: bool,
     ) -> Result<Self, String> {
         let path = package_dir.join(package);
         let bytes = fs::read(&path)
@@ -75,6 +109,9 @@ impl FixtureTemplate {
         profile.photograph_asset = None;
         profile.stage_icon_asset = None;
         profile.model_asset = None;
+        if semantic {
+            light_fixture::apply_runtime_profile_compatibility(&mut profile);
+        }
         let mode_id = profile
             .modes
             .iter()
@@ -108,49 +145,58 @@ impl FixtureTemplate {
     }
 }
 
-pub(super) fn load_templates(package_dir: &Path) -> Result<DemoTemplates, String> {
+pub(super) fn load_templates_with(
+    package_dir: &Path,
+    semantic: bool,
+) -> Result<DemoTemplates, String> {
     Ok(DemoTemplates {
-        sunstrip: Arc::new(FixtureTemplate::load(
+        sunstrip: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "Showtec",
             "Sunstrip LED RGB 42206",
             "30 Channel",
             "showtec--sunstrip-led-rgb-42206.toskfixture",
+            semantic,
         )?),
-        ledwash: Arc::new(FixtureTemplate::load(
+        ledwash: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "ROBE",
             "Robin 600X LEDWash",
             "Mode 1",
             "robe--robin-600x-ledwash.toskfixture",
+            semantic,
         )?),
-        dls: Arc::new(FixtureTemplate::load(
+        dls: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "ROBE",
             "Robin DLS Profile",
             "Mode 1",
             "robe--robin-dls-profile.toskfixture",
+            semantic,
         )?),
-        ledbeam: Arc::new(FixtureTemplate::load(
+        ledbeam: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "ROBE",
             "Robin LEDBeam 150",
             "Mode 1 – Standard 16-bit",
             "robe--robin-ledbeam-150.toskfixture",
+            semantic,
         )?),
-        rgb_three: Arc::new(FixtureTemplate::load(
+        rgb_three: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "Generic",
             "RGB LED",
             "RGB virtual dimmer",
             "generic--rgb-led.toskfixture",
+            semantic,
         )?),
-        rgb_four: Arc::new(FixtureTemplate::load(
+        rgb_four: Arc::new(FixtureTemplate::load_with(
             package_dir,
             "Generic",
             "RGB LED",
             "RGBD 8-bit dimmer last",
             "generic--rgb-led.toskfixture",
+            semantic,
         )?),
     })
 }
@@ -160,13 +206,16 @@ pub fn build(
     protocol: ProtocolSelection,
     loopback_destination: Option<SocketAddr>,
     package_dir: &Path,
+    semantic: Option<SemanticBuild>,
 ) -> Result<BenchmarkScenario, String> {
-    if config.universes != UNIVERSES as u16 {
+    let universes = usize::from(config.universes);
+    if universes != UNIVERSES && universes != CAPPED_UNIVERSES {
         return Err(
-            "the sustained benchmark show requires the 32-universe hard-floor profile".into(),
+            "the sustained benchmark show requires the 32-universe hard-floor profile or its 24-universe cap"
+                .into(),
         );
     }
-    let layout = prepare_layout(package_dir)?;
+    let layout = prepare_layout(package_dir, semantic.is_some(), universes)?;
 
     let logical_start = benchmark_start();
     let clock = Arc::new(ManualClock::new(logical_start));
@@ -178,6 +227,14 @@ pub fn build(
         .iter()
         .map(|fixture| fixture.fixture_id)
         .collect::<Vec<_>>();
+    let programmable = fixtures
+        .iter()
+        .flat_map(|fixture| {
+            std::iter::once(fixture.fixture_id)
+                .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
+        })
+        .collect::<Vec<_>>();
+    let starts = semantic.map(|_| intensity_starts(&fixture_ids));
     let groups = demo_groups(&fixture_ids);
     let group_ids = groups
         .iter()
@@ -186,10 +243,16 @@ pub fn build(
     let (cue_list, playback) = demo_playback_for_groups(&group_ids);
     let output_routes = routes(config.universes, protocol, loopback_destination);
     let packet_count = output_routes.len();
-    let engine = Engine::new(programmers.clone());
+    let engine = Arc::new(Engine::new(programmers.clone()));
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: fixtures.into(),
+            dynamics: starts
+                .iter()
+                .flatten()
+                .map(|start| start.definition.clone())
+                .collect::<Vec<_>>()
+                .into(),
             cue_lists: vec![cue_list].into(),
             playbacks: vec![playback].into(),
             routes: output_routes.into(),
@@ -218,6 +281,38 @@ pub fn build(
                 )
             }),
     );
+    let live = match (semantic, starts) {
+        (Some(options), Some(starts)) => {
+            set_semantic_bases(&programmers, session, &programmable)?;
+            start_dynamics(&programmers, session, &starts)?;
+            let description = LiveWorkloadDescription {
+                kind: "sustained_show_live_transaction",
+                typed_lane_attributes: vec!["intensity".into()],
+                semantic_base_targets: programmable.len(),
+                started_dynamics: starts.len(),
+                animated_targets: fixture_ids.len(),
+                manifest_sha256: None,
+                workload_id: None,
+                expected_dirty_targets: None,
+                expected_moving_points: None,
+                harness_rig_height_mm: None,
+                omitted_from_live_transaction: OMITTED,
+            };
+            let bench = live_bench(
+                Arc::clone(&engine),
+                starts.into_iter().map(|start| start.definition),
+                options.rate_hz,
+                options.publish,
+            )?;
+            Some(LiveScenario {
+                bench,
+                tracking: None,
+                description,
+                pending_start: None,
+            })
+        }
+        _ => None,
+    };
 
     Ok(BenchmarkScenario {
         engine,
@@ -244,33 +339,38 @@ pub fn build(
         dynamic_attribute: AttributeKey::intensity(),
         dynamic_overlaps_static_or_programmer: true,
         programmer_assignment_fraction: "1/4 of physical fixtures",
-        dynamic: Some(super::scenario::BenchmarkDynamic::intensity(
-            &fixture_ids,
-            logical_start,
-        )),
+        dynamic: live
+            .is_none()
+            .then(|| super::scenario::BenchmarkDynamic::intensity(&fixture_ids, logical_start)),
+        live,
     })
 }
 
-fn prepare_layout(package_dir: &Path) -> Result<DemoLayout, String> {
-    let templates = load_templates(package_dir)?;
-    let mut universes = (0..UNIVERSES)
+fn prepare_layout(
+    package_dir: &Path,
+    semantic: bool,
+    universe_count: usize,
+) -> Result<DemoLayout, String> {
+    let templates = load_templates_with(package_dir, semantic)?;
+    let quantities = Quantities::for_universes(universe_count);
+    let mut universes = (0..universe_count)
         .map(|_| Vec::<Arc<FixtureTemplate>>::new())
         .collect::<Vec<_>>();
     distribute(
         &mut universes,
         Arc::clone(&templates.sunstrip),
-        SUNSTRIP_QUANTITY,
+        quantities.sunstrip,
     );
     distribute(
         &mut universes,
         Arc::clone(&templates.ledwash),
-        LEDWASH_QUANTITY,
+        quantities.ledwash,
     );
-    distribute(&mut universes, Arc::clone(&templates.dls), DLS_QUANTITY);
+    distribute(&mut universes, Arc::clone(&templates.dls), quantities.dls);
     distribute(
         &mut universes,
         Arc::clone(&templates.ledbeam),
-        LEDBEAM_QUANTITY,
+        quantities.ledbeam,
     );
     let manufacturer_fixture_slots = universes
         .iter()
@@ -302,6 +402,7 @@ fn prepare_layout(package_dir: &Path) -> Result<DemoLayout, String> {
     Ok(DemoLayout {
         templates,
         universes,
+        quantities,
         manufacturer_fixture_slots,
         rgb_three_count,
         rgb_four_count,
@@ -344,10 +445,10 @@ impl DemoLayout {
         ScenarioFixtureInventory {
             scenario: "mixed_manufacturer_sustained_show",
             entries: vec![
-                self.templates.sunstrip.inventory(SUNSTRIP_QUANTITY),
-                self.templates.ledwash.inventory(LEDWASH_QUANTITY),
-                self.templates.dls.inventory(DLS_QUANTITY),
-                self.templates.ledbeam.inventory(LEDBEAM_QUANTITY),
+                self.templates.sunstrip.inventory(self.quantities.sunstrip),
+                self.templates.ledwash.inventory(self.quantities.ledwash),
+                self.templates.dls.inventory(self.quantities.dls),
+                self.templates.ledbeam.inventory(self.quantities.ledbeam),
                 self.templates.rgb_three.inventory(self.rgb_three_count),
                 self.templates.rgb_four.inventory(self.rgb_four_count),
             ],
@@ -414,22 +515,42 @@ pub(super) fn patched_fixture(
             )),
         })
         .collect();
+    let mut fixture = patched_definition(
+        fixture_id,
+        Some(fixture_number),
+        format!("{} {}", template.name, fixture_number),
+        template.definition.as_ref().clone(),
+    );
+    fixture.universe = Some(universe);
+    fixture.address = Some(address);
+    fixture.split_patches = vec![SplitPatch {
+        split: 1,
+        universe: Some(universe),
+        address: Some(address),
+    }];
+    fixture.logical_heads = logical_heads;
+    fixture
+}
+
+/// An unpatched fixture of `definition` at the stage origin, with every option at its default.
+pub(super) fn patched_definition(
+    fixture_id: FixtureId,
+    fixture_number: Option<u32>,
+    name: String,
+    definition: FixtureDefinition,
+) -> PatchedFixture {
     PatchedFixture {
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
         fixture_id,
-        fixture_number: Some(fixture_number),
+        fixture_number,
         virtual_fixture_number: None,
-        name: format!("{} {}", template.name, fixture_number),
-        definition: template.definition.as_ref().clone(),
-        universe: Some(universe),
-        address: Some(address),
-        split_patches: vec![SplitPatch {
-            split: 1,
-            universe: Some(universe),
-            address: Some(address),
-        }],
+        name,
+        definition,
+        universe: None,
+        address: None,
+        split_patches: vec![],
         layer_id: "default".into(),
         note: None,
         position_master: None,
@@ -437,12 +558,14 @@ pub(super) fn patched_fixture(
         internal_bindings: Default::default(),
         location: Default::default(),
         rotation: Default::default(),
-        logical_heads,
+        logical_heads: vec![],
         multipatch: vec![],
         group_masters_enabled: true,
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -610,6 +733,7 @@ mod tests {
             ProtocolSelection::ArtNet,
             None,
             &package_dir,
+            None,
         )
         .unwrap();
 
@@ -634,5 +758,26 @@ mod tests {
                 ("RGB LED", "RGBD 8-bit dimmer last", 24),
             ]
         );
+    }
+
+    #[test]
+    fn the_capped_sustained_show_keeps_the_mix_in_proportion_on_24_universes() {
+        let package_dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixture-library");
+        let mut config = crate::light_benchmark::arguments::BenchmarkProfile::HardFloor.config();
+        config.universes = 24;
+        let scenario = build(config, ProtocolSelection::ArtNet, None, &package_dir, None).unwrap();
+
+        assert_eq!(scenario.fixture_count, 3_111);
+        assert_eq!(scenario.fixture_inventory.total_slots, 24 * 512);
+        let quantities = scenario
+            .fixture_inventory
+            .entries
+            .iter()
+            .map(|entry| entry.quantity)
+            .collect::<Vec<_>>();
+        assert_eq!(quantities, vec![15, 30, 24, 24, 3_000, 18]);
+        config.universes = 16;
+        assert!(build(config, ProtocolSelection::ArtNet, None, &package_dir, None).is_err());
     }
 }

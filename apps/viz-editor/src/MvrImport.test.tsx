@@ -42,6 +42,8 @@ const CONFLICTED = {
 
 function preview(fixtures = [CLEAN, UNMATCHED, CONFLICTED]): MvrPreview {
 	return {
+		token: "preview-token",
+		warnings: [],
 		fixtures,
 		scenery: 2,
 		missingProfiles: fixtures.some((fixture) => !fixture.matched)
@@ -57,7 +59,6 @@ function renderImport(source = preview()) {
 	const imported = vi.fn();
 	render(
 		<MvrImport
-			path="/tmp/rig.mvr"
 			preview={source}
 			onImported={imported}
 			onCancel={vi.fn()}
@@ -102,7 +103,8 @@ describe("importing an MVR rig", () => {
 		await waitFor(() => expect(invoke).toHaveBeenCalled());
 		const [command, payload] = invoke.mock.calls[0];
 		expect(command).toBe("import_mvr");
-		expect(payload.path).toBe("/tmp/rig.mvr");
+		expect(payload.token).toBe("preview-token");
+		expect(payload.path).toBeUndefined();
 		expect(payload.resolutions[CONFLICTED.uuid].action).toBe("skip");
 		// Nothing is wrong with this one, so no decision is invented for it.
 		expect(payload.resolutions[CLEAN.uuid]).toBeUndefined();
@@ -141,4 +143,31 @@ describe("importing an MVR rig", () => {
 			screen.getByText("Every fixture patches as it stands."),
 		).toBeInTheDocument();
 	});
+});
+
+
+describe("MVR source limitations and preview lifecycle", () => {
+    it("shows source limitations and offers only unresolved or skip for a missing profile", () => {
+        renderImport({ ...preview([UNMATCHED]), warnings: ["Broken.gdtf: invalid source"] });
+        expect(screen.getByText("Broken.gdtf: invalid source")).toBeInTheDocument();
+        expect(screen.getByRole("option", { name: "Keep unresolved" })).toBeInTheDocument();
+        expect(screen.queryByRole("option", { name: "Choose address" })).not.toBeInTheDocument();
+    });
+    it("keeps post-import limitations visible until the operator acknowledges them", async () => {
+        invoke.mockResolvedValue({ importedFixtures: 1, unresolvedFixtures: 0, warnings: ["Additional DMX breaks remain unpatched"] });
+        const imported = renderImport(preview([CLEAN]));
+        await userEvent.click(screen.getByRole("button", { name: "Import" }));
+        expect(await screen.findByText("Additional DMX breaks remain unpatched")).toBeInTheDocument();
+        expect(imported).not.toHaveBeenCalled();
+        expect(screen.queryByRole("button", { name: "Import" })).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole("button", { name: "Done" }));
+        expect(imported).toHaveBeenCalledWith("Imported 1 fixtures");
+    });
+    it("cancels only the staged preview token", async () => {
+        const onCancel = vi.fn();
+        render(<MvrImport preview={preview()} onImported={vi.fn()} onCancel={onCancel} onError={vi.fn()} />);
+        await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        expect(invoke).toHaveBeenCalledWith("cancel_mvr_preview", { token: "preview-token" });
+        expect(onCancel).toHaveBeenCalledOnce();
+    });
 });

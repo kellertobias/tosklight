@@ -360,6 +360,7 @@ const CONFIGURATION_FIELDS = Object.keys({
 	highlight_look_feedback: true,
 	matter_enabled: true,
 	pool_presentation: true,
+	color_presentation: true,
 	update_settings_by_desk: true,
 	file_manager_system_picker_fallback: true,
 	file_manager_roots: true,

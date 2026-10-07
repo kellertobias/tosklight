@@ -36,5 +36,6 @@ winit.workspace = true
 workspace = true
 
 [dev-dependencies]
+light-fixture = { path = "../../crates/shared/fixture" }
 pollster.workspace = true
 wgpu.workspace = true

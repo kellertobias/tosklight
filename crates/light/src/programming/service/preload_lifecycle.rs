@@ -52,7 +52,6 @@ impl ProgrammingService {
             return Ok(result);
         }
         self.assert_lifecycle_revisions(identity.session_id, &action.command)?;
-        self.programmers.deactivate_alignment(identity.session_id);
         let result = self.mutate_preload_lifecycle(&action, ports, &identity)?;
         self.preload_lifecycle_replay.lock().insert(
             replay_identity,
@@ -76,6 +75,7 @@ impl ProgrammingService {
         )?;
         self.assert_go_is_armed(identity.session_id, &action.command.action)?;
         let mutation = self.run_preload_mutation(action, ports, identity.session_id, &before)?;
+        self.programmers.deactivate_alignment(identity.session_id);
         let mutated = Snapshot::read(
             &self.programmers,
             action.context.desk_id,

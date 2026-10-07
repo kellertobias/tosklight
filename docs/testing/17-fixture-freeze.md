@@ -6,6 +6,42 @@ Prove that Freeze retains resolved fixture output without rewriting its underlyi
 Playback, Dynamic, direct-control, or master state, and that every operator surface presents the
 same persisted result.
 
+## Status and coverage
+
+Executable coverage is `tests/124-fixture-freeze.spec.ts` (Playwright, bench server, run by
+`npm run test:e2e`), with scenario IDs `FREEZE-FULL-00n`, `FREEZE-PARTIAL-00n` and
+`FREEZE-PERSISTENCE-00n`. The bench rig is `tests/bench/specific-features/fixtureFreezeScenario.ts`:
+three intensity fixtures driven by the Programmer, a running Cue and a running Dynamic, a ROBE Robin
+600X LEDWash (multi-head colour/position) and a Cameo ROOT PAR 6 (single-head colour) in Group 10,
+under a Group Master and the Grand Master below Full. Physical output is read from the bench Art-Net
+receiver and checked against the logical frame of the same manual-clock step.
+
+- Full Freeze, steps 1–5: `FREEZE-FULL-001` drives the touch keypad (`[^CLR]`, `[GRP] 1 0`,
+  `[ENT]`; `[^CLR][^CLR]` for Unfreeze), checks the Fixture Sheet `❄ FREEZE` markers (the wash's Master row included), held DMX and visualization through every source, both masters and Blackout, and that
+  Unfreeze reveals the untouched Programmer and Cue. `FREEZE-FULL-002` holds a multi-head fixture's Master Pan/Tilt/Intensity
+  output. `FREEZE-FULL-003` holds the physical colour of semantic-colour heads and
+  fixtures: Freeze holds parameters before DMX, so the Color adapter renders the frozen colour and
+  no Dynamic drives it. `FREEZE-FULL-004` checks that applying the Freeze does not change a
+  virtual-dimmer colour fixture's output.
+- Partial Freeze, steps 1–6: `FREEZE-PARTIAL-001` (keypad `[^1][^2]` grammar, family labels,
+  retained Intensity/Colour semantic values, Position and Beam (the wash's Zoom) follow; Shutter is
+  Intensity; no master or Blackout changes the frozen Intensity) and `FREEZE-PARTIAL-002` (repeating the family live action removes it; full over
+  partial restores no partial metadata). Step 5 uses the Toggle family live action; repeating the
+  explicit `FREEZE … INTENSITY COLOR` command line is idempotent. `FREEZE-PARTIAL-003` checks that a
+  partial Intensity Freeze holds the parameter after the masters, so applying it changes nothing;
+  `FREEZE-PARTIAL-004` that with only Color frozen the unfrozen Intensity, and with it the masters,
+  still dims the frozen colour.
+- Persistence and parity: `FREEZE-PERSISTENCE-001` (steps 1–2, saved show file reopened and an
+  unrelated Show Patch edit), `FREEZE-PERSISTENCE-002` (step 3, touch keypad, OSC and attached
+  hardware each produce the same stored Freeze and exactly one Patch revision per action),
+  `FREEZE-PERSISTENCE-003` (step 4, `[UND]` ordering and no Redo) and `FREEZE-PERSISTENCE-004`
+  (step 5, the canonical older `compact-rig.show`).
+- Not in Playwright: the bench server hosts a single desk, so desk-local Undo history is covered by
+  the Rust transport tests in
+  `crates/light/adapters/headless/src/runtime/fixture_freeze/native_transport_tests.rs`, which also
+  cover native Position holds. Direct-control contributions are not exercised because no shipped
+  rig fixture exposes a control action. Native Stage rendering of a frozen fixture remains manual.
+
 ## Full Freeze
 
 1. Patch an intensity fixture and a multi-head color/position fixture, place them in a Group, and
@@ -13,7 +49,9 @@ same persisted result.
 2. Establish visible Programmer, Cue, Dynamic, and direct-control contributions, with Group Master
    and Grand Master below Full and Blackout off.
 3. Press **SHIFT + CLEAR**, enter the Group selection, and press **ENTER**. Confirm the Fixture Sheet shows `❄ FREEZE` on each resolved fixture or
-   head, with `INSIDE` on a master-only row where applicable.
+   head. A multi-head fixture's Master row shows `❄ FREEZE` too, because its own Master channels
+   (Pan, Tilt, Shutter, Intensity) are frozen with its heads; `INSIDE` marks a Master row only when
+   some of its heads alone are frozen.
 4. Change every contributing source, move Group Master and Grand Master, and enable Blackout.
    Confirm the frozen physical and visualization output remains exactly at the captured frame.
 5. Hold **SHIFT**, press **CLEAR** twice, release **SHIFT**, enter the same selection, and press
@@ -27,8 +65,9 @@ same persisted result.
 2. Confirm the Fixture Sheet names both families and does not show the full `FREEZE` state.
 3. Change Intensity, Color, Position, and Beam sources. Confirm only Intensity and Color retain their
    captured semantic values.
-4. Move Group Master and Grand Master and enable Blackout. Confirm partial Freeze output follows all
-   three masters.
+4. Move a Cue master, Group Master and Grand Master and enable Blackout. Confirm none of them
+   changes a frozen parameter: the frozen Intensity holds. A family that is not frozen still follows them; with only
+   Color frozen, the masters dim the fixture through its unfrozen Intensity.
 5. Repeat the same family action. Confirm those families and their retained values are removed.
 6. Apply a full Freeze over an existing partial Freeze, then remove it. Confirm no partial-family
    metadata is restored.

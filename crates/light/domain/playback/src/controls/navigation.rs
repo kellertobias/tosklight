@@ -32,7 +32,7 @@ impl PlaybackEngine {
                         .get(&key)
                         .ok_or_else(|| "virtual playback was automatically switched off".into());
                 }
-                self.go_at_key(key, cue_list_id, self.clock.now())?;
+                self.go_at_key(key, cue_list_id, self.clock.now(), Some(identity))?;
                 let result = self
                     .active
                     .get_mut(&key)
@@ -81,7 +81,12 @@ impl PlaybackEngine {
                 .get(&key)
                 .ok_or_else(|| "playback was automatically switched off".into());
         }
-        self.go_at_key(key, cue_list_id, self.clock.now())?;
+        self.go_at_key(
+            key,
+            cue_list_id,
+            self.clock.now(),
+            Some(PlaybackIdentity::physical(number)?),
+        )?;
         let result = self
             .active
             .get_mut(&key)
@@ -104,7 +109,12 @@ impl PlaybackEngine {
         if let Some(playback) = self.active.get_mut(&PlaybackKey::CueList(id)) {
             playback.fader_zero_auto_off_armed = false;
         }
-        self.back_at_key(PlaybackKey::CueList(id), id, self.clock.now())
+        self.back_at_key(
+            PlaybackKey::CueList(id),
+            id,
+            self.clock.now(),
+            Some(PlaybackIdentity::physical(number)?),
+        )
     }
 
     pub fn back_playback_at(
@@ -128,6 +138,7 @@ impl PlaybackEngine {
                     PlaybackKey::CueList(cue_list_id),
                     cue_list_id,
                     self.clock.now(),
+                    Some(identity),
                 )
             }
         }
@@ -273,7 +284,13 @@ impl PlaybackEngine {
         let changed = self.active.get(&key).is_none_or(|playback| {
             goto_changes_runtime(playback, number, cue_id, &cue_number, now)
         });
-        self.jump_at_key(key, id, cue_number, now)?;
+        self.jump_at_key(
+            key,
+            id,
+            cue_number,
+            now,
+            Some(PlaybackIdentity::physical(number)?),
+        )?;
         let playback = self.active.get_mut(&key).unwrap();
         playback.playback_number = Some(number);
         playback.master = 1.0;
@@ -325,7 +342,7 @@ impl PlaybackEngine {
             playback.playback_identity != Some(identity)
                 || goto_changes_runtime(playback, address.number().get(), cue_id, &cue_number, now)
         });
-        self.jump_at_key(key, cue_list_id, cue_number, now)?;
+        self.jump_at_key(key, cue_list_id, cue_number, now, Some(identity))?;
         let playback = self.active.get_mut(&key).unwrap();
         playback.playback_number = Some(address.number().get());
         playback.playback_identity = Some(identity);
@@ -505,6 +522,7 @@ fn inactive_playback(number: u16, cue_list_id: CueListId, now: DateTime<Utc>) ->
         current_cue_number: None,
         deleted_cue_hold: None,
         deleted_cue_transition_source: None,
+        source_history: None,
         loaded_cue_id: None,
         loaded_cue_number: None,
     }

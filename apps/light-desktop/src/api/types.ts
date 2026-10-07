@@ -11,6 +11,7 @@ export type {
 	DynamicPeriodicFunctionProjection,
 	DynamicPhaseDistributionProjection,
 	DynamicPhaseOrderingProjection,
+	DynamicProgrammingLaneConfigurationProjection,
 	DynamicRandomGroupProjection,
 	DynamicReferenceProjection,
 	DynamicRuntimeControllerProjection,
@@ -23,6 +24,8 @@ export type {
 	DynamicSpeedProjection,
 	DynamicTargetBindingProjection,
 	DynamicUpdateIntent,
+	DynamicValueAddressProjection,
+	DynamicValueSourceProjection,
 	EventPayload as RuntimeCapabilityEvent,
 	GroupMappingProvenanceProjection,
 	InternalAudioStatus,
@@ -102,6 +105,8 @@ export type UpdateAddress =
 			fixture_id: string;
 			attribute: string;
 			instance_link?: string | null;
+			lane_id?: string | null;
+			component?: import("./generated/light-wire").ProgrammingComponent | null;
 	  }
 	| { type: "group_membership"; fixture_id: string };
 
@@ -344,11 +349,9 @@ export * from "./types/fixtures";
 
 export * from "./types/playback";
 
-export interface DmxSnapshot {
-	revision: number;
-	universes: Array<{ universe: number; slots: number[] }>;
-	overrides: Array<{ universe: number; address: number; value: number }>;
-}
+/** The diagnostics view consumes the relevant slice of the generated output contract. */
+export type DmxSnapshot = Pick<import("./generated/light-wire").OutputDmxSnapshot,
+    "revision" | "universes" | "overrides">;
 
 export interface VersionedObject<T = Record<string, unknown>> {
 	kind: string;

@@ -12,6 +12,7 @@ import {
 	programmerValuesUuidAt,
 } from "./programmerValuesWireProjection";
 import { WireValidationError } from "./wireValidation";
+import { decodeProgrammingComponent } from "./programmingIntentWire";
 
 export function decodeProgrammerValuesEventMessage(
 	value: unknown,
@@ -105,6 +106,8 @@ function decodeDynamicAddresses(value: unknown, path: string) {
 			"fixture_id",
 			"attribute",
 			"instance_link",
+			"lane_id",
+			"component",
 		]);
 		return {
 			fixtureId: programmerValuesUuidAt(
@@ -112,6 +115,7 @@ function decodeDynamicAddresses(value: unknown, path: string) {
 				`${addressPath}.fixture_id`,
 			),
 			attribute: stringAt(address.attribute, `${addressPath}.attribute`),
+			...(address.component === undefined ? {} : { component: address.component === null ? null : decodeProgrammingComponent(address.component, `${addressPath}.component`) }),
 			instanceLink:
 				address.instance_link == null
 					? null
@@ -119,6 +123,10 @@ function decodeDynamicAddresses(value: unknown, path: string) {
 							address.instance_link,
 							`${addressPath}.instance_link`,
 						),
+			laneId:
+				address.lane_id == null
+					? null
+					: programmerValuesUuidAt(address.lane_id, `${addressPath}.lane_id`),
 		};
 	});
 }

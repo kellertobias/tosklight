@@ -49,6 +49,8 @@ fn robin_dls_full_white_keeps_its_shutter_open_in_resolved_dmx() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -107,8 +109,7 @@ fn robin_dls_full_white_keeps_its_shutter_open_in_resolved_dmx() {
 
 #[test]
 fn single_patch_fast_path_preserves_profile_visualization_for_patched_and_unpatched_fixtures() {
-    let (mut fixture, fixture_id) =
-        schema_v2_fixture(&[("intensity", false, false, false, false, false)]);
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[("intensity", false, false)]);
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
@@ -147,10 +148,8 @@ fn single_patch_fast_path_preserves_profile_visualization_for_patched_and_unpatc
 
 #[test]
 fn physical_axis_inversion_is_independent_for_root_and_multipatch() {
-    let (mut fixture, fixture_id) = schema_v2_fixture(&[
-        ("pan", false, false, false, false, false),
-        ("tilt", false, false, false, false, false),
-    ]);
+    let (mut fixture, fixture_id) =
+        schema_v2_fixture(&[("pan", false, false), ("tilt", false, false)]);
     fixture.invert_pan = true;
     fixture.multipatch = vec![MultiPatchInstance {
         scenery_size_metres: None,
@@ -163,10 +162,24 @@ fn physical_axis_inversion_is_independent_for_root_and_multipatch() {
         rotation: Default::default(),
         invert_pan: false,
         invert_tilt: true,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
     }];
+    // Saved calibration is a foundation contract and must not alter existing live output.
+    fixture.position_calibration = Some(light_fixture::InstalledPositionCalibration {
+        pan_zero_degrees: 123.0,
+        tilt_zero_degrees: -721.0,
+        ..Default::default()
+    });
+    fixture.multipatch[0].position_calibration =
+        Some(light_fixture::InstalledPositionCalibration {
+            pan_zero_degrees: -90.0,
+            tilt_zero_degrees: 45.0,
+            ..Default::default()
+        });
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
     programmers.start(session);
@@ -252,10 +265,17 @@ fn physical_axis_inversion_is_independent_for_root_and_multipatch() {
 
 #[test]
 fn patch_and_profile_axis_inversion_compose_exactly_once() {
-    let (mut fixture, fixture_id) =
-        schema_v2_fixture(&[("pan", false, false, false, false, false)]);
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[("pan", false, false)]);
     fixture.invert_pan = true;
-    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0].invert = true;
+    fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .modes[0]
+        .channels[0]
+        .invert = true;
     fixture.multipatch = vec![MultiPatchInstance {
         scenery_size_metres: None,
         id: uuid::Uuid::new_v4(),
@@ -267,6 +287,8 @@ fn patch_and_profile_axis_inversion_compose_exactly_once() {
         rotation: Default::default(),
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -305,10 +327,15 @@ fn patch_axis_inversion_preserves_exact_msb_first_encoding_at_every_resolution()
         ),
     ];
     for (resolution, secondary_slots, expected) in cases {
-        let (mut fixture, fixture_id) =
-            schema_v2_fixture(&[("pan", false, false, false, false, false)]);
+        let (mut fixture, fixture_id) = schema_v2_fixture(&[("pan", false, false)]);
         fixture.invert_pan = true;
-        let mode = &mut fixture.definition.profile_snapshot.as_mut().unwrap().modes[0];
+        let mode = &mut fixture
+            .definition
+            .profile_snapshot
+            .as_mut()
+            .map(std::sync::Arc::make_mut)
+            .unwrap()
+            .modes[0];
         mode.splits[0].footprint = resolution.bytes() as u16;
         let channel = &mut mode.channels[0];
         channel.resolution = resolution;
@@ -344,10 +371,10 @@ fn patch_axis_inversion_preserves_exact_msb_first_encoding_at_every_resolution()
 #[test]
 fn borrowed_profile_lookup_matches_owned_hold_last_resolution() {
     let (fixture, fixture_id) = schema_v2_fixture(&[
-        ("intensity", false, false, false, false, true),
-        ("color.red", false, true, false, false, false),
-        ("color.green", false, true, false, false, false),
-        ("color.blue", false, true, false, false, false),
+        ("intensity", false, false),
+        ("color.red", false, true),
+        ("color.green", false, true),
+        ("color.blue", false, true),
     ]);
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
@@ -426,9 +453,6 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
             snap: true,
             reacts_to_virtual_intensity: false,
             virtual_intensity_inverted: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: false,
-            reacts_to_grand_master: false,
             behavior: ChannelBehavior::Controlled,
             functions: vec![ChannelFunction::continuous(
                 "Exact",
@@ -454,9 +478,6 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
             snap: false,
             reacts_to_virtual_intensity: false,
             virtual_intensity_inverted: false,
-            reacts_to_sequence_master: false,
-            reacts_to_group_master: false,
-            reacts_to_grand_master: false,
             behavior: ChannelBehavior::Static,
             functions: vec![],
         },
@@ -518,6 +539,8 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
             rotation: Default::default(),
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),
@@ -526,6 +549,8 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),
@@ -570,10 +595,7 @@ fn schema_v2_snap_bypasses_programmer_fades_but_keeps_non_snap_timing() {
     let programmers = ProgrammerRegistry::with_clock(shared);
     let session = SessionId::new();
     programmers.start(session);
-    let (fixture, fixture_id) = schema_v2_fixture(&[
-        ("pan", true, false, false, false, false),
-        ("tilt", false, false, false, false, false),
-    ]);
+    let (fixture, fixture_id) = schema_v2_fixture(&[("pan", true, false), ("tilt", false, false)]);
     let engine = Engine::new(programmers.clone());
     engine.set_control_timing([120.0; 5], 1_000, 0, 0);
     engine
@@ -615,10 +637,8 @@ fn schema_v2_snap_bypasses_move_in_black_and_signal_loss_fades() {
     let clock = Arc::new(ManualClock::new(started));
     let shared: SharedClock = clock.clone();
     let programmers = ProgrammerRegistry::with_clock(shared);
-    let (fixture, fixture_id) = schema_v2_fixture(&[
-        ("intensity", false, false, false, false, false),
-        ("pan", true, false, false, false, false),
-    ]);
+    let (fixture, fixture_id) =
+        schema_v2_fixture(&[("intensity", false, false), ("pan", true, false)]);
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(mib_snapshot(vec![fixture], &[fixture_id]))
@@ -626,15 +646,17 @@ fn schema_v2_snap_bypasses_move_in_black_and_signal_loss_fades() {
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
     clock.set(started + ChronoDuration::milliseconds(1_999));
-    assert_eq!(
-        normalized(&engine.resolved_values(), fixture_id, "pan"),
-        0.2
-    );
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
+    assert_eq!(normalized(&values, fixture_id, "pan"), 0.2);
     clock.set(started + ChronoDuration::milliseconds(2_000));
-    assert_eq!(
-        normalized(&engine.resolved_values(), fixture_id, "pan"),
-        0.8
-    );
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
+    assert_eq!(normalized(&values, fixture_id, "pan"), 0.8);
     assert_eq!(
         engine.move_in_black_runtime()[0].state,
         MoveInBlackState::Completed
@@ -643,10 +665,8 @@ fn schema_v2_snap_bypasses_move_in_black_and_signal_loss_fades() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
     programmers.start(session);
-    let (mut fixture, fixture_id) = schema_v2_fixture(&[
-        ("pan", true, false, false, false, false),
-        ("tilt", false, false, false, false, false),
-    ]);
+    let (mut fixture, fixture_id) =
+        schema_v2_fixture(&[("pan", true, false), ("tilt", false, false)]);
     fixture.definition.signal_loss_policy = SignalLossPolicy::FadeToSafe {
         duration_millis: 1_000,
     };
@@ -689,12 +709,12 @@ fn schema_v2_snap_bypasses_move_in_black_and_signal_loss_fades() {
 }
 
 #[test]
-fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
+fn schema_v2_masters_scale_levels_once_and_reach_other_channels_only_through_follow() {
     let (fixture, fixture_id) = schema_v2_fixture(&[
-        ("intensity", false, false, true, true, true),
-        ("color.red", false, true, true, true, true),
-        ("beam.rate", false, false, true, true, true),
-        ("beam.other", false, false, true, true, true),
+        ("intensity", false, false),
+        ("color.red", false, true),
+        ("beam.rate", false, false),
+        ("beam.other", false, false),
     ]);
     let main = test_cue_list(
         "Main",
@@ -752,8 +772,9 @@ fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
         .unwrap();
     assert_eq!(
         &frame.universes[&1][0..4],
-        &[32, 32, 32, 6],
-        "intensity and virtual intensity already contain their sequence master; a separate semantic source receives only its own master"
+        &[32, 32, 255, 255],
+        "Cue, Group and Grand masters scale Intensity once (1.0 x 0.5 x 0.5 x 0.5); Red follows \
+         the virtual intensity; rates are not levels and no master reaches them"
     );
 }
 
@@ -762,9 +783,16 @@ fn inverted_intensity_masters_and_blackout_move_to_physical_off() {
     let programmers = ProgrammerRegistry::default();
     let session = SessionId::new();
     programmers.start(session);
-    let (mut fixture, fixture_id) =
-        schema_v2_fixture(&[("intensity", false, false, false, false, true)]);
-    fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].channels[0].invert = true;
+    let (mut fixture, fixture_id) = schema_v2_fixture(&[("intensity", false, false)]);
+    fixture
+        .definition
+        .profile_snapshot
+        .as_mut()
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .modes[0]
+        .channels[0]
+        .invert = true;
     programmers.set(
         session,
         fixture_id,
@@ -819,10 +847,8 @@ fn inverted_intensity_masters_and_blackout_move_to_physical_off() {
 /// parameter re-derived from the channels.
 #[test]
 fn virtual_dimmer_intensity_multiplies_reacting_channels_one_way() {
-    let (fixture, fixture_id) = schema_v2_fixture(&[
-        ("color.red", false, true, false, false, false),
-        ("color.green", false, true, false, false, false),
-    ]);
+    let (fixture, fixture_id) =
+        schema_v2_fixture(&[("color.red", false, true), ("color.green", false, true)]);
     let intensity = fixture
         .definition
         .heads
@@ -879,10 +905,8 @@ fn virtual_dimmer_intensity_multiplies_reacting_channels_one_way() {
 /// virtual intensity's source rather than a reader of it, and is not scaled at all.
 #[test]
 fn inverted_virtual_dimmer_intensity_scales_reacting_channels_by_the_complement_one_way() {
-    let (mut fixture, fixture_id) = schema_v2_fixture(&[
-        ("color.red", false, true, false, false, false),
-        ("intensity", false, true, false, false, false),
-    ]);
+    let (mut fixture, fixture_id) =
+        schema_v2_fixture(&[("color.red", false, true), ("intensity", false, true)]);
     let mut profile = fixture
         .definition
         .profile_snapshot
@@ -948,8 +972,7 @@ fn inverted_virtual_dimmer_intensity_scales_reacting_channels_by_the_complement_
 /// fixture's alone.
 #[test]
 fn manufacturer_channel_name_is_numbered_and_overflow_stays_with_its_fixture() {
-    let (mut dimmer, dimmer_id) =
-        schema_v2_fixture(&[("intensity", false, false, false, false, true)]);
+    let (mut dimmer, dimmer_id) = schema_v2_fixture(&[("intensity", false, false)]);
     let mut profile = dimmer
         .definition
         .profile_snapshot
@@ -962,8 +985,7 @@ fn manufacturer_channel_name_is_numbered_and_overflow_stays_with_its_fixture() {
         mode.id
     };
     dimmer.definition = profile.resolved_definition(mode_id).unwrap();
-    let (mut neighbour, neighbour_id) =
-        schema_v2_fixture(&[("intensity", false, false, false, false, true)]);
+    let (mut neighbour, neighbour_id) = schema_v2_fixture(&[("intensity", false, false)]);
     neighbour.address = Some(2);
     neighbour.fixture_number = Some(2);
 
@@ -1032,5 +1054,46 @@ fn manufacturer_channel_name_is_numbered_and_overflow_stays_with_its_fixture() {
             .get(&(neighbour_id, AttributeKey("never.declared".into()))),
         Some(&AttributeValue::Normalized(0.25)),
         "the undeclared name still reaches the boundary for the fixture it was sent to"
+    );
+}
+
+#[test]
+fn cue_master_leaves_non_level_parameters_alone_and_projection_rejects_old_generation() {
+    let (fixture, fixture_id) = schema_v2_fixture(&[("beam.rate", false, false)]);
+    let main = test_cue_list(
+        "Main",
+        vec![CueChange::set(
+            fixture_id,
+            AttributeKey("beam.rate".into()),
+            AttributeValue::Normalized(1.),
+        )],
+    );
+    let playback = test_playback(1, main.id);
+    let engine = Engine::new(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![main].into(),
+            playbacks: vec![playback].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(0.5));
+    let source = engine.snapshot();
+    let values = engine.resolved_values();
+    // The Cue master scales level parameters only: a rate is not a level.
+    let projected = engine
+        .profile_visualization_projection_at(&values, Default::default(), Some(&source))
+        .unwrap();
+    assert_eq!(projected.physical.instances[0].native_raw[0], 255);
+    let mut changed = (*source).clone();
+    changed.revision += 1;
+    engine.replace_snapshot(changed).unwrap();
+    assert!(
+        engine
+            .profile_visualization_projection_at(&values, Default::default(), Some(&source))
+            .is_err()
     );
 }

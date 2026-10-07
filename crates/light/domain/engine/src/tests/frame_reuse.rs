@@ -1,7 +1,7 @@
 use super::*;
 
 fn engine_with_one_fixture() -> Engine {
-    let (fixture, _) = schema_v2_fixture(&[("intensity", false, false, false, false, false)]);
+    let (fixture, _) = schema_v2_fixture(&[("intensity", false, false)]);
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {

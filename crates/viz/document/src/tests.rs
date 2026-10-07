@@ -132,6 +132,8 @@ fn patch_one(show_id: ShowId, profile: PatchedFixtureProfileReference) -> PatchF
                 grand_master_enabled: true,
                 invert_pan: false,
                 invert_tilt: false,
+                position_calibration: None,
+                color_calibration: None,
                 bracket_angle: 0.0,
                 shaper_angle: None,
                 installed_appearance: Default::default(),
@@ -229,8 +231,10 @@ fn a_second_fixture_may_share_an_address() {
     rig.document
         .patch_fixtures(patch_one(rig.document.show_id(), rig.profile))
         .expect("first fixture");
+    let mut second = patch_one(rig.document.show_id(), rig.profile);
+    second.fixtures[0].patch.fixture_number = Some(2);
     rig.document
-        .patch_fixtures(patch_one(rig.document.show_id(), rig.profile))
+        .patch_fixtures(second)
         .expect("a second fixture at the same address is accepted here");
 
     // Double-patching is legitimate rigging, so this boundary stores it. Surfacing the clash to
@@ -388,18 +392,15 @@ fn previewing_mvr_reports_what_the_archive_cannot_resolve_without_writing() {
     assert_eq!(fixture.universe, Some(1));
     assert_eq!(fixture.address, Some(1));
     assert!(
-        !fixture.matched,
-        "no fixture library is attached, so nothing here can be patched from one"
+        fixture.matched,
+        "native profile data resolves without an installed library"
     );
-    assert_eq!(
-        preview.missing_profiles.len(),
-        1,
-        "the operator is told which GDTF has no profile, before deciding"
-    );
+    assert!(preview.missing_profiles.is_empty());
     assert!(
         preview.address_conflicts.is_empty(),
-        "a fixture that cannot be resolved has no footprint to conflict with"
+        "the destination fixture never conflicts with itself"
     );
+    assert!(!fixture.conflicted);
     assert_eq!(
         rig.document.patch_revision().expect("revision"),
         revision,
@@ -449,6 +450,10 @@ fn an_element_repatched_to_a_newer_revision_takes_it_from_the_library() {
         mode_id: profile.modes[0].id,
     };
     let mut command = patch_one(document.show_id(), reference(&old));
+    command.fixtures[0].patch.universe = None;
+    command.fixtures[0].patch.address = None;
+    command.fixtures[0].patch.split_patches[0].universe = None;
+    command.fixtures[0].patch.split_patches[0].address = None;
     // Stretched to 8 m while its section was still built at 340 mm.
     command.fixtures[0].patch.scenery_size_metres = Some(FixtureVector {
         x: 8000.0,
@@ -461,6 +466,10 @@ fn an_element_repatched_to_a_newer_revision_takes_it_from_the_library() {
         .expect("patched from the old revision");
 
     let mut upgrade = patch_one(document.show_id(), reference(&new));
+    upgrade.fixtures[0].patch.universe = None;
+    upgrade.fixtures[0].patch.address = None;
+    upgrade.fixtures[0].patch.split_patches[0].universe = None;
+    upgrade.fixtures[0].patch.split_patches[0].address = None;
     upgrade.fixtures[0].patch.fixture_id = fixture_id;
     upgrade.fixtures[0].patch.scenery_size_metres = Some(FixtureVector {
         x: 8000.0,
@@ -532,3 +541,5 @@ fn truss_scenery(section: f32) -> light_fixture::ProfileScenery {
 
 #[path = "mvr_bracket_tests.rs"]
 mod mvr_bracket;
+
+mod mvr_sources;

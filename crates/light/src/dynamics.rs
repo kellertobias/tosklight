@@ -1,7 +1,23 @@
 //! Server-authoritative Dynamic instance and FAT application operations.
 
 mod conversion;
+mod fix_at;
 mod helpers;
+mod legacy_addresses;
+mod programmer_checkpoint;
+pub use helpers::{
+    ProgrammerDynamicController, effective_programmer_dynamic_controllers,
+    resolve_programmer_dynamic_controller,
+};
+pub use programmer_checkpoint::normalize_programmer_dynamic_checkpoint;
+#[cfg(test)]
+mod controller_tests;
+mod preset_sources;
+pub use fix_at::{DynamicFixAtCaptureCommand, DynamicFixAtEnvironment};
+pub use preset_sources::{
+    CompiledDynamicPresetSources, DynamicPresetSourceIssue, DynamicPresetSourceIssueReason,
+    compile_dynamic_preset_sources, compile_runtime_dynamic_preset_sources,
+};
 
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use conversion::{factor_rational, runtime_error};
@@ -83,6 +99,9 @@ pub struct DynamicFixAtValue {
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,
     pub value: AttributeValue,
+    /// Explicit whole/component mask. Rich families without this field become whole-family
+    /// masks; a typed Focus mask must set it because its payload is also a legacy scalar.
+    pub programming_mask: Option<light_dynamics::DynamicValueAddress>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -108,6 +127,7 @@ enum DynamicsReplayAction {
     Update(DynamicControllerUpdate),
     FixAt(DynamicFixAtCommand),
     FixAtBatch(DynamicFixAtBatchCommand),
+    FixAtCapture(DynamicFixAtCaptureCommand),
     Release(DynamicReleaseCommand),
 }
 
@@ -116,6 +136,7 @@ enum DynamicsReplayOutcome {
     Start(DynamicStartOutcome),
     OptionalStart(Option<DynamicStartOutcome>),
     Unit,
+    Applied(usize),
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -138,8 +159,43 @@ struct DynamicsReplayCache {
 
 pub trait DynamicsPorts: Send + Sync {
     fn authorize(&self, context: &ActionContext) -> Result<(), ActionError>;
+    fn supported_programming_contract(&self) -> u16 {
+        light_core::programming::PROGRAMMING_CONTRACT_VERSION
+    }
     fn snapshot(&self) -> Arc<EngineSnapshot>;
+    /// One coherent composed intent frame, including live Target adoption inputs. This must
+    /// not read fitted fixture channels or sample each target at a different instant.
+    fn fix_at_environment(
+        &self,
+        _context: &ActionContext,
+        _targets: &[FixtureId],
+        _owner: light_core::programming::ProgrammingOwner,
+    ) -> Result<DynamicFixAtEnvironment, ActionError> {
+        Err(ActionError::new(
+            ActionErrorKind::Unavailable,
+            "coherent FixAT capture is unavailable",
+        ))
+    }
+    /// Immutable original source model; never the selected destination fixture's model.
+    fn fix_at_native_model(
+        &self,
+        _source: &light_core::NativeColorIdentity,
+    ) -> Result<Arc<dyn light_core::programming::NativeColorEditModel + Send + Sync>, ActionError>
+    {
+        Err(ActionError::new(
+            ActionErrorKind::Unavailable,
+            "original Color source is unavailable",
+        ))
+    }
     fn now_millis(&self) -> u64;
+    /// The Dynamics service changed the selection (a targetless Dynamic started with nothing
+    /// selected selects every capable fixture); the adapter reconciles its selection followers.
+    fn selection_changed(&self) {}
+    /// Off authors its source edit first. The next captured frame decides whether to mute a
+    /// retained underlying On or retire an absent source; a response lookup must not stop it.
+    fn runtime_controller_instance(&self, controller_id: Uuid) -> Option<Uuid>;
+    /// Reconcile a successfully stored Live edit before publishing its event/checkpoint.
+    fn reconcile_programmer_runtime(&self);
     fn runtime_controller_is_completed(&self, controller_id: Uuid) -> bool;
     fn start_runtime(&self, request: DynamicStartRequest) -> Result<Uuid, DynamicRuntimeError>;
     fn off_runtime_controller(
@@ -188,6 +244,15 @@ impl DynamicsService {
             return Ok(outcome);
         }
         let snapshot = ports.snapshot();
+        if let Some(outcome) = self.select_capable(identity.session, &snapshot, &command, ports)? {
+            self.remember(
+                context,
+                identity.session,
+                replay_action,
+                DynamicsReplayOutcome::Start(outcome.clone()),
+            );
+            return Ok(outcome);
+        }
         let (definition, targets, inherited_spatial_mapping) = definition_and_targets(
             context,
             ports,
@@ -210,14 +275,8 @@ impl DynamicsService {
                 controller_id
             } else {
                 ports
-                    .off_runtime_controller(
-                        controller_id,
-                        ports.now_millis(),
-                        command.timing.delay_millis.unwrap_or_default(),
-                        command.timing.fade_millis.unwrap_or_default(),
-                    )
-                    .map_err(runtime_error)?
-                    .0
+                    .runtime_controller_instance(controller_id)
+                    .unwrap_or(controller_id)
             };
             store_off(
                 &self.programmers,
@@ -225,6 +284,9 @@ impl DynamicsService {
                 controller_id,
                 command.timing,
             )?;
+            if !preload {
+                ports.reconcile_programmer_runtime();
+            }
             let outcome = DynamicStartOutcome {
                 runtime_instance_id,
                 controller_id,
@@ -283,6 +345,15 @@ impl DynamicsService {
             return Ok(outcome);
         }
         let snapshot = ports.snapshot();
+        if let Some(outcome) = self.select_capable(identity.session, &snapshot, &command, ports)? {
+            self.remember(
+                context,
+                identity.session,
+                replay_action,
+                DynamicsReplayOutcome::Start(outcome.clone()),
+            );
+            return Ok(outcome);
+        }
         let (definition, targets, inherited_spatial_mapping) = definition_and_targets(
             context,
             ports,
@@ -333,6 +404,22 @@ impl DynamicsService {
             return Ok(outcome);
         }
         let snapshot = ports.snapshot();
+        // Nothing selected for a targetless Dynamic: nothing it could be running on to switch off.
+        if helpers::nothing_to_target(
+            &self.programmers,
+            identity.session,
+            &snapshot,
+            command.dynamic_id,
+            &command.targets,
+        )? {
+            self.remember(
+                context,
+                identity.session,
+                replay_action,
+                DynamicsReplayOutcome::OptionalStart(None),
+            );
+            return Ok(None);
+        }
         let (definition, targets, _) = definition_and_targets(
             context,
             ports,
@@ -361,14 +448,8 @@ impl DynamicsService {
             controller_id
         } else {
             ports
-                .off_runtime_controller(
-                    controller_id,
-                    ports.now_millis(),
-                    command.timing.delay_millis.unwrap_or_default(),
-                    command.timing.fade_millis.unwrap_or_default(),
-                )
-                .map_err(runtime_error)?
-                .0
+                .runtime_controller_instance(controller_id)
+                .unwrap_or(controller_id)
         };
         store_off(
             &self.programmers,
@@ -376,6 +457,9 @@ impl DynamicsService {
             controller_id,
             command.timing,
         )?;
+        if !preload {
+            ports.reconcile_programmer_runtime();
+        }
         let outcome = Some(DynamicStartOutcome {
             runtime_instance_id,
             controller_id,
@@ -401,6 +485,35 @@ impl DynamicsService {
         Ok(outcome)
     }
 
+    /// First press of a targetless Dynamic with nothing selected: select every capable fixture
+    /// and start nothing. The second press starts it on that selection.
+    fn select_capable(
+        &self,
+        session: SessionId,
+        snapshot: &EngineSnapshot,
+        command: &DynamicStartCommand,
+        ports: &dyn DynamicsPorts,
+    ) -> Result<Option<DynamicStartOutcome>, ActionError> {
+        if !helpers::nothing_to_target(
+            &self.programmers,
+            session,
+            snapshot,
+            command.dynamic_id,
+            &command.targets,
+        )? {
+            return Ok(None);
+        }
+        let capable = helpers::capable_fixtures(snapshot, command.dynamic_id)?;
+        self.programmers.select(session, capable.iter().copied());
+        ports.selection_changed();
+        Ok(Some(DynamicStartOutcome {
+            runtime_instance_id: Uuid::nil(),
+            controller_id: Uuid::nil(),
+            targets: capable,
+            started: false,
+        }))
+    }
+
     fn start_resolved(
         &self,
         context: &ActionContext,
@@ -415,15 +528,24 @@ impl DynamicsService {
             inherited_spatial_mapping,
             command,
         } = request;
+        if definition.required_programming_contract() > ports.supported_programming_contract() {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "This Dynamic requires a programming contract that is not active on this desk",
+            ));
+        }
         let state = self.programmers.get(identity.session).ok_or_else(|| {
             ActionError::new(ActionErrorKind::NotFound, "Programmer is unavailable")
         })?;
-        let controller_id = Uuid::new_v4();
+        let authored_link = Uuid::new_v4();
+        let controller_id =
+            light_dynamics::programmer_dynamic_controller_id(state.id, authored_link);
         let now_millis = ports.now_millis();
         let controller = DynamicController {
             id: controller_id,
             source: DynamicControllerSource::Programmer {
                 programmer_id: state.id.0,
+                instance_link: Some(authored_link),
             },
             priority: state.priority,
             activated_at_millis: now_millis,
@@ -486,9 +608,9 @@ impl DynamicsService {
                     .iter()
                     .map(|lane| DynamicProgrammerValueMutation::Set {
                         fixture_id: *fixture_id,
-                        attribute: lane.attribute.clone(),
+                        attribute: lane.output_owner(),
                         value: DynamicSemanticValue::DynamicOn {
-                            instance_link: controller_id,
+                            instance_link: authored_link,
                             dynamic: reference.clone(),
                             lane_id: lane.id,
                             overrides: command.overrides.clone(),
@@ -534,39 +656,39 @@ impl DynamicsService {
         {
             return Ok(outcome);
         }
-        let targets =
-            controller_targets(&self.programmers, identity.session, command.controller_id);
-        if targets.is_empty() {
-            return Err(ActionError::new(
-                ActionErrorKind::NotFound,
-                "Dynamic controller is not present in this Programmer",
-            ));
-        }
+        let state = self.programmers.get(identity.session).ok_or_else(|| {
+            ActionError::new(ActionErrorKind::NotFound, "Programmer is unavailable")
+        })?;
+        let controller = resolve_programmer_dynamic_controller(&state, command.controller_id)
+            .ok_or_else(|| {
+                ActionError::new(
+                    ActionErrorKind::NotFound,
+                    "Dynamic controller is not present in this Programmer",
+                )
+            })?;
+        let controller_id = controller.controller_id;
+        let targets = controller.targets;
         let preload = programmer_preload_active(&self.programmers, identity.session);
-        let dynamic_id =
-            controller_dynamic_id(&self.programmers, identity.session, command.controller_id);
+        let dynamic_id = controller.dynamic_id;
         let runtime_instance_id = if preload {
-            command.controller_id
+            controller_id
         } else {
             ports
-                .off_runtime_controller(
-                    command.controller_id,
-                    ports.now_millis(),
-                    command.timing.delay_millis.unwrap_or_default(),
-                    command.timing.fade_millis.unwrap_or_default(),
-                )
-                .map_err(runtime_error)?
-                .0
+                .runtime_controller_instance(controller_id)
+                .unwrap_or(controller_id)
         };
         store_off(
             &self.programmers,
             identity.session,
-            command.controller_id,
+            controller_id,
             command.timing,
         )?;
+        if !preload {
+            ports.reconcile_programmer_runtime();
+        }
         let outcome = DynamicStartOutcome {
             runtime_instance_id,
-            controller_id: command.controller_id,
+            controller_id,
             targets,
             started: false,
         };
@@ -606,26 +728,15 @@ impl DynamicsService {
         })?;
         let speed_rational = command.speed_multiplier.map(factor_rational).transpose()?;
         let preload = state.blind && state.preload_capture_programmer;
-        let mut source_values = state
-            .dynamic_values
-            .iter()
-            .map(|stored| {
-                (
-                    (stored.fixture_id, stored.attribute.clone()),
-                    stored.clone(),
+        let controller = resolve_programmer_dynamic_controller(&state, command.controller_id)
+            .ok_or_else(|| {
+                ActionError::new(
+                    ActionErrorKind::NotFound,
+                    "Dynamic controller is not present in this Programmer",
                 )
-            })
-            .collect::<HashMap<_, _>>();
-        if preload {
-            for stored in state.preload_dynamic_pending.iter() {
-                source_values.insert(
-                    (stored.fixture_id, stored.attribute.clone()),
-                    stored.clone(),
-                );
-            }
-        }
-        let mutations = source_values
-            .values()
+            })?;
+        let mutations = effective_programmer_dynamic_values(&state)
+            .into_iter()
             .filter_map(|stored| match &stored.value {
                 DynamicSemanticValue::DynamicOn {
                     instance_link,
@@ -633,7 +744,7 @@ impl DynamicsService {
                     lane_id,
                     overrides,
                     timing,
-                } if *instance_link == command.controller_id => {
+                } if *instance_link == controller.authored_link => {
                     let mut overrides = overrides.clone();
                     if let Some(size) = command.size {
                         overrides.size = size;
@@ -668,7 +779,7 @@ impl DynamicsService {
         if !preload {
             ports
                 .update_runtime_controller(
-                    command.controller_id,
+                    controller.controller_id,
                     command.size,
                     command.speed_multiplier,
                     command.phase_offset_degrees,
@@ -689,13 +800,9 @@ impl DynamicsService {
             context,
             crate::DynamicRuntimeChange {
                 kind: crate::DynamicRuntimeEventKind::ControllerUpdated,
-                dynamic_id: controller_dynamic_id(
-                    &self.programmers,
-                    identity.session,
-                    command.controller_id,
-                ),
+                dynamic_id: controller.dynamic_id,
                 runtime_instance_id: None,
-                controller_id: Some(command.controller_id),
+                controller_id: Some(controller.controller_id),
                 winning_controller_id: None,
                 occurred_at_millis: ports.now_millis(),
                 message: preload.then(|| "staged in Preload".into()),
@@ -708,130 +815,6 @@ impl DynamicsService {
             DynamicsReplayOutcome::Unit,
         );
         Ok(())
-    }
-
-    pub fn fix_at(
-        &self,
-        context: &ActionContext,
-        command: DynamicFixAtCommand,
-        ports: &dyn DynamicsPorts,
-    ) -> Result<(), ActionError> {
-        let identity = identity(context)?;
-        ports.authorize(context)?;
-        let replay_action = DynamicsReplayAction::FixAt(command.clone());
-        if let Some(DynamicsReplayOutcome::Unit) =
-            self.cached(context, identity.session, &replay_action)?
-        {
-            return Ok(());
-        }
-        if !command.value.is_finite() {
-            return Err(ActionError::new(
-                ActionErrorKind::Invalid,
-                "FixAT value must be finite",
-            ));
-        }
-        let targets = if command.targets.is_empty() {
-            self.programmers
-                .selection(identity.session)
-                .map(|selection| selection.selected)
-                .unwrap_or_default()
-        } else {
-            command.targets
-        };
-        if targets.is_empty() {
-            return Err(ActionError::new(
-                ActionErrorKind::Invalid,
-                "FixAT requires a fixture selection",
-            ));
-        }
-        validate_fix_at_targets(&ports.snapshot(), &targets, &command.attribute)?;
-        let mutations = targets
-            .into_iter()
-            .map(|fixture_id| DynamicProgrammerValueMutation::Set {
-                fixture_id,
-                attribute: command.attribute.clone(),
-                value: DynamicSemanticValue::FixAt {
-                    value: command.value,
-                    timing: command.timing,
-                },
-            })
-            .collect::<Vec<_>>();
-        if !self
-            .programmers
-            .apply_dynamic_values(identity.session, &mutations, None)
-        {
-            return Err(ActionError::new(
-                ActionErrorKind::Conflict,
-                "FixAT produced no Programmer change",
-            ));
-        }
-        self.remember(
-            context,
-            identity.session,
-            replay_action,
-            DynamicsReplayOutcome::Unit,
-        );
-        Ok(())
-    }
-
-    pub fn fix_at_batch(
-        &self,
-        context: &ActionContext,
-        command: DynamicFixAtBatchCommand,
-        ports: &dyn DynamicsPorts,
-    ) -> Result<usize, ActionError> {
-        let identity = identity(context)?;
-        ports.authorize(context)?;
-        let replay_action = DynamicsReplayAction::FixAtBatch(command.clone());
-        if let Some(DynamicsReplayOutcome::Unit) =
-            self.cached(context, identity.session, &replay_action)?
-        {
-            return Ok(command.values.len());
-        }
-        if command.values.is_empty() {
-            return Err(ActionError::new(
-                ActionErrorKind::Invalid,
-                "FixAT Preset contains no applicable scalar values",
-            ));
-        }
-        let snapshot = ports.snapshot();
-        for value in &command.values {
-            validate_release_targets(
-                &snapshot,
-                &[ReleaseProgrammerFixtureValue {
-                    fixture_id: value.fixture_id,
-                    attribute: value.attribute.clone(),
-                }],
-            )?;
-        }
-        let mutations = command
-            .values
-            .iter()
-            .map(|value| DynamicProgrammerValueMutation::Set {
-                fixture_id: value.fixture_id,
-                attribute: value.attribute.clone(),
-                value: DynamicSemanticValue::Static {
-                    value: value.value.clone(),
-                    timing: command.timing,
-                },
-            })
-            .collect::<Vec<_>>();
-        if !self
-            .programmers
-            .apply_dynamic_values(identity.session, &mutations, None)
-        {
-            return Err(ActionError::new(
-                ActionErrorKind::Conflict,
-                "FixAT Preset produced no Programmer change",
-            ));
-        }
-        self.remember(
-            context,
-            identity.session,
-            replay_action,
-            DynamicsReplayOutcome::Unit,
-        );
-        Ok(command.values.len())
     }
 
     pub fn release_values(
@@ -848,12 +831,21 @@ impl DynamicsService {
         {
             return Ok(command.fixture_values.len());
         }
-        if command.fixture_values.is_empty() {
-            return Err(ActionError::new(
-                ActionErrorKind::Invalid,
-                "RELEASE requires at least one supported fixture attribute",
-            ));
+        if command.fixture_values.is_empty() && command.group_values.is_empty() {
+            self.remember(
+                context,
+                identity.session,
+                replay_action,
+                DynamicsReplayOutcome::Unit,
+            );
+            return Ok(0);
         }
+        // TL-552 follow-up: at contract ≥ 1 a native Position/Color channel release is stored
+        // as the release of its semantic owner, never at a legacy address.
+        let command = legacy_addresses::semantic_release_command(
+            &command,
+            ports.supported_programming_contract(),
+        );
         validate_release_targets(&ports.snapshot(), &command.fixture_values)?;
         self.programmers.apply_release_values(
             identity.session,

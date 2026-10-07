@@ -20,6 +20,8 @@ fn hazardous_fixture_defaults_to_immediate_safe_on_control_loss() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
+            required_programming_contract: 0,
+            native_color_sources: Default::default(),
             fixtures: vec![fixture].into(),
             cue_lists: vec![].into(),
             dynamics: vec![].into(),
@@ -62,7 +64,10 @@ fn move_in_black_waits_for_resolved_darkness_then_prepositions_only_enabled_fixt
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
 
     clock.set(started + ChronoDuration::milliseconds(1_999));
-    let values = engine.resolved_values();
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
     assert!(normalized(&values, enabled, "intensity") > 0.0);
     assert_eq!(normalized(&values, enabled, "pan"), 0.2);
     let runtime = engine.move_in_black_runtime();
@@ -76,7 +81,10 @@ fn move_in_black_waits_for_resolved_darkness_then_prepositions_only_enabled_fixt
     );
 
     clock.set(started + ChronoDuration::milliseconds(2_000));
-    let values = engine.resolved_values();
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
     assert_eq!(normalized(&values, enabled, "intensity"), 0.0);
     let runtime = engine.move_in_black_runtime();
     let enabled_runtime = runtime
@@ -99,9 +107,17 @@ fn move_in_black_waits_for_resolved_darkness_then_prepositions_only_enabled_fixt
     );
 
     clock.set(started + ChronoDuration::milliseconds(2_999));
-    assert_eq!(normalized(&engine.resolved_values(), enabled, "pan"), 0.2);
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
+    assert_eq!(normalized(&values, enabled, "pan"), 0.2);
     clock.set(started + ChronoDuration::milliseconds(3_000));
-    assert_eq!(normalized(&engine.resolved_values(), enabled, "pan"), 0.2);
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
+    assert_eq!(normalized(&values, enabled, "pan"), 0.2);
     assert_eq!(
         engine
             .move_in_black_runtime()
@@ -113,12 +129,18 @@ fn move_in_black_waits_for_resolved_darkness_then_prepositions_only_enabled_fixt
     );
 
     clock.set(started + ChronoDuration::milliseconds(4_500));
-    let values = engine.resolved_values();
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
     assert!((normalized(&values, enabled, "pan") - 0.5).abs() < 0.001);
     assert_eq!(normalized(&values, disabled, "pan"), 0.2);
 
     clock.set(started + ChronoDuration::milliseconds(6_000));
-    let values = engine.resolved_values();
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
     assert!((normalized(&values, enabled, "pan") - 0.8).abs() < 0.001);
     assert_eq!(normalized(&values, disabled, "pan"), 0.2);
     assert_eq!(
@@ -132,7 +154,10 @@ fn move_in_black_waits_for_resolved_darkness_then_prepositions_only_enabled_fixt
     );
 
     execute_pool(&engine, 1, PoolPlaybackAction::Go);
-    let values = engine.resolved_values();
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
     assert!(
         (normalized(&values, enabled, "pan") - 0.8).abs() < 0.001,
         "the completed hidden move must hand off without jumping back"
@@ -163,7 +188,7 @@ fn move_in_black_is_blocked_and_restarts_its_delay_after_intensity_returns() {
     );
 
     clock.set(started + ChronoDuration::milliseconds(5_000));
-    engine.resolved_values();
+    engine.render(RenderOptions::default()).unwrap();
     let runtime = engine.move_in_black_runtime();
     let runtime = runtime
         .iter()
@@ -173,7 +198,7 @@ fn move_in_black_is_blocked_and_restarts_its_delay_after_intensity_returns() {
     assert_eq!(runtime.dark_since, None);
 
     programmers.clear(session);
-    engine.resolved_values();
+    engine.render(RenderOptions::default()).unwrap();
     let runtime = engine.move_in_black_runtime();
     let runtime = runtime
         .iter()
@@ -193,7 +218,7 @@ fn move_in_black_is_blocked_and_restarts_its_delay_after_intensity_returns() {
         AttributeKey::intensity(),
         AttributeValue::Normalized(0.2),
     );
-    engine.resolved_values();
+    engine.render(RenderOptions::default()).unwrap();
     assert_eq!(
         engine
             .move_in_black_runtime()
@@ -206,7 +231,7 @@ fn move_in_black_is_blocked_and_restarts_its_delay_after_intensity_returns() {
 
     clock.set(started + ChronoDuration::milliseconds(6_000));
     programmers.clear(session);
-    engine.resolved_values();
+    engine.render(RenderOptions::default()).unwrap();
     let runtime = engine.move_in_black_runtime();
     let runtime = runtime
         .iter()
@@ -256,9 +281,9 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
     }
 
     clock.set(started + ChronoDuration::milliseconds(2_000));
-    engine.resolved_values();
+    engine.render(RenderOptions::default()).unwrap();
     clock.set(started + ChronoDuration::milliseconds(5_000));
-    engine.resolved_values();
+    engine.render(RenderOptions::default()).unwrap();
 
     Arc::make_mut(&mut snapshot.cue_lists)[1].cues[2]
         .changes
@@ -268,10 +293,13 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
         .value = Some(AttributeValue::Normalized(0.6));
     snapshot.revision += 1;
     engine.replace_snapshot(snapshot.clone()).unwrap();
-    engine.resolved_values();
+    engine.render(RenderOptions::default()).unwrap();
 
     clock.set(started + ChronoDuration::milliseconds(6_500));
-    let values = engine.resolved_values();
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
     assert!(
         (normalized(&values, logical, "pan") - 0.5).abs() < 0.001,
         "the recalculated same-priority MIB target is the newer LTP source"
@@ -280,7 +308,10 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
     Arc::make_mut(&mut snapshot.cue_lists)[0].priority = 20;
     snapshot.revision += 1;
     engine.replace_snapshot(snapshot).unwrap();
-    let values = engine.resolved_values();
+    let values = engine
+        .render(RenderOptions::default())
+        .unwrap()
+        .resolved_values;
     let pan = normalized(&values, logical, "pan");
     assert!(
         (pan - 0.8).abs() < 0.001,

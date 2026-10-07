@@ -2,7 +2,10 @@ use crate::engine::GroupMasterTransition;
 use crate::{Engine, EngineError, GroupMasterGenerationUpdate, RuntimeGeneration, TrackedOverride};
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_fixture::{ChannelFunctionBehavior, HighlightLook};
-use std::{cell::Cell, collections::HashSet};
+use std::{
+    cell::Cell,
+    collections::{HashMap, HashSet},
+};
 
 impl Engine {
     /// Updates one output-runtime Group master without rebuilding Playback or refreshing live
@@ -67,8 +70,7 @@ impl Engine {
         Ok(current != value)
     }
 
-    pub(crate) fn advance_group_master_transitions(&self) {
-        let now = self.clock.now();
+    pub(crate) fn advance_group_master_transitions_at(&self, now: chrono::DateTime<chrono::Utc>) {
         let updates = {
             let mut transitions = self.group_master_transitions.lock();
             let mut updates = Vec::with_capacity(transitions.len());
@@ -172,12 +174,11 @@ impl Engine {
             .map(|contribution| contribution.color)
     }
 
-    pub(crate) fn group_color_for_fixture(
-        &self,
+    pub(crate) fn group_color_for_fixture_from(
+        colors: &HashMap<String, crate::engine::GroupColorContribution>,
         generation: &RuntimeGeneration,
         fixture_id: FixtureId,
     ) -> Option<(AttributeValue, chrono::DateTime<chrono::Utc>)> {
-        let colors = self.group_colors.read();
         colors
             .iter()
             .filter_map(|(group_id, contribution)| {
@@ -198,14 +199,13 @@ impl Engine {
             })
     }
 
-    pub(crate) fn apply_group_color_contributions(
-        &self,
+    pub(crate) fn apply_group_color_contributions_from(
+        colors: &HashMap<String, crate::engine::GroupColorContribution>,
         generation: &RuntimeGeneration,
         resolved: &mut crate::ResolvedAttributes,
         programmer_colors: &HashSet<FixtureId>,
     ) {
         let color_attribute = AttributeKey("color".into());
-        let colors = self.group_colors.read();
         let mut overlays = std::collections::HashMap::<
             FixtureId,
             (String, crate::engine::GroupColorContribution),
@@ -227,7 +227,6 @@ impl Engine {
                 }
             }
         }
-        drop(colors);
         for (fixture_id, (_, contribution)) in overlays {
             if programmer_colors.contains(&fixture_id) {
                 continue;
@@ -297,11 +296,23 @@ impl Engine {
     /// A binding whose source has gone quiet is *not* dropped: the receiver keeps sending the last
     /// position it heard, so the light stays where it was pointed until an operator takes it back.
     pub fn set_tracked_overrides(&self, overrides: impl IntoIterator<Item = TrackedOverride>) {
-        *self.tracked_overrides.write() = overrides.into_iter().collect();
+        self.set_tracking_frame(std::sync::Arc::new(crate::TrackedInputFrame {
+            legacy_overrides: overrides.into_iter().collect::<Vec<_>>().into(),
+            ..Default::default()
+        }));
+    }
+
+    /// Install world poses and their exact accepted input provenance in one operation.
+    pub fn set_tracking_frame(&self, frame: std::sync::Arc<crate::TrackedInputFrame>) {
+        *self.tracking_frame.write() = frame;
+    }
+
+    pub fn tracking_frame(&self) -> std::sync::Arc<crate::TrackedInputFrame> {
+        std::sync::Arc::clone(&self.tracking_frame.read())
     }
 
     pub fn clear_tracked_overrides(&self) {
-        self.tracked_overrides.write().clear();
+        self.set_tracking_frame(std::sync::Arc::default());
     }
 
     /// Install the active show's colour programming model. Takes effect from the next frame.
@@ -321,7 +332,29 @@ impl Engine {
     }
 
     pub fn tracked_overrides(&self) -> Vec<TrackedOverride> {
-        self.tracked_overrides.read().clone()
+        let frame = self.tracking_frame();
+        let generation = self.generation.load_full();
+        let mut overrides = frame.legacy_overrides.to_vec();
+        for point in frame.points.iter() {
+            let Some(position) = generation
+                .point_projection()
+                .origin_for(point.fixture_id)
+                .and_then(|origin| point.normalized_position(origin))
+            else {
+                continue;
+            };
+            for (attribute, value) in ["point.position.x", "point.position.y", "point.position.z"]
+                .into_iter()
+                .zip(position)
+            {
+                overrides.push(TrackedOverride::new(
+                    point.fixture_id,
+                    AttributeKey(attribute.into()),
+                    AttributeValue::Normalized(value),
+                ));
+            }
+        }
+        overrides
     }
 
     /// Replace the installation-owned semantic Highlight look without touching show or

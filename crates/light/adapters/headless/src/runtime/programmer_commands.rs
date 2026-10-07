@@ -329,34 +329,24 @@ fn execute_fix_at_command(
         }
         _ => (before_fix_at, None),
     };
-    if let Some(attribute) = explicit_attribute.as_ref()
-        && state.attributes.color_model() == light_core::ColorProgrammingModel::Intent
-        && super::attribute_configuration::is_native_color_attribute(&attribute.0)
-    {
-        return Err(format!(
-            "this show programs Color Intent: set the whole colour instead of the fixture-native \
-             colour channel `{}`",
-            attribute.0
-        ));
-    }
     let programmer = state
         .programming
         .get(session.id)
         .ok_or("programmer does not exist")?;
     let (targets, expression) = command_targets(state, address, &programmer)?;
-    if targets.is_empty() {
-        return Err("FixAT requires a current selection".into());
-    }
-    if let Some(expression) = expression {
-        state
-            .programming
-            .select_expression(session.id, targets.clone(), expression);
-    }
     let ports = super::dynamics_adapter::ServerDynamicsPorts { state, session };
     if let Some(preset_address) = parse_fix_at_preset(&tokens[fix_at + 1..])? {
         let preset = load_command_preset(state, preset_address)?;
         let values = fix_at_preset_values(state, &targets, &preset, explicit_attribute.as_ref())?;
-        return state
+        if values.is_empty() {
+            return Ok(0);
+        }
+        light_application::DynamicsService::validate_fix_at_contract(
+            &values,
+            state.output.supported_programming_contract(),
+        )
+        .map_err(|error| error.message)?;
+        let applied = state
             .dynamics
             .fix_at_batch(
                 context,
@@ -369,7 +359,13 @@ fn execute_fix_at_command(
                 },
                 &ports,
             )
-            .map_err(|error| error.message);
+            .map_err(|error| error.message)?;
+        if let Some(expression) = expression {
+            state
+                .programming
+                .select_expression(session.id, targets.clone(), expression);
+        }
+        return Ok(applied);
     }
     if tokens[fix_at + 1..].len() != 1 {
         return Err("FixAT requires one scalar value or Preset".into());
@@ -384,10 +380,23 @@ fn execute_fix_at_command(
     if !value.is_finite() || !(0.0..=100.0).contains(&value) {
         return Err("FixAT value must be within 0-100".into());
     }
+    if targets.is_empty() {
+        return Ok(0);
+    }
+    if let Some(attribute) = explicit_attribute.as_ref()
+        && state.attributes.color_model() == light_core::ColorProgrammingModel::Intent
+        && super::attribute_configuration::is_native_color_attribute(&attribute.0)
+    {
+        return Err(format!(
+            "this show programs Color Intent: set the whole colour instead of the fixture-native \
+             colour channel `{}`",
+            attribute.0
+        ));
+    }
     let attribute = explicit_attribute
         .or_else(|| active_programmer_attribute(&programmer))
         .ok_or("FixAT requires an active parameter context or explicit ATTRIBUTE <name>")?;
-    state
+    let applied = state
         .dynamics
         .fix_at(
             context,
@@ -403,7 +412,12 @@ fn execute_fix_at_command(
             &ports,
         )
         .map_err(|error| error.message)?;
-    Ok(targets.len())
+    if let Some(expression) = expression {
+        state
+            .programming
+            .select_expression(session.id, targets.clone(), expression);
+    }
+    Ok(applied)
 }
 
 fn execute_release_command(
@@ -430,17 +444,23 @@ fn execute_release_command(
         .get(session.id)
         .ok_or("programmer does not exist")?;
     let (targets, expression) = command_targets(state, address, &programmer)?;
-    if targets.is_empty() {
-        return Err("RELEASE requires a current selection".into());
+    let snapshot = state.output.snapshot();
+    let fixture_values = release_fixture_values(
+        &snapshot,
+        &programmer,
+        &state.output.resolved_values(),
+        &targets,
+        family,
+    );
+    let group_values = release_group_values(&programmer, expression.as_ref(), family);
+    if fixture_values.is_empty() && group_values.is_empty() {
+        return Ok(0);
     }
     if let Some(expression) = expression.clone() {
         state
             .programming
             .select_expression(session.id, targets.clone(), expression);
     }
-    let snapshot = state.output.snapshot();
-    let fixture_values = release_fixture_values(&snapshot, &targets, family);
-    let group_values = release_group_values(&programmer, expression.as_ref(), family);
     state
         .dynamics
         .release_values(
@@ -533,6 +553,8 @@ fn release_accepts(family: ReleaseFamily, attribute: &light_core::AttributeKey) 
 
 fn release_fixture_values(
     snapshot: &light_engine::EngineSnapshot,
+    programmer: &light_programmer::ProgrammerState,
+    current: &light_engine::ResolvedValues,
     targets: &[light_core::FixtureId],
     family: ReleaseFamily,
 ) -> Vec<light_programmer::ReleaseProgrammerFixtureValue> {
@@ -577,6 +599,59 @@ fn release_fixture_values(
             );
         }
     }
+    // Whole semantic owners may have no corresponding native parameter. Include active and
+    // underlying owners explicitly; unpatched fixtures and logical heads retain these identities.
+    let (stored, dynamics) = if programmer.blind && programmer.preload_capture_programmer {
+        (
+            programmer.preload_pending.as_slice(),
+            programmer.preload_dynamic_pending.as_slice(),
+        )
+    } else {
+        (
+            programmer.values.as_slice(),
+            programmer.dynamic_values.as_slice(),
+        )
+    };
+    let mut semantic = stored
+        .iter()
+        .map(|value| (value.fixture_id, value.attribute.clone()))
+        .chain(
+            dynamics
+                .iter()
+                .map(|value| (value.fixture_id, value.attribute.clone())),
+        )
+        .chain(
+            current
+                .iter()
+                .filter(|(_, value)| {
+                    matches!(
+                        value,
+                        light_core::AttributeValue::ColorXyz(_)
+                            | light_core::AttributeValue::ColorProgram(_)
+                            | light_core::AttributeValue::Position(_)
+                            | light_core::AttributeValue::Zoom(_)
+                    )
+                })
+                .map(|((fixture, attribute), _)| (*fixture, attribute.clone())),
+        )
+        .filter(|(fixture, attribute)| {
+            target_set.contains(fixture) && release_accepts(family, attribute)
+        })
+        .collect::<Vec<_>>();
+    semantic.sort_by(|(left_id, left_attribute), (right_id, right_attribute)| {
+        left_id
+            .0
+            .cmp(&right_id.0)
+            .then_with(|| left_attribute.cmp(right_attribute))
+    });
+    for (fixture_id, attribute) in semantic {
+        if seen.insert((fixture_id, attribute.clone())) {
+            values.push(light_programmer::ReleaseProgrammerFixtureValue {
+                fixture_id,
+                attribute,
+            });
+        }
+    }
     values
 }
 
@@ -603,18 +678,21 @@ fn release_group_values(
     group_ids
         .into_iter()
         .flat_map(|group_id| {
-            programmer
-                .group_values
-                .get(&group_id)
-                .into_iter()
-                .flatten()
-                .filter(|(attribute, _)| release_accepts(family, attribute))
-                .map(
-                    move |(attribute, _)| light_programmer::ReleaseProgrammerGroupValue {
-                        group_id: group_id.clone(),
-                        attribute: attribute.clone(),
-                    },
-                )
+            (if programmer.blind && programmer.preload_capture_programmer {
+                &programmer.preload_group_pending
+            } else {
+                &programmer.group_values
+            })
+            .get(&group_id)
+            .into_iter()
+            .flatten()
+            .filter(|(attribute, _)| release_accepts(family, attribute))
+            .map(move |(attribute, _)| {
+                light_programmer::ReleaseProgrammerGroupValue {
+                    group_id: group_id.clone(),
+                    attribute: attribute.clone(),
+                }
+            })
         })
         .collect()
 }
@@ -654,51 +732,86 @@ fn fix_at_preset_values(
     preset: &light_programmer::Preset,
     explicit_attribute: Option<&light_core::AttributeKey>,
 ) -> Result<Vec<light_application::DynamicFixAtValue>, String> {
-    let groups = state
-        .output
-        .snapshot()
+    let snapshot = state.output.snapshot();
+    let groups = snapshot
         .groups
         .iter()
         .map(|group| (group.id.clone(), group.clone()))
         .collect::<HashMap<_, _>>();
-    let mut planned = Vec::new();
-    for fixture_id in targets {
-        let direct = preset.values.get(fixture_id).into_iter().flatten();
-        let expanded = preset
-            .group_values
-            .iter()
-            .flat_map(|(group_id, attributes)| {
-                light_programmer::resolve_group(group_id, &groups)
-                    .is_ok_and(|members| members.contains(fixture_id))
-                    .then_some(attributes)
-                    .into_iter()
-                    .flatten()
-            });
-        for (attribute, value) in preset.universal_values.iter().chain(direct).chain(expanded) {
-            if explicit_attribute.is_some_and(|explicit| explicit != attribute) {
-                continue;
-            }
-            if let Some(index) =
-                planned
-                    .iter()
-                    .position(|existing: &light_application::DynamicFixAtValue| {
-                        existing.fixture_id == *fixture_id && existing.attribute == *attribute
-                    })
+    let positions = snapshot
+        .dynamic_stage_positions
+        .iter()
+        .map(|(id, point)| {
+            (
+                *id,
+                light_dynamics::Position3d {
+                    x: f64::from(point.x),
+                    y: f64::from(point.y),
+                    z: f64::from(point.z),
+                },
+            )
+        })
+        .collect();
+    let mutations =
+        light_application::materialize_preset_fixture_values(preset, targets, &groups, &positions)
+            .map_err(|error| error.message)?;
+    let mut values = Vec::new();
+    for mutation in mutations {
+        let light_programmer::NormalProgrammerValueMutation::SetFixture {
+            fixture_id,
+            attribute,
+            value,
+            ..
+        } = mutation
+        else {
+            continue;
+        };
+        let typed = matches!(
+            value,
+            light_core::AttributeValue::Position(_)
+                | light_core::AttributeValue::ColorProgram(_)
+                | light_core::AttributeValue::Zoom(_)
+        );
+        let component = explicit_attribute.and_then(|explicit| {
+            light_core::programming::programming_component(
+                &explicit.0,
+                light_core::programming::ProgrammingTargetRole::LightHead,
+            )
+        });
+        if explicit_attribute.is_some_and(|explicit| explicit != &attribute)
+            && !(typed && component.is_some_and(|component| component.owner().key() == attribute))
+        {
+            continue;
+        }
+        if typed && let Some(component) = component {
+            let mask = light_dynamics::ProgrammingFamilyFixAt::from_family(
+                component.owner(),
+                Some(component),
+                value,
+            )
+            .map_err(|error| error.to_string())?;
+            values.push(light_application::DynamicFixAtValue::programming(
+                fixture_id, mask,
+            ));
+        } else {
+            if let Some(explicit) = explicit_attribute
+                && state.attributes.color_model() == light_core::ColorProgrammingModel::Intent
+                && super::attribute_configuration::is_native_color_attribute(&explicit.0)
             {
-                planned[index].value = value.clone();
-            } else {
-                planned.push(light_application::DynamicFixAtValue {
-                    fixture_id: *fixture_id,
-                    attribute: attribute.clone(),
-                    value: value.clone(),
-                });
+                return Err(format!(
+                    "this show programs Color Intent: set the whole colour instead of the fixture-native colour channel `{}`",
+                    explicit.0
+                ));
             }
+            values.push(light_application::DynamicFixAtValue {
+                fixture_id,
+                attribute,
+                value,
+                programming_mask: None,
+            });
         }
     }
-    if planned.is_empty() {
-        return Err("FixAT Preset contains no applicable values for the selection".into());
-    }
-    Ok(planned)
+    Ok(values)
 }
 
 fn active_programmer_attribute(
@@ -722,4 +835,93 @@ fn active_programmer_attribute(
         .chain(dynamic_values)
         .max_by_key(|(order, _)| *order)
         .map(|(_, attribute)| attribute)
+}
+
+#[cfg(test)]
+mod semantic_release_tests {
+    use super::*;
+    use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, programming::*};
+    use std::sync::Arc;
+
+    #[test]
+    fn release_includes_complete_owners_without_native_parameters() {
+        let registry = light_programmer::ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        let logical_head = FixtureId::new();
+        registry.start(session);
+        registry.apply_normal_values(
+            session,
+            &[
+                light_programmer::NormalProgrammerValueMutation::SetFixture {
+                    fixture_id: fixture,
+                    attribute: AttributeKey::color(),
+                    value: AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic {
+                        intent: ColorIntent {
+                            uv: UvIntent { amount: 0.8 },
+                            ..Default::default()
+                        },
+                    })),
+                    timing: Default::default(),
+                },
+                light_programmer::NormalProgrammerValueMutation::SetFixture {
+                    fixture_id: logical_head,
+                    attribute: ProgrammingOwner::Position.key(),
+                    value: AttributeValue::Position(Arc::new(PositionIntent::angles(540.0, 20.0))),
+                    timing: Default::default(),
+                },
+            ],
+        );
+        let programmer = registry.get(session).unwrap();
+        let snapshot = light_engine::EngineSnapshot::default();
+        let current = light_engine::ResolvedValues::default();
+        let color = release_fixture_values(
+            &snapshot,
+            &programmer,
+            &current,
+            &[fixture, logical_head],
+            ReleaseFamily::Class(light_core::AttributeClass::Color),
+        );
+        assert_eq!(color.len(), 1);
+        assert_eq!(color[0].fixture_id, fixture);
+        assert_eq!(color[0].attribute, AttributeKey::color());
+        let position = release_fixture_values(
+            &snapshot,
+            &programmer,
+            &current,
+            &[fixture, logical_head],
+            ReleaseFamily::Class(light_core::AttributeClass::Position),
+        );
+        assert_eq!(position.len(), 1);
+        assert_eq!(position[0].fixture_id, logical_head);
+        assert_eq!(position[0].attribute, ProgrammingOwner::Position.key());
+        assert!(
+            release_fixture_values(&snapshot, &programmer, &current, &[], ReleaseFamily::All)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn release_records_an_underlying_semantic_owner_even_without_programmer_capture() {
+        let registry = light_programmer::ProgrammerRegistry::default();
+        let session = SessionId::new();
+        let fixture = FixtureId::new();
+        registry.start(session);
+        let current = light_engine::ResolvedValues::from_iter([(
+            (fixture, ProgrammingOwner::Position.key()),
+            AttributeValue::Position(Arc::new(PositionIntent::target(
+                TargetReference::Origin,
+                [1.0, 2.0, 3.0],
+            ))),
+        )]);
+        let result = release_fixture_values(
+            &light_engine::EngineSnapshot::default(),
+            &registry.get(session).unwrap(),
+            &current,
+            &[fixture],
+            ReleaseFamily::Class(light_core::AttributeClass::Position),
+        );
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].attribute, ProgrammingOwner::Position.key());
+    }
 }

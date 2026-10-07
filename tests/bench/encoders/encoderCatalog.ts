@@ -78,13 +78,37 @@ export enum ProgrammerToken {
 
 export type ProgrammerExpression = readonly (number | ProgrammerToken)[];
 
+/**
+ * The semantic family component a Color or Position encoder edits since the TL-552 cutover
+ * (programming contract 1). Color components are percentages of the semantic recipe; Pan and
+ * Tilt are Angles in degrees.
+ */
+export interface SemanticEncoderComponent {
+	owner: "color" | "position";
+	component:
+		| { kind: "color"; component: SemanticColorComponent }
+		| { kind: "pan" }
+		| { kind: "tilt" };
+	unit: "percent" | "degrees";
+}
+
+export type SemanticColorComponent =
+	| "red"
+	| "green"
+	| "blue"
+	| "amber"
+	| "white_blend"
+	| "uv";
+
 export interface EncoderCatalogEntry {
 	group: EncoderGroup;
 	familyLabel: string;
 	key: string;
+	/** The Programmer address the encoder writes: the semantic owner for Color and Position. */
 	attribute: string;
 	label: string;
 	normalized: boolean;
+	semantic?: SemanticEncoderComponent;
 }
 
 const entries: readonly EncoderCatalogEntry[] = [
@@ -116,38 +140,15 @@ const entries: readonly EncoderCatalogEntry[] = [
 		"master",
 		"Master",
 	),
-	entry(EncoderGroup.Color, "Color", ColorAttribute.Red, "color.red", "Red"),
-	entry(
-		EncoderGroup.Color,
-		"Color",
-		ColorAttribute.Green,
-		"color.green",
-		"Green",
-	),
-	entry(EncoderGroup.Color, "Color", ColorAttribute.Blue, "color.blue", "Blue"),
-	entry(
-		EncoderGroup.Color,
-		"Color",
-		ColorAttribute.White,
-		"color.white",
-		"White",
-	),
-	entry(
-		EncoderGroup.Color,
-		"Color",
-		ColorAttribute.Amber,
-		"color.amber",
-		"Amber",
-	),
-	entry(EncoderGroup.Color, "Color", ColorAttribute.Uv, "color.uv", "UV"),
-	entry(EncoderGroup.Position, "Position", PositionAttribute.Pan, "pan", "Pan"),
-	entry(
-		EncoderGroup.Position,
-		"Position",
-		PositionAttribute.Tilt,
-		"tilt",
-		"Tilt",
-	),
+	color(ColorAttribute.Red, "red", "Red"),
+	color(ColorAttribute.Green, "green", "Green"),
+	color(ColorAttribute.Blue, "blue", "Blue"),
+	// The semantic Color page names the white component White Blend.
+	color(ColorAttribute.White, "white_blend", "White Blend"),
+	color(ColorAttribute.Amber, "amber", "Amber"),
+	color(ColorAttribute.Uv, "uv", "UV"),
+	position(PositionAttribute.Pan, "pan", "Pan"),
+	position(PositionAttribute.Tilt, "tilt", "Tilt"),
 	entry(EncoderGroup.Beam, "Beam", BeamAttribute.Gobo1, "gobo", "Gobo 1"),
 	entry(EncoderGroup.Beam, "Beam", BeamAttribute.Gobo2, "gobo.2", "Gobo 2"),
 	entry(
@@ -321,6 +322,62 @@ function entry(
 	normalized = true,
 ): EncoderCatalogEntry {
 	return { group, familyLabel, key, attribute, label, normalized };
+}
+
+function color(
+	key: ColorAttribute,
+	component: SemanticColorComponent,
+	label: string,
+): EncoderCatalogEntry {
+	return {
+		...entry(EncoderGroup.Color, "Color", key, "color", label),
+		semantic: {
+			owner: "color",
+			component: { kind: "color", component },
+			unit: "percent",
+		},
+	};
+}
+
+function position(
+	key: PositionAttribute,
+	axis: "pan" | "tilt",
+	label: string,
+): EncoderCatalogEntry {
+	return {
+		...entry(EncoderGroup.Position, "Position", key, "position", label),
+		semantic: { owner: "position", component: { kind: axis }, unit: "degrees" },
+	};
+}
+
+/**
+ * A typed Position entry in degrees: one value, or THRU points spread over the ordered selection.
+ * Angles may be negative, so only finiteness is checked; the desk enforces the lamp's travel.
+ */
+export function degreesEncoderValue(
+	value: number | ProgrammerExpression,
+): { kind: "value"; value: number } | { kind: "spread"; value: number[] } {
+	const tokens = typeof value === "number" ? [value] : [...value];
+	if (tokens.length === 0)
+		throw new Error("Programmer expression requires at least one value");
+	const points: number[] = [];
+	for (const [index, token] of tokens.entries()) {
+		const expectsNumber = index % 2 === 0;
+		if (expectsNumber && typeof token !== "number")
+			throw new Error("Programmer expression cannot lead with or repeat THRU");
+		if (!expectsNumber && token !== ProgrammerToken.Thru)
+			throw new Error("Programmer expression values must be separated by THRU");
+		if (typeof token === "number") {
+			if (!Number.isFinite(token))
+				throw new Error(`Programmer angle ${token} must be finite`);
+			points.push(token);
+		}
+	}
+	if (tokens.length % 2 === 0)
+		throw new Error("Programmer expression cannot end with THRU");
+	return points.length === 1
+		? { kind: "value", value: points[0] }
+		: { kind: "spread", value: points };
 }
 
 function normalizedPercentage(value: number): number {

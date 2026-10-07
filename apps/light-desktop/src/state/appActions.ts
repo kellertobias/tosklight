@@ -17,6 +17,7 @@ export type Action =
 			type: "OPEN_BUILTIN";
 			kind: BuiltInWindow;
 			patchView?: AppState["patchBuiltInView"];
+			patchRequest?: NonNullable<AppState["patchBuiltInRequest"]>["kind"];
 	  }
 	| { type: "CLOSE_FILE_MANAGER" }
 	| { type: "TOGGLE_CONTROL_MODE" }

@@ -171,14 +171,11 @@ pub enum DynamicTargetBindingProjection {
     Targetless,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DynamicLaneProjection {
     pub id: Uuid,
-    pub attribute: String,
-    pub mode: DynamicLaneModeProjection,
-    pub keyframes: DynamicKeyframeConfigurationProjection,
-    pub max_min: DynamicMaxMinConfigurationProjection,
-    pub middle_amplitude: DynamicMiddleAmplitudeConfigurationProjection,
+    #[serde(flatten)]
+    pub body: DynamicLaneBodyProjection,
     pub speed_multiplier: DynamicRationalProjection,
     pub width: f32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -187,6 +184,24 @@ pub struct DynamicLaneProjection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub phase: Option<DynamicPhaseDistributionProjection>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(untagged)]
+pub enum DynamicLaneBodyProjection {
+    LegacyScalar(DynamicLegacyScalarLaneProjection),
+    Programming {
+        programming: DynamicProgrammingLaneProjection,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicLegacyScalarLaneProjection {
+    pub attribute: String,
+    pub mode: DynamicLaneModeProjection,
+    pub keyframes: DynamicKeyframeConfigurationProjection,
+    pub max_min: DynamicMaxMinConfigurationProjection,
+    pub middle_amplitude: DynamicMiddleAmplitudeConfigurationProjection,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -209,6 +224,7 @@ pub enum DynamicPhaseSpreadModeProjection {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DynamicKeyframeConfigurationProjection {
     pub points: Vec<DynamicKeyframeProjection>,
+    #[serde(default = "default_lane_size")]
     pub size: f32,
 }
 
@@ -224,7 +240,9 @@ pub struct DynamicMaxMinConfigurationProjection {
     pub minimum: DynamicScalarSourceProjection,
     pub maximum: DynamicScalarSourceProjection,
     pub function: DynamicPeriodicFunctionProjection,
+    #[serde(default = "default_lane_size")]
     pub size: f32,
+    #[serde(default)]
     pub pwm: DynamicPwmShapeProjection,
 }
 
@@ -233,7 +251,9 @@ pub struct DynamicMiddleAmplitudeConfigurationProjection {
     pub middle: DynamicScalarSourceProjection,
     pub amplitude: f32,
     pub function: DynamicPeriodicFunctionProjection,
+    #[serde(default = "default_lane_size")]
     pub size: f32,
+    #[serde(default)]
     pub pwm: DynamicPwmShapeProjection,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
@@ -250,6 +270,7 @@ pub enum DynamicScalarSourceProjection {
     Preset {
         preset_id: String,
         attribute: String,
+        #[serde(default)]
         last_valid_by_target: Vec<DynamicTargetScalarFallbackProjection>,
     },
 }
@@ -291,13 +312,13 @@ pub struct DynamicPwmShapeProjection {
     pub decay_interpolation: DynamicScalarInterpolationProjection,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DynamicRandomGroupProjection {
     pub id: Uuid,
     #[ts(type = "number")]
     pub seed: u64,
-    pub low: DynamicScalarSourceProjection,
-    pub high: DynamicScalarSourceProjection,
+    #[serde(flatten)]
+    pub range: DynamicRandomRangeProjection,
     #[ts(type = "number")]
     pub decision_interval_millis: u64,
     pub start_probability: f32,
@@ -310,6 +331,22 @@ pub struct DynamicRandomGroupProjection {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(untagged)]
+pub enum DynamicRandomRangeProjection {
+    LegacyScalar {
+        low: DynamicScalarSourceProjection,
+        high: DynamicScalarSourceProjection,
+    },
+    Programming {
+        programming_range: DynamicProgrammingRandomRangeProjection,
+    },
+}
+
+mod input;
+mod programming;
+pub use programming::*;
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DynamicPhaseDistributionProjection {
     pub ordering: DynamicPhaseOrderingProjection,
     pub offset_degrees: f32,
@@ -317,6 +354,7 @@ pub struct DynamicPhaseDistributionProjection {
     pub block_size: u16,
     pub repeats: u16,
     pub wings: bool,
+    #[serde(default)]
     pub anchors_degrees: Vec<f32>,
 }
 
@@ -503,6 +541,10 @@ pub struct DynamicControllerActionOutcome {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DynamicRuntimeSnapshotProjection {
+    /// Programmer addressed by this desk/session; imported authored links need this scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub programmer_id: Option<Uuid>,
     pub global_paused: bool,
     pub instances: Vec<DynamicRuntimeInstanceProjection>,
     pub definitions: Vec<DynamicDefinitionStatusProjection>,
@@ -561,6 +603,13 @@ pub struct DynamicRuntimeInstanceProjection {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DynamicRuntimeControllerProjection {
     pub controller_id: Uuid,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub programmer_id: Option<Uuid>,
+    /// Authored Programmer link, distinct from its scoped runtime controller ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub programmer_instance_link: Option<Uuid>,
     pub source: String,
     pub priority: i16,
     pub size: f32,
@@ -639,6 +688,22 @@ mod spatial_mapping_tests {
             let mut missing = request.clone();
             missing.as_object_mut().unwrap().remove(field);
             assert!(serde_json::from_value::<DynamicSpatialPreviewRequest>(missing).is_err());
+        }
+    }
+}
+
+fn default_lane_size() -> f32 {
+    1.0
+}
+impl Default for DynamicPwmShapeProjection {
+    fn default() -> Self {
+        Self {
+            attack: 0.0,
+            on: 0.5,
+            decay: 0.0,
+            off: 0.5,
+            attack_interpolation: DynamicScalarInterpolationProjection::Linear,
+            decay_interpolation: DynamicScalarInterpolationProjection::Linear,
         }
     }
 }

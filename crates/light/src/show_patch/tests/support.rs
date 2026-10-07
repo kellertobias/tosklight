@@ -488,9 +488,6 @@ pub fn point_and_lamp_profile() -> (
         snap: false,
         reacts_to_virtual_intensity: false,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: false,
-        reacts_to_group_master: false,
-        reacts_to_grand_master: false,
         behavior: Default::default(),
         functions: Vec::new(),
     });
@@ -580,6 +577,8 @@ fn fixture_candidate(
             grand_master_enabled: true,
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),

@@ -177,3 +177,43 @@ describe("HardwareEncoderDisplayView", () => {
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 });
+
+describe("HardwareEncoderDisplayView choice display (TL-651)", () => {
+	const presets = {
+		groups: [{ label: "Target reference", options: [{ value: "origin", label: "Origin" }] }],
+		actions: [{ id: "create", label: "Create Point", onPress: vi.fn() }],
+	};
+
+	it("opens only its choices, with their title actions, when it is a choice display", () => {
+		const onPresetSelect = vi.fn();
+		render(
+			<HardwareEncoderDisplayView
+				slot={3}
+				target={{ label: "Point", value: "—" }}
+				presets={presets}
+				onPresetSelect={onPresetSelect}
+				choices
+			/>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Encoder 3: Point, —" }));
+		expect(screen.queryByRole("tab", { name: "Value" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Origin" }));
+		expect(onPresetSelect).toHaveBeenCalledExactlyOnceWith("origin");
+		fireEvent.click(screen.getByRole("button", { name: "Encoder 3: Point, —" }));
+		fireEvent.click(screen.getByRole("button", { name: "Create Point" }));
+		expect(presets.actions[0]?.onPress).toHaveBeenCalledOnce();
+		expect(screen.queryByRole("dialog")).toBeNull();
+	});
+
+	it("stays a read-only display with choices but without the choice flag", () => {
+		render(
+			<HardwareEncoderDisplayView
+				slot={3}
+				target={{ label: "Play Mode", value: "Loop" }}
+				presets={presets}
+				onPresetSelect={vi.fn()}
+			/>,
+		);
+		expect(screen.queryByRole("button", { name: /^Encoder 3/ })).toBeNull();
+	});
+});

@@ -79,6 +79,23 @@ pub struct AttributeTable {
     /// attribute names the desk itself made. The default hasher answered those in SipHash, which
     /// the profile showed above every other leaf in a render.
     ids: FxHashMap<AttributeKey, AttributeId>,
+    /// The ids of the shared canonical names (`AttributeKey::intensity`, `AttributeKey::color`
+    /// and the programming owners' keys), found by the identity of their one allocation before
+    /// any hashing (TL-639 round 4). The same allocation always holds the same name.
+    shared: Vec<(AttributeKey, AttributeId)>,
+}
+
+/// The canonical names allocated once and handed out by clone.
+fn shared_canonical_keys() -> [AttributeKey; 6] {
+    use crate::programming::ProgrammingOwner;
+    [
+        AttributeKey::intensity(),
+        AttributeKey::color(),
+        ProgrammingOwner::Color.key(),
+        ProgrammingOwner::Position.key(),
+        ProgrammingOwner::Focus.key(),
+        ProgrammingOwner::Zoom.key(),
+    ]
 }
 
 impl AttributeTable {
@@ -102,6 +119,21 @@ impl AttributeTable {
     /// This is where a name is hashed. Call it while loading, patching, or importing — never while
     /// rendering.
     pub fn intern(&mut self, key: &AttributeKey) -> AttributeId {
+        let id = self.intern_named(key);
+        for canonical in shared_canonical_keys() {
+            if canonical == *key
+                && !self
+                    .shared
+                    .iter()
+                    .any(|(shared, _)| std::sync::Arc::ptr_eq(&shared.0, &canonical.0))
+            {
+                self.shared.push((canonical, id));
+            }
+        }
+        id
+    }
+
+    fn intern_named(&mut self, key: &AttributeKey) -> AttributeId {
         if let Some(id) = self.ids.get(key) {
             return *id;
         }
@@ -118,10 +150,26 @@ impl AttributeTable {
         id
     }
 
+    /// Number the complete value that a semantic component edits. This is deliberately explicit:
+    /// legacy scalar/native attributes retain their own identities until the programming cutover.
+    pub fn intern_component_owner(
+        &mut self,
+        component: crate::programming::ProgrammingComponent,
+    ) -> AttributeId {
+        self.intern(component.owner().key_ref())
+    }
+
     /// The number this name already has, or nothing if the show has never named it. Unlike
     /// [`Self::intern`] this leaves the table alone, so it is safe to ask about a name that
     /// arrived from outside.
     pub fn id(&self, key: &AttributeKey) -> Option<AttributeId> {
+        if let Some((_, id)) = self
+            .shared
+            .iter()
+            .find(|(shared, _)| std::sync::Arc::ptr_eq(&shared.0, &key.0))
+        {
+            return Some(*id);
+        }
         self.ids.get(key).copied()
     }
 
@@ -159,6 +207,26 @@ mod tests {
 
     fn key(name: &str) -> AttributeKey {
         AttributeKey(name.into())
+    }
+
+    /// TL-639 round 4: the shared canonical names answer by identity with the number their
+    /// name hashes to; an equal name in another allocation still answers by hashing.
+    #[test]
+    fn shared_canonical_names_answer_with_the_number_of_their_name() {
+        use crate::programming::ProgrammingOwner;
+        let mut table = AttributeTable::with_built_ins();
+        table.intern(&key("position"));
+        for name in [
+            AttributeKey::intensity(),
+            AttributeKey::color(),
+            ProgrammingOwner::Position.key(),
+        ] {
+            let copy = key(&name.0);
+            assert!(!std::sync::Arc::ptr_eq(&copy.0, &name.0));
+            assert_eq!(table.id(&name), table.id(&copy));
+            assert!(table.id(&name).is_some());
+        }
+        assert_eq!(AttributeTable::new().id(AttributeKey::color_ref()), None);
     }
 
     #[test]

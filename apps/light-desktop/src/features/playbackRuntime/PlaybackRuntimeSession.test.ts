@@ -3,7 +3,7 @@ import type {
 	PlaybackIdentity,
 	PlaybackRuntimeEventMessage,
 } from "./contracts";
-import { playbackIdentity } from "./contracts";
+import { groupIdentity, playbackIdentity } from "./contracts";
 import { PlaybackRuntimeSession } from "./session";
 import { PlaybackRuntimeStore } from "./store";
 import {
@@ -101,6 +101,52 @@ describe("PlaybackRuntimeSession", () => {
 		releaseTwo();
 		await settle();
 		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
+	});
+
+	it("installs an absent Group as resolved and does not re-request it", async () => {
+		vi.useFakeTimers();
+		try {
+			const harness = createHarness();
+			const stale = groupIdentity("from-previous-show");
+			harness.loadSnapshot.mockImplementation(async (identities) =>
+				playbackSnapshot(identities, 10, [
+					{
+						scope: { show_id: SHOW_ID, show_revision: 4 },
+						requested: stale,
+						playback_number: null,
+						target: "missing",
+					},
+				]),
+			);
+			harness.session.activate(stale);
+			await settle();
+			await vi.advanceTimersByTimeAsync(5_000);
+
+			expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+			expect(harness.store.getSnapshot().status).toBe("ready");
+			expect(harness.onError).not.toHaveBeenCalledWith(expect.any(Error));
+			expect(
+				harness.store.getSnapshot().projections.get("group:from-previous-show"),
+			).toEqual([expect.objectContaining({ target: "missing" })]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("keeps retrying a failed snapshot as the negative control", async () => {
+		vi.useFakeTimers();
+		try {
+			const harness = createHarness();
+			harness.loadSnapshot.mockRejectedValue(new Error("Group not found"));
+			harness.session.activate(groupIdentity("from-previous-show"));
+			await settle();
+			await vi.advanceTimersByTimeAsync(2_000);
+
+			expect(harness.loadSnapshot.mock.calls.length).toBeGreaterThan(1);
+			expect(harness.store.getSnapshot().status).toBe("error");
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("hydrates over REST when WebSocket transport is unavailable", async () => {

@@ -6,31 +6,13 @@
 
 use super::*;
 
-/// How far a 3D Point's stored offset reaches along one axis, in metres.
-///
-/// Both halves of the round trip read this: what places a point writes the offset scaled to this
-/// range, and what reads a point back scales it out again. A tracking system that wrote against a
-/// different number would put the point somewhere other than where it said.
-pub(super) const POINT_AXIS_METRES: f32 = 100.0;
-
-/// A fixture's placement once any 3D Point it is slaved to has been applied, in metres.
-pub(super) fn world_mount(
-    fixture: &light_fixture::PatchedFixture,
-    points: &HashMap<light_core::FixtureId, PointTransform>,
-) -> light_core::Mount {
-    placed(
-        [
-            fixture.location.x as f32 / 1000.0,
-            fixture.location.y as f32 / 1000.0,
-            fixture.location.z as f32 / 1000.0,
-        ],
-        [fixture.rotation.x, fixture.rotation.y, fixture.rotation.z],
-        fixture.position_master,
-        points,
-    )
-}
+mod semantic;
+pub(super) use semantic::{
+    aim_target_intent, apply_position_mutations, apply_semantic_aim, resolve_aim_preset,
+};
 
 /// Where a rigged placement actually ends up, given the points in the show.
+#[cfg(test)]
 fn placed(
     position: [f32; 3],
     rotation: [f32; 3],
@@ -48,133 +30,33 @@ fn placed(
 
 /// One 3D Point's live contribution, read from the resolved values.
 #[derive(Clone, Copy, Debug, Default)]
-pub(super) struct PointTransform {
+#[cfg(test)]
+struct PointTransform {
     pub origin: [f32; 3],
     pub offset: [f32; 3],
     pub rotation_degrees: [f32; 3],
 }
 
+#[cfg(test)]
 impl PointTransform {
     /// Turn a slave about the point's own origin, then move it.
     ///
-    /// The maths is [`viz_project::viz_scene::slaved_to_point`], the one implementation the renderer draws
-    /// with, so the beam is aimed at the object an operator can see rather than at a second
-    /// opinion of where it is. The desk keeps `x` across, `y` upstage and `z` up while the
-    /// renderer keeps `x` across, `y` up and `z` towards the audience, so the placement crosses
-    /// into renderer axes by `(x, z, -y)`, its rotation by `(x, z, y)`, and the answer comes back
-    /// the same way.
+    /// Compose wholly in desk Z-up coordinates. No renderer is needed to resolve a mount.
     fn carry(&self, position: [f32; 3], rotation: [f32; 3]) -> light_core::Mount {
-        let pose = viz_project::viz_scene::PointPose {
-            fixture_id: uuid::Uuid::nil(),
-            origin_metres: to_renderer(self.origin),
-            offset_metres: to_renderer(self.offset),
-            rotation_degrees: rotation_to_renderer(self.rotation_degrees),
-        };
-        let (placed, turned) = viz_project::viz_scene::slaved_to_point(
-            to_renderer(position).into(),
-            rotation_to_renderer(rotation).into(),
-            &pose,
-        );
+        use light_core::spatial::RigidTransform as Transform;
+        let turn = Transform::euler_xyz(self.rotation_degrees.map(f64::from))
+            .unwrap_or(Transform::IDENTITY);
+        let local = std::array::from_fn(|i| f64::from(position[i] - self.origin[i]));
+        let translated = turn.direction(local);
+        let mounted = turn
+            .compose(Transform::euler_xyz(rotation.map(f64::from)).unwrap_or(Transform::IDENTITY));
         light_core::Mount {
-            position: from_renderer(placed.to_array()),
-            rotation_degrees: rotation_from_renderer(turned.to_array()),
+            position: std::array::from_fn(|i| {
+                self.origin[i] + self.offset[i] + translated[i] as f32
+            }),
+            rotation_degrees: mounted.euler_xyz_degrees().map(|v| v as f32),
         }
     }
-}
-
-/// Desk metres to renderer metres: across stays across, up becomes `y`, upstage becomes `-z`.
-fn to_renderer([x, y, z]: [f32; 3]) -> [f32; 3] {
-    [x, z, -y]
-}
-
-fn from_renderer([x, y, z]: [f32; 3]) -> [f32; 3] {
-    [x, -z, y]
-}
-
-/// Desk rotation to renderer rotation, the Stage's `(rx, rz, ry)` mapping.
-fn rotation_to_renderer([x, y, z]: [f32; 3]) -> [f32; 3] {
-    [x, z, y]
-}
-
-fn rotation_from_renderer([x, y, z]: [f32; 3]) -> [f32; 3] {
-    [x, z, y]
-}
-
-/// One 3D Point's live pose as the desk reports it to a Stage, in desk axes and metres.
-///
-/// A point may carry no DMX, so a renderer cannot always read it out of the universes the way it
-/// reads a lantern; the desk states the pose instead, and the renderer moves everything slaved to
-/// the point. What is reported is the resolved value, without the quantisation a DMX mode adds.
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
-pub(super) struct PointPoseReport {
-    pub fixture_id: uuid::Uuid,
-    pub offset_metres: [f32; 3],
-    pub rotation_degrees: [f32; 3],
-}
-
-/// Every 3D Point's live pose, in fixture-number order so two reads of the same state agree.
-pub(super) fn point_poses(
-    snapshot: &light_engine::EngineSnapshot,
-    resolved: &light_engine::ResolvedValues,
-) -> Vec<PointPoseReport> {
-    let mut poses: Vec<_> = point_transforms(snapshot, resolved)
-        .into_iter()
-        .map(|(fixture_id, transform)| PointPoseReport {
-            fixture_id: fixture_id.0,
-            offset_metres: transform.offset,
-            rotation_degrees: transform.rotation_degrees,
-        })
-        .collect();
-    poses.sort_by_key(|pose| pose.fixture_id);
-    poses
-}
-
-/// The live poses of every 3D Point in the show.
-pub(super) fn point_transforms(
-    snapshot: &light_engine::EngineSnapshot,
-    resolved: &light_engine::ResolvedValues,
-) -> HashMap<light_core::FixtureId, PointTransform> {
-    let mut points = HashMap::new();
-    for fixture in snapshot.fixtures.iter() {
-        if !is_point(fixture) {
-            continue;
-        }
-        let axis = |name: &str, low: f32, high: f32| {
-            resolved
-                .get(&(fixture.fixture_id, light_core::AttributeKey(name.into())))
-                .and_then(light_core::AttributeValue::normalized)
-                .map_or(0.0, |value| low + value * (high - low))
-        };
-        points.insert(
-            fixture.fixture_id,
-            PointTransform {
-                origin: [
-                    fixture.location.x as f32 / 1000.0,
-                    fixture.location.y as f32 / 1000.0,
-                    fixture.location.z as f32 / 1000.0,
-                ],
-                offset: [
-                    axis("point.position.x", -POINT_AXIS_METRES, POINT_AXIS_METRES),
-                    axis("point.position.y", -POINT_AXIS_METRES, POINT_AXIS_METRES),
-                    axis("point.position.z", -POINT_AXIS_METRES, POINT_AXIS_METRES),
-                ],
-                rotation_degrees: [
-                    axis("point.rotation.x", -180.0, 180.0),
-                    axis("point.rotation.y", -180.0, 180.0),
-                    axis("point.rotation.z", -180.0, 180.0),
-                ],
-            },
-        );
-    }
-    points
-}
-
-fn is_point(fixture: &light_fixture::PatchedFixture) -> bool {
-    fixture.definition.heads.iter().any(|head| {
-        head.parameters
-            .iter()
-            .any(|parameter| parameter.attribute.0.as_ref() == "point.position.x")
-    })
 }
 
 /// Normalize `degrees` onto the fixture's own pan or tilt range.
@@ -220,15 +102,66 @@ pub(super) fn aim_selection(
     )>,
     String,
 > {
-    let snapshot = state.output.snapshot();
-    let resolved = state.output.resolved_values();
-    let points = point_transforms(&snapshot, &resolved);
+    let source = state.output.engine().observe_source_frame(&[]);
+    let snapshot = source.snapshot();
+    let mount = |fixture: light_core::FixtureId| {
+        let transform = source.mounts().mount(fixture.0)?.world_from_fixture?;
+        Some(light_core::Mount {
+            position: transform.point([0.0; 3]).map(|value| value as f32),
+            rotation_degrees: transform.euler_xyz_degrees().map(|value| value as f32),
+        })
+    };
     let target = snapshot
         .fixtures
         .iter()
         .find(|fixture| fixture.fixture_number == Some(target))
         .ok_or_else(|| format!("no fixture numbered {target}"))?;
-    let aim_at = world_mount(target, &points).position;
+    if state.output.supported_programming_contract()
+        >= light_core::programming::PROGRAMMING_CONTRACT_VERSION
+    {
+        let Some(intent) =
+            semantic::target_intent_from_frame(&source, target.fixture_number.unwrap())?
+        else {
+            return Ok(Vec::new());
+        };
+        let value = light_core::AttributeValue::Position(Arc::new(intent));
+        return Ok(fixtures
+            .iter()
+            .filter(|id| {
+                snapshot.fixtures.iter().any(|fixture| {
+                    fixture.fixture_id == **id
+                        || fixture
+                            .logical_heads
+                            .iter()
+                            .any(|head| head.fixture_id == **id)
+                })
+            })
+            .map(|id| {
+                (
+                    *id,
+                    light_core::programming::ProgrammingOwner::Position.key(),
+                    value.clone(),
+                )
+            })
+            .collect());
+    }
+    // The explicit target is validated first: an empty selection makes a valid Aim a quiet
+    // no-op, but never turns a missing target into a success (NOTICE-002).
+    if fixtures.is_empty() {
+        return Ok(Vec::new());
+    }
+    let aim_at = source
+        .points()
+        .iter()
+        .find(|point| point.fixture_id == target.fixture_id)
+        .map(|point| {
+            std::array::from_fn(|axis| point.origin_metres[axis] + point.offset_metres[axis])
+        })
+        .or_else(|| mount(target.fixture_id).map(|mount| mount.position));
+    let Some(aim_at) = aim_at else {
+        // Unknown placement is passive; do not invent a stage-origin target.
+        return Ok(Vec::new());
+    };
     let mut assignments = Vec::new();
     for fixture_id in fixtures {
         let Some(fixture) = snapshot
@@ -238,7 +171,9 @@ pub(super) fn aim_selection(
         else {
             continue;
         };
-        let mount = world_mount(fixture, &points);
+        let Some(mount) = mount(fixture.fixture_id) else {
+            continue;
+        };
         let Some((pan, tilt)) = light_core::pan_tilt_towards(mount, aim_at) else {
             continue;
         };
@@ -247,9 +182,6 @@ pub(super) fn aim_selection(
                 assignments.push((*fixture_id, key, value));
             }
         }
-    }
-    if assignments.is_empty() {
-        return Err("nothing in the selection can be aimed".into());
     }
     Ok(assignments)
 }
@@ -316,12 +248,15 @@ mod tests {
         let mount = transform.carry([4.0, 1.0, 5.0], [5.0, 10.0, 15.0]);
         let renderer = viz_project::viz_scene::slaved_to_point(
             viz_project::viz_scene::glam::Vec3::new(4.0, 5.0, -1.0),
-            viz_project::viz_scene::glam::Vec3::new(5.0, 15.0, 10.0),
+            viz_project::viz_scene::desk_rotation_to_world([5.0, 10.0, 15.0]),
             &viz_project::viz_scene::PointPose {
                 fixture_id: uuid::Uuid::nil(),
                 origin_metres: [1.0, 3.0, -2.0],
                 offset_metres: [0.5, 0.75, 0.25],
-                rotation_degrees: [20.0, -50.0, 35.0],
+                rotation_degrees: viz_project::viz_scene::desk_rotation_to_world([
+                    20.0, 35.0, -50.0,
+                ])
+                .to_array(),
             },
         );
         let drawn = [renderer.0.x, -renderer.0.z, renderer.0.y];
@@ -332,10 +267,17 @@ mod tests {
                 mount.position
             );
         }
-        assert_eq!(
-            mount.rotation_degrees,
-            [renderer.1.x, renderer.1.z, renderer.1.y]
+        let expected = viz_project::viz_scene::euler_degrees(renderer.1);
+        let actual = viz_project::viz_scene::euler_degrees(
+            viz_project::viz_scene::desk_rotation_to_world(mount.rotation_degrees),
         );
+        for axis in [
+            viz_project::viz_scene::glam::Vec3::X,
+            viz_project::viz_scene::glam::Vec3::Y,
+            viz_project::viz_scene::glam::Vec3::Z,
+        ] {
+            assert!((actual * axis - expected * axis).length() < 1e-4);
+        }
     }
 
     #[test]

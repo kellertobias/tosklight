@@ -192,6 +192,8 @@ pub enum UpdateAddress {
         fixture_id: FixtureId,
         attribute: AttributeKey,
         instance_link: Option<Uuid>,
+        lane_id: Option<Uuid>,
+        component: Option<light_core::programming::ProgrammingComponent>,
     },
     GroupMembership {
         fixture_id: FixtureId,

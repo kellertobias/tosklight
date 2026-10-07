@@ -75,7 +75,7 @@ pub(super) async fn advance_test_clock(
     let snapshot = state.output.snapshot();
     let packets = state
         .output
-        .send_network_routes(&snapshot.routes, &frames, &rendered.patched_slots)
+        .send_network_routes(&snapshot.routes, &frames, &rendered.rendered.patched_slots)
         .await
         .map_err(ApiError::io)?;
     let send_errors = state.output.take_send_errors();
@@ -84,7 +84,7 @@ pub(super) async fn advance_test_clock(
     send_osc_feedback(&state, true);
     Ok(Json(serde_json::json!({
         "now": now,
-        "revision": rendered.revision,
+        "revision": rendered.rendered.revision,
         "packets_sent": packets,
         "universes": frames.into_iter().map(|(universe, slots)| serde_json::json!({"universe":universe,"slots":slots.to_vec()})).collect::<Vec<_>>(),
     })))

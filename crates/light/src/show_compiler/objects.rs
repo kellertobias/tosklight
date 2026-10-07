@@ -24,6 +24,18 @@ pub(super) fn decode<T: DeserializeOwned>(
         .collect()
 }
 
+pub(super) fn decode_cue_lists(
+    candidate: PortableShowCandidate<'_>,
+) -> Result<Vec<CueList>, ActionError> {
+    let lists: Vec<CueList> = decode(candidate, "cue_list")?;
+    for list in &lists {
+        list.validate_programming().map_err(|error| {
+            invalid_candidate(format!("invalid cue list {}: {error}", list.id.0))
+        })?;
+    }
+    Ok(lists)
+}
+
 pub(super) fn decode_groups(
     candidate: PortableShowCandidate<'_>,
 ) -> Result<Vec<GroupDefinition>, ActionError> {
@@ -34,6 +46,13 @@ pub(super) fn decode_groups(
                 .map_err(|error| {
                     invalid_candidate(format!("invalid group {}: {error}", object.key().id()))
                 })?;
+            light_core::programming::validate_programming_entries(
+                light_core::programming::ProgrammingValueScope::LiveGroup,
+                &group.programming,
+            )
+            .map_err(|error| {
+                invalid_candidate(format!("invalid group {}: {error}", object.key().id()))
+            })?;
             group.id = object.key().id().to_owned();
             Ok(group)
         })
@@ -43,7 +62,7 @@ pub(super) fn decode_groups(
 pub(super) fn decode_dynamics(
     candidate: PortableShowCandidate<'_>,
     groups: &[GroupDefinition],
-) -> Result<Vec<light_dynamics::DynamicDefinition>, ActionError> {
+) -> Result<(Vec<light_dynamics::DynamicDefinition>, u16), ActionError> {
     // Dynamic pool objects are operator-repairable content. One malformed or semantically invalid
     // definition must remain visible through the object API without preventing the rest of the
     // active show from compiling. Runtime installation therefore receives only valid definitions.
@@ -62,7 +81,13 @@ pub(super) fn decode_dynamics(
         .objects_of_kind("preset")
         .map(|object| {
             serde_json::from_value::<Preset>(object.body().clone())
-                .map(|preset| (object.key().id().to_owned(), preset))
+                .map_err(|error| error.to_string())
+                .and_then(|preset| {
+                    preset
+                        .validate_programming()
+                        .map_err(|error| error.to_string())?;
+                    Ok((object.key().id().to_owned(), preset))
+                })
                 .map_err(|error| {
                     invalid_candidate(format!("invalid preset {}: {error}", object.key().id()))
                 })
@@ -73,18 +98,34 @@ pub(super) fn decode_dynamics(
         .cloned()
         .map(|group| (group.id.clone(), group))
         .collect::<HashMap<_, _>>();
+    let native = super::dynamic_presets::NativeTemplateValidator::new(candidate);
     for dynamic in &mut dynamics {
-        hydrate_dynamic_preset_fallbacks(dynamic, &presets, &groups);
+        hydrate_dynamic_preset_fallbacks(dynamic, &presets, &groups, &|value| native.allows(value));
     }
-    Ok(dynamics)
+    let required = presets
+        .values()
+        .map(Preset::required_programming_contract)
+        .chain(
+            dynamics
+                .iter()
+                .map(light_dynamics::DynamicDefinition::required_programming_contract),
+        )
+        .max()
+        .unwrap_or(0);
+    Ok((dynamics, required))
 }
 
 pub(super) fn hydrate_dynamic_preset_fallbacks(
     dynamic: &mut light_dynamics::DynamicDefinition,
     presets: &HashMap<String, Preset>,
     groups: &HashMap<String, GroupDefinition>,
+    verify_native: &dyn Fn(&light_core::AttributeValue) -> bool,
 ) {
-    for lane in &mut dynamic.lanes {
+    super::dynamic_presets::retain_templates(dynamic, presets, verify_native);
+    for common in &mut dynamic.lanes {
+        let Some(lane) = common.legacy_mut() else {
+            continue;
+        };
         for source in lane
             .keyframes
             .points
@@ -97,8 +138,10 @@ pub(super) fn hydrate_dynamic_preset_fallbacks(
         }
     }
     for group in &mut dynamic.random_groups {
-        hydrate_preset_source(&mut group.low, presets, groups);
-        hydrate_preset_source(&mut group.high, presets, groups);
+        if let light_dynamics::DynamicRandomRange::LegacyScalar { low, high } = &mut group.range {
+            hydrate_preset_source(low, presets, groups);
+            hydrate_preset_source(high, presets, groups);
+        }
     }
 }
 
@@ -157,32 +200,7 @@ pub(super) fn decode_dynamic_stage_positions(
     let layouts = decode::<crate::StageLayout>(candidate, "stage_layout")?;
     let mut positions = HashMap::new();
     for layout in layouts {
-        for (id, position) in layout.positions {
-            let Ok(id) = uuid::Uuid::parse_str(&id) else {
-                continue;
-            };
-            positions.insert(
-                FixtureId(id),
-                light_dynamics::SpatialPosition {
-                    x: position.x as f32,
-                    y: 0.0,
-                    z: position.y as f32,
-                },
-            );
-        }
-        for (id, position) in layout.positions_3d {
-            let Ok(id) = uuid::Uuid::parse_str(&id) else {
-                continue;
-            };
-            positions.insert(
-                FixtureId(id),
-                light_dynamics::SpatialPosition {
-                    x: position.x as f32,
-                    y: position.y as f32,
-                    z: position.z as f32,
-                },
-            );
-        }
+        positions.extend(layout.fixture_spatial_positions());
     }
     Ok(positions)
 }

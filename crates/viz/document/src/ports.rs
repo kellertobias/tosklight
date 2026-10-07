@@ -7,9 +7,9 @@
 //! the transaction, and installs nothing.
 //!
 //! Compilation still happens. `prepare_runtime` receives the engine snapshot the application
-//! layer built from the candidate document and drops it, so a patch that could not be compiled is
-//! still rejected here exactly as it is on a desk — the planning application simply has no
-//! runtime to install it into.
+//! layer built from the candidate document and validates its physical patch before discarding it.
+//! Planning keeps its established permission to retain overlapping DMX addresses; malformed
+//! fixture identities, calibration or out-of-universe addresses are still rejected before commit.
 
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowPorts, ActiveShowUnitOfWork,
@@ -203,12 +203,13 @@ impl ActiveShowPorts for PlanningPorts {
             .map_err(|error| store_error(error, None))
     }
 
-    /// Compiling proves the candidate show is renderable; the result is then discarded.
+    /// Validate physical records before commit, retaining planning's intentional overlap policy.
     fn prepare_runtime(
         &self,
-        _snapshot: EngineSnapshot,
+        snapshot: EngineSnapshot,
     ) -> Result<Self::PreparedRuntime, ActionError> {
-        Ok(())
+        light_fixture::validate_patch_for_planning(&snapshot.fixtures)
+            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))
     }
 
     fn install_runtime(&self, _context: &ActionContext, _prepared: Self::PreparedRuntime) {}

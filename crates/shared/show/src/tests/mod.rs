@@ -1,5 +1,7 @@
 mod cue_thumbnail;
 mod desk_configuration;
+mod programming_contract;
+mod semantic_intent_store;
 mod show_library;
 mod show_store;
 

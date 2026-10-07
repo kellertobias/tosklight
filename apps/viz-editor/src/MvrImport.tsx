@@ -10,19 +10,17 @@ import {
 /**
  * What an MVR archive brings, and what to do about the fixtures that need a decision.
  *
- * An archive written by another application does not always land cleanly: a GDTF this library has
- * no profile for cannot be patched, and an address already in use cannot simply be taken. The desk
+ * An archive written by another application does not always land cleanly: an unresolved GDTF
+ * cannot be patched, and an address already in use cannot simply be taken. The desk
  * asks the operator about exactly those two cases before it writes anything, and so does this. A
  * fixture nothing is wrong with needs no decision and gets none.
  */
 export function MvrImport({
-	path,
 	preview,
 	onImported,
 	onCancel,
 	onError,
 }: {
-	path: string;
 	preview: MvrPreview;
 	onImported: (summary: string) => void;
 	onCancel: () => void;
@@ -32,6 +30,10 @@ export function MvrImport({
 		() => defaultResolutions(preview),
 	);
 	const [busy, setBusy] = useState(false);
+	const [completed, setCompleted] = useState<{
+		summary: string;
+		warnings: string[];
+	} | null>(null);
 	const decide = (fixture: MvrPreviewFixture, resolution: MvrResolution) =>
 		setResolutions((current) => ({ ...current, [fixture.uuid]: resolution }));
 
@@ -40,16 +42,45 @@ export function MvrImport({
 	async function apply() {
 		setBusy(true);
 		try {
-			const report = await documentSession.importMvr(path, resolutions);
+			const report = await documentSession.importMvr(preview.token, resolutions);
 			const unresolved = report.unresolvedFixtures
 				? `, ${report.unresolvedFixtures} unresolved`
 				: "";
-			onImported(`Imported ${report.importedFixtures} fixtures${unresolved}`);
+			const summary = `Imported ${report.importedFixtures} fixtures${unresolved}`;
+			if (report.warnings.length) {
+				setCompleted({ summary, warnings: report.warnings });
+			} else {
+				onImported(summary);
+			}
 		} catch (reason) {
 			onError(reason);
 		} finally {
 			setBusy(false);
 		}
+	}
+
+	async function cancel() {
+		setBusy(true);
+		try {
+			await documentSession.cancelMvrPreview(preview.token);
+			onCancel();
+		} catch (reason) {
+			onError(reason);
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	if (completed) {
+		return (
+			<section className="viz-editor-mvr" aria-label="MVR import result">
+				<h2>{completed.summary}</h2>
+				<ImportWarnings warnings={completed.warnings} />
+				<Button variant="primary" onClick={() => onImported(completed.summary)}>
+					Done
+				</Button>
+			</section>
+		);
 	}
 
 	return (
@@ -71,6 +102,7 @@ export function MvrImport({
 					))}
 				</ul>
 			)}
+			<ImportWarnings warnings={preview.warnings} />
 			{undecided.length === 0 ? (
 				<p className="viz-editor-mvr-clean">
 					Every fixture patches as it stands.
@@ -91,7 +123,7 @@ export function MvrImport({
 				<Button variant="primary" disabled={busy} onClick={() => void apply()}>
 					{busy ? "Importing…" : "Import"}
 				</Button>
-				<Button disabled={busy} onClick={onCancel}>
+				<Button disabled={busy} onClick={() => void cancel()}>
 					Cancel
 				</Button>
 			</div>
@@ -107,8 +139,8 @@ function needsDecision(fixture: MvrPreviewFixture) {
 /**
  * The decision each troubled fixture starts with.
  *
- * An unmatched GDTF is imported unpatched, so it stays in the rig and can be given a profile here
- * later; nothing is dropped for being unrecognised. A conflicting address is also imported
+ * An unmatched GDTF stays as an unresolved import record with its retained source evidence;
+ * it cannot become a programmable fixture until its profile is resolved. A conflicting address is also imported
  * unpatched rather than taking an address a patched fixture already holds.
  */
 function defaultResolutions(preview: MvrPreview) {
@@ -161,8 +193,10 @@ function FixtureDecision({
 						})
 					}
 				>
-					<option value="import_unpatched">Import unpatched</option>
-					<option value="address">Choose address</option>
+					<option value="import_unpatched">
+						{fixture.matched ? "Import unpatched" : "Keep unresolved"}
+					</option>
+					{fixture.matched && <option value="address">Choose address</option>}
 					<option value="skip">Skip</option>
 					{fixture.conflicted && <option value="replace">Replace</option>}
 				</select>
@@ -206,5 +240,19 @@ function FixtureDecision({
 				</span>
 			)}
 		</li>
+	);
+}
+
+function ImportWarnings({ warnings }: { warnings: string[] }) {
+	if (!warnings.length) return null;
+	return (
+		<section aria-label="Import limitations">
+			<h3>Import limitations</h3>
+			<ul>
+				{warnings.map((warning, index) => (
+					<li key={`${index}:${warning}`}>{warning}</li>
+				))}
+			</ul>
+		</section>
 	);
 }

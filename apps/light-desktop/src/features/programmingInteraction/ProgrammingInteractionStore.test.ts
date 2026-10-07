@@ -52,6 +52,7 @@ function snapshot(
 		cursor: sequence,
 		projection: {
 			deskId: DESK_ID,
+			alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
 			commandLine: command,
 			selection: selected,
 		},
@@ -66,6 +67,34 @@ function readyStore() {
 }
 
 describe("ProgrammingInteractionStore authority", () => {
+	it("keeps authoritative Align Off when an older activation acknowledgement arrives", () => {
+		const store = readyStore();
+		const scope = store.captureScope();
+		const active = { revision: 2, mode: "left" as const, binding: null, fixtureCount: 2 };
+		store.applyChange({ deskId: DESK_ID, alignment: active }, 11);
+		const off = { revision: 3, mode: "off" as const, binding: null, fixtureCount: 0 };
+		store.applyChange({ deskId: DESK_ID, alignment: off }, 12);
+		store.installAlignment(active, scope);
+		expect(store.getSnapshot().alignment).toEqual(off);
+		expect(store.getSnapshot().selection?.revision).toBe(1);
+		store.reset(SHOW_ID, DESK_ID, "reconnected");
+		expect(store.installAlignment(active, scope)).toBe(false);
+		const repair = snapshot(20);
+		repair.projection.alignment = off;
+		store.installSnapshot(repair);
+		expect(store.getSnapshot().alignment).toEqual(off);
+	});
+
+	it("rejects a conflicting Align component before installing its newer peers", () => {
+		const store = readyStore();
+		const before = store.getSnapshot();
+		expect(() => store.applyChange({
+			deskId: DESK_ID,
+			commandLine: commandLine(2, "FIXTURE 9"),
+			alignment: { revision: 0, mode: "left", binding: null, fixtureCount: 2 },
+		}, 11)).toThrow(ProgrammingProtocolError);
+		expect(store.getSnapshot()).toBe(before);
+	});
 	it("isolates state by show and desk", () => {
 		const store = readyStore();
 		store.reset("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", DESK_ID);

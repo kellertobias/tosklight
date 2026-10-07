@@ -12,7 +12,10 @@
 //! Time is passed in rather than read. The caller owns a clock; this owns what is true at a moment
 //! it is told about, which is what makes staleness testable without waiting for it.
 
-use crate::{PsnFrame, PsnFrameAssembler, PsnPacket, PsnTrackerData, PsnVector3};
+use crate::{
+    PSN_MAX_PACKET_BYTES, PsnFrame, PsnFrameAssembler, PsnFrameRejection, PsnPacket,
+    PsnTrackerData, PsnVector3,
+};
 use std::collections::BTreeMap;
 
 /// What one datagram turned out to be worth.
@@ -26,6 +29,34 @@ pub enum PsnObservation {
     Info,
     /// The datagram was not usable. It is counted and dropped.
     Ignored(crate::PsnError),
+    /// Readable data which cannot establish a new coherent sample. Hold previous positions.
+    Rejected(PsnFrameRejection),
+}
+
+/// Local identity within one sender resource. A caller combines this with its source/show
+/// identity. Sender timestamps never stand in for the receiver's monotonic arrival clock.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PsnSampleId {
+    pub source_epoch: u64,
+    pub sequence: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PsnAcceptedSample {
+    pub id: PsnSampleId,
+    pub frame_id: u8,
+    pub sender_timestamp_micros: u64,
+    /// Receiver time when all accepted parts were available.
+    pub accepted_at_millis: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PsnIngressDiagnostics {
+    pub duplicate_datagrams: u64,
+    pub rejected_datagrams: u64,
+    pub incomplete_frames: u64,
+    pub ambiguous_datagrams: u64,
+    pub invalid_positions: u64,
 }
 
 /// One tracker, as this listener currently understands it.
@@ -34,10 +65,12 @@ pub struct PsnTracked {
     pub id: u16,
     /// What the sender calls it, once an info packet has said so.
     pub name: Option<String>,
-    /// The most recent data for this tracker. Fields the sender omits stay `None`.
+    /// Latest metadata, with position retained from the last finite positional sample.
+    /// Its authoritative age and identity are separate from optional metadata updates.
     pub data: PsnTrackerData,
-    /// The listener's own clock reading when this tracker was last reported, in milliseconds.
+    /// Receiver arrival of the last finite position (metadata cannot refresh position age).
     pub updated_at_millis: u64,
+    pub position_sample: Option<PsnAcceptedSample>,
 }
 
 impl PsnTracked {
@@ -81,6 +114,11 @@ pub struct PsnTracking {
     last_info_at_millis: Option<u64>,
     frames: u64,
     ignored: u64,
+    pending_arrivals: BTreeMap<u16, u64>,
+    source_epoch: u64,
+    sample_sequence: u64,
+    accepted_sample: Option<PsnAcceptedSample>,
+    diagnostics: PsnIngressDiagnostics,
 }
 
 impl PsnTracking {
@@ -91,6 +129,9 @@ impl PsnTracking {
 
     /// Take one datagram, as of a moment on the caller's clock.
     pub fn observe(&mut self, datagram: &[u8], now_millis: u64) -> PsnObservation {
+        if datagram.len() > PSN_MAX_PACKET_BYTES {
+            return self.reject(PsnFrameRejection::Oversized);
+        }
         match crate::decode(datagram) {
             Err(error) => {
                 self.ignored = self.ignored.saturating_add(1);
@@ -113,30 +154,131 @@ impl PsnTracking {
                 PsnObservation::Info
             }
             Ok(PsnPacket::Data(data)) => {
+                let update = self.assembler.push_detailed(&data);
+                if update.discarded.is_some() {
+                    self.diagnostics.incomplete_frames =
+                        self.diagnostics.incomplete_frames.saturating_add(1);
+                }
+                if update.started_new_frame {
+                    self.pending_arrivals.clear();
+                }
+                if let Some(rejection) = update.rejection {
+                    return self.reject(rejection);
+                }
+                for tracker in &data.trackers {
+                    self.pending_arrivals.insert(tracker.id, now_millis);
+                }
+                let Some(frame) = update.completed else {
+                    return PsnObservation::PartialFrame;
+                };
                 self.last_packet_at_millis = Some(now_millis);
-                self.assembler
-                    .push(data)
-                    .map_or(PsnObservation::PartialFrame, |frame| {
-                        self.record(&frame, now_millis);
-                        PsnObservation::Frame(frame)
-                    })
+                self.record(&frame, now_millis);
+                self.pending_arrivals.clear();
+                PsnObservation::Frame(frame)
             }
         }
     }
 
     fn record(&mut self, frame: &PsnFrame, now_millis: u64) {
         self.frames = self.frames.saturating_add(1);
+        self.sample_sequence = self.sample_sequence.wrapping_add(1);
+        if self.sample_sequence == 0 {
+            self.source_epoch = self.source_epoch.wrapping_add(1);
+        }
+        let sample = PsnAcceptedSample {
+            id: PsnSampleId {
+                source_epoch: self.source_epoch,
+                sequence: self.sample_sequence,
+            },
+            frame_id: frame.frame_id,
+            sender_timestamp_micros: frame.timestamp_micros,
+            accepted_at_millis: now_millis,
+        };
+        self.accepted_sample = Some(sample);
         for tracker in &frame.trackers {
+            let valid_position = tracker.position.filter(|position| {
+                position.x.is_finite() && position.y.is_finite() && position.z.is_finite()
+            });
+            if tracker.position.is_some() && valid_position.is_none() {
+                self.diagnostics.invalid_positions =
+                    self.diagnostics.invalid_positions.saturating_add(1);
+            }
+            let previous = self.tracked.get(&tracker.id);
+            let mut data = *tracker;
+            data.position = valid_position.or_else(|| previous.and_then(PsnTracked::position));
+            let (updated_at_millis, position_sample) = if valid_position.is_some() {
+                (
+                    self.pending_arrivals
+                        .get(&tracker.id)
+                        .copied()
+                        .unwrap_or(now_millis),
+                    Some(sample),
+                )
+            } else {
+                previous.map_or((now_millis, None), |previous| {
+                    (previous.updated_at_millis, previous.position_sample)
+                })
+            };
             self.tracked.insert(
                 tracker.id,
                 PsnTracked {
                     id: tracker.id,
                     name: self.names.get(&tracker.id).cloned(),
-                    data: *tracker,
-                    updated_at_millis: now_millis,
+                    data,
+                    updated_at_millis,
+                    position_sample,
                 },
             );
         }
+    }
+
+    fn reject(&mut self, rejection: PsnFrameRejection) -> PsnObservation {
+        self.ignored = self.ignored.saturating_add(1);
+        self.diagnostics.rejected_datagrams = self.diagnostics.rejected_datagrams.saturating_add(1);
+        if rejection == PsnFrameRejection::Duplicate {
+            self.diagnostics.duplicate_datagrams =
+                self.diagnostics.duplicate_datagrams.saturating_add(1);
+        }
+        if matches!(
+            rejection,
+            PsnFrameRejection::Ambiguous | PsnFrameRejection::InconsistentPacketCount
+        ) {
+            self.diagnostics.ambiguous_datagrams =
+                self.diagnostics.ambiguous_datagrams.saturating_add(1);
+        }
+        PsnObservation::Rejected(rejection)
+    }
+
+    #[must_use]
+    pub const fn accepted_sample(&self) -> Option<PsnAcceptedSample> {
+        self.accepted_sample
+    }
+
+    #[must_use]
+    pub const fn diagnostics(&self) -> PsnIngressDiagnostics {
+        self.diagnostics
+    }
+
+    /// Caller-owned timeout/configuration boundary: incomplete data never becomes a position.
+    pub fn discard_incomplete(&mut self) -> bool {
+        let discarded = self.assembler.flush().is_some();
+        if discarded {
+            self.diagnostics.incomplete_frames =
+                self.diagnostics.incomplete_frames.saturating_add(1);
+        }
+        self.pending_arrivals.clear();
+        discarded
+    }
+
+    /// An explicit receiver decision that a new sender session owns this source. PSN has no
+    /// session identifier, so timestamp regression alone never invokes this automatically.
+    /// Retained poses keep their previous sample identities and ages until new valid data arrives.
+    pub fn restart_source_epoch(&mut self) {
+        self.discard_incomplete();
+        self.assembler.reset_source_epoch();
+        self.source_epoch = self.source_epoch.wrapping_add(1);
+        self.sample_sequence = 0;
+        self.accepted_sample = None;
     }
 
     /// The sender's own name for itself, once an info packet has said.
@@ -188,7 +330,7 @@ impl PsnTracking {
         }
     }
 
-    /// How many whole or closed frames have been recorded.
+    /// How many complete, accepted frames have been recorded.
     #[must_use]
     pub const fn frames(&self) -> u64 {
         self.frames

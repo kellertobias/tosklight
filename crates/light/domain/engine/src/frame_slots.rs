@@ -42,7 +42,12 @@ impl Slot {
 const UNNUMBERED: u32 = u32::MAX;
 
 /// Attributes every profile head can hold regardless of the channels its mode declares.
-const SYNTHESISED_HEAD_ATTRIBUTES: &[&str] = &["intensity", "color"];
+///
+/// TL-639 round 2: the semantic family owners are numbered too. A typed Position, Zoom or Focus
+/// value used to land in the unnumbered overflow of every head that held one, which sent every
+/// channel read of that head (the never-numbered control attribute first) through a name lookup.
+/// Arbitration of a numbered and an unnumbered value is the same; only where it is kept changes.
+const SYNTHESISED_HEAD_ATTRIBUTES: &[&str] = &["intensity", "color", "position", "zoom", "focus"];
 
 /// The two attributes every head is asked for before its channels are resolved.
 ///
@@ -75,6 +80,21 @@ pub(crate) struct SlotTable {
     /// Where each fixture keeps the two attributes projection asks every head for by name.
     /// Answered from the row rather than by comparing names against the fixture's whole slot list.
     common: FxHashMap<FixtureId, CommonSlots>,
+    /// Every level slot (Intensity, Volume) with the patched fixture that owns it and its
+    /// profile default, so the output-parameter stage masters levels without scanning names.
+    level_slots: Vec<LevelSlot>,
+}
+
+/// One level parameter of the patched show, as the output-parameter stage masters it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LevelSlot {
+    pub(crate) slot: Slot,
+    /// Index of the patched fixture that owns the slot.
+    pub(crate) root: u32,
+    /// The parameter's normalized profile default: what the lamp holds when nobody programs it.
+    /// None for a level the fixture's definition does not declare (a synthesised head slot),
+    /// which therefore has nothing to master unless a source writes it.
+    pub(crate) default: Option<f32>,
 }
 
 /// Hands out [`light_core::FrameAddress`]es for one generation's numbering.
@@ -207,6 +227,41 @@ impl Declarations {
     }
 }
 
+/// The normalized profile default of every level parameter a fixture's resolved definition
+/// declares, by the owner that holds it. The abstract virtual-dimmer Intensity of a head without
+/// an Intensity channel is declared there too, defaulting to full.
+fn level_defaults(
+    fixtures: &[PatchedFixture],
+    attributes: &AttributeTable,
+) -> FxHashMap<(FixtureId, AttributeId), f32> {
+    let mut defaults = FxHashMap::default();
+    for fixture in fixtures {
+        for head in &fixture.definition.heads {
+            let owner = if head.shared {
+                fixture.fixture_id
+            } else {
+                fixture
+                    .logical_heads
+                    .iter()
+                    .find(|logical| logical.head_index == head.index)
+                    .map_or(fixture.fixture_id, |logical| logical.fixture_id)
+            };
+            for parameter in head
+                .parameters
+                .iter()
+                .filter(|parameter| parameter.attribute.is_level())
+            {
+                if let Some(id) = attributes.id(&parameter.attribute) {
+                    defaults
+                        .entry((owner, id))
+                        .or_insert(parameter.default.clamp(0.0, 1.0));
+                }
+            }
+        }
+    }
+    defaults
+}
+
 impl SlotTable {
     /// Number every pair the fixtures of this generation can produce.
     pub(crate) fn compile(generation: u64, fixtures: &[PatchedFixture]) -> Self {
@@ -261,10 +316,33 @@ impl SlotTable {
                 )
             })
             .collect();
+        let roots: FxHashMap<FixtureId, u32> = fixtures
+            .iter()
+            .enumerate()
+            .flat_map(|(index, fixture)| {
+                std::iter::once(fixture.fixture_id)
+                    .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
+                    .map(move |owner| (owner, index as u32))
+            })
+            .collect();
+        let defaults = level_defaults(fixtures, &attributes);
+        let level_slots = pairs
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, attribute))| attributes.key(*attribute).is_level())
+            .filter_map(|(slot, (owner, attribute))| {
+                roots.get(owner).map(|root| LevelSlot {
+                    slot: Slot(slot as u32),
+                    root: *root,
+                    default: defaults.get(&(*owner, *attribute)).copied(),
+                })
+            })
+            .collect();
         Self {
             generation,
             attributes,
             common,
+            level_slots,
             rows: owners
                 .iter()
                 .enumerate()
@@ -282,6 +360,11 @@ impl SlotTable {
     /// The slots for the attributes every head is asked for by name.
     pub(crate) fn common(&self, fixture_id: FixtureId) -> CommonSlots {
         self.common.get(&fixture_id).copied().unwrap_or_default()
+    }
+
+    /// Every level slot with its patched fixture and profile default.
+    pub(crate) fn level_slots(&self) -> &[LevelSlot] {
+        &self.level_slots
     }
 
     pub(crate) fn fixture_slots(&self, fixture_id: FixtureId) -> &[Slot] {
@@ -368,6 +451,7 @@ pub(crate) fn legacy_test_fixture(fixture_id: FixtureId, attributes: &[&str]) ->
         note: None,
         position_master: None,
         definition: FixtureDefinition {
+            runtime_color_context: None,
             schema_version: 1,
             id: FixtureId::new(),
             revision: 1,
@@ -408,6 +492,8 @@ pub(crate) fn legacy_test_fixture(fixture_id: FixtureId, attributes: &[&str]) ->
         grand_master_enabled: true,
         invert_pan: false,
         invert_tilt: false,
+        position_calibration: None,
+        color_calibration: None,
         bracket_angle: 0.0,
         shaper_angle: None,
         installed_appearance: Default::default(),

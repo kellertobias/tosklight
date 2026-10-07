@@ -4,10 +4,12 @@ use super::capability_resources::{
     ActiveShowCoordinator, ActiveShowProjection, OutputControlCapability,
     OutputPersistenceResource, PlaybackRenderCapability,
 };
-use super::visualization_frame::VisualizationFrameHub;
+use super::visualization_frame::{
+    FrameDynamicSources, RenderedSemanticFrame, VisualizationFrameHub,
+};
 use super::{
-    ActionTimingResource, ApiError, AppState, OutputControl, PersistedOutputRuntime,
-    playback_service,
+    ActionTimingResource, ApiError, AppState, DynamicSnapshotPublication, OutputControl,
+    PersistedOutputRuntime, playback_service,
 };
 use light_application::{
     PlaybackOperation, PlaybackShowScope, PlaybackUnitOfWork, automatic_playback_events,
@@ -42,16 +44,54 @@ use std::{
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+mod cold_preset_materialization;
 mod dynamic_projection;
+#[cfg(test)]
+pub(super) use dynamic_projection::physical_adapter::{
+    PhysicalAdapterLane,
+    position::{PositionAdapter, tests as position_test_support},
+};
 mod dynamic_reconciliation;
+mod live_output_bench;
+pub use live_output_bench::{
+    LiveOutputBench, LiveOutputFrame, LiveOutputWork, ReadoutConsumerReport, ReadoutConsumers,
+};
+mod restored_dynamic_candidate;
+mod start_path_timing;
+pub(in crate::runtime) use restored_dynamic_candidate::{
+    RestoredDynamicCandidate, prepare_restored_dynamic_candidate,
+};
+pub use start_path_timing::StartPathPhases;
 
-use dynamic_projection::dynamic_contributions_with_auto_off;
+pub(in crate::runtime) use cold_preset_materialization::{
+    materialize_cold_preset_dependencies, materialize_pending_preset_dependencies,
+};
+
+pub(in crate::runtime) use dynamic_reconciliation::{
+    ColdDynamicReconciliationInputs, dynamic_playback_owner, reconcile_cold_dynamic_candidate,
+};
+
+/// Pending (Preload) readout identity and the accepted-pair payload, for Position readouts.
+pub(in crate::runtime) use dynamic_projection::pending_publication::{
+    PendingAttemptTicket, PendingEpisodeIdentity, PendingLaneValues, PendingNativeReadout,
+    PendingPairBinding, PendingReadoutError,
+};
+/// TL-554: native Color descriptors, adoption and Direct status for routes and edit capture.
+pub(in crate::runtime) use dynamic_projection::physical_adapter as physical_adapters;
+pub(in crate::runtime) use dynamic_projection::reconcile_dynamic_controllers;
+pub(in crate::runtime) use dynamic_projection::retained_preload_hybrid::PendingHybridResult;
+/// TL-548 C4 hook: the desk's Pending (Preload) episode executor and its lifecycle triggers.
+pub(in crate::runtime) use dynamic_projection::retained_preload_hybrid::pending_executor::{
+    PendingEpisodeResource, PendingEpisodeStatus, PendingTrigger,
+};
+#[cfg(test)]
+pub(in crate::runtime) use dynamic_projection::retained_preload_hybrid::tests::position::RealPositionPendingRig;
 #[cfg(test)]
 pub(super) use dynamic_projection::{
     DynamicPlaybackControl, dynamic_transition_events, fully_controlled_dynamic_playbacks,
 };
 pub(in crate::runtime) use dynamic_projection::{
-    ProgrammerReconciliationCache, dynamic_contributions_cached,
+    LiveFamilyAdapters, ProgrammerReconciliationCache, dynamic_output_frame,
 };
 pub(super) use dynamic_projection::{dynamic_contributions, dynamic_projection};
 use dynamic_reconciliation::{
@@ -79,6 +119,8 @@ pub(super) struct Config {
     pub activation: ActiveShowCoordinator,
     pub test_bench: bool,
     pub dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
+    pub dynamic_snapshot: Arc<DynamicSnapshotPublication>,
+    pub dynamic_source_origins: super::dynamic_source_origins::SharedDynamicSourceOrigins,
     pub speed_groups: Arc<Mutex<[light_control::speed::SpeedGroupController; 5]>>,
     pub dynamic_auto_offs: Arc<Mutex<Vec<PlaybackIdentity>>>,
     pub visualization_frames: Arc<VisualizationFrameHub>,
@@ -92,6 +134,7 @@ pub(super) struct OutputScheduler {
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
     pub(super) usb: Arc<UsbOutputFanout>,
+    family_adapters: Arc<LiveFamilyAdapters>,
     start: Option<tokio::sync::oneshot::Sender<()>>,
     task: OutputTask,
 }
@@ -103,6 +146,7 @@ struct SharedResources {
     pub(super) usb: Arc<UsbOutputFanout>,
     persistence: OutputPersistenceResource,
     programmer_reconciliation_cache: Arc<ProgrammerReconciliationCache>,
+    family_adapters: Arc<LiveFamilyAdapters>,
 }
 
 #[derive(Clone)]
@@ -119,12 +163,15 @@ struct Runtime {
     pub(super) activation: ActiveShowCoordinator,
     pub(super) cancellation: CancellationToken,
     pub(super) dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
+    pub(super) dynamic_snapshot: Arc<DynamicSnapshotPublication>,
+    pub(super) dynamic_source_origins: super::dynamic_source_origins::SharedDynamicSourceOrigins,
     pub(super) speed_groups: Arc<Mutex<[light_control::speed::SpeedGroupController; 5]>>,
     pub(super) rate: Arc<AtomicU16>,
     pub(super) dynamic_auto_offs: Arc<Mutex<Vec<PlaybackIdentity>>>,
     pub(super) visualization_frames: Arc<VisualizationFrameHub>,
     pub(super) action_timing: ActionTimingResource,
     pub(super) programmer_reconciliation_cache: Arc<ProgrammerReconciliationCache>,
+    pub(super) family_adapters: Arc<LiveFamilyAdapters>,
     pub(super) persistence: OutputPersistenceResource,
     pub(super) internal_audio: Arc<Mutex<super::internal_audio::InternalAudioRuntime>>,
 }
@@ -229,14 +276,6 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         runtime.timecodes.tick();
     }
     let options = runtime.control.lock().render_options();
-    // The plain runtime: the status projection also works out next cues and timing for every
-    // playback, none of which this comparison reads.
-    let before_cues = runtime
-        .engine
-        .playback_runtime()
-        .into_iter()
-        .map(|playback| (playback.cue_list_id, playback.current_cue_id))
-        .collect::<HashMap<_, _>>();
     let (rendered, visualization_scope, dynamic, engine) = {
         let Ok(_activation) = runtime.activation.try_acquire() else {
             return send_retained_output(&runtime).await;
@@ -245,71 +284,41 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         let visualization_scope = VisualizationScope {
             show_id: runtime.active_show.current().map(|show| show.id.0),
         };
-        let dynamic_started = Instant::now();
-        let (mut sampled, auto_offs, dynamic_events, _, _) = dynamic_contributions_with_auto_off(
-            &runtime.engine,
-            &runtime.dynamics,
-            &runtime.speed_groups,
-            &runtime.rate,
-            &[],
-            Some(&runtime.programmer_reconciliation_cache),
-            true,
-        );
-        if !auto_offs.is_empty() {
-            runtime.dynamic_auto_offs.lock().extend(auto_offs);
-        }
-        for event in dynamic_events {
-            runtime.playback.publish(event);
-        }
-        let timecode_audio = timecode_audio_contributions(
-            &runtime.timecodes,
-            runtime.engine.snapshot().fixtures.as_ref(),
-        );
-        if !timecode_audio.is_empty() {
-            sampled.push(timecode_audio);
-        }
-        let dynamic = dynamic_started.elapsed();
-        let engine_started = Instant::now();
-        let rendered = render_with_playback_events(
-            &runtime.engine,
-            &runtime.active_show,
-            &runtime.playback,
-            options,
-            &sampled,
-            Some(&runtime.persistence),
-        )
-        .map_err(io::Error::other)?;
-        (
-            rendered,
-            visualization_scope,
-            dynamic,
-            engine_started.elapsed(),
-        )
+        let completed = ordered_output_operation(&runtime.playback, || {
+            render_ordered_output_frame(&runtime, options)
+        });
+        let (rendered, dynamic, engine) = match completed {
+            Ok(completed) => completed,
+            Err(EngineError::StalePreparedFrame) => {
+                drop(_activation);
+                return send_retained_output(&runtime).await;
+            }
+            Err(error) => {
+                return Err(io::Error::other(error));
+            }
+        };
+        (rendered, visualization_scope, dynamic, engine)
     };
-    dispatch_automatic_cue_actions(
-        &runtime.engine,
-        &runtime.timecodes,
-        &runtime.active_show,
-        &before_cues,
-    );
     runtime.internal_audio.lock().reconcile(
-        runtime.engine.snapshot().fixtures.as_ref(),
-        rendered.profile_visualization_values.as_ref(),
-        &rendered.resolved_values,
+        rendered.rendered.source_snapshot.fixtures.as_ref(),
+        rendered.rendered.profile_visualization_values.as_ref(),
+        &rendered.rendered.resolved_values,
     );
     let publish_started = Instant::now();
     let (routes, frames, patched_slots) = {
         let mut control = runtime.control.lock();
-        if !control.hold {
-            runtime
-                .visualization_frames
-                .publish(&rendered, options, visualization_scope);
+        if !control.effective_hold() {
+            runtime.visualization_frames.publish(
+                &rendered,
+                visualization_scope,
+                runtime.engine.output_pool().as_deref(),
+            );
         }
         output_payload(
             &mut control,
-            rendered.routes,
-            rendered.universes,
-            rendered.patched_slots,
+            rendered.rendered.routes,
+            rendered.rendered.universes,
+            rendered.rendered.patched_slots,
         )
     };
     let publish = publish_started.elapsed();
@@ -331,6 +340,104 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         runtime.action_timing.complete_output_render(action_timing);
     }
     result
+}
+
+/// The ordered part of one output tick: captures the prepared frame, projects Dynamics into it
+/// and renders it, returning the rendered frame with its Dynamic and engine phase durations.
+fn render_ordered_output_frame(
+    runtime: &Runtime,
+    options: RenderOptions,
+) -> PlaybackOperation<Result<(RenderedSemanticFrame, Duration, Duration), EngineError>> {
+    let dynamic_started = Instant::now();
+    let Some(prepared) = runtime.engine.try_prepare_output_frame(options) else {
+        return PlaybackOperation::new(Err(EngineError::StalePreparedFrame));
+    };
+    let prepared = crate::runtime::dynamic_snapshot_publication::RetainedFrameCapture::select(
+        prepared,
+        &runtime.dynamic_snapshot,
+        dynamic_started,
+    );
+    let timecode_audio = timecode_audio_contributions(
+        &runtime.timecodes,
+        prepared.snapshot().fixtures.as_ref(),
+        prepared.sampled_at(),
+    );
+    let baseline_samples = if timecode_audio.is_empty() {
+        Vec::new()
+    } else {
+        vec![timecode_audio]
+    };
+    let mut events = Vec::new();
+    let completed = dynamic_output_frame(
+        &runtime.engine,
+        &prepared,
+        prepared.retained(),
+        &baseline_samples,
+        &runtime.dynamics,
+        &runtime.dynamic_snapshot,
+        &runtime.dynamic_source_origins,
+        &runtime.speed_groups,
+        &runtime.rate,
+        &runtime.programmer_reconciliation_cache,
+        &runtime.family_adapters,
+        |source| {
+            let dynamic = dynamic_started.elapsed();
+            let engine_started = Instant::now();
+            let operation = source.playback_operation(
+                &runtime.engine,
+                &runtime.active_show,
+                &runtime.playback,
+                &prepared,
+                Some(&runtime.persistence),
+            );
+            // These transitions already happened during capture, including when
+            // final render rejects a stale continuity token.
+            events.extend(operation.events);
+            operation
+                .output
+                .map(|rendered| (rendered, dynamic, engine_started.elapsed()))
+        },
+    );
+    if completed.is_err() {
+        events.extend(captured_playback_events(
+            &runtime.engine,
+            &runtime.active_show,
+            &runtime.playback,
+            &prepared,
+            None,
+            Some(&runtime.persistence),
+        ));
+    }
+    dispatch_automatic_cue_actions(
+        &prepared,
+        &runtime.engine,
+        &runtime.timecodes,
+        runtime.active_show.current().as_ref(),
+    );
+    let result = completed.map(|completed| {
+        runtime.dynamic_auto_offs.lock().extend(completed.auto_offs);
+        events.extend(completed.events);
+        let dynamics = Arc::new(FrameDynamicSources {
+            sample_boundary: completed.sample_boundary,
+            runtime: completed.runtime,
+            samples: completed.samples,
+            origins: completed.origins,
+            programmer_values: Arc::clone(prepared.dynamic_programmer_values()),
+            cue_values: prepared.cue_dynamic_values().into(),
+            ordinary: completed.ordinary,
+        });
+        let (rendered, dynamic, engine) = completed.output;
+        (
+            RenderedSemanticFrame {
+                rendered,
+                options,
+                dynamics: Some(dynamics),
+            },
+            dynamic,
+            engine,
+        )
+    });
+    PlaybackOperation::with_events(result, events)
 }
 
 /// A player patched from the TL-367 profile revision carries the canonical Media attributes.
@@ -355,9 +462,9 @@ fn timecode_play_mode(transport: u32, repeat: bool) -> u32 {
 fn timecode_audio_contributions(
     timecodes: &light_application::timeline::TimecodeRuntimeService,
     fixtures: &[light_fixture::PatchedFixture],
+    changed_at: chrono::DateTime<chrono::Utc>,
 ) -> ContributionBatch {
     let rate = timecodes.frame_rate();
-    let changed_at = chrono::Utc::now();
     let mut order = 0_u64;
     ContributionBatch::new(timecodes.snapshots().into_iter().flat_map(|snapshot| {
         let transport = match snapshot.transport {
@@ -447,36 +554,17 @@ fn timecode_audio_contributions(
 }
 
 fn dispatch_automatic_cue_actions(
+    frame: &light_engine::PreparedOutputFrame,
     engine: &Engine,
     timecodes: &light_application::timeline::TimecodeRuntimeService,
-    active_show: &ActiveShowProjection,
-    before: &HashMap<light_core::CueListId, Option<Uuid>>,
+    show: Option<&light_show::ShowEntry>,
 ) {
-    let Some(show) = active_show.current() else {
+    let Some(show) = show else {
         return;
     };
-    let snapshot = engine.snapshot();
-    for playback in engine.playback_runtime() {
-        if playback.transition_timing_bypassed || playback.discrete_cue_actions_suppressed {
-            continue;
-        }
-        let cue_list_id = playback.cue_list_id;
-        let Some(current) = playback
-            .current_cue_id
-            .filter(|current| before.get(&cue_list_id).copied().flatten() != Some(*current))
-        else {
-            continue;
-        };
-        let Some(cue) = snapshot
-            .cue_lists
-            .iter()
-            .find(|cue_list| cue_list.id == cue_list_id)
-            .and_then(|cue_list| cue_list.cues.iter().find(|cue| cue.id == current))
-        else {
-            continue;
-        };
+    for (cue_list_id, actions) in claim_automatic_cue_action_batches(frame) {
         let mut completion = 0;
-        for action in &cue.actions {
+        for action in &actions {
             match super::timecode_v2::apply_installed_cue_action(timecodes, &show.path, action) {
                 Ok(value) => completion = completion.max(value.unwrap_or(0)),
                 Err(error) => {
@@ -486,6 +574,44 @@ fn dispatch_automatic_cue_actions(
         }
         engine.set_cue_external_completion_millis(cue_list_id, completion);
     }
+}
+
+/// Resolves only final-state transitions captured by this authoritative tick. The token is
+/// independent of event publication, so a failed DMX frame still gets one action dispatch.
+pub(in crate::runtime) fn claim_automatic_cue_action_batches(
+    frame: &light_engine::PreparedOutputFrame,
+) -> Vec<(light_core::CueListId, Vec<light_playback::CueAction>)> {
+    let snapshot = frame.snapshot();
+    let mut batches = Vec::new();
+    for transition in frame.claim_automatic_cue_action_transitions() {
+        let Some(playback) = frame.captured_active_playbacks().iter().find(|playback| {
+            playback.cue_list_id == transition.cue_list_id
+                && playback.playback_number == transition.playback_number
+                && playback.current_cue_id == Some(transition.current.id)
+                && playback.transition_ordinal == transition.transition_ordinal
+        }) else {
+            continue;
+        };
+        if playback.transition_timing_bypassed || playback.discrete_cue_actions_suppressed {
+            continue;
+        }
+        let cue_list_id = transition.cue_list_id;
+        let Some(cue) = snapshot
+            .cue_lists
+            .iter()
+            .find(|cue_list| cue_list.id == cue_list_id)
+            .and_then(|cue_list| {
+                cue_list
+                    .cues
+                    .iter()
+                    .find(|cue| cue.id == transition.current.id)
+            })
+        else {
+            continue;
+        };
+        batches.push((cue_list_id, cue.actions.clone()));
+    }
+    batches
 }
 
 async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
@@ -539,12 +665,6 @@ pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
         state.timecodes.tick();
     }
     let action_timing = state.action_timing.begin_output_render();
-    let before_cues = state
-        .output
-        .playback_runtime_status()
-        .into_iter()
-        .map(|status| (status.playback.cue_list_id, status.playback.current_cue_id))
-        .collect::<HashMap<_, _>>();
     let (rendered, semantic_timing, visualization_scope) = {
         let _activation = state.active_show.acquire_shared().await;
         state.timecodes.reconcile_cue_lists(state.output.engine());
@@ -552,32 +672,39 @@ pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
             show_id: state.active_show.current().map(|show| show.id.0),
         };
         let playback = state.playback.render_capability();
-        let (rendered, semantic_timing) = state
-            .output
-            .render_with_playback_events_timed(
-                &state.active_show.output_projection(),
-                &playback,
-                state.output.render_options(),
-            )
-            .map_err(io::Error::other)?;
+        let active_show = state.active_show.output_projection();
+        let result = state.output.render_with_playback_events_timed_with_capture(
+            &active_show,
+            &playback,
+            state.output.render_options(),
+            |prepared| {
+                dispatch_automatic_cue_actions(
+                    prepared,
+                    state.output.engine(),
+                    &state.timecodes,
+                    active_show.current().as_ref(),
+                );
+            },
+        );
+        let (rendered, semantic_timing) = match result {
+            Ok(rendered) => rendered,
+            Err(error) => {
+                drop(_activation);
+                return match error {
+                    EngineError::StalePreparedFrame => state.output.send_retained_output().await,
+                    error => Err(io::Error::other(error)),
+                };
+            }
+        };
         (rendered, semantic_timing, visualization_scope)
     };
-    dispatch_automatic_cue_actions(
-        state.output.engine(),
-        &state.timecodes,
-        &state.active_show.output_projection(),
-        &before_cues,
-    );
     let publish_started = Instant::now();
-    let frames = state
+    state
         .output
         .render_frames_and_publish(&rendered, visualization_scope);
     let publish = publish_started.elapsed();
     let send_started = Instant::now();
-    let result = state
-        .output
-        .send_network_routes(&rendered.routes, &frames, &rendered.patched_slots)
-        .await;
+    let result = state.output.send_retained_output().await;
     let send = send_started.elapsed();
     trace_slow_output_phases(
         tick_started.elapsed(),
@@ -633,7 +760,7 @@ pub(super) fn render_with_playback_events(
         .run_unit_of_work(AutomaticRender {
             engine,
             active_show,
-            options,
+            source: AutomaticRenderSource::Live(options),
             playback,
             sampled,
             persistence,
@@ -641,10 +768,80 @@ pub(super) fn render_with_playback_events(
         .output
 }
 
+pub(in crate::runtime) fn render_prepared_with_playback_events(
+    engine: &Engine,
+    active_show: &ActiveShowProjection,
+    playback: &PlaybackRenderCapability,
+    frame: &light_engine::PreparedOutputFrame,
+    sampled: &[ContributionBatch],
+    persistence: Option<&OutputPersistenceResource>,
+) -> Result<RenderResult, EngineError> {
+    playback
+        .run_unit_of_work(AutomaticRender {
+            engine,
+            active_show,
+            source: AutomaticRenderSource::Prepared(frame),
+            playback,
+            sampled,
+            persistence,
+        })
+        .output
+}
+
+/// Authoritative capture advances Playback, so the entire capture/sample/render operation must
+/// share the same ordering boundary as an operator command. The closure returns drafts for this
+/// unit of work; it must not call another locking Playback operation.
+pub(in crate::runtime) fn ordered_output_operation<O>(
+    playback: &PlaybackRenderCapability,
+    operation: impl FnOnce() -> PlaybackOperation<O>,
+) -> O {
+    playback
+        .run_unit_of_work(OrderedOutputOperation(operation))
+        .output
+}
+
+struct OrderedOutputOperation<F>(F);
+
+impl<F, O> PlaybackUnitOfWork for OrderedOutputOperation<F>
+where
+    F: FnOnce() -> PlaybackOperation<O>,
+{
+    type Output = O;
+
+    fn execute(self) -> PlaybackOperation<O> {
+        (self.0)()
+    }
+}
+
+/// Render/checkpoint/event assembly for a caller already inside ordered_output_operation.
+pub(in crate::runtime) fn prepared_playback_operation(
+    engine: &Engine,
+    active_show: &ActiveShowProjection,
+    playback: &PlaybackRenderCapability,
+    frame: &light_engine::PreparedOutputFrame,
+    sampled: &[ContributionBatch],
+    persistence: Option<&OutputPersistenceResource>,
+) -> PlaybackOperation<Result<RenderResult, EngineError>> {
+    AutomaticRender {
+        engine,
+        active_show,
+        source: AutomaticRenderSource::Prepared(frame),
+        playback,
+        sampled,
+        persistence,
+    }
+    .execute()
+}
+
+enum AutomaticRenderSource<'a> {
+    Live(RenderOptions),
+    Prepared(&'a light_engine::PreparedOutputFrame),
+}
+
 struct AutomaticRender<'a> {
     engine: &'a Engine,
     active_show: &'a ActiveShowProjection,
-    options: RenderOptions,
+    source: AutomaticRenderSource<'a>,
     playback: &'a PlaybackRenderCapability,
     sampled: &'a [ContributionBatch],
     persistence: Option<&'a OutputPersistenceResource>,
@@ -654,47 +851,91 @@ impl PlaybackUnitOfWork for AutomaticRender<'_> {
     type Output = Result<RenderResult, EngineError>;
 
     fn execute(self) -> PlaybackOperation<Self::Output> {
-        let mut rendered = match self
-            .engine
-            .render_with_contribution_batches(self.options, self.sampled)
-        {
-            Ok(rendered) => rendered,
-            Err(error) => return PlaybackOperation::new(Err(error)),
+        let captured;
+        let frame = match self.source {
+            AutomaticRenderSource::Live(options) => {
+                captured = self.engine.prepare_output_frame(options);
+                &captured
+            }
+            AutomaticRenderSource::Prepared(frame) => frame,
         };
-        let transitions = std::mem::take(&mut rendered.automatic_playback_transitions);
-        let show_id = self.active_show.current().as_ref().map(|show| show.id.0);
-        if !transitions.is_empty()
-            && let (Some(show_id), Some(persistence)) = (show_id, self.persistence)
-            && let Err(error) =
-                checkpoint_automatic_playback_runtime(self.engine, persistence, show_id)
-        {
-            tracing::warn!(error = %error.message, "automatic Playback runtime persistence is pending");
-        }
-        let mut events = show_id
-            .map(|show_id| {
-                playback_service::automatic_projection_changes(
-                    self.engine,
-                    PlaybackShowScope {
-                        show_id,
-                        show_revision: rendered.revision,
-                    },
-                    transitions,
-                )
-            })
-            .map(automatic_playback_events)
-            .unwrap_or_default();
-        if let Some(show_id) = show_id
-            && let Some(draft) = self.playback.completed_frame(
-                self.engine,
-                show_id,
-                rendered.revision,
-                self.engine.application_time(),
-            )
-        {
-            events.push(draft);
-        }
-        PlaybackOperation::with_events(Ok(rendered), events)
+        completed_prepared_playback_operation(
+            self.engine,
+            self.active_show,
+            self.playback,
+            frame,
+            self.engine.render_prepared(frame, self.sampled),
+            self.persistence,
+        )
     }
+}
+
+/// Finish capture-owned Playback events after either renderer, or an earlier sampling failure.
+/// This function never renders or commits engine continuity. A staged family producer can
+/// therefore consume its prepared token once and pass the result through this same boundary.
+pub(in crate::runtime) fn completed_prepared_playback_operation(
+    engine: &Engine,
+    active_show: &ActiveShowProjection,
+    playback: &PlaybackRenderCapability,
+    frame: &light_engine::PreparedOutputFrame,
+    mut result: Result<RenderResult, EngineError>,
+    persistence: Option<&OutputPersistenceResource>,
+) -> PlaybackOperation<Result<RenderResult, EngineError>> {
+    let events = captured_playback_events(
+        engine,
+        active_show,
+        playback,
+        frame,
+        result.as_mut().ok(),
+        persistence,
+    );
+    PlaybackOperation::with_events(result, events)
+}
+
+/// Capture transitions have already happened even when Dynamic evaluation fails before the
+/// renderer runs. Claim them once; a failed frame must not publish completed-frame telemetry.
+pub(in crate::runtime) fn captured_playback_events(
+    engine: &Engine,
+    active_show: &ActiveShowProjection,
+    playback: &PlaybackRenderCapability,
+    frame: &light_engine::PreparedOutputFrame,
+    mut rendered: Option<&mut RenderResult>,
+    persistence: Option<&OutputPersistenceResource>,
+) -> Vec<light_application::EventDraft> {
+    // Playback advanced during capture. Its real automatic transitions must still be
+    // persisted and announced if an unrelated continuity edit makes DMX retain a frame.
+    let transitions = frame.claim_automatic_playback_transitions().to_vec();
+    if let Some(rendered) = rendered.as_deref_mut() {
+        rendered.automatic_playback_transitions.clear();
+    }
+    let show_id = active_show.current().as_ref().map(|show| show.id.0);
+    if !transitions.is_empty()
+        && let (Some(show_id), Some(persistence)) = (show_id, persistence)
+        && let Err(error) = checkpoint_automatic_playback_runtime(engine, persistence, show_id)
+    {
+        tracing::warn!(error = %error.message, "automatic Playback runtime persistence is pending");
+    }
+    let mut events = show_id
+        .map(|show_id| {
+            playback_service::automatic_projection_changes(
+                engine,
+                PlaybackShowScope {
+                    show_id,
+                    show_revision: frame.snapshot().revision,
+                },
+                transitions,
+            )
+        })
+        .map(automatic_playback_events)
+        .unwrap_or_default();
+    if let Some(rendered) = rendered
+        && let Some(show_id) = show_id
+        && let Some(draft) =
+            playback.completed_frame(engine, show_id, rendered.revision, rendered.sampled_at)
+    {
+        events.push(draft);
+    }
+    events
 }
 
 fn checkpoint_automatic_playback_runtime(
@@ -763,7 +1004,7 @@ fn output_frames(
     control: &mut OutputControl,
     mut rendered: light_engine::Pooled<HashMap<Universe, DmxFrame>>,
 ) -> light_engine::Pooled<HashMap<Universe, DmxFrame>> {
-    if control.hold {
+    if control.effective_hold() {
         // Hold republishes what was last sent, in the borrowed frame this render already has.
         rendered.clone_from(&control.last_frames);
         return rendered;
@@ -783,7 +1024,7 @@ fn output_payload(
     light_engine::Pooled<HashMap<Universe, DmxFrame>>,
     light_engine::Pooled<HashMap<Universe, u16>>,
 ) {
-    if control.hold {
+    if control.effective_hold() {
         rendered.clone_from(&control.last_frames);
         patched_slots.clone_from(&control.last_patched_slots);
         return (Arc::clone(&control.last_routes), rendered, patched_slots);
@@ -863,6 +1104,10 @@ impl OutputScheduler {
         Arc::clone(&self.usb)
     }
 
+    pub(super) fn family_adapters(&self) -> Arc<LiveFamilyAdapters> {
+        Arc::clone(&self.family_adapters)
+    }
+
     pub(super) fn into_task(mut self) -> OutputTask {
         self.start.take();
         self.task
@@ -895,6 +1140,11 @@ impl SharedResources {
             usb,
             persistence,
             programmer_reconciliation_cache: Arc::new(ProgrammerReconciliationCache::default()),
+            // TL-548 C3 / TL-552: production is opted in to the all-family Live path; `engaged`
+            // still requires a contract-1 engine (see `e2e_semantic_contract`).
+            family_adapters: Arc::new(LiveFamilyAdapters::new(
+                super::e2e_semantic_contract::live_family_adapters_opted_in(),
+            )),
         })
     }
 
@@ -912,12 +1162,15 @@ impl SharedResources {
             activation: config.activation.clone(),
             cancellation: config.cancellation.clone(),
             dynamics: Arc::clone(&config.dynamics),
+            dynamic_snapshot: Arc::clone(&config.dynamic_snapshot),
+            dynamic_source_origins: Arc::clone(&config.dynamic_source_origins),
             speed_groups: Arc::clone(&config.speed_groups),
             rate: Arc::clone(&config.rate),
             dynamic_auto_offs: Arc::clone(&config.dynamic_auto_offs),
             visualization_frames: Arc::clone(&config.visualization_frames),
             action_timing: config.action_timing.clone(),
             programmer_reconciliation_cache: Arc::clone(&self.programmer_reconciliation_cache),
+            family_adapters: Arc::clone(&self.family_adapters),
             persistence: self.persistence.clone(),
             internal_audio: Arc::clone(&config.internal_audio),
         }
@@ -933,6 +1186,7 @@ impl SharedResources {
             sequences: self.sequences,
             control: self.control,
             usb: self.usb,
+            family_adapters: self.family_adapters,
             start: Some(start),
             task,
         }

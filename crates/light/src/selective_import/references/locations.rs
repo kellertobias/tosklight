@@ -162,7 +162,7 @@ pub(super) fn add_optional_direct_reference(
     Ok(())
 }
 
-fn fixture_reference(
+pub(super) fn fixture_reference(
     source_identity: String,
     location: ImportReferenceLocation,
     source: &FixtureIdentityCatalog,
@@ -177,12 +177,14 @@ fn fixture_reference(
             target_slot: owner.slot.clone(),
             source_identity,
             location,
+            allow_missing: false,
         },
         None => ImportObjectReference {
             target: PortableShowObjectKey::new("patched_fixture", &source_identity),
             target_slot: "object".into(),
             source_identity,
             location,
+            allow_missing: false,
         },
     })
 }
@@ -197,6 +199,7 @@ pub(super) fn direct_reference(
         target_slot: "object".into(),
         source_identity,
         location,
+        allow_missing: false,
     }
 }
 

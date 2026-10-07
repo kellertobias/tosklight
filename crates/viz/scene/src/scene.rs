@@ -21,12 +21,20 @@ pub fn euler_degrees(rotation: Vec3) -> Quat {
 /// address one light-producing head by a stable index without walking a tree per frame.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Scene {
+    #[serde(default)]
+    pub physical_positions: Vec<crate::PhysicalPositionPlan>,
+    #[serde(default)]
+    pub physical_position_indices: Vec<Option<usize>>,
     pub revision: u64,
     pub show_id: Option<Uuid>,
+    #[serde(default)]
+    pub source_show_revision: u64,
     pub show_name: String,
     pub source_identity: String,
     pub fixtures: Vec<FixtureInstance>,
     pub emitters: Vec<EmitterInstance>,
+    #[serde(default)]
+    pub emitter_ids: Vec<Uuid>,
     pub scenery: Vec<SceneryObject>,
     /// DMX-controlled scenic bodies. Their authored pose is structural; live offsets are in
     /// [`crate::SceneValues::physics_frames`] so reconnects and scene revisions can carry state.

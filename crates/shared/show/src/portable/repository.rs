@@ -19,15 +19,22 @@ pub(crate) fn immediate_transaction(conn: &Connection) -> Result<Transaction<'_>
     Transaction::new_unchecked(conn, TransactionBehavior::Immediate).map_err(Into::into)
 }
 
+/// `writer_contract` is the programming contract of the writing runtime: a direct write of
+/// authored programming at contract ≥ 1 stamps the show's marker in the same transaction
+/// (TL-552), and a body holding legacy programming is refused before anything is written
+/// (TL-552 follow-up). Callers that are not a runtime (tests, tools) pass 0.
 pub(crate) fn put_legacy_object(
     conn: &Connection,
     kind: &str,
     id: &str,
     body: &Value,
     expected: Revision,
+    writer_contract: u16,
 ) -> Result<Revision, StoreError> {
+    crate::programming_contract::check_direct_writes(writer_contract, [(kind, id, body)])?;
     let tx = immediate_transaction(conn)?;
     let revision = write_checked(&tx, kind, id, body, expected, &timestamp())?;
+    crate::programming_contract::stamp_direct_write(&tx, writer_contract, [kind].into_iter())?;
     bump_revision(&tx)?;
     tx.commit()?;
     Ok(revision)
@@ -37,11 +44,26 @@ pub(crate) fn mutate_legacy_objects(
     conn: &Connection,
     writes: &[AtomicObjectWrite<'_>],
     deletes: &[AtomicObjectDelete<'_>],
+    writer_contract: u16,
 ) -> Result<Vec<Revision>, StoreError> {
+    crate::programming_contract::check_direct_writes(
+        writer_contract,
+        writes
+            .iter()
+            .map(|write| (write.kind, write.id, write.body)),
+    )?;
     let tx = immediate_transaction(conn)?;
     let timestamp = timestamp();
     let revisions = apply_checked_writes(&tx, writes, &timestamp)?;
     let deleted = apply_checked_deletes(&tx, deletes)?;
+    crate::programming_contract::stamp_direct_write(
+        &tx,
+        writer_contract,
+        writes
+            .iter()
+            .map(|write| write.kind)
+            .chain(deletes.iter().map(|delete| delete.kind)),
+    )?;
     if !writes.is_empty() || deleted {
         bump_revision(&tx)?;
     }
@@ -161,10 +183,12 @@ pub(crate) fn delete_legacy_object(
     conn: &Connection,
     kind: &str,
     id: &str,
+    writer_contract: u16,
 ) -> Result<bool, StoreError> {
     let tx = immediate_transaction(conn)?;
     let deleted = delete_current(&tx, &PortableShowObjectKey::new(kind, id))?;
     if deleted {
+        crate::programming_contract::stamp_direct_write(&tx, writer_contract, [kind].into_iter())?;
         bump_revision(&tx)?;
     }
     tx.commit()?;

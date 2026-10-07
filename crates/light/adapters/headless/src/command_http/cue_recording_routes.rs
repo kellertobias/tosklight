@@ -27,7 +27,9 @@ async fn record_cue(
     request: Result<Json<CueRecordRequest>, JsonRejection>,
 ) -> Result<Response, CueRecordHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
-    let show_id = show.resolve(&state).map_err(CueRecordHttpError::api)?;
+    let show_id = show
+        .resolve_writable(&state)
+        .map_err(CueRecordHttpError::api)?;
     let expected_revision =
         super::super::parse_if_match(&headers).map_err(CueRecordHttpError::api)?;
     let Json(request) = request.map_err(CueRecordHttpError::json)?;

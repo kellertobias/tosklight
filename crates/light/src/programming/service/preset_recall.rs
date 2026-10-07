@@ -61,7 +61,12 @@ impl ProgrammingService {
         )?;
         let environment = ports.preset_recall_environment(&action.context, &action.command)?;
         validate_environment(&action.command, &environment, values_revision)?;
-        if selection.selected.is_empty() {
+        if selection.selected.is_empty()
+            && selection
+                .expression
+                .as_ref()
+                .is_none_or(|expression| expression.live_group_owners().is_empty())
+        {
             return self.select_preset_targets(
                 action,
                 ports,
@@ -75,14 +80,40 @@ impl ProgrammingService {
                 target,
             );
         }
-        let mutations = super::super::preset_recall_plan::plan(
+        let mutations = super::super::preset_recall_plan::plan_with_positions(
             &selection,
-            &environment.preset,
+            environment
+                .resolved_aim
+                .as_deref()
+                .unwrap_or(&environment.preset),
             &environment.groups,
+            &environment.stage_positions,
             environment.programmer_fade_millis,
         )?;
         let preset_context = format!("preset:{}", action.command.address.storage_key());
-        let normal_changed = if target == ProgrammingPresetRecallTarget::Programmer {
+        let required = mutations
+            .iter()
+            .filter_map(|mutation| match mutation {
+                light_programmer::NormalProgrammerValueMutation::SetFixture { value, .. }
+                | light_programmer::NormalProgrammerValueMutation::SetGroup { value, .. } => {
+                    Some(value.required_programming_contract())
+                }
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
+        if required > environment.supported_programming_contract {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                format!(
+                    "Preset requires programming contract {required}; this runtime supports {}",
+                    environment.supported_programming_contract
+                ),
+            ));
+        }
+        let normal_changed = if !mutations.is_empty()
+            && target == ProgrammingPresetRecallTarget::Programmer
+        {
             self.programmers
                 .apply_normal_preset_recall(identity.session_id, &mutations, preset_context.clone())
                 .ok_or_else(recall_unavailable)?
@@ -109,12 +140,15 @@ impl ProgrammingService {
             before,
             after,
             environment,
-            selection.selected.len(),
+            if mutations.is_empty() {
+                0
+            } else {
+                selection.selected.len()
+            },
             values_revision,
             preload_values_revision,
             capture_mode_revision,
             target,
-            preset_context,
             normal_changed,
             preload_changed,
         )
@@ -134,7 +168,6 @@ impl ProgrammingService {
         preload_values_revision: u64,
         capture_mode_revision: u64,
         target: ProgrammingPresetRecallTarget,
-        preset_context: String,
         normal_changed: bool,
         preload_changed: bool,
     ) -> Result<ProgrammingPresetRecallResult, ActionError> {
@@ -205,13 +238,10 @@ impl ProgrammingService {
             } => *preload_values_revision,
             _ => preload_values_revision,
         };
-        let active_context = match target {
-            ProgrammingPresetRecallTarget::Programmer => Some(preset_context),
-            ProgrammingPresetRecallTarget::Preload => self
-                .programmers
-                .get(identity.session_id)
-                .and_then(|programmer| programmer.active_context),
-        };
+        let active_context = self
+            .programmers
+            .get(identity.session_id)
+            .and_then(|programmer| programmer.active_context);
         let result = ProgrammingPresetRecallResult {
             context: action.context.clone(),
             target,
@@ -421,6 +451,9 @@ fn validate_environment(
     environment: &ProgrammingPresetRecallEnvironment,
     values_revision: u64,
 ) -> Result<(), ActionError> {
+    if environment.preset.aim_at_fixture_number.is_some() && environment.resolved_aim.is_none() {
+        return Err(invalid("Aim preset recall requires captured target values"));
+    }
     if environment.show_id != request.show_id || environment.address != request.address {
         return Err(invalid("Preset recall resolved a mismatched authority"));
     }

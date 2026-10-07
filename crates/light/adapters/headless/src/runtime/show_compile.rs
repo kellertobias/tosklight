@@ -1,7 +1,8 @@
+use super::attribute_configuration::InstalledAttributeConfiguration;
 use super::*;
 use light_application::{ActionError, ActionErrorKind};
-use light_engine::{EngineError, PreparedEngineSnapshot};
-use light_show::{PortableShowTransaction, StoreError};
+use light_engine::EngineError;
+use light_show::{PortableShowDocument, PortableShowTransaction, StoreError};
 
 #[derive(Debug)]
 pub(super) enum ShowLoadError {
@@ -24,30 +25,148 @@ impl std::fmt::Display for ShowLoadError {
 
 /// One exact portable document, its staged compatibility migration, and the snapshot compiled
 /// from that same candidate. No persistence changes occur until `prepare_runtime` succeeds.
+///
+/// `document` is the accepted source document the candidate was staged against. It is read once
+/// and carried through commit so activation configuration never needs a second path read.
 pub(super) struct PreparedShowLoad {
     store: ActiveShowRepository,
     source_revision: u64,
+    document: PortableShowDocument,
     transaction: PortableShowTransaction,
     snapshot: EngineSnapshot,
 }
 
-pub(super) struct PreparedRuntimeShowLoad {
+pub(super) struct PreparedRuntimeShowLoad<T> {
     store: ActiveShowRepository,
     source_revision: u64,
+    document: PortableShowDocument,
     transaction: PortableShowTransaction,
-    runtime: PreparedEngineSnapshot,
+    candidate_revision: u64,
+    runtime: T,
+}
+
+/// Show-owned configuration derived, before any activation effect, from the exact portable
+/// document the installed snapshot was compiled from.
+///
+/// Derivation is pure: it reads neither the show file nor live desk state, and it keeps the
+/// current passive policies. An invalid Attribute configuration becomes recommended defaults
+/// with `validation_error` while the stored object is preserved; an undecodable PSN body becomes
+/// the default (off) configuration and is reported through `PsnConfigurationOrigin`.
+#[derive(Clone, Debug)]
+#[cfg_attr(not(test), allow(dead_code))] // Installed by TL-584's owned activation workflow.
+pub(super) struct PreparedShowConfiguration {
+    show_id: light_core::ShowId,
+    show_revision: u64,
+    attributes: InstalledAttributeConfiguration,
+    psn: super::psn_http::PreparedPsnConfiguration,
+}
+
+#[cfg_attr(not(test), allow(dead_code))] // Installed by TL-584's owned activation workflow.
+impl PreparedShowConfiguration {
+    pub(super) fn for_document(document: &PortableShowDocument) -> Self {
+        Self {
+            show_id: document.id(),
+            show_revision: document.revision().value(),
+            attributes: InstalledAttributeConfiguration::for_document(document),
+            psn: super::psn_http::PreparedPsnConfiguration::for_document(document),
+        }
+    }
+
+    pub(super) const fn show_id(&self) -> light_core::ShowId {
+        self.show_id
+    }
+
+    pub(super) const fn show_revision(&self) -> u64 {
+        self.show_revision
+    }
+
+    pub(super) const fn attributes(&self) -> &InstalledAttributeConfiguration {
+        &self.attributes
+    }
+
+    pub(super) const fn psn(&self) -> &super::psn_http::PreparedPsnConfiguration {
+        &self.psn
+    }
+
+    /// Every part names the same show and portable revision as the compiled snapshot.
+    fn ensure_matches(
+        &self,
+        document: &PortableShowDocument,
+        compiled_revision: u64,
+    ) -> Result<(), ShowLoadError> {
+        let document_revision = document.revision().value();
+        let coherent = self.show_id == document.id()
+            && self.show_revision == document_revision
+            && document_revision == compiled_revision
+            && self.attributes.show_id == Some(self.show_id)
+            && self.attributes.show_revision == document_revision
+            && self.psn.show_id == self.show_id
+            && self.psn.show_revision == document_revision;
+        if coherent {
+            Ok(())
+        } else {
+            Err(ShowLoadError::Invariant(format!(
+                "prepared show configuration for {} revision {document_revision} differs from \
+                 the compiled snapshot revision {compiled_revision}",
+                document.id().0
+            )))
+        }
+    }
+
+    /// Memory-only installation of the prepared values. It never reopens the show file, so a
+    /// later file replacement or deletion cannot substitute another document or silent defaults.
+    /// PSN ownership is always reset, including for an equal configuration or the same show ID.
+    pub(super) fn install_memory_only(&self, state: &AppState) {
+        state.attributes.install_prepared(self.attributes.clone());
+        super::psn_http::install_prepared(state, &self.psn);
+        state
+            .output
+            .engine()
+            .set_color_model(self.attributes.configuration.color_model);
+    }
+}
+
+/// A committed (or unchanged) show load: the prepared runtime, the exact portable document it was
+/// compiled from and the configuration derived from that document. No live state was touched.
+#[cfg_attr(not(test), allow(dead_code))] // Installed by TL-584's owned activation workflow.
+pub(super) struct PreparedShowActivation<T> {
+    runtime: T,
+    document: PortableShowDocument,
+    configuration: PreparedShowConfiguration,
+}
+
+#[cfg_attr(not(test), allow(dead_code))] // Installed by TL-584's owned activation workflow.
+impl<T> PreparedShowActivation<T> {
+    pub(super) const fn runtime(&self) -> &T {
+        &self.runtime
+    }
+
+    pub(super) const fn document(&self) -> &PortableShowDocument {
+        &self.document
+    }
+
+    pub(super) const fn configuration(&self) -> &PreparedShowConfiguration {
+        &self.configuration
+    }
+
+    pub(super) fn into_parts(self) -> (T, PortableShowDocument, PreparedShowConfiguration) {
+        (self.runtime, self.document, self.configuration)
+    }
 }
 
 impl PreparedShowLoad {
-    pub(super) fn prepare_runtime(
+    pub(super) fn prepare_runtime<T>(
         self,
-        prepare: impl FnOnce(EngineSnapshot) -> Result<PreparedEngineSnapshot, EngineError>,
-    ) -> Result<PreparedRuntimeShowLoad, ShowLoadError> {
+        prepare: impl FnOnce(EngineSnapshot) -> Result<T, EngineError>,
+    ) -> Result<PreparedRuntimeShowLoad<T>, ShowLoadError> {
+        let candidate_revision = self.snapshot.revision;
         let runtime = prepare(self.snapshot).map_err(ShowLoadError::Engine)?;
         Ok(PreparedRuntimeShowLoad {
             store: self.store,
             source_revision: self.source_revision,
+            document: self.document,
             transaction: self.transaction,
+            candidate_revision,
             runtime,
         })
     }
@@ -57,24 +176,64 @@ impl PreparedShowLoad {
     }
 }
 
-impl PreparedRuntimeShowLoad {
+impl<T> PreparedRuntimeShowLoad<T> {
+    /// Compatibility wrapper for startup and unaffected callers: commits a staged migration and
+    /// returns only the prepared runtime.
     pub(super) fn commit_migration(
         self,
         backup: &ShowMutationBackupPlan,
-    ) -> Result<PreparedEngineSnapshot, ShowLoadError> {
-        if self.transaction.is_empty() {
-            return Ok(self.runtime);
+    ) -> Result<T, ShowLoadError> {
+        let candidate_revision = self.candidate_revision;
+        let (runtime, document) = self.commit_document(backup)?;
+        debug_assert_eq!(document.revision().value(), candidate_revision);
+        Ok(runtime)
+    }
+
+    /// Commits a staged migration and derives activation configuration from the exact compiled
+    /// document: the accepted source document when nothing migrated, otherwise that document
+    /// advanced by the transaction's own committed changes. Nothing rereads the show file.
+    ///
+    /// An identity/revision mismatch is reported before any activation effect. After a migration
+    /// commit that report necessarily follows persistence; no post-commit atomicity is claimed.
+    #[cfg_attr(not(test), allow(dead_code))] // Called by TL-584's owned activation workflow.
+    pub(super) fn commit_activation(
+        self,
+        backup: &ShowMutationBackupPlan,
+    ) -> Result<PreparedShowActivation<T>, ShowLoadError> {
+        let candidate_revision = self.candidate_revision;
+        let (runtime, document) = self.commit_document(backup)?;
+        let configuration = PreparedShowConfiguration::for_document(&document);
+        configuration.ensure_matches(&document, candidate_revision)?;
+        Ok(PreparedShowActivation {
+            runtime,
+            document,
+            configuration,
+        })
+    }
+
+    fn commit_document(
+        self,
+        backup: &ShowMutationBackupPlan,
+    ) -> Result<(T, PortableShowDocument), ShowLoadError> {
+        let Self {
+            store,
+            source_revision,
+            mut document,
+            transaction,
+            candidate_revision: _,
+            runtime,
+        } = self;
+        if transaction.is_empty() {
+            return Ok((runtime, document));
         }
         backup
-            .create_migration(&self.store, self.source_revision)
+            .create_migration(&store, source_revision)
             .map_err(ShowLoadError::Application)?;
-        let candidate_revision = self.runtime.snapshot().revision;
-        let committed = self
-            .store
-            .apply_portable_transaction(self.transaction)
+        let committed = store
+            .apply_portable_transaction(transaction)
             .map_err(ShowLoadError::Store)?;
-        debug_assert_eq!(committed.revision().value(), candidate_revision);
-        Ok(self.runtime)
+        document.apply_commit(&committed);
+        Ok((runtime, document))
     }
 }
 
@@ -107,6 +266,7 @@ pub(super) fn prepare_show_load(
     Ok(PreparedShowLoad {
         store,
         source_revision,
+        document,
         transaction,
         snapshot,
     })
@@ -132,7 +292,8 @@ pub(super) fn load_engine_snapshot_with_override(
 pub(super) fn prepare_show_for_runtime(
     state: &AppState,
     entry: &ShowEntry,
-) -> Result<PreparedEngineSnapshot, ApiError> {
+) -> Result<PreparedOutputSnapshot, ApiError> {
+    super::show_programming_contract::require_for_show(state, entry)?;
     highlight_compatibility::require_review_for_show(state, entry)?;
     let backup = ShowMutationBackupPlan::migration(
         state.installation.data_dir(),
@@ -144,6 +305,30 @@ pub(super) fn prepare_show_for_runtime(
             prepared.prepare_runtime(|snapshot| state.output.prepare_snapshot(snapshot))
         })
         .and_then(|prepared| prepared.commit_migration(&backup))
+        .map_err(show_load_api_error)
+}
+
+/// Activation-bundle sibling of `prepare_show_for_runtime` for TL-584. It performs the same
+/// review gate, compilation, output preparation and migration commit, and additionally returns
+/// the exact compiled document with its prepared Attribute and PSN configuration. It installs
+/// nothing; the caller installs the runtime and `install_memory_only` inside its own boundary.
+#[cfg_attr(not(test), allow(dead_code))] // Called by TL-584's owned activation workflow.
+pub(super) fn prepare_show_activation_for_runtime(
+    state: &AppState,
+    entry: &ShowEntry,
+) -> Result<PreparedShowActivation<PreparedOutputSnapshot>, ApiError> {
+    super::show_programming_contract::require_for_show(state, entry)?;
+    highlight_compatibility::require_review_for_show(state, entry)?;
+    let backup = ShowMutationBackupPlan::migration(
+        state.installation.data_dir(),
+        entry,
+        state.installation.configuration().backup_retention,
+    );
+    prepare_show_load(entry, None)
+        .and_then(|prepared| {
+            prepared.prepare_runtime(|snapshot| state.output.prepare_snapshot(snapshot))
+        })
+        .and_then(|prepared| prepared.commit_activation(&backup))
         .map_err(show_load_api_error)
 }
 

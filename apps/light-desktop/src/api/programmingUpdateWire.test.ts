@@ -23,6 +23,13 @@ const CORRELATION_ID = "55555555-5555-4555-8555-555555555555";
 const DESK_ID = "66666666-6666-4666-8666-666666666666";
 const FINGERPRINT = "a".repeat(64);
 
+it("retains a component mask address in Update previews", () => {
+ const response = groupPreviewResponse();
+ const address = { type: "dynamic_attribute", fixture_id: FIXTURE_ID, attribute: "position", instance_link: null, lane_id: null, component: { kind: "pan" } };
+ const decoded = decodeProgrammingUpdatePreviewResponse({ ...response, preview: { ...response.preview, items: [{ address, outcome: { outcome: "add_new" } }] } }, SHOW_ID, groupRequest());
+ expect(decoded.preview.items[0].address).toEqual(address);
+});
+
 function groupRequest(): ProgrammingUpdatePreviewRequest {
 	return {
 		request_id: "preview-group",

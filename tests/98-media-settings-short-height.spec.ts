@@ -217,9 +217,10 @@ for (const viewport of [
 	{ name: "short and wide", width: 1280, height: 420 },
 ]) {
 	test.describe(`Settings in a ${viewport.name} window`, () => {
-		test.beforeEach(async ({ page }) => {
-			await page.setViewportSize(viewport);
-		});
+		// The page opens at the short size instead of being shrunk from the default viewport after
+		// it was created: Chrome sometimes keeps a dead band along the bottom of a page shrunk that
+		// way, where a touch drag starts a gesture that scrolls nothing.
+		test.use({ viewport: { width: viewport.width, height: viewport.height } });
 
 		test(`TL-455 @ui › the section scrolls to its last control with the mouse wheel and small trackpad steps (${viewport.name})`, async ({
 			page,
@@ -261,8 +262,12 @@ for (const viewport of [
 			await expect(content).toBeFocused();
 			await page.keyboard.press("End");
 			await expectAtBottom(content);
+			// A key pressed while the previous key's smooth scroll is still running can be lost
+			// to it, so each key waits for the section to come to rest.
+			await expectScrollSettled(content);
 			await page.keyboard.press("Home");
 			await expect.poll(async () => (await scrollState(content)).top).toBe(0);
+			await expectScrollSettled(content);
 			await page.keyboard.press("PageDown");
 			await expect
 				.poll(async () => (await scrollState(content)).top)

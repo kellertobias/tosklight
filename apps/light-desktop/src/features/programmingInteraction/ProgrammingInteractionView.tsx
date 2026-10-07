@@ -297,6 +297,18 @@ export function useProgrammingSelectionView(enabled = true) {
 	);
 }
 
+export function useProgrammingAlignmentView(enabled = true) {
+	useProgrammingCapabilityView("alignment", enabled);
+	return useProgrammingSelector(
+		useCallback(
+			(state: ProgrammingInteractionState) => enabled ? state.alignment : null,
+			[enabled],
+		),
+		Object.is,
+		enabled,
+	);
+}
+
 export function useProgrammingInteractionStatus() {
 	return useProgrammingSelector(selectStatus, equalStatus);
 }

@@ -136,12 +136,6 @@ pub struct FixtureChannel {
     #[serde(default)]
     pub virtual_intensity_inverted: bool,
     #[serde(default)]
-    pub reacts_to_sequence_master: bool,
-    #[serde(default)]
-    pub reacts_to_group_master: bool,
-    #[serde(default)]
-    pub reacts_to_grand_master: bool,
-    #[serde(default)]
     pub behavior: ChannelBehavior,
     #[serde(default)]
     pub functions: Vec<ChannelFunction>,
@@ -159,6 +153,10 @@ struct FixtureModeCanonical {
     channels: Vec<FixtureChannel>,
     #[serde(default)]
     color_systems: Vec<HeadColorSystem>,
+    #[serde(default)]
+    color_physical: Option<super::ColorPhysicalModel>,
+    #[serde(default)]
+    position_physical: Option<super::PositionPhysicalModel>,
     #[serde(default)]
     control_actions: Vec<ControlAction>,
     #[serde(default)]
@@ -230,11 +228,27 @@ impl<'de> Deserialize<'de> for FixtureMode {
             heads: canonical.heads,
             channels: canonical.channels,
             color_systems: canonical.color_systems,
+            color_physical: canonical.color_physical,
+            position_physical: canonical.position_physical,
             control_actions: canonical.control_actions,
             geometry: canonical.geometry,
             emitter_heads: canonical.emitter_heads,
             motion_attributes: canonical.motion_attributes,
         })
+    }
+}
+
+impl FixtureChannel {
+    /// Whether the masters reach this channel: it carries a level parameter (Intensity, Volume)
+    /// the masters scale before DMX, or it follows the virtual intensity, directly or inversely.
+    pub fn follows_masters(&self) -> bool {
+        self.reacts_to_virtual_intensity
+            || self.attribute.is_level()
+            || self.fixture_attribute.is_level()
+            || self
+                .functions
+                .iter()
+                .any(|function| function.attribute.is_level())
     }
 }
 
@@ -246,18 +260,17 @@ pub struct ChannelScales {
     /// `1 - virtual intensity`, so a neutral stand-in value would close it. The engine passes
     /// `None` for a channel whose own active attribute is intensity.
     pub virtual_intensity: Option<f32>,
-    pub sequence_master: f32,
-    pub group_master: f32,
-    pub grand_master: f32,
+    /// The Grand Master (0 under Blackout) a highlighted level channel still follows: the only
+    /// master above transient Highlight. Every other master already scaled the level parameters
+    /// before DMX, so an ordinary channel is never scaled by a master here.
+    pub highlight_master: f32,
 }
 
 impl Default for ChannelScales {
     fn default() -> Self {
         Self {
             virtual_intensity: None,
-            sequence_master: 1.0,
-            group_master: 1.0,
-            grand_master: 1.0,
+            highlight_master: 1.0,
         }
     }
 }
@@ -294,6 +307,9 @@ pub struct ChannelFunction {
     /// `physical_min` and `physical_max` remain the exact DMX endpoint mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub angular_motion: Option<AngularMotion>,
+    /// Optional physical response samples and their evidence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub physical_mapping: Option<super::PhysicalMappingCalibration>,
     pub behavior: ChannelFunctionBehavior,
 }
 
@@ -348,6 +364,7 @@ impl ChannelFunction {
             attribute,
             priority: 0,
             angular_motion: None,
+            physical_mapping: None,
             behavior: ChannelFunctionBehavior::Continuous {
                 physical_min: 0.0,
                 physical_max: 1.0,

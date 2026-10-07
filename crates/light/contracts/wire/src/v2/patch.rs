@@ -120,6 +120,12 @@ pub enum PatchFixtureUpdateAction {
         invert_pan: bool,
         invert_tilt: bool,
     },
+    SetPositionCalibration {
+        calibration: Option<PatchPositionCalibration>,
+    },
+    SetColorCalibration {
+        calibration: Option<PatchColorCalibration>,
+    },
     SetMoveInBlack {
         enabled: bool,
         #[ts(type = "number")]
@@ -146,6 +152,114 @@ pub enum PatchFixtureUpdateAction {
     SetInstalledAppearance {
         appearance: PatchInstalledFixtureAppearance,
     },
+}
+
+/// Saved installation zero correction for one physical fixture; live integration is separate.
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchPositionCalibration {
+    #[serde(default)]
+    pub revision: u32,
+    #[serde(default)]
+    pub quality: PatchCalibrationQuality,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub pan_zero_degrees: f32,
+    #[serde(default)]
+    pub tilt_zero_degrees: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub axis_overrides: Option<PatchAxisOverrides>,
+}
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchPositionCalibrationIdentity {
+    pub profile_id: Uuid,
+    pub mode_id: Uuid,
+    pub geometry_digest: String,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchAxisOverrides {
+    pub version: u16,
+    pub source_identity: PatchPositionCalibrationIdentity,
+    pub axes: Vec<PatchAxisCalibration>,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchAxisCalibration {
+    pub node_id: Uuid,
+    pub zero_degrees: f32,
+    pub invert: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PatchCalibrationQuality {
+    #[default]
+    Unknown,
+    Estimated,
+    Manufacturer,
+    Measured,
+}
+
+/// Installed optical observations. Every path is bound to an immutable source profile.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchColorCalibration {
+    pub version: u16,
+    #[serde(default)]
+    pub revision: u32,
+    pub paths: Vec<PatchColorPathCalibration>,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchColorPathCalibration {
+    pub source_identity: PatchNativeColorIdentity,
+    #[serde(default)]
+    pub emitters: Vec<PatchEmitterCalibration>,
+    #[serde(default)]
+    pub measurements: Vec<PatchColorRecipeMeasurement>,
+}
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchNativeColorIdentity {
+    pub profile_id: Uuid,
+    pub profile_revision: u32,
+    pub profile_digest: String,
+    pub mode_id: Uuid,
+    pub head_id: Uuid,
+    pub path_id: Uuid,
+    pub model_revision: u32,
+    pub native_layout_signature: String,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchEmitterCalibration {
+    pub emitter_id: Uuid,
+    pub output_gain: f32,
+    #[serde(default)]
+    pub provenance: PatchOpticalProvenance,
+}
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchOpticalProvenance {
+    #[serde(default)]
+    pub quality: PatchCalibrationQuality,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub revision: u32,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchColorRecipeMeasurement {
+    pub recipe: Vec<PatchNativeColorValue>,
+    pub xyz: PatchColorXyz,
+    #[serde(default)]
+    pub provenance: PatchOpticalProvenance,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchNativeColorValue {
+    pub channel_id: Uuid,
+    pub function_id: Uuid,
+    pub raw: u32,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchColorXyz {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 /// Portable installed lamp/filter/static-shaper appearance for one physical fixture instance.
@@ -302,6 +416,10 @@ pub struct PatchFixtureInput {
     pub invert_pan: bool,
     #[serde(default)]
     pub invert_tilt: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_calibration: Option<PatchPositionCalibration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_calibration: Option<PatchColorCalibration>,
     /// Degrees the mounting bracket is set to, positive nose-down. A mechanical setting the desk
     /// cannot drive, recorded so the visualizer draws the rig as it actually hangs.
     #[serde(default)]
@@ -423,6 +541,10 @@ pub struct PatchMultiPatchInput {
     pub invert_pan: bool,
     #[serde(default)]
     pub invert_tilt: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_calibration: Option<PatchPositionCalibration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_calibration: Option<PatchColorCalibration>,
     #[serde(default)]
     pub bracket_angle: f32,
     #[serde(default)]
@@ -534,6 +656,10 @@ pub struct PatchFixtureProjection {
     pub grand_master_enabled: bool,
     pub invert_pan: bool,
     pub invert_tilt: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_calibration: Option<PatchPositionCalibration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_calibration: Option<PatchColorCalibration>,
     pub bracket_angle: f32,
     pub shaper_angle: Option<f32>,
     pub installed_appearance: PatchInstalledFixtureAppearance,
@@ -583,6 +709,10 @@ pub struct PatchMultiPatchProjection {
     pub rotation: PatchFixtureRotation,
     pub invert_pan: bool,
     pub invert_tilt: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_calibration: Option<PatchPositionCalibration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_calibration: Option<PatchColorCalibration>,
     pub bracket_angle: f32,
     pub shaper_angle: Option<f32>,
     pub installed_appearance: PatchInstalledFixtureAppearance,
@@ -630,6 +760,10 @@ pub struct PatchModeProjection {
     pub mode_id: Uuid,
     pub name: String,
     pub splits: Vec<PatchModeSplitProjection>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub native_color_identities: Vec<PatchNativeColorIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_calibration_identity: Option<PatchPositionCalibrationIdentity>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

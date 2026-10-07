@@ -203,8 +203,8 @@ fn align_without_a_selection_is_a_value_neutral_no_op() {
 #[test]
 fn align_modifies_future_relative_steps_and_reanchors_without_mutating_on_activation() {
     let mut setup = ValuesSetup::new();
-    let pan = AttributeKey("pan".into());
-    let tilt = AttributeKey("tilt".into());
+    let pan = AttributeKey("iris".into());
+    let tilt = AttributeKey("softness".into());
     setup.registry.select(setup.session, setup.fixtures);
     for fixture in setup.fixtures {
         setup
@@ -250,6 +250,8 @@ fn align_modifies_future_relative_steps_and_reanchors_without_mutating_on_activa
                 operation: ProgrammingValueOperation::RelativeStep(0.2),
                 undo_group: Some("encoder-pan".into()),
                 timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
             },
         },
     );
@@ -291,6 +293,8 @@ fn align_modifies_future_relative_steps_and_reanchors_without_mutating_on_activa
                 operation: ProgrammingValueOperation::RelativeStep(0.2),
                 undo_group: Some("encoder-pan-out".into()),
                 timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
             },
         },
     );
@@ -320,6 +324,8 @@ fn align_modifies_future_relative_steps_and_reanchors_without_mutating_on_activa
                 operation: ProgrammingValueOperation::RelativeStep(0.1),
                 undo_group: None,
                 timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
             },
         },
     );
@@ -537,10 +543,10 @@ fn values_batch_is_one_persisted_projection_event_and_undo_checkpoint() {
         ProgrammingValuesCommand::Batch {
             mutations: vec![
                 fixture_set(setup.fixtures[0], "intensity", 0.25, Default::default()),
-                fixture_set(setup.fixtures[1], "pan", 0.5, timing),
+                fixture_set(setup.fixtures[1], "iris", 0.5, timing),
                 group_set(
                     "front",
-                    "tilt",
+                    "softness",
                     AttributeValue::Spread(vec![0.1, 0.9]),
                     timing,
                 ),
@@ -591,7 +597,7 @@ fn value_intent_identity_and_injected_activation_expansion_are_atomic() {
     let mut setup = ValuesSetup::new();
     let fixture = setup.fixtures[0];
     let intensity = AttributeKey::intensity();
-    let pan = AttributeKey("pan".into());
+    let pan = AttributeKey("iris".into());
     setup.ports.environment.current_values = light_engine::ResolvedValues::from_iter([(
         (fixture, pan.clone()),
         AttributeValue::Normalized(0.7),
@@ -614,6 +620,8 @@ fn value_intent_identity_and_injected_activation_expansion_are_atomic() {
                 operation: ProgrammingValueOperation::AbsoluteSet(AttributeValue::Normalized(0.25)),
                 undo_group: None,
                 timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
             },
         },
     );
@@ -641,6 +649,8 @@ fn value_intent_identity_and_injected_activation_expansion_are_atomic() {
                 operation: ProgrammingValueOperation::RelativeStep(0.1),
                 undo_group: None,
                 timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
             },
         },
     );
@@ -719,6 +729,8 @@ fn relative_fixture_intent_starts_from_the_owned_programmer_value() {
                 operation: ProgrammingValueOperation::AbsoluteSet(AttributeValue::Normalized(0.5)),
                 undo_group: None,
                 timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
             },
         },
     );
@@ -733,6 +745,8 @@ fn relative_fixture_intent_starts_from_the_owned_programmer_value() {
                 operation: ProgrammingValueOperation::RelativeStep(0.001),
                 undo_group: None,
                 timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
             },
         },
     );
@@ -771,6 +785,8 @@ fn relative_fixture_intent_without_a_resolvable_base_is_actionable_and_atomic() 
                         operation: ProgrammingValueOperation::RelativeStep(0.01),
                         undo_group: Some("encoder-focus".into()),
                         timing: Default::default(),
+                        displayed_source: None,
+                        color_adoption: Default::default(),
                     },
                 },
             ),
@@ -806,6 +822,8 @@ fn relative_group_intent_preserves_live_group_scope_and_mixed_member_values() {
                 operation: ProgrammingValueOperation::RelativeStep(0.1),
                 undo_group: None,
                 timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
             },
         },
     );
@@ -824,8 +842,8 @@ fn relative_group_intent_preserves_live_group_scope_and_mixed_member_values() {
 #[test]
 fn group_intent_captures_supported_linked_values_per_fixture_in_one_undo_step() {
     let mut setup = ValuesSetup::new();
-    let red = AttributeKey("color.red".into());
-    let green = AttributeKey("color.green".into());
+    let red = AttributeKey("gobo.1".into());
+    let green = AttributeKey("gobo.2".into());
     setup
         .ports
         .environment
@@ -858,6 +876,8 @@ fn group_intent_captures_supported_linked_values_per_fixture_in_one_undo_step() 
                 operation: ProgrammingValueOperation::AbsoluteSet(AttributeValue::Normalized(0.8)),
                 undo_group: None,
                 timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
             },
         },
     );
@@ -883,7 +903,7 @@ fn exact_and_interaction_only_actions_do_not_materialize_values() {
             fixture_set(setup.fixtures[0], "intensity", 0.5, Default::default()),
             group_set(
                 "front",
-                "pan",
+                "iris",
                 AttributeValue::Spread(vec![0.2, 0.8]),
                 Default::default(),
             ),
@@ -964,8 +984,8 @@ fn values_replay_precedes_revision_checks_and_failures_do_not_mutate() {
             1,
             ProgrammingValuesCommand::Batch {
                 mutations: vec![
-                    fixture_set(setup.fixtures[1], "pan", 0.2, Default::default()),
-                    fixture_set(setup.fixtures[1], "pan", 0.8, Default::default()),
+                    fixture_set(setup.fixtures[1], "iris", 0.2, Default::default()),
+                    fixture_set(setup.fixtures[1], "iris", 0.8, Default::default()),
                 ],
             },
         ),
@@ -1059,7 +1079,7 @@ fn release_and_clear_preserve_preload_transient_selection_and_modes() {
                 fixture_set(setup.fixtures[0], "intensity", 0.5, Default::default()),
                 group_set(
                     "front",
-                    "pan",
+                    "iris",
                     AttributeValue::Spread(vec![0.2, 0.8]),
                     Default::default(),
                 ),
@@ -1080,7 +1100,7 @@ fn release_and_clear_preserve_preload_transient_selection_and_modes() {
         2,
         ProgrammingValuesCommand::ReleaseGroup {
             group_id: "front".into(),
-            attribute: AttributeKey("pan".into()),
+            attribute: AttributeKey("iris".into()),
         },
     );
     assert_eq!(released_group.outcome.revision(), 3);
@@ -1093,7 +1113,7 @@ fn release_and_clear_preserve_preload_transient_selection_and_modes() {
                 fixture_set(setup.fixtures[0], "intensity", 0.7, Default::default()),
                 group_set(
                     "front",
-                    "tilt",
+                    "softness",
                     AttributeValue::Normalized(0.6),
                     Default::default(),
                 ),
@@ -1110,7 +1130,7 @@ fn release_and_clear_preserve_preload_transient_selection_and_modes() {
     assert!(setup.registry.set_preload_group(
         setup.session,
         "back".into(),
-        AttributeKey("pan".into()),
+        AttributeKey("iris".into()),
         AttributeValue::Normalized(0.3),
     ));
     assert!(
@@ -1176,7 +1196,7 @@ fn every_surface_programs_the_same_values() {
                     expected_capture_mode_revision: 0,
                     command: ProgrammingValuesCommand::SetGroup {
                         group_id: "front".into(),
-                        attribute: AttributeKey("pan".into()),
+                        attribute: AttributeKey("iris".into()),
                         value: AttributeValue::Normalized(0.5),
                         timing: Default::default(),
                     },
@@ -1239,5 +1259,469 @@ fn every_surface_programs_the_same_values() {
         snapshot.projection.fixture_values.len(),
         2,
         "the desk holds every surface's values in one Programmer"
+    );
+}
+
+#[test]
+fn empty_value_intents_are_silent_and_validate_without_mutating() {
+    let setup = ValuesSetup::new();
+    let before = setup.registry.get(setup.session).unwrap();
+    for (index, operation) in [
+        ProgrammingValueOperation::AbsoluteSet(AttributeValue::Normalized(0.4)),
+        ProgrammingValueOperation::RelativeStep(0.1),
+        ProgrammingValueOperation::AbsoluteSet(AttributeValue::Spread(vec![0.0, 0.5, 1.0])),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let outcome = setup.handle(
+            &format!("empty-{index}"),
+            0,
+            ProgrammingValuesCommand::ApplyIntent {
+                intent: ProgrammingValueIntent {
+                    fixture_ids: vec![],
+                    group_id: None,
+                    attribute: AttributeKey::intensity(),
+                    operation,
+                    undo_group: Some("no-selection".into()),
+                    timing: Default::default(),
+                    displayed_source: None,
+                    color_adoption: Default::default(),
+                },
+            },
+        );
+        assert!(matches!(
+            outcome.outcome,
+            ProgrammingValuesOutcome::NoChange { .. }
+        ));
+        assert!(outcome.warning.is_none());
+    }
+    for (index, operation) in [
+        ProgrammingValueOperation::AbsoluteSet(AttributeValue::Normalized(f32::NAN)),
+        ProgrammingValueOperation::RelativeStep(0.0),
+        ProgrammingValueOperation::AbsoluteSet(AttributeValue::Spread(vec![0.0, 2.0])),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let action = setup.action(
+            &format!("invalid-empty-{index}"),
+            0,
+            ProgrammingValuesCommand::ApplyIntent {
+                intent: ProgrammingValueIntent {
+                    fixture_ids: vec![],
+                    group_id: None,
+                    attribute: AttributeKey::intensity(),
+                    operation,
+                    undo_group: None,
+                    timing: Default::default(),
+                    displayed_source: None,
+                    color_adoption: Default::default(),
+                },
+            },
+        );
+        assert!(setup.service.handle_values(action, &setup.ports).is_err());
+    }
+    let after = setup.registry.get(setup.session).unwrap();
+    assert_eq!(
+        serde_json::to_value(&after).unwrap(),
+        serde_json::to_value(&before).unwrap()
+    );
+    assert_eq!(after.undo.len(), before.undo.len());
+    assert_eq!(setup.registry.normal_values_revision(), 0);
+    assert_eq!(setup.events.latest_sequence(), 0);
+    assert!(setup.ports.persisted.lock().is_empty());
+}
+
+#[test]
+fn semantic_color_edits_adopt_each_fixture_once_and_undo_the_whole_gesture() {
+    use light_core::programming::*;
+    let mut setup = ValuesSetup::new();
+    let fixtures = [setup.fixtures[0], setup.fixtures[1]];
+    let colors = [
+        light_core::Xyz {
+            x: 0.4,
+            y: 0.2,
+            z: 0.0,
+        },
+        light_core::Xyz {
+            x: 0.1,
+            y: 0.1,
+            z: 0.8,
+        },
+    ];
+    for (fixture, xyz) in fixtures.into_iter().zip(colors) {
+        setup.ports.environment.current_values.insert(
+            (fixture, AttributeKey::color()),
+            AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic {
+                intent: ColorIntent {
+                    base_xyz: xyz,
+                    recipe: VirtualColorRecipe {
+                        approximate: true,
+                        ..Default::default()
+                    },
+                    uv: UvIntent { amount: 0.75 },
+                    ..Default::default()
+                },
+            })),
+        );
+    }
+    let command = |component, value| ProgrammingValuesCommand::ApplyIntent {
+        intent: ProgrammingValueIntent {
+            fixture_ids: fixtures.to_vec(),
+            group_id: None,
+            attribute: AttributeKey::color(),
+            operation: ProgrammingValueOperation::ComponentEdits(vec![ComponentEdit::Scalar {
+                component: ProgrammingComponent::Color(component),
+                operation: ScalarEdit::Set(ScalarIntent::Value(value)),
+            }]),
+            undo_group: Some("color-family-touch".into()),
+            timing: Default::default(),
+            displayed_source: None,
+            color_adoption: Default::default(),
+        },
+    };
+    let before = setup.registry.undo_depth(setup.session).unwrap();
+    setup.handle("family-white", 0, command(ColorComponent::WhiteBlend, 0.5));
+    setup.ports.environment.current_values.clear();
+    setup.handle(
+        "family-temp",
+        1,
+        command(ColorComponent::Temperature, 3200.0),
+    );
+    let state = setup.registry.get(setup.session).unwrap();
+    assert_eq!(state.values.len(), 2);
+    for (fixture, xyz) in fixtures.into_iter().zip(colors) {
+        let value = state
+            .values
+            .iter()
+            .find(|value| value.fixture_id == fixture)
+            .unwrap();
+        let AttributeValue::ColorProgram(program) = &value.value else {
+            panic!()
+        };
+        let ColorProgram::Semantic { intent } = program.as_ref() else {
+            panic!()
+        };
+        assert_eq!(intent.base_xyz, xyz);
+        assert_eq!(intent.uv.amount, 0.75);
+        assert_eq!(intent.white_blend, 0.5);
+        assert_eq!(intent.white_target.kelvin, 3200.0);
+    }
+    assert_eq!(state.undo.len(), before + 1);
+    assert!(setup.registry.undo(setup.session));
+    assert!(setup.registry.get(setup.session).unwrap().values.is_empty());
+}
+
+#[test]
+fn semantic_position_spread_uses_order_and_takeover_pose_without_clamping() {
+    use light_core::programming::*;
+    let mut setup = ValuesSetup::new();
+    let fixtures = [setup.fixtures[1], setup.fixtures[0]];
+    for (fixture, tilt) in fixtures.into_iter().zip([12.0, -30.0]) {
+        setup.ports.environment.current_values.insert(
+            (fixture, ProgrammingOwner::Position.key()),
+            AttributeValue::Position(Arc::new(PositionIntent::target(
+                TargetReference::Origin,
+                [0.0; 3],
+            ))),
+        );
+        setup.ports.environment.family_contexts.insert(
+            fixture,
+            crate::ProgrammingFamilyContext {
+                solved_angles: Some(JointAngles {
+                    pan_degrees: 720.0,
+                    tilt_degrees: tilt,
+                }),
+                ..Default::default()
+            },
+        );
+    }
+    setup.handle(
+        "family-pan-spread",
+        0,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: fixtures.to_vec(),
+                group_id: None,
+                attribute: ProgrammingOwner::Position.key(),
+                operation: ProgrammingValueOperation::ComponentEdits(vec![ComponentEdit::Scalar {
+                    component: ProgrammingComponent::Pan,
+                    operation: ScalarEdit::Set(ScalarIntent::Spread(vec![-450.0, 900.0])),
+                }]),
+                undo_group: None,
+                timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
+            },
+        },
+    );
+    let state = setup.registry.get(setup.session).unwrap();
+    for ((fixture, pan), tilt) in fixtures.into_iter().zip([-450.0, 900.0]).zip([12.0, -30.0]) {
+        assert_eq!(
+            state
+                .values
+                .iter()
+                .find(|value| value.fixture_id == fixture)
+                .unwrap()
+                .value,
+            AttributeValue::Position(Arc::new(PositionIntent::angles(pan, tilt)))
+        );
+    }
+}
+
+#[test]
+fn component_edit_failure_is_atomic_and_empty_targets_still_validate_syntax() {
+    use light_core::programming::*;
+    let mut setup = ValuesSetup::new();
+    setup.ports.environment.current_values.insert(
+        (setup.fixtures[0], ProgrammingOwner::Position.key()),
+        AttributeValue::Position(Arc::new(PositionIntent::angles(0.0, 10.0))),
+    );
+    let command = |targets, delta| ProgrammingValuesCommand::ApplyIntent {
+        intent: ProgrammingValueIntent {
+            fixture_ids: targets,
+            group_id: None,
+            attribute: ProgrammingOwner::Position.key(),
+            operation: ProgrammingValueOperation::ComponentEdits(vec![ComponentEdit::Scalar {
+                component: ProgrammingComponent::Pan,
+                operation: ScalarEdit::Relative(delta),
+            }]),
+            undo_group: None,
+            timing: Default::default(),
+            displayed_source: None,
+            color_adoption: Default::default(),
+        },
+    };
+    let before = setup.registry.get(setup.session).unwrap();
+    for (id, targets, delta) in [
+        ("missing-seed", setup.fixtures[..2].to_vec(), 90.0),
+        ("invalid-empty", vec![], f32::NAN),
+    ] {
+        let error = setup
+            .service
+            .handle_values(setup.action(id, 0, command(targets, delta)), &setup.ports)
+            .unwrap_err();
+        assert_eq!(error.kind, ActionErrorKind::Invalid);
+    }
+    let result = setup.handle("valid-empty", 0, command(vec![], 90.0));
+    assert!(matches!(
+        result.outcome,
+        ProgrammingValuesOutcome::NoChange { revision: 0 }
+    ));
+    let after = setup.registry.get(setup.session).unwrap();
+    assert_eq!(after.values, before.values);
+    assert_eq!(after.undo.len(), before.undo.len());
+    assert!(setup.ports.persisted.lock().is_empty());
+}
+
+#[test]
+fn rejected_component_edit_preserves_active_align_and_empty_spread_is_rejected() {
+    use light_core::programming::*;
+    let setup = ValuesSetup::new();
+    setup
+        .registry
+        .select(setup.session, setup.fixtures.to_vec());
+    setup
+        .service
+        .set_alignment(
+            &setup.context,
+            &setup.ports,
+            Some(ProgrammerAlignmentMode::Left),
+        )
+        .unwrap();
+    let alignment = setup.registry.alignment(setup.session);
+    assert!(alignment.is_some());
+    let action = setup.action(
+        "missing-family-with-align",
+        0,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: vec![setup.fixtures[0]],
+                group_id: None,
+                attribute: ProgrammingOwner::Position.key(),
+                operation: ProgrammingValueOperation::ComponentEdits(vec![ComponentEdit::Scalar {
+                    component: ProgrammingComponent::Pan,
+                    operation: ScalarEdit::Relative(90.0),
+                }]),
+                undo_group: None,
+                timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
+            },
+        },
+    );
+    assert!(setup.service.handle_values(action, &setup.ports).is_err());
+    assert_eq!(setup.registry.alignment(setup.session), alignment);
+    let invalid_spread = setup.action(
+        "empty-spread-fixture",
+        0,
+        ProgrammingValuesCommand::SetFixture {
+            fixture_id: setup.fixtures[0],
+            attribute: AttributeKey::intensity(),
+            value: AttributeValue::Spread(vec![]),
+            timing: Default::default(),
+        },
+    );
+    assert!(
+        setup
+            .service
+            .handle_values(invalid_spread, &setup.ports)
+            .is_err()
+    );
+    assert!(setup.registry.get(setup.session).unwrap().values.is_empty());
+}
+
+#[test]
+fn whole_position_spread_materializes_complete_fixture_values() {
+    use light_core::programming::*;
+    let setup = ValuesSetup::new();
+    let reference = TargetReference::Point {
+        point_id: Uuid::new_v4(),
+    };
+    setup.handle(
+        "whole-target-spread",
+        0,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: setup.fixtures.to_vec(),
+                group_id: None,
+                attribute: ProgrammingOwner::Position.key(),
+                operation: ProgrammingValueOperation::AbsoluteSet(AttributeValue::Position(
+                    Arc::new(PositionIntent::Target {
+                        reference,
+                        offset_metres: [
+                            ScalarIntent::Spread(vec![-20.0, 20.0]),
+                            ScalarIntent::Value(4.0),
+                            ScalarIntent::Value(-2.0),
+                        ],
+                    }),
+                )),
+                undo_group: None,
+                timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
+            },
+        },
+    );
+    let state = setup.registry.get(setup.session).unwrap();
+    for (fixture, x) in setup.fixtures.into_iter().zip([-20.0, 0.0, 20.0]) {
+        assert_eq!(
+            state
+                .values
+                .iter()
+                .find(|value| value.fixture_id == fixture)
+                .unwrap()
+                .value,
+            AttributeValue::Position(Arc::new(PositionIntent::target(reference, [x, 4.0, -2.0])))
+        );
+    }
+}
+
+#[test]
+fn editing_a_group_keeps_untouched_curves_after_membership_shrinks() {
+    use light_core::programming::*;
+    let mut setup = ValuesSetup::new();
+    let position = PositionIntent::Angles {
+        pan_degrees: ScalarIntent::Spread(vec![-90.0, 0.0, 90.0]),
+        tilt_degrees: ScalarIntent::Value(20.0),
+    };
+    setup.handle(
+        "capture-group-curve",
+        0,
+        ProgrammingValuesCommand::SetGroup {
+            group_id: "front".into(),
+            attribute: ProgrammingOwner::Position.key(),
+            value: AttributeValue::Position(Arc::new(position.clone())),
+            timing: Default::default(),
+        },
+    );
+    setup
+        .ports
+        .environment
+        .group_rank_counts
+        .insert("front".into(), 2);
+    setup.handle(
+        "edit-shrunken-group",
+        1,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: vec![],
+                group_id: Some("front".into()),
+                attribute: ProgrammingOwner::Position.key(),
+                operation: ProgrammingValueOperation::ComponentEdits(vec![ComponentEdit::Scalar {
+                    component: ProgrammingComponent::Tilt,
+                    operation: ScalarEdit::Relative(10.0),
+                }]),
+                undo_group: None,
+                timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
+            },
+        },
+    );
+    let state = setup.registry.get(setup.session).unwrap();
+    let AttributeValue::Position(result) =
+        &state.group_values["front"][&ProgrammingOwner::Position.key()].value
+    else {
+        panic!()
+    };
+    assert_eq!(
+        result.as_ref(),
+        &PositionIntent::Angles {
+            pan_degrees: ScalarIntent::Spread(vec![-90.0, 0.0, 90.0]),
+            tilt_degrees: ScalarIntent::Value(30.0)
+        }
+    );
+}
+
+#[path = "family_gesture_tests.rs"]
+mod family_gesture_tests;
+#[path = "optics_values_tests.rs"]
+mod optics_values_tests;
+
+#[test]
+fn full_group_color_does_not_leak_linked_native_channels_to_fixture_ownership() {
+    use light_core::programming::*;
+    let mut setup = ValuesSetup::new();
+    setup
+        .ports
+        .environment
+        .activation_links
+        .insert(AttributeKey::color(), vec![AttributeKey("gobo.1".into())]);
+    for fixture in setup.fixtures {
+        setup.ports.environment.supported_attributes.insert(
+            fixture,
+            [AttributeKey("gobo.1".into())].into_iter().collect(),
+        );
+        setup.ports.environment.current_values.insert(
+            (fixture, AttributeKey("gobo.1".into())),
+            AttributeValue::Normalized(0.5),
+        );
+    }
+    let value = AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic {
+        intent: ColorIntent::default(),
+    }));
+    setup.handle(
+        "group-complete-color",
+        0,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: vec![],
+                group_id: Some("front".into()),
+                attribute: AttributeKey::color(),
+                operation: ProgrammingValueOperation::AbsoluteSet(value.clone()),
+                undo_group: None,
+                timing: Default::default(),
+                displayed_source: None,
+                color_adoption: Default::default(),
+            },
+        },
+    );
+    let state = setup.registry.get(setup.session).unwrap();
+    assert!(state.values.is_empty());
+    assert_eq!(
+        state.group_values["front"][AttributeKey::color_ref()].value,
+        value
     );
 }

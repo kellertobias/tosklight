@@ -55,6 +55,16 @@ pub(crate) fn application_update_command(
             invert_pan,
             invert_tilt,
         },
+        wire::PatchFixtureUpdateAction::SetColorCalibration { calibration } => {
+            application::PatchFixtureUpdateAction::SetColorCalibration {
+                calibration: calibration.map(application_color_calibration),
+            }
+        }
+        wire::PatchFixtureUpdateAction::SetPositionCalibration { calibration } => {
+            application::PatchFixtureUpdateAction::SetPositionCalibration {
+                calibration: calibration.map(application_position_calibration),
+            }
+        }
         wire::PatchFixtureUpdateAction::SetMoveInBlack {
             enabled,
             delay_millis,
@@ -149,7 +159,7 @@ pub(crate) fn application_policy_command(
             if !mode
                 .channels
                 .iter()
-                .any(|channel| channel.reacts_to_group_master)
+                .any(fixture::FixtureChannel::follows_masters)
             {
                 return Err("fixture mode has no Group Master eligible channels".into());
             }
@@ -159,7 +169,7 @@ pub(crate) fn application_policy_command(
             if !mode
                 .channels
                 .iter()
-                .any(|channel| channel.reacts_to_grand_master)
+                .any(fixture::FixtureChannel::follows_masters)
             {
                 return Err("fixture mode has no Grand Master eligible channels".into());
             }
@@ -359,6 +369,10 @@ fn application_fixture(
             grand_master_enabled: input.grand_master_enabled,
             invert_pan: input.invert_pan,
             invert_tilt: input.invert_tilt,
+            position_calibration: input
+                .position_calibration
+                .map(application_position_calibration),
+            color_calibration: input.color_calibration.map(application_color_calibration),
             bracket_angle: input.bracket_angle,
             shaper_angle: input.shaper_angle,
             installed_appearance: application_installed_appearance(input.installed_appearance),
@@ -486,6 +500,10 @@ fn application_multipatch(input: wire::PatchMultiPatchInput) -> fixture::MultiPa
         rotation: application_rotation(input.rotation),
         invert_pan: input.invert_pan,
         invert_tilt: input.invert_tilt,
+        position_calibration: input
+            .position_calibration
+            .map(application_position_calibration),
+        color_calibration: input.color_calibration.map(application_color_calibration),
         bracket_angle: input.bracket_angle,
         shaper_angle: input.shaper_angle,
         installed_appearance: application_installed_appearance(input.installed_appearance),
@@ -598,6 +616,11 @@ fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchFixtu
         grand_master_enabled: patch.grand_master_enabled,
         invert_pan: patch.invert_pan,
         invert_tilt: patch.invert_tilt,
+        position_calibration: patch
+            .position_calibration
+            .as_ref()
+            .map(wire_position_calibration),
+        color_calibration: patch.color_calibration.as_ref().map(wire_color_calibration),
         bracket_angle: patch.bracket_angle,
         shaper_angle: patch.shaper_angle,
         installed_appearance: wire_installed_appearance(&patch.installed_appearance),
@@ -687,6 +710,14 @@ fn wire_multipatch(instance: &fixture::MultiPatchInstance) -> wire::PatchMultiPa
         rotation: wire_rotation(instance.rotation),
         invert_pan: instance.invert_pan,
         invert_tilt: instance.invert_tilt,
+        position_calibration: instance
+            .position_calibration
+            .as_ref()
+            .map(wire_position_calibration),
+        color_calibration: instance
+            .color_calibration
+            .as_ref()
+            .map(wire_color_calibration),
         bracket_angle: instance.bracket_angle,
         shaper_angle: instance.shaper_angle,
         installed_appearance: wire_installed_appearance(&instance.installed_appearance),
@@ -766,6 +797,15 @@ fn wire_profile(
             .referenced_modes
             .iter()
             .map(|mode| wire::PatchModeProjection {
+                position_calibration_identity: mode
+                    .position_calibration_identity
+                    .as_ref()
+                    .map(wire_position_identity),
+                native_color_identities: mode
+                    .native_color_identities
+                    .iter()
+                    .map(wire_color_identity)
+                    .collect(),
                 mode_id: mode.mode_id,
                 name: mode.name.clone(),
                 splits: mode
@@ -780,4 +820,284 @@ fn wire_profile(
             .collect(),
         profile_snapshot: profile.profile_snapshot.clone(),
     }
+}
+
+fn application_position_calibration(
+    value: wire::PatchPositionCalibration,
+) -> fixture::InstalledPositionCalibration {
+    fixture::InstalledPositionCalibration {
+        axis_overrides: value
+            .axis_overrides
+            .map(|v| fixture::InstalledAxisOverrides {
+                version: v.version,
+                source_identity: application_position_identity(v.source_identity),
+                axes: v
+                    .axes
+                    .into_iter()
+                    .map(|a| fixture::InstalledAxisCalibration {
+                        node_id: a.node_id,
+                        zero_degrees: a.zero_degrees,
+                        invert: a.invert,
+                    })
+                    .collect(),
+            }),
+        revision: value.revision,
+        quality: match value.quality {
+            wire::PatchCalibrationQuality::Unknown => fixture::PhysicalDataQuality::Unknown,
+            wire::PatchCalibrationQuality::Estimated => fixture::PhysicalDataQuality::Estimated,
+            wire::PatchCalibrationQuality::Manufacturer => {
+                fixture::PhysicalDataQuality::Manufacturer
+            }
+            wire::PatchCalibrationQuality::Measured => fixture::PhysicalDataQuality::Measured,
+        },
+        source: value.source,
+        pan_zero_degrees: value.pan_zero_degrees,
+        tilt_zero_degrees: value.tilt_zero_degrees,
+    }
+}
+
+fn wire_position_calibration(
+    value: &fixture::InstalledPositionCalibration,
+) -> wire::PatchPositionCalibration {
+    wire::PatchPositionCalibration {
+        axis_overrides: value
+            .axis_overrides
+            .as_ref()
+            .map(|v| wire::PatchAxisOverrides {
+                version: v.version,
+                source_identity: wire_position_identity(&v.source_identity),
+                axes: v
+                    .axes
+                    .iter()
+                    .map(|a| wire::PatchAxisCalibration {
+                        node_id: a.node_id,
+                        zero_degrees: a.zero_degrees,
+                        invert: a.invert,
+                    })
+                    .collect(),
+            }),
+        revision: value.revision,
+        quality: match value.quality {
+            fixture::PhysicalDataQuality::Unknown => wire::PatchCalibrationQuality::Unknown,
+            fixture::PhysicalDataQuality::Estimated => wire::PatchCalibrationQuality::Estimated,
+            fixture::PhysicalDataQuality::Manufacturer => {
+                wire::PatchCalibrationQuality::Manufacturer
+            }
+            fixture::PhysicalDataQuality::Measured => wire::PatchCalibrationQuality::Measured,
+        },
+        source: value.source.clone(),
+        pan_zero_degrees: value.pan_zero_degrees,
+        tilt_zero_degrees: value.tilt_zero_degrees,
+    }
+}
+
+fn application_color_identity(v: wire::PatchNativeColorIdentity) -> fixture::NativeColorIdentity {
+    fixture::NativeColorIdentity {
+        profile_id: v.profile_id,
+        profile_revision: v.profile_revision,
+        profile_digest: v.profile_digest,
+        mode_id: v.mode_id,
+        head_id: v.head_id,
+        path_id: v.path_id,
+        model_revision: v.model_revision,
+        native_layout_signature: v.native_layout_signature,
+    }
+}
+fn wire_color_identity(v: &fixture::NativeColorIdentity) -> wire::PatchNativeColorIdentity {
+    wire::PatchNativeColorIdentity {
+        profile_id: v.profile_id,
+        profile_revision: v.profile_revision,
+        profile_digest: v.profile_digest.clone(),
+        mode_id: v.mode_id,
+        head_id: v.head_id,
+        path_id: v.path_id,
+        model_revision: v.model_revision,
+        native_layout_signature: v.native_layout_signature.clone(),
+    }
+}
+fn application_optical_provenance(v: wire::PatchOpticalProvenance) -> fixture::OpticalProvenance {
+    fixture::OpticalProvenance {
+        revision: v.revision,
+        source: v.source,
+        quality: match v.quality {
+            wire::PatchCalibrationQuality::Unknown => fixture::PhysicalDataQuality::Unknown,
+            wire::PatchCalibrationQuality::Estimated => fixture::PhysicalDataQuality::Estimated,
+            wire::PatchCalibrationQuality::Manufacturer => {
+                fixture::PhysicalDataQuality::Manufacturer
+            }
+            wire::PatchCalibrationQuality::Measured => fixture::PhysicalDataQuality::Measured,
+        },
+    }
+}
+fn wire_optical_provenance(v: &fixture::OpticalProvenance) -> wire::PatchOpticalProvenance {
+    wire::PatchOpticalProvenance {
+        revision: v.revision,
+        source: v.source.clone(),
+        quality: match v.quality {
+            fixture::PhysicalDataQuality::Unknown => wire::PatchCalibrationQuality::Unknown,
+            fixture::PhysicalDataQuality::Estimated => wire::PatchCalibrationQuality::Estimated,
+            fixture::PhysicalDataQuality::Manufacturer => {
+                wire::PatchCalibrationQuality::Manufacturer
+            }
+            fixture::PhysicalDataQuality::Measured => wire::PatchCalibrationQuality::Measured,
+        },
+    }
+}
+fn application_color_calibration(
+    v: wire::PatchColorCalibration,
+) -> fixture::InstalledColorCalibration {
+    fixture::InstalledColorCalibration {
+        version: v.version,
+        revision: v.revision,
+        paths: v
+            .paths
+            .into_iter()
+            .map(|p| fixture::InstalledColorPathCalibration {
+                source_identity: application_color_identity(p.source_identity),
+                emitters: p
+                    .emitters
+                    .into_iter()
+                    .map(|e| fixture::InstalledEmitterCalibration {
+                        emitter_id: e.emitter_id,
+                        output_gain: e.output_gain,
+                        provenance: application_optical_provenance(e.provenance),
+                    })
+                    .collect(),
+                measurements: p
+                    .measurements
+                    .into_iter()
+                    .map(|m| fixture::ColorRecipeMeasurement {
+                        recipe: m
+                            .recipe
+                            .into_iter()
+                            .map(|v| fixture::NativeColorValue {
+                                channel_id: v.channel_id,
+                                function_id: v.function_id,
+                                raw: v.raw,
+                            })
+                            .collect(),
+                        xyz: light_core::Xyz {
+                            x: m.xyz.x,
+                            y: m.xyz.y,
+                            z: m.xyz.z,
+                        },
+                        provenance: application_optical_provenance(m.provenance),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
+}
+fn wire_color_calibration(v: &fixture::InstalledColorCalibration) -> wire::PatchColorCalibration {
+    wire::PatchColorCalibration {
+        version: v.version,
+        revision: v.revision,
+        paths: v
+            .paths
+            .iter()
+            .map(|p| wire::PatchColorPathCalibration {
+                source_identity: wire_color_identity(&p.source_identity),
+                emitters: p
+                    .emitters
+                    .iter()
+                    .map(|e| wire::PatchEmitterCalibration {
+                        emitter_id: e.emitter_id,
+                        output_gain: e.output_gain,
+                        provenance: wire_optical_provenance(&e.provenance),
+                    })
+                    .collect(),
+                measurements: p
+                    .measurements
+                    .iter()
+                    .map(|m| wire::PatchColorRecipeMeasurement {
+                        recipe: m
+                            .recipe
+                            .iter()
+                            .map(|v| wire::PatchNativeColorValue {
+                                channel_id: v.channel_id,
+                                function_id: v.function_id,
+                                raw: v.raw,
+                            })
+                            .collect(),
+                        xyz: wire::PatchColorXyz {
+                            x: m.xyz.x,
+                            y: m.xyz.y,
+                            z: m.xyz.z,
+                        },
+                        provenance: wire_optical_provenance(&m.provenance),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
+}
+
+#[cfg(test)]
+mod color_calibration_tests {
+    use super::*;
+    #[test]
+    fn installed_color_wire_conversion_preserves_exact_identity_and_u32_recipe() {
+        let value:fixture::InstalledColorCalibration=serde_json::from_value(serde_json::json!({
+            "version":1,"revision":7,"paths":[{"source_identity":{
+                "profile_id":uuid::Uuid::from_u128(1),"profile_revision":4,"profile_digest":"a".repeat(64),
+                "mode_id":uuid::Uuid::from_u128(2),"head_id":uuid::Uuid::from_u128(3),"path_id":uuid::Uuid::from_u128(4),
+                "model_revision":5,"native_layout_signature":"b".repeat(64)},
+                "emitters":[{"emitter_id":uuid::Uuid::from_u128(5),"output_gain":0.0,"provenance":{"quality":"measured","source":"Test","revision":3}}],
+                "measurements":[{"recipe":[{"channel_id":uuid::Uuid::from_u128(6),"function_id":uuid::Uuid::from_u128(7),"raw":4294967295u32}],
+                    "xyz":{"x":0.0,"y":0.0,"z":0.0},"provenance":{"quality":"unknown","revision":0}}]
+            }]
+        })).unwrap();
+        value.validate().unwrap();
+        let wire = wire_color_calibration(&value);
+        let restored: wire::PatchColorCalibration =
+            serde_json::from_value(serde_json::to_value(wire).unwrap()).unwrap();
+        assert_eq!(application_color_calibration(restored), value);
+    }
+}
+
+fn application_position_identity(
+    v: wire::PatchPositionCalibrationIdentity,
+) -> fixture::PositionCalibrationIdentity {
+    fixture::PositionCalibrationIdentity {
+        profile_id: v.profile_id,
+        mode_id: v.mode_id,
+        geometry_digest: v.geometry_digest,
+    }
+}
+fn wire_position_identity(
+    v: &fixture::PositionCalibrationIdentity,
+) -> wire::PatchPositionCalibrationIdentity {
+    wire::PatchPositionCalibrationIdentity {
+        profile_id: v.profile_id,
+        mode_id: v.mode_id,
+        geometry_digest: v.geometry_digest.clone(),
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn installed_position_axis_calibration_wire_round_trip() {
+    let value = fixture::InstalledPositionCalibration {
+        revision: 3,
+        quality: fixture::PhysicalDataQuality::Measured,
+        source: Some("Synthetic regression".into()),
+        pan_zero_degrees: 999.0,
+        tilt_zero_degrees: 0.0,
+        axis_overrides: Some(fixture::InstalledAxisOverrides {
+            version: 1,
+            source_identity: fixture::PositionCalibrationIdentity {
+                profile_id: uuid::Uuid::new_v4(),
+                mode_id: uuid::Uuid::new_v4(),
+                geometry_digest: "a".repeat(64),
+            },
+            axes: vec![fixture::InstalledAxisCalibration {
+                node_id: uuid::Uuid::new_v4(),
+                zero_degrees: -1080.5,
+                invert: true,
+            }],
+        }),
+    };
+    let encoded = serde_json::to_value(wire_position_calibration(&value)).unwrap();
+    let decoded: wire::PatchPositionCalibration = serde_json::from_value(encoded).unwrap();
+    assert_eq!(application_position_calibration(decoded), value);
 }

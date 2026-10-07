@@ -310,6 +310,10 @@ function toWireFixtureUpdateAction(
 				invert_pan: action.invertPan,
 				invert_tilt: action.invertTilt,
 			};
+		case "set_color_calibration":
+			return { action: action.type, calibration: action.calibration };
+		case "set_position_calibration":
+			return { action: action.type, calibration: action.calibration ? { ...action.calibration, source: action.calibration.source ?? null } : null };
 		case "set_move_in_black":
 			return {
 				action: action.type,
@@ -381,6 +385,8 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 			rotation: { ...instance.rotation },
 			invert_pan: instance.invertPan ?? false,
 			invert_tilt: instance.invertTilt ?? false,
+			position_calibration: instance.positionCalibration ? { ...instance.positionCalibration, source: instance.positionCalibration.source ?? null } : null,
+		color_calibration: instance.colorCalibration ?? null,
 			bracket_angle: instance.bracketAngle ?? 0,
 			shaper_angle: instance.shaperAngle ?? null,
 			installed_appearance: toWireInstalledAppearance(
@@ -394,6 +400,8 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 		grand_master_enabled: fixture.grandMasterEnabled ?? true,
 		invert_pan: fixture.invertPan ?? false,
 		invert_tilt: fixture.invertTilt ?? false,
+		position_calibration: fixture.positionCalibration ? { ...fixture.positionCalibration, source: fixture.positionCalibration.source ?? null } : null,
+		color_calibration: fixture.colorCalibration ?? null,
 		bracket_angle: fixture.bracketAngle ?? 0,
 		shaper_angle: fixture.shaperAngle ?? null,
 		installed_appearance: toWireInstalledAppearance(

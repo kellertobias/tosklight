@@ -28,6 +28,9 @@ pub struct PlaybackEngine {
     pub(crate) clock: SharedClock,
     pub(crate) next_activation_ordinal: u64,
     pub(crate) next_transition_ordinal: u64,
+    pub(crate) next_source_occurrence_ordinal: u64,
+    /// Where a Position fading in from no previous Cue value starts (TL-552).
+    pub(crate) family_start: crate::contribution::FamilyStartSlot,
 }
 
 impl Default for PlaybackEngine {
@@ -62,11 +65,27 @@ impl PlaybackEngine {
             clock,
             next_activation_ordinal: 1,
             next_transition_ordinal: 1,
+            next_source_occurrence_ordinal: 1,
+            family_start: Default::default(),
         }
+    }
+
+    /// Install where a Position that fades in from no previous Cue value starts (TL-552).
+    pub fn set_family_start(&mut self, source: Option<Arc<dyn crate::FamilyStartSource>>) {
+        self.family_start = crate::contribution::FamilyStartSlot(source);
     }
 
     pub fn clock(&self) -> SharedClock {
         Arc::clone(&self.clock)
+    }
+
+    /// Copy the retained Playback state for isolated preview operations at one captured instant.
+    /// Immutable compiled Cue data remains shared, while runtime mutations and time belong to
+    /// the fork. Creating the fork does not sample the Live clock or advance any Playback.
+    pub fn fork_for_preview(&self, sampled_at: DateTime<Utc>) -> Self {
+        let mut preview = self.clone();
+        preview.clock = Arc::new(light_core::ManualClock::new(sampled_at));
+        preview
     }
 
     pub fn set_external_completion_millis(
@@ -111,6 +130,10 @@ impl PlaybackEngine {
             let elapsed = (phase_at - playback.activated_at).num_milliseconds().max(0) as u64;
             let completed_steps = elapsed / old_step;
             advance_chaser_steps(playback, cue_list, completed_steps);
+            if completed_steps > 0 {
+                // Retiming can replace the previous-value route even at the final Cue.
+                playback.source_history = None;
+            }
             let old_phase = elapsed % old_step;
             let next_phase =
                 ((old_phase as f64 / old_step as f64) * next_step as f64).round() as i64;

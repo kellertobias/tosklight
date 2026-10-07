@@ -30,6 +30,14 @@ impl ShowContext {
         Ok(active)
     }
 
+    /// [`Self::resolve`] for a request that changes the active show's content: in show recovery
+    /// it is refused (409) before anything is read or written.
+    pub(super) fn resolve_writable(&self, state: &AppState) -> Result<ShowId, ApiError> {
+        let show_id = self.resolve(state)?;
+        ensure_show_content_writable(state)?;
+        Ok(show_id)
+    }
+
     pub(super) fn verify(&self, state: &AppState) -> Result<(), ApiError> {
         let Some(requested) = self.0 else {
             return Ok(());
@@ -47,6 +55,30 @@ impl ShowContext {
         }
         Ok(())
     }
+}
+
+/// Refuses a change to the active show's content in show recovery; see
+/// `ActiveShowResource::ensure_content_writable`.
+pub(super) fn ensure_show_content_writable(state: &AppState) -> Result<(), ApiError> {
+    state
+        .active_show
+        .ensure_content_writable()
+        .map_err(|error| ApiError::conflict(error.message))
+}
+
+/// Library actions that rewrite one named show in place (description, rename, overwrite,
+/// replacement document) are refused for the show that is in recovery: its file is the preserved
+/// original. They stay available for every other show, and for this one once a recovery action
+/// has loaded another show.
+pub(super) fn ensure_not_recovering_show(state: &AppState, show_id: Uuid) -> Result<(), ApiError> {
+    let recovering = state
+        .active_show
+        .current()
+        .is_some_and(|active| active.id.0 == show_id);
+    if recovering {
+        ensure_show_content_writable(state)?;
+    }
+    Ok(())
 }
 
 impl FromRequestParts<AppState> for ShowContext {

@@ -103,9 +103,6 @@ fn intensity_fixture(default_raw: u32) -> (PatchedFixture, FixtureId) {
         snap: false,
         reacts_to_virtual_intensity: false,
         virtual_intensity_inverted: false,
-        reacts_to_sequence_master: false,
-        reacts_to_group_master: false,
-        reacts_to_grand_master: false,
         behavior: ChannelBehavior::Controlled,
         functions: vec![ChannelFunction::continuous(
             "Intensity",
@@ -142,6 +139,8 @@ fn intensity_fixture(default_raw: u32) -> (PatchedFixture, FixtureId) {
             grand_master_enabled: true,
             invert_pan: false,
             invert_tilt: false,
+            position_calibration: None,
+            color_calibration: None,
             bracket_angle: 0.0,
             shaper_angle: None,
             installed_appearance: Default::default(),

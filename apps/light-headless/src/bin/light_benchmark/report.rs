@@ -81,6 +81,9 @@ pub struct ScenarioReport {
     pub contribution_sources: ContributionSources,
     pub sampled_contributions: SampledContributionReport,
     pub loopback: Option<LoopbackSummary>,
+    /// TL-596: present when the scenario rendered through the production Live transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic: Option<crate::light_benchmark::semantic_runner::SemanticScenarioReport>,
 }
 
 #[derive(Debug, Serialize)]

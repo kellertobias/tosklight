@@ -40,9 +40,9 @@ pub fn to_world(x: f32, y: f32, z: f32) -> Vec3 {
     Vec3::new(x, z, -y)
 }
 
-/// Desk storage rotation to renderer world rotation, matching the Stage's `(rx, rz, ry)` mapping.
+/// Conjugate the desk XYZ rotation by the desk-to-renderer basis, then expose XYZ Euler degrees.
 pub fn rotation_to_world(x: f32, y: f32, z: f32) -> Vec3 {
-    Vec3::new(x, z, y)
+    viz_scene::desk_rotation_to_world([x, y, z])
 }
 
 /// Carry one placement with the 3D Point it is slaved to.
@@ -190,7 +190,7 @@ mod tests {
         );
         assert_eq!(placement.source, PlacementSource::MigratedLayout2d);
         assert_eq!(placement.position.x, 0.0);
-        assert_eq!(placement.rotation_degrees.y, 30.0);
+        assert!((placement.rotation_degrees.y - 30.0).abs() < 1e-4);
     }
 
     #[test]
@@ -200,5 +200,20 @@ mod tests {
         assert_eq!(first.source, PlacementSource::DefaultGrid);
         assert_eq!(first.position.x, ninth.position.x);
         assert_ne!(first.position.z, ninth.position.z);
+    }
+}
+
+#[cfg(test)]
+mod coordinate_tests {
+    use super::*;
+    #[test]
+    fn compound_rotation_changes_basis_exactly_once() {
+        let desk = viz_scene::euler_degrees(Vec3::new(24., 37., -52.));
+        let world = viz_scene::euler_degrees(rotation_to_world(24., 37., -52.));
+        for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+            let in_world = to_world(axis.x, axis.y, axis.z);
+            let rotated = desk * axis;
+            assert!((world * in_world - to_world(rotated.x, rotated.y, rotated.z)).length() < 1e-5);
+        }
     }
 }

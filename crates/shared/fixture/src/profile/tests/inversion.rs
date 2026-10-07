@@ -14,6 +14,7 @@ fn inverted_channel_mode() -> (FixtureMode, FixtureChannel) {
             dmx_to: 109,
             attribute: AttributeKey::intensity(),
             priority: 0,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Continuous {
                 physical_min: 0.0,
@@ -28,6 +29,7 @@ fn inverted_channel_mode() -> (FixtureMode, FixtureChannel) {
             dmx_to: 179,
             attribute: AttributeKey("shutter".into()),
             priority: 100,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Fixed {
                 semantic_id: "open".into(),
@@ -42,6 +44,7 @@ fn inverted_channel_mode() -> (FixtureMode, FixtureChannel) {
             dmx_to: 255,
             attribute: AttributeKey("gobo".into()),
             priority: 100,
+            physical_mapping: None,
             angular_motion: None,
             behavior: ChannelFunctionBehavior::Indexed {
                 semantic_id: "dots".into(),
@@ -65,6 +68,8 @@ fn inverted_channel_mode() -> (FixtureMode, FixtureChannel) {
         }],
         channels: vec![fixture_channel.clone()],
         color_systems: vec![],
+        color_physical: None,
+        position_physical: None,
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
@@ -76,7 +81,9 @@ fn inverted_channel_mode() -> (FixtureMode, FixtureChannel) {
 
 #[test]
 fn invert_scales_semantic_ranges_before_inversion_and_preserves_exact_raw_values() {
-    let (mode, fixture_channel) = inverted_channel_mode();
+    let (mode, mut fixture_channel) = inverted_channel_mode();
+    // Scaling is the virtual intensity's (masters act on the parameters before DMX).
+    fixture_channel.reacts_to_virtual_intensity = true;
     let semantic = HashMap::from([(AttributeKey::intensity(), AttributeValue::Normalized(0.5))]);
     assert_eq!(
         mode.resolve_channel_raw(
@@ -85,7 +92,7 @@ fn invert_scales_semantic_ranges_before_inversion_and_preserves_exact_raw_values
             false,
             None,
             ChannelScales {
-                grand_master: 0.5,
+                virtual_intensity: Some(0.5),
                 ..Default::default()
             },
         ),
@@ -99,7 +106,7 @@ fn invert_scales_semantic_ranges_before_inversion_and_preserves_exact_raw_values
             false,
             None,
             ChannelScales {
-                grand_master: 0.0,
+                virtual_intensity: Some(0.0),
                 ..Default::default()
             },
         ),
@@ -173,7 +180,7 @@ fn invert_scales_semantic_ranges_before_inversion_and_preserves_exact_raw_values
             false,
             None,
             ChannelScales {
-                grand_master: 0.5,
+                virtual_intensity: Some(0.5),
                 ..Default::default()
             },
         ),
@@ -193,6 +200,7 @@ fn typed_control_action_owns_its_exact_channel_without_losing_function_precision
         dmx_to: 65_535,
         attribute: AttributeKey("shutter".into()),
         priority: 250,
+        physical_mapping: None,
         angular_motion: None,
         behavior: ChannelFunctionBehavior::Fixed {
             semantic_id: "open".into(),
@@ -215,6 +223,8 @@ fn typed_control_action_owns_its_exact_channel_without_losing_function_precision
         }],
         channels: vec![fixture_channel.clone()],
         color_systems: vec![],
+        color_physical: None,
+        position_physical: None,
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),
@@ -275,6 +285,8 @@ fn fixture_facing_cmy_can_map_to_inverted_canonical_rgb_without_reinterpreting_e
         }],
         channels: vec![cyan.clone()],
         color_systems: vec![],
+        color_physical: None,
+        position_physical: None,
         control_actions: vec![],
         geometry: GeometryGraph::default(),
         emitter_heads: Vec::new(),

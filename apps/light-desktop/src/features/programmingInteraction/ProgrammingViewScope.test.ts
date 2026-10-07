@@ -38,6 +38,7 @@ describe("ProgrammingViewScope", () => {
 
 		expect(scope.subscription()).toEqual({
 			commandLine: true,
+			alignment: false,
 			selection: true,
 		});
 		expect(scope.deactivate("commandLine")).toBe(false);
@@ -45,6 +46,7 @@ describe("ProgrammingViewScope", () => {
 		expect(scope.deactivate("commandLine")).toBe(true);
 		expect(scope.subscription()).toEqual({
 			commandLine: false,
+			alignment: false,
 			selection: true,
 		});
 	});
@@ -70,12 +72,13 @@ describe("ProgrammingViewScope", () => {
 		expect(scope.hasViews()).toBe(false);
 		scope.activate("selection");
 		expect(scope.key()).toBe(
-			JSON.stringify({ commandLine: false, selection: true }),
+			JSON.stringify({ commandLine: false, selection: true, alignment: false }),
 		);
 		scope.clear();
 		expect(scope.hasViews()).toBe(false);
 		expect(scope.subscription()).toEqual({
 			commandLine: false,
+			alignment: false,
 			selection: false,
 		});
 	});

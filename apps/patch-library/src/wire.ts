@@ -1,3 +1,6 @@
+import type { InstalledColorCalibration, NativeColorIdentity } from "./colorCalibration";
+import type { InstalledPositionCalibration } from "./positionCalibration";
+export type { InstalledPositionCalibration } from "./positionCalibration";
 export interface PatchedFixture {
 	fixture_id: string;
 	fixture_number?: number | null;
@@ -25,6 +28,8 @@ export interface PatchedFixture {
 	grand_master_enabled?: boolean;
 	invert_pan?: boolean;
 	invert_tilt?: boolean;
+	position_calibration?: InstalledPositionCalibration | null;
+	color_calibration?: InstalledColorCalibration | null;
 	/** Degrees the mounting bracket is set to, positive nose-down. */
 	bracket_angle?: number;
 	/** Degrees a fitted shaper or barn-door module is turned to; absent when none is fitted. */
@@ -73,6 +78,8 @@ export interface MultiPatchInstance {
 	split_patches?: SplitPatch[];
 	invert_pan?: boolean;
 	invert_tilt?: boolean;
+	position_calibration?: InstalledPositionCalibration | null;
+	color_calibration?: InstalledColorCalibration | null;
 	bracket_angle?: number;
 	shaper_angle?: number | null;
 	installed_appearance?: InstalledFixtureAppearance;
@@ -131,6 +138,9 @@ import type {
 } from "./fixtureProfile";
 
 export interface FixtureDefinition {
+	/** Read-only server context for installed calibration; never written into a profile. */
+	color_calibration_context?: { identities: readonly NativeColorIdentity[]; mode: import("./fixtureProfile").FixtureMode };
+ position_calibration_context?: import("./positionCalibration").PositionCalibrationContext;
 	schema_version: number;
 	id: string;
 	revision: number;

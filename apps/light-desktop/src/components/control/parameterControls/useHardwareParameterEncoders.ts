@@ -9,6 +9,8 @@ import type { ParameterProjection } from "./useParameterProjection";
 
 interface HardwareParameterActions {
 	canWriteValues: boolean;
+	/** Semantic family slots consume their detents (TL-549/550/551); legacy slots return false. */
+	familyEncoderDetent?(slot: number, value: string | undefined): boolean;
 	relativeSteps: boolean;
 	programmerTarget(attribute: string): number | undefined;
 	programmerDiscreteTarget(attribute: string): string | undefined;
@@ -119,6 +121,7 @@ export function useHardwareParameterEncoders(
 				}>
 			).detail;
 			const slot = Number(control.split("/")[1]) - 1;
+			if (actions.familyEncoderDetent?.(slot, value)) return;
 			const primaryAttribute = projection.encoderSlots[slot];
 			const pushTurnAttribute = projection.encoderPushTurnSlots[slot];
 			const attribute =

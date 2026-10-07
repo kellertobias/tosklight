@@ -9,6 +9,7 @@ chrono.workspace = true
 light-core = { path = "../../../shared/core" }
 light-dynamics = { path = "../dynamics" }
 parking_lot.workspace = true
+rustc-hash.workspace = true
 serde.workspace = true
 uuid.workspace = true
 

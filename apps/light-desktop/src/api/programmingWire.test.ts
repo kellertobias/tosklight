@@ -67,6 +67,7 @@ function decodedSnapshot(): ProgrammingSnapshot {
 		cursor: 20,
 		projection: {
 			deskId: PROGRAMMING_DESK_ID,
+			alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
 			commandLine: decodedCommandLine(),
 			selection: decodedSelection(),
 		},
@@ -88,6 +89,25 @@ function decodedChange(
 }
 
 describe("Programming projection wire validation", () => {
+	it("accepts an Align-only event on its narrow route and rejects discarded peer routes", () => {
+		const message = programmingEvent("commandLine") as unknown as {
+			event: { object: { capability: string; id: string }; payload: { change: unknown } };
+		};
+		message.event.object.id = `programming-alignment:${PROGRAMMING_DESK_ID}`;
+		message.event.payload.change = {
+			desk_id: PROGRAMMING_DESK_ID,
+			alignment: { revision: 9, mode: "left", fixture_count: 3, binding: {
+				kind: "family", component: { kind: "pan" }, lane: "preload", group_id: "7",
+			} },
+		};
+		const scope = { commandLine: false, selection: false, alignment: true };
+		expect(decodeProgrammingEventMessage(message, PROGRAMMING_DESK_ID, scope)).toMatchObject({
+			type: "event", change: { alignment: { revision: 9, mode: "left", fixtureCount: 3,
+				binding: { kind: "family", component: { kind: "pan" }, lane: "preload", groupId: "7" } } },
+		});
+		message.event.object.id = `programming-selection:${PROGRAMMING_DESK_ID}`;
+		expect(() => decodeProgrammingEventMessage(message, PROGRAMMING_DESK_ID, scope)).toThrow();
+	});
 	it("decodes a complete snapshot and discards untrusted fields", () => {
 		const value = programmingSnapshot();
 		record(value.projection).untrusted = true;

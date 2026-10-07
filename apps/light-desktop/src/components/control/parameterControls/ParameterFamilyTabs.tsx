@@ -9,13 +9,12 @@ import { useLowerSectionSwitch } from "../../../features/screens/LowerSectionSwi
 import { useDynamics } from "../../../features/showObjects/ShowObjectsState";
 import { projectionKind } from "../../../features/spatialMapping/projectionKinds";
 import {
-	alignModes,
 	compactFamilyLabels,
 	type ParameterFamily,
 	parameterFamilies,
 	type SpecialParameterFamily,
-	specialParameterFamilies,
 } from "./model";
+import { hasSpecialDialog } from "../../modals/specialDialogs/registry/specialDialogRegistry";
 import type { ParameterController } from "./useParameterController";
 import { useVisibleEncoderCount } from "./VisibleEncoderCount";
 
@@ -38,13 +37,10 @@ function alignLabel(mode: ParameterController["alignMode"]) {
 
 function AlignmentControl({ controller }: { controller: ParameterController }) {
 	const label = alignLabel(controller.alignMode);
-	const setMode = async (mode: ParameterController["alignMode"]) => {
+	const setMode = async (mode: "cycle" | "off") => {
 		if (!controller.programmerActions) return;
 		try {
-			const resulting = await controller.programmerActions.alignSelection(
-				mode ?? "off",
-			);
-			controller.setAlignMode(resulting === "off" ? null : mode);
+			await controller.programmerActions.alignSelection(mode);
 		} catch {
 			// The server error is already projected by the programming action owner.
 		}
@@ -59,16 +55,10 @@ function AlignmentControl({ controller }: { controller: ParameterController }) {
 			className={`align-cycle ${controller.alignMode ? "align-active" : "align-off"}`}
 			onClick={(event) => {
 				if (event.shiftKey || controller.state.shiftArmed) {
-					void setMode(null);
+					void setMode("off");
 					return;
 				}
-				const nextIndex =
-					controller.alignMode == null
-						? 0
-						: alignModes.indexOf(controller.alignMode) + 1;
-				void setMode(
-					nextIndex >= alignModes.length ? null : alignModes[nextIndex],
-				);
+				void setMode("cycle");
 			}}
 		>
 			<span className="align-label-full">
@@ -95,8 +85,9 @@ function SpecialDialogButton({
 	controller: ParameterController;
 }) {
 	if (
-		!specialParameterFamilies.has(
-			controller.family as SpecialParameterFamily,
+		!hasSpecialDialog(
+			controller.family,
+			controller.familyEncoders?.semantic ?? false,
 		) ||
 		(controller.family === "Media" &&
 			!controller.selectedFixtures.some((fixture) => {
@@ -160,9 +151,11 @@ export function ParameterFamilyTabs({
 					label: name,
 					compactLabel: compactFamilyLabels[name],
 					pageCount:
+						controller.familyEncoders?.pageCountFor(name) ??
 						controller.encoderGroups.find(
 							(group) => group.id === name.toLowerCase(),
-						)?.pages.length ?? 1,
+						)?.pages.length ??
+						1,
 				}),
 			)}
 			activeGroup={controller.family}
