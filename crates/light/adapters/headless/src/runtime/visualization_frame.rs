@@ -448,8 +448,8 @@ impl VisualizationFrameHub {
             self.subscriber_notify.notify_one();
         } else {
             let decrement = u64::from(delta.unsigned_abs());
-            let _ = subscribers.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-                Some(current.saturating_sub(decrement))
+            subscribers.update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                current.saturating_sub(decrement)
             });
             self.subscriber_notify.notify_one();
         }
@@ -515,11 +515,10 @@ impl VisualizationFrameHub {
     }
 
     pub(super) fn record_stream_queue_take(&self) {
-        let _ =
-            self.stream_queue_depth
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |depth| {
-                    Some(depth.saturating_sub(1))
-                });
+        self.stream_queue_depth
+            .update(Ordering::Relaxed, Ordering::Relaxed, |depth| {
+                depth.saturating_sub(1)
+            });
     }
 
     pub(super) fn record_stream_send(&self, duration: Duration, succeeded: bool) {

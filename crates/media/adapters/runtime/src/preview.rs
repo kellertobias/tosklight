@@ -181,7 +181,7 @@ impl Preview {
             // count wrap and leave the GPU reading back forever.
             let _ = self
                 .subscribers
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
                     count.checked_sub(1)
                 });
         }
