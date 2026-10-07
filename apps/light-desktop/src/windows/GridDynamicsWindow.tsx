@@ -163,12 +163,19 @@ function Tile({
 			title={`${preset?.label ?? "Current"} · Attack ${cell.attack}% · Decay ${cell.decay}%`}
 			onContextMenu={(event) => {
 				event.preventDefault();
+				// The picker opens now; a pending hold must not reopen it after
+				// the operator has already chosen a preset.
+				clearHold();
+				held.current = true;
 				onChoose();
 				onPresetPicker();
 			}}
-			onPointerDown={(_event) => {
+			onPointerDown={(event) => {
 				held.current = false;
+				if (event.button !== 0) return;
+				clearHold();
 				holdTimer.current = window.setTimeout(() => {
+					holdTimer.current = null;
 					held.current = true;
 					onChoose();
 					onPresetPicker();
@@ -179,8 +186,9 @@ function Tile({
 				onChoose();
 				onPaint();
 			}}
-			onPointerUp={() => {
+			onPointerUp={(event) => {
 				clearHold();
+				if (event.button !== 0) return;
 				if (held.current) {
 					held.current = false;
 					return;

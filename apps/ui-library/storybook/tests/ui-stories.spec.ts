@@ -4926,6 +4926,10 @@ test("Grid Dynamics paints presets, toggles history, and queues Preload transpor
 		exact: true,
 	});
 	await expect(paintedStep).toBeVisible();
+	await expect(presetDialog).toHaveCount(0);
+	// The press-and-hold delay must not reopen the picker a right-click opened.
+	await page.waitForTimeout(700);
+	await expect(presetDialog).toHaveCount(0);
 	await paintedStep.click();
 	await expect(positionStep).toBeVisible();
 	await page.getByRole("button", { name: "Stop", exact: true }).click();
