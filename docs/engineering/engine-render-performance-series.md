@@ -1864,3 +1864,176 @@ preparation buffers); the object counts do not. Resident memory: typed hard floo
   summaries `.artifacts/tmp/tl639r7/{d,l}-*.json`, `digest-*.txt` (per step `a1`-`g1`, `final`-`final4`,
   worker counts, `-verify`); profiles `p-*-{s2000,hf}.txt` with `sections-wall.py`, `secitems.py`,
   `callers.py`; allocation counts `allocs-final*.txt`; alternated single-worker runs `w1-ab-*.txt`.
+
+## Semantic output, round 8: the owner's targets at 8, 16 and 24 universes (TL-639)
+
+Round 8 started against round 7's tiers (typed stress 2,000 and 4,000, the 32-universe typed hard
+floor at 125 Hz). During the round the owner replaced those deadlines: the ceiling is 24 universes
+× 512 = 12,288 parameters, nothing beyond it is optimised or benchmarked, and the targets are the
+four rows below. None of round 7's typed tiers is inside the ceiling (stress 2,000 needs 74
+universes, the sustained hard floor 32), so the round added typed workloads of the target sizes and
+measured them. Every target row is met on this machine with a p99 at most 0.43 of its budget, and
+the entry-level estimate holds 40 Hz at 8 universes when the frame runs on two or more threads; the
+binding case is the typed stress mix on one thread. No engine code changed: with the targets met,
+none of the profiled candidates (below) had a payoff that justified a cross-frame cache or a new
+proof. The two commits are benchmark-only, and the final binary is byte-identical to the round's
+start head `892b0ee29` on all digest workloads.
+
+### Workloads at the target sizes
+
+- **Sustained show on 8, 16 and 24 universes** (`--profile hard-floor --sustained-show
+  --universes 8|16|24`, `f30269cad`, `15a0003f5`): the 32-universe mix with every manufacturer
+  quantity scaled exactly by `universes / 32` and the RGB PARs filling each universe: 1,037, 2,074
+  and 3,111 fixtures on 4,096, 8,192 and 12,288 slots. The typed variant (`--semantic`) is the
+  hard floor's: a static semantic Colour and Position base on every fixture and Intensity Dynamics
+  on every target. 32 universes is unchanged.
+- **Headless stress on 200, 400 and 650 fixtures** (`--headless-stress-fixtures`): the stress mix
+  (20 Dynamics, typed Colour recipe and Angle lanes on 54 % of the fixtures) on 8, 15 and 24
+  universes (3,772, 7,544 and 12,259 slots). 650 is the largest multiple of the mix's 50-fixture
+  step inside 12,288. 1,000-4,000 are unchanged.
+
+Both shapes are measured at every row; the row's verdict is the worse of the two.
+
+### Gates
+
+Final binary `74505b20…` (default workers, 8 here), three rounds of 8 s after 2 s warmup per row,
+paced at the row's rate, medians of the three runs and the worst maximum
+(`tl639r8-targets-20261007T020836Z/rows.txt`; load average 1.9-4.9). Pipeline ms.
+
+| Owner target | Workload | p50 | p99 | worst max | Budget | Rate | Misses (3 runs) | RSS |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 8 universes, clearly 60 Hz | typed sustained 1,037 | 4.70 | 5.92 | 9.14 | 16.7 | 60.1 Hz | 0 / 0 / 0 | 91 MB |
+| | typed stress 200 | 4.89 | 5.51 | 5.80 | 16.7 | 60.1 Hz | 0 / 0 / 0 | 73 MB |
+| 16 universes, clearly 40 Hz | typed sustained 2,074 | 6.84 | 7.39 | 7.77 | 25.0 | 40.1 Hz | 0 / 0 / 0 | 137 MB |
+| | typed stress 400 (15 universes) | 7.80 | 8.21 | 8.76 | 25.0 | 40.1 Hz | 0 / 0 / 0 | 121 MB |
+| 24 universes, 32-40 Hz (ceiling) | typed sustained 3,111 @ 40 Hz | 8.19 | 9.20 | 18.63 | 25.0 | 40.1 Hz | 0 / 0 / 0 | 188 MB |
+| | typed stress 650 @ 40 Hz | 10.14 | 10.71 | 18.89 | 25.0 | 40.1 Hz | 0 / 1 / 0 | 168 MB |
+| | typed sustained 3,111 @ 32 Hz | 8.84 | 9.55 | 12.58 | 31.2 | 32.1 Hz | 0 / 0 / 0 | 177 MB |
+| | typed stress 650 @ 32 Hz | 10.56 | 11.14 | 11.49 | 31.2 | 32.1 Hz | 0 / 0 / 0 | 165 MB |
+| Entry-level, stable 40 Hz at 8 universes | see the estimate below | | | | 25.0 | | | |
+
+The one miss (stress 650 at 40 Hz, round 2) is a single late frame in a run whose worst frame took
+18.9 ms of its 25 ms; it coincided with a load spike, and the same row had no miss in the other
+two rounds. The legacy (scalar) shapes of the same rows run at p99 1.7-4.9 ms with no misses except
+one late frame in one run of the 24-universe sustained show (worst frame 34.8 ms, host).
+
+The typed frame is 3-4× the legacy frame at every size (8 universes: 4.7 / 4.9 ms against 1.7 /
+1.5 ms at p50), and a paced frame is slower than an unpaced one: at 40 Hz on one thread the typed
+8-universe sustained frame takes 6.96 ms at p50 against 2.81 ms at 240 Hz (stress 200: 7.12 against
+4.17 ms). Between frames the cores idle and clock down, and the frame starts cold; the legacy frame
+shows the same effect at a smaller scale (1.96 against about 1.5 ms).
+
+### Entry-level estimate (hard requirement: stable 40 Hz at 8 universes)
+
+No entry-level machine was available. The estimate runs the 8-universe rows at 40 Hz with 1, 2 and
+4 output workers (an entry-level CPU has 2-4 cores; the default is the available parallelism
+capped at 8), once normally and once under `taskpolicy -b` (background QoS: the frame runs on the
+slower core cluster at its lowest clocks, so no turbo is left in the measurement), two rounds of
+8 s (`entry.txt`). Calibration on the same host: a single-threaded integer loop takes 1.80 / 1.86 s
+normally and 7.41 / 7.45 s under `taskpolicy -b` (4.0-4.1×); the unpaced typed 8-universe frames
+on one thread take 2.81 → 10.57 ms (sustained, 3.8×) and 4.17 → 19.25 ms (stress, 4.6×). The
+assumed entry-level CPU (Intel N100 / Celeron or Ryzen 3 7320U class) is about 3.2-3.5× slower per
+thread than this machine's (Apple M5 Max) fastest cores at full clock; background QoS is therefore
+a slightly pessimistic stand-in (≈1.2×) for its compute.
+
+Background QoS also throttles the benchmark's sleeps, so the achieved rate (7-17 Hz) and the
+misses of those runs are pacing artifacts (the legacy frames, at 2 ms, show the same rates); the
+measure is each frame's pipeline time against the 25 ms budget. p99, medians of two runs:
+
+| Workers | Typed sustained 1,037 | Typed stress 200 | Legacy sustained / stress | Headroom (worst typed) |
+| ---: | ---: | ---: | ---: | ---: |
+| 1, normal | 8.68 | 7.83 | 2.50 / 1.67 | 2.9× |
+| 2, normal | 7.61 | 7.62 | 2.03 / 1.64 | 3.3× |
+| 4, normal | 6.82 | 8.09 | 1.85 / 1.67 | 3.1× |
+| 1, background QoS | 13.54 | 21.43 | 2.92 / 1.86 | 1.17× |
+| 2, background QoS | 12.16 | 17.44 | 2.33 / 2.04 | 1.43× |
+| 4, background QoS | 11.02 | 13.07 | 2.16 / 1.85 | 1.91× |
+
+Two readings bracket the entry-level frame:
+
+- **Background QoS as the entry-level core** (scaling factor ≈1, slightly pessimistic): the worst
+  typed p99 is 13.1 ms with 4 workers and 17.4 ms with 2, so 40 Hz holds with 1.9× and 1.4×
+  headroom; on a single thread 21.4 ms leaves 1.17×.
+- **This machine's paced frame × 3.5** (the per-thread ratio applied on top of the paced, already
+  clocked-down frame, which counts the idle penalty twice if the entry-level CPU also ramps): 8.09 ×
+  3.5 = 28.3 ms for the typed stress mix with 4 workers and 6.82 × 3.5 = 23.9 ms for the sustained
+  show, so the stress mix would miss its 25 ms by about 13 %.
+
+So the hard requirement is met for the sustained show under both readings and for the stress mix
+under the first; the typed stress mix with 2-4 workers lies between 0.88× and 1.9× of its budget
+depending on how much of the paced idle penalty an entry-level CPU shares. The legacy frames have
+at least 8× headroom under both readings. Confirming the requirement needs a run on a real
+entry-level machine (`light-benchmark --headless-stress-fixtures 200 --semantic --rate-hz 40` and
+`--profile hard-floor --sustained-show --universes 8 --semantic --rate-hz 40`).
+
+### Equivalence
+
+The engine is unchanged; the final binary was still compared with the start head `892b0ee29`
+(`lb-ref-head`) by `--digest-ticks` on the 12 workloads of rounds 4-7, plus the two new 24-universe
+typed workloads (`hf24`, `s650`, against the first build that could run them) and lifecycle digests
+(fades, FixAT, Freeze, Preload GO) of the typed and legacy tiers: 16/16 clean at the default worker
+count, at `LIGHT_OUTPUT_WORKERS` 1 and `max`, and with `LIGHT_VERIFY_PLANS=1` (0 fixture mismatches,
+DMX equal on every tick, work counters equal on every tick). Nothing is kept across frames, so no
+new invalidation tests were needed.
+
+### Where the time goes at 8 universes
+
+`sample` of the final binary, one worker, unpaced (240 Hz), output thread by section:
+
+- **Typed stress 200 (4.2 ms; 54 % of its fixtures animate five typed lanes).** Groups 34 % (the
+  animated Colour fit, `CompiledColorFitting::fit`, 6 % of the frame; the retained family
+  composition 12 %; the static Colour rows' proofs), frees 16 % (with one worker the retired
+  preparation output, `DynamicFamilyPreparationScratch::clear_output`, is freed inline: 4 % of the
+  frame plus its drop glue; with two or more workers it is freed on the pool), preparation 16 %
+  (the Position forest bundle 6 %, of which `from_position_forest` 3 %), the deferred completion's
+  resolution 8 %, render 7 %, Position fits 3 %, Position program preparation 3 %. Allocation, free,
+  copy and zeroing together are about 30 % of the frame's CPU: 48,600 allocations and 12.1 MB per
+  frame for 200 fixtures (legacy: 322 and 2.1 MB).
+- **Typed sustained 1,037 (2.8 ms on one thread; four workers, sections by wall time).** Static
+  Colour rows (the groups section) 26 %, render 13 % (the shared projection; the DMX encoding's
+  SipHash map 1 %), the Playback tick 12 % (`ContributionContext::extend_playback`, shared with
+  the legacy frame), static targets 7 %, static resolution 6 %, preparation 5 %, accepted Colour
+  record 4 %.
+
+Candidates measured and not built, by share of the binding frame (typed stress 200, one thread):
+the kept compiled Position graph (round 7, item 1; at most the 6 % forest bundle), reuse of the
+retired preparation output's inner buffers instead of freeing them (4 %, only on one thread),
+the colour solver's per-solve zeroing of its 16 × 16 matrices (`Qp::new` and `subproblem`, 1.2 %),
+the attribute-name lookup per head value in the shared render (`AttributeTable::id`, 2 %), and the
+validation of internally built values every frame (`DynamicSampleExpression`, `ColorIntent`,
+`AngleNumericProgram` and `DynamicValueAddress` validation, together 6 %, which would need a proof
+that the values cannot be invalid). Together they could take the single-thread frame down by
+roughly a fifth, which would close the conservative reading's 13 % gap; each needs its own
+byte-identity proof.
+
+### Allocation per frame
+
+Counting allocator (`allocs-r8.txt`), objects and bytes per frame, paced at 40 Hz:
+
+| Workload | 1 worker | 4 workers |
+| --- | ---: | ---: |
+| Typed sustained, 8 universes | 11,491 / 5.7 MB | 12,378 / 8.6 MB |
+| Typed stress 200 | 48,596 / 12.1 MB | 51,556 / 17.8 MB |
+| Typed sustained, 24 universes | 33,887 / 16.0 MB | 35,183 / 24.9 MB |
+| Typed stress 650 | 155,333 / 39.3 MB | 163,167 / 58.0 MB |
+| Legacy sustained, 8 universes | 47 / 1.9 MB | 48 / 1.9 MB |
+| Legacy stress 200 | 322 / 2.1 MB | 322 / 2.1 MB |
+
+Bounded and proportional to the animated targets, as in round 7. Resident memory at the rows: 73-91
+MB at 8 universes, 121-143 MB at 16, 165-198 MB at 24 (legacy 25-63 MB).
+
+### Measurement identities
+
+- Start head and digest reference: `892b0ee29`, binary `d01ec0be…`
+  (`.artifacts/tmp/tl639r8/bin/lb-ref-head`); the 24-universe digests' base is `f30269cad`'s
+  first build (`lb-cap0`, the same engine).
+- Final: `15a0003f5`, binary `74505b20…` (`lb-final`), `--release --locked --no-default-features`.
+- Host: Apple M5 Max (6 + 12 cores, 64 GB), shared with the desktop session and an idle debug
+  `light-headless` of another worktree; load average 1.9-4.9 during the campaign.
+- Evidence: `.artifacts/performance/semantic-output/tl639r8-targets-20261007T020836Z/` (`rows.txt`,
+  `entry.txt` with the calibration lines, `host.txt`, `allocs-r8.txt`, `digest-summary.txt`).
+  Scripts in `.artifacts/tmp/tl639r8/`: `tier.sh` (one row), `grid.sh`, `campaign.sh`,
+  `digest-all.sh` / `dsum.sh` / `wdigest.sh` (with `hf24` and `s650`), `allocs.sh`, `profile.sh`
+  and `p6.sh` (`sus8`, `st200`, `sus24`, `st650`), `prof.py` and `dm` (a `rustc-demangle` filter
+  for `sample` reports; round 7's helpers in `.artifacts/tmp/tl639/` no longer exist). Profiles
+  `p-w1-st200.*`, `p-w4-st200.*`, `p-w4-sus8.*`.

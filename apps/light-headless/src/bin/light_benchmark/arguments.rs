@@ -241,7 +241,7 @@ impl Arguments {
                 "--headless-stress-fixtures" => {
                     let value = parse_bounded_u64(
                         &required_value(&mut arguments, &argument)?,
-                        650,
+                        200,
                         4_000,
                         "headless stress fixtures",
                     )? as usize;
@@ -249,7 +249,7 @@ impl Arguments {
                         .contains(&value)
                     {
                         return Err(
-                            "headless stress fixtures must be exactly 650, 1000, 2000 or 4000"
+                            "headless stress fixtures must be exactly 200, 400, 650, 1000, 2000 or 4000"
                                 .into(),
                         );
                     }
@@ -307,7 +307,7 @@ impl Arguments {
           --universes N                Override the profile universe count (1-512)\n\
           --rate-hz N                  Scheduled output target, 1-240\n\
           --sustained-show             Use the mixed-fixture sustained benchmark show\n\
-          --headless-stress-fixtures N Run the informational mixed-mode headless tier (650, 1000, 2000 or 4000)\n\
+          --headless-stress-fixtures N Run the informational mixed-mode headless tier (200, 400, 650, 1000, 2000 or 4000)\n\
           --fixture-package-dir PATH   Fixture packages used by shipped-mode workloads\n\
           --mutation-gate              Run the large-show incremental mutation gate\n\
           --patch-gate                 Run the real persisted Patch transaction gate\n\

@@ -19,8 +19,9 @@ use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PoolPlaybackAc
 use light_programmer::ProgrammerRegistry;
 use std::{net::SocketAddr, path::Path, sync::Arc};
 
-/// 650 is the TL-639 round 8 cap: 24 universes (12,259 of 12,288 parameters).
-pub(super) const SUPPORTED_FIXTURE_COUNTS: [usize; 4] = [650, 1_000, 2_000, 4_000];
+/// TL-639 round 8 adds the tiers of the performance targets: 200, 400 and 650 fixtures fill 8,
+/// 15 and 24 universes (650 is the 24 × 512 ceiling: 12,259 slots).
+pub(super) const SUPPORTED_FIXTURE_COUNTS: [usize; 6] = [200, 400, 650, 1_000, 2_000, 4_000];
 const BASE_MANIFEST: [StressTemplate; 5] = [
     StressTemplate::Dls,
     StressTemplate::LedWash,
@@ -302,7 +303,9 @@ fn prepare_layout(
     semantic: bool,
 ) -> Result<StressLayout, String> {
     if !SUPPORTED_FIXTURE_COUNTS.contains(&fixture_count) {
-        return Err("headless stress fixtures must be exactly 650, 1000, 2000 or 4000".into());
+        return Err(
+            "headless stress fixtures must be exactly 200, 400, 650, 1000, 2000 or 4000".into(),
+        );
     }
     // The 2,000-fixture manifest, halved or doubled; every base quantity is even.
     let quantity = |kind: StressTemplate| kind.base_quantity() * fixture_count / 2_000;

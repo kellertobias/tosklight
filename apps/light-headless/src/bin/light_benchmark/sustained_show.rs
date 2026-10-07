@@ -27,10 +27,11 @@ use std::{fs, net::SocketAddr, path::Path, sync::Arc};
 use uuid::Uuid;
 
 const UNIVERSES: usize = 32;
-/// TL-639 round 8: the performance goal is capped at 24 universes (12,288 parameters). A
-/// sustained show of fewer universes keeps the 32-universe mix in proportion: every
-/// manufacturer quantity scales by `universes / 32` and the RGB PARs fill each universe.
-const CAPPED_UNIVERSES: usize = 24;
+/// TL-639 round 8: the performance targets name 8, 16 and 24 universes (24 × 512 parameters is
+/// the ceiling). A sustained show of 8, 16 or 24 universes keeps the 32-universe mix in
+/// proportion: every manufacturer quantity scales by `universes / 32` (exactly, for multiples
+/// of 8) and the RGB PARs fill each universe.
+const SCALED_UNIVERSES: [usize; 3] = [8, 16, 24];
 const SUNSTRIP_QUANTITY: usize = 20;
 const LEDWASH_QUANTITY: usize = 40;
 const DLS_QUANTITY: usize = 32;
@@ -209,9 +210,9 @@ pub fn build(
     semantic: Option<SemanticBuild>,
 ) -> Result<BenchmarkScenario, String> {
     let universes = usize::from(config.universes);
-    if universes != UNIVERSES && universes != CAPPED_UNIVERSES {
+    if universes != UNIVERSES && !SCALED_UNIVERSES.contains(&universes) {
         return Err(
-            "the sustained benchmark show requires the 32-universe hard-floor profile or its 24-universe cap"
+            "the sustained benchmark show requires 32 universes (the hard-floor profile) or 8, 16 or 24"
                 .into(),
         );
     }
@@ -761,7 +762,7 @@ mod tests {
     }
 
     #[test]
-    fn the_capped_sustained_show_keeps_the_mix_in_proportion_on_24_universes() {
+    fn the_scaled_sustained_shows_keep_the_mix_in_proportion() {
         let package_dir =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixture-library");
         let mut config = crate::light_benchmark::arguments::BenchmarkProfile::HardFloor.config();
@@ -777,7 +778,17 @@ mod tests {
             .map(|entry| entry.quantity)
             .collect::<Vec<_>>();
         assert_eq!(quantities, vec![15, 30, 24, 24, 3_000, 18]);
-        config.universes = 16;
+        for (universes, fixtures) in [(8, 1_037), (16, 2_074)] {
+            config.universes = universes;
+            let scenario =
+                build(config, ProtocolSelection::ArtNet, None, &package_dir, None).unwrap();
+            assert_eq!(scenario.fixture_count, fixtures);
+            assert_eq!(
+                scenario.fixture_inventory.total_slots,
+                usize::from(universes) * 512
+            );
+        }
+        config.universes = 12;
         assert!(build(config, ProtocolSelection::ArtNet, None, &package_dir, None).is_err());
     }
 }
