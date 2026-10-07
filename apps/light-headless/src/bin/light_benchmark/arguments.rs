@@ -281,8 +281,13 @@ impl Arguments {
         parsed
             .semantic
             .validate(parsed.sustained_show || parsed.headless_stress_fixtures.is_some())?;
-        if parsed.semantic.start_latency && parsed.headless_stress_fixtures.is_none() {
-            return Err("--start-latency needs --headless-stress-fixtures".into());
+        if parsed.semantic.start_latency
+            && parsed.headless_stress_fixtures.is_none()
+            && !parsed.sustained_show
+        {
+            return Err(
+                "--start-latency needs --headless-stress-fixtures or --sustained-show".into(),
+            );
         }
         Ok(ParseOutcome::Run(parsed))
     }
@@ -489,13 +494,14 @@ mod tests {
             .is_err(),
             "cycles need the start-latency probe"
         );
+        // TL-641: the sustained show's typed tiers take the probe too.
         assert!(
             Arguments::parse([
                 "--semantic".into(),
                 "--sustained-show".into(),
                 "--start-latency".into()
             ])
-            .is_err()
+            .is_ok()
         );
         assert!(
             Arguments::parse([

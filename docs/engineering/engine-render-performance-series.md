@@ -2037,3 +2037,79 @@ MB at 8 universes, 121-143 MB at 16, 165-198 MB at 24 (legacy 25-63 MB).
   and `p6.sh` (`sus8`, `st200`, `sus24`, `st650`), `prof.py` and `dm` (a `rustc-demangle` filter
   for `sample` reports; round 7's helpers in `.artifacts/tmp/tl639/` no longer exist). Profiles
   `p-w1-st200.*`, `p-w4-st200.*`, `p-w4-sus8.*`.
+
+## Start Now latency at the round-8 tiers (TL-641)
+
+The contract: a Dynamic started with Start Now (not on a beat or upbeat boundary) reaches output no
+later than the DMX frame after the one being generated, within two frame periods of the gesture.
+Scope is the round-8 typed tiers above; the 4,000-fixture stress target and show load are out of
+scope.
+
+### How it was measured
+
+`light-benchmark --start-latency --semantic` on both round-8 shapes (the sustained show now takes
+the probe as well as the headless stress mix), release `--locked --no-default-features`, three runs
+per row, medians. The probe starts one Start Now Dynamic on every target the way the desk does: the
+runtime controller under the Dynamics lock, then the `DynamicOn` rows under the Programmer lock.
+
+- **Serialized:** the gesture between two frames, then the first frame split into reconcile and
+  merge, controller construction, and family evaluation plus render.
+- **Concurrent:** an output thread paced at the row's rate and the gesture issued while a frame is
+  in progress. It reports how many frames after the in-progress one first carried the Dynamic, the
+  gesture-to-end-of-that-frame time against two frame periods, and the in-progress frame's time
+  against the median steady frame (a gesture that blocked the frame would show here).
+
+The frame that carries the start is also read from the desk's change lead ledger (TL-659), the
+same claim the DMX statistics measure from; both agree on every run. The sustained show's own
+keyframe wave runs from Current to a preset the Live lane has no source for and never moves DMX,
+so its probe Dynamic is that wave's Max/Min sine (10-90 %), which changes every fixture from the
+first frame.
+
+### Results
+
+Host load average 6-8 from other sessions during the runs (round 8 measured at 1.9-4.9), so frames
+run 1.4-1.6× round 8's. Pipeline ms, medians of three runs (`rows-branch.md`):
+
+| Row | Targets | Rate / budget | Programmer apply | Reconcile + merge | Controller construction | Family eval + render | Concurrent gesture → output | Frames after in-progress | Gesture blocks in-progress frame |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| 8 u, stress 200 | 388 | 60 Hz / 33.3 | 0.74 | 1.23 | 0.32 | 7.25 | 28.2 | 1 / 1 / 1 | no (2.13 vs 2.22) |
+| 8 u, sustained 1,037 | 1,037 | 60 Hz / 33.3 | 0.32 | 0.40 | 0.11 | 4.36 | 4.2 | 0 / 0 / 0 | no |
+| 16 u, stress 400 | 776 | 40 Hz / 50.0 | 1.23 | 1.95 | 0.49 | 12.24 | 42.7 | 1 / 1 / 1 | no (3.01 vs 3.56) |
+| 16 u, sustained 2,074 | 2,074 | 40 Hz / 50.0 | 0.56 | 0.61 | 0.26 | 8.59 | 9.3 | 0 / 0 / 0 | no |
+| 24 u, stress 650 | 1,261 | 40 Hz / 50.0 | 2.63 | 3.72 | 1.11 | 20.70 | 56.2 | 1 / 1 / 1 | no (4.15 vs 4.09) |
+| 24 u, sustained 3,111 | 3,111 | 40 Hz / 50.0 | 0.77 | 0.99 | 0.32 | 10.91 | 12.5 | 0 / 0 / 0 | no |
+
+"0" means the in-progress frame itself carried the Dynamic: the gesture reached the Dynamics
+runtime before that frame's Dynamics transaction. The Programmer apply runs on the gesture's own
+thread, never inside an output frame.
+
+Every row is carried by the in-progress frame or the next one, on every run. The two-period budget
+holds on every row except stress 650 at 40 Hz in this loaded series (56.2 ms); re-measured with the
+base build interleaved (`rows-st650-*-rerun.md`, load 7.6-8.9) it holds at 41.9 ms (base 46.7 ms,
+one of three base runs over). Its carrying frame (19-27 ms) is the steady animated frame (15-17 ms
+here, about 10 ms in round 8) plus the start's reconcile and controller construction (about 4 ms),
+so the remaining headroom is about 8 ms at round 8's load and less on a loaded host. The base build
+(`c8a894b2c`, stress rows only) measures the same within noise (`rows-base.md`), so TL-659's change
+lead claims add nothing measurable.
+
+No engine change was made: the contract is met on every row, the miss on the loaded run comes from
+the steady animated frame approaching the period, not from the start path, and every candidate
+(moving reconciliation out of the frame) would need its own byte-identity proof. Beat and upbeat
+boundary starts are untouched; `light-dynamics` tests cover that a boundary start is due at the
+boundary sampling chooses, not on the next frame.
+
+### Equivalence
+
+`--digest-ticks 240`, with and without `--digest-lifecycle`, on typed stress 200 / 400 / 650, typed
+sustained 8 / 16 / 24 universes and the legacy stress 200 and sustained 8 shapes: 16/16 byte
+identical between the base build and the final build (`digests/digest-summary.txt`).
+
+### Measurement identities
+
+- Base `c8a894b2c`, binary `8a75fb31…`; measured: `4a0264bd9` plus the TL-641 probe changes,
+  binary `92b090be…` (`binaries.txt`). The commit after it only drops an unused probe parameter
+  and adds tests.
+- Host: Apple M5 Max, shared with other agents' builds and tests.
+- Evidence: `.artifacts/performance/tl641-start-latency/` (per-run JSON under `branch/`, `base/`,
+  `branch-quiet/`, `base-quiet/`; `rows-*.md`; `digests/`). Scripts in `.artifacts/tmp/tl641/`
+  (`summarize.py`, `digests.py`).
