@@ -450,26 +450,54 @@ impl SurfaceLost {
 mod tests {
     use super::*;
 
+    /// Creates one hidden test window from the running event loop, then leaves it.
+    #[cfg(target_os = "windows")]
+    #[derive(Default)]
+    struct TestWindow {
+        window: Option<Arc<Window>>,
+    }
+
+    #[cfg(target_os = "windows")]
+    impl winit::application::ApplicationHandler for TestWindow {
+        fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+            if self.window.is_none() {
+                let window = event_loop
+                    .create_window(
+                        Window::default_attributes()
+                            .with_title("Pixel surface recovery check")
+                            .with_visible(false)
+                            .with_window_level(winit::window::WindowLevel::Normal)
+                            .with_inner_size(winit::dpi::PhysicalSize::new(320, 200)),
+                    )
+                    .expect("test window");
+                self.window = Some(Arc::new(window));
+            }
+            event_loop.exit();
+        }
+
+        fn window_event(
+            &mut self,
+            _event_loop: &winit::event_loop::ActiveEventLoop,
+            _window_id: winit::window::WindowId,
+            _event: winit::event::WindowEvent,
+        ) {
+        }
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
-    #[allow(deprecated)]
     fn an_unconfigured_windows_surface_recovers_without_panicking() {
+        use winit::platform::run_on_demand::EventLoopExtRunOnDemand;
         use winit::platform::windows::EventLoopBuilderExtWindows;
-        let event_loop = winit::event_loop::EventLoop::builder()
+        let mut event_loop = winit::event_loop::EventLoop::builder()
             .with_any_thread(true)
             .build()
             .expect("Windows event loop");
-        let window = Arc::new(
-            event_loop
-                .create_window(
-                    Window::default_attributes()
-                        .with_title("Pixel surface recovery check")
-                        .with_visible(false)
-                        .with_window_level(winit::window::WindowLevel::Normal)
-                        .with_inner_size(winit::dpi::PhysicalSize::new(320, 200)),
-                )
-                .expect("test window"),
-        );
+        let mut created = TestWindow::default();
+        event_loop
+            .run_app_on_demand(&mut created)
+            .expect("event loop creates the test window");
+        let window = created.window.expect("test window");
         let monitor = window
             .available_monitors()
             .nth(1)
