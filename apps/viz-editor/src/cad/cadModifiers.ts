@@ -6,10 +6,10 @@
 
 /** Whether this is a Mac, whose duplicate modifier is Option rather than Ctrl. */
 export function isMac(): boolean {
+	// WebKit has no userAgentData; its user agent still names the Mac.
 	const platform =
 		(navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ??
-		navigator.platform ??
-		"";
+		navigator.userAgent;
 	return /mac/iu.test(platform);
 }
 

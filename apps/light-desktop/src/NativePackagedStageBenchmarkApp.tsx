@@ -189,7 +189,6 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 					timeline: timeline.current,
 					capabilities: {
 						userAgent: navigator.userAgent,
-						platform: navigator.platform,
 						renderer: "native-helper",
 					},
 				});

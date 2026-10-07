@@ -20,7 +20,6 @@ export function useTextEditorGuards(model: TextEditorState) {
 		const warn = (event: BeforeUnloadEvent) => {
 			if (!dirtyRef.current) return;
 			event.preventDefault();
-			event.returnValue = "";
 		};
 		window.addEventListener("beforeunload", warn);
 		return () => window.removeEventListener("beforeunload", warn);

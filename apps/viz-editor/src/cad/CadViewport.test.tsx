@@ -721,7 +721,9 @@ describe("CAD fixture interaction", () => {
 		// A drag along one screen axis leaves the other at -0; the move is the same.
 		const plain = (delta: readonly number[]) => delta.map((value) => value + 0);
 		const onMac = (mac: boolean) =>
-			vi.spyOn(navigator, "platform", "get").mockReturnValue(mac ? "MacIntel" : "Win32");
+			vi
+				.spyOn(navigator, "userAgent", "get")
+				.mockReturnValue(mac ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" : "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
 		it("places a moved copy with Option on a Mac only while Option is held as the mouse lets go", async () => {
 			onMac(true);
