@@ -66,13 +66,15 @@ Preset families are Mixed, Intensity, Color, Position, and Beam. Intensity store
 
 Each family is a separate pool with its own local preset numbers. The command-line address combines type and number: `0.1` is Mixed 1, `1.1` is Intensity 1, `2.1` is Color 1, `3.1` is Position 1, and `4.1` is Beam 1. The dotted address is not a global preset ID, so all five presets numbered 1 can coexist.
 
-Each stored Preset tile shows its fixture count as `active / defined`, for example `3 / 8`. The
+The lower-left corner of every stored Group and Preset tile shows how many fixtures it holds. A Group
+tile reads its member count, for example `8 fx`. A Preset tile reads `active/defined`, for example
+`3/8 fx`. The
 second number counts every fixture the Preset defines, including the members of any Group it
 stores and fixtures that are currently unpatched. The first number counts the fixtures whose
 current effective values, after the Programmer and every Playback have been merged, match every
 value the Preset stores for them; a Preset that is only stored, or whose values another source
 has overridden, is not active. The count follows the live output state while the pane is open. A
-Preset that defines no fixtures shows `0 / 0`. In a [Color Intent](05-color-intent.md) show, a Color preset that holds one shared colour is **universal**: it applies to every selected fixture and its tile reads **Universal** with the number of fixtures currently showing it.
+Preset that defines no fixtures shows `0/0 fx`. In a [Color Intent](05-color-intent.md) show, a Color preset that holds one shared colour is **universal**: it applies to every selected fixture and its tile reads **Any** with the number of fixtures currently showing it, for example `Any · 2 fx`.
 
 ### Automatic Color and Position previews
 

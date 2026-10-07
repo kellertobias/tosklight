@@ -673,19 +673,19 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 		const up = pane.locator(".preset-card").nth(1);
 		await expect(down).toContainText("Down");
 		await expect(up).toContainText("Up");
-		await expect.poll(() => tileCount(bench, down)).toContain("0 / 2");
-		await expect.poll(() => tileCount(bench, up)).toContain("0 / 2");
+		await expect.poll(() => tileCount(bench, down)).toContain("0/2 fx");
+		await expect.poll(() => tileCount(bench, up)).toContain("0/2 fx");
 
 		await down.click();
 		await expect.poll(async () => (await programmedAngles(api, selected.length))?.every((angles) => angles.tilt === -67.5) ?? false).toBe(true);
-		await expect.poll(() => tileCount(bench, down)).toContain("2 / 2");
+		await expect.poll(() => tileCount(bench, down)).toContain("2/2 fx");
 		// Negative control: a preset the fixtures do not show stays inactive.
-		expect(await tileCount(bench, up)).toContain("0 / 2");
+		expect(await tileCount(bench, up)).toContain("0/2 fx");
 
 		await up.click();
 		await expect.poll(async () => (await programmedAngles(api, selected.length))?.every((angles) => angles.tilt === 45) ?? false).toBe(true);
-		await expect.poll(() => tileCount(bench, up)).toContain("2 / 2");
-		await expect.poll(() => tileCount(bench, down)).toContain("0 / 2");
+		await expect.poll(() => tileCount(bench, up)).toContain("2/2 fx");
+		await expect.poll(() => tileCount(bench, down)).toContain("0/2 fx");
 		await expect(page.getByRole("alert")).toHaveCount(0);
 	});
 

@@ -310,11 +310,7 @@ export class BrowserGroups {
 			});
 		} else if (route === "pool") {
 			const card = this.groupCard(number);
-			await expect(card).toContainText(
-				group.body.fixtures.length
-					? `${group.body.fixtures.length} fixtures`
-					: "Group is empty",
-			);
+			await expect(card).toContainText(`${group.body.fixtures.length} fx`);
 			await longPress(card);
 			const dialog = this.page.getByRole("dialog", {
 				name: `Group ${number} settings`,

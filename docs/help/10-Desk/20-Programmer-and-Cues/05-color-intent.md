@@ -171,7 +171,7 @@ on that fixture's details.
 In a Color Intent show, a Color preset recorded from fixtures that all hold the same colour is stored
 once, as that colour, rather than once per fixture. Such a preset is **universal**: recalling it
 gives that colour to every selected fixture, including fixtures that were never part of it. Its
-pool tile reads **Universal** followed by the number of fixtures currently showing it.
+pool tile reads **Any** followed by the number of fixtures currently showing it, for example `Any · 2 fx`.
 
 A Color preset recorded from fixtures holding different colours keeps each fixture's own colour and
 only ever applies to those fixtures; it is never stretched over the rest of the selection.

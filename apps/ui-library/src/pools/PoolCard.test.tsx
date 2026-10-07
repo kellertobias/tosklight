@@ -38,7 +38,7 @@ describe("PoolCard", () => {
 				model={{
 					number: 4,
 					primary: "Front Wash",
-					secondary: "4 fixtures · ordered",
+					secondary: "4 fx",
 					details: ["⚠ 1 missing", "2 portable attributes"],
 					icon: "◇",
 					color: "#1bd6ec",
@@ -67,7 +67,7 @@ describe("PoolCard", () => {
 			"Front Wash",
 		);
 		expect(card.querySelector(".pool-card-information")).toHaveTextContent(
-			"4 fixtures · ordered",
+			"4 fx",
 		);
 		expect(card.querySelector(".pool-card-media")).toHaveTextContent("◇");
 		expect(card.querySelector(".pool-card-workflow")).toHaveTextContent(

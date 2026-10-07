@@ -157,9 +157,7 @@ export function GroupCard({
 				secondary: group
 					? updateArmed
 						? "Touch to choose Update mode"
-						: group.body.fixtures.length
-							? `${group.body.fixtures.length} fixtures · ordered`
-							: "Group is empty"
+						: `${group.body.fixtures.length} fx`
 					: emptyGroupHint(storeArmed, updateArmed),
 				details,
 				icon: group?.body.icon,

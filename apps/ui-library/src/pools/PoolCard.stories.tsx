@@ -33,7 +33,7 @@ const models: PoolCardViewModel[] = [
 	{
 		number: 1,
 		primary: "All",
-		secondary: "12 fixtures · ordered",
+		secondary: "12 fx",
 		kind: "group",
 		states: ["selected"],
 		icon: "◇",
@@ -44,7 +44,7 @@ const models: PoolCardViewModel[] = [
 	{
 		number: 2,
 		primary: "Front Wash With A Deliberately Long Operator Name",
-		secondary: "4 fixtures · ordered",
+		secondary: "4 fx",
 		details: ["1 portable attribute"],
 		kind: "group",
 		states: ["active"],

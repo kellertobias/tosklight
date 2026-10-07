@@ -65,7 +65,7 @@ const sparseSlots: PoolSlotViewModel<string>[] = [
 		card: {
 			number: 1,
 			primary: "All Fixtures",
-			secondary: "12 fixtures · ordered",
+			secondary: "12 fx",
 			kind: "group",
 		},
 	},

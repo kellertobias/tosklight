@@ -474,13 +474,13 @@ describe("PresetsWindow active / defined fixture counts", () => {
 		const cards = () =>
 			container.querySelectorAll<HTMLButtonElement>(".preset-card");
 
-		expect(cards()[0]).toHaveTextContent("0 / 2");
+		expect(cards()[0]).toHaveTextContent("0/2 fx");
 		expect(cards()[0]).not.toHaveTextContent(/fixtures/);
 		expect(cards()[0]).not.toHaveTextContent(/Beam ·/);
-		expect(cards()[1]).toHaveTextContent("0 / 0");
+		expect(cards()[1]).toHaveTextContent("0/0 fx");
 
 		mocks.visualization = zoomSnapshot(2, 1);
 		rerender(<PresetsWindow compact />);
-		expect(cards()[0]).toHaveTextContent("1 / 2");
+		expect(cards()[0]).toHaveTextContent("1/2 fx");
 	});
 });

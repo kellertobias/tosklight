@@ -55,7 +55,7 @@ describe("Preset active / defined fixture counts", () => {
 			},
 		]);
 		expect(result).toEqual({ active: 0, defined: 2 });
-		expect(presetFixtureCountLabel(result)).toBe("0 / 2");
+		expect(presetFixtureCountLabel(result)).toBe("0/2 fx");
 	});
 
 	it("counts zero active fixtures before any resolved values arrive", () => {
@@ -80,7 +80,7 @@ describe("Preset active / defined fixture counts", () => {
 				value: { kind: "normalized", value: 0.5 },
 			},
 		]);
-		expect(presetFixtureCountLabel(result)).toBe("1 / 2");
+		expect(presetFixtureCountLabel(result)).toBe("1/2 fx");
 	});
 
 	it("counts every defined fixture when all show the stored look", () => {
@@ -96,10 +96,10 @@ describe("Preset active / defined fixture counts", () => {
 				value: { kind: "discrete", value: "Dots" } as const,
 			},
 		]);
-		expect(presetFixtureCountLabel(counts(beamPreset, values))).toBe("2 / 2");
+		expect(presetFixtureCountLabel(counts(beamPreset, values))).toBe("2/2 fx");
 	});
 
-	it("shows 0 / 0 for a Preset that defines no fixture", () => {
+	it("shows 0/0 fx for a Preset that defines no fixture", () => {
 		const result = counts({ values: {} }, [
 			{
 				fixture_id: "fixture-a",
@@ -107,7 +107,7 @@ describe("Preset active / defined fixture counts", () => {
 				value: { kind: "normalized", value: 0.5 },
 			},
 		]);
-		expect(presetFixtureCountLabel(result)).toBe("0 / 0");
+		expect(presetFixtureCountLabel(result)).toBe("0/0 fx");
 	});
 
 	it("resolves group values over ordered membership, spreading by position", () => {
@@ -211,14 +211,14 @@ describe("Preset active / defined fixture counts", () => {
 				"fixture-a": angles(-67.5),
 				"fixture-b": angles(-67.5),
 			});
-			expect(presetFixtureCountLabel(counts(down, live))).toBe("2 / 2");
+			expect(presetFixtureCountLabel(counts(down, live))).toBe("2/2 fx");
 			// Negative control: a different stored Position stays inactive.
-			expect(presetFixtureCountLabel(counts(up, live))).toBe("0 / 2");
+			expect(presetFixtureCountLabel(counts(up, live))).toBe("0/2 fx");
 			const fixtureBElsewhere = effective("position", {
 				"fixture-a": angles(-67.5),
 				"fixture-b": angles(45),
 			});
-			expect(presetFixtureCountLabel(counts(down, fixtureBElsewhere))).toBe("1 / 2");
+			expect(presetFixtureCountLabel(counts(down, fixtureBElsewhere))).toBe("1/2 fx");
 		});
 
 		it("matches a semantic Color across float spellings and rejects another colour", () => {
@@ -227,23 +227,23 @@ describe("Preset active / defined fixture counts", () => {
 				"fixture-b": effectiveYellow,
 			});
 			expect(presetFixtureCountLabel(counts(stored("color", storedYellow), live))).toBe(
-				"2 / 2",
+				"2/2 fx",
 			);
 			const red = yellow(0.4124564, 0.2126729, 0.0193339);
-			expect(presetFixtureCountLabel(counts(stored("color", red), live))).toBe("0 / 2");
+			expect(presetFixtureCountLabel(counts(stored("color", red), live))).toBe("0/2 fx");
 			// A universal colour names no fixtures: it counts every fixture currently showing it.
 			const universal = { values: {}, universal_values: { color: storedYellow } };
-			expect(presetFixtureCountLabel(counts(universal, live))).toBe("Universal · 2");
+			expect(presetFixtureCountLabel(counts(universal, live))).toBe("Any · 2 fx");
 			expect(
 				presetFixtureCountLabel(
 					counts({ values: {}, universal_values: { color: red } }, live),
 				),
-			).toBe("Universal · 0");
+			).toBe("Any · 0 fx");
 		});
 
 		it("counts a Zoom preset by its requested opening", () => {
 			const live = effective("zoom", { "fixture-a": zoom(20), "fixture-b": zoom(30) });
-			expect(presetFixtureCountLabel(counts(stored("zoom", zoom(20)), live))).toBe("1 / 2");
+			expect(presetFixtureCountLabel(counts(stored("zoom", zoom(20)), live))).toBe("1/2 fx");
 		});
 
 		it("requires every stored family of a Mixed preset, alongside Intensity", () => {
@@ -260,13 +260,13 @@ describe("Preset active / defined fixture counts", () => {
 				...effective("position", { "fixture-a": angles(45) }),
 				...effective("intensity", { "fixture-a": { kind: "normalized", value: 1 } as Effective }),
 			];
-			expect(presetFixtureCountLabel(counts(mixed, live))).toBe("0 / 1");
-			expect(presetFixtureCountLabel(counts(intensity, live))).toBe("1 / 1");
+			expect(presetFixtureCountLabel(counts(mixed, live))).toBe("0/1 fx");
+			expect(presetFixtureCountLabel(counts(intensity, live))).toBe("1/1 fx");
 			const showing = [
 				...effective("position", { "fixture-a": angles(-67.5) }),
 				...effective("intensity", { "fixture-a": { kind: "normalized", value: 1 } as Effective }),
 			];
-			expect(presetFixtureCountLabel(counts(mixed, showing))).toBe("1 / 1");
+			expect(presetFixtureCountLabel(counts(mixed, showing))).toBe("1/1 fx");
 		});
 	});
 });

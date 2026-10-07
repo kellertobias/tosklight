@@ -84,7 +84,7 @@ With the red above still programmed and output at least once:
 In the Color Intent show:
 
 - RGB 1 and RGB 2 set to the same blue, recorded as **Color 1**, store one universal colour: the
-  tile reads **Universal · 2** and the stored preset has `universal_values` and no per-fixture
+  tile reads **Any · 2 fx** and the stored preset has `universal_values` and no per-fixture
   values.
 - Selecting RGBW 3 and CMY 4 only, which were never part of Color 1, and recalling Color 1 gives
   both of them that blue.

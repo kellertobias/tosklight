@@ -441,7 +441,7 @@ test.describe("docs/testing/26-color-intent.md", () => {
 
 		await desk.open(api.baseUrl);
 		await showColorPresets(page);
-		await expect(presetCard(page, 1)).toContainText("Universal · 2");
+		await expect(presetCard(page, 1)).toContainText("Any · 2 fx");
 
 		// RGBW 3 and CMY 4 were never part of Color 1; recalling it from the pool makes them blue.
 		await clearProgrammer(api, show);

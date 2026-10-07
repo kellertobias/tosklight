@@ -49,7 +49,7 @@ async function storeGroupFromPool(
 	await ensureGroupPool(page);
 	const record = page.locator(".global-store-button");
 	const card = groupCard(page, group);
-	if (mode) await expect(card.locator("small")).toContainText("fixtures · ordered");
+	if (mode) await expect(card.locator("small")).toContainText(/^\d+ fx$/);
 	const requiresMode =
 		(await card.getByText(/^(Empty|⚠ Group is empty)$/).count()) === 0;
 	if (requiresMode && !mode)
