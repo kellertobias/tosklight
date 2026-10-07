@@ -134,7 +134,7 @@ test("software SHIFT arms ordered endpoints for White Blend, Temperature/Duv and
 	// Arming changes lamp state only; the software keypad keeps its geometry.
 	await page.keyboard.press("Escape");
 	await tapShift(page, true);
-	expect(await shiftKey(page).boundingBox()).toEqual(keypadBefore);
+	await expect.poll(() => shiftKey(page).boundingBox(), "SHIFT keeps its geometry once the press settles").toEqual(keypadBefore);
 	await tapShift(page, false);
 	await workspaceUnchanged();
 });
