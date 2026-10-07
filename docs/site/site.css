@@ -74,8 +74,7 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-
 .hero-line { display: block; white-space: nowrap; }
 .hero-line-accent { color: var(--amber-bright); }
 .hero-lede { max-width: 36rem; margin: 1.8rem 0 0; color: #bbc4d2; font-size: 1.13rem; line-height: 1.7; }
-.hero-free { max-width: 36rem; margin: 1rem 0 0; padding: .7rem 1rem; border: 1px solid rgb(95 216 220 / .35); border-radius: .55rem; background: rgb(95 216 220 / .08); color: #bbc4d2; line-height: 1.55; }
-.hero-free strong { color: #e8f6fb; }
+.hero-free { margin: .35rem 0 0; color: var(--quiet); font-size: .78rem; }
 .actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
 .button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.9rem; padding: .65rem 1.1rem; border: 1px solid var(--line-bright); border-radius: .65rem; color: var(--text); font-weight: 750; text-decoration: none; transition: border-color .2s ease, background .2s ease, transform .2s ease; }
 .button:hover { border-color: #647189; background: rgb(255 255 255 / .035); transform: translateY(-2px); }
