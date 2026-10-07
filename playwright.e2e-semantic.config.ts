@@ -19,6 +19,7 @@ export const SEMANTIC_SPECS = [
 	/120-direct-color-pages\.spec\.ts$/,
 	/121-intention-programming-frame-contract\.spec\.ts$/,
 	/125-typed-family-values\.spec\.ts$/,
+	/128-position-points\.spec\.ts$/,
 ];
 export const SEMANTIC_SCENARIOS = /\b(POSITION-CONTROLS|SEMANTIC-COLOR|DIRECT-COLOR|FOCUS-ZOOM|INTENT-FRAME|TYPED-FAMILY)-\d{3}\b/;
 

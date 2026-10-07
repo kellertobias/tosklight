@@ -28,7 +28,8 @@ Executable coverage:
   lane has published and ticks frames until the dialog reads it. Step 2 is covered: the gesture's
   Preload part ends with one Preload Finish, the rest of the held motion continues on the Normal
   Programmer with its own Finish, Preload no longer changes, and the next gesture is Normal too.
-- POSITION-CONTROLS-012 and 013 (TL-651, Points) are in `tests/128-position-points.spec.ts`. Vitest
+- POSITION-CONTROLS-012 and 013 (TL-651, Points) are in `tests/128-position-points.spec.ts`, under
+  `npm run test:e2e` and `npm run test:e2e-semantic`. Vitest
   covers the picker's Create Point and Manage Points on the software and hardware-connected Point
   slot (`familyEncoders/FamilyEncoderSlotSurface.point.test.tsx`), the Points view and its
   one-shot Create Point request (`windows/PatchWindow.test.tsx`) and the Point helpers
