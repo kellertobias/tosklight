@@ -181,8 +181,8 @@ code { padding: .12rem .32rem; border-radius: .3rem; background: rgb(255 255 255
 .license-seal-outer { fill: rgb(95 216 220 / .04); stroke: rgb(95 216 220 / .45); stroke-width: 1.2; }
 .license-seal-inner { fill: none; stroke: var(--line); stroke-width: 1; }
 .license-seal-ring { fill: #c9d2df; font-size: 11.5px; font-weight: 700; }
-.license-seal-mark { fill: var(--cyan); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 24px; font-weight: 600; }
-.license-seal-label { fill: var(--muted); font-size: 8.5px; font-weight: 700; }
+.license-seal-mark { fill: var(--cyan); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; font-weight: 600; }
+.license-seal-center { fill: #e6edf5; font-size: 15px; font-weight: 800; }
 .why-it-exists h2 { margin: 0; font-size: clamp(2.2rem, 5vw, 4rem); line-height: 1.06; letter-spacing: -.05em; }
 .why-it-exists p:not(.eyebrow) { max-width: 48rem; margin: 1.25rem 0 0; color: var(--muted); font-size: 1.06rem; }
 .section-heading > p:last-child { max-width: 47rem; color: var(--muted); }
