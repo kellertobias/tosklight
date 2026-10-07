@@ -98,7 +98,7 @@ a:focus-visible, button:focus-visible { outline: 3px solid var(--blue); outline-
 .suite-icons { display: flex; gap: .65rem; padding-bottom: .35rem; }
 .suite-icons img { width: 4rem; height: 4rem; padding: .12rem; border: 1px solid rgb(255 255 255 / .28); border-radius: .95rem; background: rgb(255 255 255 / .055); box-shadow: 0 10px 30px rgb(0 0 0 / .22); }
 .suite-intro h2, .section-heading h2, .evidence-grid h2 { max-width: 46rem; margin: 0; font-size: clamp(2.3rem, 5vw, 4rem); line-height: 1.06; letter-spacing: -.045em; }
-.suite-intro > p:last-child { max-width: 48rem; margin: 1.25rem 0 0; color: var(--muted); font-size: 1.08rem; }
+.suite-intro > p { max-width: 48rem; margin: 1.25rem 0 0; color: var(--muted); font-size: 1.08rem; }
 
 .product { position: relative; overflow: hidden; padding: 7rem 0; border-top: 1px solid rgb(255 255 255 / .07); }
 .product::before { content: ""; position: absolute; top: 10%; width: 32rem; height: 32rem; border-radius: 50%; filter: blur(70px); opacity: .09; pointer-events: none; }
@@ -207,7 +207,6 @@ code { padding: .12rem .32rem; border-radius: .3rem; background: rgb(255 255 255
 .performance-histogram-bar { width: 80%; height: var(--bar-height, 0%); min-height: 1px; background: var(--tone, var(--quiet)); }
 .performance-tone-failing { --tone: var(--danger); }.performance-tone-struggling { --tone: #ff9f45; }.performance-tone-holding { --tone: #ffd166; }.performance-tone-comfortable { --tone: var(--green); }.performance-tone-spare { --tone: var(--blue); }
 
-.demo { padding: 7rem 0; }
 .product-demo { display: block; width: 100%; margin-top: 2rem; border: 1px solid var(--line); border-radius: var(--radius); background: #000; box-shadow: var(--shadow); }
 .section-lede { color: var(--muted); }
 .downloads-section { padding: 7rem 0; border-top: 1px solid rgb(255 255 255 / .08); background: var(--bg-raised); }
@@ -354,7 +353,7 @@ footer { padding: 4rem 0; border-top: 1px solid rgb(255 255 255 / .08); }
   .hero-frame-control { top: 2rem; width: 96%; }
   .hero-frame-pixel { right: -.5rem; width: 55%; }
   .hero-frame-architect { left: -.4rem; width: 52%; }
-  .suite-intro, .product, .workflow, .demo, .downloads-section { padding-block: 4.5rem; }
+  .suite-intro, .product, .workflow, .downloads-section { padding-block: 4.5rem; }
   .suite-icons img { width: 3.35rem; height: 3.35rem; }
   .product-identity { align-items: flex-start; }
   .product-identity > img { width: 3.8rem; height: 3.8rem; }
