@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	type CSSProperties,
 	useCallback,
@@ -135,13 +136,13 @@ export function DemoPlaybackControlsView({
 			style={{ position: "relative" }}
 		>
 			{pending && (
-				<p
+				<ErrorAlert as="p"
 					className="product-demo-playback-status"
 					role={pending.kind === "error" ? "alert" : "status"}
 					style={PLAYBACK_STATUS_STYLE}
 				>
 					{pending.message}
-				</p>
+				</ErrorAlert>
 			)}
 			<div className="product-demo-playback-top-row">
 				{DEMO_PLAYBACK_TOP_SLOTS.map((slot) => (

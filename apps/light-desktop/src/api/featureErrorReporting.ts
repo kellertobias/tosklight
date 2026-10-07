@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { Dispatch, SetStateAction } from "react";
 
 type FeatureErrorLane = "session" | "mutation";
@@ -16,7 +17,7 @@ export function createFeatureErrorGroup(
 	const report = (lane: FeatureErrorLane, error: Error | null) => {
 		const previous = displayed;
 		entries[lane] = error
-			? { message: error.message, order: ++order }
+			? { message: formatErrorDetails(error), order: ++order }
 			: null;
 		const next = Object.values(entries)
 			.filter((entry) => entry !== null)

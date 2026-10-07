@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { ApiRequestError } from "../../api/ApiRequestError";
 import type { VersionedObject } from "../../api/types";
 import { DESK_LAYOUT_ID, type StoredDeskLayout } from "./contracts";
@@ -52,7 +53,7 @@ export function createLayoutActions(
 				);
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 	};

@@ -203,7 +203,7 @@ describe("useRunningDynamicsAuthority", () => {
 		});
 
 		expect(changed).toBe(false);
-		expect(rendered.result.current.error).toBe("controller rejected");
+		expect(rendered.result.current.error).toContain("controller rejected");
 		expect(rendered.result.current.stoppingControllerIds.size).toBe(0);
 	});
 });

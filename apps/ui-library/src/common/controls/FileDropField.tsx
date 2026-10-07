@@ -1,3 +1,4 @@
+import { ErrorAlert } from "../ErrorAlert";
 import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Button, FormField, type LabelPlacement } from "./foundation";
 
@@ -133,6 +134,6 @@ export function FileDropField({
       </span>
       <span className="ui-file-drop-browse">Browse File Manager</span>
     </Button>
-    {status === "error" && statusMessage && <small className="ui-file-drop-error" role="alert">{statusMessage}</small>}
+    {status === "error" && statusMessage && <ErrorAlert as="small" className="ui-file-drop-error" role="alert">{statusMessage}</ErrorAlert>}
   </FormField>;
 }

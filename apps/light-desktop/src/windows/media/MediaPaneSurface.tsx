@@ -1,3 +1,4 @@
+import { CopyErrorButton } from "@tosklight/ui";
 import {
 	Button,
 	ColorPickerField,
@@ -423,7 +424,7 @@ function MediaLayerStrip({
 						Math.min(100, layer.opacityPercent ?? 100),
 					);
 					return (
-						<li key={layer.id}>
+						<li key={layer.id} style={{ position: "relative" }}>
 							<Button
 								className={`media-layer-tile status-${layer.status}`}
 								active={layer.id === selectedLayerId}
@@ -455,7 +456,7 @@ function MediaLayerStrip({
 										/>
 									)}
 								</span>
-								<span className="media-layer-copy">
+								<span className="media-layer-copy" style={layer.errorDetail || currentPreviewFailed ? { paddingRight: 28 } : undefined}>
 									<b className="media-layer-title">
 										<span>Layer {layer.number}</span>
 										<span className="media-layer-name">{layer.name}</span>
@@ -494,6 +495,7 @@ function MediaLayerStrip({
 								</span>
 								<i aria-hidden="true" />
 							</Button>
+							{layer.errorDetail || currentPreviewFailed ? <span style={{ position: "absolute", top: 4, right: 4 }}><CopyErrorButton text={layer.errorDetail ?? "Live layer preview could not be loaded."} /></span> : null}
 						</li>
 					);
 				})}

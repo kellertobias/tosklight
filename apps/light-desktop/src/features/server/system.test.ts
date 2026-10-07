@@ -125,8 +125,10 @@ describe("paperwork export", () => {
 	});
 
 	it("reports a CueList load failure without starting a download", async () => {
+		const failure = new Error("CueLists unavailable");
+		failure.stack = "Error: CueLists unavailable\n    at loadCueLists (paperwork.ts:42:7)";
 		const objects = vi.fn(async (_showId: string, kind: string) => {
-			if (kind === "cue_list") throw new Error("CueLists unavailable");
+			if (kind === "cue_list") throw failure;
 			return [];
 		});
 		const download = mockDownload();
@@ -141,7 +143,7 @@ describe("paperwork export", () => {
 			model as unknown as ServerController,
 		).exportPaperwork();
 
-		expect(setError).toHaveBeenLastCalledWith("CueLists unavailable");
+		expect(setError).toHaveBeenLastCalledWith(`${failure.message}\n${failure.stack}`);
 		expect(download.createObjectURL).not.toHaveBeenCalled();
 		expect(download.click).not.toHaveBeenCalled();
 	});

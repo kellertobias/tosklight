@@ -1,3 +1,4 @@
+import { CopyErrorButton } from "@tosklight/ui";
 import type {
 	DeviceStatus,
 	HardwareMode,
@@ -78,6 +79,7 @@ export function LinkStatus({
 			{activeMode !== "osc" && (
 				<span className={`device-state-${device.state}`}>
 					{describeDevice(device)}
+					{device.state === "error" ? <CopyErrorButton text={describeDevice(device)} /> : null}
 				</span>
 			)}
 			<span
@@ -86,6 +88,7 @@ export function LinkStatus({
 				}
 			>
 				{desk}
+				{!connected && linkError ? <CopyErrorButton text={linkError} /> : null}
 			</span>
 			<small>{input}</small>
 		</div>

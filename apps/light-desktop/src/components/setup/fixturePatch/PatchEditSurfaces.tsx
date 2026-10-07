@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { isVisualOnly } from "../patchUtils";
 import { positionPointLabel, positionPoints } from "./positionReference";
 import { SCENERY_AXES } from "./scenerySize";
@@ -488,9 +489,9 @@ function CombinedPolicySelect({ kind }: { kind: "masters" | "pan_tilt" }) {
 				</Select>
 			</label>
 			{warning && (
-				<p className="patch-policy-warning" role="alert">
+				<ErrorAlert as="p" className="patch-policy-warning" role="alert">
 					This fixture may remain live while an applicable master is reduced.
-				</p>
+				</ErrorAlert>
 			)}
 		</>
 	);
@@ -605,9 +606,9 @@ export function FixtureAddressDialog() {
 function EditError() {
 	const error = usePatchController().ui.editError;
 	return error ? (
-		<p className="patch-status" role="alert">
+		<ErrorAlert as="p" className="patch-status" role="alert">
 			{error}
-		</p>
+		</ErrorAlert>
 	) : null;
 }
 

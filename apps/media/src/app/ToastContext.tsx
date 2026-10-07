@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button } from "@tosklight/ui/controls";
 import { newIdentity } from "../shared/api/identity";
 import {
@@ -36,7 +37,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 			{children}
 			<div className="media-toast-region" aria-label="Notifications">
 				{toasts.map((toast) => (
-					<div className="media-toast is-error" role="alert" key={toast.id}>
+					<ErrorAlert as="div" className="media-toast is-error" role="alert" key={toast.id}>
 						<span>{toast.message}</span>
 						<Button
 							size="compact"
@@ -48,7 +49,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 						>
 							Dismiss
 						</Button>
-					</div>
+					</ErrorAlert>
 				))}
 			</div>
 		</ToastContext.Provider>
@@ -79,12 +80,12 @@ export function MediaErrorToast({
 }) {
 	return (
 		<div className="media-toast-region" aria-label="Notifications">
-			<div className="media-toast is-error" role="alert">
+			<ErrorAlert as="div" className="media-toast is-error" role="alert">
 				<span>{message}</span>
 				<Button size="compact" onClick={onDismiss}>
 					Dismiss
 				</Button>
-			</div>
+			</ErrorAlert>
 		</div>
 	);
 }

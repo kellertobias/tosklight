@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 // What the desk is doing to this server.
 //
 // This page answers one question an operator asks at a patch bay: is anything actually arriving,
@@ -126,7 +128,7 @@ function ConsoleConnection({ outputs }: { outputs: OutputView[] }) {
 				if (current) setFixtures(names);
 			})
 			.catch((error: unknown) => {
-				if (current) setFailure(String(error));
+				if (current) setFailure(formatErrorDetails(error));
 			});
 		return () => {
 			current = false;
@@ -165,15 +167,15 @@ function ConsoleConnection({ outputs }: { outputs: OutputView[] }) {
 				<p role="status">Loading generated personalities…</p>
 			)}
 			{failure && (
-				<p role="alert">
+				<ErrorAlert as="p" role="alert">
 					Could not load personalities: {failure}. Close and reopen Connect to
 					Console to retry.
-				</p>
+				</ErrorAlert>
 			)}
 			{files?.length === 0 && (
-				<p role="alert">
+				<ErrorAlert as="p" role="alert">
 					No generated personalities are available for this console.
-				</p>
+				</ErrorAlert>
 			)}
 			<div className="media-settings-actions">
 				{files?.map((name) => (
@@ -222,10 +224,10 @@ function ConsoleConnection({ outputs }: { outputs: OutputView[] }) {
 							<dd>{value.resolved.httpListen}</dd>
 						</dl>
 						{value.pendingRestart && (
-							<p role="alert">
+							<ErrorAlert as="p" role="alert">
 								A CITP or interface address change is pending. Restart Pixel
 								before connecting over CITP.
-							</p>
+							</ErrorAlert>
 						)}
 					</>
 				)}
@@ -355,7 +357,7 @@ function ConsolePatch({ output }: { output: OutputView }) {
 	return (
 		<section aria-label={`${output.name} console patch`}>
 			<h4>{output.name}</h4>
-			{map.failure && <p role="alert">{map.failure.message}</p>}
+			{map.failure && <ErrorAlert as="p" role="alert">{map.failure.message}</ErrorAlert>}
 			{!map.data && !map.failure && (
 				<p role="status">Loading patch addresses…</p>
 			)}
@@ -450,7 +452,7 @@ function OutputDmx({
 			</dl>
 
 			{map.failure && (
-				<p className="media-state is-error">{map.failure.message}</p>
+				<ErrorAlert as="p" className="media-state is-error">{map.failure.message}</ErrorAlert>
 			)}
 			{map.data && <ChannelMap map={map.data} ingress={ingress} />}
 		</section>
@@ -497,10 +499,10 @@ function ConfiguredInput({
 				)}
 			</dl>
 			{unset && (
-				<p role="alert">
+				<ErrorAlert as="p" role="alert">
 					No start address is set, so this output answers no desk. Set one in
 					Settings › Network &amp; DMX.
-				</p>
+				</ErrorAlert>
 			)}
 		</div>
 	);
@@ -605,7 +607,7 @@ function useDmxMap(output: string): {
 						setFailure(
 							error instanceof ApiFailure
 								? error
-								: new ApiFailure("unexpected-error", String(error), 0),
+								: new ApiFailure("unexpected-error", formatErrorDetails(error), 0),
 						);
 				});
 		read();

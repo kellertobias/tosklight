@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, FormLayout, SelectField, TextField } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import type { FixtureSourceMapping } from "../../api/client/fixtures";
@@ -27,7 +29,7 @@ export function SourceAttributeMappings({
 			.catch(
 				(reason) =>
 					active &&
-					setError(reason instanceof Error ? reason.message : String(reason)),
+					setError(formatErrorDetails(reason)),
 			);
 		return () => {
 			active = false;
@@ -55,7 +57,7 @@ export function SourceAttributeMappings({
 			]);
 			setError(null);
 		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
+			setError(formatErrorDetails(reason));
 		}
 	};
 	const create = async () => {
@@ -134,7 +136,7 @@ export function SourceAttributeMappings({
 			>
 				Map imported name
 			</Button>
-			{error && <p role="alert">{error}</p>}
+			{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
 		</article>
 	);
 }

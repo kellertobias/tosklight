@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { type Dispatch, type SetStateAction, useRef } from "react";
 import type {
 	UpdatePreview,
@@ -190,5 +191,5 @@ function synchronizeArmed(
 }
 
 function errorMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

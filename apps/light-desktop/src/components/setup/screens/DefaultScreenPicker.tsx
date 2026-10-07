@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useState } from "react";
@@ -206,9 +207,9 @@ export function KnownClientsModal({
 						))}
 					</WindowScrollArea>
 					{removeError && (
-						<p className="default-screen-remove-error" role="alert">
+						<ErrorAlert as="p" className="default-screen-remove-error" role="alert">
 							{removeError}
-						</p>
+						</ErrorAlert>
 					)}
 				</section>
 				{removeCandidate && (

@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button, SwitchField } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
@@ -201,7 +203,7 @@ export function CadUnderlayPanel({
 			setPending({ path, preview: await underlaySession.preview(path) });
 			setView(defaultView);
 		} catch (reason) {
-			setReadError(String(reason));
+			setReadError(formatErrorDetails(reason));
 			setPending(null);
 		} finally {
 			setReading(false);
@@ -232,8 +234,8 @@ export function CadUnderlayPanel({
 			) : reading ? (
 				<p role="status">Reading drawing…</p>
 			) : null}
-			{readError ? <output className="cad-error">{readError}</output> : null}
-			{state.error ? <output className="cad-error">{state.error}</output> : null}
+			{readError ? <ErrorAlert as="output" className="cad-error">{readError}</ErrorAlert> : null}
+			{state.error ? <ErrorAlert as="output" className="cad-error">{state.error}</ErrorAlert> : null}
 			{pending ? (
 				<PlacementPreview
 					preview={pending.preview}

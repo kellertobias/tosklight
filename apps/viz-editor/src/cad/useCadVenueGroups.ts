@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 /**
  * The open show's Venue element groups, followed across windows and saved on every change.
  *
@@ -44,7 +45,7 @@ export function useCadVenueGroups(documentKey: string | null) {
 		setError(null);
 		venueGroupsSession.save(next).catch((reason) => {
 			setGroups(previous);
-			setError(String(reason));
+			setError(formatErrorDetails(reason));
 		});
 	}
 

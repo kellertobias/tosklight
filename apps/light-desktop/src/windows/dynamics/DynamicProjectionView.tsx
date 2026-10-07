@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	MultiValueToggleField,
@@ -83,9 +85,9 @@ function DynamicProjectionSettings({
 				}
 			/>
 			{validation && (
-				<p className="dynamics-warning" role="alert">
+				<ErrorAlert as="p" className="dynamics-warning" role="alert">
 					{validation}
-				</p>
+				</ErrorAlert>
 			)}
 			{message && (
 				<p className="dynamic-projection-message" role="status">
@@ -161,7 +163,7 @@ export function DynamicProjectionView({
 			.catch((error: unknown) => {
 				if (request.current !== sequence) return;
 				setLoading(false);
-				setMessage(error instanceof Error ? error.message : String(error));
+				setMessage(formatErrorDetails(error));
 			});
 	}, [draft, loadPreview, saved]);
 
@@ -202,7 +204,7 @@ export function DynamicProjectionView({
 				})
 				.catch((error: unknown) => {
 					if (cancelled) return;
-					setMessage(error instanceof Error ? error.message : String(error));
+					setMessage(formatErrorDetails(error));
 				});
 		}, APPLY_DEBOUNCE_MS);
 		return () => {

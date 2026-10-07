@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useRef } from "react";
 import { useToast } from "../../app/ToastContext";
 import { ApiFailure } from "./client";
@@ -16,7 +17,7 @@ export function useEditingFailure(setFailure: (failure: ApiFailure) => void) {
 		(error: unknown) => {
 			const failure = error instanceof ApiFailure
 				? error
-				: new ApiFailure("unexpected-error", String(error), 0);
+				: new ApiFailure("unexpected-error", formatErrorDetails(error), 0);
 			if (mounted.current) setFailure(failure);
 			else showError(failure.message);
 		},

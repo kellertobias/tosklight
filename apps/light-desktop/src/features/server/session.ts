@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
 
@@ -24,7 +25,7 @@ export function createSessionActions(
 				setBootstrap(await api.runtime.bootstrap());
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				if (options?.throwOnError) throw reason;
 			}
 		},
@@ -39,7 +40,7 @@ export function createSessionActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},

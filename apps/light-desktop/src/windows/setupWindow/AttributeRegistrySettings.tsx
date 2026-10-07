@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	FormLayout,
@@ -99,9 +100,9 @@ export function AttributeRegistrySettings({
 				</div>
 			)}
 			{controller.attributeConfigurationError && (
-				<p className="modal-error" role="alert">
+				<ErrorAlert as="p" className="modal-error" role="alert">
 					{controller.attributeConfigurationError}
-				</p>
+				</ErrorAlert>
 			)}
 		</>
 	);

@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import {
 	type Dispatch,
 	type SetStateAction,
@@ -170,7 +171,7 @@ function loadPictures(
 			settle({
 				state: "offline",
 				entry,
-				error: error instanceof Error ? error.message : String(error),
+				error: formatErrorDetails(error),
 			});
 		}
 	};

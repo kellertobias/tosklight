@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 // What the server is hearing.
 //
 // A meter, not an instrument: this is how an operator confirms the desk feed is arriving, that the
@@ -28,9 +29,9 @@ export function AudioMeters({ audio, live }: AudioMetersProps) {
 					{status(audio, live)}
 				</span>
 				{audio.clipping && (
-					<span className="media-badge is-bad" role="alert">
+					<ErrorAlert as="span" className="media-badge is-bad" role="alert">
 						Input clipping — turn the source down
-					</span>
+					</ErrorAlert>
 				)}
 			</header>
 

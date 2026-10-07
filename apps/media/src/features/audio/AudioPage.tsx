@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 // The audio monitor, and the tuning beside it.
 //
 // The two belong on one page because they are used together: an operator turns the gain while
@@ -153,7 +154,7 @@ function MicrophoneAccess({
 		);
 	if (permission === "denied" || permission === "restricted")
 		return (
-			<div className="media-state is-warning" role="alert">
+			<ErrorAlert as="div" className="media-state is-warning" role="alert">
 				<p>
 					{permission === "denied"
 						? "Microphone access is denied. Enable ToskLight Pixel in macOS System Settings → Privacy & Security → Microphone, then check access here."
@@ -164,7 +165,7 @@ function MicrophoneAccess({
 						Check microphone access
 					</button>
 				)}
-			</div>
+			</ErrorAlert>
 		);
 	if (permission === "granted" && !capturing)
 		return (

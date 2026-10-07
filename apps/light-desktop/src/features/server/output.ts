@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { OutputRoute } from "../../api/types";
 import type { ServerCapabilities } from "./capabilityContracts";
 import type { ServerController } from "./model";
@@ -27,7 +28,7 @@ export function createOutputActions(
 				await api.mediaOutput.setDmxOverride(universe, address, rawValue);
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		saveOutputRoute: async (id, route, revision) => {
@@ -48,7 +49,7 @@ export function createOutputActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},
@@ -68,7 +69,7 @@ export function createOutputActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},
@@ -89,7 +90,7 @@ export function createOutputActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},

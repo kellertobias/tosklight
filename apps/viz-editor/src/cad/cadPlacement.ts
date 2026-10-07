@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 /**
  * How the CAD add buttons read the fixture library and place a Venue object in the show.
  *
@@ -30,7 +31,7 @@ export async function readLibrary(): Promise<Exclude<FixtureLibrary, { state: "l
 		const definitions = mergeFixtureDefinitions(await documentSession.fixtureProfiles(), []);
 		return { state: "ready", definitions };
 	} catch (reason) {
-		return { state: "failed", reason: String(reason) };
+		return { state: "failed", reason: formatErrorDetails(reason) };
 	}
 }
 
@@ -140,6 +141,6 @@ export async function placeProfile(
 	try {
 		return { ok: true, fixtureIds: await placeDefinitions(definition, placements, extras) };
 	} catch (reason) {
-		return { ok: false, reason: `The show refused the ${label}: ${String(reason)}` };
+		return { ok: false, reason: `The show refused the ${label}: ${formatErrorDetails(reason)}` };
 	}
 }

@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useState } from "react";
 import type { RecordUpdateOption, UpdateSettings } from "../../api/types";
 import type { ProgrammingUpdateCapability } from "../../features/programmingUpdate/contracts";
@@ -128,5 +129,5 @@ export function useUpdateChoice({
 }
 
 function errorMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

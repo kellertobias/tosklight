@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	draggedDmxStart,
 	type PatchFixtureProjection,
@@ -179,7 +181,7 @@ function DmxPatchView({
 			await onApplyPatch(movedWrites(fixtures, moves));
 			onMoves(new Map());
 		} catch (reason) {
-			setApplyError(String(reason));
+			setApplyError(formatErrorDetails(reason));
 		} finally {
 			setApplying(false);
 		}
@@ -391,9 +393,9 @@ function PendingPatch({
 				})}
 			</ul>
 			{error ? (
-				<output className="viz-dmx-error" role="alert">
+				<ErrorAlert as="output" className="viz-dmx-error" role="alert">
 					{error}
-				</output>
+				</ErrorAlert>
 			) : null}
 			<div className="viz-dmx-pending-actions">
 				<Button size="compact" disabled={applying} onClick={onDiscard}>

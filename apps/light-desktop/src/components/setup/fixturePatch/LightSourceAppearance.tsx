@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { modeGeometry } from "@tosklight/patch";
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { useCallback, useState } from "react";
@@ -172,9 +173,9 @@ function AppearanceEditor({
 						onCatalogError={onCatalogError}
 					/>
 					{(result.error || submitError || catalogError) && (
-						<p className="patch-status" role="alert">
+						<ErrorAlert as="p" className="patch-status" role="alert">
 							{result.error || submitError || catalogError}
-						</p>
+						</ErrorAlert>
 					)}
 				</section>
 			</div>

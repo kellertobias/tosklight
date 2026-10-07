@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	ModalRegistration,
@@ -62,9 +63,9 @@ export function RenumberCuesDialog({
 						onChange={(event) => setStartCue(event.target.value)}
 					/>
 					{renumberError && (
-						<p className="ui-field-error" role="alert">
+						<ErrorAlert as="p" className="ui-field-error" role="alert">
 							{renumberError}
-						</p>
+						</ErrorAlert>
 					)}
 				</form>
 			</div>

@@ -70,6 +70,15 @@
 	text-align: left;
 }
 
+button.ui-error-copy.is-icon-only {
+	width: 40px;
+	min-width: 40px;
+	min-height: 40px;
+	flex: 0 0 auto;
+	margin-inline-start: 8px;
+	vertical-align: middle;
+}
+
 .encoder-group-paged .family-label-full,
 .encoder-group-paged .family-label-compact {
 	align-items: baseline;

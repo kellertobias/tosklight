@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useConnectionStatus } from "../features/shellStatus/ShellStatusState";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { WindowProps } from "./windowTypes";
@@ -236,7 +237,7 @@ export function DmxWindow({ active = true, compact }: WindowProps) {
       setEndpoints(value);
       setEndpointsError(null);
     },
-    onError: (reason) => setEndpointsError(reason instanceof Error ? reason.message : String(reason)),
+    onError: (reason) => setEndpointsError(formatErrorDetails(reason)),
   });
   const disconnected = view === "nodes" && connectionStatus !== "connected";
 

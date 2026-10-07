@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 /**
  * The open show's drawing arrangement, followed across windows and saved on every change.
  *
@@ -42,7 +43,7 @@ export function useCadDrawingTree(documentKey: string | null) {
 		setError(null);
 		drawingTreeSession.save(next).catch((reason) => {
 			setTree(previous);
-			setError(String(reason));
+			setError(formatErrorDetails(reason));
 		});
 	}
 

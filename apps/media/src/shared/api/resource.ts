@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 // The one server-state mechanism the whole application uses.
 //
 // A media server has no session and no user-specific data: every panel is a projection of one
@@ -95,7 +96,7 @@ async function load<T>(key: string, loader: () => Promise<T>): Promise<void> {
 			entry.failure =
 				error instanceof ApiFailure
 					? error
-					: new ApiFailure("unexpected-error", String(error), 0);
+					: new ApiFailure("unexpected-error", formatErrorDetails(error), 0);
 		} finally {
 			entry.loading = false;
 			entry.inFlight = undefined;

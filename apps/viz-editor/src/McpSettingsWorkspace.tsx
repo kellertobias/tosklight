@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
@@ -20,7 +22,7 @@ export function McpSettingsWorkspace() {
 				if (current) setConfiguration(value);
 			})
 			.catch((reason) => {
-				if (current) setError(String(reason));
+				if (current) setError(formatErrorDetails(reason));
 			});
 		return () => {
 			current = false;
@@ -41,9 +43,9 @@ export function McpSettingsWorkspace() {
 				<div className="viz-renderer-settings-grid">
 					{error ? (
 						<section>
-							<p className="viz-mcp-settings-error" role="alert">
+							<ErrorAlert as="p" className="viz-mcp-settings-error" role="alert">
 								{error}
-							</p>
+							</ErrorAlert>
 						</section>
 					) : configuration ? (
 						<>

@@ -65,9 +65,11 @@ describe("SelectiveImportProvider", () => {
 
 	it("refreshes changed outcomes and reports failures", async () => {
 		const capabilitySource = source();
+		const failure = new Error("revision changed");
+		failure.stack = "Error: revision changed\n    at applyImport (import.ts:24:6)";
 		vi.mocked(capabilitySource.apply)
 			.mockResolvedValueOnce({ ...unchanged, changed: true })
-			.mockRejectedValueOnce(new Error("revision changed"));
+			.mockRejectedValueOnce(failure);
 		let capability!: SelectiveImportCapability;
 		function Probe() {
 			capability = useSelectiveImport();
@@ -93,7 +95,7 @@ describe("SelectiveImportProvider", () => {
 			"revision changed",
 		);
 		expect(capabilitySource.reportError).toHaveBeenLastCalledWith(
-			"revision changed",
+			`${failure.message}\n${failure.stack}`,
 		);
 	});
 });

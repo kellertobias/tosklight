@@ -1,3 +1,4 @@
+import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 import {
 	Button,
 	FormLayout,
@@ -92,17 +93,22 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 	if (!controller.authorityReady || controller.pageNumber == null)
 		return (
 			<section className="virtual-playback-pane" aria-busy="true">
-				<p
+				<ErrorAlert as="p"
 					role={
 						controller.topology.error || controller.runtimeStatus.error
 							? "alert"
 							: "status"
 					}
+					copyText={
+						controller.topology.error || controller.runtimeStatus.error
+							? formatErrorDetails(controller.topology.error ?? controller.runtimeStatus.error)
+							: undefined
+					}
 				>
 					{controller.topology.error?.message ??
 						controller.runtimeStatus.error?.message ??
 						"Loading Virtual Playbacks…"}
-				</p>
+				</ErrorAlert>
 			</section>
 		);
 	return (
@@ -172,14 +178,14 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 				/>
 			)}
 			{controller.zones.error && (
-				<p className="virtual-playback-pane-error" role="alert">
+				<ErrorAlert as="p" className="virtual-playback-pane-error" role="alert">
 					{controller.zones.error}
-				</p>
+				</ErrorAlert>
 			)}
 			{controller.topologyActionError && (
-				<p className="virtual-playback-pane-error" role="alert">
+				<ErrorAlert as="p" className="virtual-playback-pane-error" role="alert">
 					{controller.topologyActionError}
-				</p>
+				</ErrorAlert>
 			)}
 			{controller.configuration && (
 				<VirtualPlaybackConfigurationModal
@@ -420,7 +426,7 @@ function CreateZoneModal(props: {
 							{props.saving ? "Creating…" : "Create region"}
 						</Button>
 					</footer>
-					{props.error && <p className="modal-error">{props.error}</p>}
+					{props.error && <ErrorAlert as="p" className="modal-error">{props.error}</ErrorAlert>}
 				</section>
 			</div>
 		</ModalRegistration>

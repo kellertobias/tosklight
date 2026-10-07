@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import {
 	createContext,
 	type PropsWithChildren,
@@ -105,5 +106,5 @@ export function useConfigurationActions(): ConfigurationActions | null {
 }
 
 function asMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

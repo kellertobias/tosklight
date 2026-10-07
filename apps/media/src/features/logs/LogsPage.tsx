@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 // The log.
 //
 // This exists because an operator at a venue has a browser and nothing else: no terminal, no log
@@ -113,7 +115,7 @@ export function LogsPage() {
 				setFailure(
 					error instanceof ApiFailure
 						? error
-						: new ApiFailure("unexpected-error", String(error), 0),
+						: new ApiFailure("unexpected-error", formatErrorDetails(error), 0),
 				);
 			});
 	}, []);
@@ -131,7 +133,7 @@ export function LogsPage() {
 			setFailure(
 				error instanceof ApiFailure
 					? error
-					: new ApiFailure("unexpected-error", String(error), 0),
+					: new ApiFailure("unexpected-error", formatErrorDetails(error), 0),
 			);
 		} finally {
 			setChangingServerLevel(false);
@@ -151,7 +153,7 @@ export function LogsPage() {
 			setFailure(
 				error instanceof ApiFailure
 					? error
-					: new ApiFailure("unexpected-error", String(error), 0),
+					: new ApiFailure("unexpected-error", formatErrorDetails(error), 0),
 			);
 		}
 	}, [level]);
@@ -200,11 +202,11 @@ export function LogsPage() {
 			</div>
 
 			{failure && (
-				<p className="media-state is-error" role="alert">
+				<ErrorAlert as="p" className="media-state is-error" role="alert">
 					{failure.disconnected
 						? "The Media Server is not answering, so the log cannot be read."
 						: failure.message}
-				</p>
+				</ErrorAlert>
 			)}
 
 			{dropped > 0 && (

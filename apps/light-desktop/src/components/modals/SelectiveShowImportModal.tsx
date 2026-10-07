@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, ModalTitleBar, RadioField, SelectField } from "@tosklight/ui";
 import { type MutableRefObject, useLayoutEffect } from "react";
 import type { SelectiveImportOutcome } from "../../api/selectiveImportModels";
@@ -178,9 +179,9 @@ function WorkflowStatus({ workflow }: { workflow: SelectiveImportWorkflow }) {
 				</p>
 			)}
 			{workflow.error && (
-				<p className="modal-error" role="alert">
+				<ErrorAlert as="p" className="modal-error" role="alert">
 					{workflow.error}
-				</p>
+				</ErrorAlert>
 			)}
 		</>
 	);

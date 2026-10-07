@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback } from "react";
 import type { ServerState } from "./useServerState";
 
@@ -28,7 +29,7 @@ export function useCommandLineController(state: ServerState) {
 			commandLineEpoch.current += 1;
 			setCommandLineState(next);
 			setCommandLinePristine(pristine || !value.trim());
-			void persistCommandLine(next).catch((reason) => setError(String(reason)));
+			void persistCommandLine(next).catch((reason) => setError(formatErrorDetails(reason)));
 		},
 		[
 			commandLineEpoch,

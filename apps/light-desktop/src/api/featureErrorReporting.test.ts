@@ -12,7 +12,7 @@ describe("createFeatureErrorGroup", () => {
 		errors.reportSession(new Error("stream disconnected"));
 		errors.reportMutation(null);
 
-		expect(visible).toBe("stream disconnected");
+		expect(visible).toContain("stream disconnected");
 	});
 
 	it("restores an older active lane when the latest error clears", () => {
@@ -23,10 +23,10 @@ describe("createFeatureErrorGroup", () => {
 
 		errors.reportSession(new Error("stream disconnected"));
 		errors.reportMutation(new Error("write rejected"));
-		expect(visible).toBe("write rejected");
+		expect(visible).toContain("write rejected");
 
 		errors.reportMutation(null);
-		expect(visible).toBe("stream disconnected");
+		expect(visible).toContain("stream disconnected");
 		errors.reportSession(null);
 		expect(visible).toBeNull();
 	});

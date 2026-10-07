@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { SpeedGroupId } from "../../api/types";
 
 export const speedGroupIds: SpeedGroupId[] = ["A", "B", "C", "D", "E"];
@@ -14,5 +15,5 @@ export function soundDeviceStorageKey(
 }
 
 export function soundToLightErrorMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

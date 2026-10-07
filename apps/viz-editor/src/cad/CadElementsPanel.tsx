@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 /**
  * The CAD window's Elements panel: what the venue is made of, apart from the lamps.
  *
@@ -161,7 +163,7 @@ function DrawingsTab({
 			onChange={change}
 			newFolderRequest={requests.newFolder}
 		>
-			{error ? <output className="cad-error">{error}</output> : null}
+			{error ? <ErrorAlert as="output" className="cad-error">{error}</ErrorAlert> : null}
 			<CadUnderlayPanel
 				state={underlayState}
 				defaultView={defaultView}
@@ -316,7 +318,7 @@ function ObjectsTab({
 			onSelect([imported.fixtureId]);
 			setStatus(`${imported.name} placed at the stage origin.`);
 		} catch (reason) {
-			setStatus(`Could not import the 3D model: ${String(reason)}`);
+			setStatus(`Could not import the 3D model: ${formatErrorDetails(reason)}`);
 		}
 	}
 
@@ -365,7 +367,7 @@ function ObjectsTab({
 					Ungroup
 				</button>
 			</div>
-			{venueGroups.error ? <output className="cad-error">{venueGroups.error}</output> : null}
+			{venueGroups.error ? <ErrorAlert as="output" className="cad-error">{venueGroups.error}</ErrorAlert> : null}
 			{shownGroups.length ? (
 				<section className="cad-elements-group" aria-label="Groups">
 					<h3>Groups</h3>

@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 // The transport. One place converts an HTTP exchange into either a typed value or a typed
 // failure, so no feature ever branches on a status code or reads `error.message` to decide what
 // happened.
@@ -148,10 +149,10 @@ function uploadWithProgress<T>(
 			const error = body as Partial<ApiErrorBody> | undefined;
 			reject(
 				typeof error?.code === "string" && typeof error?.message === "string"
-					? new ApiFailure(error.code, error.message, xhr.status)
+					? new ApiFailure(error.code, serverErrorMessage(error), xhr.status)
 					: new ApiFailure(
 							"unexpected-response",
-							`the server answered ${xhr.status}`,
+							[`the server answered ${xhr.status}`, xhr.responseText].filter(Boolean).join("\n"),
 							xhr.status,
 						),
 			);
@@ -162,20 +163,27 @@ function uploadWithProgress<T>(
 	});
 }
 
+/** Preserve server diagnostics without creating a client-side trace for a server refusal. */
+function serverErrorMessage(body: Partial<ApiErrorBody>): string {
+	const details = Object.fromEntries(Object.entries(body).filter(([key]) => !["code", "message"].includes(key)));
+	return [body.message, Object.keys(details).length ? formatErrorDetails(details) : ""].filter(Boolean).join("\n");
+}
+
 async function failureOf(response: Response): Promise<ApiFailure> {
+	const diagnosticBody = await response.clone().text().catch(() => "");
 	// A route answers with the typed error body. Anything else — a proxy, a crash page — still
 	// has to become a failure an operator can read.
 	try {
 		const body = (await response.json()) as ApiErrorBody;
 		if (typeof body?.code === "string" && typeof body?.message === "string") {
-			return new ApiFailure(body.code, body.message, response.status);
+			return new ApiFailure(body.code, serverErrorMessage(body), response.status);
 		}
 	} catch {
 		// fall through to the generic failure
 	}
 	return new ApiFailure(
 		"unexpected-response",
-		`the server answered ${response.status}`,
+		[`the server answered ${response.status}`, diagnosticBody].filter(Boolean).join("\n"),
 		response.status,
 	);
 }

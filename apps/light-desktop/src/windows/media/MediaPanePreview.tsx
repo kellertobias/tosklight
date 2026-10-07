@@ -1,3 +1,4 @@
+import { CopyErrorButton } from "@tosklight/ui";
 import { Button } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
 import type { MediaPreviewState } from "./mediaPaneModel";
@@ -17,7 +18,13 @@ export function MediaCompositePreview({
 	const outputAspectRatio = preview.outputSize
 		? `${preview.outputSize.width} / ${preview.outputSize.height}`
 		: "16 / 9";
+	const errorText = preview.kind === "offline"
+		? [`Offline${preview.imageSrc ? " · showing last preview" : " · black output"} · ${preview.detail}`, preview.diagnostic].filter(Boolean).join("\n")
+		: preview.kind === "failed_source" ? `Source ${preview.source} failed · ${preview.detail}`
+		: preview.kind === "missing_patch" ? `Missing patch · ${preview.detail}` : null;
+	const copyText = [imageFailed ? "Live preview could not be loaded." : null, errorText].filter(Boolean).join("\n");
 	return (
+		<div style={{ position: "relative", minWidth: 0 }}>
 		<Button
 			type="button"
 			fullWidth
@@ -44,7 +51,7 @@ export function MediaCompositePreview({
 					)}
 					<span className="media-composite-safe-area" aria-hidden="true" />
 			</span>
-			<span className="media-composite-info">
+			<span className="media-composite-info" style={copyText ? { paddingRight: 44 } : undefined}>
 				<strong>
 						{preview.kind === "audio"
 							? "Master audio output"
@@ -58,6 +65,8 @@ export function MediaCompositePreview({
 				<PreviewStateMessage preview={preview} />
 			</span>
 		</Button>
+		{copyText ? <span style={{ position: "absolute", bottom: 4, right: 4 }}><CopyErrorButton text={copyText} /></span> : null}
+		</div>
 	);
 }
 
@@ -158,7 +167,7 @@ export function PreviewStateMessage({ preview }: { preview: MediaPreviewState })
 			);
 		case "offline":
 			return (
-				<span className="danger" title={preview.diagnostic ?? undefined}>
+				<span className="danger" role="alert" title={preview.diagnostic ?? undefined}>
 					Offline
 					{preview.imageSrc ? " · showing last preview" : " · black output"} ·{" "}
 					{preview.detail}
@@ -166,14 +175,14 @@ export function PreviewStateMessage({ preview }: { preview: MediaPreviewState })
 			);
 		case "failed_source":
 			return (
-				<span className="danger">
+				<span className="danger" role="alert">
 					Source {preview.source} failed · {preview.detail}
 				</span>
 			);
 		case "audio":
 			return <span>{preview.detail}</span>;
 		case "missing_patch":
-			return <span className="danger">Missing patch · {preview.detail}</span>;
+			return <span className="danger" role="alert">Missing patch · {preview.detail}</span>;
 		case "unsupported":
 			return (
 				<span className="warning">

@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useRef } from "react";
 import type { UpdateMode, UpdateResult, UpdateSettings } from "../../api/types";
 import type { ProgrammingUpdateMenuEntry } from "../../features/programmingUpdate/contracts";
@@ -142,5 +143,5 @@ function authorityForMode(entry: ProgrammingUpdateMenuEntry, mode: UpdateMode) {
 }
 
 function errorMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

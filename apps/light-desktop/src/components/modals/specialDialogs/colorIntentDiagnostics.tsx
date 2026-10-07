@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import type {
 	ColorIntentHeadReport,
@@ -58,7 +60,7 @@ export function ColorIntentDiagnostics({
 				})
 				.catch((reason) => {
 					if (!active) return;
-					setError(reason instanceof Error ? reason.message : String(reason));
+					setError(formatErrorDetails(reason));
 				});
 		}, SETTLE_MILLIS);
 		return () => {
@@ -80,7 +82,7 @@ export function ColorIntentDiagnostics({
 			aria-label="Color Intent results"
 		>
 			<b>Color Intent</b>
-			{error && <p role="alert">{error}</p>}
+			{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
 			{!heads && !error && <p role="status">Checking the selected fixtures…</p>}
 			{heads && flagged.length === 0 && (
 				<p role="status">Every selected fixture shows this colour exactly.</p>

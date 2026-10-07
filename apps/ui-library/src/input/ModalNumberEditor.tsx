@@ -1,3 +1,4 @@
+import { ErrorAlert } from "../common/ErrorAlert";
 import {
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
@@ -189,9 +190,9 @@ export function ModalNumberEditor({
 								value={value}
 							/>
 							{error ? (
-								<p className="modal-number-editor-error" role="alert">
+								<ErrorAlert as="p" className="modal-number-editor-error" role="alert">
 									{error}
-								</p>
+								</ErrorAlert>
 							) : null}
 						</div>
 					</div>

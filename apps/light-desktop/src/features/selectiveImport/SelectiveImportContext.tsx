@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import {
 	createContext,
 	type PropsWithChildren,
@@ -63,7 +64,7 @@ export function SelectiveImportProvider({
 				reportError(null);
 				return outcome;
 			} catch (reason) {
-				reportError(reason instanceof Error ? reason.message : String(reason));
+				reportError(formatErrorDetails(reason));
 				throw reason;
 			}
 		},

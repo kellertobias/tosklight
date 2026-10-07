@@ -295,7 +295,7 @@ describe("help navigation", () => {
 				topic={null}
 			/>,
 		);
-		const warning = screen.getByRole("status");
+		const warning = screen.getByRole("alert");
 		expect(warning).toHaveClass("help-catalog-warning");
 		expect(warning).toHaveTextContent("Help catalog warning");
 		expect(warning).toHaveTextContent(

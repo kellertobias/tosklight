@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import {
 	createContext,
 	type PropsWithChildren,
@@ -86,5 +87,5 @@ export function useDeskLockActions(): DeskLockActions | null {
 }
 
 function asMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

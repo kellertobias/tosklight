@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 /**
  * What the CAD screen's toolbar offers every viewport: adding venue objects from the fixture
  * library, and the tool the pointer draws with.
@@ -152,7 +153,7 @@ export function CadToolProvider({
 	}, [documentKey]);
 
 	const value = useMemo<CadTools>(() => {
-		const report = (reason: unknown) => setError(String(reason));
+		const report = (reason: unknown) => setError(formatErrorDetails(reason));
 		const announcePlaced = (fixtureIds: string | readonly string[]) =>
 			setPlaced((current) => ({
 				fixtureIds: typeof fixtureIds === "string" ? [fixtureIds] : [...fixtureIds],

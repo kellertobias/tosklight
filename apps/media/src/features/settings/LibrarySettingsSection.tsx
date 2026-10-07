@@ -1,3 +1,4 @@
+import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 import { Button } from "@tosklight/ui/controls";
 import { NumberField } from "@tosklight/ui/forms";
 import { useEffect, useState } from "react";
@@ -294,7 +295,7 @@ function PortableDataFolder({ runtime }: { runtime: RunningServerView }) {
 								} catch (error) {
 									setFailure(
 										error instanceof Error
-											? error.message
+											? formatErrorDetails(error)
 											: "The folder could not be opened.",
 									);
 								} finally {
@@ -308,7 +309,7 @@ function PortableDataFolder({ runtime }: { runtime: RunningServerView }) {
 						</Button>
 						{changeFolder}
 					</div>
-					{failure && <p role="alert">{failure}</p>}
+					{failure && <ErrorAlert as="p" role="alert">{failure}</ErrorAlert>}
 				</>
 			) : (
 				<>

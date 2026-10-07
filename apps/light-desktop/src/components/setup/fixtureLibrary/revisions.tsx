@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { useState } from "react";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import type { FixtureDefinition, FixtureProfile } from "../../../api/types";
@@ -27,7 +29,7 @@ export function useFixtureRevisionHistory({
 			);
 		} catch (reason) {
 			setHistory([]);
-			setError(reason instanceof Error ? reason.message : String(reason));
+			setError(formatErrorDetails(reason));
 		}
 	};
 
@@ -99,7 +101,7 @@ export function FixtureRevisionHistory({
 					closeLabel="Close Fixture revision history"
 					onClose={onClose}
 				/>
-				{error && <p role="alert">{error}</p>}
+				{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
 				{!history.length && !error && <p>No retained revisions.</p>}
 				<div>
 					{[...history]

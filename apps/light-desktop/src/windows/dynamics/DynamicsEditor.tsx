@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button } from "@tosklight/ui";
 import { ModalFrame } from "@tosklight/ui/modals";
 import {
@@ -694,9 +695,9 @@ export function LaneAttributeModal({
 					</div>
 				)}
 				{groups.length === 0 && (
-					<p className="dynamic-attribute-choice-empty" role="alert">
+					<ErrorAlert as="p" className="dynamic-attribute-choice-empty" role="alert">
 						No continuous scalar attributes are available.
-					</p>
+					</ErrorAlert>
 				)}
 			</div>
 		</ModalFrame>

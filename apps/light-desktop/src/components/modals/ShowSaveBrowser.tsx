@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { Button, ModalFrame, SelectField, SwitchField, TextInput } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
@@ -63,7 +65,7 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
                 if(current) setFolders(directory.entries.filter(item => item.kind === "folder").sort((a,b) => a.name.localeCompare(b.name)));
             }
         };
-        void read().catch(reason => {if(current) setError(reason instanceof Error ? reason.message : String(reason));}).finally(() => {if(current) setReading(false);});
+        void read().catch(reason => {if(current) setError(formatErrorDetails(reason));}).finally(() => {if(current) setReading(false);});
         return () => {current = false;};
     }, [source, peer, rootId, path, files, lifecycle, locationOpen]);
 
@@ -83,7 +85,7 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
                 const saved = await lifecycle!.saveShowCopy(name, target, dialogs.baseShow);
                 setStatus(`Saved ${saved.name} to ${peer?.name ?? root.label} / ${path || "/"}`);
             }
-        } catch(reason) {setError(reason instanceof Error ? reason.message : String(reason)); setStatus("");}
+        } catch(reason) {setError(formatErrorDetails(reason)); setStatus("");}
         finally {setSaving(false);}
     }
     useEffect(() => {
@@ -96,7 +98,7 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
         try {
             const saved = await lifecycle!.exportMvrFile(dialogs.showName.trim() || model.view.activeShow?.name || "Show", target);
             setStatus(`Exported MVR to ${peer?.name ?? root.label} / ${saved.path}`);
-        } catch(reason) {setError(reason instanceof Error ? reason.message : String(reason));setStatus("");}
+        } catch(reason) {setError(formatErrorDetails(reason));setStatus("");}
         finally {setSaving(false);}
     }
     const sourceLabel = source === "usb" ? `USB: ${root?.label ?? "No drive connected"}` : sources.find(item=>item.id===source)?.label;
@@ -122,7 +124,7 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
                     {source === "network" && (rootId || peer) && <Button disabled={busy} onClick={()=>{setPeer(null);setRootId("");setPath("");}}>Network destinations</Button>}
                 </div>}
                 {reading && <p className="show-save-message" role="status">Reading folders…</p>}
-                {error ? <p className="show-browser-error" role="alert">{error}</p> : !reading && <WindowScrollArea className="show-save-folder-scroll"><table className="show-browser-table"><thead><tr><th>Folder / destination</th><th>Location</th></tr></thead><tbody>
+                {error ? <ErrorAlert as="p" className="show-browser-error" role="alert">{error}</ErrorAlert> : !reading && <WindowScrollArea className="show-save-folder-scroll"><table className="show-browser-table"><thead><tr><th>Folder / destination</th><th>Location</th></tr></thead><tbody>
                     {source === "network" && !rootId && !peer ? <>
                         {availableRoots.map(item=><tr key={item.id}><td><Button disabled={busy} onClick={()=>{setRootId(item.id);setPath("");}}>{item.label}</Button></td><td>Mounted network drive</td></tr>)}
                         {peers.map(item=><tr key={item.instance}><td><Button disabled={busy || item.role !== "desk" || !!item.error} onClick={()=>{setPeer(item);setRootId("");setPath("");}}>{item.name}</Button></td><td>{item.role === "desk" ? "Control desk" : "Architect · Load its show through Load Show"}{item.error ? ` · ${item.error}` : ""}</td></tr>)}
@@ -137,7 +139,7 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
                 {!reading && source === "network" && !rootId && !peer && !availableRoots.length && !peers.length && <p className="show-save-message">No writable network drives or announced Control desks available.</p>}
             </div>}
             </div>
-            {error && !locationOpen && <p className="show-browser-error" role="alert">{error}</p>}{status && <p className="show-save-message" role="status">{status}</p>}
+            {error && !locationOpen && <ErrorAlert as="p" className="show-browser-error" role="alert">{error}</ErrorAlert>}{status && <p className="show-save-message" role="status">{status}</p>}
             <div className="show-save-fields">
             <TextInput clearable className="show-name-input" autoFocus value={dialogs.showName} onChange={event=>dialogs.setShowName(event.target.value)} onKeyboardCommit={()=>void save()} placeholder="New show name" aria-label="Show name" disabled={saving} />
             <div className="show-row-actions">

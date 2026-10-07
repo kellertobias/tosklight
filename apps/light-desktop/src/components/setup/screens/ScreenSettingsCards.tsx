@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	ModalRegistration,
@@ -484,12 +485,12 @@ function ScreenConfigurationModal(
 					/>
 					<div className="screen-configuration-modal-content" data-tab={tab}>
 						{props.saveError && (
-							<p
+							<ErrorAlert as="p"
 								className="screen-settings-note screen-configuration-wide screen-save-error"
 								role="alert"
 							>
 								Could not save this screen: {props.saveError}
-							</p>
+							</ErrorAlert>
 						)}
 						{tab === "layout" && (
 							<ScreenLayoutFields
@@ -528,11 +529,11 @@ function ScreenConfigurationModal(
 									onPageMode={playbacks.changePageMode}
 								/>
 								{playbacks.invalid && (
-									<p className="screen-settings-note" role="alert">
+									<ErrorAlert as="p" className="screen-settings-note" role="alert">
 										Not saved yet: use at most 32 playbacks per row and keep
 										every row within playbacks 1-127, counted from the first
 										row's first playback number.
-									</p>
+									</ErrorAlert>
 								)}
 							</>
 						)}
@@ -614,7 +615,7 @@ function ScreenRemovalConfirmation(props: {
 					Cancel
 				</Button>
 			</div>
-			{props.error && <p role="alert">{props.error}</p>}
+			{props.error && <ErrorAlert as="p" role="alert">{props.error}</ErrorAlert>}
 		</div>
 	);
 }
@@ -750,9 +751,9 @@ export function ScreenSettingsCard({
 				}
 			/>
 			{saveError && !configurationOpen && (
-				<p className="screen-settings-note screen-save-error" role="alert">
+				<ErrorAlert as="p" className="screen-settings-note screen-save-error" role="alert">
 					Could not save this screen: {saveError}
-				</p>
+				</ErrorAlert>
 			)}
 			{removeConfirmationOpen && (
 				<ScreenRemovalConfirmation

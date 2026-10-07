@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	MacroExecution,
@@ -64,7 +65,7 @@ export function useRunningSupplementalAuthority(
 					setState((current) => ({
 						...current,
 						loading: false,
-						error: cause instanceof Error ? cause.message : String(cause),
+						error: formatErrorDetails(cause),
 					}));
 				}
 			})();

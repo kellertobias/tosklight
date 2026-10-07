@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, SelectField } from "@tosklight/ui";
 import type {
 	VisualizerRenderQuality,
@@ -101,9 +102,9 @@ export function VisualizerControls(props: VisualizerControlsProps) {
 				Reset physics scenery
 			</Button>
 			{props.error ? (
-				<p className="system-controls-visualizer-error" role="status">
+				<ErrorAlert as="p" className="system-controls-visualizer-error">
 					{props.error}
-				</p>
+				</ErrorAlert>
 			) : (
 				props.view === null && (
 					<p className="system-controls-visualizer-error" role="status">

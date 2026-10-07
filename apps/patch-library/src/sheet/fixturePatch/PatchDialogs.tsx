@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, ModalRegistration, TextInput } from "@tosklight/ui";
 import type { PatchLayer } from "../../wire";
 import { fixtureRange } from "../patchUtils";
@@ -258,9 +259,9 @@ export function PatchConflictDialog() {
 			>
 				<h3>Patch conflict</h3>
 				{editError && (
-					<p className="patch-status" role="alert">
+					<ErrorAlert as="p" className="patch-status" role="alert">
 						{editError}
-					</p>
+					</ErrorAlert>
 				)}
 				<p>
 					The requested range overlaps {blockedBy.map(conflictLabel).join(", ")}

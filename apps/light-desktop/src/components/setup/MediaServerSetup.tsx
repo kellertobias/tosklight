@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PatchedFixture } from "../../api/types";
 import {
@@ -72,7 +73,7 @@ export function MediaServerSetup({
 					CITP endpoints belong to the physical master fixture. Every logical
 					media layer inherits the same endpoint.
 				</p>
-				{patch.error && <p role="alert">{patch.error}</p>}
+				{patch.error && <ErrorAlert as="p" role="alert">{patch.error}</ErrorAlert>}
 				<MediaServerTable rows={rows} />
 			</section>
 			<DiscoveredMediaServers
@@ -109,7 +110,7 @@ function DiscoveredMediaServers({
 				</div>
 			</header>
 			{busy && <p role="status">Discovering Media Servers…</p>}
-			{error && <p role="alert">{error}</p>}
+			{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
 			{!busy && discovery?.servers.length === 0 && (
 				<p>
 					No ToskLight Pixel Media servers were found. Check that the Media
@@ -142,10 +143,10 @@ function DiscoveredMediaServers({
 							</div>
 							<strong>Unavailable</strong>
 						</header>
-						<p role="alert">
+						<ErrorAlert as="p" role="alert">
 							{candidate.error ??
 								"No Media Server outputs are available. Refresh Discovery."}
-						</p>
+						</ErrorAlert>
 					</article>
 				),
 			)}

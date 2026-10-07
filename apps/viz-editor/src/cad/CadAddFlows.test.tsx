@@ -325,7 +325,7 @@ describe("Load model from Add primitive", () => {
 		mocks.importVenueModel.mockRejectedValueOnce(new Error("the OBJ file has no faces"));
 		press("primitive", "load-model");
 		await waitFor(() =>
-			expect(onError).toHaveBeenCalledWith("Could not load the 3D model: Error: the OBJ file has no faces"),
+			expect(onError).toHaveBeenCalledWith(expect.stringContaining("Could not load the 3D model: the OBJ file has no faces")),
 		);
 		expect(announcePlaced).not.toHaveBeenCalled();
 	});

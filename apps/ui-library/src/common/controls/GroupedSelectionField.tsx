@@ -1,3 +1,4 @@
+import { ErrorAlert } from "../ErrorAlert";
 import { useState, type ReactNode } from "react";
 import { ModalLayer } from "../../modals/ModalStack";
 import { ModalTitleBar } from "../ModalTitleBar";
@@ -131,9 +132,9 @@ export function GroupedSelectionModal<T extends string>({
 					</section>
 				))}
 				{error && (
-					<p className="ui-field-error" role="alert">
+					<ErrorAlert as="p" className="ui-field-error" role="alert">
 						{error}
-					</p>
+					</ErrorAlert>
 				)}
 			</div>
 		</ModalLayer>

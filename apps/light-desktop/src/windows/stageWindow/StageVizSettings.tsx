@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	ColorPickerField,
@@ -213,9 +214,9 @@ export function StageVizSettings({ paneId }: { paneId?: string } = {}) {
 				}}
 			/>
 			{trouble && (
-				<div className="stage-viz-trouble" role="alert">
+				<ErrorAlert as="div" className="stage-viz-trouble" role="alert">
 					{trouble}
-				</div>
+				</ErrorAlert>
 			)}
 		</>
 	);

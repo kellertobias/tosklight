@@ -1,3 +1,4 @@
+import { ErrorAlert, CopyErrorButton } from "../common/ErrorAlert";
 import { type RefObject, useEffect, useRef } from "react";
 import { Button, Input } from "../controls";
 import { ModalTitleBar } from "../common/ModalTitleBar";
@@ -272,6 +273,7 @@ function PersistentErrorPopover({
 				<Button onClick={onClose}>×</Button>
 			</header>
 			<pre>{message}</pre>
+			<CopyErrorButton text={message} />
 			<Button onClick={onAcknowledge}>Acknowledge</Button>
 		</div>
 	);
@@ -415,13 +417,13 @@ function CommandHistoryPanel({
 				onClose={onClose}
 			/>
 			{commandError && (
-				<div className="command-history-current-error" role="alert">
+				<ErrorAlert as="div" className="command-history-current-error" role="alert" copyText={commandError}>
 					<div>
 						<b>Command error</b>
 						<p>{commandError}</p>
 					</div>
 					<Button onClick={onAcknowledgeCommandError}>Acknowledge</Button>
-				</div>
+				</ErrorAlert>
 			)}
 			<div className="command-history-list">
 				{history.length === 0 ? (
@@ -454,6 +456,7 @@ function CommandHistoryPanel({
 								</small>
 							</div>
 							<p>{entry.feedback}</p>
+							{entry.status === "rejected" && <CopyErrorButton text={`${entry.command}\n${entry.feedback}`} />}
 							{entry.source !== "window" && (
 								<Button onClick={() => onReuse(entry.command)}>Reuse</Button>
 							)}

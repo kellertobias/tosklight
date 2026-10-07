@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import { ShowRecoveryFileManager } from "../../components/setup/ShowRecoveryFileManager";
@@ -47,7 +49,7 @@ export function ShowsRecoverySection({
 			.catch((reason) => {
 				if (active)
 					setLibraryError(
-						reason instanceof Error ? reason.message : String(reason),
+						formatErrorDetails(reason),
 					);
 			});
 		return () => {
@@ -110,7 +112,7 @@ export function ShowsRecoverySection({
 				<p>
 					<b>Current selection:</b> {selectedLibrary ?? "Not configured"}
 				</p>
-				{libraryError && <p role="alert">Library unavailable: {libraryError}</p>}
+				{libraryError && <ErrorAlert as="p" role="alert">Library unavailable: {libraryError}</ErrorAlert>}
 				<Button
 					disabled={!desktop.available || !draft}
 					title={
@@ -133,7 +135,7 @@ export function ShowsRecoverySection({
 							});
 						} catch (reason) {
 							setLibraryError(
-								reason instanceof Error ? reason.message : String(reason),
+								formatErrorDetails(reason),
 							);
 						}
 					}}

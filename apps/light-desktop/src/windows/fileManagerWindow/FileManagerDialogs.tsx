@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	CheckboxField,
@@ -41,7 +42,7 @@ function RenameEditor({ controller }: { controller: FileManagerController }) {
 				}}
 			/>
 			{!validItemName(operation.renameDraft) && (
-				<span role="alert">Enter a name without path separators.</span>
+				<ErrorAlert as="span" role="alert">Enter a name without path separators.</ErrorAlert>
 			)}
 		</section>
 	);
@@ -192,17 +193,17 @@ function TextEditor({ controller }: { controller: FileManagerController }) {
 				<Button onClick={editor.closeText}>Close</Button>
 			</header>
 			{state.editorConflict && (
-				<div className="file-message" role="alert">
+				<ErrorAlert as="div" className="file-message" role="alert">
 					A newer file revision is available. Your unsaved text has not been
 					overwritten.{" "}
 					<Button onClick={editor.reloadConflict}>Reload Newer Version</Button>
-				</div>
+				</ErrorAlert>
 			)}
 			{state.editorMissing && (
-				<div className="file-message" role="alert">
+				<ErrorAlert as="div" className="file-message" role="alert">
 					The associated file is missing. The last loaded text is retained until
 					you recreate or close it.
-				</div>
+				</ErrorAlert>
 			)}
 			<TextArea
 				aria-label="File text"

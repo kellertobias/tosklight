@@ -1,3 +1,4 @@
+import { ErrorAlert } from "../ErrorAlert";
 import {
 	type ChangeEvent,
 	Children,
@@ -584,9 +585,9 @@ function renderSwitchField(
 				{control}
 				{description && !error && <small>{description}</small>}
 				{error && (
-					<small className="ui-field-error" role="alert">
+					<ErrorAlert as="small" className="ui-field-error" role="alert">
 						{error}
-					</small>
+					</ErrorAlert>
 				)}
 			</div>
 		);

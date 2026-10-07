@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { DeviceStatus } from "../controller/types";
 
 /**
@@ -189,5 +190,5 @@ export function describeDevice(status: DeviceStatus): string {
 }
 
 function errorText(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
+	return formatErrorDetails(error);
 }

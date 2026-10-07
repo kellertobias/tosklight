@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { CheckboxField, SelectField } from "@tosklight/ui";
 import type {
 	SelectiveImportCatalog,
@@ -353,9 +354,9 @@ function BlockerSummary({ preview }: { preview: SelectiveImportPreview }) {
 				<p>None — ready to apply.</p>
 			) : (
 				preview.blockers.map((blocker, index) => (
-					<p className="modal-error" key={`${blocker.type}-${index}`}>
+					<ErrorAlert as="p" className="modal-error" key={`${blocker.type}-${index}`}>
 						{blocker.summary}
-					</p>
+					</ErrorAlert>
 				))
 			)}
 		</>

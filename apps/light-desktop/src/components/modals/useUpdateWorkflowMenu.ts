@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UpdateMode, UpdateTargetFilter } from "../../api/types";
 import type {
@@ -103,5 +104,5 @@ function isCurrent(
 }
 
 function errorMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

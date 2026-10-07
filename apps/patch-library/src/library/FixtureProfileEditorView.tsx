@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Fragment } from "react";
 import type {
 	AttributeDescriptor,
@@ -78,14 +79,14 @@ function ProfileEditorBody({
 				))}
 			</datalist>
 			{editor.localErrors.length > 0 && (
-				<section className="fixture-profile-errors" role="alert">
+				<ErrorAlert as="section" className="fixture-profile-errors" role="alert">
 					<strong>Fixture profile needs attention</strong>
 					<ul>
 						{editor.localErrors.map((error) => (
 							<li key={error}>{error}</li>
 						))}
 					</ul>
-				</section>
+				</ErrorAlert>
 			)}
 			{editor.tab === "identity" && (
 				<IdentityProfileTab

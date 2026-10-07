@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { reportDeskNotice } from "../deskNotice/deskNotice";
 import type { ServerCapabilities } from "./capabilityContracts";
 import type { ServerController } from "./model";
@@ -17,7 +18,7 @@ export function createProgrammerAlignmentActions(
 				setError(null);
 			} catch (reason) {
 				// Refusals and genuine desk failures keep the actionable error treatment.
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				throw reason;
 			}
 			// The server reports an activation that changed nothing (no selection) as Off.

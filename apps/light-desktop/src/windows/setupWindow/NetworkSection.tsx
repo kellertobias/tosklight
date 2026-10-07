@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, FormField, FormLayout, TextField } from "@tosklight/ui";
 import { useCallback, useEffect, useState } from "react";
 import type { ExtensionRuntimeSnapshot } from "../../api/client/deskManagement";
@@ -69,7 +71,7 @@ function NetworkInputs({ controller }: { controller: SetupWindowController }) {
 								<dd>{extensions.configuration_path}</dd>
 							</dl>
 							{extensions.configuration_diagnostic && (
-								<p role="alert">{extensions.configuration_diagnostic}</p>
+								<ErrorAlert as="p" role="alert">{extensions.configuration_diagnostic}</ErrorAlert>
 							)}
 							{extensions.packages.map((extensionPackage) => (
 								<div
@@ -104,13 +106,13 @@ function NetworkInputs({ controller }: { controller: SetupWindowController }) {
 								</div>
 							))}
 							{extensions.instance_diagnostics.map((diagnostic) => (
-								<p
+								<ErrorAlert as="p"
 									key={`${diagnostic.instance_id}:${diagnostic.code}`}
 									role="alert"
 								>
 									{diagnostic.instance_id} · {diagnostic.code}:{" "}
 									{diagnostic.detail}
-								</p>
+								</ErrorAlert>
 							))}
 						</details>
 					)}
@@ -137,7 +139,7 @@ function extensionSummary(
 }
 
 function errorMessage(reason: unknown): string {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }
 
 export function NetworkSection({

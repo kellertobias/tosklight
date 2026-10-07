@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	FormLayout,
@@ -427,9 +428,9 @@ export function OutputRoutesSetup({
 				</div>
 			</header>
 			{usbError && (
-				<p className="ui-field-error" role="alert">
+				<ErrorAlert as="p" className="ui-field-error" role="alert">
 					USB DMX discovery failed: {usbError}
-				</p>
+				</ErrorAlert>
 			)}
 			{usbDevices.length > 0 && (
 				<section
@@ -847,9 +848,9 @@ export function OutputRoutesSetup({
 								</FormLayout>
 							)}
 							{error && !confirmDelete && (
-								<p className="ui-field-error" role="alert">
+								<ErrorAlert as="p" className="ui-field-error" role="alert">
 									{error}
-								</p>
+								</ErrorAlert>
 							)}
 						</section>
 					</div>

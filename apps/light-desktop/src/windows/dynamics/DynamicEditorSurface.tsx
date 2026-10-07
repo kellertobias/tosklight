@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	ColorPickerField,
@@ -85,9 +86,9 @@ export function DynamicEditorSurface(props: DynamicEditorSurfaceProps) {
 				/>
 			)}
 			{props.error && (
-				<p className="dynamics-error" role="alert">
+				<ErrorAlert as="p" className="dynamics-error" role="alert">
 					{props.error}
-				</p>
+				</ErrorAlert>
 			)}
 			<DynamicEditorWorkspace {...props} />
 		</section>

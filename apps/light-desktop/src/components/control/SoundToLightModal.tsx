@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	FormField,
@@ -684,7 +686,7 @@ export function SoundToLightModal({
 			setConfirmClose(false);
 			if (closeAfterSave) onClose();
 		} catch (reason) {
-			setLocalError(reason instanceof Error ? reason.message : String(reason));
+			setLocalError(formatErrorDetails(reason));
 		} finally {
 			setBusy(false);
 		}
@@ -717,7 +719,7 @@ export function SoundToLightModal({
 			});
 			setLocalError(null);
 		} catch (reason) {
-			setLocalError(reason instanceof Error ? reason.message : String(reason));
+			setLocalError(formatErrorDetails(reason));
 		} finally {
 			setBusy(false);
 		}
@@ -856,9 +858,9 @@ function SoundToLightDialog({
 						onCustomFrequencyChange={updateCustomFrequency}
 					/>
 					{(invalid || localError || controllerError) && (
-						<p className="sound-error" role="alert">
+						<ErrorAlert as="p" className="sound-error" role="alert">
 							{localError ?? invalid ?? controllerError}
-						</p>
+						</ErrorAlert>
 					)}
 					<DirtyCloseConfirmation
 						visible={confirmClose}

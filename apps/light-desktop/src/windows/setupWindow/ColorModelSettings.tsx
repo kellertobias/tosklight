@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, FormLayout, ModalPortal, ModalTitleBar, SelectField } from "@tosklight/ui";
 import { useState } from "react";
 import type {
@@ -44,7 +46,7 @@ export function ShowColorModelSettings({
 			await controller.adoptAttributeConfiguration(saved);
 			setPending(null);
 		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
+			setError(formatErrorDetails(reason));
 		} finally {
 			setBusy(false);
 		}
@@ -61,7 +63,7 @@ export function ShowColorModelSettings({
 			else await apply(model, false);
 		} catch (reason) {
 			setBusy(false);
-			setError(reason instanceof Error ? reason.message : String(reason));
+			setError(formatErrorDetails(reason));
 		}
 	};
 	return (
@@ -91,9 +93,9 @@ export function ShowColorModelSettings({
 				</p>
 			)}
 			{error && (
-				<p className="modal-error" role="alert">
+				<ErrorAlert as="p" className="modal-error" role="alert">
 					{error}
-				</p>
+				</ErrorAlert>
 			)}
 			{pending && (
 				<ColorModelImpactDialog

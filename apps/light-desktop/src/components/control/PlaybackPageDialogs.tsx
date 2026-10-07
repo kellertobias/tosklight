@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PlaybackPage } from "../../api/types";
@@ -166,14 +167,14 @@ export function PlaybackPageMenu({
 						onClose={requestClose}
 					/>
 					{operation.failure && (
-						<p className="modal-error" role="alert">
+						<ErrorAlert as="p" className="modal-error" role="alert">
 							{operation.failure}
-						</p>
+						</ErrorAlert>
 					)}
 					{!ready && (
-						<p role={authorityError ? "alert" : "status"}>
+						<ErrorAlert as="p" role={authorityError ? "alert" : "status"}>
 							{authorityError ?? "Loading Playback pages…"}
-						</p>
+						</ErrorAlert>
 					)}
 					{operation.pending === "select" && (
 						<p role="status">Selecting Playback page…</p>
@@ -345,9 +346,9 @@ function OpenPlaybackPageRenameDialog({
 						onKeyboardCommit={(value) => void save(value)}
 					/>
 					{operation.failure && (
-						<p className="modal-error" role="alert">
+						<ErrorAlert as="p" className="modal-error" role="alert">
 							{operation.failure}
-						</p>
+						</ErrorAlert>
 					)}
 					<footer>
 						<Button disabled={operation.busy} onClick={onClose}>

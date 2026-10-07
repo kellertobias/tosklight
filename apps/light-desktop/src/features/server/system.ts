@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { saveServerUrl } from "../../api/client/serverLocation";
 import type { CueList, StoredGroup, StoredPreset } from "../../api/types";
 import type { ServerController } from "./model";
@@ -72,7 +73,7 @@ export function createSystemActions(
 				URL.revokeObjectURL(url);
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		shutdownServer: async () => {
@@ -81,7 +82,7 @@ export function createSystemActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},
@@ -96,7 +97,7 @@ export function createSystemActions(
 				}
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		setDeskToken: (token) => {
@@ -108,7 +109,7 @@ export function createSystemActions(
 				saveServerUrl(url);
 				location.reload();
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 	};

@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useRef } from "react";
 import { closeOwnedSession, type SessionRole } from "../session/ownership";
 import {
@@ -79,9 +80,7 @@ export function useServerConnection(
 				}
 				setError(
 					role === "primary"
-						? reason instanceof Error
-							? reason.message
-							: String(reason)
+						? formatErrorDetails(reason)
 						: describeScreenConnectionFailure(reason, api.runtime.serverUrl),
 				);
 				setStatus(reason instanceof TypeError ? "offline" : "error");

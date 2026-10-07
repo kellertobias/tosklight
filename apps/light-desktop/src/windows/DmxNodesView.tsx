@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useState } from "react";
@@ -102,14 +103,14 @@ export function DmxNodesView({
 			<WindowScrollArea>
 				<main className="dmx-nodes">
 					{error ? (
-						<div className="dmx-nodes-error" role="alert">
+						<ErrorAlert as="div" className="dmx-nodes-error" role="alert">
 							<b>Network state could not be read.</b>
 							<span>{error}</span>
 							<small>
 								The list shows the last known state and refreshes when the desk
 								answers again.
 							</small>
-						</div>
+						</ErrorAlert>
 					) : null}
 					{endpoints.length ? (
 						<NodesTable

@@ -38,6 +38,28 @@ describe("MediaPaneSurface control state", () => {
 		).toContainElement(feedback);
 	});
 
+	it("copies preview and layer diagnostics without selecting their tiles", async () => {
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+		const onSelectLayer = vi.fn();
+		const view = renderSurface(
+			{ kind: "offline", detail: "The server is down", diagnostic: "Trace: connect -> refused" },
+			[{ id: "failed-layer", number: "1", name: "Clip", status: "failed", errorDetail: "Decoder failed\nTrace: open -> decode" }],
+			{}, vi.fn(), onSelectLayer,
+		);
+		const copyButtons = within(view.container).getAllByRole("button", { name: "Copy error" });
+		expect(copyButtons).toHaveLength(2);
+		for (const button of copyButtons) expect(button.parentElement?.closest("button")).toBeNull();
+		await userEvent.click(copyButtons[0]);
+		expect(writeText).toHaveBeenCalledWith("Offline · black output · The server is down\nTrace: connect -> refused");
+		await userEvent.click(copyButtons[1]);
+		expect(writeText).toHaveBeenCalledWith("Decoder failed\nTrace: open -> decode");
+		expect(onSelectLayer).not.toHaveBeenCalled();
+		await userEvent.click(within(view.container).getByRole("button", { name: "Layer 1 Clip · failed" }));
+		expect(onSelectLayer).toHaveBeenCalledWith("failed-layer");
+		view.unmount();
+	});
+
 	it("shows a music note for the Internal Audio Player master and its layers", () => {
 		const view = renderSurface(
 			{ kind: "audio", detail: "003/012.wav" },

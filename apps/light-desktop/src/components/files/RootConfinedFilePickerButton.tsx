@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { useCallback, useEffect, useState, type MutableRefObject } from "react";
 import { useFiles } from "../../features/files/FilesContext";
 import { Button, type ButtonProps } from "@tosklight/ui";
@@ -58,6 +59,6 @@ export function RootConfinedFilePickerButton({
 
   return <span className="root-confined-file-picker">
     {!hideButton && <Button aria-label={label} variant={variant} className={buttonClassName} disabled={disabled || busy} onClick={() => void choose()}>{busy ? "Loading selected file…" : label}</Button>}
-    {error && <small role="alert">{error}</small>}
+    {error && <ErrorAlert as="small" role="alert">{error}</ErrorAlert>}
   </span>;
 }

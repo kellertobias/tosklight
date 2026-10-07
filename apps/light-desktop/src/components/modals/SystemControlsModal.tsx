@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	ModalPortal,
@@ -305,7 +306,7 @@ function AllOffConfirmation({
 						This releases every running playback, dynamic, and Programmer
 						Preload. Active Programmers are not cleared.
 					</p>
-					{error && <p role="alert">{error}</p>}
+					{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
 					<div className="modal-actions">
 						<Button autoFocus disabled={stopping} onClick={onCancel}>
 							Cancel

@@ -1,3 +1,4 @@
+import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 import { Button, FileDropField } from "@tosklight/ui/controls";
 import { TextField } from "@tosklight/ui/forms";
 import {
@@ -111,8 +112,9 @@ export function ModelsPage({
 				state: "failed",
 				fileName: file.name,
 				message:
-					error instanceof ApiFailure || error instanceof Error
+					error instanceof ApiFailure
 						? error.message
+						: error instanceof Error ? formatErrorDetails(error)
 						: "the model could not be uploaded",
 			});
 		}
@@ -332,10 +334,10 @@ function ModelSlotEditor({
 				</p>
 			)}
 			{model?.status === "unloadable" && (
-				<p className="media-model-status-error" role="alert">
+				<ErrorAlert as="p" className="media-model-status-error" role="alert">
 					This model cannot be loaded, so layers selecting it are mapped onto
 					the Plane: {model.detail}
-				</p>
+				</ErrorAlert>
 			)}
 			{model && (
 				<figure className="media-model-preview">
@@ -489,10 +491,10 @@ function ImportedModelFields({
 				</div>
 			)}
 			{upload.state === "failed" && (
-				<p className="media-model-status-error" role="alert">
+				<ErrorAlert as="p" className="media-model-status-error" role="alert">
 					{upload.fileName ? `${upload.fileName}: ` : ""}
 					{upload.message}
-				</p>
+				</ErrorAlert>
 			)}
 		</>
 	);

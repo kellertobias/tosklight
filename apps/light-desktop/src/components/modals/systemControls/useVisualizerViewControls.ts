@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useState } from "react";
 import type {
 	VisualizerRenderQuality,
@@ -92,5 +93,5 @@ export function useVisualizerViewControls(open: boolean) {
 }
 
 function describe(reason: unknown): string {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

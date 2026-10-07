@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { FileEntry, TextDocument } from "../../api/types";
 
 export const TEXT_FILE_EXTENSIONS = new Set(["txt", "md", "csv", "log"]);
@@ -45,7 +46,7 @@ export function isSameDocumentVersion(
 }
 
 export function friendlyError(error: unknown) {
-	const raw = error instanceof Error ? error.message : String(error);
+	const raw = formatErrorDetails(error);
 	try {
 		const parsed = JSON.parse(raw) as { error?: unknown };
 		if (typeof parsed.error === "string") return parsed.error;

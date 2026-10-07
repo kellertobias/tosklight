@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useMemo, useRef } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import type { ShowObjectKind } from "../features/showObjects/contracts";
@@ -218,8 +219,8 @@ function useFeatureErrorReporter(
 	return useCallback(
 		(error: Error | null) => {
 			if (error) {
-				lastError.current = error.message;
-				setError(error.message);
+				lastError.current = formatErrorDetails(error);
+				setError(formatErrorDetails(error));
 				return;
 			}
 			setError((current) => (current === lastError.current ? null : current));

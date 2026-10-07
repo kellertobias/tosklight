@@ -9,14 +9,17 @@ describe("an error message", () => {
 		const writeText = vi.fn().mockResolvedValue(undefined);
 		Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
 		const onDismiss = vi.fn();
-		render(<ErrorMessage className="cad-error" message="The show refused the truss: revision 4" onDismiss={onDismiss} />);
-		const words = screen.getByText("The show refused the truss: revision 4");
+		const message = "The show refused the truss: revision 4\nTrace: write_show -> store_entity\nCaused by: disk full";
+		render(<ErrorMessage className="cad-error" message={message} onDismiss={onDismiss} />);
+		const words = screen.getByText(/The show refused the truss: revision 4/);
 		// Clicking or selecting the words keeps the message, so it can be copied by hand too.
 		fireEvent.click(words);
 		expect(onDismiss).not.toHaveBeenCalled();
-		fireEvent.click(screen.getByRole("button", { name: "Copy error" }));
-		expect(writeText).toHaveBeenCalledWith("The show refused the truss: revision 4");
-		await waitFor(() => expect(screen.getByRole("button", { name: "Copy error" })).toHaveTextContent("Copied"));
+		const copyButton = screen.getByRole("button", { name: "Copy error" });
+		expect(copyButton).toHaveTextContent("");
+		fireEvent.click(copyButton);
+		expect(writeText).toHaveBeenCalledWith(message);
+		await waitFor(() => expect(screen.getByRole("button", { name: "Error copied; copy again" })).toHaveAttribute("title", "Error copied; copy again"));
 		fireEvent.click(screen.getByRole("button", { name: "Dismiss error" }));
 		expect(onDismiss).toHaveBeenCalledTimes(1);
 	});

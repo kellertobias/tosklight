@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 // Loading, empty, error, retry, and disconnected — decided once.
 //
 // The shared package owns how these look; Media owns *when* they occur. That split is why this
@@ -43,12 +44,12 @@ export function ResourceState<T>({
 	return (
 		<>
 			{stale && failure && (
-				<p className="media-state is-stale" role="status" aria-live="polite">
+				<ErrorAlert as="p" className="media-state is-stale" role="status" aria-live="polite">
 					Showing the last known {subject}. {failure.message}{" "}
 					<Button size="compact" onClick={reload}>
 						Retry
 					</Button>
-				</p>
+				</ErrorAlert>
 			)}
 			{isEmpty?.(data) && empty ? (
 				<p className="media-state is-empty">{empty}</p>
@@ -69,14 +70,14 @@ function Failed({
 	onRetry: () => void;
 }) {
 	return (
-		<div className="media-state is-error" role="alert">
+		<ErrorAlert as="div" className="media-state is-error" role="alert">
 			<p>
 				{capitalize(subject)} could not be loaded. {message}
 			</p>
 			<Button variant="primary" onClick={onRetry}>
 				Try again
 			</Button>
-		</div>
+		</ErrorAlert>
 	);
 }
 

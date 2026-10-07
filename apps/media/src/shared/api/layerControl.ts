@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 // Layer control: the writes, their optimistic effect, and their rollback.
 //
 // This lives in the shared API layer rather than inside the layers feature because two features
@@ -366,7 +367,7 @@ export function applyTakeoverLocally(
 function asFailure(error: unknown): ApiFailure {
 	return error instanceof ApiFailure
 		? error
-		: new ApiFailure("unexpected-error", String(error), 0);
+		: new ApiFailure("unexpected-error", formatErrorDetails(error), 0);
 }
 
 /** The same change the server will make, applied to the projection we already hold. */

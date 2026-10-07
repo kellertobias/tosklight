@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import type { PlaybackButtonAction, PlaybackDefinition } from "../../api/types";
 import {
 	Button,
@@ -693,10 +694,10 @@ function DynamicTargetSettings({
 						/>
 					)}
 					{!scope && (
-						<p role="alert" className="modal-error">
+						<ErrorAlert as="p" role="alert" className="modal-error">
 							Choose a reviewable Live Group or frozen ordered target scope
 							before applying this targetless Dynamic.
-						</p>
+						</ErrorAlert>
 					)}
 				</>
 			)}

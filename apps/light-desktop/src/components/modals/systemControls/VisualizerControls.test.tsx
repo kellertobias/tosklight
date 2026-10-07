@@ -103,7 +103,7 @@ describe("VisualizerControls", () => {
 		}
 		cleanup();
 		renderControls({ error: "the desk refused: exposure must be within 0.05-4.0" });
-		expect(screen.getByRole("status")).toHaveTextContent("the desk refused");
+		expect(screen.getByRole("alert")).toHaveTextContent("the desk refused");
 	});
 
 	it("takes no press while an edit is in flight", () => {

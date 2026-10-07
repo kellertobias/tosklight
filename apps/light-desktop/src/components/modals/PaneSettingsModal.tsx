@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	FormLayout,
@@ -151,9 +152,9 @@ function VirtualPlaybackZoneSettings({
 			</p>
 			{surface.saving && <p role="status">Saving Playback Solo Regions…</p>}
 			{!surface.ready ? (
-				<p role={surface.error ? "alert" : "status"}>
+				<ErrorAlert as="p" role={surface.error ? "alert" : "status"}>
 					{surface.error ?? "Loading Playback Solo Regions…"}
-				</p>
+				</ErrorAlert>
 			) : surface.zones.length === 0 ? (
 				<p>No Solo Regions are configured for this show.</p>
 			) : (

@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	ModalRegistration,
@@ -90,9 +91,9 @@ export function UpdateSettingsDialog({
 					</p>
 					<UpdateDefaultsFields settings={settings} onChange={onChange} />
 					{error && (
-						<p className="modal-error" role="alert">
+						<ErrorAlert as="p" className="modal-error" role="alert">
 							{error}
-						</p>
+						</ErrorAlert>
 					)}
 				</section>
 			</div>
@@ -281,9 +282,9 @@ export function UpdateTargetMenu<T extends UpdateMenuEntry>({
 						})}
 					</div>
 					{error && (
-						<p className="modal-error" role="alert">
+						<ErrorAlert as="p" className="modal-error" role="alert">
 							{error}
-						</p>
+						</ErrorAlert>
 					)}
 				</section>
 			</div>

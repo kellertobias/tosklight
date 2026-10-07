@@ -1,3 +1,4 @@
+import { CopyErrorButton, ErrorAlert } from "@tosklight/ui";
 // Speed Group reception, live.
 //
 // The Media Server only receives Speed Groups. This panel says whether a Light desk is being
@@ -58,6 +59,7 @@ export function SpeedGroupReception({
 			>
 				{CONNECTION_TEXT[reception.connection] ?? reception.connection}
 				{reception.detail ? ` ${reception.detail}` : ""}
+				{problem ? <CopyErrorButton text={`${CONNECTION_TEXT[reception.connection] ?? reception.connection}${reception.detail ? ` ${reception.detail}` : ""}`} /> : null}
 			</p>
 			<ReceptionFacts reception={reception} />
 			{reception.groups.length > 0 && (
@@ -92,10 +94,10 @@ export function SpeedGroupReception({
 					<h4>Refused messages</h4>
 					<ul className="media-settings-note">
 						{reception.rejections.map((rejection) => (
-							<li key={`${rejection.ageMillis}-${rejection.reason}`}>
+							<ErrorAlert as="li" key={`${rejection.ageMillis}-${rejection.reason}`}>
 								{rejection.from ? `${rejection.from}: ` : ""}
 								{rejection.reason} ({formatAge(rejection.ageMillis)} ago)
-							</li>
+							</ErrorAlert>
 						))}
 					</ul>
 				</>

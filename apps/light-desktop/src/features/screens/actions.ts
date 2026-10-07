@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { LightApi } from "../../api/client/api";
 import type { ScreenSnapshot } from "../../api/types";
 import type { ScreenCapabilities } from "./types";
@@ -19,7 +20,7 @@ export function createScreenActions(
 				setScreens(await api.playback.screens());
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		deleteScreen: async (id) => {
@@ -28,7 +29,7 @@ export function createScreenActions(
 				setScreens(await api.playback.screens());
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		setScreenPage: async (id, page) => {
@@ -37,7 +38,7 @@ export function createScreenActions(
 				setScreens(await api.playback.screens());
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		updateProgrammerControlSurface: async (patch) => {
@@ -46,7 +47,7 @@ export function createScreenActions(
 				setScreens(await api.playback.screens());
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 	};

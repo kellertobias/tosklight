@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	NativeMediaEffectSlot,
@@ -89,7 +90,7 @@ export function useNativeMediaEffects({
 			(reason) => {
 				if (!current) return;
 				const message =
-					reason instanceof Error ? reason.message : String(reason);
+					formatErrorDetails(reason);
 				setError(message);
 				setPointFrameRate({
 					kind: "unknown",
@@ -120,7 +121,7 @@ export function useNativeMediaEffects({
 				},
 				(reason) => {
 					if (version !== changeVersion.current) return;
-					setError(reason instanceof Error ? reason.message : String(reason));
+					setError(formatErrorDetails(reason));
 				},
 			);
 		},

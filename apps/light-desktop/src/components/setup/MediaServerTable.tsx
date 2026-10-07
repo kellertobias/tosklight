@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
 import type { MediaServerFixture, PatchedFixture } from "../../api/types";
 import {
@@ -190,7 +191,7 @@ function MediaServerStatusCell({ row }: { row: MediaServerRowView }) {
 			</b>
 			{row.network ? <small>{row.network}</small> : null}
 			{state === "offline" && error ? (
-				<small role="alert">{offlineHint(error)}</small>
+				<ErrorAlert as="small" role="alert">{offlineHint(error)}</ErrorAlert>
 			) : null}
 			{state === "connected" && lastSuccess ? (
 				<small>

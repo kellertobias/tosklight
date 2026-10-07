@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { Button, ModalFrame } from "@tosklight/ui";
 import { useEffect, useState } from "react";
@@ -35,7 +37,7 @@ export function ShowLoadBrowser({model}: {model: QuickSetupModel}) {
         const task = source === "network"
             ? lifecycle?.networkShows().then(catalog => {if(current) setPeers(catalog.peers);})
             : files.fileEntries(rootId, path).then(directory => {if(current) setEntries(directory.entries);});
-        void task?.catch(reason => current && setError(reason instanceof Error ? reason.message : String(reason))).finally(() => current && setBusy(false));
+        void task?.catch(reason => current && setError(formatErrorDetails(reason))).finally(() => current && setBusy(false));
         return () => {current = false;};
     }, [source, rootId, path, files, lifecycle]);
     const root = roots.find(root => root.id === rootId);
@@ -49,7 +51,7 @@ export function ShowLoadBrowser({model}: {model: QuickSetupModel}) {
         }).sort((a,b) => a.name.localeCompare(b.name));
     async function run(task: () => Promise<void>) {
         setBusy(true); setError("");
-        try {await task();} catch(reason) {setError(reason instanceof Error ? reason.message : String(reason));} finally {setBusy(false);}
+        try {await task();} catch(reason) {setError(formatErrorDetails(reason));} finally {setBusy(false);}
     }
     function switchSource(next: Source, driveId?: string) {
         setSource(next); setPath(""); setSelected(null);
@@ -93,8 +95,8 @@ export function ShowLoadBrowser({model}: {model: QuickSetupModel}) {
             </div>
             {source === "usb" && !root && <p>No USB drive connected.</p>}
             {busy && <p role="status">Loading…</p>}
-            {error && <p className="show-browser-error" role="alert">{error}</p>}
-            {source === "network" && peers.map(peer => <p key={peer.instance} className={peer.error ? "modal-warning" : "show-peer"}>{peer.name} · {peer.address}{peer.error ? ` · ${peer.error}` : peer.shows.length === 0 ? " · No shows available" : ""}</p>)}
+            {error && <ErrorAlert as="p" className="show-browser-error" role="alert">{error}</ErrorAlert>}
+            {source === "network" && peers.map(peer => <ErrorAlert as="p" role={peer.error ? "alert" : "status"} key={peer.instance} className={peer.error ? "modal-warning" : "show-peer"}>{peer.name} · {peer.address}{peer.error ? ` · ${peer.error}` : peer.shows.length === 0 ? " · No shows available" : ""}</ErrorAlert>)}
             {!error && !busy && rows.length === 0 && folders.length === 0 && <p>No shows available in this source.</p>}
             {!error && !busy && <WindowScrollArea className="show-browser-table-scroll"><table className="show-browser-table"><thead><tr><th>Show / folder</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>
                 {folders.map(folder => <tr key={folder.path}><td colSpan={3}><Button disabled={busy} onClick={() => setPath(folder.path)}>📁 {folder.name}</Button></td></tr>)}
@@ -111,7 +113,7 @@ export function ShowLoadBrowser({model}: {model: QuickSetupModel}) {
                         </div></td>
                     </tr>)}
                 </tbody></table></WindowScrollArea>
-                {busy && <p role="status">Preparing show…</p>}{error && <p className="show-browser-error" role="alert">{error}</p>}
+                {busy && <p role="status">Preparing show…</p>}{error && <ErrorAlert as="p" className="show-browser-error" role="alert">{error}</ErrorAlert>}
             </ModalFrame>}
     </ModalFrame>;
 }

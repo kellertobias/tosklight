@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button } from "@tosklight/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -77,7 +78,7 @@ export function HighlightErrorAlert({
 }) {
 	if (!message) return null;
 	return createPortal(
-		<div className="highlight-error" data-highlight-error-alert role="alert">
+		<ErrorAlert as="div" className="highlight-error" data-highlight-error-alert role="alert">
 			<span>{message}</span>
 			<Button
 				iconOnly
@@ -90,7 +91,7 @@ export function HighlightErrorAlert({
 			>
 				×
 			</Button>
-		</div>,
+		</ErrorAlert>,
 		document.body,
 	);
 }

@@ -30,6 +30,12 @@ describe("the transport", () => {
 		expect((failure as ApiFailure).disconnected).toBe(false);
 	});
 
+	it("retains server diagnostic traces and causes with the error message", async () => {
+		answering({ code: "configuration-not-written", message: "The save failed", trace: "save_settings\nwrite_file", details: { cause: "Disk full" } }, 500);
+		const failure = await api.outputs().catch((error: unknown) => error) as ApiFailure;
+		expect(failure.message).toBe("The save failed\ntrace: save_settings\nwrite_file\ndetails: cause: Disk full");
+	});
+
 	it("distinguishes a server that says no from one that is not there", async () => {
 		vi.stubGlobal(
 			"fetch",
@@ -58,6 +64,7 @@ describe("the transport", () => {
 			.catch((error: unknown) => error)) as ApiFailure;
 		expect(failure.code).toBe("unexpected-response");
 		expect(failure.status).toBe(502);
+		expect(failure.message).toContain("<html>proxy error</html>");
 	});
 
 	it("sends an intent-shaped body carrying only what changed", async () => {

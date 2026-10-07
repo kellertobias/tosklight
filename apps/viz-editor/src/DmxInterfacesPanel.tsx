@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { SelectField } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import {
@@ -60,7 +62,7 @@ export function DmxInterfacesPanel({
 				.catch((reason) => {
 					if (!current) return;
 					setInterfaces([]);
-					setListError(String(reason));
+					setListError(formatErrorDetails(reason));
 				});
 		look();
 		const timer = window.setInterval(look, 5000);
@@ -131,19 +133,19 @@ export function DmxInterfacesPanel({
 								]}
 							/>
 							{missing ? (
-								<output className="viz-live-input-error" role="alert">
+								<ErrorAlert as="output" className="viz-live-input-error" role="alert">
 									{chosen} is not connected. No {label} is received until it
 									returns, or until another interface is chosen.
-								</output>
+								</ErrorAlert>
 							) : null}
 						</div>
 					);
 				})}
 			</div>
 			{listError ? (
-				<output className="viz-live-input-error" role="alert">
+				<ErrorAlert as="output" className="viz-live-input-error" role="alert">
 					{listError}
-				</output>
+				</ErrorAlert>
 			) : null}
 			{status ? <output className="viz-editor-status">{status}</output> : null}
 		</section>

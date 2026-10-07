@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import {
   type Dispatch,
   useCallback,
@@ -208,7 +209,7 @@ export function useHardwareController(
           ? simulatorBridge.send(path, arguments_)
           : bridge.send(path, arguments_)
       ).catch((error: unknown) => {
-        setLinkError(error instanceof Error ? error.message : String(error));
+        setLinkError(formatErrorDetails(error));
       });
     },
     [bridge, simulatorBridge],

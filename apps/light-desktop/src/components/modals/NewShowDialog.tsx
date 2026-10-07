@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, ModalFrame, TextInput, WindowScrollArea } from "@tosklight/ui";
 import { useState } from "react";
 import type { ShowEntry } from "../../api/types";
@@ -24,14 +26,14 @@ export function NewShowDialog({ model }: { model: QuickSetupModel }) {
         try {
             if (await task()) setNewShowOpen(false);
             else setError("The show could not be opened. Check the desk error and try again.");
-        } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+        } catch (reason) { setError(formatErrorDetails(reason)); }
         finally { setBusy(null); }
     };
     const saveDescription = async () => {
         if (!editing || busy || !lifecycle) return;
         setBusy("Saving description…"); setError(null);
         try { await lifecycle.setShowDescription(editing.id, description); setEditing(null); }
-        catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+        catch (reason) { setError(formatErrorDetails(reason)); }
         finally { setBusy(null); }
     };
     const bases = (lifecycle?.shows ?? []).filter(show => show.is_base_show);
@@ -56,12 +58,12 @@ export function NewShowDialog({ model }: { model: QuickSetupModel }) {
                 </table></WindowScrollArea> : <p>No base shows are saved. Select “Save as Template” in Save As to add one.</p>}
             </section>
             {busy && <p role="status">{busy}</p>}
-            {error && <p role="alert" className="modal-warning">{error}</p>}
+            {error && <ErrorAlert as="p" role="alert" className="modal-warning">{error}</ErrorAlert>}
         </ModalFrame>
         {editing && <ModalFrame title={`Description — ${editing.name}`} ariaLabel={`Description for ${editing.name}`} dialogClassName="nested-modal show-description-modal" closeDisabled={Boolean(busy)} policy={{escape:!busy,backdrop:!busy}} onClose={() => { if (!busy) setEditing(null); }}>
                 <TextInput value={description} onChange={event => setDescription(event.target.value)} maxLength={2000} disabled={Boolean(busy)} aria-label="Show description" autoFocus />
                 <footer><Button disabled={Boolean(busy)} onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" disabled={Boolean(busy)} onClick={() => void saveDescription()}>Save description</Button></footer>
-                {busy && <p role="status">{busy}</p>}{error && <p role="alert">{error}</p>}
+                {busy && <p role="status">{busy}</p>}{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
         </ModalFrame>}
     </>;
 }

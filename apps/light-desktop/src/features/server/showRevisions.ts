@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
 
@@ -19,7 +20,7 @@ export function createShowRevisionActions(
 				setError(null);
 				return revisions;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return [];
 			}
 		},
@@ -34,7 +35,7 @@ export function createShowRevisionActions(
 				setError(null);
 				return revision;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return null;
 			}
 		},
@@ -49,7 +50,7 @@ export function createShowRevisionActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			} finally {
 				model.finishDeskLoading(operationId);
@@ -65,7 +66,7 @@ export function createShowRevisionActions(
 				await refresh();
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			} finally {
 				model.finishDeskLoading(operationId);
 			}
@@ -81,7 +82,7 @@ export function createShowRevisionActions(
 				URL.revokeObjectURL(url);
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 	};

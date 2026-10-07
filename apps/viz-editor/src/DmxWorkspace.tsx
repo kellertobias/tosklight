@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import type {
 	PatchFixtureProjection,
 	PatchProfileRevision,
@@ -256,7 +258,7 @@ function usePolledWhileShown<T>(
 					setError("");
 				})
 				.catch((reason) => {
-					if (active) setError(String(reason));
+					if (active) setError(formatErrorDetails(reason));
 				})
 				.finally(() => {
 					// One read at a time: the next is scheduled only once this one answered.
@@ -479,9 +481,9 @@ function SourcesSummary({
 		<>
 			<b>Network summary</b>
 			{error ? (
-				<output className="viz-dmx-error" role="alert">
+				<ErrorAlert as="output" className="viz-dmx-error" role="alert">
 					{error}
-				</output>
+				</ErrorAlert>
 			) : null}
 			<section>
 				<b>Found</b>
@@ -670,9 +672,9 @@ function ReceiveSummary({
 		<>
 			<b>Input summary</b>
 			{error ? (
-				<output className="viz-dmx-error" role="alert">
+				<ErrorAlert as="output" className="viz-dmx-error" role="alert">
 					{error}
-				</output>
+				</ErrorAlert>
 			) : null}
 			<section>
 				<b>Listening</b>

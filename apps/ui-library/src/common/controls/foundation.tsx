@@ -1,3 +1,4 @@
+import { ErrorAlert } from "../ErrorAlert";
 import {
   createContext,
   forwardRef,
@@ -122,7 +123,7 @@ export function FormField({
       {label && <label htmlFor={htmlFor}>{label}{required && <span aria-hidden="true"> *</span>}</label>}
       <div className="ui-form-control">{children}</div>
       {description && !error && <small>{description}</small>}
-      {error && <small className="ui-field-error" role="alert">{error}</small>}
+      {error && <ErrorAlert as="small" className="ui-field-error" role="alert">{error}</ErrorAlert>}
     </div>
   );
 }

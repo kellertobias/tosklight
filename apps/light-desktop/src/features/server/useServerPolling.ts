@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useEffect } from "react";
 import { retainEquivalent } from "./pollingEquivalence";
 import type { ServerState } from "./useServerState";
@@ -69,7 +70,7 @@ function useHighlightHydration(state: ServerState) {
 			.catch((reason) => {
 				if (!cancelled && request === highlightEpoch.current)
 					setHighlightError(
-						reason instanceof Error ? reason.message : String(reason),
+						formatErrorDetails(reason),
 					);
 			});
 		return () => {

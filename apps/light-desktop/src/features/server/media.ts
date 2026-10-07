@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { ServerCapabilities } from "./capabilityContracts";
 import type { ServerController } from "./model";
 
@@ -66,7 +67,7 @@ export function createMediaActions(
 				recordStatus(
 					fixtureId,
 					false,
-					reason instanceof Error ? reason.message : String(reason),
+					formatErrorDetails(reason),
 				);
 				throw reason;
 			}
@@ -107,7 +108,7 @@ export function createMediaActions(
 				return true;
 			} catch (reason) {
 				const message =
-					reason instanceof Error ? reason.message : String(reason);
+					formatErrorDetails(reason);
 				recordStatus(fixtureId, false, message);
 				setError(message);
 				return false;
@@ -125,7 +126,7 @@ export function createMediaActions(
 				return true;
 			} catch (reason) {
 				const message =
-					reason instanceof Error ? reason.message : String(reason);
+					formatErrorDetails(reason);
 				recordStatus(fixtureId, false, message);
 				setError(message);
 				return false;

@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { useState } from "react";
 import {
 	useActiveShowError,
@@ -34,7 +35,7 @@ export function ShowRecoveryModal() {
     <section className="show-recovery-card">
       <ModalTitleBar title="Show File Could Not Be Loaded"/>
       <p>The active show file might be corrupted or incompatible with this version. It has not been changed or deleted.</p>
-      <pre>{error}</pre>
+      <ErrorAlert as="pre" copyText={error}>{error}</ErrorAlert>
       {alternatives.length > 0 && <section className="show-recovery-alternatives" aria-label="Saved recovery shows">
         <b>Open another saved show</b>
         <small>Load Latest Autosave uses a safe blackout and leaves the damaged file untouched.</small>

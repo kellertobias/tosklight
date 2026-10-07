@@ -1,3 +1,4 @@
+import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 import { memo, useEffect, useId, useState } from "react";
 import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
 import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
@@ -102,12 +103,13 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 			controller.authorityReady || (rendered && controller.topology.ready);
 		if (!showGrid)
 			return (
-				<div
+				<ErrorAlert as="div"
 					className="playback-fader-bank playback-authority-status"
 					role={controller.authorityError ? "alert" : "status"}
+					copyText={controller.authorityError ? formatErrorDetails(controller.authorityError) : undefined}
 				>
 					{controller.authorityError?.message ?? "Loading Playbacks…"}
-				</div>
+				</ErrorAlert>
 			);
 		return (
 			<>

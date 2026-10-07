@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { ShowEntry } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
@@ -67,7 +68,7 @@ function createShowCreationActions(
 				setShows(await api.shows.shows());
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		saveShowAs: async (name, options = {}) => {
@@ -100,7 +101,7 @@ function createShowCreationActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},
@@ -120,7 +121,7 @@ function createShowCreationActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},
@@ -139,7 +140,7 @@ function createShowCreationActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},
@@ -172,11 +173,11 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
                 const show = await api.shows.importRemoteShow(instance, id, revision, open);
                 if (open) await refresh();
                 setShows(await api.shows.shows()); setError(null); return show;
-            } catch(reason) {setError(reason instanceof Error ? reason.message : String(reason)); return null;}
+            } catch(reason) {setError(formatErrorDetails(reason)); return null;}
         },
         prepareShowRevision: async (id, revision) => {
             try { const show = await api.shows.prepareRevision(id, revision); setShows(await api.shows.shows()); setError(null); return show; }
-            catch(reason) {setError(reason instanceof Error ? reason.message : String(reason)); return null;}
+            catch(reason) {setError(formatErrorDetails(reason)); return null;}
         },
         prepareShowFile: async (root, path, name) => {
             try {
@@ -187,7 +188,7 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
                 let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
                 const imported = await api.shows.createShow(name.replace(/\.show$/i, ""), btoa(binary), false);
                 setShows(await api.shows.shows()); setError(null); return imported;
-            } catch(reason) {setError(reason instanceof Error ? reason.message : String(reason)); return null;}
+            } catch(reason) {setError(formatErrorDetails(reason)); return null;}
         },
 		uploadShow: async (file, overwrite = false) => {
 			try {
@@ -202,7 +203,7 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 				setShows(await api.shows.shows());
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		/**
@@ -230,7 +231,7 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},
@@ -248,7 +249,7 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 				setError(null);
                 return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
                 return false;
 			}
 		},
@@ -265,7 +266,7 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},
@@ -289,7 +290,7 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},

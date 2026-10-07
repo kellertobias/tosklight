@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	AttributeConfiguration,
@@ -490,5 +491,5 @@ function attributeConfigurationPatch(
 }
 
 function errorMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

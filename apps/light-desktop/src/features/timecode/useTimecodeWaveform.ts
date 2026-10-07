@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	TimecodeAudio,
@@ -57,7 +58,7 @@ export function useTimecodeWaveform({
 				setRequest({
 					key,
 					loading: false,
-					error: `Waveform could not be loaded: ${reason instanceof Error ? reason.message : String(reason)}`,
+					error: `Waveform could not be loaded: ${formatErrorDetails(reason)}`,
 				});
 			},
 		);

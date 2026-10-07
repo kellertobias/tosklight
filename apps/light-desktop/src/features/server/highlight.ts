@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
 
@@ -31,7 +32,7 @@ export function createHighlightActions(
 				}
 				return true;
 			} catch (reason) {
-				const raw = reason instanceof Error ? reason.message : String(reason);
+				const raw = formatErrorDetails(reason);
 				let message = raw;
 				try {
 					const parsed = JSON.parse(raw) as {
@@ -57,7 +58,7 @@ export function createHighlightActions(
 				setError(null);
 				return result.active;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},

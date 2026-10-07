@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 /**
  * What a press of a CAD add button does.
  *
@@ -58,7 +59,7 @@ export function CadAddFlows({
 			const imported = await chooseAndImportModel(() => setImporting(true));
 			if (imported) tools.announcePlaced([imported.fixtureId]);
 		} catch (reason) {
-			onError(`Could not load the 3D model: ${String(reason)}`);
+			onError(`Could not load the 3D model: ${formatErrorDetails(reason)}`);
 		} finally {
 			setImporting(false);
 		}

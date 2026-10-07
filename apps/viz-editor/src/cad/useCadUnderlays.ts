@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 /**
  * The venue drawings the open show carries.
  *
@@ -51,7 +52,7 @@ export function useCadUnderlays(documentKey: string | null): CadUnderlays {
 		try {
 			await action();
 		} catch (reason) {
-			setError(String(reason));
+			setError(formatErrorDetails(reason));
 		} finally {
 			setBusy(false);
 		}

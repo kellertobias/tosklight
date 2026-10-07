@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 // The layer page: every output, every layer, and why a control might be unavailable.
 
 import { Button } from "@tosklight/ui/controls";
@@ -22,14 +23,14 @@ export function LayersPage() {
 	return (
 		<section className="media-page">
 			{control.refusal && (
-				<p className="media-state is-error" role="alert">
+				<ErrorAlert as="p" className="media-state is-error" role="alert">
 					{control.refusal.deskOwnsIt
 						? "That change was not applied: a lighting desk is driving this output."
 						: control.refusal.message}{" "}
 					<Button size="compact" onClick={control.dismissRefusal}>
 						Dismiss
 					</Button>
-				</p>
+				</ErrorAlert>
 			)}
 
 			<ResourceState

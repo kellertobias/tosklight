@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, SelectField, SwitchField } from "@tosklight/ui";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -188,9 +189,9 @@ export function LiveDmxInputsPanel({
 			)}
 
 			{validation ? (
-				<output className="viz-live-input-error" role="alert">
+				<ErrorAlert as="output" className="viz-live-input-error" role="alert">
 					{validation}
-				</output>
+				</ErrorAlert>
 			) : null}
 			{status ? <output className="viz-editor-status">{status}</output> : null}
 			<footer>

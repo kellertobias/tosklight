@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useMemo, useState } from "react";
 import type { FixtureMode, FixtureProfile } from "../wire";
 import {
@@ -81,7 +82,7 @@ export function useFixtureProfileEditorController({
 			if (saved) onClose();
 		} catch (reason) {
 			const message =
-				reason instanceof Error ? reason.message : String(reason ?? "");
+				formatErrorDetails(reason ?? "");
 			setLocalErrors([
 				message.trim() ||
 					"The fixture profile could not be saved. Check the server error and try again.",

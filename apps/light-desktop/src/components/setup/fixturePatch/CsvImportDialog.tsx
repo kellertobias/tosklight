@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	Input,
@@ -319,9 +320,9 @@ function ColumnsStep({
 				)}
 			</div>
 			{fileError && (
-				<p className="patch-status" role="alert">
+				<ErrorAlert as="p" className="patch-status" role="alert">
 					{fileError}
-				</p>
+				</ErrorAlert>
 			)}
 			{!parsed && !fileError && (
 				<p className="patch-secondary">
@@ -704,9 +705,9 @@ function ReviewStep({
 				/>
 			</div>
 			{importError && (
-				<p className="patch-status" role="alert">
+				<ErrorAlert as="p" className="patch-status" role="alert">
 					{importError}
-				</p>
+				</ErrorAlert>
 			)}
 			<div className="csv-import-table-scroll">
 				<table className="csv-import-table" aria-label="Fixtures to import">

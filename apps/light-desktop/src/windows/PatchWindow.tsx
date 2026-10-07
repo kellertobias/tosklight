@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useEffect, useState } from "react";
 import { FixturePatchSetupContent } from "../components/setup/FixturePatchSetup";
@@ -110,7 +111,7 @@ function PatchWindowContent({
 				onTracking={onTracking}
 				onOpenStageWindow={desktop.available ? openStageRenderer : undefined}
 			/>
-			{rendererError && <p role="alert">{rendererError}</p>}
+			{rendererError && <ErrorAlert as="p" role="alert">{rendererError}</ErrorAlert>}
 		</div>
 	);
 }

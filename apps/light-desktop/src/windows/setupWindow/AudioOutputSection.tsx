@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { NumberField, SelectField, TextAreaField } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import type { InternalAudioStatus } from "../../api/types";
@@ -26,7 +28,7 @@ export function AudioOutputSection({
 			.catch((reason) => {
 				if (active)
 					setAudioOutputError(
-						reason instanceof Error ? reason.message : String(reason),
+						formatErrorDetails(reason),
 					);
 			});
 		void timecodes.api
@@ -88,15 +90,15 @@ export function AudioOutputSection({
 			{internalAudioStatus && (
 				<div className="setup-field-description" aria-live="polite">
 					{internalAudioStatus.players.map((player) => (
-						<p key={player.fixture_id} role={player.available ? undefined : "alert"}>
+						<ErrorAlert as="p" key={player.fixture_id} role={player.available ? undefined : "alert"}>
 							Audio Player {player.fixture_id}: {player.available ? "Ready" : player.diagnostic}
-						</p>
+						</ErrorAlert>
 					))}
 					{internalAudioStatus.libraries.flatMap((library) =>
 						library.diagnostics.map((diagnostic) => (
-							<p key={`${library.binding}:${diagnostic}`} role="alert">
+							<ErrorAlert as="p" key={`${library.binding}:${diagnostic}`} role="alert">
 								{library.binding}: {diagnostic}
-							</p>
+							</ErrorAlert>
 						)),
 					)}
 				</div>

@@ -1,3 +1,4 @@
+import { CopyErrorButton } from "@tosklight/ui";
 import { Button, FileDropField, NumberField, SwitchField, TextField } from "@tosklight/ui/controls";
 import {
 	DEFAULT_POOL_COLOR_PALETTE,
@@ -87,6 +88,7 @@ function MediaLibraryPage({
 			<WindowFrame title="Library" className="media-library-window">
 				<p className={`media-state ${catalog.failure ? "is-error" : ""}`}>
 					{catalog.failure?.message ?? "Loading the CITP media library…"}
+					{catalog.failure ? <CopyErrorButton text={catalog.failure.message} /> : null}
 				</p>
 			</WindowFrame>
 		);

@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useMemo, useState } from "react";
 import {
 	type CsvImportField,
@@ -70,7 +71,7 @@ export function useCsvImportSource(onSourceChanged: () => void) {
 		} catch (error) {
 			setParsed(null);
 			setFileError(
-				`${file.name} could not be read: ${error instanceof Error ? error.message : String(error)}`,
+				`${file.name} could not be read: ${formatErrorDetails(error)}`,
 			);
 		}
 	};

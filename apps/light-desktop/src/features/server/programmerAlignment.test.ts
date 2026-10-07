@@ -53,25 +53,27 @@ describe("Programmer Align feedback", () => {
 		const refusal = new Error(
 			"Programmer Align changed during the encoder action",
 		);
+		refusal.stack = `Error: ${refusal.message}\n    at alignSelection (programmer.ts:12:4)`;
 		const { actions, setError, notices } = setup(async () => {
 			throw refusal;
 		});
 
 		await expect(actions.alignSelection("out")).rejects.toBe(refusal);
 
-		expect(setError).toHaveBeenCalledWith(refusal.message);
+		expect(setError).toHaveBeenCalledWith(`${refusal.message}\n${refusal.stack}`);
 		expect(notices).toEqual([]);
 	});
 
 	it("keeps the actionable error treatment for a genuine desk failure", async () => {
 		const failure = new Error("Live server connection is not ready");
+		failure.stack = `Error: ${failure.message}\n    at connectDesk (connection.ts:18:2)`;
 		const { actions, setError, notices } = setup(async () => {
 			throw failure;
 		});
 
 		await expect(actions.alignSelection("left")).rejects.toBe(failure);
 
-		expect(setError).toHaveBeenCalledWith(failure.message);
+		expect(setError).toHaveBeenCalledWith(`${failure.message}\n${failure.stack}`);
 		expect(notices).toEqual([]);
 	});
 });

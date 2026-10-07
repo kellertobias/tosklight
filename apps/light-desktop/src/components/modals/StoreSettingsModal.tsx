@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
 import type { RecordUpdateOption, UpdateSettings } from "../../api/types";
@@ -99,9 +101,9 @@ export function StoreSettingsModal() {
 						onRecordDefault={changeRecordDefault}
 					/>
 					{error && (
-						<p className="modal-error" role="alert">
+						<ErrorAlert as="p" className="modal-error" role="alert">
 							{error}
-						</p>
+						</ErrorAlert>
 					)}
 				</section>
 			</div>
@@ -110,5 +112,5 @@ export function StoreSettingsModal() {
 }
 
 function errorMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

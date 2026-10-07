@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button } from "@tosklight/ui";
 import type { RunningCueListSource } from "./runningPlaybackAuthority";
 import type { RunningDynamicController } from "./runningDynamicsAuthority";
@@ -172,9 +173,9 @@ function DynamicsSection({
 					</p>
 				)}
 				{dynamics.length > 0 && error && (
-					<p className="modal-status" role="alert">
+					<ErrorAlert as="p" className="modal-status" role="alert">
 						{error}
-					</p>
+					</ErrorAlert>
 				)}
 			</div>
 		</section>

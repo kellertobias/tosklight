@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	FormLayout,
@@ -239,7 +241,7 @@ function customAttributeOperations(
 				physicalUnit: "",
 			});
 		} catch (reason) {
-			state.setError(reason instanceof Error ? reason.message : String(reason));
+			state.setError(formatErrorDetails(reason));
 		} finally {
 			state.setBusy(false);
 		}
@@ -333,7 +335,7 @@ function customAttributeOperations(
 			state.setCustomAttributeSnapshot(null);
 			state.setCustomAttributeDraft(null);
 		} catch (reason) {
-			state.setError(reason instanceof Error ? reason.message : String(reason));
+			state.setError(formatErrorDetails(reason));
 		} finally {
 			state.setBusy(false);
 		}
@@ -424,7 +426,7 @@ function gdtfOperations(
 			}
 			await saveGdtfProfile(profile, source);
 		} catch (reason) {
-			state.setError(reason instanceof Error ? reason.message : String(reason));
+			state.setError(formatErrorDetails(reason));
 		} finally {
 			state.setBusy(false);
 		}
@@ -460,7 +462,7 @@ function gdtfOperations(
 				);
 			await saveGdtfProfile(profile, state.pendingGdtf.source);
 		} catch (reason) {
-			state.setError(reason instanceof Error ? reason.message : String(reason));
+			state.setError(formatErrorDetails(reason));
 		} finally {
 			state.setBusy(false);
 		}
@@ -540,7 +542,7 @@ export function useFixtureLibraryTransfers({
 				setMappings({});
 			}
 		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
+			setError(formatErrorDetails(reason));
 		} finally {
 			setBusy(false);
 		}
@@ -571,7 +573,7 @@ export function useFixtureLibraryTransfers({
 				setRequirements(imported.unknown_attributes);
 			}
 		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
+			setError(formatErrorDetails(reason));
 		} finally {
 			setBusy(false);
 		}
@@ -838,7 +840,7 @@ export function FixtureImportDialogs({
 								Select a GDTF archive. Every DMX mode will be imported into the
 								desk-wide fixture library.
 							</p>
-							{error && <p role="alert">{error}</p>}
+							{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
 							{requirements.length === 0 ? (
 								<RootConfinedFilePickerButton
 									variant="primary"
@@ -899,7 +901,7 @@ export function FixtureImportDialogs({
 								Select a transferable .toskfixture package. Its modes,
 								photograph, stage icon, and 3D model travel together.
 							</p>
-							{error && <p role="alert">{error}</p>}
+							{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
 							{requirements.length === 0 ? (
 								<RootConfinedFilePickerButton
 									variant="primary"

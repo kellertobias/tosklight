@@ -1,3 +1,4 @@
+import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 // Choosing the folder that holds this Media Server's configuration and media library.
 //
 // The folders listed are on the Media Server computer, not the browser's, so the picker browses
@@ -7,7 +8,7 @@
 import { Button } from "@tosklight/ui/controls";
 import { ModalFrame } from "@tosklight/ui/modals";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../../shared/api/client";
+import { api, ApiFailure } from "../../shared/api/client";
 import { requestId } from "../../shared/api/editing";
 import type {
 	DataFolderChangeView,
@@ -15,7 +16,7 @@ import type {
 } from "../../shared/api/generated/media-wire";
 
 function failureText(error: unknown, fallback: string): string {
-	return error instanceof Error && error.message ? error.message : fallback;
+	return error instanceof ApiFailure ? error.message : error instanceof Error && error.message ? formatErrorDetails(error) : fallback;
 }
 
 export function DataFolderPicker({
@@ -115,9 +116,9 @@ export function DataFolderPicker({
 					)}
 				</ul>
 				{failure && (
-					<p className="media-state is-error" role="alert">
+					<ErrorAlert as="p" className="media-state is-error" role="alert">
 						{failure}
-					</p>
+					</ErrorAlert>
 				)}
 				<p>
 					Pixel uses the chosen folder for its configuration and its media

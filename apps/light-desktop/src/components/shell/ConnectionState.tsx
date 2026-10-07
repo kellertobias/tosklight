@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { useConnectionStatus, useServerError } from "../../features/shellStatus/ShellStatusState";
 import { useEffect, useMemo, useState } from "react";
 import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
@@ -46,10 +47,10 @@ export function ConnectionState() {
             ? "Reconnecting to server…"
             : "Server unavailable"}
         </b>
-        <small>
+        <ErrorAlert as="small" role={serverError ? "alert" : undefined}>
           {serverError ??
             "Playback state remains visible while the connection recovers."}
-        </small>
+        </ErrorAlert>
       </div>
     );
   const boundaryRequired =
@@ -75,7 +76,7 @@ export function ConnectionState() {
             ? "Connect to this desk"
             : "Connecting to ToskLight"}
         </h1>
-        <p>{boundaryRequired ? serverError : usesBuiltInServer ? serverError ?? "Built-in server is unavailable." : serverError ?? "Starting a secure operator session…"}</p>
+        <ErrorAlert as="p">{boundaryRequired ? serverError : usesBuiltInServer ? serverError ?? "Built-in server is unavailable." : serverError ?? "Starting a secure operator session…"}</ErrorAlert>
         {boundaryRequired ? (
           <form
             className="connection-form"
@@ -148,7 +149,7 @@ function ScreenConnectionState({
     <div className="connection-cover" role="status">
       <div className="connection-card">
         <h1>Screen cannot join the desk</h1>
-        <p role="alert">{error}</p>
+        <ErrorAlert as="p" role="alert">{error}</ErrorAlert>
         <small>Server: {serverUrl} · Retrying automatically</small>
         <div className="connection-form-actions">
           <Button onClick={retry}>Retry now</Button>

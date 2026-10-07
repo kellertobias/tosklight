@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { ApiRequestError } from "../../api/ApiRequestError";
 import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
@@ -52,7 +53,7 @@ export function createPreloadActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},

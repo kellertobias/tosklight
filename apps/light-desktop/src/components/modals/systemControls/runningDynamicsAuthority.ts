@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DynamicsApiClient } from "../../../api/client/dynamics";
 import type { RuntimeCapabilityEvent } from "../../../api/types";
@@ -228,5 +229,5 @@ export function runningControllerRows(
 }
 
 function errorMessage(cause: unknown) {
-	return cause instanceof Error ? cause.message : String(cause);
+	return formatErrorDetails(cause);
 }

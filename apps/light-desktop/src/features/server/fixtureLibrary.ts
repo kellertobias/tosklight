@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { ServerCapabilities } from "./capabilityContracts";
 import type { ServerController } from "./model";
 
@@ -35,7 +36,7 @@ export function createFixtureLibraryActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},
@@ -45,7 +46,7 @@ export function createFixtureLibraryActions(
 				setFixtureLibrary(await api.fixtures.fixtureLibrary());
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		saveFixtureProfile: async (profile, expectedRevision) => {
@@ -60,7 +61,7 @@ export function createFixtureLibraryActions(
 				setError(null);
 				return saved;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				throw reason;
 			}
 		},
@@ -72,7 +73,7 @@ export function createFixtureLibraryActions(
 				setFixtureLibrary(await api.fixtures.fixtureLibrary());
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		fixtureProfileRevisions: (id) => api.fixtures.fixtureProfileRevisions(id),
@@ -83,7 +84,7 @@ export function createFixtureLibraryActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},
@@ -103,7 +104,7 @@ export function createFixtureLibraryActions(
 				setError(null);
 				return imported;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				throw reason;
 			}
 		},

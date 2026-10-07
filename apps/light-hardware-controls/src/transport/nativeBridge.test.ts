@@ -153,7 +153,7 @@ describe("HTTP native hardware bridge", () => {
 		await unreachable.open({ host: "h", serverPort: 1 });
 		expect(await unreachable.status()).toEqual({
 			state: "error",
-			message: "desk unreachable at http://h:1: Load failed",
+			message: expect.stringContaining("desk unreachable at http://h:1: Load failed\nError: Load failed"),
 		});
 	});
 });

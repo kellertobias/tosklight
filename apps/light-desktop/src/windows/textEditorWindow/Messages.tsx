@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, TextArea } from "@tosklight/ui";
 import type { TextEditorController } from "./controller";
 
@@ -15,13 +16,13 @@ export function TextEditorMessages({
 				</div>
 			)}
 			{controller.notice && (
-				<div
+				<ErrorAlert as="div"
 					id={controller.messageId}
 					className={`file-message text-editor-${controller.notice.kind}`}
 					role={controller.notice.kind === "info" ? "status" : "alert"}
 				>
 					{controller.notice.text}
-				</div>
+				</ErrorAlert>
 			)}
 			{controller.availability === "missing" && controller.selectedPath && (
 				<MissingFileActions controller={controller} />

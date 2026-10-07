@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import {
 	commandTargetAfterEnter,
 	defaultCommandLine,
@@ -105,7 +106,7 @@ export function createCommandLineActions(
 				return true;
 			} catch (reason) {
 				const message =
-					reason instanceof Error ? reason.message : String(reason);
+					formatErrorDetails(reason);
 				window.dispatchEvent(
 					new CustomEvent("light:command-error", { detail: message }),
 				);

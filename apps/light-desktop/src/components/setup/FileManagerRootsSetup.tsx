@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import type { DeskConfiguration } from "../../api/types";
 import { Button, FormLayout, SelectField, SwitchField, TextField } from "@tosklight/ui";
 
@@ -91,7 +92,7 @@ export function FileManagerRootsSetup({
         <small>The stable ID is generated once and is not changed when the label or path is edited.</small>
       </article>)}
     </div>
-    {validation && <p className="modal-error" role="alert">{validation}</p>}
+    {validation && <ErrorAlert as="p" className="modal-error" role="alert">{validation}</ErrorAlert>}
     <SwitchField
       label="Allow Open system file picker fallback"
       offLabel="ToskLight only"

@@ -146,8 +146,10 @@ describe("Tracking Settings", () => {
 			screen.getByRole("button", { name: "Apply tracking settings" }),
 		);
 		expect(await screen.findByRole("alert")).toHaveTextContent(
-			/refused the tracking settings: the PSN port must not be 0\. Correct the value and apply again\./,
+			/refused the tracking settings: the PSN port must not be 0/,
 		);
+		expect(screen.getByRole("alert")).toHaveTextContent("Correct the value and apply again.");
+		expect(screen.getByRole("alert")).toHaveTextContent("PsnSourceForm.test.tsx");
 	});
 
 	it("validates the same limits the desk enforces", () => {

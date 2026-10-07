@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 // One output's stored identity: where it opens, how it presents, and which DMX block feeds it.
 //
 // The DMX protocol, universe, start address and tempo source reach the running output as soon as
@@ -48,7 +50,7 @@ function useOutputConfiguration(outputId: string, poll: boolean): ConfigurationR
 				setFailure(
 					error instanceof ApiFailure
 						? error
-						: new ApiFailure("unexpected-error", String(error), 0),
+						: new ApiFailure("unexpected-error", formatErrorDetails(error), 0),
 				);
 			});
 		return () => {
@@ -89,12 +91,12 @@ export function OutputSettings({
 				className="media-settings-section"
 				aria-label={`${outputName} output settings`}
 			>
-				<p className="media-state is-error" role="alert">
+				<ErrorAlert as="p" className="media-state is-error" role="alert">
 					{configuration.failure.message}{" "}
 					<Button size="compact" onClick={configuration.reload}>
 						Try again
 					</Button>
-				</p>
+				</ErrorAlert>
 			</article>
 		);
 	}

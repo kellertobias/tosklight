@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { FormLayout } from "@tosklight/ui";
 import { HorizontalFaderField } from "@tosklight/ui/faders";
 import { useEffect, useRef, useState } from "react";
@@ -80,7 +82,7 @@ function HardwareLightingFields({
 			} catch (reason) {
 				if (!active.current) return;
 				for (const { field } of controls) {
-					if (patch[field] !== undefined) failures.current.set(field, reason instanceof Error ? reason.message : String(reason));
+					if (patch[field] !== undefined) failures.current.set(field, formatErrorDetails(reason));
 				}
 			}
 			if (active.current) setError([...new Set(failures.current.values())].join(" ") || null);
@@ -110,7 +112,7 @@ function HardwareLightingFields({
 					/>
 				))}
 			</FormLayout>
-			{error && <p role="alert">{error}</p>}
+			{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
 			<p role="status">{saving ? "Saving hardware lighting…" : error ? "Move a fader to retry its value." : "Hardware lighting applies automatically."}</p>
 		</section>
 	);

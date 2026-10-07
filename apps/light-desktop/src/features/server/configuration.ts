@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
 
@@ -19,7 +20,7 @@ export function createConfigurationActions(
 				setError(null);
 				return result;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				throw reason;
 			}
 		},
@@ -31,7 +32,7 @@ export function createConfigurationActions(
 				setError(null);
 				return result;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				throw reason;
 			}
 		},

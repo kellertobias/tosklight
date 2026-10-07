@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { PlaybackDefinition } from "../../api/types";
 import { usePlaybackTopologyActions } from "../../features/playbackTopology/PlaybackTopologyProvider";
 import {
@@ -40,7 +41,7 @@ export function PhysicalPlaybackConfigurationModal({
 			fallbackButtons={fallbackButtons}
 			save={save}
 			clear={clear}
-			error={topology?.error?.message}
+			error={topology?.error ? formatErrorDetails(topology.error) : undefined}
 		/>
 	);
 }

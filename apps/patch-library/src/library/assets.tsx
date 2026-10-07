@@ -1,3 +1,4 @@
+import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -152,7 +153,7 @@ function GlbAssetPreview({ value }: { value: string }) {
 				if (cancelled) return;
 				setMetadata("");
 				setError(
-					`GLB preview failed: ${reason instanceof Error ? reason.message : String(reason)}`,
+					`GLB preview failed: ${formatErrorDetails(reason)}`,
 				);
 			});
 		return () => {
@@ -172,7 +173,7 @@ function GlbAssetPreview({ value }: { value: string }) {
 				title="Drag to rotate; scroll to zoom"
 			/>
 			<small>Drag to rotate · Scroll to zoom</small>
-			<small role={error ? "alert" : "status"}>{error ?? metadata}</small>
+			{error ? <ErrorAlert as="small">{error}</ErrorAlert> : <small role="status">{metadata}</small>}
 		</div>
 	);
 }

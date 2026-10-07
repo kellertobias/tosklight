@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Button, ModalFrame } from "@tosklight/ui";
 import { type ReactNode, useEffect, useState } from "react";
@@ -79,7 +80,7 @@ export function FileBar({
 			const result = await action();
 			setStatus(result ?? "");
 		} catch (reason) {
-			setStatus(`${label} failed: ${String(reason)}`);
+			setStatus(`${label} failed: ${formatErrorDetails(reason)}`);
 			onError(reason);
 		} finally {
 			setBusy(false);

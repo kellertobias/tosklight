@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { ApiRequestError } from "../../api/ApiRequestError";
 import type { PatchLayer, VersionedObject } from "../../api/types";
 import type { ServerController } from "./model";
@@ -40,7 +41,7 @@ export function createPatchActions(
 				setError(null);
 				return true;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return false;
 			}
 		},

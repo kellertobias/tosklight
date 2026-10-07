@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, FormLayout, SelectField } from "@tosklight/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -160,7 +161,7 @@ export function ProgrammerControlSurfaceSettings() {
 				Attributes &amp; encoders.
 			</small>
 			{ownerClosed && (
-				<div className="programmer-control-owner-warning" role="alert">
+				<ErrorAlert as="div" className="programmer-control-owner-warning" role="alert">
 					<span>{`Encoders unavailable — assigned to ${owner?.name}`}</span>
 					<Button
 						variant="warning"
@@ -172,7 +173,7 @@ export function ProgrammerControlSurfaceSettings() {
 					>
 						Use encoders on this screen
 					</Button>
-				</div>
+				</ErrorAlert>
 			)}
 		</section>
 	);

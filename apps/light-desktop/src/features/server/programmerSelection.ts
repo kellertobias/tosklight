@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { ServerCapabilities } from "./capabilityContracts";
 import type { ServerController } from "./model";
 
@@ -11,7 +12,7 @@ export function createProgrammerSelectionActions(
 				await api.programming.undoProgrammer();
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		toggleFixtureFreeze: async () => {
@@ -19,7 +20,7 @@ export function createProgrammerSelectionActions(
 				await api.programming.toggleFixtureFreeze();
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 	};

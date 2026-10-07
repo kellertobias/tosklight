@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import {
 	createContext,
 	type MutableRefObject,
@@ -58,7 +59,7 @@ export function VirtualPlaybackZonesProvider({
 						(error) =>
 							setReportedError(
 								error
-									? { generation: epoch.generation, message: error.message }
+									? { generation: epoch.generation, message: formatErrorDetails(error) }
 									: null,
 							),
 					)

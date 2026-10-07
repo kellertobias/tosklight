@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { NativeHardwareBridge } from "../transport/nativeBridge";
 import type { NativeSimulatorBridge } from "../transport/nativeSimulatorBridge";
 import type { OscBridge } from "../transport/oscBridge";
@@ -101,5 +102,5 @@ export async function openLink(
 }
 
 function errorText(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
+	return formatErrorDetails(error);
 }

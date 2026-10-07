@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 // The Pixel Map dock: one output's picture with its display regions and pixel zones drawn on it,
 // and the tables that edit them.
 //
@@ -146,9 +147,9 @@ function OutputPixelMap({
 			<PixelMapFrame tab={tab} onTabChange={onTabChange}>
 				<section className="media-page media-pixel-map-content">
 					{failure ? (
-						<p className="media-state is-error" role="alert">
+						<ErrorAlert as="p" className="media-state is-error" role="alert">
 							The {output.name} pixel map could not be read. {failure.message}
-						</p>
+						</ErrorAlert>
 					) : (
 						<p className="media-state" role="status">
 							Reading {output.name}…

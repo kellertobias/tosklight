@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import type { LightApi } from "../../api/client/api";
 import type {
@@ -378,5 +379,5 @@ function serverDate(instant: string, timezone: string) {
 }
 
 function errorMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

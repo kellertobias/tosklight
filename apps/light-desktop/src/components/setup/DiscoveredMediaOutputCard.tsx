@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, FormLayout, NumberField } from "@tosklight/ui";
 import { useMemo, useState } from "react";
 import type {
@@ -97,8 +98,8 @@ export function DiscoveredMediaOutputCard({
 				<strong>{DISCOVERED_PATCH_LABELS[state.kind]}</strong>
 			</header>
 			<p>{discoveredOutputFacts(output, deskUniverse)}</p>
-			{output.issue && <p role="alert">{output.issue}</p>}
-			{state.problem && <p role="alert">{state.problem}</p>}
+			{output.issue && <ErrorAlert as="p" role="alert">{output.issue}</ErrorAlert>}
+			{state.problem && <ErrorAlert as="p" role="alert">{state.problem}</ErrorAlert>}
 			{output.dmxPendingRestart && (
 				<p role="status">The Media Server has a DMX change pending restart.</p>
 			)}

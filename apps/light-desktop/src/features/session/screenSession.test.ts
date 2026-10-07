@@ -105,8 +105,8 @@ describe("screen window desk session", () => {
 				url,
 			),
 		).toContain("refused this screen: desk boundary");
-		expect(describeScreenConnectionFailure(new Error("other"), url)).toBe(
-			"other",
-		);
+		const failure = new Error("other");
+		failure.stack = "Error: other\n    at joinScreen (screen.ts:9:3)";
+		expect(describeScreenConnectionFailure(failure, url)).toBe(`${failure.message}\n${failure.stack}`);
 	});
 });

@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -100,7 +102,7 @@ export function HelpMarkdown({
           {...props}
         >{children}</a>;
       },
-      img({ src, alt, ...props }) { return src ? <img src={src} alt={alt ?? ""} loading="lazy" {...props} /> : <span className="help-image-error">Image unavailable: {alt}</span>; },
+      img({ src, alt, ...props }) { return src ? <img src={src} alt={alt ?? ""} loading="lazy" {...props} /> : <ErrorAlert as="span" className="help-image-error">Image unavailable: {alt}</ErrorAlert>; },
     }}
   >{prepareHelpMarkdown(markdown)}</ReactMarkdown>;
 }
@@ -179,11 +181,11 @@ export function HelpWindow({ compact }: WindowProps) {
       setCatalog(next);
       setSelected((current) => current && containsTopic(next.topics, current) ? current : firstTopic(next.topics));
       setError(null);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    } catch (reason) { setError(formatErrorDetails(reason)); }
   }, [client]);
   const loadTopic = useCallback(async (id: string) => {
     try { setTopic(await client.helpTopic(id)); setError(null); }
-    catch (reason) { setTopic(null); setError(reason instanceof Error ? reason.message : String(reason)); }
+    catch (reason) { setTopic(null); setError(formatErrorDetails(reason)); }
   }, [client]);
 
   useEffect(() => { void loadCatalog(); }, [loadCatalog]);
@@ -264,11 +266,11 @@ export function HelpWindowView({
         {catalog && catalog.topics.length > 0 && visibleTopics.length === 0 && <p>No matching help topics.</p>}
       </nav>
       <WindowScrollArea className="help-topic-pane" emptyState={emptyState}><main className="help-content">
-        {error && <p className="modal-error">Unable to load help: {error}</p>}
-        {catalog?.errors.map((message) => <div className="help-catalog-warning" role="status" key={message}>
+        {error && <ErrorAlert as="p" className="modal-error">Unable to load help: {error}</ErrorAlert>}
+        {catalog?.errors.map((message) => <ErrorAlert as="div" className="help-catalog-warning" key={message}>
           <HelpWarningIcon/>
           <span><strong>Help catalog warning</strong><small>{message}</small></span>
-        </div>)}
+        </ErrorAlert>)}
         {topic && <HelpMarkdown markdown={topic.markdown} topicId={topic.id} onSelectTopic={onSelect} urlTransform={urlTransform}/>}
       </main></WindowScrollArea>
     </div>

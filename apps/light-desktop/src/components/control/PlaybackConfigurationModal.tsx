@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
 import type { PlaybackDefinition } from "../../api/types";
@@ -263,7 +264,7 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 								/>}
 							</div>
 						</WindowScrollArea>}
-						{failure && <p role="alert" className="modal-error">{failure}</p>}
+						{failure && <ErrorAlert as="p" role="alert" className="modal-error">{failure}</ErrorAlert>}
 					</div>
 				</section>
 			</div>

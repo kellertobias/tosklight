@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { save } from "@tauri-apps/plugin-dialog";
 import { Button, SelectField, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
@@ -190,7 +191,7 @@ export function CadApp() {
 		cadSession
 			.snapshot()
 			.then((snapshot) => !disposed && applyScene(snapshot))
-			.catch((reason) => !disposed && setError(String(reason)));
+			.catch((reason) => !disposed && setError(formatErrorDetails(reason)));
 		cadSession
 			.onSceneDelta((delta) => {
 				// Applied straight away rather than inside a `setScene` updater, so that a selection
@@ -242,13 +243,13 @@ export function CadApp() {
 			documentSession
 				.current()
 				.then(setDocumentInfo)
-				.catch((reason) => setError(String(reason)));
+				.catch((reason) => setError(formatErrorDetails(reason)));
 		const refreshFocusedWindow = () => {
 			refreshDocument();
 			cadSession
 				.snapshot()
 				.then(applyScene)
-				.catch((reason) => setError(String(reason)));
+				.catch((reason) => setError(formatErrorDetails(reason)));
 		};
 		refreshDocument();
 		window.addEventListener("focus", refreshFocusedWindow);
@@ -314,11 +315,11 @@ export function CadApp() {
 					selectedIds: outcome.selectedIds,
 				});
 			} catch (reason) {
-				setError(String(reason));
+				setError(formatErrorDetails(reason));
 				try {
 					applyScene(await cadSession.snapshot());
 				} catch (refreshReason) {
-					setError(String(refreshReason));
+					setError(formatErrorDetails(refreshReason));
 				}
 			}
 		});
@@ -363,7 +364,7 @@ export function CadApp() {
 				),
 			);
 		} catch (reason) {
-			setError(String(reason));
+			setError(formatErrorDetails(reason));
 		} finally {
 			setExporting(false);
 		}
@@ -375,7 +376,7 @@ export function CadApp() {
 			await cadSession[direction](scene.sceneRevision);
 			applyScene(await cadSession.snapshot());
 		} catch (reason) {
-			setError(String(reason));
+			setError(formatErrorDetails(reason));
 		}
 	}
 
@@ -511,7 +512,7 @@ export function CadApp() {
 					objectMenu={objectMenu}
 					venueGroups={venueGroups}
 					deleteRequest={deleteRequest}
-					onError={(reason) => setError(String(reason))}
+					onError={(reason) => setError(formatErrorDetails(reason))}
 					onNotice={setNotice}
 				/>
 			</div>

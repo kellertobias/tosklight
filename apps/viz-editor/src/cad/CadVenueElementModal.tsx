@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 /**
  * The dialog behind **Add venue element**: the Venue profiles no add button of its own offers, each
  * shown by its picture on a dark ground, in a scrolling grid the title's search narrows.
@@ -65,9 +66,9 @@ export function CadVenueElementModal({
 					<p className="cad-add-part-note">Loading the fixture library…</p>
 				) : null}
 				{library.state === "failed" ? (
-					<p className="cad-add-part-note" role="alert">
+					<ErrorAlert as="p" className="cad-add-part-note" role="alert">
 						The fixture library could not be read: {library.reason}
-					</p>
+					</ErrorAlert>
 				) : null}
 				{library.state === "ready" && shown.length === 0 ? (
 					<p className="cad-add-part-note">

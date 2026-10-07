@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { NewShowDefaultsSettings } from "./ColorModelSettings";
 import {
 	Button,
@@ -189,12 +190,12 @@ export function HighlightLookSettings({
 				)}
 			</FormLayout>
 			{compatibilityMessage && (
-				<div className="modal-error" role="alert">
+				<ErrorAlert as="div" className="modal-error" role="alert">
 					<p>{compatibilityMessage}</p>
 					<Button onClick={() => update({ compatibility: "semantic" })}>
 						Use semantic Highlight Look
 					</Button>
-				</div>
+				</ErrorAlert>
 			)}
 		</article>
 	);
@@ -353,9 +354,9 @@ function PreferencesPage({
 			<div className="setup-list programmer-setup-list">
 				{children}
 				{controller.programmerSettingsError && (
-					<p className="modal-error" role="alert">
+					<ErrorAlert as="p" className="modal-error" role="alert">
 						{controller.programmerSettingsError}
-					</p>
+					</ErrorAlert>
 				)}
 			</div>
 		</>

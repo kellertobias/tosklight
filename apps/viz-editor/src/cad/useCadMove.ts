@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 /**
  * Moving the rig from a CAD viewport: the live preview while dragging, and the commit on release.
  *
@@ -65,7 +66,7 @@ export function useCadMove({
 			settle(await cadSession.snapshot());
 		} catch (reason) {
 			const refreshed = await cadSession.snapshot().catch(() => null);
-			settle(refreshed, String(reason));
+			settle(refreshed, formatErrorDetails(reason));
 		}
 	}
 
@@ -78,7 +79,7 @@ export function useCadMove({
 			settle(await cadSession.snapshot());
 		} catch (reason) {
 			const refreshed = await cadSession.snapshot().catch(() => null);
-			settle(refreshed, String(reason));
+			settle(refreshed, formatErrorDetails(reason));
 		}
 	}
 
@@ -99,7 +100,7 @@ export function useCadMove({
 			if (copies.length) onCopied(copies);
 		} catch (reason) {
 			const refreshed = await cadSession.snapshot().catch(() => null);
-			settle(refreshed, String(reason));
+			settle(refreshed, formatErrorDetails(reason));
 		}
 	}
 

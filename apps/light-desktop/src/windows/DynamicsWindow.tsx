@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	PoolCard,
 	PoolGrid,
@@ -255,7 +257,7 @@ function useDynamicsRuntime(
 	useEffect(() => {
 		if (!active || !showId) return;
 		void refreshRuntime().catch((cause) =>
-			setError(cause instanceof Error ? cause.message : String(cause)),
+			setError(formatErrorDetails(cause)),
 		);
 		const timer = window.setInterval(() => {
 			void refreshRuntime().catch(() => undefined);
@@ -285,7 +287,7 @@ function useBusyOperation(
 			try {
 				await operation();
 			} catch (cause) {
-				setError(cause instanceof Error ? cause.message : String(cause));
+				setError(formatErrorDetails(cause));
 			} finally {
 				setBusy(false);
 			}
@@ -588,9 +590,9 @@ function DynamicsPool(props: DynamicsPoolProps) {
 				/>
 			)}
 			{props.error && (
-				<p className="dynamics-error" role="alert">
+				<ErrorAlert as="p" className="dynamics-error" role="alert">
 					{props.error}
-				</p>
+				</ErrorAlert>
 			)}
 			<WindowScrollArea>
 				<PoolGrid

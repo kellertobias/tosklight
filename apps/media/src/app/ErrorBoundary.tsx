@@ -1,3 +1,4 @@
+import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 // The last line of defence. A rendering fault in one panel must not leave an operator staring at
 // a blank browser window with no way back.
 
@@ -10,6 +11,7 @@ interface Props {
 
 interface State {
 	failed: boolean;
+	diagnostics?: string;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -21,12 +23,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
 	componentDidCatch(error: Error, info: ErrorInfo): void {
 		console.error("the administration interface failed to render", error, info);
+		this.setState({ diagnostics: `${formatErrorDetails(error)}\n${info.componentStack ?? ""}` });
 	}
 
 	render(): ReactNode {
 		if (!this.state.failed) return this.props.children;
 		return (
-			<div className="media-state is-error" role="alert">
+			<ErrorAlert as="div" className="media-state is-error" role="alert" copyText={this.state.diagnostics ? `The administration interface stopped responding. Program output is unaffected — the server keeps running whatever the desk asked for.\n\n${this.state.diagnostics}` : undefined}>
 				<p>
 					The administration interface stopped responding. Program output is
 					unaffected — the server keeps running whatever the desk asked for.
@@ -34,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
 				<Button variant="primary" onClick={() => window.location.reload()}>
 					Reload the interface
 				</Button>
-			</div>
+			</ErrorAlert>
 		);
 	}
 }

@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	FormLayout,
@@ -600,12 +601,12 @@ function MacroEditorHeader({
 			info={{
 				primary: controller.draft.name,
 				secondary: (
-					<span
+					<ErrorAlert as="span"
 						className="macro-editor-status"
 						role={controller.status.error ? "alert" : "status"}
 					>
 						{controller.status.text}
-					</span>
+					</ErrorAlert>
 				),
 			}}
 			groups={[

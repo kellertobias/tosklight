@@ -1492,7 +1492,7 @@ describe("the CAD planning screen", () => {
 		const viewport = await screen.findByTestId("cad-canvas");
 		fireEvent.pointerMove(viewport);
 		fireEvent.pointerUp(viewport);
-		expect(await screen.findByText("Error: The fixture is locked")).toBeInTheDocument();
+		expect(await screen.findByText(/Error: The fixture is locked/)).toBeInTheDocument();
 		expect(viewport).toHaveAttribute("data-preview", "none");
 		expect(drawnX.at(-1)).toBe(0);
 	});

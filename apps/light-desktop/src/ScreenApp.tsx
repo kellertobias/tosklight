@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	type CSSProperties,
 	type MutableRefObject,
@@ -146,13 +147,13 @@ function ScreenSurface({ id }: { id: string }) {
 	const closing = useScreenWindowPersistence(screen, server.saveScreen);
 	if (server.screens && !screen)
 		return (
-			<div className="connection-cover parameter-empty" role="alert">
+			<ErrorAlert as="div" className="connection-cover parameter-empty" role="alert">
 				<b>Screen unavailable</b>
 				<small>
 					This screen was removed or this browser link is not authorized for
 					the current desk.
 				</small>
-			</div>
+			</ErrorAlert>
 		);
 	if (!screen)
 		return (

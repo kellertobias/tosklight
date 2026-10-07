@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { ApiRequestError } from "../../api/ApiRequestError";
 import { readScreenAttachment } from "../../api/client/screenAttachment";
 import type { SessionResponse } from "../../api/types";
@@ -52,5 +53,5 @@ export function describeScreenConnectionFailure(
 		return `The ToskLight server at ${serverUrl} refused this screen: ${reason.message}`;
 	if (reason instanceof TypeError)
 		return `The ToskLight server at ${serverUrl} is not reachable. Check that the main ToskLight window is still connected.`;
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

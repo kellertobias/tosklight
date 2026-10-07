@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 export type FrontendWarmupPriority = "foreground" | "near-future" | "idle";
 
 export interface FrontendWarmupTaskResult {
@@ -237,7 +238,7 @@ export class FrontendWarmupCoordinator {
 			} else {
 				entry.diagnostics.status = "error";
 				entry.diagnostics.error =
-					reason instanceof Error ? reason.message : String(reason);
+					formatErrorDetails(reason);
 			}
 			entry.diagnostics.finishedAt = this.now();
 		}

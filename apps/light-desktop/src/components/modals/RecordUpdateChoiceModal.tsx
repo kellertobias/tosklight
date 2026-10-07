@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	FormLayout,
 	ModalRegistration,
@@ -137,9 +138,9 @@ export function RecordUpdateChoiceModal({
 						/>
 					</FormLayout>
 					{error && (
-						<p className="modal-error" role="alert">
+						<ErrorAlert as="p" className="modal-error" role="alert">
 							{error}
-						</p>
+						</ErrorAlert>
 					)}
 				</section>
 			</div>

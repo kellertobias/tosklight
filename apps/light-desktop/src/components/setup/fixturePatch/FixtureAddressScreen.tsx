@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
 import { Button, ModalTitleBar } from "@tosklight/ui";
@@ -235,8 +236,8 @@ function AddressEntry({
 			<Button className="unpatch" onClick={() => onValue("")}>
 				Clear address · Unpatch
 			</Button>
-			{invalidMessage && <p role="alert">{invalidMessage}</p>}
-			{error && <p role="alert">{error}</p>}
+			{invalidMessage && <ErrorAlert as="p" role="alert">{invalidMessage}</ErrorAlert>}
+			{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
 		</div>
 	);
 }

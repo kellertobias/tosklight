@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, SelectField } from "@tosklight/ui";
 import { TouchEncoder } from "@tosklight/ui/encoders";
 import type {
@@ -394,7 +395,7 @@ function DynamicOffControl({
 	return (
 		<div className="parameter-placeholder programmer-dynamics-off">
 			<b>Dynamic Off</b>
-			<small>{error ?? "Stops only this exact instance."}</small>
+			<ErrorAlert as="small" role={error ? "alert" : "status"}>{error ?? "Stops only this exact instance."}</ErrorAlert>
 			<Button onClick={() => void onOff()}>Off</Button>
 		</div>
 	);

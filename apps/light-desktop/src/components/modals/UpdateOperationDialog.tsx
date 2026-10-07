@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import type {
 	CueUpdateMode,
@@ -159,9 +160,9 @@ export function UpdateOperationDialog({
 						</p>
 					)}
 					{error && (
-						<p className="modal-error" role="alert">
+						<ErrorAlert as="p" className="modal-error" role="alert">
 							{error}
-						</p>
+						</ErrorAlert>
 					)}
 				</section>
 			</div>

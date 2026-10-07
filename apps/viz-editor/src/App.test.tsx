@@ -520,7 +520,7 @@ describe("the Viz editor window", () => {
 			return base?.(command, args);
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Save to Front desk" }));
-		expect(await screen.findByText("Saving to Front desk failed: Error: Desk disconnected")).toBeInTheDocument();
+		expect(await screen.findByText(/Saving to Front desk failed: Desk disconnected/)).toBeInTheDocument();
 		expect(screen.queryByText("Saved to Front desk")).not.toBeInTheDocument();
 	});
 

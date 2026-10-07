@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
 import { useFiles } from "../features/files/FilesContext";
 import { Button, Input, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
@@ -193,7 +194,7 @@ export function FileManagerPickerHost() {
 								This secondary picker keeps the calling form's target,
 								selection-count, and extension constraints.
 							</small>
-							{systemError && <span role="alert">{systemError}</span>}
+							{systemError && <ErrorAlert as="span" role="alert">{systemError}</ErrorAlert>}
 							<Input
 								ref={setSystemInput}
 								hidden

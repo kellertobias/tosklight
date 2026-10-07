@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
 	TimecodeDefinition,
@@ -46,7 +47,7 @@ export function useTimecodeAutosave({
 			.catch((reason) => {
 				if (current)
 					setSaveError(
-						`Autosave failed: ${reason instanceof Error ? reason.message : String(reason)}`,
+						`Autosave failed: ${formatErrorDetails(reason)}`,
 					);
 			})
 			.finally(() => current && setSaving(false));

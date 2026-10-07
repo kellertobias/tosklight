@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback } from "react";
 import type { MediaServerInspection } from "../../api/client/mediaOutput";
@@ -97,7 +98,7 @@ function browseMediaItem(
 		);
 		void operation?.catch((cause) =>
 			input.setInspectionError(
-				cause instanceof Error ? cause.message : String(cause),
+				formatErrorDetails(cause),
 			),
 		);
 		return;
@@ -115,7 +116,7 @@ function browseMediaItem(
 		]);
 		void operation.catch((cause) =>
 			input.setInspectionError(
-				cause instanceof Error ? cause.message : String(cause),
+				formatErrorDetails(cause),
 			),
 		);
 		return;
@@ -156,7 +157,7 @@ function browseMediaItem(
 	if (!operation) return;
 	void operation.catch((cause) =>
 		input.setInspectionError(
-			cause instanceof Error ? cause.message : String(cause),
+			formatErrorDetails(cause),
 		),
 	);
 }

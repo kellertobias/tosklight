@@ -124,7 +124,7 @@ describe("useVisualizerViewControls", () => {
 
 		result.current.selectQuality("ultra");
 		await waitFor(() =>
-			expect(result.current.error).toBe("exposure must be within 0.05-4.0"),
+			expect(result.current.error).toContain("exposure must be within 0.05-4.0"),
 		);
 		expect(result.current.view?.mode).toBe("top_down");
 		expect(result.current.busy).toBe(false);

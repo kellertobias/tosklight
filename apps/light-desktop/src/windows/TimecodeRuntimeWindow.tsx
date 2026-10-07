@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	CheckboxField,
@@ -279,9 +281,9 @@ export function TimecodeRuntimeWindow({
 				/>
 			)}
 			{error && (
-				<p className="timecode-error" role="alert">
+				<ErrorAlert as="p" className="timecode-error" role="alert">
 					{error}
-				</p>
+				</ErrorAlert>
 			)}
 			<WindowScrollArea>
 				<PoolGrid
@@ -580,7 +582,7 @@ export function TimecodeEditor({
 				peaks,
 			);
 		} catch (reason) {
-			setError(reason instanceof Error ? reason.message : String(reason));
+			setError(formatErrorDetails(reason));
 		} finally {
 			setAudioImporting(false);
 		}
@@ -606,7 +608,7 @@ export function TimecodeEditor({
 			});
 			setCsvError(null);
 		} catch (reason) {
-			setCsvError(reason instanceof Error ? reason.message : String(reason));
+			setCsvError(formatErrorDetails(reason));
 		}
 	};
 	const transportActions = timecodeTransportActions({
@@ -722,9 +724,9 @@ export function TimecodeEditor({
 				/>
 			)}
 			{error && (
-				<p className="timecode-error" role="alert">
+				<ErrorAlert as="p" className="timecode-error" role="alert">
 					{error}
-				</p>
+				</ErrorAlert>
 			)}
 			<TimecodeEditorFeedback
 				savingError={saveError}
@@ -885,7 +887,7 @@ export function TimecodeSettings({
 							disabled={busy}
 							onFiles={async ([file]) => file && importCsv(file)}
 						/>
-						{csvError && <p role="alert">{csvError}</p>}
+						{csvError && <ErrorAlert as="p" role="alert">{csvError}</ErrorAlert>}
 					</div>
 				</>
 			)}
@@ -925,7 +927,7 @@ function useTimecodeAddAction({
 			} catch (reason) {
 				onError(
 					`Could not ${label}: ${
-						reason instanceof Error ? reason.message : String(reason)
+						formatErrorDetails(reason)
 					}`,
 				);
 			} finally {

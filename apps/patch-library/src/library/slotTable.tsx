@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, InputModal, SwitchField } from "@tosklight/ui";
 import { useState } from "react";
 import type { AttributeDescriptor, FixtureChannel, FixtureMode } from "../wire";
@@ -509,9 +510,9 @@ export function SlotTable({
 	return (
 		<div className="fixture-channel-split">
 			{levelError && (
-				<p className="fixture-inline-errors" role="alert">
+				<ErrorAlert as="p" className="fixture-inline-errors" role="alert">
 					{levelError}
-				</p>
+				</ErrorAlert>
 			)}
 			<div className="fixture-channel-table-wrap">
 				<table className="fixture-channel-table fixture-slot-table">

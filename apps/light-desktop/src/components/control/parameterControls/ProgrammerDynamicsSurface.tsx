@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	DynamicDefinitionProjection,
@@ -260,7 +261,7 @@ function useDefinitionEditor(
 					mutationGroup,
 				);
 			} catch (cause) {
-				setError(cause instanceof Error ? cause.message : String(cause));
+				setError(formatErrorDetails(cause));
 			}
 		},
 		[mutationWriter, selectedObject, setError, showId],
@@ -311,7 +312,7 @@ function useRuntimeChoices(
 	}, [actions, showId]);
 	useEffect(() => {
 		void refresh().catch((cause) =>
-			setError(cause instanceof Error ? cause.message : String(cause)),
+			setError(formatErrorDetails(cause)),
 		);
 		if (!controller.active) return;
 		const timer = window.setInterval(
@@ -399,7 +400,7 @@ function useSelectedController(
 				);
 				await refresh();
 			} catch (cause) {
-				setError(cause instanceof Error ? cause.message : String(cause));
+				setError(formatErrorDetails(cause));
 			} finally {
 				if (latestWrites.current.get(writeKey) === writeId) {
 					latestWrites.current.delete(writeKey);
@@ -422,7 +423,7 @@ function useSelectedController(
 			);
 			await refresh();
 		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : String(cause));
+			setError(formatErrorDetails(cause));
 		}
 	}, [actions, refresh, selected, setError]);
 	const cycleChoice = useCallback(

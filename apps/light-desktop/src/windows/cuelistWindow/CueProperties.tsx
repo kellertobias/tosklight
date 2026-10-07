@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	GroupedSelectionModal,
 	InputModal,
@@ -349,9 +350,9 @@ export function CuePropertyModal({
 							</span>
 						)}
 						{error && (
-							<span className="ui-field-error" role="alert">
+							<ErrorAlert as="span" className="ui-field-error" role="alert">
 								{error}
-							</span>
+							</ErrorAlert>
 						)}
 					</>
 				) : undefined

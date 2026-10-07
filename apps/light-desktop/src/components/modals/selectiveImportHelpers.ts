@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type {
 	SelectiveImportCatalog,
 	SelectiveImportConflictResolution,
@@ -83,7 +84,7 @@ export function actionLabel(value: string) {
 }
 
 export function operatorError(reason: unknown) {
-	const message = reason instanceof Error ? reason.message : String(reason);
+	const message = formatErrorDetails(reason);
 	try {
 		const body = JSON.parse(message) as { error?: string };
 		return body.error ?? message;

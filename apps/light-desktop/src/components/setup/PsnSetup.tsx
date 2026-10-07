@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { useCallback, useEffect, useState } from "react";
 import type {
 	PsnBinding,
@@ -34,7 +36,7 @@ export function PsnSetup({ active = true }: { active?: boolean }) {
 		try {
 			setSnapshot(await psn.snapshot());
 		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : String(cause));
+			setError(formatErrorDetails(cause));
 		}
 	}, [psn]);
 
@@ -53,7 +55,7 @@ export function PsnSetup({ active = true }: { active?: boolean }) {
 			await psn.update(change);
 			await refresh();
 		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : String(cause));
+			setError(formatErrorDetails(cause));
 		} finally {
 			setBusy(false);
 		}
@@ -63,7 +65,7 @@ export function PsnSetup({ active = true }: { active?: boolean }) {
 		return (
 			<section className="psn-setup">
 				<h2>Tracking</h2>
-				<p>{error ?? "Reading the tracking configuration…"}</p>
+				<ErrorAlert as="p" role={error ? "alert" : undefined}>{error ?? "Reading the tracking configuration…"}</ErrorAlert>
 			</section>
 		);
 	}
@@ -90,14 +92,14 @@ export function PsnSetup({ active = true }: { active?: boolean }) {
 				{describeStatus(snapshot)}
 			</p>
 			{status.error && (
-				<p className="psn-error" role="alert">
+				<ErrorAlert as="p" className="psn-error" role="alert">
 					{status.error}
-				</p>
+				</ErrorAlert>
 			)}
 			{error && (
-				<p className="psn-error" role="alert">
+				<ErrorAlert as="p" className="psn-error" role="alert">
 					{error}
-				</p>
+				</ErrorAlert>
 			)}
 
 			<PsnReceiveSwitch

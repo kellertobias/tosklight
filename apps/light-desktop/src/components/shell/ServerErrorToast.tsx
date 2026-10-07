@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
@@ -21,8 +22,9 @@ export function ServerErrorToast() {
 	}, [connection, error]);
 	if (connection !== "connected" || !displayedError) return null;
 	return (
-		<aside
+		<ErrorAlert as="aside"
 			className="server-error-toast"
+			copyText={displayedError}
 			role="alert"
 			aria-label="Desk failure"
 		>
@@ -39,6 +41,6 @@ export function ServerErrorToast() {
 			>
 				Dismiss
 			</Button>
-		</aside>
+		</ErrorAlert>
 	);
 }

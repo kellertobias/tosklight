@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, SelectField } from "@tosklight/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
@@ -39,7 +41,7 @@ export function SoundInputSettings() {
 			await sound.refreshInputs();
 		} catch (reason) {
 			setRequestError(
-				reason instanceof Error ? reason.message : String(reason),
+				formatErrorDetails(reason),
 			);
 		}
 	};
@@ -64,7 +66,7 @@ export function SoundInputSettings() {
 					Refresh inputs
 				</Button>
 			</div>
-			{requestError && <p role="alert">{requestError}</p>}
+			{requestError && <ErrorAlert as="p" role="alert">{requestError}</ErrorAlert>}
 		</article>
 	);
 }

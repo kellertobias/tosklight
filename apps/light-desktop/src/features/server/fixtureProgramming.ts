@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { StoredPreset } from "../../api/types";
 import type { ServerCapabilities } from "./capabilityContracts";
 import type { ServerController } from "./model";
@@ -16,7 +17,7 @@ export function createFixtureProgrammingActions(
 				await api.programming.controlFixtureAction(fixtureId, actionId, active);
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		controlFixtureActions: async (
@@ -32,7 +33,7 @@ export function createFixtureProgrammingActions(
 				);
 				setError(null);
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 			}
 		},
 		generateFixturePresets: async (fixtureIds) => {
@@ -66,7 +67,7 @@ export function createFixtureProgrammingActions(
 				setError(null);
 				return result;
 			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				setError(formatErrorDetails(reason));
 				return null;
 			}
 		},

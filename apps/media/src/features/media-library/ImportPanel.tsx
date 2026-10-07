@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 // Bringing media into the library.
 //
 // A library carried over from the previous Media Server is full of `.mp4` and `.png` files, and
@@ -112,27 +114,27 @@ export function ImportPanel({ onImported }: ImportPanelProps) {
 						/>
 					)}
 					{batchFinished && failed > 0 && (
-						<p className="media-state is-error">
+						<ErrorAlert as="p" className="media-state is-error">
 							Conversion failures were retried once. These files were skipped.
-						</p>
+						</ErrorAlert>
 					)}
 				</section>
 			)}
 
 			{!imports.canImport && (
-				<p className="media-state is-error" role="alert">
+				<ErrorAlert as="p" className="media-state is-error" role="alert">
 					This machine cannot convert media: FFmpeg is not installed or not on
 					PATH. Install it and restart the server.
-				</p>
+				</ErrorAlert>
 			)}
 
 			{failure && (
-				<p className="media-state is-error" role="alert">
+				<ErrorAlert as="p" className="media-state is-error" role="alert">
 					{failure.message}{" "}
 					<Button size="compact" onClick={() => setFailure(undefined)}>
 						Dismiss
 					</Button>
-				</p>
+				</ErrorAlert>
 			)}
 
 			{pending.length > 0 && (
@@ -218,7 +220,7 @@ async function beginImport(
 		setFailure(
 			error instanceof ApiFailure
 				? error
-				: new ApiFailure("unexpected-error", String(error), 0),
+				: new ApiFailure("unexpected-error", formatErrorDetails(error), 0),
 		);
 	} finally {
 		setBusy(false);
@@ -269,7 +271,7 @@ function ImportRow({ job }: { job: ImportJobView }) {
 					Stop
 				</Button>
 			)}
-			{job.reason && <span className="media-import-reason">{job.reason}</span>}
+			{job.reason && <ErrorAlert as="span" className="media-import-reason" copyText={`${job.filename} · ${describe(job)}\n${job.reason}`}>{job.reason}</ErrorAlert>}
 		</li>
 	);
 }

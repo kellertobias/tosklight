@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	ColorPickerField,
@@ -180,9 +181,9 @@ export function DesktopValueEntryDialog() {
 			title={`${label} · ${targets.length} fixture${targets.length === 1 ? "" : "s"}`}
 			beforeTitle={
 				controller.ui.editError ? (
-					<output className="patch-status" role="alert">
+					<ErrorAlert as="output" className="patch-status" role="alert">
 						{controller.ui.editError}
-					</output>
+					</ErrorAlert>
 				) : undefined
 			}
 			value={controller.ui.editText}
@@ -669,9 +670,9 @@ function MastersFields() {
 				</Select>
 			</label>
 			{isMastersValue(value) && value !== "both" ? (
-				<p className="patch-policy-warning" role="alert">
+				<ErrorAlert as="p" className="patch-policy-warning" role="alert">
 					This fixture can remain live while the {MASTERS_WARNINGS[value]}
-				</p>
+				</ErrorAlert>
 			) : null}
 		</>
 	);
@@ -855,9 +856,9 @@ export function FixtureAddressDialog() {
 function EditError() {
 	const error = usePatchController().ui.editError;
 	return error ? (
-		<p className="patch-status" role="alert">
+		<ErrorAlert as="p" className="patch-status" role="alert">
 			{error}
-		</p>
+		</ErrorAlert>
 	) : null;
 }
 

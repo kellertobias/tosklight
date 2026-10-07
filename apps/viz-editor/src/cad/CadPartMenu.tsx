@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 /**
  * The menu behind the caret of **Add truss**, **Add stage element**, **Add scenery** and
  * **Add primitive**: the button's parts, each with its picture on a dark ground.
@@ -128,9 +129,9 @@ export function CadPartMenu({
 	return (
 		<div className="cad-part-menu" aria-busy={library.state === "loading" || undefined}>
 			{library.state === "failed" ? (
-				<p className="cad-part-menu-note" role="alert">
+				<ErrorAlert as="p" className="cad-part-menu-note" role="alert">
 					The fixture library could not be read: {library.reason}
-				</p>
+				</ErrorAlert>
 			) : null}
 			{CAD_PART_CATALOGUE[kind].map((group) => {
 				const item = (part: VenuePart, label: string, detail: string | undefined) => (

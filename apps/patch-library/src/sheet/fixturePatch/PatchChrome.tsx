@@ -1,3 +1,4 @@
+import { CopyErrorButton, formatErrorDetails } from "@tosklight/ui";
 import { isVisualOnly } from "../patchUtils";
 import { Button, SelectField, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
@@ -49,7 +50,7 @@ async function importVenueModel(
 			"3D model placed at the stage origin. Set its location and rotation in the sheet.",
 		);
 	} catch (reason) {
-		setStatus(`Could not import the 3D model: ${String(reason)}`);
+		setStatus(`Could not import the 3D model: ${formatErrorDetails(reason)}`);
 	}
 }
 
@@ -68,6 +69,7 @@ export function PatchHeader() {
 			settings
 			onSettings={(anchor) => setSettingsAnchor((open) => (open ? null : anchor.getBoundingClientRect()))}
 			info={patchHeaderInfo(controller)}
+			toolbar={controller.patch.error ? <CopyErrorButton text={controller.patch.error} /> : undefined}
 			groups={[
 				...props.titleGroups,
 				{
@@ -170,6 +172,7 @@ export function PatchHeader() {
 		{importStatus ? (
 			<p className="patch-status" role="status">
 				{importStatus}
+				{importStatus.startsWith("Could not import") ? <CopyErrorButton text={importStatus} /> : null}
 			</p>
 		) : null}
 		{settingsAnchor ? (

@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 // What this server is, what it listens on, and what it sends to.
 //
 // Every setting saves automatically. Most of them reach the running server at once; the few that
@@ -154,9 +155,9 @@ function Network({
 			/>
 			<SpeedGroupStatus />
 			{network.warnings.map((warning) => (
-				<p key={warning} className="media-state is-error" role="alert">
+				<ErrorAlert as="p" key={warning} className="media-state is-error" role="alert">
 					{warning}
-				</p>
+				</ErrorAlert>
 			))}
 			{network.pendingRestart && network.takesEffectOnRestart && (
 				<>

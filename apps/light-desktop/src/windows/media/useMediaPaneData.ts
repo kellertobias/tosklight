@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MediaServerInspection } from "../../api/client/mediaOutput";
@@ -89,7 +90,7 @@ function useInspectionPolling({
 			} catch (cause) {
 				if (!disposed) {
 					setInspectionError(
-						cause instanceof Error ? cause.message : String(cause),
+						formatErrorDetails(cause),
 					);
 					setInspection(EMPTY_MEDIA_INSPECTION);
 				}

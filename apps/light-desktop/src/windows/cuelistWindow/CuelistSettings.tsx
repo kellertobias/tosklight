@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { CuelistSettingsFields } from "./CuelistSettingsFields";
 import {
@@ -114,9 +115,9 @@ export function CuelistSettings(props: CuelistSettingsProps) {
 						priority={props.object.body.priority}
 					/>
 					{settingsError && (
-						<p className="ui-field-error" role="alert">
+						<ErrorAlert as="p" className="ui-field-error" role="alert">
 							{settingsError}
-						</p>
+						</ErrorAlert>
 					)}
 					<RenumberCuesDialog controller={controller} />
 					<UnsavedSettingsDialog

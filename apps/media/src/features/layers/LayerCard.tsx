@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 // One layer's controls.
 
 import { Button } from "@tosklight/ui/controls";
@@ -62,9 +63,9 @@ export function LayerCard({
 				{layer.drawing ? "" : " · not drawing"}
 			</p>
 			{badge.detail && (
-				<p className="media-state is-error" role="alert">
+				<ErrorAlert as="p" className="media-state is-error" role="alert">
 					{badge.detail}
-				</p>
+				</ErrorAlert>
 			)}
 
 			<MediaPicker

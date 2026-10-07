@@ -1,3 +1,4 @@
+import { ErrorAlert } from "../ErrorAlert";
 import { type ReactNode, useState } from "react";
 import {
 	ModalCaretValue,
@@ -158,9 +159,9 @@ export function InputModal({
 					onCaretChange={setCaret}
 				/>
 				{error && (
-					<p className="ui-field-error" role="alert">
+					<ErrorAlert as="p" className="ui-field-error" role="alert">
 						{error}
-					</p>
+					</ErrorAlert>
 				)}
 				{kind !== "number" ? (
 					<ModalTextKeyboard

@@ -111,7 +111,9 @@ describe("Media pane offline draft", () => {
 	});
 
 	it("keeps locally configured slots across failed CITP polling", async () => {
-		const inspect = vi.fn().mockRejectedValue(new Error("CITP unavailable"));
+		const failure = new Error("CITP unavailable");
+		failure.stack = "Error: CITP unavailable\n    at inspectMedia (citp.ts:31:8)";
+		const inspect = vi.fn().mockRejectedValue(failure);
 		const hook = renderHook(() =>
 			useMediaPaneData({
 				active: true,
@@ -125,7 +127,7 @@ describe("Media pane offline draft", () => {
 		);
 
 		await waitFor(() =>
-			expect(hook.result.current.inspectionError).toBe("CITP unavailable"),
+			expect(hook.result.current.inspectionError).toBe(`${failure.message}\n${failure.stack}`),
 		);
 		act(() => {
 			hook.result.current.setDraftFolderId("17");

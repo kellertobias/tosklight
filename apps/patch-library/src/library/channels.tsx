@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import { useState } from "react";
 import type { AttributeDescriptor, FixtureMode } from "../wire";
 import { derivePrimarySlots } from "../sheet/fixtureProfileModel";
@@ -52,11 +53,11 @@ export function ChannelsEditor({
 				renderSplit={renderSplit}
 			/>
 			{primary.errors.length > 0 && (
-				<div className="fixture-inline-errors" role="alert">
+				<ErrorAlert as="div" className="fixture-inline-errors" role="alert">
 					{primary.errors.map((error) => (
 						<p key={error}>{error}</p>
 					))}
-				</div>
+				</ErrorAlert>
 			)}
 			{mappingChannel && (
 				<ChannelMappingModal

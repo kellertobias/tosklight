@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { Button } from "@tosklight/ui";
 import { DEFAULT_POOL_COLOR_PALETTE } from "@tosklight/ui/pools";
 import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
@@ -73,7 +75,7 @@ export function RunningPane({
 				);
 			}
 		} catch (cause) {
-			const reason = cause instanceof Error ? cause.message : String(cause);
+			const reason = formatErrorDetails(cause);
 			setActionError(
 				`Could not turn off ${kindSingular(row.kind)} ${identityLabel(row)}: ${reason}`,
 			);
@@ -120,14 +122,14 @@ export function RunningPane({
 						</p>
 					)}
 					{error && (
-						<p className="running-error" role="alert">
+						<ErrorAlert as="p" className="running-error" role="alert">
 							Running state unavailable: {error}
-						</p>
+						</ErrorAlert>
 					)}
 					{actionError && (
-						<p className="running-error" role="alert">
+						<ErrorAlert as="p" className="running-error" role="alert">
 							{actionError}
-						</p>
+						</ErrorAlert>
 					)}
 				</div>
 			</WindowScrollArea>

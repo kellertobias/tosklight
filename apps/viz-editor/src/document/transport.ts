@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type {
 	PatchChange,
 	PatchEventObserver,
@@ -70,7 +71,7 @@ export class TauriPatchTransport implements PatchTransport {
 				else unlisten = stop;
 			})
 			.catch((reason) => {
-				if (!closed) observer.error(new Error(String(reason)));
+				if (!closed) observer.error(new Error(formatErrorDetails(reason)));
 			});
 		return {
 			repair: () => undefined,
@@ -92,6 +93,6 @@ async function call<T>(
 	} catch (reason) {
 		// A planning document has no revisions in flight, so a rejected patch is never a
 		// concurrency conflict the store should retry — it is a rule the operator has to see.
-		throw new PatchTransportError(String(reason), 400, null, false);
+		throw new PatchTransportError(formatErrorDetails(reason), 400, null, false);
 	}
 }

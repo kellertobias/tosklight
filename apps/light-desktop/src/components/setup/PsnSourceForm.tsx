@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	FormLayout,
@@ -89,7 +91,7 @@ export function TrackingSettingsForm() {
 			setFailure(null);
 		} catch (cause) {
 			setFailure(
-				`The tracking settings could not be read: ${cause instanceof Error ? cause.message : String(cause)}. Check the desk connection and reopen Settings.`,
+				`The tracking settings could not be read: ${formatErrorDetails(cause)}. Check the desk connection and reopen Settings.`,
 			);
 		}
 	}, [psn]);
@@ -99,13 +101,13 @@ export function TrackingSettingsForm() {
 	}, [load]);
 
 	if (!psn)
-		return <p role="alert">Tracking is not available on this surface.</p>;
+		return <ErrorAlert as="p" role="alert">Tracking is not available on this surface.</ErrorAlert>;
 	if (!stored || !draft)
 		return (
 			<section className="tracking-settings">
-				<p role={failure ? "alert" : undefined}>
+				<ErrorAlert as="p" role={failure ? "alert" : undefined}>
 					{failure ?? "Reading the tracking settings…"}
-				</p>
+				</ErrorAlert>
 			</section>
 		);
 
@@ -134,7 +136,7 @@ export function TrackingSettingsForm() {
 			setSaved(true);
 		} catch (cause) {
 			setFailure(
-				`The desk refused the tracking settings: ${cause instanceof Error ? cause.message : String(cause)}. Correct the value and apply again.`,
+				`The desk refused the tracking settings: ${formatErrorDetails(cause)}. Correct the value and apply again.`,
 			);
 		} finally {
 			setBusy(false);
@@ -172,7 +174,7 @@ export function TrackingSettingsForm() {
 					onChange={(event) => change("staleAfter", event.target.value)}
 				/>
 			</FormLayout>
-			{failure && <p role="alert">{failure}</p>}
+			{failure && <ErrorAlert as="p" role="alert">{failure}</ErrorAlert>}
 			<div className="tracking-settings-actions">
 				{saved && !dirty && <span role="status">Tracking settings saved.</span>}
 				<Button disabled={busy || !dirty} onClick={() => void apply()}>

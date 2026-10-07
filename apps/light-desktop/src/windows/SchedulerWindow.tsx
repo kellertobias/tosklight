@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
 	Calendar,
@@ -259,13 +260,13 @@ export function SchedulerWindow({
 					Loading Schedules…
 				</div>
 			) : snapshot.status === "error" ? (
-				<div className="scheduler-message is-error" role="alert">
+				<ErrorAlert as="div" className="scheduler-message is-error" role="alert">
 					<strong>Schedules could not be loaded</strong>
 					<span>{snapshot.error}</span>
 					{controller?.retry && (
 						<Button onClick={() => void controller.retry?.()}>Retry</Button>
 					)}
-				</div>
+				</ErrorAlert>
 			) : (
 				<SchedulerReadyContent
 					controller={controller}
@@ -481,9 +482,9 @@ function SchedulerReadyContent({
 	return (
 		<>
 			{mutationError && (
-				<p className="scheduler-mutation-error" role="alert">
+				<ErrorAlert as="p" className="scheduler-mutation-error" role="alert">
 					{mutationError}
-				</p>
+				</ErrorAlert>
 			)}
 			<div
 				className={`scheduler-layout ${localShowList && localShowCalendar ? "is-split" : ""}`}
@@ -726,9 +727,9 @@ function ScheduleEditor({
 		>
 			<div className="scheduler-editor">
 				{saveError && (
-					<p className="scheduler-mutation-error" role="alert">
+					<ErrorAlert as="p" className="scheduler-mutation-error" role="alert">
 						{saveError}
-					</p>
+					</ErrorAlert>
 				)}
 				<ScheduleEditorTabs
 					activeTab={tab}
@@ -762,17 +763,17 @@ function OccurrencePreview({
 		);
 	if (preview.status === "error")
 		return (
-			<aside className="scheduler-preview is-error" role="alert">
+			<ErrorAlert as="aside" className="scheduler-preview is-error" role="alert">
 				<strong>Preview unavailable</strong>
 				<span>Check the server connection and retry.</span>
-			</aside>
+			</ErrorAlert>
 		);
 	if (preview.result.status === "invalid")
 		return (
-			<aside className="scheduler-preview is-error" role="alert">
+			<ErrorAlert as="aside" className="scheduler-preview is-error" role="alert">
 				<strong>Schedule is invalid</strong>
 				<span>{preview.result.message}</span>
-			</aside>
+			</ErrorAlert>
 		);
 	return (
 		<aside className="scheduler-preview" aria-live="polite">

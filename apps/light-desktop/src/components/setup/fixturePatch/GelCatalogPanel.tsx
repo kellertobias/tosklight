@@ -1,3 +1,5 @@
+import { formatErrorDetails } from "@tosklight/ui";
+import { ErrorAlert } from "@tosklight/ui";
 import { Button, Input, Select, TextField } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import type {
@@ -104,14 +106,14 @@ function UnavailableCatalogGel({
 	const fallback = gel.embedded_fallback;
 	return (
 		<section className="gel-catalog-unavailable" aria-label="Unavailable gel">
-			<p role="alert">
+			<ErrorAlert as="p" role="alert">
 				<strong>
 					{availability === "catalog_unavailable"
 						? "Catalog unavailable"
 						: "Catalog entry unavailable"}
 				</strong>
 				. The stored appearance continues to use its embedded fallback.
-			</p>
+			</ErrorAlert>
 			<p className="patch-secondary">
 				Stored reference: {gel.catalog_id} / {gel.entry_id}
 				{catalog ? ` in ${catalog.name}` : ""}
@@ -212,14 +214,14 @@ function GelImportPreview({ model }: { model: GelCatalogModel }) {
 				replacements · {preview.unchanged.length} unchanged
 			</p>
 			{preview.conflicts.map((conflict) => (
-				<p key={JSON.stringify(conflict)} role="alert">
+				<ErrorAlert as="p" key={JSON.stringify(conflict)} role="alert">
 					{gelImportConflict(conflict)}
-				</p>
+				</ErrorAlert>
 			))}
 			{preview.invalid_rows.map((error) => (
-				<p key={`${error.row}:${error.message}`} role="alert">
+				<ErrorAlert as="p" key={`${error.row}:${error.message}`} role="alert">
 					Row {error.row}: {error.message}
-				</p>
+				</ErrorAlert>
 			))}
 			<Button
 				className="primary"
@@ -385,5 +387,5 @@ function toCatalogGel(
 }
 
 function errorMessage(reason: unknown) {
-	return reason instanceof Error ? reason.message : String(reason);
+	return formatErrorDetails(reason);
 }

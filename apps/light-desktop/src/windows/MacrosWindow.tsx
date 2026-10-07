@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import {
 	PoolCard,
 	PoolGrid,
@@ -238,9 +239,9 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 				/>
 			)}
 			{error && (
-				<p role="alert" className="macro-error">
+				<ErrorAlert as="p" role="alert" className="macro-error">
 					{error}
-				</p>
+				</ErrorAlert>
 			)}
 			<WindowScrollArea>
 				<MacroPool

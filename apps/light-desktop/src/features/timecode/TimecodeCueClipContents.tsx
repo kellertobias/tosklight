@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { CueList } from "../../api/types";
@@ -137,7 +138,7 @@ function useCueFadeDrag({
 					setDragError("");
 				})
 				.catch((reason) => {
-					const message = `Cue ${current.row.cue.number} ${current.kind === "in" ? "In" : "Out"} fade was not saved: ${reason instanceof Error ? reason.message : String(reason)}`;
+					const message = `Cue ${current.row.cue.number} ${current.kind === "in" ? "In" : "Out"} fade was not saved: ${formatErrorDetails(reason)}`;
 					setPreview(null);
 					setDragError(message);
 					onError?.(message);

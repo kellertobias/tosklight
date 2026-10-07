@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import {
 	type FixtureDefinition,
 	type FixtureNote,
@@ -511,7 +512,7 @@ export function App() {
 	}
 
 	const report = useCallback((reason: unknown) => {
-		setError(String(reason));
+		setError(formatErrorDetails(reason));
 	}, []);
 	/** Re-read the machine's fixture library, after authoring a fixture or opening a document. */
 	const reloadProfiles = useCallback(() => {

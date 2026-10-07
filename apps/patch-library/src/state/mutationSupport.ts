@@ -1,9 +1,10 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import type { PatchMutation, PatchPlacement } from "../contracts";
 import type { PatchFixtureCandidate } from "./model";
 import { PatchTransportError } from "../transport";
 
 export function asError(reason: unknown): Error {
-	return reason instanceof Error ? reason : new Error(String(reason));
+	return reason instanceof Error ? reason : new Error(formatErrorDetails(reason));
 }
 
 export function authorityChanged(): Error {

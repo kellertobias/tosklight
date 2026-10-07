@@ -1,3 +1,4 @@
+import { ErrorAlert } from "@tosklight/ui";
 import type { DeskStateDiagnostic } from "../../../features/deskState/deskStateDiagnostics";
 
 export function DeskStatePanel({
@@ -33,7 +34,7 @@ export function DeskStatePanel({
 			</nav>
 			<div className="desk-state-error-list">
 				{diagnostics.map((diagnostic) => (
-					<article key={diagnostic.id} id={diagnostic.id} className="desk-state-error">
+					<ErrorAlert as="article" key={diagnostic.id} id={diagnostic.id} className="desk-state-error">
 						<h3>{diagnostic.title}</h3>
 						<p>{diagnostic.summary}</p>
 						<p className="desk-state-action">
@@ -41,7 +42,7 @@ export function DeskStatePanel({
 							<span>{diagnostic.action}</span>
 						</p>
 						{diagnostic.detail && <pre>{diagnostic.detail}</pre>}
-					</article>
+					</ErrorAlert>
 				))}
 			</div>
 		</section>
