@@ -90,27 +90,20 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 		});
 	};
 	useVirtualPlaybackSettingsRequests(paneId, controller);
-	if (!controller.authorityReady || controller.pageNumber == null)
+	if (!controller.authorityReady || controller.pageNumber == null) {
+		const loadError = controller.topology.error ?? controller.runtimeStatus.error;
 		return (
 			<section className="virtual-playback-pane" aria-busy="true">
-				<ErrorAlert as="p"
-					role={
-						controller.topology.error || controller.runtimeStatus.error
-							? "alert"
-							: "status"
-					}
-					copyText={
-						controller.topology.error || controller.runtimeStatus.error
-							? formatErrorDetails(controller.topology.error ?? controller.runtimeStatus.error)
-							: undefined
-					}
+				<ErrorAlert
+					as="p"
+					role={loadError ? "alert" : "status"}
+					copyText={loadError ? formatErrorDetails(loadError) : undefined}
 				>
-					{controller.topology.error?.message ??
-						controller.runtimeStatus.error?.message ??
-						"Loading Virtual Playbacks…"}
+					{loadError?.message ?? "Loading Virtual Playbacks…"}
 				</ErrorAlert>
 			</section>
 		);
+	}
 	return (
 		<section
 			className="virtual-playback-pane"
