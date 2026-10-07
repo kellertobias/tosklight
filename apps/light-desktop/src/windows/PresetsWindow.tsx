@@ -1,4 +1,3 @@
-import { INDIVIDUAL_POOL_COLOR_FALLBACK } from "@tosklight/ui/pools";
 import { poolCardSizing } from "../state/reducerHelpers";
 import { useMemo, useState } from "react";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
@@ -120,8 +119,8 @@ function activatePreset(options: PresetActivationOptions) {
 		options.onConfigure(index, {
 			title: saved.title ?? preset?.body.name ?? `Preset ${index + 1}`,
 			icon: saved.icon ?? preset?.body.icon,
-			color:
-				saved.color ?? preset?.body.color ?? INDIVIDUAL_POOL_COLOR_FALLBACK,
+			// Only a colour the operator picks is explicit; it replaces the automatic preview.
+			color: saved.color ?? preset?.body.color,
 		});
 		options.onDisarmSet();
 		return;
@@ -171,13 +170,14 @@ function usePresetFixtureCounts(
 		() => resolvedValueIndex(visualization),
 		[visualization],
 	);
-	return useMemo(() => {
+	const counts = useMemo(() => {
 		const counts = new Map<string, ReturnType<typeof presetFixtureCounts>>();
 		for (const card of cards)
 			if (card)
 				counts.set(card.id, presetFixtureCounts(card.body, resolved, groupMembers));
 		return counts;
 	}, [cards, groupMembers, resolved]);
+	return { counts, groupMembers };
 }
 
 /** The family's 200 slots, falling back to demo Presets before a Show is active. */
@@ -197,7 +197,8 @@ function usePresetPoolCards(
 		() => resolvePresetCards(stored, family),
 		[stored, family],
 	);
-	return { cards, fixtureCounts: usePresetFixtureCounts(active, cards) };
+	const { counts, groupMembers } = usePresetFixtureCounts(active, cards);
+	return { cards, fixtureCounts: counts, groupMembers };
 }
 
 function usePresetCustomizations(
@@ -265,7 +266,7 @@ function usePresetsWindowModel({
 	const groupsVisible = compact
 		? Boolean(showGroupShortcuts)
 		: state.presetGroupsVisible;
-	const { cards, fixtureCounts } = usePresetPoolCards(
+	const { cards, fixtureCounts, groupMembers } = usePresetPoolCards(
 		active,
 		family,
 		activeShowId !== null,
@@ -337,6 +338,7 @@ function usePresetsWindowModel({
 		cardSizing: poolCardSizing(state),
 		cards,
 		fixtureCounts,
+		groupMembers,
 		customizations,
 		groupsVisible,
 		selectionCount: selection?.selected.length ?? 0,
@@ -392,6 +394,7 @@ export function PresetsWindow(props: WindowProps) {
 				setArmed={model.setArmed}
 				mutationTarget={model.mutationTarget}
 				fixtureCounts={model.fixtureCounts}
+				groupMembers={model.groupMembers}
 				onActivate={model.activate}
 				onConfigure={model.configure}
 			/>
