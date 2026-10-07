@@ -1307,7 +1307,9 @@ test("Help application stories render real navigation, Markdown, search, and sta
 		page.getByText("One optional help topic could not be indexed."),
 	).toBeVisible();
 	const warning = page.locator(".help-catalog-warning");
-	await expect(warning.locator("svg")).toBeVisible();
+	// The status icon is the alert's own; the Copy error button carries a second icon.
+	await expect(warning.locator(":scope > svg")).toBeVisible();
+	await expect(warning.getByRole("button", { name: "Copy error" })).toBeVisible();
 	await expect(warning).toHaveCSS("border-top-color", "rgb(217, 133, 37)");
 
 	await page.goto(
