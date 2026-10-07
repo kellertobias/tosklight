@@ -1,4 +1,4 @@
-import { type MutableRefObject, useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 import type { ScreenConfiguration } from "../../api/types";
 import { useDesktopBridge } from "./DesktopContext";
 import type { DesktopBridge, DesktopUnsubscribe } from "./types";
@@ -13,8 +13,8 @@ class ScreenWindowPersistence {
 
 	constructor(
 		private readonly desktop: DesktopBridge,
-		private readonly screen: MutableRefObject<ScreenConfiguration | undefined>,
-		private readonly closing: MutableRefObject<boolean>,
+		private readonly screen: RefObject<ScreenConfiguration | undefined>,
+		private readonly closing: RefObject<boolean>,
 		private readonly save: SaveScreen,
 	) {}
 

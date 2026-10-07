@@ -1,6 +1,6 @@
 import { ErrorAlert } from "@tosklight/ui";
 import { Button, ModalTitleBar, RadioField, SelectField } from "@tosklight/ui";
-import { type MutableRefObject, useLayoutEffect } from "react";
+import { type RefObject, useLayoutEffect } from "react";
 import type { SelectiveImportOutcome } from "../../api/selectiveImportModels";
 import {
 	CatalogSelection,
@@ -14,7 +14,7 @@ import {
 
 export interface SelectiveShowImportModalProps
 	extends SelectiveImportWorkflowOptions {
-	closeTriggerRef?: MutableRefObject<(() => void) | null>;
+	closeTriggerRef?: RefObject<(() => void) | null>;
 }
 
 export function SelectiveShowImportModal(props: SelectiveShowImportModalProps) {
@@ -97,7 +97,7 @@ function LoadModeSelector({ workflow }: { workflow: SelectiveImportWorkflow }) {
 }
 
 function useCloseTrigger(
-	trigger: MutableRefObject<(() => void) | null> | undefined,
+	trigger: RefObject<(() => void) | null> | undefined,
 	close: () => void,
 ) {
 	useLayoutEffect(() => {

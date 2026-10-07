@@ -1,6 +1,6 @@
 import {
 	type Dispatch,
-	type MutableRefObject,
+	type RefObject,
 	type SetStateAction,
 	useCallback,
 	useEffect,
@@ -173,11 +173,11 @@ interface QueuedCueWrite {
 	generation: number;
 	saveKey: string;
 	queue: CueWriteQueue;
-	activeQueue: MutableRefObject<CueWriteQueue>;
-	latestCueObject: MutableRefObject<VersionedObject<CueList> | undefined>;
-	cueDraft: MutableRefObject<Cue | null>;
-	needsRebase: MutableRefObject<boolean>;
-	cueWriteBase: MutableRefObject<{
+	activeQueue: RefObject<CueWriteQueue>;
+	latestCueObject: RefObject<VersionedObject<CueList> | undefined>;
+	cueDraft: RefObject<Cue | null>;
+	needsRebase: RefObject<boolean>;
+	cueWriteBase: RefObject<{
 		basis: CueListWriteBasis;
 		body: CueList;
 		cueIndex: number;

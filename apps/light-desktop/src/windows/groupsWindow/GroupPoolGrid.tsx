@@ -4,7 +4,7 @@ import {
 } from "@tosklight/ui/pools";
 import { poolCardSizing } from "../../state/reducerHelpers";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
-import { type MutableRefObject, useRef } from "react";
+import { type RefObject, useRef } from "react";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { requestUpdateTarget } from "../../components/control/updateWorkflow";
 import {
@@ -47,8 +47,8 @@ interface GroupPoolCardSlotProps
 	chooseSetSource(group: Group): void;
 	dereference(group: Group): void;
 	onOpenSettings(id: string): void;
-	hold: MutableRefObject<number | null>;
-	held: MutableRefObject<boolean>;
+	hold: RefObject<number | null>;
+	held: RefObject<boolean>;
 }
 
 function GroupPoolCardSlot({

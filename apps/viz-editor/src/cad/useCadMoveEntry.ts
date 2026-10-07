@@ -2,7 +2,7 @@
  * Typing into a gizmo move in flight: the readout beside the gizmo, the keys that build a typed
  * coordinate, and the exact move it commits. See `moveEntry.ts` for what a typed value means.
  */
-import { type MutableRefObject, useEffect, useState } from "react";
+import { type RefObject, useEffect, useState } from "react";
 import { rememberMoveAxis } from "./duplicateStep";
 import {
 	applyMoveEntry,
@@ -38,7 +38,7 @@ export function useCadMoveEntry({
 	cancel,
 	endMove,
 }: {
-	drag: MutableRefObject<Drag | null>;
+	drag: RefObject<Drag | null>;
 	context: CadViewportContext;
 	/** Abandons the move in flight, leaving the rig where it started. */
 	cancel(): void;

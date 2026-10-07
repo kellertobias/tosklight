@@ -1,7 +1,7 @@
 import { formatErrorDetails } from "@tosklight/ui";
 import {
 	createContext,
-	type MutableRefObject,
+	type RefObject,
 	type PropsWithChildren,
 	useContext,
 	useMemo,
@@ -272,7 +272,7 @@ export class VirtualPlaybackZonesController {
 }
 
 function updateEpoch(
-	ref: MutableRefObject<AuthorityEpoch>,
+	ref: RefObject<AuthorityEpoch>,
 	authority: VirtualPlaybackZonesAuthority | null,
 	transport: VirtualPlaybackZonesTransport | null,
 ) {

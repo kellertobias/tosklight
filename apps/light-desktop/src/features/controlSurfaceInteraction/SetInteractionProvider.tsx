@@ -1,6 +1,6 @@
 import {
 	createContext,
-	type MutableRefObject,
+	type RefObject,
 	type PropsWithChildren,
 	useCallback,
 	useContext,
@@ -91,7 +91,7 @@ function useSetInteractionExit({
 	writeVisibleState,
 }: {
 	scope: ControlSurfaceInteractionScope | null;
-	stateRef: MutableRefObject<SetInteractionState | null>;
+	stateRef: RefObject<SetInteractionState | null>;
 	apply: ApplySetEvent;
 	writeVisibleState: WriteVisibleState;
 }) {
@@ -184,7 +184,7 @@ function useChoosePlayback({
 	command,
 }: {
 	scope: ControlSurfaceInteractionScope | null;
-	stateRef: MutableRefObject<SetInteractionState | null>;
+	stateRef: RefObject<SetInteractionState | null>;
 	apply: ApplySetEvent;
 	writeVisibleState: WriteVisibleState;
 	topology: ReturnType<typeof usePlaybackTopologyActions>;
@@ -254,7 +254,7 @@ function useEnterSetInteraction({
 	groupsReady,
 }: {
 	scope: ControlSurfaceInteractionScope | null;
-	stateRef: MutableRefObject<SetInteractionState | null>;
+	stateRef: RefObject<SetInteractionState | null>;
 	apply: ApplySetEvent;
 	writeVisibleState: WriteVisibleState;
 	text: string | undefined;

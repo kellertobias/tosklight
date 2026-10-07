@@ -1,5 +1,5 @@
 import { ErrorAlert } from "@tosklight/ui";
-import { useCallback, useEffect, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useState, type RefObject } from "react";
 import { useFiles } from "../../features/files/FilesContext";
 import { Button, type ButtonProps } from "@tosklight/ui";
 import { openFileManagerPicker } from "../../windows/FileManagerPickerHost";
@@ -12,7 +12,7 @@ export interface RootConfinedFilePickerButtonProps {
   buttonClassName?: string;
   variant?: ButtonProps["variant"];
   hideButton?: boolean;
-  triggerRef?: MutableRefObject<(() => void) | null>;
+  triggerRef?: RefObject<(() => void) | null>;
   onFiles: (files: File[]) => void | Promise<void>;
 }
 

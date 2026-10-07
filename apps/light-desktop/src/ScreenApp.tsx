@@ -1,7 +1,7 @@
 import { ErrorAlert } from "@tosklight/ui";
 import {
 	type CSSProperties,
-	type MutableRefObject,
+	type RefObject,
 	useEffect,
 	useRef,
 	useState,
@@ -30,7 +30,7 @@ function DesktopScreenSurface({
 }: {
 	screen: ScreenConfiguration;
 	saveScreen: (screen: ScreenConfiguration) => Promise<void>;
-	closing: MutableRefObject<boolean>;
+	closing: RefObject<boolean>;
 }) {
 	const { state, dispatch } = useApp();
 	const programmerOwner =

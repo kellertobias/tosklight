@@ -1,5 +1,5 @@
 import { formatErrorDetails } from "@tosklight/ui";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MediaServerInspection } from "../../api/client/mediaOutput";
 import type { MediaServerFixture } from "../../api/types";
@@ -30,9 +30,9 @@ interface InspectionPollingInput {
 	active: boolean;
 	fixtureId: string | undefined;
 	endpointKey: string;
-	serverLayers: MutableRefObject<MediaServerFixture["layers"]>;
+	serverLayers: RefObject<MediaServerFixture["layers"]>;
 	layerId: string;
-	inspect: MutableRefObject<
+	inspect: RefObject<
 		MediaServersState["inspectMediaServer"] | undefined
 	>;
 	hasInspect: boolean;
@@ -41,7 +41,7 @@ interface InspectionPollingInput {
 	setInspectionError: Dispatch<SetStateAction<string | null>>;
 	setDraftFolderId: Dispatch<SetStateAction<string>>;
 	setDraftFileId: Dispatch<SetStateAction<string | null>>;
-	initializedDraftScope: MutableRefObject<string | null>;
+	initializedDraftScope: RefObject<string | null>;
 }
 
 function useInspectionPolling({

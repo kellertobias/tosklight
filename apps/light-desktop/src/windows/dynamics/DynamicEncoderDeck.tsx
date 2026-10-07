@@ -32,7 +32,7 @@ import {
 import {
 	type CSSProperties,
 	type ComponentProps,
-	type MutableRefObject,
+	type RefObject,
 	type ReactNode,
 	useCallback,
 	useEffect,
@@ -381,8 +381,8 @@ function encoderSectionItems(
 
 function useHardwareEncoderActions(
 	hardwareConnected: boolean,
-	slotsRef: MutableRefObject<DynamicEncoderSlot[]>,
-	hardwareDisplays: MutableRefObject<
+	slotsRef: RefObject<DynamicEncoderSlot[]>,
+	hardwareDisplays: RefObject<
 		Array<HardwareEncoderDisplayHandle | null>
 	>,
 	applyRelative: (id: string, delta: number, group?: string | null) => void,

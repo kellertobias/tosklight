@@ -44,7 +44,7 @@ import {
 } from "@tosklight/ui/window-kit";
 import {
 	type CSSProperties,
-	type MutableRefObject,
+	type RefObject,
 	type ReactNode,
 	useCallback,
 	useEffect,
