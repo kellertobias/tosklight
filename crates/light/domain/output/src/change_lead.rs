@@ -84,7 +84,7 @@ impl ChangeLeadTime {
         let second = second_of(sent_micros);
         let bucket = &self.recent[second as usize % RECENT_BUCKETS];
         // Leads stay below the plausibility limit, so they fit the low 32 bits.
-        let _ = bucket.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |packed| {
+        let _ = bucket.try_update(Ordering::Relaxed, Ordering::Relaxed, |packed| {
             let previous = if packed >> 32 == second {
                 packed & u64::from(u32::MAX)
             } else {
