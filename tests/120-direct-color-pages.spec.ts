@@ -558,13 +558,18 @@ test.describe("docs/testing/37-direct-color-pages.md", () => {
 			// Each native encoder names its control and the reference head; the idle head shows its
 			// profile defaults as native values (a wheel its slot's name), never a dash.
 			const named = new RegExp(`^Enc \\d+ · (.+) · ${number}(?: · Resolved)?$`);
+			// The bench clock only outputs a frame when ticked, where a running desk outputs one every
+			// period. A show write after the last tick (the desk saving its layout once the loaded show
+			// is hydrated) leaves no frame of the current show, so keep outputting while the encoders
+			// re-read their values.
 			await expect
-				.poll(async () =>
-					(await encoderReadings(page)).flatMap((reading) => {
+				.poll(async () => {
+					await bench.tick(25);
+					return (await encoderReadings(page)).flatMap((reading) => {
 						const label = named.exec(reading.name)?.[1];
 						return label && reading.value && reading.value !== "—" ? [label] : [];
-					}),
-				{ message: `${which} ${number}: Direct labels with values` })
+					});
+				}, { message: `${which} ${number}: Direct labels with values` })
 				.toEqual(labels);
 			const shown = await encoderReadings(page);
 			expect(shown.every((reading) => !/\bcolor\./.test(reading.name)), JSON.stringify(shown)).toBe(true);
