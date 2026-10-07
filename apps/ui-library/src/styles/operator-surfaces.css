@@ -1575,13 +1575,17 @@
 		--pool-card-color,
 		var(--pool-card-uncolored-color, #65717b)
 	);
+	/* Tile insets and the picture box size; everything inside the tile follows them. */
+	--pool-card-inset: 6.4px;
+	--pool-card-media-width: clamp(29px, 32%, 56px);
+	--pool-card-media-height: clamp(29px, 30%, 51px);
 	position: relative;
 	width: 100%;
 	min-width: 0;
 	aspect-ratio: 1;
 	display: block;
 	overflow: hidden;
-	padding: 8px;
+	padding: var(--pool-card-inset);
 	border: 1px solid
 		color-mix(in srgb, var(--pool-card-resolved-color) 68%, var(--line2));
 	border-radius: 7px;
@@ -1646,8 +1650,8 @@
 .pool-card > .number {
 	position: absolute;
 	z-index: 4;
-	top: 6px;
-	right: 8px;
+	top: calc(var(--pool-card-inset) - 1.6px);
+	right: var(--pool-card-inset);
 	color: var(--muted);
 	font-size: 10px;
 	font-variant-numeric: tabular-nums;
@@ -1656,9 +1660,9 @@
 .pool-card-name {
 	position: absolute;
 	z-index: 2;
-	top: 8px;
-	right: 32px;
-	left: 8px;
+	top: var(--pool-card-inset);
+	right: calc(var(--pool-card-inset) + 22px);
+	left: var(--pool-card-inset);
 	max-height: 48%;
 	overflow: hidden;
 	color: var(--text);
@@ -1675,7 +1679,7 @@
 }
 
 .pool-card:not(.has-information, .has-media, .has-status) .pool-card-name {
-	bottom: 8px;
+	bottom: var(--pool-card-inset);
 	max-height: none;
 	-webkit-line-clamp: 6;
 }
@@ -1683,20 +1687,20 @@
 .pool-card-information {
 	position: absolute;
 	z-index: 2;
-	right: 8px;
-	bottom: 8px;
-	left: 8px;
+	right: var(--pool-card-inset);
+	bottom: var(--pool-card-inset);
+	left: var(--pool-card-inset);
 	max-height: 42%;
 	overflow: hidden;
 	pointer-events: none;
 }
 
 .pool-card.has-media .pool-card-information {
-	right: calc(clamp(34px, 38%, 66px) + 14px);
+	right: calc(var(--pool-card-media-width) + 2 * var(--pool-card-inset) - 2px);
 }
 
 .pool-card.has-status .pool-card-information {
-	bottom: 28px;
+	bottom: calc(var(--pool-card-inset) + 20px);
 }
 
 .pool-card-information > small,
@@ -1795,9 +1799,9 @@
 .pool-card-status-row {
 	position: absolute;
 	z-index: 3;
-	right: 8px;
-	bottom: 7px;
-	left: 7px;
+	right: var(--pool-card-inset);
+	bottom: calc(var(--pool-card-inset) - 1px);
+	left: calc(var(--pool-card-inset) - 1px);
 	min-width: 0;
 	display: flex;
 	align-items: center;
@@ -1807,7 +1811,7 @@
 }
 
 .pool-card.has-media .pool-card-status-row {
-	right: calc(clamp(34px, 38%, 66px) + 14px);
+	right: calc(var(--pool-card-media-width) + 2 * var(--pool-card-inset) - 2px);
 }
 
 .pool-card-state-marker,
@@ -1849,10 +1853,10 @@
 .pool-card-media {
 	position: absolute;
 	z-index: 2;
-	right: 8px;
-	bottom: 8px;
-	width: clamp(34px, 38%, 66px);
-	height: clamp(34px, 35%, 60px);
+	right: var(--pool-card-inset);
+	bottom: var(--pool-card-inset);
+	width: var(--pool-card-media-width);
+	height: var(--pool-card-media-height);
 	display: grid;
 	place-items: center;
 	overflow: hidden;
