@@ -51,6 +51,7 @@ tools/build.sh is invoked by the root package.json scripts:
   npm run models:render        Render one PNG per model and regenerate the help catalogue
   npm run models:open          Rebuild the models and open the whole set as one .blend in Blender
   npm run pages:generate       Assemble the public site: landing page, manual, Storybook, and code safari
+                               (needs TOSKLIGHT_IMPRINT_CONTACT; see tools/site-legal/README.md)
   npm run pages:serve [PORT]   Serve the assembled public site locally
   npm run codesafari           Run the CodeSafari code tour locally
   npm run bundle               Create self-contained server archives for macOS, Windows, Linux AMD64/ARM64
@@ -179,12 +180,16 @@ build_safari() {
   }
   cp "$ROOT/tools/codesafari-overrides.css" "$LIGHT_SAFARI_DIR/codesafari-overrides.css"
   node "$ROOT/tools/inject-codesafari-overrides.mjs" "$LIGHT_SAFARI_DIR/index.html"
+  # Serve syntax-highlighting grammars from the site instead of lighter.codehike.org.
+  node "$ROOT/tools/codesafari-self-host-highlighting.mjs" "$LIGHT_SAFARI_DIR"
   echo "Created $LIGHT_SAFARI_DIR"
 }
 
 # Assemble the deployable public site. The landing page sits at the root and links
 # into the two generated subdirectories; nothing here reaches outside $LIGHT_PAGES_DIR.
 build_pages() {
+  # Fail before the expensive builds when the operator's contact data is missing or invalid.
+  node "$ROOT/tools/site-legal/cli.mjs" validate
   if [[ "${LIGHT_REUSE_MANUAL:-0}" == "1" ]]; then
     for required in "$LIGHT_MANUAL_PDF" "$LIGHT_MANUAL_HTML_DIR/index.html" "$LIGHT_MANUAL_HTML_ARCHIVE"; do
       [[ -f "$required" ]] || {
@@ -217,11 +222,16 @@ build_pages() {
   touch "$LIGHT_PAGES_DIR/.nojekyll"
 
   node "$ROOT/tools/render-landing-page.mjs" "$LIGHT_PAGES_DIR/index.html"
+  # Impressum and Datenschutz from TOSKLIGHT_IMPRINT_CONTACT, linked from every page, then checked
+  # for third-party requests.
+  node "$ROOT/tools/site-legal/cli.mjs" write "$LIGHT_PAGES_DIR"
 
   for required in \
     index.html \
     downloads/index.html \
     imprint/index.html \
+    impressum/index.html \
+    datenschutz/index.html \
     manual/index.html \
     storybook/index.html \
     safari/index.html \

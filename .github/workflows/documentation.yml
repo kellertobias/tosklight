@@ -518,6 +518,9 @@ jobs:
       LIGHT_RELEASE_VERSION: ${{ needs.release-metadata.outputs.version }}
       LIGHT_REUSE_MANUAL: "1"
       LIGHT_PERFORMANCE_STATUS_FILE: .artifacts/performance/status.json
+      # Impressum and Datenschutz contact data (JSON). pages:generate validates it and fails the
+      # build when it is missing or incomplete; tools/site-legal never prints its values.
+      TOSKLIGHT_IMPRINT_CONTACT: ${{ secrets.TOSKLIGHT_IMPRINT_CONTACT }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

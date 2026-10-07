@@ -32,6 +32,7 @@
             <a class="button" href="#applications">Explore the suite</a>
           </div>
           <a class="version" id="version" href="__RELEASE_URL__" data-built="__VERSION__">Current build · v__VERSION__</a>
+          <p class="hero-free">Free to use, and it will stay free.</p>
         </div>
         <div class="hero-visual" aria-label="ToskLight product family">
           <div class="hero-glow"></div>
@@ -41,14 +42,30 @@
         </div>
       </header>
 
-      <section class="demo shell" aria-labelledby="demo-title">
-        <div class="section-heading"><p class="eyebrow">From idea to opening night</p><h2 id="demo-title">Make the room feel exactly right.</h2><p>Turn a rough venue plan into a show that looks considered from the first focus session to the final cue. ToskLight keeps lighting, visualisation, and video together, so the whole picture stays clear as the production comes to life.</p></div>
-        __DEMO__
+      <section class="why-it-exists shell" aria-labelledby="why-it-exists-title">
+        <a class="license-seal" href="license/" aria-label="Always free, source available: read the ToskLight Community License">
+          <svg viewBox="0 0 160 160" aria-hidden="true" focusable="false">
+            <defs><path id="license-seal-ring" d="M80 20a60 60 0 1 1 0 120a60 60 0 1 1 0-120" /></defs>
+            <circle class="license-seal-outer" cx="80" cy="80" r="77" />
+            <circle class="license-seal-inner" cx="80" cy="80" r="47" />
+            <text class="license-seal-ring"><textPath href="#license-seal-ring" textLength="372" lengthAdjust="spacing">COMMUNITY LICENSE · SOURCE AVAILABLE · STAYS FREE ·</textPath></text>
+            <text class="license-seal-mark" x="80" y="57" text-anchor="middle" dominant-baseline="central">&lt;/&gt;</text>
+            <text class="license-seal-center" x="80" y="81" text-anchor="middle" dominant-baseline="central" textLength="68" lengthAdjust="spacingAndGlyphs">ALWAYS</text>
+            <text class="license-seal-center" x="80" y="99" text-anchor="middle" dominant-baseline="central" textLength="44" lengthAdjust="spacingAndGlyphs">FREE</text>
+          </svg>
+        </a>
+        <div class="why-it-exists-copy">
+          <p class="eyebrow">Why it exists</p>
+          <h2 id="why-it-exists-title">Professional concepts should survive a smaller budget.</h2>
+          <p>The industry-standard consoles are excellent and worth every penny. The difficulty sits below that budget: smaller productions often learn a workflow that stops applying the day they decide to take the craft further.</p>
+          <p>ToskLight bridges that gap with professional concepts, free to use on macOS, Windows, and Linux. Start by pointing at things to get a show running, then grow into the command line, tracking, and referencing as you need them.</p>
+        </div>
       </section>
-
       <section class="suite-intro shell" id="applications">
         <div class="suite-heading-row"><div><p class="eyebrow">The ToskLight suite</p><h2>Plan your venue. Build the moment. Run the show.</h2></div><div class="suite-icons" aria-label="ToskLight applications"><img src="product-icons/tosklight-control.png" alt="ToskLight Control" /><img src="product-icons/tosklight-pixel.png" alt="ToskLight Pixel" /><img src="product-icons/tosklight-architect.png" alt="ToskLight Architect" /></div></div>
-        <p>Draw and print a plan, see the rig before you arrive, program a show that stays understandable, and play video as part of the picture. Use the suite together or connect each application to any Art-Net or sACN-compatible lighting desk.</p>
+        <p>Turn a rough venue plan into a show that looks considered from the first focus session to the final cue. Draw and print a plan, see the rig before you arrive, program a show that stays understandable, and play video as part of the picture. ToskLight keeps lighting, visualisation, and video together, so the whole picture stays clear as the production comes to life.</p>
+        <p>Use the suite together or connect each application to any Art-Net or sACN-compatible lighting desk.</p>
+        __DEMO__
       </section>
 
       <section class="product product-control" aria-labelledby="control-title">
@@ -61,9 +78,9 @@
             <h3 class="product-claim">Easy to enter. Deep enough to grow with you.</h3>
             <p class="product-lede">Start with direct fixture control and reusable looks. Add tracked cues, Dynamics, command-line programming, and custom workspaces as your show and your confidence grow.</p>
             <ul class="feature-list">
-              <li><strong>Program naturally.</strong> Start with direct controls and grow into a desk-style command language.</li>
-              <li><strong>Make changes that hold.</strong> Groups and presets keep a look connected to the show, so a correction made in rehearsal follows through the cue list.</li>
-              <li><strong>Connect to the real world.</strong> Output through sACN, Art-Net, or USB DMX, with as many universes as your hardware supports. The released desk is tested with eight full universes.</li>
+              <li><strong>Program naturally, with intention.</strong> Start with direct controls and grow into a desk-style command language. You program what you mean, not DMX values, so a show stays portable between fixture types, and groups and presets keep every look connected to the show.</li>
+              <li><strong>Desk-style shows with modern effects.</strong> Run cue lists with full tracking, and layer Dynamics on top for movement, colour, and intensity effects.</li>
+              <li><strong>Bring your rig and connect to the real world.</strong> Import and export your rig with the industry standards MVR and GDTF, so it moves between planning tools and other lighting desks. Output through sACN, Art-Net, or USB DMX, with as many universes as your hardware supports. The released desk is tested with eight full universes.</li>
             </ul>
             <a class="text-link" href="control/">Discover ToskLight Control <span>→</span></a>
           </div>
@@ -82,7 +99,7 @@
             <ul class="feature-list">
               <li><strong>Compose the image live.</strong> Stack up to eight independent video layers, shape them, and keep the final composition in view.</li>
               <li><strong>Use the desk you already know.</strong> Patch Pixel into any Art-Net or sACN show, with previews and media choices available when you need them.</li>
-              <li><strong>Make every surface count.</strong> Send a deliberate picture to LED walls, projection, off-screen outputs, or a room full of displays.</li>
+              <li><strong>React to the music.</strong> Beat detection drives effects and visualizers that respond to what they hear.</li>
             </ul>
             <a class="text-link" href="pixel/">Discover ToskLight Pixel <span>→</span></a>
           </div>
@@ -99,21 +116,14 @@
             </div>
             <p class="product-lede">Plan a venue in CAD, print the plan, and see the finished rig in a live 3D renderer. Prepare before the desk arrives, then visualize real Art-Net or sACN from ToskLight or another compatible desk.</p>
             <ul class="feature-list">
-              <li><strong>Plan the physical show.</strong> Lay out fixtures, scenery, media surfaces, patch, and installed geometry.</li>
-              <li><strong>Move between planning and control.</strong> Architect and Control read the same portable <code>.show</code> format.</li>
-              <li><strong>Visualize live.</strong> Render beams, focus, color, movement, gobos, lasers, particles, and venue geometry.</li>
+              <li><strong>Plan the physical show.</strong> Lay out fixtures, scenery, media surfaces, patch, stages, and rigging in a CAD-style editor.</li>
+              <li><strong>Visualize live.</strong> Render beams, focus, colour, movement, gobos, lasers, and venue geometry. Moving trusses are supported.</li>
+              <li><strong>Move between planning and control.</strong> Architect and Control share the same <code>.show</code> format and the same import and export engine, so both support the industry standards MVR and GDTF.</li>
             </ul>
             <a class="text-link" href="architect/">Discover ToskLight Architect <span>→</span></a>
           </div>
           <div class="product-gallery product-gallery-architect">__ARCHITECT_GALLERY__</div>
         </div>
-      </section>
-
-      <section class="why-it-exists shell" aria-labelledby="why-it-exists-title">
-        <p class="eyebrow">Why it exists</p>
-        <h2 id="why-it-exists-title">Professional concepts should survive a smaller budget.</h2>
-        <p>The industry-standard consoles are excellent and worth every penny. The difficulty sits below that budget: smaller productions often learn a workflow that stops applying the day they decide to take the craft further.</p>
-        <p>ToskLight bridges that gap with professional concepts, free to use on macOS, Windows, and Linux. Start by pointing at things to get a show running, then grow into the command line, tracking, and referencing as you need them.</p>
       </section>
 
       <section class="workflow shell" aria-labelledby="workflow-title">
@@ -138,7 +148,7 @@
       <div class="shell footer-grid">
         <div><a class="wordmark" href="#top"><img src="icon.png" alt="" /><span>ToskLight</span></a><p>Professional show concepts for productions of every size.</p></div>
         <div class="footer-links"><a href="downloads/">Downloads</a><a href="manual/">Operator manual</a><a href="tosklight-manual.pdf">PDF manual</a><a href="performance/">Development</a><a href="https://github.com/kellertobias/tosklight">Source on GitHub</a></div>
-        <div class="footer-meta"><a href="license/">ToskLight Community License</a><a href="third-party-licenses.html">Third-party licenses</a><a href="imprint/">Imprint &amp; Privacy</a></div>
+        <div class="footer-meta"><a href="license/">ToskLight Community License</a><a href="third-party-licenses.html">Third-party licenses</a><a href="impressum/">Impressum</a><a href="datenschutz/">Datenschutz</a></div>
       </div>
     </footer>
 

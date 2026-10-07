@@ -539,15 +539,8 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.equal(downloadsPage.match(/<option value=/gu)?.length, 4);
 		assert.match(downloadsPage, /Useful alongside the suite/u);
 		assert.match(downloadsPage, /href="\.\.\/license\/"/u);
-		assert.match(downloadsPage, /href="\.\.\/imprint\/"/u);
-		const legalPage = readFileSync(resolve(ROOT, "docs/site/imprint/index.html"), "utf8");
-		assert.match(legalPage, /Angaben gemäß § 5 DDG/u);
-		assert.match(legalPage, /GitHub Pages/u);
-		assert.match(legalPage, /GitHub, Inc\., 88 Colin P\. Kelly Jr\. Street/u);
-		assert.match(legalPage, /GitHub B\.V\., Prins Bernhardplein 200/u);
-		assert.match(legalPage, /<strong>Tobisk Media<\/strong>/u);
-		assert.doesNotMatch(legalPage, /api\.github\.com|Tobisk Music/u);
-		assert.match(legalPage, /setzt auf dieser Webseite selbst keine Cookies/u);
+		assert.match(downloadsPage, /href="\.\.\/impressum\/"/u);
+		assert.match(downloadsPage, /href="\.\.\/datenschutz\/"/u);
 		const landingPage = readFileSync(target, "utf8");
 		assert.doesNotMatch(landingPage, /class="performance-compact"|class="downloads"/u);
 		assert.match(landingPage, /Open source lighting control desk/u);
@@ -560,7 +553,8 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.match(landingPage, /screenshots\/architect-cad\.png/u);
 		assert.doesNotMatch(landingPage, /screenshots\/media-server-dashboard\.png/u);
 		assert.match(landingPage, /href="downloads\/"/u);
-		assert.match(landingPage, /href="imprint\/"/u);
+		assert.match(landingPage, /href="impressum\/"/u);
+		assert.match(landingPage, /href="datenschutz\/"/u);
 		assert.doesNotMatch(landingPage, /__[A-Z_]+__/u);
 	} finally {
 		rmSync(directory, { recursive: true, force: true });

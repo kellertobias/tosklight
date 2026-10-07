@@ -116,7 +116,7 @@ ${table([...npm, ...rust, ...fonts])}
       </tbody>
     </table></div>
   </main>
-  <footer><div class="shell download-footer"><p><a href="license/">ToskLight Community License</a> · <a href="imprint/">Imprint &amp; Privacy</a></p><a href="./">← Back to ToskLight</a></div></footer>
+  <footer><div class="shell download-footer"><p><a href="license/">ToskLight Community License</a> · <a href="impressum/">Impressum</a> · <a href="datenschutz/">Datenschutz</a></p><a href="./">← Back to ToskLight</a></div></footer>
 </body>
 </html>
 `;

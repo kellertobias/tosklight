@@ -21,6 +21,9 @@ const config: StorybookConfig = {
 	},
 	docs: { autodocs: "tag" },
 	core: { disableTelemetry: true },
+	// The onboarding guide loads its images from storybook.js.org; the published Storybook must not
+	// make third-party requests (see tools/site-legal).
+	features: { sidebarOnboardingChecklist: false, menuOnboardingChecklist: false },
 	viteFinal: async (viteConfig) => ({
 		...viteConfig,
 		cacheDir: `${artifactPaths.viteCache}/ui-library-storybook`,
