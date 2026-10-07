@@ -103,13 +103,6 @@ export type ProgrammerValuesEventMessage =
 			change: ProgrammerValuesChange;
 	  }
 	| {
-			/** @deprecated Compatibility for already-buffered in-process projections. */
-			type: "event";
-			sequence: number;
-			correlationId: string | null;
-			projection: ProgrammerValuesProjection;
-	  }
-	| {
 			type: "gap";
 			afterSequence: number;
 			oldestAvailable: number;

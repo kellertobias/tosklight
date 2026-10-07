@@ -12,6 +12,7 @@ import {
 	groupValue,
 	SHOW_ID,
 	SESSION_ID,
+	valuesChange,
 	valuesProjection,
 } from "../../../features/programmerValues/testFixtures";
 import { useParameterProgrammerValues } from "./useParameterProgrammerValues";
@@ -161,7 +162,7 @@ describe("useParameterProgrammerValues", () => {
 				type: "event",
 				sequence: 11,
 				correlationId: "unrelated-values",
-				projection: valuesProjection({
+				change: valuesChange(valuesProjection({
 					revision: 2,
 					fixtureValues: [
 						fixtureValue(0.25),
@@ -189,7 +190,7 @@ describe("useParameterProgrammerValues", () => {
 							changedAtMillis: 1,
 						},
 					],
-				}),
+				})),
 			}),
 		);
 

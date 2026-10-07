@@ -280,7 +280,15 @@ describe("ServerRuntime Programmer values boundary", () => {
 				type: "event",
 				sequence: 11,
 				correlationId: null,
-				projection: projection(2),
+				change: {
+					revision: 2,
+					fixtureValues: [],
+					removedFixtureValues: [],
+					groupValues: [],
+					removedGroupValues: [],
+					dynamicValues: [],
+					removedDynamicValues: [],
+				},
 			}),
 		);
 

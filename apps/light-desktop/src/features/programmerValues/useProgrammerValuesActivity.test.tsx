@@ -25,6 +25,7 @@ import {
 	groupValue,
 	SHOW_ID,
 	SESSION_ID,
+	valuesChange,
 	valuesProjection,
 	valuesSnapshot,
 } from "./testFixtures";
@@ -293,14 +294,18 @@ describe("Programmer values activity", () => {
 				type: "event",
 				sequence: 11,
 				correlationId: "same-count",
-				projection: valuesProjection({
-					revision: 2,
-					fixtureValues: [
-						fixtureValue(0.5),
-						fixtureValue(0.75, { fixtureId: FIXTURE_2 }),
-					],
-					groupValues: [],
-				}),
+				change: {
+					...valuesChange(
+						valuesProjection({
+							revision: 2,
+							fixtureValues: [
+								fixtureValue(0.5),
+								fixtureValue(0.75, { fixtureId: FIXTURE_2 }),
+							],
+						}),
+					),
+					removedGroupValues: [{ groupId: "front", attribute: "intensity" }],
+				},
 			}),
 		);
 		expect(harness.valuesStore.getSnapshot().projection?.revision).toBe(2);
@@ -311,14 +316,14 @@ describe("Programmer values activity", () => {
 				type: "event",
 				sequence: 12,
 				correlationId: "changed-count",
-				projection: valuesProjection({
+				change: valuesChange(valuesProjection({
 					revision: 3,
 					fixtureValues: [
 						fixtureValue(0.5),
 						fixtureValue(0.75, { fixtureId: FIXTURE_2 }),
 					],
 					groupValues: [groupValue()],
-				}),
+				})),
 			}),
 		);
 		await waitFor(() =>

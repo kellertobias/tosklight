@@ -25,6 +25,7 @@ import {
 	groupValue,
 	SHOW_ID,
 	SESSION_ID,
+	valuesChange,
 	valuesProjection,
 	valuesSnapshot,
 } from "./testFixtures";
@@ -177,10 +178,10 @@ describe("Programmer value targets", () => {
 				type: "event",
 				sequence: 11,
 				correlationId: "same-target",
-				projection: valuesProjection({
+				change: valuesChange(valuesProjection({
 					revision: 2,
 					fixtureValues: [fixtureValue(0.8, { attribute: "pan" })],
-				}),
+				})),
 			}),
 		);
 		expect(state.valuesStore.getSnapshot().projection?.revision).toBe(2);
@@ -191,13 +192,13 @@ describe("Programmer value targets", () => {
 				type: "event",
 				sequence: 12,
 				correlationId: "new-target",
-				projection: valuesProjection({
+				change: valuesChange(valuesProjection({
 					revision: 3,
 					fixtureValues: [
 						fixtureValue(0.8, { attribute: "pan" }),
 						fixtureValue(0.4, { fixtureId: FIXTURE_2 }),
 					],
-				}),
+				})),
 			}),
 		);
 		await waitFor(() =>

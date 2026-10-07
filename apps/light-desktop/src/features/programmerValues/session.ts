@@ -206,18 +206,11 @@ export class ProgrammerValuesSession {
 			return;
 		}
 		try {
-			if ("change" in message)
-				this.store.applyChange(
-					message.change,
-					message.sequence,
-					this.expectedStoreScope(),
-				);
-			else
-				this.store.applyProjection(
-					message.projection,
-					message.sequence,
-					this.expectedStoreScope(),
-				);
+			this.store.applyChange(
+				message.change,
+				message.sequence,
+				this.expectedStoreScope(),
+			);
 		} catch (reason) {
 			void this.repair(generation, asError(reason));
 		}

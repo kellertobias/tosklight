@@ -9,7 +9,6 @@ import {
 	settleProgrammerValuesSession,
 	SHOW_ID,
 	SESSION_ID,
-	valuesProjection,
 	valuesSnapshot,
 } from "./testFixtures";
 import {
@@ -218,36 +217,5 @@ describe("ProgrammerValuesSession authority and repair", () => {
 		expect(harness.loadSnapshot).toHaveBeenCalledTimes(2);
 		expect(transport.subscriptions).toHaveLength(1);
 		expect(transport.subscriptions[0].repair).toHaveBeenCalledWith(30);
-	});
-
-	it("replaces same-revision divergence during protocol repair", async () => {
-		const harness = createHarness();
-		const transport = harness.transport as FakeProgrammerValuesTransport;
-		harness.session.activate();
-		await settleProgrammerValuesSession();
-		harness.loadSnapshot.mockResolvedValueOnce(
-			valuesSnapshot({
-				cursor: 15,
-				revision: 1,
-				fixtureValues: [fixtureValue(0.9)],
-			}),
-		);
-
-		transport.emit({
-			type: "event",
-			sequence: 14,
-			correlationId: null,
-			projection: valuesProjection({
-				revision: 1,
-				fixtureValues: [fixtureValue(0.8)],
-			}),
-		});
-		await settleProgrammerValuesSession();
-
-		const value =
-			harness.store.getSnapshot().projection?.fixtureValues[0]?.value;
-		expect(value).toEqual({ kind: "normalized", value: 0.9 });
-		expect(transport.subscriptions[0].repair).toHaveBeenCalledWith(15);
-		expect(harness.store.getSnapshot().repairRequired).toBe(false);
 	});
 });

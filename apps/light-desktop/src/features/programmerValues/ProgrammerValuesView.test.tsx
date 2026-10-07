@@ -26,6 +26,7 @@ import {
 	groupValue,
 	SHOW_ID,
 	SESSION_ID,
+	valuesChange,
 	valuesProjection,
 	valuesSnapshot,
 } from "./testFixtures";
@@ -246,11 +247,11 @@ describe("ProgrammerValuesViewProvider", () => {
 				type: "event",
 				sequence: 20,
 				correlationId: "osc-group-value",
-				projection: valuesProjection({
+				change: valuesChange(valuesProjection({
 					revision: 2,
 					fixtureValues: [fixtureValue(0.25)],
 					groupValues: [groupValue(0.8)],
-				}),
+				})),
 			}),
 		);
 
