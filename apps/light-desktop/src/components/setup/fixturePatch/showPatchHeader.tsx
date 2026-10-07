@@ -6,16 +6,25 @@ import {
 	type ShowPatchSettingsTab,
 } from "./ShowPatchSettings";
 
-export type ShowPatchView = "fixtures" | "media" | "tracking";
+export type ShowPatchView = "fixtures" | "points" | "media" | "tracking";
+
+/** Every Show Patch view, in the order the view switch shows them. */
+export const SHOW_PATCH_VIEWS: readonly ShowPatchView[] = [
+	"fixtures",
+	"points",
+	"media",
+	"tracking",
+];
 
 const VIEW_LABELS: Record<ShowPatchView, string> = {
 	fixtures: "Fixtures",
+	points: "Points",
 	media: "Media Servers",
 	tracking: "Tracking",
 };
 
 /**
- * The Fixtures / Media Servers / Tracking switch, built the same way on every Show Patch view so
+ * The Fixtures / Points / Media Servers / Tracking switch, built the same way on every Show Patch view so
  * it keeps its place and width when the operator moves between them.
  */
 export function showPatchViewGroup(
@@ -40,7 +49,7 @@ export function settingsTabFor(view: ShowPatchView): ShowPatchSettingsTab {
 	return view === "media" ? "media" : "columns";
 }
 
-/** Header for the Media Servers and Tracking views; Fixtures adds its own actions to the same shape. */
+/** Header for the Points, Media Servers and Tracking views; Fixtures adds its own actions to the same shape. */
 export function ShowPatchViewHeader({
 	view,
 	compact,
@@ -66,7 +75,7 @@ export function ShowPatchViewHeader({
 				info={{ primary: VIEW_LABELS[view] }}
 				groups={[
 					...groups,
-					showPatchViewGroup(view, ["fixtures", "media", "tracking"], onView),
+					showPatchViewGroup(view, SHOW_PATCH_VIEWS, onView),
 				]}
 			/>
 			{anchor ? (

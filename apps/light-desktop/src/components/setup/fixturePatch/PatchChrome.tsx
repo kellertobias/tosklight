@@ -6,7 +6,7 @@ import { usePatchController } from "./controller";
 import { selectLayer, setFixtureNumber } from "./fixtureActions";
 import { addMultipatch } from "./multipatchActions";
 import { ShowPatchSettings } from "./ShowPatchSettings";
-import { type ShowPatchView, showPatchViewGroup } from "./showPatchHeader";
+import { SHOW_PATCH_VIEWS, showPatchViewGroup } from "./showPatchHeader";
 
 export function PatchHeader() {
 	const controller = usePatchController();
@@ -88,20 +88,11 @@ export function PatchHeader() {
 								: []),
 						],
 					},
-					...(props.onMedia || props.onTracking
+					...(props.onView
 						? [
-								showPatchViewGroup(
-									"fixtures",
-									[
-										"fixtures",
-										...(props.onMedia ? (["media"] as const) : []),
-										...(props.onTracking ? (["tracking"] as const) : []),
-									] satisfies ShowPatchView[],
-									(view) => {
-										if (view === "media") props.onMedia?.();
-										if (view === "tracking") props.onTracking?.();
-									},
-								),
+								showPatchViewGroup("fixtures", SHOW_PATCH_VIEWS, (view) => {
+									if (view !== "fixtures") props.onView?.(view);
+								}),
 							]
 						: []),
 				]}

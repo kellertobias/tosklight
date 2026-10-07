@@ -1468,3 +1468,31 @@ describe("appReducer Cuelist built-in navigation", () => {
 		).toBe("pool");
 	});
 });
+
+describe("appReducer Show Patch requests (TL-651)", () => {
+	it("opens Show Patch on Points with a new Create Point request each time", () => {
+		const first = appReducer(initialState, {
+			type: "OPEN_BUILTIN",
+			kind: "patch",
+			patchView: "points",
+			patchRequest: "create_point",
+		});
+		expect(first.builtIn).toBe("patch");
+		expect(first.patchBuiltInView).toBe("points");
+		expect(first.patchBuiltInRequest).toEqual({ id: 1, kind: "create_point" });
+		const second = appReducer(first, {
+			type: "OPEN_BUILTIN",
+			kind: "patch",
+			patchView: "points",
+			patchRequest: "create_point",
+		});
+		expect(second.patchBuiltInRequest).toEqual({ id: 2, kind: "create_point" });
+		// Opening Show Patch without a request keeps the last one, so nothing runs twice.
+		const plain = appReducer(second, {
+			type: "OPEN_BUILTIN",
+			kind: "patch",
+			patchView: "points",
+		});
+		expect(plain.patchBuiltInRequest).toEqual({ id: 2, kind: "create_point" });
+	});
+});

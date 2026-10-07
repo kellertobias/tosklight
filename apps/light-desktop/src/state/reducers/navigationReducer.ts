@@ -60,7 +60,15 @@ export function reduceNavigation(
 				dockMode: "builtins",
 				fileManagerReturn: null,
 				...(kind === "patch"
-					? { patchBuiltInView: action.patchView ?? "fixtures" }
+					? {
+							patchBuiltInView: action.patchView ?? "fixtures",
+							patchBuiltInRequest: action.patchRequest
+								? {
+										id: (state.patchBuiltInRequest?.id ?? 0) + 1,
+										kind: action.patchRequest,
+									}
+								: state.patchBuiltInRequest,
+						}
 					: {}),
 			};
 		}

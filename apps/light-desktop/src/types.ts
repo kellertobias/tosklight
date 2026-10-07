@@ -268,7 +268,9 @@ export interface AppState {
 	presetSetArmed: boolean;
 	cuelistBuiltInView: "pool" | "cues";
 	cuelistBuiltInNumber: number | null;
-	patchBuiltInView: "fixtures" | "media";
+	patchBuiltInView: "fixtures" | "points" | "media" | "tracking";
+	/** A one-shot request for the built-in Show Patch; each one carries a new id. */
+	patchBuiltInRequest: { id: number; kind: "create_point" } | null;
 	cueListSetArmed: boolean;
 	cueListSetTarget: number | null;
 	playbackSetArmed: boolean;

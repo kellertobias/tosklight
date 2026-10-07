@@ -29,6 +29,7 @@ import { definitionSplits } from "./patchModel";
 import { usePatchSelection } from "./selection";
 import { positionReferenceColumnAvailable } from "./positionReference";
 import { DEFAULT_PATCH_SORT, type PatchSort, sortPatchFixtures } from "./tableSort";
+import type { ShowPatchView } from "./showPatchHeader";
 
 export type EditKind =
 	| "number"
@@ -84,8 +85,8 @@ export type PlacementBaseline = {
 
 export type FixturePatchSetupProps = {
 	active?: boolean;
-	onMedia?: () => void;
-	onTracking?: () => void;
+	/** Switches Show Patch to another view; without it the view switch is not shown (a pane). */
+	onView?: (view: Exclude<ShowPatchView, "fixtures">) => void;
 	stagePreviewOpen?: boolean;
 	stagePreviewClearance?: number;
 	onStagePreview?: () => void;
@@ -427,8 +428,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		ui,
 		data,
 		props: {
-			onMedia: props.onMedia,
-			onTracking: props.onTracking,
+			onView: props.onView,
 			stagePreviewOpen: props.stagePreviewOpen ?? false,
 			stagePreviewClearance: props.stagePreviewClearance ?? 0,
 			onStagePreview: props.onStagePreview,

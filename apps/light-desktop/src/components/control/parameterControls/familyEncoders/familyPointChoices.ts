@@ -19,8 +19,8 @@ import {
 } from "./familyEncoderDisplay";
 
 /**
- * The Point slot's ordered choices (TL-544 G4): Origin, then every 3D Point of the show in Patch
- * table order, named as the Patch names them wherever an operator picks one. Hardware/OSC
+ * The Point slot's ordered choices (TL-544 G4): Origin, then every 3D Point of the show in Fixture
+ * ID order, patched or not (TL-651), named as the Patch names them wherever an operator picks one. Hardware/OSC
  * detents, software encoder steps and the value-pad picker all walk or pick from this one list.
  */
 

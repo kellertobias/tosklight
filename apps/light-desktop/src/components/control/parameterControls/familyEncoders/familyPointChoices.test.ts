@@ -42,6 +42,14 @@ describe("Point slot choices", () => {
 		expect(choices[1]?.reference).toEqual({ kind: "point", point_id: POINT_ID });
 	});
 
+	it("orders the Points by fixture ID whatever order the Patch delivers them in (TL-651)", () => {
+		const choices = familyPointChoices([
+			fixture("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", 902, "Spare", true),
+			fixture(POINT_ID, 901, "Rig", true),
+		]);
+		expect(choices.map((choice) => choice.label)).toEqual(["Origin", "901 · Rig", "902 · Spare"]);
+	});
+
 	it("reads the selection's shared reference, Mixed, a missing Point, or nothing", () => {
 		const choices = familyPointChoices([fixture(POINT_ID, 900, "Singer", true)]);
 		const entry = (fixtureId: string, reference: object) => ({

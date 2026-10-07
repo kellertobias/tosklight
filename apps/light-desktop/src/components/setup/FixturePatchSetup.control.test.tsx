@@ -1437,7 +1437,7 @@ describe("selected split selection and SET editing", () => {
 		const onOpenStageWindow = vi.fn();
 		const rendered = render(
 			<FixturePatchSetup
-				onMedia={vi.fn()}
+				onView={vi.fn()}
 				onOpenStageWindow={onOpenStageWindow}
 			/>,
 		);
@@ -1464,7 +1464,9 @@ describe("selected split selection and SET editing", () => {
 				.map((tab) => [tab.textContent, tab.getAttribute("aria-selected")]),
 		).toEqual([
 			["Fixtures", "true"],
+			["Points", "false"],
 			["Media Servers", "false"],
+			["Tracking", "false"],
 		]);
 		expect(
 			[
@@ -1480,7 +1482,7 @@ describe("selected split selection and SET editing", () => {
 			["Open Stage Renderer"],
 			["+ Add layer", "+ Add fixture", "+ Add multi-patch"],
 			["Delete"],
-			["Fixtures", "Media Servers"],
+			["Fixtures", "Points", "Media Servers", "Tracking"],
 		]);
 		fireEvent.click(screen.getByRole("button", { name: "Open Stage Renderer" }));
 		expect(onOpenStageWindow).toHaveBeenCalledOnce();
@@ -1504,7 +1506,7 @@ describe("selected split selection and SET editing", () => {
 		programming.selection.selected = ["fixture-split"];
 		rendered.rerender(
 			<FixturePatchSetup
-				onMedia={vi.fn()}
+				onView={vi.fn()}
 				onOpenStageWindow={onOpenStageWindow}
 			/>,
 		);

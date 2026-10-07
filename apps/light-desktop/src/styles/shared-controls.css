@@ -2362,8 +2362,32 @@ button:not(:disabled):active {
 	min-width: 0;
 	padding: 12px;
 }
-.patch-configuration-content .psn-setup > h2:first-child {
+.patch-configuration-content .psn-setup > h2:first-child,
+.patch-configuration-content .points-setup > h2:first-child {
 	margin-top: 0;
+}
+/* Show Patch > Points (TL-651): the table reuses the Media Servers table. */
+.points-setup {
+	display: grid;
+	gap: 8px;
+	min-width: 0;
+}
+.points-setup > p {
+	margin: 0;
+	color: var(--muted);
+}
+.points-setup > .points-setup-error {
+	color: var(--red);
+}
+.points-setup .points-table {
+	display: block;
+	overflow-x: auto;
+}
+.points-setup .points-table td .ui-number-control {
+	min-width: 150px;
+}
+.points-setup .points-table tr.is-created td {
+	background: color-mix(in srgb, var(--blue) 18%, transparent);
 }
 .tracking-settings {
 	display: grid;
