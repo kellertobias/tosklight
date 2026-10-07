@@ -19,7 +19,8 @@ use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PoolPlaybackAc
 use light_programmer::ProgrammerRegistry;
 use std::{net::SocketAddr, path::Path, sync::Arc};
 
-pub(super) const SUPPORTED_FIXTURE_COUNTS: [usize; 3] = [1_000, 2_000, 4_000];
+/// 650 is the TL-639 round 8 cap: 24 universes (12,259 of 12,288 parameters).
+pub(super) const SUPPORTED_FIXTURE_COUNTS: [usize; 4] = [650, 1_000, 2_000, 4_000];
 const BASE_MANIFEST: [StressTemplate; 5] = [
     StressTemplate::Dls,
     StressTemplate::LedWash,
@@ -301,7 +302,7 @@ fn prepare_layout(
     semantic: bool,
 ) -> Result<StressLayout, String> {
     if !SUPPORTED_FIXTURE_COUNTS.contains(&fixture_count) {
-        return Err("headless stress fixtures must be exactly 1000, 2000 or 4000".into());
+        return Err("headless stress fixtures must be exactly 650, 1000, 2000 or 4000".into());
     }
     // The 2,000-fixture manifest, halved or doubled; every base quantity is even.
     let quantity = |kind: StressTemplate| kind.base_quantity() * fixture_count / 2_000;
@@ -418,9 +419,11 @@ mod tests {
     fn shipped_profiles_build_the_exact_headless_capacity_tiers() {
         let package_dir =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixture-library");
-        for (fixture_count, universes, final_slot, slots) in
-            [(2_000, 74, 344, 37_720), (4_000, 148, 176, 75_440)]
-        {
+        for (fixture_count, universes, final_slot, slots) in [
+            (650, 24, 483, 12_259),
+            (2_000, 74, 344, 37_720),
+            (4_000, 148, 176, 75_440),
+        ] {
             let scenario = build(
                 fixture_count,
                 BenchmarkProfile::HeadlessStress.config(),

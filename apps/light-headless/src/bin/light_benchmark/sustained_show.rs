@@ -27,6 +27,10 @@ use std::{fs, net::SocketAddr, path::Path, sync::Arc};
 use uuid::Uuid;
 
 const UNIVERSES: usize = 32;
+/// TL-639 round 8: the performance goal is capped at 24 universes (12,288 parameters). A
+/// sustained show of fewer universes keeps the 32-universe mix in proportion: every
+/// manufacturer quantity scales by `universes / 32` and the RGB PARs fill each universe.
+const CAPPED_UNIVERSES: usize = 24;
 const SUNSTRIP_QUANTITY: usize = 20;
 const LEDWASH_QUANTITY: usize = 40;
 const DLS_QUANTITY: usize = 32;
@@ -48,9 +52,30 @@ pub(super) struct DemoTemplates {
     pub(super) rgb_four: Arc<FixtureTemplate>,
 }
 
+#[derive(Clone, Copy)]
+struct Quantities {
+    sunstrip: usize,
+    ledwash: usize,
+    dls: usize,
+    ledbeam: usize,
+}
+
+impl Quantities {
+    fn for_universes(universes: usize) -> Self {
+        let scale = |quantity: usize| quantity * universes / UNIVERSES;
+        Self {
+            sunstrip: scale(SUNSTRIP_QUANTITY),
+            ledwash: scale(LEDWASH_QUANTITY),
+            dls: scale(DLS_QUANTITY),
+            ledbeam: scale(LEDBEAM_QUANTITY),
+        }
+    }
+}
+
 struct DemoLayout {
     templates: DemoTemplates,
     universes: Vec<Vec<Arc<FixtureTemplate>>>,
+    quantities: Quantities,
     manufacturer_fixture_slots: usize,
     rgb_three_count: usize,
     rgb_four_count: usize,
@@ -183,12 +208,14 @@ pub fn build(
     package_dir: &Path,
     semantic: Option<SemanticBuild>,
 ) -> Result<BenchmarkScenario, String> {
-    if config.universes != UNIVERSES as u16 {
+    let universes = usize::from(config.universes);
+    if universes != UNIVERSES && universes != CAPPED_UNIVERSES {
         return Err(
-            "the sustained benchmark show requires the 32-universe hard-floor profile".into(),
+            "the sustained benchmark show requires the 32-universe hard-floor profile or its 24-universe cap"
+                .into(),
         );
     }
-    let layout = prepare_layout(package_dir, semantic.is_some())?;
+    let layout = prepare_layout(package_dir, semantic.is_some(), universes)?;
 
     let logical_start = benchmark_start();
     let clock = Arc::new(ManualClock::new(logical_start));
@@ -319,26 +346,31 @@ pub fn build(
     })
 }
 
-fn prepare_layout(package_dir: &Path, semantic: bool) -> Result<DemoLayout, String> {
+fn prepare_layout(
+    package_dir: &Path,
+    semantic: bool,
+    universe_count: usize,
+) -> Result<DemoLayout, String> {
     let templates = load_templates_with(package_dir, semantic)?;
-    let mut universes = (0..UNIVERSES)
+    let quantities = Quantities::for_universes(universe_count);
+    let mut universes = (0..universe_count)
         .map(|_| Vec::<Arc<FixtureTemplate>>::new())
         .collect::<Vec<_>>();
     distribute(
         &mut universes,
         Arc::clone(&templates.sunstrip),
-        SUNSTRIP_QUANTITY,
+        quantities.sunstrip,
     );
     distribute(
         &mut universes,
         Arc::clone(&templates.ledwash),
-        LEDWASH_QUANTITY,
+        quantities.ledwash,
     );
-    distribute(&mut universes, Arc::clone(&templates.dls), DLS_QUANTITY);
+    distribute(&mut universes, Arc::clone(&templates.dls), quantities.dls);
     distribute(
         &mut universes,
         Arc::clone(&templates.ledbeam),
-        LEDBEAM_QUANTITY,
+        quantities.ledbeam,
     );
     let manufacturer_fixture_slots = universes
         .iter()
@@ -370,6 +402,7 @@ fn prepare_layout(package_dir: &Path, semantic: bool) -> Result<DemoLayout, Stri
     Ok(DemoLayout {
         templates,
         universes,
+        quantities,
         manufacturer_fixture_slots,
         rgb_three_count,
         rgb_four_count,
@@ -412,10 +445,10 @@ impl DemoLayout {
         ScenarioFixtureInventory {
             scenario: "mixed_manufacturer_sustained_show",
             entries: vec![
-                self.templates.sunstrip.inventory(SUNSTRIP_QUANTITY),
-                self.templates.ledwash.inventory(LEDWASH_QUANTITY),
-                self.templates.dls.inventory(DLS_QUANTITY),
-                self.templates.ledbeam.inventory(LEDBEAM_QUANTITY),
+                self.templates.sunstrip.inventory(self.quantities.sunstrip),
+                self.templates.ledwash.inventory(self.quantities.ledwash),
+                self.templates.dls.inventory(self.quantities.dls),
+                self.templates.ledbeam.inventory(self.quantities.ledbeam),
                 self.templates.rgb_three.inventory(self.rgb_three_count),
                 self.templates.rgb_four.inventory(self.rgb_four_count),
             ],
@@ -725,5 +758,26 @@ mod tests {
                 ("RGB LED", "RGBD 8-bit dimmer last", 24),
             ]
         );
+    }
+
+    #[test]
+    fn the_capped_sustained_show_keeps_the_mix_in_proportion_on_24_universes() {
+        let package_dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixture-library");
+        let mut config = crate::light_benchmark::arguments::BenchmarkProfile::HardFloor.config();
+        config.universes = 24;
+        let scenario = build(config, ProtocolSelection::ArtNet, None, &package_dir, None).unwrap();
+
+        assert_eq!(scenario.fixture_count, 3_111);
+        assert_eq!(scenario.fixture_inventory.total_slots, 24 * 512);
+        let quantities = scenario
+            .fixture_inventory
+            .entries
+            .iter()
+            .map(|entry| entry.quantity)
+            .collect::<Vec<_>>();
+        assert_eq!(quantities, vec![15, 30, 24, 24, 3_000, 18]);
+        config.universes = 16;
+        assert!(build(config, ProtocolSelection::ArtNet, None, &package_dir, None).is_err());
     }
 }
