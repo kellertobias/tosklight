@@ -84,6 +84,7 @@ architecture(){
   architecture_check "Control state labels" node --test "$ROOT/tools/check-control-state-labels.test.mjs"
   architecture_check "Programmer action timing" node --test "$ROOT/tools/programmer-action-timing.test.mjs"
   architecture_check "Performance publication" node --test "$ROOT/tools/performance-publication.test.mjs"
+  architecture_check "Public site legal pages" node --test "$ROOT/tools/site-legal/site-legal.test.mjs"
   architecture_check "Release performance runner" node --test "$ROOT/tools/run-release-performance.test.mjs"
   architecture_check "Sustained output benchmark" node --test "$ROOT/tools/run-sustained-output-benchmark.test.mjs"
   architecture_check "Semantic performance workloads" node --test "$ROOT/tools/semantic-performance-workload.test.mjs" "$ROOT/tools/semantic-performance-report.test.mjs" "$ROOT/tools/semantic-source-manifest.test.mjs" "$ROOT/tools/run-semantic-output-benchmark.test.mjs"

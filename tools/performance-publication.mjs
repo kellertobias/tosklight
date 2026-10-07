@@ -684,6 +684,6 @@ export function renderPerformancePage(performance) {
 		`<a class="resource-card" href="../semantic-tests/semantic-test-catalog.html"><strong>Semantic test catalog →</strong><span>Searchable human-readable contracts compiled from the acceptance suite.</span></a>` +
 		`<a class="resource-card" href="https://github.com/kellertobias/tosklight"><strong>Source on GitHub →</strong><span>The complete Rust, TypeScript, React, Tauri, tests, issues, and build history.</span></a>` +
 		`<a class="resource-card" href="https://github.com/kellertobias/tosklight/blob/main/docs/engineering/build-and-test-commands.md"><strong>Build and test guide →</strong><span>Authoritative commands for local development, packages, documentation, and verification.</span></a>` +
-		`</div></section><p class="performance-footer"><a href="../">← Return to ToskLight</a> · <a href="../imprint/">Imprint &amp; Privacy</a></p></main></html>`
+		`</div></section><p class="performance-footer"><a href="../">← Return to ToskLight</a> · <a href="../impressum/">Impressum</a> · <a href="../datenschutz/">Datenschutz</a></p></main></html>`
 	);
 }

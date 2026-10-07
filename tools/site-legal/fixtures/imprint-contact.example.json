@@ -1,0 +1,11 @@
+{
+  "operator": "Beispiel Medien (fiktiv)",
+  "name": "Erika Mustermann",
+  "street": "Musterstraße 1",
+  "postalCode": "12345",
+  "city": "Musterstadt",
+  "country": "Deutschland",
+  "email": "impressum@example.invalid",
+  "phone": "+49 000 0000000",
+  "responsibleForContent": "Erika Mustermann"
+}
