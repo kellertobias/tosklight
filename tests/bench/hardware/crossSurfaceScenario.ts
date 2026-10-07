@@ -614,7 +614,7 @@ export class BrowserCrossSurface {
 			status: "changed",
 			group: { state: "stored", id: "3", revision: group.revision + 1 },
 		});
-		await expect(groupCard).toContainText("5 fixtures");
+		await expect(groupCard).toContainText("5 fx");
 		await this.desk.click(
 			dialog.getByRole("button", { name: "Close settings" }),
 		);
@@ -653,7 +653,7 @@ export class BrowserCrossSurface {
 			this.page
 				.locator(".group-pool-window .group-card")
 				.filter({ hasText: "Front Dimmers" }),
-		).toContainText("5 fixtures");
+		).toContainText("5 fx");
 		for (const number of [1, 5])
 			await expect(
 				this.fixtureRow(number).locator(".source-value").first(),

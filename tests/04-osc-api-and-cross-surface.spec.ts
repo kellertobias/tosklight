@@ -495,7 +495,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await test.step("Apply the contract's external REST membership mutation", async () => {
         state.mutationRevision = await appendFixtureFive(api);
       });
-      await expect(groupCard).toContainText("5 fixtures");
+      await expect(groupCard).toContainText("5 fx");
       await dialog.getByRole("button", { name: "Close settings" }).click();
       await groupCard.click({ button: "right" });
       await expect(dialog).toBeVisible();
@@ -530,7 +530,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await page.waitForTimeout(700);
       await page.reload();
       await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
-      await expect(page.locator(".group-pool-window .group-card").filter({ hasText: "Front Dimmers" })).toContainText("5 fixtures");
+      await expect(page.locator(".group-pool-window .group-card").filter({ hasText: "Front Dimmers" })).toContainText("5 fx");
       for (const number of [1, 5]) {
         const row = fixtureSheetRow(page, number);
         await expect(row.locator(".source-value").first()).toHaveClass(/source-programmer/);
