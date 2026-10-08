@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+	createOutputWindowAccumulator,
 	histogramPercentileMicros,
 	outputWindow,
 } from "./output-histogram.mjs";
@@ -37,4 +38,19 @@ test("returns null for an empty bounded window", () => {
 test("p99 excludes one isolated outlier only after the window exceeds 100 samples", () => {
 	assert.equal(histogramPercentileMicros(output([43, 0, 0, 1]), 99), 2_000);
 	assert.equal(histogramPercentileMicros(output([100, 0, 0, 1]), 99), 250);
+});
+
+test("an accumulated window keeps the ticks on both sides of a scheduler counter reset", () => {
+	const accumulator = createOutputWindowAccumulator(output([1, 0, 0, 0]));
+	accumulator.observe(output([3, 2, 0, 0]));
+	// A show switch restarts the scheduler: its counters begin again from zero.
+	accumulator.observe(output([0, 1, 0, 0]));
+	const window = accumulator.take(output([0, 2, 0, 1]));
+
+	assert.deepEqual(window.tick_duration_bucket_counts, [2, 4, 0, 1]);
+	assert.equal(window.frames_sent, 7);
+	assert.equal(window.counter_resets, 1);
+	const next = accumulator.take(output([0, 3, 0, 1]));
+	assert.deepEqual(next.tick_duration_bucket_counts, [0, 1, 0, 0]);
+	assert.equal(next.counter_resets, 0);
 });

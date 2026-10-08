@@ -2113,3 +2113,224 @@ identical between the base build and the final build (`digests/digest-summary.tx
 - Evidence: `.artifacts/performance/tl641-start-latency/` (per-run JSON under `branch/`, `base/`,
   `branch-quiet/`, `base-quiet/`; `rows-*.md`; `digests/`). Scripts in `.artifacts/tmp/tl641/`
   (`summarize.py`, `digests.py`).
+
+## Native Stage and assembled semantic output at the owner's targets (TL-553)
+
+The question was whether the packaged native Stage and the assembled semantic output path hold
+the fixed Stage gates (`docs/testing/16-stage-performance.md`) inside the owner's 24-universe
+ceiling. The assembled semantic output does: re-measured on this head, every round-8 target row
+holds with round 8's numbers. The native Stage holds the gates on the animated canonical demo
+(10 universes) except during the renderer teardown/recreation exercise. On the animated
+500-instance Stage (19 universes) it misses them: the Live pane at Ultra quality spends 77 ms
+of CPU per frame and delivers about 7 changing frames per second instead of 10. The operator
+session locked during the campaign, so four planned runs, including the 30-minute
+retained-resource run, could not complete; they stay open.
+
+### Workloads inside the 24-universe ceiling
+
+- **canonical-demo**: `assets/demo.show` (312 records, 345 physical instances, universes 1-10)
+  with its 12-assignment benchmark look:
+  - Pan/Tilt Circle and Waterfall Dynamics (mount motion) on the Beam and Wash groups;
+  - the Sunstrip Rain Dynamic (blue and White Blend lanes, colour fitting);
+  - PWM, Random, Sinus and Strobe intensity Dynamics;
+  - the ACL Chase cue list with 1 s cue fades;
+  - Live and Follow Preload streams.
+- **stage-500, animated** (`LIGHT_PACKAGED_STAGE_DYNAMICS=1`): the 500-record mixed patch (19
+  universes, 9,712 slots: ROBE DLS, 600X LEDWash, LEDBeam 150, Showtec Sunstrip, dimmers, Venue)
+  animated by the large Stage's 20-instance Dynamics plan. The plan runs Intensity, Colour recipe
+  primaries and Pan/Tilt Angles on 747 targets, which the runtime holds as 1,659 target-family
+  units. Without the option, stage-500 is a static look and its 10 Hz cadence clause cannot be
+  measured.
+- **default-stage**: the development default show. It is the demo patch with no look running,
+  so its source frames change only on show switches.
+- **Out of scope**: `large-stage` and `supported-scale` (970 records, 1,000 instances) patch 37
+  universes. No shipped scenario animates Position Targets (XYZ) or Focus/Zoom, so those two
+  families are not covered. Covering them would need new harness work.
+
+### How it was measured
+
+- **Build.** The release bundle at `7fe806fe4`: the shipped archive's cargo profile, host
+  architecture only. It holds the release Tauri shell with the release `light-headless` and
+  `viz-renderer` beside it.
+- **Isolation.** The bundle identifier was changed to `de.tokenet.light.tl553bench` and the
+  frontend's default server to `127.0.0.1:5553`. The owner's running desk (port 5000, OSC 9000,
+  bundle `de.tokenet.light`) was never addressed, stopped or shared.
+- **Debug bundle.** The debug bundle `npm run build:open` would produce was built too. Its
+  numbers are not used for the gates: its renderer and server are several times slower.
+- **Runner options.** `tools/run-packaged-stage-benchmark.mjs` with:
+  - `LIGHT_PACKAGED_STAGE_PORT=5553`: runs the bundled server on that port, with OSC input on
+    5554, and stops only the processes the runner started.
+  - `LIGHT_PACKAGED_STAGE_CARGO_PROFILE=release`: measures the release bundle.
+  - `LIGHT_PACKAGED_STAGE_NETWORK_CAPTURE=1`: routes the first patched universe to loopback
+    Art-Net and sACN receivers in both switched shows.
+  - `LIGHT_PACKAGED_STAGE_DYNAMICS=1`: animates stage-500 as above.
+- **Pairing.** Each run pairs a 300 s no-Stage window with a 300 s Stage window on the same desk.
+  Runs alternated canonical-demo and stage-500.
+- **Host.** Apple M5 Max (18 cores, 64 GB), macOS 26.6.2, renderer "Apple M5 Max (Metal, 4x
+  MSAA)". Drawables are 960×450 and 912×450 (the shell's pane size). The host was shared with
+  other agents' E2E suites; its load was logged every 10 s (`host-load.log`).
+
+The runner no longer measured what the gates say. Fixes made as part of this work:
+
+- **Output pairing.** A show switch restarts the scheduler's cumulative counters, and every Stage
+  window holds four switches. Subtracting the window's end snapshots gave negative frame counts
+  and clamped histograms. The windows are now accumulated from one-second observations
+  (`createOutputWindowAccumulator`), which also record each interval that missed and whether it
+  began with a counter reset.
+- **Latency.** Every presentation was counted, including a quality change or resize that
+  re-presents an unchanged source and so reports that source's age (seconds on a static look).
+  The gate now takes each pane's first presentation of each source frame. Repeated
+  presentations are reported separately.
+- **Gaps.** The presentation-gap and source-cadence gates counted only frames marked
+  `visibleChanged`, which the native helper never sets, so both always passed. First
+  presentations now carry the mark.
+- **API drift.** Preparing canonical-demo and stage-500 had broken against the current API:
+  - expected demo counts 264/306 (now 312/345);
+  - the look's playback numbers (ACL Chase 17 is now 8);
+  - `go_to` cue numbers are now strings;
+  - the desk-scoped `/api/v2/programmer/values` routes;
+  - the large Dynamics plan's runtime target count, which counts target-family units, not lane
+    addresses.
+
+### Gates
+
+Release bundle, one no-Stage → Stage pair per run, 300 s each. A "changing frame" is the first
+presentation of a new source frame. Scheduler p99 is a histogram bucket bound, so it moves in
+steps. The desk ran at 44 Hz (the default).
+
+| Gate | demo r2 (load 4-7) | demo r1b (Stage window under load up to 34) | stage-500 animated r1 (load 5-9) | stage-500 animated r2 (control under load 25) |
+| --- | --- | --- | --- | --- |
+| Live and Preload lanes present | pass | pass | pass | pass |
+| Source-to-present p95 ≤ 120 ms | **pass** 14.7 (p50 4.0) | pass 18.0 | pass 104.8 (p50 24.8) | pass 104.2 |
+| No changing frame over 200 ms | pass, max 48 | pass, max 151 | pass, max 182 | **fail**, max 203 |
+| Presentation gap ≤ 200 ms | pass, max 150 | fail, 329 | **fail**, 228 | **fail**, 307 |
+| Source cadence gap ≤ 200 ms (10 Hz) | **fail**, 1,216 (recreation only; p95 interval 113) | fail, 1,211 | **fail**, 1,522; p95 interval 290 | **fail**, 1,450; p95 275 |
+| Lifecycle exercises (below) | pass | pass | pass | pass |
+| Paused visualization client stays bounded | n/a | n/a | pass (4 drops, 1 send failure, depth 0) | pass |
+| Scheduler p99 not worse than max(1 ms, 5 %) | **pass** 8 → 4 ms | fail 8 → 48 ms | **fail** 12 → 24 ms | pass 48 → 16 ms (control loaded) |
+| No added deadline misses | **pass** 1 → 0 | fail 0 → 162 | **fail** 0 → 5 | fail 89 → 4 |
+| No send errors | pass, 0 / 0 | pass | pass | pass |
+| Art-Net / sACN packets per second, no-Stage / Stage | 44.0 / 44.3 each | 44 / 43.2 | 44 / 44 | 43.6 / 44 |
+| Desktop RSS over the Stage window | 114 → 163 MB | 119 → 158 MB | 112 → 143 MB | 122 → 151 MB |
+
+The lifecycle row covers all four render qualities, the resize (960×450 / 912×450), renderer
+recreation, four show switches and a 1 s suspend.
+
+Reading the table against the host load:
+
+- **demo r1b is unpaired.** Its misses all fall in the Stage window's last minutes, while
+  another agent's four-worker E2E suite raised the load to 34. Its control window was quiet, so
+  the pair says nothing about the Stage.
+- **demo r2 is the clean pair.** It passes every gate except the recreation gap.
+- **Most stage-500 misses are show opens.** Three of r1's five misses and three of r2's four
+  begin with a counter reset: each is the first frame of a newly opened show. With no Stage
+  open that frame takes 25-28 ms (`no-stage-show-switch-slow-ticks-*.txt`, `dynamic_micros`
+  24.9-27.5 ms at each switch), over the 22.7 ms period at 44 Hz. That is a show-open cost,
+  charged to the Stage because only the Stage window switches shows.
+- **The animated Stage does cost the output thread.** r1 still has two misses in a steady
+  window, and its p99 doubles from 12 to 24 ms at moderate load.
+
+### What fails, and why
+
+- **Renderer recreation (every run).** The "unmount-and-recreate" exercise leaves the Live lane
+  without a frame for 1.1-1.5 s, from the old pane's last frame to the new helper's first
+  (process start, Metal setup, scene upload). The WebGL path excluded its context-recovery
+  interval from these gates. The native path records no interval, so the gap counts. Fixing it
+  means either recording the interval and excluding it (an owner decision about the gate) or
+  making recreation faster.
+- **Ultra at 500 animated instances.** Native helper CPU per Live-pane frame by quality, p50 /
+  p95 ms (`*.quality.txt`):
+
+  | Live pane | Draft | Standard | High | Ultra |
+  | --- | ---: | ---: | ---: | ---: |
+  | canonical demo, 5,058 drawn instances | 1.2 / 3.5 | 1.2 / 1.6 | 1.4 / 1.7 | 7.2 / 14.6 |
+  | stage-500 animated, 7,524 drawn instances | 1.6 / 3.4 | 2.0 / 14.1 | 2.7 / 22.3 | **77.2 / 98.9** |
+
+  - After its quality sweep the benchmark stays at Ultra, so nearly every gate sample is an Ultra
+    frame.
+  - At 77 ms the Live pane drops about every third 10 Hz source frame. That gives the
+    275-290 ms cadence p95, the 104 ms latency p95 and the presentation gaps.
+  - The Preload pane draws 511 instances and stays at 7 ms. GPU time was under 1 ms where
+    sampled.
+  - The cost is CPU in frame preparation (`Renderer::render`: plan, shadow assignment, upload)
+    and grows with the moving instances. It is renderer work, not a small output-neutral fix.
+- **The packaged shell stops while the session is locked.** The screen locked at 00:36:12 UTC
+  (`CGSSessionScreenIsLocked`). From then on the shell's timers stopped: every run either
+  never reached its Stage window or stopped reporting partway through. The scenario already
+  fails a locked session. An earlier burst of identical failures at 23:24-23:32 fits the same
+  cause.
+
+### Retained resources (30 minutes)
+
+Not run. The 30-minute stage-500 run (`npm run benchmark:packaged-stage -- 1800 stage-500` with
+the options above) was queued last and could not start in the locked session. **Open.** What the
+300 s runs show:
+
+- No instance or draw-call growth: 5,058 / 117 on the demo and 7,524 / 50 on stage-500
+  throughout.
+- No degraded frame.
+- No GLB, mesh or row rebuild churn visible in the constant instance and draw-call counts.
+- Desktop RSS rose 30-50 MB per 10-minute run. A 30-minute run with a 60 s warmup still has to
+  test that against the 1 MiB per minute gate.
+- The run's late CPU frame p95 gate (16.7 ms) is already exceeded at Ultra: stage-500's Live
+  pane reaches p95 98.9 ms in every 300 s run. Until the Ultra cost is fixed, the 30-minute run
+  will fail on that clause.
+
+### Assembled semantic output at the round-8 rows, this head
+
+`light-benchmark` from this head (`--release --locked --no-default-features`, binary
+`c0524bed…`), three rounds of 8 s after a 2 s warmup, paced, encode-only, at load 2.4-5.4
+(`semantic-rows/rows.md`). Pipeline ms, medians and worst maximum:
+
+| Owner target | Workload | p50 | p99 | worst max | Budget | Rate | Misses | RSS |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 8 universes, clearly 60 Hz | typed sustained 1,037 | 4.80 | 5.89 | 6.86 | 16.7 | 60.1 Hz | 0 / 0 / 0 | 91 MB |
+| | typed stress 200 | 4.87 | 5.46 | 14.29 | 16.7 | 60.1 Hz | 0 / 0 / 1 | 70 MB |
+| 16 universes, clearly 40 Hz | typed sustained 2,074 | 6.76 | 7.55 | 8.42 | 25.0 | 40.1 Hz | 0 / 0 / 0 | 140 MB |
+| | typed stress 400 (15 universes) | 7.71 | 8.16 | 8.87 | 25.0 | 40.1 Hz | 0 / 0 / 0 | 137 MB |
+| 24 universes, 32-40 Hz | typed sustained 3,111 @ 40 Hz | 7.99 | 8.50 | 8.75 | 25.0 | 40.1 Hz | 0 / 0 / 0 | 180 MB |
+| | typed stress 650 @ 40 Hz | 10.08 | 10.68 | 11.24 | 25.0 | 40.1 Hz | 0 / 0 / 0 | 186 MB |
+| | typed sustained 3,111 @ 32 Hz | 8.76 | 9.44 | 9.62 | 31.2 | 32.1 Hz | 0 / 0 / 0 | 171 MB |
+| | typed stress 650 @ 32 Hz | 10.49 | 11.04 | 11.52 | 31.2 | 32.1 Hz | 0 / 0 / 0 | 166 MB |
+
+- **Rates.** Every row holds its rate. The one miss is a single late frame in one stress-200
+  run whose slowest frame (14.3 ms) is inside the period.
+- **Entry-level estimate.** The estimate repeats round 8's: at 8 universes and 40 Hz under
+  background QoS, the worst typed p99 is 21.1 ms on one worker, 18.4 on two and 13.4 on four,
+  against a 25 ms budget. Under normal QoS it is 7.6-8.5 ms. A real entry-level machine is
+  still **open**.
+- **Wire output.** The desk's own loopback output agrees at 44 Hz: 44 Art-Net and 44 sACN
+  packets per second on the tracked universe in every window. Art-Net is ArtDmx (0x5000,
+  protocol 14, universe 101, 512 slots); sACN is `ASC-E1.17`. On the animated looks the DMX
+  changed with the look.
+
+### For follow-up
+
+- **Ultra on a 500-instance animated Stage.** Live-pane CPU is 77 / 99 ms per frame (p50 /
+  p95), against 2.7 / 22 ms at High. Reproduce with the options above and `300 stage-500`, then
+  read `*.quality.txt`. Keeping a 10 Hz source with headroom needs it below about 50 ms.
+- **Native renderer recreation.** The Live lane goes dark for 1.1-1.5 s. Either record the
+  interval and exclude it, as WebGL context recovery was, or shorten the recreation.
+- **First frame after a show open.** At 19 animated universes it takes 25-28 ms. That is one
+  deadline miss at 44 Hz per show switch, with or without the Stage.
+- **Show switch in the no-Stage window.** One debug run that switched shows in the no-Stage
+  window stopped the shell before its Stage window. It may be the same lock effect; it was not
+  isolated.
+
+### Measurement identities
+
+- **Source.** `7fe806fe4`. Engine, renderer and shell sources are unchanged; only `tools/`
+  changed.
+- **Release bundle.** `light-desktop` `85abb4d4…`, `light-headless` `8357dee1…`, `viz-renderer`
+  `84abb786…`.
+- **Debug bundle.** `light-desktop` `95d696b2…`, `light-headless` `c3daac5d…`, `viz-renderer`
+  `b87133c7…`.
+- **Benchmark.** `light-benchmark` `c0524bed…`.
+- **Evidence.** `.artifacts/performance/tl553/` of the TL-553 worktree:
+  - `identity*.txt`;
+  - `run-*.log`, and per run `<name>.json`, `.jsonl`, `.summary.json`, `.gaps.txt` and
+    `.quality.txt`;
+  - `runs.txt`, `host-load.log`, `no-stage-show-switch-slow-ticks-release-stage500dyn.txt`;
+  - `semantic-rows/`.
+- **Scripts.** `.artifacts/tmp/tl553/`: `build.sh`, `build-release.sh`, `run.sh`, `campaign.sh`,
+  `rows.sh`, `summarize.mjs`, `gaps.mjs`, `cpu.mjs`, `demo-switch-probe.mjs`.
