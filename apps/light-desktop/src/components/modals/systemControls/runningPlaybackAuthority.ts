@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import type { CueList, PlaybackDefinition } from "../../../api/types";
+import type { CueList, PlaybackDefinition, PlaybackPage } from "../../../api/types";
 import type { CueListRuntimeSource } from "../../../features/playbackRuntime/actionWriter";
 import type {
 	PlaybackIdentity,
@@ -16,11 +16,12 @@ import {
 import {
 	useCueLists,
 	usePlaybackDefinitions,
+	usePlaybackPages,
 	useShowObjectCollectionsReady,
 } from "../../../features/showObjects/ShowObjectsState";
 import { useShowObjectKindsView } from "../../../features/showObjects/ShowObjectsView";
 
-const SHOW_KINDS = ["cue_list", "playback"] as const;
+const SHOW_KINDS = ["cue_list", "playback", "playback_page"] as const;
 const NO_SOURCES: readonly RunningCueListSource[] = [];
 const NO_DYNAMICS: readonly RunningDynamic[] = [];
 
@@ -36,6 +37,7 @@ export interface RunningCueListSource extends CueListRuntimeSource {
 	/** Stable Cuelist Pool number, independent of the surface runtime identity. */
 	cueListNumber?: number | null;
 	playbackNumber: number | null;
+	locations?: readonly { page: number; slot: number }[];
 	label: string;
 	runtime: CueListRuntime;
 	cueList: CueList | undefined;
@@ -66,11 +68,12 @@ export function useRunningPlaybackAuthority(
 	const collectionsReady = useShowObjectCollectionsReady(SHOW_KINDS, enabled);
 	const cueListObjects = useCueLists(enabled);
 	const playbackObjects = usePlaybackDefinitions(enabled);
+	const pageObjects = usePlaybackPages(enabled);
 	const cueLists = enabled && collectionsReady ? cueListObjects : [];
 	const playbacks = enabled && collectionsReady ? playbackObjects : [];
 	const model = useMemo(
-		() => portableModel(cueLists, playbacks),
-		[cueLists, playbacks],
+		() => portableModel(cueLists, playbacks, pageObjects),
+		[cueLists, playbacks, pageObjects],
 	);
 	const runtimeEnabled = enabled && collectionsReady;
 	const mapped = usePlaybackProjectionMap(
@@ -116,6 +119,7 @@ export function useRunningPlaybackAuthority(
 function portableModel(
 	cueListObjects: ReturnType<typeof useCueLists>,
 	playbackObjects: ReturnType<typeof usePlaybackDefinitions>,
+	pageObjects: ReturnType<typeof usePlaybackPages>,
 ) {
 	const cueLists = cueListObjects.map((object) => object.body);
 	const playbacks = playbackObjects
@@ -133,6 +137,7 @@ function portableModel(
 		cueListNumbers,
 		cueListIds: cueLists.map((cueList) => cueList.id),
 		playbackNumbers: playbacks.map((playback) => playback.number),
+		pages: pageObjects.map((object) => object.body),
 	};
 }
 
@@ -160,6 +165,7 @@ function deriveSources(
 						cueLists.get(playback.target.cue_list_id),
 						model.cueListNumbers.get(playback.target.cue_list_id) ?? null,
 						playback,
+						model.pages,
 					),
 				]
 			: [];
@@ -195,6 +201,7 @@ function source(
 	cueList: CueList | undefined,
 	cueListNumber: number | null,
 	playback?: CueListPlayback,
+	pages: readonly PlaybackPage[] = [],
 ): RunningCueListSource {
 	const playbackNumber = projection.playback_number;
 	const identity: PlaybackIdentity =
@@ -207,6 +214,10 @@ function source(
 		cueListId: projection.cue_list_id,
 		cueListNumber,
 		playbackNumber,
+		locations: playbackNumber == null ? [] : pages.flatMap((page) =>
+			Object.entries(page.slots).filter(([, number]) => number === playbackNumber)
+				.map(([slot]) => ({ page: page.number, slot: Number(slot) })),
+		).sort((a, b) => a.page - b.page || a.slot - b.slot),
 		label:
 			playback?.name ||
 			cueList?.name ||

@@ -272,6 +272,7 @@ vi.mock("./systemControls/useVisualizerViewControls", () => ({
 }));
 
 afterEach(() => {
+	delete mapped.locations;
 	cleanup();
 	vi.clearAllMocks();
 	legacyReads = 0;
@@ -439,6 +440,16 @@ describe("SystemControlsModal", () => {
 			dynamicsRuntime.authority.rows[0],
 		);
 		expect(clearProgrammer).toHaveBeenCalledWith("session-1");
+	});
+
+	it("distinguishes page slot from pool owner when stopping a mapped Cuelist", () => {
+		mapped.locations = [{ page: 1, slot: 7 }, { page: 2, slot: 3 }];
+		render(<SystemControlsModal />);
+		expect(screen.getByText(/Page 1 · Playback 7, Page 2 · Playback 3 · Pool 12/))
+			.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Turn off Playback Main playback" }));
+		expect(release).toHaveBeenCalledWith(mapped);
+		expect(mapped.identity).toEqual({ kind: "playback", playback_number: 12 });
 	});
 
 	it("groups the desk's sessions and uses safe lifecycle counts", () => {

@@ -320,7 +320,8 @@ impl ServerPlaybackPorts<'_> {
         let definition = virtual_playback_definition(self.state, address)?;
         let (definition, action) = configured_control_definition(&definition, action)?;
         let (action_name, input) = legacy_action(action.clone());
-        if captures_preload(context.source)
+        if !matches!(action, PlaybackAction::Release)
+            && captures_preload(context.source)
             && let Some(pending) = self.capture(
                 context,
                 &definition,
@@ -588,7 +589,8 @@ impl ServerPlaybackPorts<'_> {
             });
         }
         let (action_name, input) = legacy_action(action.clone());
-        if captures_preload(context.source)
+        if !matches!(action, PlaybackAction::Release)
+            && captures_preload(context.source)
             && let Some(pending) =
                 self.capture(context, &definition, action_name, &input, surface, page)?
         {
@@ -597,7 +599,9 @@ impl ServerPlaybackPorts<'_> {
                 pending: Some(pending),
             });
         }
-        if self.intercept_update(context, &definition, action) {
+        if !matches!(action, PlaybackAction::Release)
+            && self.intercept_update(context, &definition, action)
+        {
             return Ok(PlaybackExecution::Pool {
                 changed: false,
                 pending: None,

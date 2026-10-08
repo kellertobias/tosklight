@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "playback_release_routes.rs"]
+mod release_routes;
+
 #[tokio::test]
 async fn v2_playback_overview_is_authenticated_and_keeps_desk_scope() {
     let (state, data_dir) = test_state();

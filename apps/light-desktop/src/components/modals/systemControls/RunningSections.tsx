@@ -114,7 +114,9 @@ function PlaybackRow({
 				<small>
 					{playback.playbackNumber == null
 						? "Virtual playback"
-						: `Playback ${playback.playbackNumber}`} {" "}
+						: playback.locations?.length
+							? `${playback.locations.map(({ page, slot }) => `Page ${page} · Playback ${slot}`).join(", ")} · Pool ${playback.playbackNumber}`
+							: `Playback pool ${playback.playbackNumber}`} {" "}
 					· Cue {cueNumber} · {Math.round(playback.runtime.master * 100)}% ·{" "}
 					{playback.runtime.paused ? "Paused" : "Running"}
 				</small>

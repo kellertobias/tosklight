@@ -302,7 +302,10 @@ function harness(options: {
 			objects:
 				kind === "cue_list" || kind === "playback"
 					? OBJECTS[showId as keyof typeof OBJECTS][kind]
-					: [],
+					: kind === "playback_page" ? [{
+						kind, id: "1", revision: 1, updated_at: "",
+						body: { number: 1, name: "Main", slots: { 7: showId === SHOW_A ? 12 : 7 }, virtual_playbacks: {} },
+					}] : [],
 			showRevision: 4,
 		}),
 	);
@@ -366,7 +369,7 @@ describe("System Controls running Playback authority", () => {
 		expect(screen.getByTestId("ready")).toHaveTextContent("false");
 	});
 
-	it("hydrates only Cuelists and Playbacks, then selects exact running identities", async () => {
+	it("hydrates Cuelists, Playbacks and page locations, then selects exact running identities", async () => {
 		const model = harness();
 
 		await waitFor(() =>
@@ -375,9 +378,9 @@ describe("System Controls running Playback authority", () => {
 
 		expect(
 			model.loadCollection.mock.calls.map(([, kind]) => kind).sort(),
-		).toEqual(["cue_list", "playback"]);
+		).toEqual(["cue_list", "playback", "playback_page"]);
 		expect(model.showTransport.subscriptions.at(-1)).toEqual({
-			kinds: ["cue_list", "playback"],
+			kinds: ["cue_list", "playback", "playback_page"],
 			objects: [],
 		});
 		const requested = new Set(
@@ -400,6 +403,10 @@ describe("System Controls running Playback authority", () => {
 			"Main playback|Virtual Cuelist",
 		);
 		expect(screen.getByTestId("dynamics")).toHaveTextContent("0");
+		expect(latest?.mappedSources[0]).toMatchObject({
+			identity: { kind: "playback", playback_number: 12 },
+			locations: [{ page: 1, slot: 7 }],
+		});
 	});
 
 	it("refuses release and exposes no stale rows while exact runtime is loading", async () => {
@@ -450,7 +457,7 @@ describe("System Controls running Playback authority", () => {
 			expect(model.runtimeStore.getSnapshot().status).toBe("ready"),
 		);
 		expect(model.showStore.getSnapshot().readyCollections).toEqual(
-			new Set(["cue_list", "playback"]),
+			new Set(["cue_list", "playback", "playback_page"]),
 		);
 		expect(model.showStore.getSnapshot().playbacks.map(({ id }) => id)).toEqual([
 			"7",

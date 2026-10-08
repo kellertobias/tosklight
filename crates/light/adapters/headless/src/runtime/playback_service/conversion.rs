@@ -126,7 +126,9 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
         PlaybackAction::Go { .. } => "go",
         PlaybackAction::Back { .. } => "go-minus",
         PlaybackAction::Pause { .. } => "pause",
-        PlaybackAction::Release => "release",
+        // The numbered control dispatcher exposes the immediate release as Off.
+        // Direct Cuelist and dedicated virtual runtimes handle Release as a typed action.
+        PlaybackAction::Release => "off",
         PlaybackAction::On { .. } => "on",
         PlaybackAction::Off { .. } => "off",
         PlaybackAction::Toggle { .. } => "toggle",
