@@ -38,6 +38,16 @@ const extendedTest = base.extend<TestFixtures, BenchWorkerOptions>({
 		}
 	},
 	baseURL: async ({ bench }, use) => use(bench.baseUrl),
+	// A test must never depend on the OS giving its browser window focus: parallel workers and CI
+	// runners often leave the page unfocused, which silently drops :focus/:focus-within styling and
+	// focus events. Chromium's focus emulation makes every page behave as the focused window.
+	page: async ({ page, browserName }, use) => {
+		if (browserName === "chromium") {
+			const session = await page.context().newCDPSession(page);
+			await session.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+		}
+		await use(page);
+	},
 	show: [
 		async ({ bench }, use, testInfo) => {
 			const show = await bench.createTwelveDimmerShow();
