@@ -1,37 +1,62 @@
 import { ErrorAlert } from "@tosklight/ui";
 import { Button } from "@tosklight/ui";
 import { useEffect, useState } from "react";
+import { useActiveShowError } from "../../features/deskSnapshot/DeskSnapshotState";
+import { useDeskStateDiagnostics } from "../../features/deskState/DeskStateDiagnosticsState";
+import { criticalDeskFailure } from "../../features/shellStatus/criticalDeskFailure";
 import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
 import {
 	useConnectionStatus,
 	useServerError,
 } from "../../features/shellStatus/ShellStatusState";
 
-/** One global lane for connected-desk failures that do not belong to an object surface. */
+/** Red is reserved for authoritative capability loss; request failures remain non-blocking. */
 export function ServerErrorToast() {
 	const connection = useConnectionStatus();
 	const error = useServerError();
 	const actions = useShellStatusActions();
+	const critical = criticalDeskFailure(
+		useActiveShowError(),
+		useDeskStateDiagnostics(),
+	);
 	const [displayedError, setDisplayedError] = useState<string | null>(null);
 	useEffect(() => {
 		if (connection !== "connected") {
 			setDisplayedError(null);
 			return;
 		}
-		if (error) setDisplayedError(error);
+		setDisplayedError(error);
 	}, [connection, error]);
-	if (connection !== "connected" || !displayedError) return null;
+	if (connection !== "connected") return null;
+	if (critical)
+		return (
+			<ErrorAlert
+				as="aside"
+				className="server-error-toast"
+				copyText={critical.message}
+				role="alert"
+				aria-label="Desk failure"
+			>
+				<div>
+					<strong>Desk needs attention</strong>
+					<span>{critical.message}</span>
+					<small>{critical.action}</small>
+				</div>
+			</ErrorAlert>
+		);
+	if (!displayedError) return null;
 	return (
-		<ErrorAlert as="aside"
-			className="server-error-toast"
-			copyText={displayedError}
-			role="alert"
-			aria-label="Desk failure"
+		<aside
+			className="server-action-notice"
+			role="status"
+			aria-label="Action feedback"
 		>
 			<div>
-				<strong>Desk needs attention</strong>
-				<span>{displayedError}</span>
-				<small>Correct the named condition, then retry the action.</small>
+				<strong>Action could not be completed</strong>
+				<details>
+					<summary>{displayedError.split("\n")[0]}</summary>
+					<pre>{displayedError}</pre>
+				</details>
 			</div>
 			<Button
 				onClick={() => {
@@ -41,6 +66,6 @@ export function ServerErrorToast() {
 			>
 				Dismiss
 			</Button>
-		</ErrorAlert>
+		</aside>
 	);
 }

@@ -29,6 +29,7 @@ export interface ProgrammingCommandLineWriterOptions {
 	): Promise<CommandLineProjection>;
 	loadSnapshot(): Promise<ProgrammingSnapshot>;
 	onError?: (error: Error | null) => void;
+	onEdit?: () => void;
 }
 
 /**
@@ -47,6 +48,7 @@ export class ProgrammingCommandLineWriter {
 	private readonly replaceRequest: ProgrammingCommandLineWriterOptions["replace"];
 	private readonly loadSnapshot: ProgrammingCommandLineWriterOptions["loadSnapshot"];
 	private readonly onError?: ProgrammingCommandLineWriterOptions["onError"];
+	private readonly onEdit?: ProgrammingCommandLineWriterOptions["onEdit"];
 	private scope: number | null = null;
 	private readonly idleResolvers = new Set<(succeeded: boolean) => void>();
 	private readonly drainResolvers = new Set<(succeeded: boolean) => void>();
@@ -63,19 +65,24 @@ export class ProgrammingCommandLineWriter {
 
 	constructor(options: ProgrammingCommandLineWriterOptions) {
 		const showId = options.showId ?? options.store.getSnapshot().showId;
-		if (!showId) throw new Error("A command-line writer requires an active show");
+		if (!showId)
+			throw new Error("A command-line writer requires an active show");
 		this.showId = showId;
 		this.deskId = options.deskId;
 		this.store = options.store;
 		this.replaceRequest = options.replace;
 		this.loadSnapshot = options.loadSnapshot;
 		this.onError = options.onError;
+		this.onEdit = options.onEdit;
 	}
 
 	replace(text: string): Promise<boolean> {
 		if (this.stopped || !this.scopeIsCurrent()) return Promise.resolve(false);
 		const current = this.store.getSnapshot().commandLine;
 		if (!current) return Promise.resolve(false);
+		// Editing resumes operator intent; retain historical rejection elsewhere,
+		// but retire the current command error before waiting for transport.
+		this.onEdit?.();
 		const normalized = normalizeCommandLine(text, current);
 		const token = this.beginOptimisticCommandLine({
 			text: normalized.text,
@@ -168,8 +175,7 @@ export class ProgrammingCommandLineWriter {
 			this.active.resolve(false);
 			this.active = null;
 		}
-		if (this.executionResetToken)
-			this.commit(this.executionResetToken);
+		if (this.executionResetToken) this.commit(this.executionResetToken);
 		this.executionResetToken = null;
 		if (this.queued) {
 			this.commit(this.queued.token);
@@ -326,7 +332,9 @@ export class ProgrammingCommandLineWriter {
 		}
 	}
 
-	private discardDeferredWrite(error = new Error("Command synchronization failed")) {
+	private discardDeferredWrite(
+		error = new Error("Command synchronization failed"),
+	) {
 		if (!this.deferred) return;
 		this.rollback(this.deferred.token, error);
 		this.deferred.resolve(false);
@@ -381,19 +389,16 @@ export class ProgrammingCommandLineWriter {
 	}
 
 	private resolveIdle(succeeded = this.drainSucceeded, force = false) {
-		if (!force && (this.running || this.queued || this.executionRunning)) return;
+		if (!force && (this.running || this.queued || this.executionRunning))
+			return;
 		for (const resolve of this.idleResolvers) resolve(succeeded);
 		this.idleResolvers.clear();
 	}
 }
 
-function normalizeCommandLine(
-	text: string,
-	current: CommandLineProjection,
-) {
+function normalizeCommandLine(text: string, current: CommandLineProjection) {
 	const trimmed = text.trim();
-	const pristine =
-		!trimmed || trimmed.toUpperCase() === current.target;
+	const pristine = !trimmed || trimmed.toUpperCase() === current.target;
 	return {
 		text: pristine ? current.target : text,
 		pristine,

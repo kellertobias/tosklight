@@ -223,6 +223,35 @@
 .server-error-toast small {
 	color: var(--muted);
 }
+.server-action-notice {
+	position: fixed;
+	z-index: 1240;
+	top: 12px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: min(520px, calc(100vw - 24px));
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 6px 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--panel2);
+}
+.server-action-notice > div {
+	flex: 1;
+	min-width: 0;
+}
+.server-action-notice summary {
+	overflow-wrap: anywhere;
+	cursor: pointer;
+}
+.server-action-notice pre {
+	max-height: 30vh;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
 .desk-notice-lane {
 	position: fixed;
 	z-index: 1240;

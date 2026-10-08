@@ -56,12 +56,13 @@ describe("current desk output diagnostics", () => {
 				minimum_slots: 512,
 			},
 		});
-		const duplicate = currentOutputDiagnostics(
-			{ outputRoutes: [] },
-			[usbRoute("route-a", 1), usbRoute("route-b", 4)],
-		);
+		const duplicate = currentOutputDiagnostics({ outputRoutes: [] }, [
+			usbRoute("route-a", 1),
+			usbRoute("route-b", 4),
+		]);
 		expect(duplicate).toEqual([
 			expect.objectContaining({
+				capabilityLoss: "dmx_output",
 				title: "Duplicate output · USB DMX device · universes 1, 4",
 				summary:
 					"The same USB DMX device is targeted by 2 enabled routes for logical universes 1, 4. One USB DMX device can output one logical universe, so the desk suppresses output instead of choosing one.",
@@ -77,10 +78,10 @@ describe("current desk output diagnostics", () => {
 		expect(operatorCopy).not.toContain("rear-dmx");
 		expect(operatorCopy).not.toMatch(/endpoint|claim/iu);
 		expect(
-			currentOutputDiagnostics(
-				{ outputRoutes: [] },
-				[usbRoute("route-a", 1), usbRoute("route-b", 4, false)],
-			),
+			currentOutputDiagnostics({ outputRoutes: [] }, [
+				usbRoute("route-a", 1),
+				usbRoute("route-b", 4, false),
+			]),
 		).toEqual([]);
 	});
 });

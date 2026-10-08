@@ -15,7 +15,9 @@ import type { DeskStateDiagnostic } from "./deskStateDiagnostics";
 
 type ReadDiagnostics = () => Promise<RuntimeDiagnostics>;
 
-const OutputDiagnosticsContext = createContext<readonly DeskStateDiagnostic[]>([]);
+const OutputDiagnosticsContext = createContext<readonly DeskStateDiagnostic[]>(
+	[],
+);
 
 export function DeskStateDiagnosticsProvider({
 	children,
@@ -51,7 +53,10 @@ export function DeskStateDiagnosticsProvider({
 			}
 		};
 		void refresh();
-		const timer = globalThis.setInterval(() => void refresh(), pollMilliseconds);
+		const timer = globalThis.setInterval(
+			() => void refresh(),
+			pollMilliseconds,
+		);
 		return () => {
 			current = false;
 			globalThis.clearInterval(timer);
@@ -113,10 +118,12 @@ export function currentOutputDiagnostics(
 				.sort((left, right) => left - right)
 				.join(", ");
 			return {
+				capabilityLoss: "dmx_output" as const,
 				id: `duplicate-output-usb-${slug(endpointId)}`,
 				title: `Duplicate output · USB DMX device · universes ${universes}`,
 				summary: `The same USB DMX device is targeted by ${claims.length} enabled routes for logical universes ${universes}. One USB DMX device can output one logical universe, so the desk suppresses output instead of choosing one.`,
-				action: "Open Setup → Outputs and disable or remove the extra device routes. Keep only the intended logical universe for this USB DMX device.",
+				action:
+					"Open Setup → Outputs and disable or remove the extra device routes. Keep only the intended logical universe for this USB DMX device.",
 			};
 		});
 	return [...networkDuplicates, ...usbDuplicates];

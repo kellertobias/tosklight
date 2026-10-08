@@ -20,6 +20,7 @@ import {
 	useHardwareConnected,
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useHighlightSnapshot } from "../../features/highlight/HighlightState";
+import { COMMAND_ERROR_EVENT } from "../../features/programmingInteraction/commandError";
 import { useOutputRuntimeBlackout } from "../../features/outputRuntime/OutputRuntimeView";
 import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
 import {
@@ -69,7 +70,6 @@ function pendingCommandSummary(
 
 function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const shellStatus = useShellStatusActions();
-	const serverError = useServerError();
 	const [commandError, setCommandError] = useState<string | null>(null);
 	const commandErrorRef = useRef<string | null>(null);
 	const updateCommandError = useCallback((error: string | null) => {
@@ -79,22 +79,16 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const [persistentError, setPersistentError] = useState<string | null>(null);
 	const [errorOpen, setErrorOpen] = useState(false);
 	useEffect(() => {
-		if (serverError) setPersistentError(serverError);
-	}, [serverError]);
-	useEffect(() => {
-		if (commandError && serverError) updateCommandError(serverError);
-	}, [serverError, commandError, updateCommandError]);
-	useEffect(() => {
 		const showCommandError = (event: Event) => {
-			setCompleted(false);
+			const detail = (event as CustomEvent<string | null>).detail;
+			if (detail !== null) setCompleted(false);
 			updateCommandError(
-				(event as CustomEvent<string>).detail ||
-					"The command could not be executed.",
+				detail === null ? null : detail || "The command could not be executed.",
 			);
 		};
-		window.addEventListener("light:command-error", showCommandError);
+		window.addEventListener(COMMAND_ERROR_EVENT, showCommandError);
 		return () =>
-			window.removeEventListener("light:command-error", showCommandError);
+			window.removeEventListener(COMMAND_ERROR_EVENT, showCommandError);
 	}, [setCompleted, updateCommandError]);
 	const acknowledgeCommand = () => {
 		updateCommandError(null);
@@ -237,7 +231,11 @@ function useCommandLineBarModel() {
 				return;
 			}
 			if (key === "running-output") {
-				dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
+				dispatch({
+					type: "SET_MODAL",
+					modal: "systemControlsOpen",
+					value: true,
+				});
 				return;
 			}
 			if (key === "playback") numericPad.press("PLAYBACK", "hardware");

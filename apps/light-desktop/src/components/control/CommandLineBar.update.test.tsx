@@ -251,6 +251,35 @@ function RequestedSystemControlsTab() {
 }
 
 describe("scoped command-line integration", () => {
+	it("does not turn an unrelated failed request into programmer feedback", () => {
+		server.error = "CITP discovery request failed";
+		render(<CommandLineBar />);
+		expect(
+			screen.getByRole("textbox", { name: "Command line" }),
+		).not.toHaveClass("error");
+		expect(screen.queryByText("CITP discovery request failed")).toBeNull();
+	});
+
+	it("clears current local command feedback on edit without deleting rejection history", () => {
+		render(<CommandLineBar />);
+		fireEvent(
+			window,
+			new CustomEvent("light:command-error", {
+				detail: "Command revision changed on another surface",
+			}),
+		);
+		expect(screen.getByRole("textbox", { name: "Command line" })).toHaveClass(
+			"error",
+		);
+		fireEvent(window, new CustomEvent("light:command-error", { detail: null }));
+		expect(
+			screen.getByRole("textbox", { name: "Command line" }),
+		).not.toHaveClass("error");
+		expect(
+			screen.queryByText("Command revision changed on another surface"),
+		).toBeNull();
+		expect(server.commandHistory.length).toBeGreaterThan(0);
+	});
 	it("marks a rejected command locally without turning it into a Desk State warning", () => {
 		render(
 			<>
