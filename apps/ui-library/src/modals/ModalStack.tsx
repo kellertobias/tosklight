@@ -150,7 +150,13 @@ export function ModalProvider({ children }: { children: ReactNode }) {
 		const target = pendingFocusRestore.current;
 		if (!target) return;
 		pendingFocusRestore.current = null;
-		requestAnimationFrame(() => target.isConnected && target.focus());
+		requestAnimationFrame(() => {
+			// Return focus only if nothing took it while the modal closed; a control the operator
+			// focused in the meantime keeps it.
+			const active = document.activeElement;
+			const unclaimed = !active || active === document.body || !active.isConnected;
+			if (unclaimed && target.isConnected) target.focus();
+		});
 	}, [entries]);
 
 	if (parent) return children;

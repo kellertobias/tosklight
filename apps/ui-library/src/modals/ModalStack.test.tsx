@@ -249,6 +249,37 @@ describe("ModalProvider", () => {
     expect(opener).toHaveFocus();
   });
 
+  it("leaves focus where the operator moved it while the modal closed", async () => {
+    function FocusHarness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <ModalProvider>
+          <Button onClick={() => setOpen(true)}>Open closing modal</Button>
+          <input aria-label="Next field" />
+          {open && (
+            <ModalFrame
+              id="closing"
+              ariaLabel="Closing"
+              title="Closing"
+              onClose={() => setOpen(false)}
+            >
+              <Button onClick={() => setOpen(false)}>Finish closing modal</Button>
+            </ModalFrame>
+          )}
+        </ModalProvider>
+      );
+    }
+    render(<FocusHarness />);
+    const opener = screen.getByRole("button", { name: "Open closing modal" });
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.click(screen.getByRole("button", { name: "Finish closing modal" }));
+    const next = screen.getByRole("textbox", { name: "Next field" });
+    next.focus();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(next).toHaveFocus();
+  });
+
   it("registers a modal before it is painted, so it is top on its first frame", () => {
     const close = vi.fn();
     // Siblings' layout effects run in tree order, after the modal's own; both precede paint.
