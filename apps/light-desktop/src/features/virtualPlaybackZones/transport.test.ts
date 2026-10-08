@@ -24,6 +24,39 @@ function transport(fetchImplementation: typeof globalThis.fetch) {
 }
 
 describe("HttpVirtualPlaybackZonesTransport", () => {
+	it("ignores late error/open/message callbacks after explicit teardown", () => {
+		let socket!: EventTarget & {
+			send: ReturnType<typeof vi.fn>;
+			close: ReturnType<typeof vi.fn>;
+		};
+		class FakeSocket extends EventTarget {
+			send = vi.fn();
+			close = vi.fn(() => this.dispatchEvent(new Event("error")));
+			constructor() {
+				super();
+				socket = this;
+			}
+		}
+		const observer = {
+			ready: vi.fn(),
+			changed: vi.fn(),
+			gap: vi.fn(),
+			error: vi.fn(),
+			closed: vi.fn(),
+		};
+		const stream = new HttpVirtualPlaybackZonesTransport({
+			baseUrl: "http://127.0.0.1:5000",
+			sessionToken: "session-token",
+			webSocket: FakeSocket as unknown as typeof WebSocket,
+		}).subscribe(SCOPE, observer);
+		stream.close();
+		socket.dispatchEvent(new Event("open"));
+		socket.dispatchEvent(new MessageEvent("message", { data: "invalid json" }));
+		socket.dispatchEvent(new Event("close"));
+		expect(socket.send).not.toHaveBeenCalled();
+		expect(observer.error).not.toHaveBeenCalled();
+		expect(observer.closed).not.toHaveBeenCalled();
+	});
 	it("loads a show-global snapshot without a desk header", async () => {
 		const request = vi
 			.fn<typeof globalThis.fetch>()

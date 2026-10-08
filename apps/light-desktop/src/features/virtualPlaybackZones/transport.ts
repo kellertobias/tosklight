@@ -110,6 +110,7 @@ export class HttpVirtualPlaybackZonesTransport
 		const socket = new this.WebSocketImplementation(url, protocols);
 		let explicitlyClosed = false;
 		socket.addEventListener("open", () => {
+			if (explicitlyClosed) return;
 			socket.send(
 				JSON.stringify({
 					type: "subscribe",
@@ -129,6 +130,7 @@ export class HttpVirtualPlaybackZonesTransport
 			);
 		});
 		socket.addEventListener("message", (event) => {
+			if (explicitlyClosed) return;
 			try {
 				const decoded = decodeVirtualPlaybackZonesEvent(
 					JSON.parse(String(event.data)),
@@ -136,12 +138,14 @@ export class HttpVirtualPlaybackZonesTransport
 				if (decoded === "gap") observer.gap();
 				else if (decoded === "error")
 					observer.error(new Error("Virtual Playback zone event failed"));
-				else if (decoded !== "ready") observer.changed(decoded);
+				else if (decoded === "ready") observer.ready?.();
+				else observer.changed(decoded);
 			} catch (reason) {
 				observer.error(asError(reason));
 			}
 		});
 		socket.addEventListener("error", () => {
+			if (explicitlyClosed) return;
 			observer.error(
 				new Error("Virtual Playback zone event connection failed"),
 			);

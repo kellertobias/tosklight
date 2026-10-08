@@ -39,6 +39,8 @@ export interface VirtualPlaybackZonesChange {
 }
 
 export interface VirtualPlaybackZonesEventObserver {
+	/** Server acknowledged the subscription; snapshot repair may now close the gap. */
+	ready?(): void;
 	changed(change: VirtualPlaybackZonesChange): void;
 	gap(): void;
 	error(error: Error): void;
