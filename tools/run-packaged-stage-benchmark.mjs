@@ -1,12 +1,14 @@
 import { execFile, spawn } from "node:child_process";
 import dgram from "node:dgram";
-import { readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { openSync } from "node:fs";
+import { mkdir, open, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 import { artifactPaths, repositoryRoot } from "./artifact-paths.mjs";
 import {
+	createOutputWindowAccumulator,
 	histogramPercentileMicros,
 	outputWindow,
 } from "./output-histogram.mjs";
@@ -50,7 +52,30 @@ const profile = process.argv[3] ?? "default-stage";
 const profileDefinition = packagedStageProfile(profile);
 const controlDurationSeconds =
 	packagedStageControlDurationSeconds(durationSeconds);
-const application = packagedApplication();
+// LIGHT_PACKAGED_STAGE_PORT runs the benchmark beside a desk that already owns 127.0.0.1:5000
+// (and OSC 9000): the runner starts the bundled server itself on the given port, launches the
+// packaged executable directly against it, and stops only the processes it started.
+const isolatedPort = optionalPort(
+	process.env.LIGHT_PACKAGED_STAGE_PORT,
+	"LIGHT_PACKAGED_STAGE_PORT",
+);
+const serverOrigin = `http://127.0.0.1:${isolatedPort ?? 5000}`;
+const oscPort =
+	isolatedPort === null
+		? 9000
+		: (optionalPort(
+				process.env.LIGHT_PACKAGED_STAGE_OSC_PORT,
+				"LIGHT_PACKAGED_STAGE_OSC_PORT",
+			) ?? isolatedPort + 1);
+// LIGHT_PACKAGED_STAGE_NETWORK_CAPTURE=1 routes the first patched universe to the loopback
+// Art-Net and sACN receivers the supported-scale tier uses, for every profile and both windows.
+const networkCaptureRequested =
+	process.env.LIGHT_PACKAGED_STAGE_NETWORK_CAPTURE === "1";
+// LIGHT_PACKAGED_STAGE_DYNAMICS=1 animates stage-500 (19 universes) with the large Stage's
+// Dynamics plan; the large tiers themselves patch 37 universes.
+const stage500DynamicsRequested =
+	process.env.LIGHT_PACKAGED_STAGE_DYNAMICS === "1";
+const application = packagedApplication(isolatedPort !== null);
 const executable = application.executable;
 await stat(executable).catch(() => {
 	throw new Error("Build and open the debug app first with `npm run build:open`");
@@ -76,7 +101,7 @@ const dataPath = path.join(
 const preparedPath = path.join(dataPath, "stage-profile-prepared");
 await unlink(samplesPath).catch(() => undefined);
 await unlink(preparedPath).catch(() => undefined);
-await stopExistingDevelopmentDesk();
+if (isolatedPort === null) await stopExistingDevelopmentDesk();
 
 const benchmarkEnvironment = {
 	LIGHT_STAGE_PACKAGED_BENCH_REPORT: samplesPath,
@@ -89,7 +114,14 @@ const benchmarkEnvironment = {
 		profile === "supported-scale" ? "0" : "1",
 	LIGHT_STAGE_PACKAGED_BENCH_PREPARED: preparedPath,
 	LIGHT_DESKTOP_TEST_DATA_DIR: dataPath,
+	...(isolatedPort === null
+		? {}
+		: { LIGHT_DESKTOP_TEST_BIND: `127.0.0.1:${isolatedPort}` }),
 };
+const isolatedServer =
+	isolatedPort === null
+		? null
+		: await startIsolatedServer(application, dataPath, isolatedPort, oscPort);
 const app = launchPackagedApplication(application, benchmarkEnvironment);
 
 let records;
@@ -123,6 +155,30 @@ const collectMemory = async () => {
 	}
 };
 const memorySampler = setInterval(() => void collectMemory(), 1_000);
+// Show switches restart the output scheduler's cumulative counters, so the paired windows are
+// accumulated from one-second observations instead of subtracting their end snapshots.
+let outputAccumulator;
+let outputSampler;
+let outputSampling = Promise.resolve();
+const sampleOutputCounters = (session) => {
+	outputSampling = outputSampling
+		.then(async () => {
+			const diagnostics = await runtimeDiagnostics(session);
+			outputAccumulator.observe(diagnostics.output);
+		})
+		.catch(() => undefined);
+	return outputSampling;
+};
+// The window closes on a snapshot read in the same queue as the observations: a snapshot read
+// before an observation still in flight is older than it and would look like a counter reset.
+const takeOutputWindow = async (session) => {
+	const taken = outputSampling.then(async () => {
+		const diagnostics = await runtimeDiagnostics(session);
+		return outputAccumulator.take(diagnostics.output);
+	});
+	outputSampling = taken.catch(() => undefined);
+	return taken;
+};
 try {
 	await requireReadiness(app, dataPath);
 	await collectMemory();
@@ -144,9 +200,36 @@ try {
 		oscHardware = await startPackagedOscHardware(
 			prepared.session.desk.osc_alias,
 		);
+	} else if (networkCaptureRequested) {
+		benchmarkPhase = "network-capture";
+		const tracked = await firstPatchedDmxAddress(
+			prepared.session,
+			prepared.showId,
+		);
+		networkCapture = await startSupportedScaleNetworkCapture(tracked.address);
+		// Both shows of the switch exercise carry the routes, so output continues across switches.
+		// Routes change only on the active show, so the alternate show is opened to receive them.
+		const alternateShowId = prepared.showSwitch?.alternateShowId;
+		for (const showId of [alternateShowId, prepared.showId].filter(Boolean)) {
+			if (alternateShowId) await openShow(prepared.session, showId);
+			if (profile === "canonical-demo")
+				await startCanonicalDemoBenchmarkLook(prepared.session, showId);
+			await configureSupportedScaleOutputRoutes(
+				prepared.session,
+				showId,
+				networkCapture,
+				tracked.universe,
+			);
+		}
+		scene = { ...scene, networkCapture: tracked };
 	}
 	benchmarkPhase = "control-window";
 	const before = await runtimeDiagnostics(prepared.session);
+	outputAccumulator = createOutputWindowAccumulator(before.output);
+	outputSampler = setInterval(
+		() => void sampleOutputCounters(prepared.session),
+		1_000,
+	);
 	const networkBefore = networkCapture?.snapshot() ?? null;
 	const programmerTimingExercise = await exercisePackagedProgrammerTiming(
 		prepared.session,
@@ -183,6 +266,7 @@ try {
 		await activatePackagedApplication(application);
 		benchmarkPhase = "stage-window";
 		const afterNoStage = await runtimeDiagnostics(prepared.session);
+		const noStageOutputWindow = await takeOutputWindow(prepared.session);
 		const networkAfterNoStage = networkCapture?.snapshot() ?? null;
 		const stagePlaybackTimingExercise =
 			profile === "supported-scale"
@@ -196,7 +280,7 @@ try {
 		memoryPhase = "stage";
 		if (usesStalledVisualizationClient(profile))
 			slowClient = await startSlowVisualizationClient(
-				"http://127.0.0.1:5000",
+				serverOrigin,
 				prepared.session.token,
 			);
 		const showSwitch =
@@ -221,11 +305,13 @@ try {
 		slowClient = undefined;
 		await new Promise((resolve) => setTimeout(resolve, 250));
 		const after = await runtimeDiagnostics(prepared.session);
+		const stageOutputWindow = await takeOutputWindow(prepared.session);
 		const networkAfter = networkCapture?.snapshot() ?? null;
 		runtime = {
 			before,
 			afterNoStage,
 			after,
+			outputWindows: { noStage: noStageOutputWindow, stage: stageOutputWindow },
 			showSwitch: showSwitchResult,
 			applicationSuspend: applicationSuspendResult,
 			programmerTimingExercise,
@@ -240,14 +326,17 @@ try {
 	}
 } catch (reason) {
 	benchmarkFailure = reason;
+	console.error(reason instanceof Error ? reason.stack : reason);
 } finally {
 	clearInterval(memorySampler);
+	clearInterval(outputSampler);
 	await collectMemory();
 	await slowClient?.close();
 	await networkCapture?.close();
 	await oscHardware?.close();
 	app.kill("SIGTERM");
-	await stopPackagedDesktop();
+	if (isolatedServer) await stopIsolatedDesktop(app, isolatedServer);
+	else await stopPackagedDesktop();
 }
 
 let result;
@@ -306,7 +395,7 @@ async function requireReadiness(app, dataDirectory) {
 				`Packaged ToskLight exited during startup; inspect ${path.join(dataDirectory, "light-headless.log")}`,
 			);
 		const response = await fetch(
-			"http://127.0.0.1:5000/api/v2/readiness",
+			`${serverOrigin}/api/v2/readiness`,
 		).catch(() => null);
 		if (response?.ok) return;
 		await new Promise((resolve) => setTimeout(resolve, 100));
@@ -461,7 +550,7 @@ async function startPackagedOscHardware(deskAlias) {
 		new Promise((resolve, reject) => {
 			command.send(
 				encodeOscMessage(address, arguments_),
-				9000,
+				oscPort,
 				"127.0.0.1",
 				(error) => (error ? reject(error) : resolve()),
 			);
@@ -507,7 +596,7 @@ async function exerciseSupportedScaleOscPlayback(
 		throw new Error("supported-scale network capture is unavailable");
 	await hardware.subscribe();
 	for (const action of [
-		{ type: "go_to", cue_number: 1 },
+		{ type: "go_to", cue_number: "1" },
 		{ type: "master", value: 0.5 },
 	])
 		await requestJson(
@@ -555,7 +644,7 @@ async function exerciseSupportedScaleOscPlayback(
 		);
 	}
 	for (const action of [
-		{ type: "go_to", cue_number: 1 },
+		{ type: "go_to", cue_number: "1" },
 		{ type: "master", value: 0.5 },
 	])
 		await requestJson(
@@ -923,24 +1012,76 @@ async function prepareScene(profile) {
 			session,
 			showId,
 		});
+		if (!stage500DynamicsRequested) {
+			await setStaticControlIntensity(
+				session,
+				showId,
+				workload.staticControlFixtureIds,
+			);
+			const scene = {
+				...summarizeScene(profile, after.fixtures),
+				inventory: workload.inventory,
+				categoryCounts: workload.categoryCounts,
+				patch: workload.patch,
+			};
+			const failures = packagedStageSceneFailures(profile, scene);
+			if (failures.length > 0) throw new Error(failures.join("; "));
+			return {
+				scene,
+				session,
+				showId,
+				showSwitch: await createShowSwitchTarget(session, showId, profile),
+			};
+		}
+		// The large Stage's animated workload (Intensity, semantic Colour recipe and Pan/Tilt Angle
+		// Dynamics in 20 instances) on the 500-instance patch, started in both switched shows.
+		const dynamicsPlan = createLargeStageDynamicsPlan(after, workload);
+		const dynamics = await installLargeStageDynamics(
+			session,
+			showId,
+			dynamicsPlan,
+		);
 		await setStaticControlIntensity(
 			session,
 			showId,
-			workload.staticControlFixtureIds,
+			dynamicsPlan.staticControlFixtureIds,
 		);
 		const scene = {
 			...summarizeScene(profile, after.fixtures),
 			inventory: workload.inventory,
 			categoryCounts: workload.categoryCounts,
 			patch: workload.patch,
+			dynamics,
 		};
 		const failures = packagedStageSceneFailures(profile, scene);
 		if (failures.length > 0) throw new Error(failures.join("; "));
+		const showSwitch = await createShowSwitchTarget(session, showId, profile);
+		await openShow(session, showSwitch.alternateShowId);
+		await startLargeStageDynamics(
+			session,
+			showSwitch.alternateShowId,
+			dynamics.definitionIds.map((definitionId, index) => ({
+				definitionId,
+				targets: dynamicsPlan.activations[index].targets,
+			})),
+		);
+		await setStaticControlIntensity(
+			session,
+			showSwitch.alternateShowId,
+			dynamicsPlan.staticControlFixtureIds,
+		);
+		await requireLargeStageDynamicsRuntime(
+			session,
+			showSwitch.alternateShowId,
+			dynamics,
+		);
+		await openShow(session, showId);
+		await requireLargeStageDynamicsRuntime(session, showId, dynamics);
 		return {
 			scene,
 			session,
 			showId,
-			showSwitch: await createShowSwitchTarget(session, showId, profile),
+			showSwitch: { ...showSwitch, dynamics },
 		};
 	}
 	const largeScene = createDeterministicLargeStageInputs(
@@ -1141,7 +1282,7 @@ async function startCanonicalDemoBenchmarkLook(session, showId) {
 					};
 		const pressedAction =
 			assignment.kind === "physical"
-				? { type: "go_to", cue_number: 1 }
+				? { type: "go_to", cue_number: "1" }
 				: { type: "on", pressed: true };
 		await requestJson(
 			"POST",
@@ -1266,7 +1407,9 @@ async function installLargeStageDynamics(session, showId, plan) {
 	const expected = {
 		definitionIds: activations.map((activation) => activation.definitionId),
 		instanceCount: LARGE_STAGE_DYNAMIC_INSTANCES,
-		targetCount: plan.dynamicTargetCount,
+		// One runtime target per (target, family) unit; a unit carries all of its component lanes.
+		targetCount: activations.flatMap((activation) => activation.targets).length,
+		laneAddressCount: plan.dynamicTargetCount,
 		uniqueTargetCount: new Set(
 			activations.flatMap((activation) => activation.targets),
 		).size,
@@ -1391,7 +1534,7 @@ async function installSupportedScalePlaybackWorkload(
 		{
 			request_id: crypto.randomUUID(),
 			address: { kind: "playback", playback_number: 1 },
-			action: { type: "go_to", cue_number: 1 },
+			action: { type: "go_to", cue_number: "1" },
 			surface: "physical",
 		},
 		{ session, showId, deskId: session.desk.id },
@@ -1472,24 +1615,23 @@ async function clearProgrammerValues(session, showId) {
 }
 
 async function mutateProgrammerValues(session, showId, action) {
-	const userId = session.user.id;
 	const [values, capture] = await Promise.all([
 		requestJson(
 			"GET",
-			`/api/v2/users/${encodeURIComponent(userId)}/programmer-values/snapshot`,
+			"/api/v2/programmer/values/snapshot",
 			undefined,
 			{ session, showId, deskId: session.desk.id },
 		),
 		requestJson(
 			"GET",
-			`/api/v2/users/${encodeURIComponent(userId)}/programmer-capture-mode/snapshot`,
+			"/api/v2/programmer/capture-mode/snapshot",
 			undefined,
 			{ session, showId, deskId: session.desk.id },
 		),
 	]);
 	return requestJson(
 		"POST",
-		`/api/v2/users/${encodeURIComponent(userId)}/programmer-values/actions`,
+		"/api/v2/programmer/values/actions",
 		{
 			request_id: crypto.randomUUID(),
 			expected_revision: values.projection.revision,
@@ -1519,7 +1661,7 @@ async function setStaticControlIntensity(session, showId, fixtureIds) {
 
 async function createShowSwitchTarget(session, originalShowId, profile) {
 	const response = await fetch(
-		`http://127.0.0.1:5000/api/v2/shows/${encodeURIComponent(originalShowId)}/download`,
+		`${serverOrigin}/api/v2/shows/${encodeURIComponent(originalShowId)}/download`,
 		{
 			headers: { authorization: `Bearer ${session.token}` },
 		},
@@ -1691,7 +1833,7 @@ async function requestJson(method, route, body, context = {}) {
 	if (context.revision !== undefined)
 		headers["if-match"] = String(context.revision);
 	if (context.deskId) headers["x-tosk-desk"] = context.deskId;
-	const response = await fetch(`http://127.0.0.1:5000${route}`, {
+	const response = await fetch(`${serverOrigin}${route}`, {
 		method,
 		headers,
 		body: body === undefined ? undefined : JSON.stringify(body),
@@ -1768,23 +1910,134 @@ async function lightDesktopPid(directPid) {
 	return pid ? Number.parseInt(pid, 10) : null;
 }
 
-function packagedApplication() {
+async function openShow(session, showId) {
+	await requestJson(
+		"POST",
+		"/api/v2/shows",
+		{
+			request_id: crypto.randomUUID(),
+			action: {
+				type: "open",
+				show_id: showId,
+				transition: "safe_blackout",
+				transition_millis: null,
+			},
+		},
+		{ session },
+	);
+}
+
+async function firstPatchedDmxAddress(session, showId) {
+	const patch = await requestJson("GET", "/api/v2/patch", undefined, {
+		session,
+		showId,
+	});
+	for (const fixture of patch.fixtures) {
+		const placement =
+			fixture.split_patches?.find(
+				(split) => split.universe != null && split.address != null,
+			) ?? fixture;
+		if (
+			Number.isSafeInteger(placement.universe) &&
+			Number.isSafeInteger(placement.address)
+		)
+			return {
+				fixtureId: fixture.fixture_id,
+				universe: placement.universe,
+				address: placement.address,
+			};
+	}
+	throw new Error("network capture found no patched fixture");
+}
+
+async function startIsolatedServer(application, dataDirectory, port, osc) {
+	const contents = application.bundle
+		? path.join(application.bundle, "Contents")
+		: null;
+	const server = contents
+		? path.join(contents, "MacOS", "light-headless")
+		: path.join(
+				path.dirname(application.executable),
+				process.platform === "win32" ? "light-headless.exe" : "light-headless",
+			);
+	const fixtureLibrary = contents
+		? path.join(contents, "Resources", "fixture-library")
+		: path.join(repositoryRoot, "assets", "fixture-library");
+	await mkdir(dataDirectory, { recursive: true });
+	const log = await open(path.join(dataDirectory, "light-headless.log"), "w");
+	const child = spawn(
+		server,
+		[
+			"--data-dir",
+			dataDirectory,
+			"--fixture-package-dir",
+			fixtureLibrary,
+			"--bind",
+			`127.0.0.1:${port}`,
+			"--osc-bind",
+			`127.0.0.1:${osc}`,
+		],
+		{ cwd: repositoryRoot, stdio: ["ignore", log.fd, log.fd] },
+	);
+	child.once("exit", () => void log.close().catch(() => undefined));
+	return child;
+}
+
+async function stopIsolatedDesktop(launched, server) {
+	await waitForExit(launched, 5_000);
+	server.kill("SIGTERM");
+	await waitForExit(server, 10_000);
+}
+
+async function waitForExit(child, timeoutMs) {
+	if (child.exitCode !== null || child.signalCode !== null) return;
+	const exited = new Promise((resolve) => child.once("exit", resolve));
+	const timedOut = new Promise((resolve) =>
+		setTimeout(() => resolve("timeout"), timeoutMs),
+	);
+	if ((await Promise.race([exited, timedOut])) === "timeout") {
+		child.kill("SIGKILL");
+		await exited;
+	}
+}
+
+function optionalPort(value, label) {
+	if (value === undefined || value === "") return null;
+	const port = positiveInteger(value, label);
+	if (port > 65_535) throw new Error(`${label} must be a TCP/UDP port`);
+	return port;
+}
+
+function packagedApplication(isolated = false) {
+	// LIGHT_PACKAGED_STAGE_CARGO_PROFILE=release measures the release bundle (the shipped
+	// archive's profile) instead of the `npm run build:open` debug bundle.
+	const cargoProfile =
+		process.env.LIGHT_PACKAGED_STAGE_CARGO_PROFILE || "debug";
+	if (!["debug", "release"].includes(cargoProfile))
+		throw new Error(
+			"LIGHT_PACKAGED_STAGE_CARGO_PROFILE must be debug or release",
+		);
 	if (process.platform === "darwin") {
 		const bundle = path.join(
 			artifactPaths.cargo,
-			"debug/bundle/macos/ToskLight.app",
+			cargoProfile,
+			"bundle/macos/ToskLight.app",
 		);
 		return {
-			direct: false,
+			cargoProfile,
+			// An isolated run launches the bundle's executable directly: `open` would hand a
+			// bundle that shares its identifier with a running desk to that desk.
+			direct: isolated,
 			executable: path.join(bundle, "Contents/MacOS/light-desktop"),
 			bundle,
 		};
 	}
 	return {
+		cargoProfile,
 		direct: true,
 		executable: path.join(
 			artifactPaths.cargo,
-			"debug",
+			cargoProfile,
 			process.platform === "win32" ? "light-desktop.exe" : "light-desktop",
 		),
 	};
@@ -1796,6 +2049,7 @@ function packagedApplicationIdentity(application) {
 		applicationKind: "packaged-desktop",
 		executable: path.basename(application.executable),
 		bundle: application.bundle ? path.basename(application.bundle) : null,
+		cargoProfile: application.cargoProfile,
 	};
 }
 
@@ -1817,10 +2071,18 @@ function launchPackagedApplication(application, environment) {
 				stdio: "ignore",
 			},
 		);
+	// An isolated run keeps the shell's own output beside the server log of its data directory.
+	const output =
+		environment.LIGHT_DESKTOP_TEST_BIND && environment.LIGHT_DESKTOP_TEST_DATA_DIR
+			? openSync(
+					path.join(environment.LIGHT_DESKTOP_TEST_DATA_DIR, "light-desktop.log"),
+					"w",
+				)
+			: "ignore";
 	return spawn(application.executable, [], {
 		cwd: repositoryRoot,
 		env: { ...process.env, ...environment },
-		stdio: "ignore",
+		stdio: output === "ignore" ? "ignore" : ["ignore", output, output],
 	});
 }
 
@@ -2299,19 +2561,35 @@ function evaluateNativeStage(
 			!frameOverlapsApplicationSuspend(frame, runtime.applicationSuspend) &&
 			!frameOverlapsShowSwitch(frame, runtime.showSwitch),
 	);
-	const latencies = lifecycleFrames
+	// Source-to-presentation is the first presentation of each source frame on each pane. A
+	// quality change or resize presents the unchanged latest source again; that repeat is not a
+	// source delivery and would otherwise report the source's age (seconds on a static look).
+	const firstPresentations = firstSourcePresentations(lifecycleFrames);
+	const latencies = firstPresentations
+		.map((frame) => frame.sourceToSettledCanvasMs)
+		.sort((left, right) => left - right);
+	const repeatedPresentationAges = lifecycleFrames
+		.filter((frame) => !firstPresentations.includes(frame))
 		.map((frame) => frame.sourceToSettledCanvasMs)
 		.sort((left, right) => left - right);
 	const lanes = [...new Set(lifecycleFrames.map((frame) => frame.lane))].sort();
 	const qualities = [...new Set(frames.map((frame) => frame.quality))].sort();
+	// The continuity helpers count only frames marked `visibleChanged`, which the native helper
+	// does not report; a pane's first presentation of a new source frame is that change.
+	const presentedSources = new Set(firstSourcePresentations(frames));
+	const changeMarkedFrames = frames.map((frame) => ({
+		...frame,
+		visibleChanged:
+			presentedSources.has(frame) && Number.isFinite(frame.sourceToSettledCanvasMs),
+	}));
 	const presentationGaps = changingPresentationGaps(
-		frames,
+		changeMarkedFrames,
 		runtime.applicationSuspend,
 		runtime.showSwitch,
 		null,
 	);
 	const sourceCadenceGaps = laneSourceCadenceGaps(
-		frames,
+		changeMarkedFrames,
 		runtime.applicationSuspend,
 		runtime.showSwitch,
 		null,
@@ -2371,6 +2649,15 @@ function evaluateNativeStage(
 		failures.push("packaged native Stage output missed a scheduler deadline");
 	if (output.stageWindowSendErrors > 0)
 		failures.push("packaged native Stage output recorded a send error");
+	if (runtime.networkCapture?.after)
+		for (const protocol of ["artnet", "sacn"])
+			if (
+				(runtime.networkCapture.after[protocol]?.packets ?? 0) <=
+				(runtime.networkCapture.afterNoStage?.[protocol]?.packets ?? 0)
+			)
+				failures.push(
+					`packaged native Stage window dispatched no actual ${protocol} UDP packets`,
+				);
 	const visualization = summarizeVisualizationWindow(runtime);
 	if (visualization.finalStreamQueueDepth !== 0)
 		failures.push("packaged visualization stream retained a queued frame");
@@ -2426,6 +2713,11 @@ function evaluateNativeStage(
 			maxSourceCadenceGapMs: sourceCadenceGaps.length
 				? maximum(sourceCadenceGaps)
 				: null,
+			repeatedPresentations: {
+				samples: repeatedPresentationAges.length,
+				p95SourceAgeMs: percentile(repeatedPresentationAges, 95),
+				maxSourceAgeMs: repeatedPresentationAges.at(-1) ?? null,
+			},
 		},
 		resources: {
 			frames: frames.length,
@@ -2455,6 +2747,16 @@ function evaluateNativeStage(
 			renderer,
 		},
 	};
+}
+
+function firstSourcePresentations(frames) {
+	const presented = new Set();
+	return frames.filter((frame) => {
+		const identity = `${frame.paneId}\u0000${frame.sourceFrame}`;
+		if (presented.has(identity)) return false;
+		presented.add(identity);
+		return true;
+	});
 }
 
 function countNativeRendererRestarts(frames) {
@@ -2742,11 +3044,12 @@ function hostHardware() {
 }
 
 function summarizeOutputComparison(runtime) {
-	const noStage = outputWindow(
-		runtime.before.output,
-		runtime.afterNoStage.output,
-	);
-	const stage = outputWindow(runtime.afterNoStage.output, runtime.after.output);
+	const noStage =
+		runtime.outputWindows?.noStage ??
+		outputWindow(runtime.before.output, runtime.afterNoStage.output);
+	const stage =
+		runtime.outputWindows?.stage ??
+		outputWindow(runtime.afterNoStage.output, runtime.after.output);
 	const noStageP99TickMicros = histogramPercentileMicros(noStage, 99);
 	const stageP99TickMicros = histogramPercentileMicros(stage, 99);
 	const allowedP99RegressionMicros =

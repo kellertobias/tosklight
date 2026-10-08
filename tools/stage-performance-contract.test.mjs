@@ -34,6 +34,25 @@ test("native Stage acceptance retains its named profiles and canonical artifact"
 	);
 });
 
+test("an isolated packaged run never stops or addresses the desk on the default port", () => {
+	assert.match(
+		runner,
+		/if \(isolatedPort === null\) await stopExistingDevelopmentDesk\(\);/u,
+	);
+	assert.match(runner, /if \(isolatedServer\) await stopIsolatedDesktop/u);
+	assert.match(runner, /LIGHT_DESKTOP_TEST_BIND: `127\.0\.0\.1:\$\{isolatedPort\}`/u);
+	assert.match(runner, /direct: isolated,/u);
+	assert.doesNotMatch(runner, /fetch\(\s*"http:\/\/127\.0\.0\.1:5000/u);
+	assert.doesNotMatch(runner, /`http:\/\/127\.0\.0\.1:5000\$\{route\}`/u);
+});
+
+test("native gates measure first source presentations and windows across show switches", () => {
+	assert.match(runner, /const firstPresentations = firstSourcePresentations\(/u);
+	assert.match(runner, /visibleChanged:\s*presentedSources\.has\(frame\)/u);
+	assert.match(runner, /createOutputWindowAccumulator\(before\.output\)/u);
+	assert.match(runner, /runtime\.outputWindows\?\.stage \?\?/u);
+});
+
 test("packaged acceptance measures the native helper rather than a removed WebGL canvas", () => {
 	assert.match(nativeShell, /takeStagePaneBenchmarkSamples/u);
 	assert.match(nativeShell, /stageView="3d-viz"/u);

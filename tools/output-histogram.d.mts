@@ -23,3 +23,20 @@ export function histogramPercentileMicros(
 	window: OutputWindow,
 	percentile: number,
 ): number | null;
+
+export interface OutputWindowAccumulator {
+	observe(snapshot: RuntimeOutputHealth, observedAt?: number): void;
+	take(snapshot: RuntimeOutputHealth): OutputWindow & {
+		counter_resets: number;
+		late_intervals: Array<{
+			observedAt: string;
+			deadline_misses: number;
+			send_errors: number;
+			counter_reset: boolean;
+		}>;
+	};
+}
+
+export function createOutputWindowAccumulator(
+	start: RuntimeOutputHealth,
+): OutputWindowAccumulator;
