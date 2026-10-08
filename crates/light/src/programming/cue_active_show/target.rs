@@ -157,7 +157,7 @@ fn cue_list_for_playback(
 ) -> Result<Stored<CueList>, ActionError> {
     let PlaybackTarget::CueList { cue_list_id } = playback.typed.target else {
         return Err(invalid(format!(
-            "Playback {} does not target a Cuelist",
+            "Cuelist number {} is unavailable: its Playback is assigned to another target. Choose an empty Cuelist number; the existing assignment is preserved",
             playback.typed.number
         )));
     };

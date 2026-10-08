@@ -51,11 +51,11 @@ import {
 } from "../../features/poolPresentation/poolPresentation";
 import {
 	useCueLists,
+	usePlaybackDefinitions,
 	usePlaybackPages,
 } from "../../features/showObjects/ShowObjectsState";
 import { useShowObjectKindsView } from "../../features/showObjects/ShowObjectsView";
 import { useApp } from "../../state/AppContext";
-import { useCuelistPool } from "./useCuelistSelection";
 
 interface CuelistPoolProps {
 	active: boolean;
@@ -94,6 +94,7 @@ const CUELIST_POOL_KINDS = ["cue_list", "playback", "playback_page"] as const;
 
 function CuelistPoolSlot(props: PoolSlotProps) {
 	const { number, playback, runtimeMaster, usage } = props;
+	const reserved = playback !== null && playback.target.type !== "cue_list";
 	return (
 		<div className="cuelist-card-slot">
 			<PoolCard
@@ -104,18 +105,22 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 				aria-pressed={props.selectedCuelist === number && Boolean(playback)}
 				model={{
 					number,
-					primary: playback?.name ?? "Empty",
-					secondary: playback
-						? props.offPending
-							? "Tap to release Cuelist"
+					primary: reserved
+						? `Reserved · ${playback.name}`
+						: (playback?.name ?? "Empty"),
+					secondary: reserved
+						? "Assigned to another playback type"
+						: playback
+							? props.offPending
+								? "Tap to release Cuelist"
+								: props.updateArmed
+									? "Touch to choose Update mode"
+									: `Cuelist · ${runtimeMaster != null ? `${Math.round(runtimeMaster * 100)}%` : "Off"}`
 							: props.updateArmed
-								? "Touch to choose Update mode"
-								: `Cuelist · ${runtimeMaster != null ? `${Math.round(runtimeMaster * 100)}%` : "Off"}`
-						: props.updateArmed
-							? "Touch to check Update eligibility"
-							: props.storeArmed
-								? "Tap to record Cuelist"
-								: "Press Rec first",
+								? "Touch to check Update eligibility"
+								: props.storeArmed
+									? "Tap to record Cuelist"
+									: "Press Rec first",
 					details: playback
 						? [
 								usage.length
@@ -166,6 +171,10 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 	);
 }
 
+function reservedPoolMessage(number: number, playback: PlaybackDefinition) {
+	return `Cuelist ${number} is unavailable · Playback ${number} is assigned to ${playback.name}. Choose an empty number; the existing assignment is preserved.`;
+}
+
 function poolCueNumbers(
 	cueLists: ReturnType<typeof useCueLists>,
 	playback: PlaybackDefinition | null,
@@ -200,7 +209,13 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		holdTimer.current = null;
 	};
 	const startHold = (number: number, playback: PlaybackDefinition | null) => {
-		if (!playback || state.updateArmed || offPending) return;
+		if (
+			!playback ||
+			playback.target.type !== "cue_list" ||
+			state.updateArmed ||
+			offPending
+		)
+			return;
 		held.current = false;
 		holdTimer.current = window.setTimeout(() => {
 			held.current = true;
@@ -225,6 +240,10 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		number: number,
 		playback: PlaybackDefinition | null,
 	) => {
+		if (playback && playback.target.type !== "cue_list") {
+			props.onMessage(reservedPoolMessage(number, playback));
+			return;
+		}
 		if (!playback) {
 			props.onMessage(
 				`Cuelist ${number} is empty · record it before opening settings.`,
@@ -271,6 +290,10 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 				playback && setRecordChoice({ number, playback, cueNumber }),
 		});
 	const click = (number: number, playback: PlaybackDefinition | null) => {
+		if (playback && playback.target.type !== "cue_list") {
+			props.onMessage(reservedPoolMessage(number, playback));
+			return;
+		}
 		if (held.current) {
 			held.current = false;
 			return;
@@ -454,8 +477,14 @@ function resolveCuelistPresentation({
 			...(selectedCuelist === slot.number && slot.playback
 				? (["selected"] as const)
 				: []),
-			...(storeArmed ? (["record-target"] as const) : []),
-			...(storeArmed ? (["store-target"] as const) : []),
+			...(storeArmed &&
+			(!slot.playback || slot.playback.target.type === "cue_list")
+				? (["record-target"] as const)
+				: []),
+			...(storeArmed &&
+			(!slot.playback || slot.playback.target.type === "cue_list")
+				? (["store-target"] as const)
+				: []),
 			...(updateArmed ? (["update-target"] as const) : []),
 			...(slot.playback && (setArmed || setTarget)
 				? (["set-target"] as const)
@@ -669,7 +698,11 @@ export function CuelistPool(props: CuelistPoolProps) {
 	} | null>(null);
 	const [colorSettingsAnchor, setColorSettingsAnchor] =
 		useState<DOMRect | null>(null);
-	const pool = useCuelistPool();
+	const definitions = usePlaybackDefinitions();
+	const pool = useMemo(
+		() => definitions.map((object) => object.body),
+		[definitions],
+	);
 	const poolPresentation = usePoolPresentationConfiguration();
 	const showId = useActiveShowId() ?? "unresolved";
 	const surfaceKey = poolSurfaceKey(showId, "cuelist", props.paneId);

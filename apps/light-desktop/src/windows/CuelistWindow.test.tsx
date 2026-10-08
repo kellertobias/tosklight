@@ -92,9 +92,10 @@ vi.mock("../features/playbackTopology/PlaybackTopologyProvider", () => ({
 vi.mock(
 	"../features/playbackRuntime/PlaybackRuntimeView",
 	async (importOriginal) => {
-		const actual = await importOriginal<
-			typeof import("../features/playbackRuntime/PlaybackRuntimeView")
-		>();
+		const actual =
+			await importOriginal<
+				typeof import("../features/playbackRuntime/PlaybackRuntimeView")
+			>();
 		return {
 			...actual,
 			useCueListRuntime: (
@@ -104,7 +105,8 @@ vi.mock(
 				mocks.playbacks.active.find(
 					(entry) =>
 						entry.cue_list_id === cueListId &&
-						(playbackNumber == null || entry.playback_number === playbackNumber),
+						(playbackNumber == null ||
+							entry.playback_number === playbackNumber),
 				),
 		};
 	},
@@ -288,9 +290,7 @@ describe("CuelistWindow Cue settings", () => {
 						fade_millis: 1000,
 						delay_millis: 0,
 						trigger: { type: "manual" },
-						actions: [
-							{ type: "jump", cue_id: "cue-opening", count: 2 },
-						],
+						actions: [{ type: "jump", cue_id: "cue-opening", count: 2 }],
 						changes: [],
 					},
 				],
@@ -476,10 +476,9 @@ describe("CuelistWindow pane selection", () => {
 		const modal = screen.getByRole("dialog", {
 			name: "Cue 1 preview image",
 		});
-		expect(within(modal).getByRole("img", { name: "Cue 1 preview" })).toHaveAttribute(
-			"src",
-			"data:image/png;base64,preview",
-		);
+		expect(
+			within(modal).getByRole("img", { name: "Cue 1 preview" }),
+		).toHaveAttribute("src", "data:image/png;base64,preview");
 		fireEvent.click(
 			within(modal).getByRole("button", { name: "Close Cue preview" }),
 		);
@@ -510,11 +509,7 @@ describe("CuelistWindow pane selection", () => {
 			},
 		];
 		const view = render(
-			<CuelistWindow
-				compact
-				cueListTab="cues"
-				cueInformationBlock="current"
-			/>,
+			<CuelistWindow compact cueListTab="cues" cueInformationBlock="current" />,
 		);
 		expect(
 			within(view.container).getByRole("region", {
@@ -523,11 +518,7 @@ describe("CuelistWindow pane selection", () => {
 		).toHaveTextContent("House opens");
 
 		view.rerender(
-			<CuelistWindow
-				compact
-				cueListTab="cues"
-				cueInformationBlock="next"
-			/>,
+			<CuelistWindow compact cueListTab="cues" cueInformationBlock="next" />,
 		);
 		expect(
 			within(view.container).getByRole("region", {
@@ -986,7 +977,9 @@ describe("CuelistWindow Cue property transactions", () => {
 		fireEvent.click(ui.getByRole("button", { name: "Cue Name" }));
 		appendDirectKeyboardValue(" Reprise");
 		fireEvent.keyDown(window, { key: "Enter" });
-		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
+		);
 		expect(mocks.saveTopologyCueList).toHaveBeenLastCalledWith(
 			cueList.id,
 			3,
@@ -1150,6 +1143,40 @@ describe("CuelistWindow pool recording", () => {
 		const cards = container.querySelectorAll(".cuelist-card");
 		expect(cards[0].querySelector(".pool-card-icon")).toBeNull();
 		expect(cards[1].querySelector(".pool-card-icon")).toHaveTextContent("★");
+	});
+
+	it("shows reserved non-Cuelist identities and preserves their assignment when Record is armed", async () => {
+		mocks.playbacks.pool = [
+			{
+				number: 101,
+				name: "Speed A",
+				target: { type: "speed_group", group: "A" },
+				buttons: ["go", "go_minus", "flash"],
+				fader: "master",
+				go_activates: true,
+				auto_off: true,
+				xfade_millis: 0,
+			},
+		];
+		const before = JSON.stringify(mocks.playbacks.pool);
+		const authority = createCommandLineTestAuthority({ text: "RECORD" });
+		const { container } = render(
+			authority.wrap(<CuelistWindow compact cueListTab="pool" />),
+		);
+		await act(authority.settle);
+		const reserved = container.querySelector<HTMLButtonElement>(
+			'[data-pool-slot-id="101"]',
+		)!;
+		expect(reserved).toHaveTextContent("Reserved · Speed A");
+		expect(reserved).toHaveTextContent("Assigned to another playback type");
+		expect(reserved).not.toHaveClass("empty", "store-target");
+		fireEvent.click(reserved);
+		expect(container.querySelector(".pool-message")).toHaveTextContent(
+			"Choose an empty number; the existing assignment is preserved.",
+		);
+		expect(mocks.recordCue).not.toHaveBeenCalled();
+		expect(authority.writes).toEqual([]);
+		expect(JSON.stringify(mocks.playbacks.pool)).toBe(before);
 	});
 
 	it("renders empty numbered slots and records into the touched slot", async () => {
