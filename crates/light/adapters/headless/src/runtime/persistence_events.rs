@@ -277,7 +277,43 @@ pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) -> 
         state.events.publish(event);
     }
     announce_show_to_the_network(state, kind);
+    announce_show_change_to_sync_mirrors(state, kind, &payload);
     revision
+}
+
+/// Tell bound Architects when the active show changed outside the incremental commit path.
+///
+/// Opening, rolling back or overwriting the active show replaces it as a whole; renaming,
+/// re-uploading or describing it rewrites the file's metadata without a unit-of-work commit.
+/// Either way no committed change describes the step, so the sync feed announces a gap.
+fn announce_show_change_to_sync_mirrors(state: &AppState, kind: &str, payload: &serde_json::Value) {
+    match kind {
+        "show_opened" | "show_rolled_back" => {
+            super::show_sync_feed::publish_active_show_replaced(state);
+        }
+        "show_uploaded" | "show_renamed" | "show_description_changed" | "show_overwritten" => {
+            let named = [
+                payload.pointer("/show/id"),
+                payload.pointer("/show_id"),
+                payload.pointer("/destination_show/id"),
+            ]
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str)
+            .filter_map(|id| Uuid::parse_str(id).ok())
+            .collect::<Vec<_>>();
+            if let Some(active) = state.active_show.current()
+                && named.contains(&active.id.0)
+            {
+                super::show_sync_feed::publish_gap(
+                    state,
+                    active.id,
+                    light_application::show_sync::ShowSyncGapReason::OutOfBandWrite,
+                );
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Keep what this desk advertises equal to what it is running.
@@ -297,7 +333,7 @@ fn announce_show_to_the_network(state: &AppState, kind: &str) {
         .active_show()
         .ok()
         .flatten()
-        .map(|entry| entry.name);
+        .map(|entry| super::discovery_http::ShowAnnouncement::of(&entry));
     state.discovery.announce_show(show);
 }
 

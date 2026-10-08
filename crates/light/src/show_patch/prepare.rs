@@ -1,10 +1,13 @@
 use super::legacy_profiles::materialize_touched_legacy_profiles;
 use super::placement::assign_placement_addresses;
-use super::profiles::{ResolvedMode, ResolvedProfiles, profile_mode_is_position_point};
+use super::profiles::{
+    ResolvedMode, ResolvedModes, ResolvedProfiles, profile_mode_is_position_point,
+};
 use super::projection::build_change;
 use super::record_index::StoredFixtureRecords;
 use super::records::{
-    PositionReferences, build_records, stage_group_pruning, stage_records, stage_removals,
+    PositionReferences, StagedFixture, build_records, stage_group_pruning, stage_records,
+    stage_removals,
 };
 use super::update::resolve_fixture_updates;
 use super::vector_spread::apply_vector_spreads;
@@ -13,7 +16,9 @@ use crate::{
     ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowObjectKind,
     PreparedShowCandidate, prepare_show_candidate,
 };
-use light_show::{PortableShowCandidate, PortableShowDocument};
+use light_show::{
+    PortableShowCandidate, PortableShowDocument, PortableShowObjectKey, PortableShowTransaction,
+};
 use std::{collections::BTreeSet, time::Instant};
 
 pub(super) struct PatchPlan {
@@ -76,6 +81,44 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
     plan: PatchPlan,
     ports: &P,
 ) -> Result<PreparedPatch, ActionError> {
+    let mut staged = stage_patch(document, command, plan)?;
+    if staged.is_empty() {
+        return staged.noop_change(document).map(PreparedPatch::Noop);
+    }
+    let transaction = staged.take_transaction();
+    let compile_started = Instant::now();
+    let candidate = prepare_show_candidate(document, transaction);
+    ports.record_patch_performance_phase(PatchPerformancePhase::Compile, compile_started.elapsed());
+    let candidate = candidate?;
+    let projection = document
+        .candidate(candidate.transaction())
+        .map_err(candidate_error)?;
+    let (change, group_changes) = staged.finish(document, projection, &BTreeSet::new())?;
+    Ok(PreparedPatch::Mutation(Box::new(PreparedMutation {
+        candidate,
+        change,
+        group_changes,
+    })))
+}
+
+/// A patch command staged into one portable transaction, before compilation.
+///
+/// The patch capability compiles it directly; a sync transaction first adds its own non-patch
+/// object writes, so that one CAD gesture commits — and compiles — exactly once.
+pub(crate) struct StagedPatch {
+    transaction: PortableShowTransaction,
+    fixtures: Vec<StagedFixture>,
+    removed: Vec<light_core::FixtureId>,
+    modes: ResolvedModes,
+    pruned_groups: Vec<String>,
+    command: PatchFixturesCommand,
+}
+
+fn stage_patch(
+    document: &PortableShowDocument,
+    command: &PatchFixturesCommand,
+    plan: PatchPlan,
+) -> Result<StagedPatch, ActionError> {
     let stored = StoredFixtureRecords::load(document)?;
     let profiles = plan.profiles;
     let assigned_command = PatchFixturesCommand {
@@ -93,26 +136,71 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
     stage_records(&mut transaction, &fixtures);
     let removed = stage_removals(&stored, &mut transaction, &command.remove_fixture_ids);
     let pruned_groups = stage_group_pruning(document, &mut transaction, &removed);
-    if transaction.is_empty() {
-        let candidate = document.candidate(&transaction).map_err(candidate_error)?;
-        return build_change(candidate, &fixtures, &removed, &modes).map(PreparedPatch::Noop);
+    if !transaction.is_empty() {
+        transaction.mark_patch_changed();
     }
-    transaction.mark_patch_changed();
-    let compile_started = Instant::now();
-    let candidate = prepare_show_candidate(document, transaction);
-    ports.record_patch_performance_phase(PatchPerformancePhase::Compile, compile_started.elapsed());
-    let candidate = candidate?;
-    let projection = document
-        .candidate(candidate.transaction())
-        .map_err(candidate_error)?;
-    ensure_patch_scoped_candidate(document, projection, &assigned_command, &pruned_groups)?;
-    let change = build_change(projection, &fixtures, &removed, &modes)?;
-    let group_changes = pruned_group_changes(projection, &pruned_groups)?;
-    Ok(PreparedPatch::Mutation(Box::new(PreparedMutation {
-        candidate,
-        change,
-        group_changes,
-    })))
+    Ok(StagedPatch {
+        transaction,
+        fixtures,
+        removed,
+        modes,
+        pruned_groups,
+        command: assigned_command,
+    })
+}
+
+/// Plans and stages a patch command inside an already-open active-show unit, for a caller that
+/// commits it together with other changes.
+pub(crate) fn stage_patch_command<P: ShowPatchPorts>(
+    document: &PortableShowDocument,
+    command: &PatchFixturesCommand,
+    ports: &P,
+) -> Result<StagedPatch, ActionError> {
+    let plan = plan_patch(document, command, ports)?;
+    stage_patch(document, command, plan)
+}
+
+impl StagedPatch {
+    /// `true` when the command already matches the document and changes nothing.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.transaction.is_empty()
+    }
+
+    pub(crate) fn take_transaction(&mut self) -> PortableShowTransaction {
+        let expected = self.transaction.expected_revision();
+        std::mem::replace(
+            &mut self.transaction,
+            PortableShowTransaction::new(expected),
+        )
+    }
+
+    fn noop_change(&self, document: &PortableShowDocument) -> Result<PatchChange, ActionError> {
+        let candidate = document
+            .candidate(&self.transaction)
+            .map_err(candidate_error)?;
+        build_change(candidate, &self.fixtures, &self.removed, &self.modes)
+    }
+
+    /// Checks the compiled candidate changes nothing outside this patch (and `extra`, the
+    /// caller's own staged objects), then projects the committed patch change and the Groups its
+    /// removals pruned.
+    pub(crate) fn finish(
+        &self,
+        document: &PortableShowDocument,
+        projection: PortableShowCandidate<'_>,
+        extra: &BTreeSet<PortableShowObjectKey>,
+    ) -> Result<(PatchChange, Vec<ActiveShowObjectChange>), ActionError> {
+        ensure_patch_scoped_candidate(
+            document,
+            projection,
+            &self.command,
+            &self.pruned_groups,
+            extra,
+        )?;
+        let change = build_change(projection, &self.fixtures, &self.removed, &self.modes)?;
+        let group_changes = pruned_group_changes(projection, &self.pruned_groups)?;
+        Ok((change, group_changes))
+    }
 }
 
 /// Every fixture the show holds once the command is applied, and which of them are 3D Points.
@@ -187,9 +275,13 @@ fn ensure_patch_scoped_candidate(
     candidate: PortableShowCandidate<'_>,
     command: &PatchFixturesCommand,
     pruned_groups: &[String],
+    extra: &BTreeSet<PortableShowObjectKey>,
 ) -> Result<(), ActionError> {
     let fixture_ids = command_fixture_ids(command);
     let has_unrelated_write = candidate.objects().any(|object| {
+        if extra.contains(object.key()) {
+            return false;
+        }
         let changed = document
             .object(object.key().kind(), object.key().id())
             .is_none_or(|stored| stored.body() != object.body());
@@ -200,9 +292,10 @@ fn ensure_patch_scoped_candidate(
             && !allowed_patch_body(object.key().kind(), object.body(), &fixture_ids)
     });
     let has_unrelated_delete = document.objects().any(|object| {
-        candidate
-            .object(object.key().kind(), object.key().id())
-            .is_none()
+        !extra.contains(object.key())
+            && candidate
+                .object(object.key().kind(), object.key().id())
+                .is_none()
             && !allowed_patch_body(object.key().kind(), object.body(), &fixture_ids)
     });
     if has_unrelated_write || has_unrelated_delete {

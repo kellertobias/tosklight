@@ -22,6 +22,14 @@ impl ActiveShowResource {
             .collect())
     }
 
+    pub(in crate::runtime) fn synchronize<P: light_application::ShowSyncPorts>(
+        &self,
+        action: light_application::ActionEnvelope<light_application::ShowSyncCommand>,
+        ports: &P,
+    ) -> Result<light_application::ShowSyncResult, light_application::ActionError> {
+        self.service.synchronize(action, ports)
+    }
+
     pub(in crate::runtime) fn mutate_objects<P: light_application::ActiveShowPorts>(
         &self,
         action: light_application::ActionEnvelope<
@@ -362,6 +370,29 @@ impl ActiveShowResource {
         update: impl FnOnce(&mut Option<(light_core::ShowId, u64)>),
     ) {
         update(&mut self.backup_checkpoint.lock());
+    }
+
+    /// The revision last announced on the sync feed for `show_id`.
+    pub(in crate::runtime) fn sync_watermark(&self, show_id: light_core::ShowId) -> Option<u64> {
+        self.sync_watermark
+            .lock()
+            .filter(|(watermark_show, _)| *watermark_show == show_id)
+            .map(|(_, revision)| revision)
+    }
+
+    /// Records `revision` as announced for `show_id` and returns the revision announced before,
+    /// when it was for the same show.
+    pub(in crate::runtime) fn advance_sync_watermark(
+        &self,
+        show_id: light_core::ShowId,
+        revision: u64,
+    ) -> Option<u64> {
+        let mut watermark = self.sync_watermark.lock();
+        let previous = watermark
+            .filter(|(watermark_show, _)| *watermark_show == show_id)
+            .map(|(_, revision)| revision);
+        *watermark = Some((show_id, revision));
+        previous
     }
 }
 

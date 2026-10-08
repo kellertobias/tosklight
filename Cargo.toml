@@ -11,6 +11,7 @@ members = [
   "crates/light/adapters/headless",
   "crates/light/adapters/extensions",
   "crates/light/adapters/media",
+  "crates/light/adapters/patch-wire",
   "crates/light/adapters/usb-dmx-core",
   "crates/light/adapters/usb-dmx-serial",
   "crates/light/contracts/extensions",
@@ -56,6 +57,7 @@ members = [
   "crates/viz/planning",
   "crates/viz/render",
   "crates/viz/snapshot",
+  "crates/viz/sync",
   "crates/viz/surface",
   "apps/viz-renderer",
 ]
@@ -109,6 +111,7 @@ quick-xml = "0.41"
 zip = { version = "4.6", default-features = false, features = ["deflate"] }
 light-application = { path = "crates/light" }
 light-wire = { path = "crates/light/contracts/wire" }
+light-patch-wire = { path = "crates/light/adapters/patch-wire" }
 # Viz visualizer stack. These belong to `apps/viz-renderer` and `crates/viz/*` only; the
 # ToskLight desk build must never require them.
 wgpu = "30"
@@ -138,6 +141,7 @@ viz-project = { path = "crates/viz/project" }
 viz-desk = { path = "crates/viz/desk" }
 viz-render = { path = "crates/viz/render" }
 viz-snapshot = { path = "crates/viz/snapshot" }
+viz-sync = { path = "crates/viz/sync" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

@@ -7,6 +7,27 @@ use light_fixture::PatchedFixtureProfileReference;
 use light_show::{FixtureProfileRevision, PortableShowDocument};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// The stored patch projection of one fixture, without resolving its profile.
+pub(crate) fn fixture_projection(
+    document: &PortableShowDocument,
+    fixture_id: light_core::FixtureId,
+) -> Result<Option<PatchFixtureProjection>, ActionError> {
+    let stored = StoredFixtureRecords::load(document)?;
+    let Some(stored) = stored.get(fixture_id) else {
+        return Ok(None);
+    };
+    let profile = stored
+        .record
+        .selected_profile_reference()
+        .map_err(patch_error)?
+        .ok_or_else(|| invalid("patched fixture has no portable profile reference"))?;
+    Ok(Some(PatchFixtureProjection {
+        fixture_revision: stored.revision,
+        profile,
+        patch: stored.record.patch().map_err(patch_error)?,
+    }))
+}
+
 pub(super) fn build_snapshot(
     document: &PortableShowDocument,
 ) -> Result<PatchSnapshot, ActionError> {

@@ -499,7 +499,8 @@ export const documentSession = {
 		}),
 	recentDocuments: () => invoke<string[]>("recent_documents"),
 	recentDocumentDetails: () => invoke<RecentDocument[]>("recent_document_details"),
-	saveAs: (path: string) => invoke<void>("save_document_as", { path }),
+	/** Saves a copy as a new show — a new identity, bound to no desk — and continues there. */
+	saveAs: (path: string) => invoke<DocumentSummary>("save_document_as", { path }),
 	rename: (name: string) => invoke<void>("rename_document", { name }),
 	exportMvr: (path: string) => invoke<number>("export_mvr", { path }),
 	previewMvr: (path: string) => invoke<MvrPreview>("preview_mvr", { path }),
@@ -511,7 +512,12 @@ export const documentSession = {
 	loadDeskShow: (address: string, name: string, showId: string) =>
 		invoke<DocumentSummary>("load_desk_show", { address, name, showId }),
 	sourceDesk: () => invoke<string | null>("source_desk"),
-	saveToSourceDesk: () => invoke<string>("save_to_source_desk"),
+	/**
+	 * Publishes the open document to a desk as a new show and continues with the desk's copy,
+	 * bound to it: the deliberate way to associate a standalone show or a Save As copy.
+	 */
+	publishToDesk: (instance: string) =>
+		invoke<DocumentSummary>("publish_to_desk", { instance }),
 	discoveredDesks: () => invoke<DeskPeer[]>("discovered_desks"),
 	liveDmxInputs: () => invoke<LiveDmxInputs>("live_dmx_inputs"),
 	saveLiveDmxInputs: (inputs: LiveDmxInputs) =>

@@ -55,6 +55,12 @@ pub struct Peer {
     /// The show or document it is holding. `None` means it has nothing loaded, which is a peer
     /// worth showing and not worth offering to load from.
     pub show: Option<String>,
+    /// The desk installation's stable identity (`desk_id`), when the peer publishes one. An older
+    /// peer does not, and is still a peer.
+    pub desk_id: Option<String>,
+    /// The UUID of the show it is holding (`show_id`), when the peer publishes one. This, not the
+    /// name, is what a bound Architect matches on.
+    pub show_id: Option<String>,
     /// Where to reach its API, in the order worth trying: a machine answers on every interface
     /// it has, and only the peer's own network knows which of them a caller can actually reach.
     /// Never empty — a record with no usable address is not a peer.
@@ -87,6 +93,10 @@ pub struct Advertisement {
     pub name: String,
     pub show: Option<String>,
     pub port: u16,
+    /// Stable installation identity, published as the `desk_id` TXT key.
+    pub desk_id: Option<String>,
+    /// UUID of the show being held, published as the `show_id` TXT key.
+    pub show_id: Option<String>,
 }
 
 /// A running advertisement. Dropping it withdraws the service.
@@ -122,11 +132,24 @@ impl Advertiser {
     /// The record is what a peer decides from, so it has to follow the application rather than
     /// describe the moment it started.
     pub fn set_show(&self, show: Option<String>) {
+        let show_id = self
+            .advertisement
+            .lock()
+            .expect("advertisement")
+            .show_id
+            .clone();
+        self.set_show_identity(show, show_id);
+    }
+
+    /// Re-publish the show's name together with its UUID, so a peer can match the show itself
+    /// rather than a name another show may share.
+    pub fn set_show_identity(&self, show: Option<String>, show_id: Option<String>) {
         let mut advertisement = self.advertisement.lock().expect("advertisement");
-        if advertisement.show == show {
+        if advertisement.show == show && advertisement.show_id == show_id {
             return;
         }
         advertisement.show = show;
+        advertisement.show_id = show_id;
         let Ok(info) = service_info(&advertisement) else {
             return;
         };
@@ -150,15 +173,28 @@ impl Drop for Advertiser {
     }
 }
 
-fn service_info(advertisement: &Advertisement) -> Result<ServiceInfo, String> {
+/// The TXT record for one advertisement. Optional keys are omitted rather than published empty,
+/// and a reader ignores keys it does not know, so older and newer peers read each other.
+fn txt_properties(advertisement: &Advertisement) -> HashMap<String, String> {
     let mut properties = HashMap::from([
         ("role".to_owned(), advertisement.role.wire().to_owned()),
         ("name".to_owned(), advertisement.name.clone()),
         ("os".to_owned(), std::env::consts::OS.to_owned()),
     ]);
-    if let Some(show) = &advertisement.show {
-        properties.insert("show".to_owned(), show.clone());
+    for (key, value) in [
+        ("show", &advertisement.show),
+        ("desk_id", &advertisement.desk_id),
+        ("show_id", &advertisement.show_id),
+    ] {
+        if let Some(value) = value {
+            properties.insert(key.to_owned(), value.clone());
+        }
     }
+    properties
+}
+
+fn service_info(advertisement: &Advertisement) -> Result<ServiceInfo, String> {
+    let properties = txt_properties(advertisement);
     // The instance name has to be stable for this application on this machine, or every change of
     // show would arrive at a browser as a different peer.
     let instance = instance_name(advertisement.role);
@@ -319,13 +355,37 @@ fn peer_from(resolved: &mdns_sd::ResolvedService) -> Option<Peer> {
     if addresses.is_empty() {
         return None;
     }
+    let identity = PeerIdentity::from_properties(property);
     Some(Peer {
         role,
-        name: property("name").unwrap_or_else(|| resolved.fullname.clone()),
-        show: property("show").filter(|show| !show.trim().is_empty()),
+        name: identity.name.unwrap_or_else(|| resolved.fullname.clone()),
+        show: identity.show,
+        desk_id: identity.desk_id,
+        show_id: identity.show_id,
         addresses,
         instance: resolved.fullname.clone(),
     })
+}
+
+/// What a record says about the peer, read key by key so unknown keys cost nothing.
+#[derive(Debug, Default, Eq, PartialEq)]
+struct PeerIdentity {
+    name: Option<String>,
+    show: Option<String>,
+    desk_id: Option<String>,
+    show_id: Option<String>,
+}
+
+impl PeerIdentity {
+    fn from_properties(property: impl Fn(&str) -> Option<String>) -> Self {
+        let present = |key: &str| property(key).filter(|value| !value.trim().is_empty());
+        Self {
+            name: property("name"),
+            show: present("show"),
+            desk_id: present("desk_id"),
+            show_id: present("show_id"),
+        }
+    }
 }
 
 /// A peer's addresses, in the order worth trying, and without the ones that cannot work.
@@ -395,6 +455,8 @@ mod tests {
             role: Role::Desk,
             name: "FOH desk".into(),
             show: Some("Summer Tour".into()),
+            desk_id: None,
+            show_id: None,
             addresses: vec!["10.0.0.9:5000".into(), "127.0.0.1:5000".into()],
             instance: "tosklight-desk-foh._tosklight._tcp.local.".into(),
         };
@@ -451,6 +513,8 @@ mod tests {
             name: "ToskLight Viz Editor".into(),
             show: Some("Summer Tour rig".into()),
             port: 5310,
+            desk_id: None,
+            show_id: None,
         };
         let info = service_info(&advertisement).expect("a service record");
         assert_eq!(info.get_property_val_str("os"), Some(std::env::consts::OS));
@@ -492,6 +556,8 @@ mod network_tests {
             name: "discovery test desk".to_owned(),
             show: Some("Summer Tour".to_owned()),
             port: 5000,
+            desk_id: None,
+            show_id: None,
         })
         .expect("advertising");
         let browser = Browser::start().expect("browsing");
@@ -510,5 +576,39 @@ mod network_tests {
         assert_eq!(peer.show.as_deref(), Some("Summer Tour"));
         assert!(peer.address().ends_with(":5000"), "{}", peer.address());
         drop(advertiser);
+    }
+
+    /// The identity keys survive the trip through a TXT record, a missing key reads as absent, and
+    /// a key this version does not know is ignored rather than refused.
+    #[test]
+    fn show_and_desk_identities_survive_the_trip_through_a_service_record() {
+        let advertisement = Advertisement {
+            role: Role::Desk,
+            name: "FOH desk".into(),
+            show: Some("Summer Tour".into()),
+            port: 5000,
+            desk_id: Some("8d5a2f0e-6a0c-4a43-9b8e-0d5bd4a0c001".into()),
+            show_id: Some("1b0c7a3e-2f53-4b5b-8b0e-5a4f3c2d1e00".into()),
+        };
+        let mut record = txt_properties(&advertisement);
+        record.insert("a_future_key".into(), "whatever comes next".into());
+        let read = PeerIdentity::from_properties(|key| record.get(key).cloned());
+        assert_eq!(
+            read,
+            PeerIdentity {
+                name: Some("FOH desk".into()),
+                show: Some("Summer Tour".into()),
+                desk_id: advertisement.desk_id.clone(),
+                show_id: advertisement.show_id.clone(),
+            }
+        );
+        let older = txt_properties(&Advertisement {
+            desk_id: None,
+            show_id: None,
+            ..advertisement
+        });
+        assert!(!older.contains_key("desk_id") && !older.contains_key("show_id"));
+        let read = PeerIdentity::from_properties(|key| older.get(key).cloned());
+        assert_eq!((read.desk_id, read.show_id), (None, None));
     }
 }

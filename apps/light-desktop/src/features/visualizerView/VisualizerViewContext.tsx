@@ -17,6 +17,12 @@ export interface VisualizerViewActions {
 	snapshot(): Promise<VisualizerViewSnapshot>;
 	update(target: string, patch: VisualizerViewPatch): Promise<VisualizerView>;
 	onConnectionChanged(listener: (connected: boolean) => void): () => unknown;
+	/**
+	 * Whether an Architect is following the active show, kept in step with Control. Absent where
+	 * no desk is attached, which reads as no Architect.
+	 */
+	architectSync?(): Promise<boolean>;
+	onArchitectSyncChanged?(listener: (active: boolean) => void): () => unknown;
 }
 
 const VisualizerViewContext = createContext<VisualizerViewActions | null>(null);

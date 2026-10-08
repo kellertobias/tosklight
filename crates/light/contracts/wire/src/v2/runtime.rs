@@ -271,12 +271,18 @@ pub struct RuntimeBootstrapSnapshot {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeReadinessSnapshot {
     pub status: String,
+    /// Stable identity of this desk installation. An Architect binds a show to it, so a desk that
+    /// moved address is still recognised and a different desk is never mistaken for it.
+    pub desk_identity: Uuid,
     pub active_show: Option<Uuid>,
     pub active_show_last_loaded_at: Option<String>,
     pub active_show_error: Option<String>,
     pub recovery_mode: bool,
     #[ts(type = "number")]
     pub snapshot_revision: u64,
+    /// At least one Architect is following the active show on the sync feed. The desk shows it,
+    /// and `architect_sync_changed` events keep it current.
+    pub architect_sync_active: bool,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]

@@ -29,13 +29,20 @@ pub(super) struct DeskDiscovery {
 
 impl DeskDiscovery {
     /// Start announcing this desk on `port` and looking for the others.
-    pub(super) fn start(port: u16, show: Option<String>) -> Self {
+    pub(super) fn start(
+        port: u16,
+        show: Option<ShowAnnouncement>,
+        desk_id: Option<String>,
+    ) -> Self {
         let name = light_discovery::hostname();
+        let (show, show_id) = ShowAnnouncement::split(show);
         let advertiser = match Advertiser::start(Advertisement {
             role: Role::Desk,
             name,
             show,
             port,
+            desk_id,
+            show_id,
         }) {
             Ok(advertiser) => Some(advertiser),
             Err(error) => {
@@ -61,9 +68,10 @@ impl DeskDiscovery {
         self.advertiser.as_ref().map(Advertiser::instance)
     }
 
-    pub(super) fn announce_show(&self, show: Option<String>) {
+    pub(super) fn announce_show(&self, show: Option<ShowAnnouncement>) {
         if let Some(advertiser) = &self.advertiser {
-            advertiser.set_show(show);
+            let (show, show_id) = ShowAnnouncement::split(show);
+            advertiser.set_show_identity(show, show_id);
         }
     }
 
@@ -85,6 +93,29 @@ impl DeskDiscovery {
     }
 }
 
+/// The active show as the network record names it: its name for an operator, its UUID for a bound
+/// Architect, which must never mistake another show of the same name for its own.
+#[derive(Clone, Debug)]
+pub(super) struct ShowAnnouncement {
+    pub(super) name: String,
+    pub(super) id: uuid::Uuid,
+}
+
+impl ShowAnnouncement {
+    pub(super) fn of(entry: &light_show::ShowEntry) -> Self {
+        Self {
+            name: entry.name.clone(),
+            id: entry.id.0,
+        }
+    }
+
+    fn split(show: Option<Self>) -> (Option<String>, Option<String>) {
+        show.map_or((None, None), |show| {
+            (Some(show.name), Some(show.id.to_string()))
+        })
+    }
+}
+
 /// The desk's discovery, as the rest of the runtime holds it.
 ///
 /// The responder and the browse stay inside: what leaves is a list of peers and an announcement
@@ -93,15 +124,19 @@ impl DeskDiscovery {
 pub(super) struct DiscoveryResource(Arc<DeskDiscovery>);
 
 impl DiscoveryResource {
-    pub(super) fn start(port: u16, show: Option<String>) -> Self {
-        Self(Arc::new(DeskDiscovery::start(port, show)))
+    pub(super) fn start(
+        port: u16,
+        show: Option<ShowAnnouncement>,
+        desk_id: Option<String>,
+    ) -> Self {
+        Self(Arc::new(DeskDiscovery::start(port, show, desk_id)))
     }
 
     pub(super) fn own_instance(&self) -> Option<String> {
         self.0.own_instance()
     }
 
-    pub(super) fn announce_show(&self, show: Option<String>) {
+    pub(super) fn announce_show(&self, show: Option<ShowAnnouncement>) {
         self.0.announce_show(show);
     }
 

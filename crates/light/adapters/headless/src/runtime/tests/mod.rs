@@ -119,6 +119,14 @@ mod show_patch_route_tests;
 mod show_recovery_route_tests;
 #[path = "show_recovery_write_tests.rs"]
 mod show_recovery_write_tests;
+#[path = "show_sync_event_tests.rs"]
+mod show_sync_event_tests;
+#[path = "show_sync_replay_tests.rs"]
+mod show_sync_replay_tests;
+#[path = "show_sync_route_tests.rs"]
+mod show_sync_route_tests;
+#[path = "show_sync_support.rs"]
+mod show_sync_support;
 #[path = "speed_group_v2_tests.rs"]
 mod speed_group_v2_tests;
 

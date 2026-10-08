@@ -33,6 +33,7 @@ viz-drawing = { path = "../../../crates/viz/drawing" }
 viz-planning = { path = "../../../crates/viz/planning" }
 viz-project = { path = "../../../crates/viz/project" }
 viz-scene = { path = "../../../crates/viz/scene" }
+viz-sync.workspace = true
 light-show = { path = "../../../crates/shared/show" }
 tokio.workspace = true
 zip.workspace = true

@@ -68,6 +68,17 @@ impl EventBus {
         event
     }
 
+    /// Whether any live subscription has opted into `topic`. Opt-in families are published only
+    /// then, so a desk with no such subscriber keeps its event stream exactly as it was.
+    pub fn has_subscriber_for(&self, topic: super::model::EventTopic) -> bool {
+        self.inner
+            .state
+            .lock()
+            .subscriptions
+            .values()
+            .any(|subscriber| subscriber.filter().topics.contains(&topic))
+    }
+
     pub fn replay(&self, after_sequence: u64, filter: &EventFilter) -> EventReplay {
         replay_from(&self.inner.state.lock(), after_sequence, filter)
     }

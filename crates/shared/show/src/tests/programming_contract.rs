@@ -289,7 +289,7 @@ fn writers_stamp_the_marker_only_at_contract_one_and_only_for_programming_change
     assert!(!transaction.stamp_programming_contract(1));
     let commit = store.apply_portable_transaction(transaction).unwrap();
     document.apply_commit(&commit);
-    assert!(commit.written_metadata().is_empty());
+    assert!(commit.metadata_changes().is_empty());
 
     let mut transaction = document.transaction();
     transaction.put("preset", "2.2", preset);

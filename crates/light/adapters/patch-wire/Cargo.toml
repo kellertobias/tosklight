@@ -1,0 +1,16 @@
+[package]
+name = "light-patch-wire"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+light-application.workspace = true
+light-core = { path = "../../../shared/core" }
+light-fixture = { path = "../../../shared/fixture" }
+light-wire.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

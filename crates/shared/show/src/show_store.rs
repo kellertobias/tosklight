@@ -9,6 +9,17 @@ use uuid::Uuid;
 
 pub const DESK_LAYOUT_ID: &str = "desk";
 
+/// What identifies one stored object's content without reading it: a write changes the revision,
+/// the time or the length, and a delete and re-create at the same revision still changes the time.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ObjectStamp {
+    pub kind: String,
+    pub id: String,
+    pub revision: Revision,
+    pub updated_at: String,
+    pub length: u64,
+}
+
 pub struct ShowStore {
     pub(crate) conn: Connection,
 }
@@ -93,6 +104,45 @@ impl ShowStore {
                 "INSERT INTO metadata(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 params![key, value],
             )?;
+        }
+        portable::bump_revision(&transaction)?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Every metadata value whose key starts with one of `prefixes`, read in one statement.
+    pub fn metadata_with_prefixes(
+        &self,
+        prefixes: &[&str],
+    ) -> Result<std::collections::BTreeMap<String, String>, StoreError> {
+        let mut statement = self.conn.prepare("SELECT key,value FROM metadata")?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut values = std::collections::BTreeMap::new();
+        for row in rows {
+            let (key, value) = row?;
+            if prefixes.iter().any(|prefix| key.starts_with(prefix)) {
+                values.insert(key, value);
+            }
+        }
+        Ok(values)
+    }
+
+    /// Writes or removes metadata values atomically and advances the show revision once.
+    pub fn replace_metadata_values(
+        &self,
+        values: &[(&str, Option<&str>)],
+    ) -> Result<(), StoreError> {
+        let transaction = self.conn.unchecked_transaction()?;
+        for (key, value) in values {
+            match value {
+                Some(value) => transaction.execute(
+                    "INSERT INTO metadata(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    params![key, value],
+                )?,
+                None => transaction.execute("DELETE FROM metadata WHERE key=?1", [key])?,
+            };
         }
         portable::bump_revision(&transaction)?;
         transaction.commit()?;
@@ -240,6 +290,34 @@ impl ShowStore {
 
     pub fn objects(&self, kind: &str) -> Result<Vec<VersionedObject>, StoreError> {
         load_versioned_objects(&self.conn, kind)
+    }
+
+    /// Every object of `kinds` as a stamp, without reading or decoding a body: enough to tell
+    /// which objects changed since a previous read.
+    pub fn object_stamps(&self, kinds: &[&str]) -> Result<Vec<ObjectStamp>, StoreError> {
+        if kinds.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = vec!["?"; kinds.len()].join(",");
+        let mut statement = self.conn.prepare(&format!(
+            "SELECT kind,id,revision,updated_at,length(body_json) FROM objects \
+             WHERE kind IN ({placeholders}) ORDER BY kind,id"
+        ))?;
+        let rows = statement.query_map(rusqlite::params_from_iter(kinds.iter()), |row| {
+            Ok(ObjectStamp {
+                kind: row.get(0)?,
+                id: row.get(1)?,
+                revision: row.get::<_, i64>(2)?.max(0) as Revision,
+                updated_at: row.get(3)?,
+                length: row.get::<_, i64>(4)?.max(0) as u64,
+            })
+        })?;
+        rows.collect::<Result<_, _>>().map_err(Into::into)
+    }
+
+    /// One stored object, if it exists.
+    pub fn object(&self, kind: &str, id: &str) -> Result<Option<VersionedObject>, StoreError> {
+        load_versioned_object(&self.conn, kind, id)
     }
 
     /// Reads one object collection and the whole-Show revision from the same SQLite snapshot.

@@ -28,14 +28,27 @@ use viz_planning::SceneSource;
 pub struct Session {
     source: SceneSource,
     document_lifecycle: Mutex<()>,
-    pub(crate) desk_save_gate: tokio::sync::Mutex<()>,
-    pub(crate) pending_desk_save: Mutex<Option<crate::discovery::show_library::PendingDeskSave>>,
+    /// Held for the whole of one operator gesture — every write a command makes — and by every
+    /// change Control makes to a bound document, so the two never interleave. Reentrant, so a
+    /// gesture made of several commands nests; the count is the nesting depth.
+    gesture: parking_lot::ReentrantMutex<std::cell::Cell<u32>>,
+    /// Bumped whenever another document opens, so a staged MVR preview never lands in it.
     document_generation: std::sync::atomic::AtomicU64,
     pending_mvr: Mutex<Option<mvr_preview::PendingMvrImport>>,
     library_path: Mutex<Option<PathBuf>>,
     recent: Mutex<Option<RecentShow>>,
-    pub(crate) desk_source: Mutex<Option<crate::discovery::DeskSource>>,
+    /// The desk show the open document is bound to, if it came from one.
+    pub(crate) binding: Mutex<Option<crate::sync::SyncBinding>>,
+    bindings: Mutex<Option<crate::sync::SyncBindingStore>>,
+    /// The synchronization of a bound document with its desk.
+    engine: Mutex<Option<viz_sync::SyncEngine>>,
+    sync_host: Mutex<Option<SyncHost>>,
 }
+
+type SyncHost = (
+    std::sync::Arc<dyn viz_sync::DocumentHost>,
+    tokio::runtime::Handle,
+);
 
 /// What the window title bar and the file menu need to know.
 #[derive(Clone, Debug, Serialize)]
@@ -132,85 +145,112 @@ impl Session {
         *self.recent.lock() = Some(recent);
     }
 
+    /// Where this installation keeps the bindings of documents opened from a desk.
+    pub fn set_binding_store(&self, store: crate::sync::SyncBindingStore) {
+        *self.bindings.lock() = Some(store);
+    }
+
+    /// Where bound documents send their edits from: the engine's host and its runtime.
+    pub(crate) fn set_sync_host(
+        &self,
+        host: std::sync::Arc<dyn viz_sync::DocumentHost>,
+        runtime: tokio::runtime::Handle,
+    ) {
+        *self.sync_host.lock() = Some((host, runtime));
+    }
+
+    /// The running synchronization of the open document, if it is bound to a desk.
+    pub(crate) fn sync_engine(&self) -> Option<viz_sync::SyncEngine> {
+        self.engine.lock().clone()
+    }
+
+    /// Opens a show file just copied from a desk, bound to that desk's show. The copy *is* the
+    /// desk's show at the moment it was read, so it seeds the confirmed mirror.
     pub(crate) fn open_from_desk(
         &self,
         path: &Path,
-        mut source: crate::discovery::DeskSource,
+        mut binding: crate::sync::SyncBinding,
     ) -> Answer<DocumentSummary> {
         let _lifecycle = self.document_lifecycle.lock();
         let summary = self.open_path_locked(path, None)?;
-        source.revision =
+        binding.acknowledged_show_revision =
             self.with(|document| document.portable_revision().map_err(|e| e.to_string()))?;
-        self.set_desk_source(Some(source))?;
+        self.set_binding(Some(binding.clone()))?;
+        self.start_sync(binding, viz_sync::Start::FreshCopy)?;
         Ok(summary)
     }
 
-    pub(crate) fn desk_save_snapshot(
-        &self,
-    ) -> Answer<(crate::discovery::DeskSource, u64, Vec<u8>, u64)> {
-        let _lifecycle = self.document_lifecycle.lock();
-        let source = self
-            .desk_source
-            .lock()
-            .clone()
-            .ok_or("This show was not opened from a desk")?;
-        let generation = self
-            .document_generation
-            .load(std::sync::atomic::Ordering::Relaxed);
-        let (bytes, local_revision) = self.with(|document| {
-            if document.show_id().0.to_string() != source.show_id {
-                return Err("The open show does not match its source desk".into());
-            }
-            let staged = document
-                .path()
-                .with_file_name(format!(".desk-save-{}.show", Uuid::new_v4()));
-            let result = document
-                .save_as(&staged)
-                .map_err(|e| e.to_string())
-                .and_then(|_| std::fs::read(&staged).map_err(|e| e.to_string()));
-            let _ = std::fs::remove_file(staged);
-            let bytes = result?;
-            let revision = document.portable_revision().map_err(|e| e.to_string())?;
-            Ok((bytes, revision))
-        })?;
-        Ok((source, generation, bytes, local_revision))
-    }
-
-    pub(crate) fn confirm_desk_save(&self, generation: u64, revision: u64) -> Answer<()> {
-        let _lifecycle = self.document_lifecycle.lock();
-        if self
-            .document_generation
-            .load(std::sync::atomic::Ordering::Relaxed)
-            != generation
-        {
+    /// Starts synchronizing the open document, when the editor can host a synchronization.
+    fn start_sync(&self, binding: crate::sync::SyncBinding, start: viz_sync::Start) -> Answer<()> {
+        self.stop_sync();
+        let Some((host, runtime)) = self.sync_host.lock().clone() else {
             return Ok(());
-        }
-        if let Some(source) = self.desk_source.lock().as_mut() {
-            source.revision = revision;
-        }
-        self.persist_desk_source()
-    }
-
-    pub(crate) fn set_desk_source(
-        &self,
-        source: Option<crate::discovery::DeskSource>,
-    ) -> Answer<()> {
-        *self.desk_source.lock() = source;
-        self.persist_desk_source()
-    }
-
-    pub(crate) fn persist_desk_source(&self) -> Answer<()> {
-        let source = self.desk_source.lock().clone();
-        if let Some(source) = source {
-            let path =
-                self.with(|document| Ok(document.path().with_extension("show.desk-source.json")))?;
-            std::fs::write(
-                path,
-                serde_json::to_vec(&source).map_err(|e| e.to_string())?,
-            )
-            .map_err(|e| e.to_string())?;
-        }
+        };
+        let Some(store) = self.bindings.lock().clone() else {
+            return Ok(());
+        };
+        let _gesture = self.gesture.lock();
+        let engine = self.with(|document| {
+            viz_sync::SyncEngine::start(document, binding, store, host, &runtime, start)
+        })?;
+        *self.engine.lock() = Some(engine);
         Ok(())
+    }
+
+    fn stop_sync(&self) {
+        if let Some(engine) = self.engine.lock().take() {
+            engine.stop();
+        }
+    }
+
+    /// Runs one operator gesture: every document write `action` makes, however many commands it
+    /// takes, becomes one synchronized transaction when the outermost gesture ends.
+    pub(crate) fn gesture<T>(&self, action: impl FnOnce() -> Answer<T>) -> Answer<T> {
+        let depth = self.gesture.lock();
+        depth.set(depth.get() + 1);
+        let outcome = action();
+        depth.set(depth.get() - 1);
+        if depth.get() == 0
+            && let Some(engine) = self.sync_engine()
+        {
+            // A failure to journal is reported on the sync status; the edit itself is in the
+            // document either way, and is recovered from it on the next start.
+            let _ = self.source.with(|document| engine.capture(document));
+        }
+        outcome
+    }
+
+    /// Applies a change Control made, under the gesture lock so it never lands inside an
+    /// operator's gesture. Answers whether the document changed.
+    pub(crate) fn remote_edit(
+        &self,
+        edit: &mut dyn FnMut(&PlanningDocument) -> Answer<bool>,
+    ) -> Answer<bool> {
+        let _gesture = self.gesture.lock();
+        let changed = self
+            .source
+            .with(edit)
+            .unwrap_or_else(|| Err("no document is open".to_owned()))?;
+        if changed {
+            self.source.mark_changed();
+        }
+        Ok(changed)
+    }
+
+    /// Binds the open document to a desk show, or unbinds it, in memory and in the store.
+    pub(crate) fn set_binding(&self, binding: Option<crate::sync::SyncBinding>) -> Answer<()> {
+        if binding.is_none() {
+            self.stop_sync();
+        }
+        *self.binding.lock() = binding.clone();
+        let path = self.with(|document| Ok(document.path().to_path_buf()))?;
+        let Some(store) = self.bindings.lock().clone() else {
+            return Ok(());
+        };
+        match binding {
+            Some(binding) => store.bind(&path, &binding),
+            None => store.unbind(&path),
+        }
     }
 
     pub fn recent_paths(&self) -> Vec<String> {
@@ -243,6 +283,23 @@ impl Session {
         self.open_path(path, None)
     }
 
+    /// Copies the open document to `path` as a new show and opens the copy, unbound.
+    pub(crate) fn fork_to(&self, path: &Path) -> Answer<DocumentSummary> {
+        let _lifecycle = self.document_lifecycle.lock();
+        self.with(|document| {
+            let name = document.name().map_err(|error| error.to_string())?;
+            document
+                .fork_to(path, &name)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        })?;
+        if let Some(store) = self.bindings.lock().clone() {
+            // A file written over an older bound document at the same path must not inherit it.
+            store.unbind(path).ok();
+        }
+        self.open_path_locked(path, None)
+    }
+
     /// Renames the open document, for a caller that opened it itself rather than through the
     /// window's own rename command.
     pub fn rename_to(&self, name: &str) -> Answer<()> {
@@ -269,6 +326,7 @@ impl Session {
     }
 
     fn open_path_locked(&self, path: &Path, created: Option<&str>) -> Answer<DocumentSummary> {
+        self.stop_sync();
         let document = match created {
             Some(name) => PlanningDocument::create(path, name),
             None => PlanningDocument::open(path),
@@ -280,13 +338,27 @@ impl Session {
         *self.pending_mvr.lock() = None;
         self.document_generation
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        *self.desk_source.lock() = std::fs::read(path.with_extension("show.desk-source.json"))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+        let binding = self.stored_binding(path);
+        *self.binding.lock() = binding.clone();
+        if let Some(binding) = binding
+            && let Err(error) = self.start_sync(binding, viz_sync::Start::Reopen)
+        {
+            eprintln!("{} opens without synchronization: {error}", path.display());
+        }
         if let Some(recent) = self.recent.lock().as_ref() {
             recent.remember(path);
         }
         Ok(summary)
+    }
+
+    /// The stored binding of `path`. A damaged binding leaves the document standalone and says
+    /// so, rather than refusing to open the operator's file.
+    fn stored_binding(&self, path: &Path) -> Option<crate::sync::SyncBinding> {
+        let store = self.bindings.lock().clone()?;
+        store.for_document(path).unwrap_or_else(|error| {
+            eprintln!("{} opens unbound: {error}", path.display());
+            None
+        })
     }
 
     pub(crate) fn with<T>(&self, action: impl FnOnce(&PlanningDocument) -> Answer<T>) -> Answer<T> {
@@ -299,15 +371,20 @@ impl Session {
     ///
     /// A rig the operator just patched has to appear in the picture now, not on whatever the
     /// renderer's next reconnection would have been.
+    ///
+    /// Every write is one gesture, or part of the gesture a caller opened around several, so a
+    /// bound document journals it for its desk.
     pub(crate) fn change<T>(
         &self,
         action: impl FnOnce(&PlanningDocument) -> Answer<T>,
     ) -> Answer<T> {
-        let outcome = self.with(action);
-        if outcome.is_ok() {
-            self.source.mark_changed();
-        }
-        outcome
+        self.gesture(|| {
+            let outcome = self.with(action);
+            if outcome.is_ok() {
+                self.source.mark_changed();
+            }
+            outcome
+        })
     }
 }
 
@@ -470,21 +547,23 @@ pub fn save_live_dmx_inputs(
     })
 }
 
-/// Writes a complete copy of the document. The result is an ordinary show file the desk opens.
+/// Writes the document to a new file as a different show and continues there.
+///
+/// The copy gets a new show identity and no desk binding: a Save As is a fork, and nothing done to
+/// the copy can ever reach the desk show the original is bound to. The original keeps its binding
+/// and its unconfirmed edits for the next time it is opened.
 #[tauri::command]
 pub fn save_document_as(
     app: tauri::AppHandle,
     window: tauri::Window,
     session: tauri::State<'_, Session>,
+    discovery: tauri::State<'_, Discovery>,
     path: String,
-) -> Answer<()> {
-    session.with(|document| {
-        document
-            .save_as(Path::new(&path))
-            .map_err(|error| error.to_string())
-    })?;
+) -> Answer<DocumentSummary> {
+    let summary = session.fork_to(Path::new(&path))?;
+    discovery.announce_document(Some(summary.name.clone()));
     announce_document_change(&app, &window)?;
-    Ok(())
+    Ok(summary)
 }
 
 #[tauri::command]

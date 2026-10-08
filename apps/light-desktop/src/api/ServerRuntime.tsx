@@ -435,6 +435,12 @@ function useVisualizerViewActionSource(
 					if (event.type === "visualizer_connection_changed")
 						listener(event.change.connected);
 				}),
+			architectSync: () => state.api.runtime.architectSyncActive(),
+			onArchitectSyncChanged: (listener: (active: boolean) => void) =>
+				state.api.runtime.onEvent((event) => {
+					if (event.type === "architect_sync_changed")
+						listener(event.change.active);
+				}),
 		}),
 		[state.api, state.status],
 	);

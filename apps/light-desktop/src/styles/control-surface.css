@@ -1342,6 +1342,16 @@ button.large-action:disabled {
 	color: var(--cyan);
 	font-size: 10px;
 }
+/* An Architect is keeping this show in step: one quiet line under the show name. */
+.dock-identity > .dock-architect-sync {
+	width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-muted, #8fa3ad);
+	font-size: 9px;
+	font-weight: 700;
+}
 .mode-toggle {
 	width: 104px;
 	min-width: 104px;

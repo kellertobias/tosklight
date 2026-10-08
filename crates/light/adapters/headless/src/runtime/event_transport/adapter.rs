@@ -1,6 +1,7 @@
 //! Translation between transport-independent application events and v2 wire DTOs.
 
 mod selective_import;
+mod show_sync;
 
 use light_application as application;
 use light_wire::v2::events as wire;
@@ -46,6 +47,13 @@ pub(super) fn application_filter(
             .collect(),
         classes: filter.classes.into_iter().map(app_class).collect(),
         objects: filter.objects.into_iter().map(app_object).collect(),
+        topics: filter
+            .topics
+            .into_iter()
+            .map(|topic| match topic {
+                wire::EventTopic::ShowSync => application::EventTopic::ShowSync,
+            })
+            .collect(),
     }
 }
 
@@ -180,6 +188,56 @@ fn wire_action_source(source: application::ActionSource) -> wire::EventActionSou
     }
 }
 
+fn wire_desk_payload(event: &application::DeskEvent) -> wire::EventPayload {
+    match event {
+        application::DeskEvent::PlaybackViewChanged(projection) => {
+            wire::EventPayload::PlaybackViewChanged {
+                projection: super::super::playback_v2::desk_projection(*projection),
+            }
+        }
+        application::DeskEvent::ConfigurationChanged(change) => {
+            wire::EventPayload::ServerConfigurationChanged {
+                change: wire_revision(*change),
+            }
+        }
+        application::DeskEvent::ScreensChanged(change) => wire::EventPayload::ScreensChanged {
+            change: wire_screen_notification(*change),
+        },
+        application::DeskEvent::HardwareConnectionChanged(change) => {
+            wire::EventPayload::HardwareConnectionChanged {
+                change: wire::HardwareConnectionNotification {
+                    revision: change.revision,
+                    connected: change.connected,
+                },
+            }
+        }
+        application::DeskEvent::VisualizerConnectionChanged(change) => {
+            wire::EventPayload::VisualizerConnectionChanged {
+                change: wire::VisualizerConnectionNotification {
+                    connected: change.connected,
+                },
+            }
+        }
+        application::DeskEvent::ArchitectSyncChanged(change) => {
+            wire::EventPayload::ArchitectSyncChanged {
+                change: wire::ArchitectSyncNotification {
+                    active: change.active,
+                },
+            }
+        }
+        application::DeskEvent::MacroExecutionChanged(change) => {
+            wire::EventPayload::MacroExecutionChanged {
+                execution: super::super::macros_v2::execution_wire(change.clone()),
+            }
+        }
+        application::DeskEvent::TimecodeRuntimeChanged(change) => {
+            wire::EventPayload::TimecodeRuntimeChanged {
+                snapshot: super::super::timecode_v2::wire_snapshot(change.snapshot.clone()),
+            }
+        }
+    }
+}
+
 fn wire_payload(
     payload: &application::ApplicationEvent,
     sequence: u64,
@@ -201,46 +259,7 @@ fn wire_payload(
         ) => wire::EventPayload::SpeedGroupsChanged {
             change: super::super::speed_group_v2::wire_change(change),
         },
-        application::ApplicationEvent::Desk(event) => match event {
-            application::DeskEvent::PlaybackViewChanged(projection) => {
-                wire::EventPayload::PlaybackViewChanged {
-                    projection: super::super::playback_v2::desk_projection(*projection),
-                }
-            }
-            application::DeskEvent::ConfigurationChanged(change) => {
-                wire::EventPayload::ServerConfigurationChanged {
-                    change: wire_revision(*change),
-                }
-            }
-            application::DeskEvent::ScreensChanged(change) => wire::EventPayload::ScreensChanged {
-                change: wire_screen_notification(*change),
-            },
-            application::DeskEvent::HardwareConnectionChanged(change) => {
-                wire::EventPayload::HardwareConnectionChanged {
-                    change: wire::HardwareConnectionNotification {
-                        revision: change.revision,
-                        connected: change.connected,
-                    },
-                }
-            }
-            application::DeskEvent::VisualizerConnectionChanged(change) => {
-                wire::EventPayload::VisualizerConnectionChanged {
-                    change: wire::VisualizerConnectionNotification {
-                        connected: change.connected,
-                    },
-                }
-            }
-            application::DeskEvent::MacroExecutionChanged(change) => {
-                wire::EventPayload::MacroExecutionChanged {
-                    execution: super::super::macros_v2::execution_wire(change.clone()),
-                }
-            }
-            application::DeskEvent::TimecodeRuntimeChanged(change) => {
-                wire::EventPayload::TimecodeRuntimeChanged {
-                    snapshot: super::super::timecode_v2::wire_snapshot(change.snapshot.clone()),
-                }
-            }
-        },
+        application::ApplicationEvent::Desk(event) => wire_desk_payload(event),
         application::ApplicationEvent::Output(event) => match event {
             application::OutputEvent::RuntimeChanged(change) => {
                 wire::EventPayload::OutputRuntimeChanged {
@@ -280,6 +299,16 @@ fn wire_payload(
         application::ApplicationEvent::Show(application::ShowEvent::ObjectsChanged(change)) => {
             wire::EventPayload::ShowObjectsChanged {
                 change: wire_show_objects_change(change),
+            }
+        }
+        application::ApplicationEvent::Show(application::ShowEvent::SyncCommitted(change)) => {
+            wire::EventPayload::ShowSyncCommitted {
+                change: Box::new(show_sync::wire_commit(change)),
+            }
+        }
+        application::ApplicationEvent::Show(application::ShowEvent::SyncGap(gap)) => {
+            wire::EventPayload::ShowSyncGap {
+                gap: show_sync::wire_gap(gap),
             }
         }
         application::ApplicationEvent::Show(application::ShowEvent::ScheduleRuntimeChanged(

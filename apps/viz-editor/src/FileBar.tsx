@@ -1,7 +1,7 @@
 import { formatErrorDetails } from "@tosklight/ui";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Button, ModalFrame } from "@tosklight/ui";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import type { DeskPeer, DocumentSummary, MvrPreview, RecentDocument } from "./document/session";
 import { documentSession } from "./document/session";
 import { MvrImport } from "./MvrImport";
@@ -40,11 +40,9 @@ export function FileBar({
 	const [status, setStatus] = useState("");
 	const [busy, setBusy] = useState(false);
 	const desks = useDiscoveredDesks();
-	const [browser, setBrowser] = useState<"recent" | "desks" | null>(null);
+	const [browser, setBrowser] = useState<"recent" | "desks" | "publish" | null>(null);
 	const [recent, setRecent] = useState<RecentDocument[]>([]);
-	const [sourceDesk, setSourceDesk] = useState<string | null>(null);
 	const activeDesks = desks.filter((desk) => Boolean(desk.show?.trim()));
-	useEffect(() => { void documentSession.sourceDesk().then(setSourceDesk).catch(() => setSourceDesk(null)); }, [document]);
 	async function browseRecent() {
 		setBrowser("recent");
 		setRecent(await documentSession.recentDocumentDetails());
@@ -52,6 +50,10 @@ export function FileBar({
 	}
 	async function browseDesks() {
 		setBrowser("desks");
+		return null;
+	}
+	async function browsePublish() {
+		setBrowser("publish");
 		return null;
 	}
 	/** The archive the operator is deciding about, and what is in it. */
@@ -89,9 +91,10 @@ export function FileBar({
 
 	return (
 		<section className="viz-editor-file-bar is-show">
-			<FileActionButtons busy={busy} document={document} sourceDesk={sourceDesk} actions={actions} browseRecent={browseRecent} browseDesks={browseDesks} run={run} />
+			<FileActionButtons busy={busy} document={document} actions={actions} browseRecent={browseRecent} browseDesks={browseDesks} browsePublish={browsePublish} run={run} />
 			{children}
-			{browser && <ModalFrame
+			{browser === "publish" && <PublishToDesk busy={busy} desks={desks} document={document} run={run} onPublished={(summary) => { onDocument(summary); onReloadProfiles(); onReloadDocument(); setBrowser(null); }} onClose={() => { if (!busy) setBrowser(null); }} />}
+			{browser && browser !== "publish" && <ModalFrame
 				title={browser === "recent" ? "Recent shows" : "Control desk shows"}
 				ariaLabel={browser === "recent" ? "Recent shows" : "Control desk shows"}
 				closeLabel={browser === "recent" ? "Close Recent shows" : "Close Control desk shows"}
@@ -112,7 +115,7 @@ export function FileBar({
 				</> : <>
 					{activeDesks.length === 0 ? <p className="viz-show-browser-empty">No announced control desks have an active show.</p> : <table className="viz-desk-shows-table"><thead><tr><th>Desk</th><th>Active Show</th><th>Actions</th></tr></thead><tbody>
 					{activeDesks.map((desk) => <tr key={desk.instance}><td><strong className="viz-show-browser-primary">{desk.name}</strong><span className="viz-show-browser-secondary">{desk.address} · {displayOperatingSystem(desk.operatingSystem)}</span></td><td><span className="viz-show-browser-primary">{desk.show}</span><span className="viz-show-browser-secondary">Last loaded: {desk.showLastLoadedAt ? new Date(desk.showLastLoadedAt).toLocaleString() : "—"}</span></td><td><Button aria-label={`Load ${desk.show} from ${desk.name}`} disabled={busy} onClick={() => void run("Loading", async () => {
-						const summary = await documentSession.loadFromDesk(desk.instance); onDocument(summary); onReloadProfiles(); onReloadDocument(); setSourceDesk(desk.name); setBrowser(null); return `Loaded ${summary.name} from ${desk.name}`;
+						const summary = await documentSession.loadFromDesk(desk.instance); onDocument(summary); onReloadProfiles(); onReloadDocument(); setBrowser(null); return `Loaded ${summary.name} from ${desk.name}`;
 					})}>Load</Button></td></tr>)}
 					</tbody></table>}
 				</>}
@@ -139,18 +142,18 @@ export function FileBar({
 function FileActionButtons({
 	busy,
 	document,
-	sourceDesk,
 	actions,
 	browseRecent,
 	browseDesks,
+	browsePublish,
 	run,
 }: {
 	busy: boolean;
 	document: DocumentSummary | null;
-	sourceDesk: string | null;
 	actions: ReturnType<typeof useFileActions>;
 	browseRecent: () => Promise<null>;
 	browseDesks: () => Promise<null>;
+	browsePublish: () => Promise<null>;
 	run: (label: string, action: () => Promise<string | null>) => Promise<void>;
 }) {
 	return (
@@ -184,12 +187,18 @@ function FileActionButtons({
 				</section>
 				<section>
 					<h2>Save As</h2>
-					{sourceDesk && <Button disabled={busy} onClick={() => void run(`Saving to ${sourceDesk}`, documentSession.saveToSourceDesk)}>Save to {sourceDesk}</Button>}
 					<Button
 						disabled={busy || !document}
 						onClick={() => void run("Saving", actions.saveShowAs)}
 					>
 						Save As
+					</Button>
+					<Button
+						disabled={busy || !document}
+						title="Add this show to a desk's show library and keep it in step with the desk"
+						onClick={() => void run("Reading desks", browsePublish)}
+					>
+						Publish to ToskLight Control
 					</Button>
 				</section>
 				<section>
@@ -244,10 +253,12 @@ function useFileActions(
 		saveShowAs: async () => {
 			const path = await save({ filters: SHOW_FILTER });
 			if (!path) return null;
-			await documentSession.saveAs(path);
 			const desk = await documentSession.sourceDesk();
-			if (desk) return `Saved to ${path}; ${await documentSession.saveToSourceDesk()}`;
-			return `Saved to ${path}`;
+			const summary = accept(await documentSession.saveAs(path));
+			// A copy is a different show: it never writes into the desk show the original follows.
+			return desk
+				? `Saved ${summary.name} as a new show at ${path}; it is not synchronized with ${desk}`
+				: `Saved ${summary.name} as a new show at ${path}`;
 		},
 		readMvr: async () => {
 			// Nothing is written until the operator has reviewed the archive and made its decisions.
@@ -267,6 +278,48 @@ function useFileActions(
 			return `Loaded ${summary.name} from ${desk.name}`;
 		},
 	};
+}
+
+/** The desks this show can be published to: every desk on the network, with or without a show. */
+function PublishToDesk({
+	busy,
+	desks,
+	document,
+	run,
+	onPublished,
+	onClose,
+}: {
+	busy: boolean;
+	desks: DeskPeer[];
+	document: DocumentSummary | null;
+	run: (label: string, action: () => Promise<string | null>) => Promise<void>;
+	onPublished: (summary: DocumentSummary) => void;
+	onClose: () => void;
+}) {
+	return (
+		<ModalFrame
+			title="Publish to ToskLight Control"
+			ariaLabel="Publish to ToskLight Control"
+			closeLabel="Close Publish to ToskLight Control"
+			dialogClassName="viz-show-browser"
+			closeDisabled={busy}
+			policy={{ escape: !busy, backdrop: !busy }}
+			onClose={onClose}
+		>
+			<div className="viz-show-browser-scroll" aria-busy={busy}>
+				<p>
+					The desk adds {document?.name ?? "this show"} to its show library as a new show, and this
+					window continues with the desk's copy, kept in step with it. Open the show on the desk to
+					start sending edits.
+				</p>
+				{desks.length === 0 ? <p className="viz-show-browser-empty">No control desks are announced on the network.</p> : <table className="viz-desk-shows-table"><thead><tr><th>Desk</th><th>Actions</th></tr></thead><tbody>
+					{desks.map((desk) => <tr key={desk.instance}><td><strong className="viz-show-browser-primary">{desk.name}</strong><span className="viz-show-browser-secondary">{desk.address}</span></td><td><Button aria-label={`Publish to ${desk.name}`} disabled={busy || !document} onClick={() => void run("Publishing", async () => {
+						const summary = await documentSession.publishToDesk(desk.instance); onPublished(summary); return `Published ${summary.name} to ${desk.name}; it now stays in step with the desk's show`;
+					})}>Publish</Button></td></tr>)}
+				</tbody></table>}
+			</div>
+		</ModalFrame>
+	);
 }
 
 function fileStem(path: string) {

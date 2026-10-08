@@ -22,6 +22,8 @@ pub use model::{
     PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
 };
 pub use ports::{PatchPerformancePhase, ShowPatchPorts};
+pub(crate) use prepare::{StagedPatch, stage_patch_command};
+pub(crate) use query::fixture_projection;
 pub use service::ShowPatchService;
 
 #[cfg(test)]

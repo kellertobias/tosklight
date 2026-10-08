@@ -44,86 +44,89 @@ pub fn import_venue_model(
     path: String,
     layer_id: Option<String>,
 ) -> Result<VenueModelImport, String> {
-    let path = Path::new(&path);
-    let size = std::fs::metadata(path)
-        .map_err(|error| format!("Could not read {}: {error}", path.display()))?
-        .len();
-    if size > MAX_FIXTURE_MODEL_BYTES as u64 {
-        return Err(format!(
-            "{} is {} MB; a 3D model may be at most {} MB.",
-            file_name(path),
-            size.div_ceil(1024 * 1024),
-            MAX_FIXTURE_MODEL_BYTES / (1024 * 1024)
-        ));
-    }
-    let bytes = std::fs::read(path)
-        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
-    let name = path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .map(str::trim)
-        .filter(|stem| !stem.is_empty())
-        .unwrap_or("Venue model")
-        .to_owned();
-    let source = file_name(path);
-    let bytes =
-        crate::model_import::to_glb(&source, &bytes, |relative| read_sibling(path, relative))
-            .map_err(|error| error.to_string())?;
-    let model = venue_model_profile(&name, &source, &bytes)?;
-    let profile_id = model.profile.id.0;
-    let mode_id = model.profile.modes[0].id;
+    // One operator gesture: every write below becomes one synchronized transaction.
+    session.gesture(|| {
+        let path = Path::new(&path);
+        let size = std::fs::metadata(path)
+            .map_err(|error| format!("Could not read {}: {error}", path.display()))?
+            .len();
+        if size > MAX_FIXTURE_MODEL_BYTES as u64 {
+            return Err(format!(
+                "{} is {} MB; a 3D model may be at most {} MB.",
+                file_name(path),
+                size.div_ceil(1024 * 1024),
+                MAX_FIXTURE_MODEL_BYTES / (1024 * 1024)
+            ));
+        }
+        let bytes = std::fs::read(path)
+            .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+        let name = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .map(str::trim)
+            .filter(|stem| !stem.is_empty())
+            .unwrap_or("Venue model")
+            .to_owned();
+        let source = file_name(path);
+        let bytes =
+            crate::model_import::to_glb(&source, &bytes, |relative| read_sibling(path, relative))
+                .map_err(|error| error.to_string())?;
+        let model = venue_model_profile(&name, &source, &bytes)?;
+        let profile_id = model.profile.id.0;
+        let mode_id = model.profile.modes[0].id;
 
-    let virtual_number = session.with(|document| {
-        let snapshot = document
-            .patch_snapshot()
-            .map_err(|error| error.to_string())?;
-        Ok(first_free_virtual_number(
-            snapshot
-                .fixtures
-                .iter()
-                .filter_map(|fixture| fixture.patch.virtual_fixture_number),
-        ))
-    })?;
-    let profile = serde_json::to_value(&model.profile).map_err(|error| error.to_string())?;
-    // The patch resolves a profile from the show before the library, so once the show holds it the
-    // placement below needs no library entry at all.
-    session.change(|document| {
-        document
-            .retain_fixture_profile(profile)
-            .map_err(|error| error.to_string())
-    })?;
+        let virtual_number = session.with(|document| {
+            let snapshot = document
+                .patch_snapshot()
+                .map_err(|error| error.to_string())?;
+            Ok(first_free_virtual_number(
+                snapshot
+                    .fixtures
+                    .iter()
+                    .filter_map(|fixture| fixture.patch.virtual_fixture_number),
+            ))
+        })?;
+        let profile = serde_json::to_value(&model.profile).map_err(|error| error.to_string())?;
+        // The patch resolves a profile from the show before the library, so once the show holds it the
+        // placement below needs no library entry at all.
+        session.change(|document| {
+            document
+                .retain_fixture_profile(profile)
+                .map_err(|error| error.to_string())
+        })?;
 
-    let fixture_id = Uuid::new_v4();
-    let fixture: FixtureDto = serde_json::from_value(serde_json::json!({
-        "fixtureId": fixture_id,
-        "fixtureNumber": null,
-        "virtualFixtureNumber": virtual_number,
-        "name": name,
-        "profileId": profile_id,
-        "profileRevision": 1,
-        "modeId": mode_id,
-        "splitPatches": [{ "split": 1, "universe": null, "address": null }],
-        "layerId": layer_id.filter(|layer| !layer.trim().is_empty()).unwrap_or_else(|| "default".into()),
-        "location": { "x": 0, "y": 0, "z": 0 },
-        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
-    }))
-    .map_err(|error| error.to_string())?;
-    apply_patch_mutation(
-        &app,
-        &session,
-        &cad,
-        None,
-        MutationDto {
-            request_id: Uuid::new_v4().to_string(),
-            fixtures: vec![fixture],
-            remove_fixture_ids: Vec::new(),
-            placements: Vec::new(),
-        },
-    )?;
-    Ok(VenueModelImport {
-        fixture_id: fixture_id.to_string(),
-        name,
-        triangles: model.triangles,
+        let fixture_id = Uuid::new_v4();
+        let fixture: FixtureDto = serde_json::from_value(serde_json::json!({
+            "fixtureId": fixture_id,
+            "fixtureNumber": null,
+            "virtualFixtureNumber": virtual_number,
+            "name": name,
+            "profileId": profile_id,
+            "profileRevision": 1,
+            "modeId": mode_id,
+            "splitPatches": [{ "split": 1, "universe": null, "address": null }],
+            "layerId": layer_id.filter(|layer| !layer.trim().is_empty()).unwrap_or_else(|| "default".into()),
+            "location": { "x": 0, "y": 0, "z": 0 },
+            "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        }))
+        .map_err(|error| error.to_string())?;
+        apply_patch_mutation(
+            &app,
+            &session,
+            &cad,
+            None,
+            MutationDto {
+                request_id: Uuid::new_v4().to_string(),
+                fixtures: vec![fixture],
+                remove_fixture_ids: Vec::new(),
+                placements: Vec::new(),
+            },
+        )?;
+        Ok(VenueModelImport {
+            fixture_id: fixture_id.to_string(),
+            name,
+            triangles: model.triangles,
+        })
     })
 }
 

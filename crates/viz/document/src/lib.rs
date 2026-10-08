@@ -245,6 +245,23 @@ impl PlanningDocument {
         Ok(self.store()?.objects(kind)?)
     }
 
+    /// Every object of `kinds`, stamped but not read.
+    pub fn object_stamps(
+        &self,
+        kinds: &[&str],
+    ) -> Result<Vec<light_show::ObjectStamp>, DocumentError> {
+        Ok(self.store()?.object_stamps(kinds)?)
+    }
+
+    /// One stored show object, if it exists.
+    pub fn object(
+        &self,
+        kind: &str,
+        id: &str,
+    ) -> Result<Option<light_show::VersionedObject>, DocumentError> {
+        Ok(self.store()?.object(kind, id)?)
+    }
+
     /// Writes one stored show object, creating it when it is not there yet.
     ///
     /// Patch layers travel with the show, so a layer made while planning is the same layer the
@@ -344,6 +361,36 @@ impl PlanningDocument {
 
     pub fn save_as(&self, destination: impl AsRef<Path>) -> Result<(), DocumentError> {
         Ok(self.store()?.backup_to(destination)?)
+    }
+
+    /// Metadata values whose keys start with one of `prefixes`.
+    pub fn metadata_with_prefixes(
+        &self,
+        prefixes: &[&str],
+    ) -> Result<std::collections::BTreeMap<String, String>, DocumentError> {
+        Ok(self.store()?.metadata_with_prefixes(prefixes)?)
+    }
+
+    /// Writes or removes metadata values as one commit.
+    pub fn replace_metadata_values(
+        &self,
+        values: &[(&str, Option<&str>)],
+    ) -> Result<(), DocumentError> {
+        Ok(self.store()?.replace_metadata_values(values)?)
+    }
+
+    /// Writes a copy of the document to `destination` as a different show: a new show identity
+    /// under `name`, so the copy can never be mistaken for the show it was copied from.
+    pub fn fork_to(
+        &self,
+        destination: impl AsRef<Path>,
+        name: &str,
+    ) -> Result<ShowId, DocumentError> {
+        let destination = destination.as_ref();
+        self.store()?.backup_to(destination)?;
+        let id = ShowId(Uuid::new_v4());
+        ShowStore::open(destination)?.set_identity(id, name, None)?;
+        Ok(id)
     }
 
     /// Renames the document as the desk's show library will present it.

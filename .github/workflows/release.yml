@@ -504,7 +504,9 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-application-${{ github.sha }}
-          path: .artifacts/build/cargo/debug/light-headless
+          path: |
+            .artifacts/build/cargo/debug/light-headless
+            .artifacts/build/cargo/debug/viz-sync-harness
           if-no-files-found: error
 
   e2e:
@@ -565,8 +567,8 @@ jobs:
           name: playwright-application-${{ github.sha }}
           path: .artifacts/build/cargo/debug
 
-      - name: Make the Playwright server executable
-        run: chmod +x .artifacts/build/cargo/debug/light-headless
+      - name: Make the Playwright server and headless Architect executable
+        run: chmod +x .artifacts/build/cargo/debug/light-headless .artifacts/build/cargo/debug/viz-sync-harness
 
       # Each Playwright worker launches its own browser, Rust server, UDP listeners,
       # and isolated show. Keep one worker per runner to prevent local port/timing

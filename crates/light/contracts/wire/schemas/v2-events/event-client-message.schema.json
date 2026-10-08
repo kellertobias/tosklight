@@ -170,8 +170,24 @@
           "items": {
             "$ref": "#/$defs/EventObject"
           }
+        },
+        "topics": {
+          "description": "Opt-in event families delivered in addition to the default stream. A subscription that\nnames none receives exactly the stream it always did.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EventTopic"
+          }
         }
       }
+    },
+    "EventTopic": {
+      "oneOf": [
+        {
+          "description": "`show_sync_committed` and `show_sync_gap`, for a bound Architect.",
+          "type": "string",
+          "const": "show_sync"
+        }
+      ]
     }
   }
 }

@@ -47,6 +47,10 @@ impl ServerShowPatchPorts {
         }
     }
 
+    pub(super) const fn state(&self) -> &AppState {
+        &self.state
+    }
+
     fn current_patch_revision(&self) -> Option<u64> {
         *self.current_patch_revision.read()
     }
@@ -117,6 +121,12 @@ impl PatchProfileResolutionPause {
 pub(super) struct ServerShowPatchUnitOfWork {
     inner: ServerActiveShowUnitOfWork,
     patch_revision: u64,
+}
+
+impl ServerShowPatchUnitOfWork {
+    pub(super) const fn active_show_unit(&self) -> &ServerActiveShowUnitOfWork {
+        &self.inner
+    }
 }
 
 impl ActiveShowUnitOfWork for ServerShowPatchUnitOfWork {

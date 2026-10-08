@@ -209,16 +209,19 @@ pub fn cad_delete(
     expected_scene_revision: u64,
     fixture_ids: Vec<Uuid>,
 ) -> Result<DeleteOutcome, String> {
-    check_revision(&session, expected_scene_revision)?;
-    let record = deletion(&session, &fixture_ids)?;
-    let scene_revision = remove(&app, &session, &cad, &record)?;
-    let deleted_ids = record.ids();
-    let mut history = cad.history.lock();
-    history.undo.push(Step::Delete(record));
-    history.redo.clear();
-    Ok(DeleteOutcome {
-        scene_revision,
-        deleted_ids,
+    // One operator gesture: every write below becomes one synchronized transaction.
+    session.gesture(|| {
+        check_revision(&session, expected_scene_revision)?;
+        let record = deletion(&session, &fixture_ids)?;
+        let scene_revision = remove(&app, &session, &cad, &record)?;
+        let deleted_ids = record.ids();
+        let mut history = cad.history.lock();
+        history.undo.push(Step::Delete(record));
+        history.redo.clear();
+        Ok(DeleteOutcome {
+            scene_revision,
+            deleted_ids,
+        })
     })
 }
 
@@ -232,39 +235,42 @@ pub fn cad_set_transforms(
     expected_scene_revision: u64,
     transforms: Vec<EntityTransform>,
 ) -> Result<TransformOutcome, String> {
-    let ids: BTreeSet<Uuid> = transforms.iter().map(|transform| transform.id).collect();
-    if ids.is_empty() || ids.len() != transforms.len() {
-        return Err("Set each selected CAD entity's transform exactly once".to_owned());
-    }
-    if !ids.is_subset(&selectable_ids(&session)?) {
-        return Err("One or more selected CAD entities belong to a locked layer".to_owned());
-    }
-    check_revision(&session, expected_scene_revision)?;
-    let before = session.with(|document| {
-        let patch = document
-            .patch_snapshot()
-            .map_err(|error| error.to_string())?;
-        selected_transforms(&patch, &ids)
-    })?;
-    if before.len() != ids.len() {
-        return Err("One or more selected CAD entities no longer exist".to_owned());
-    }
-    let held = attachments(&session)?
-        .into_iter()
-        .filter(|attachment| ids.contains(&attachment.fixture_id))
-        .collect::<Vec<_>>();
-    let revision = apply_transforms(&session, expected_scene_revision, &transforms)?;
-    cad.history.lock().record_move(TransformRecord {
-        before,
-        after: transforms.clone(),
-        before_attachments: held.clone(),
-        after_attachments: held,
-    });
-    emit_scene_delta(&app, &session, &cad, revision, Vec::new())?;
-    Ok(TransformOutcome {
-        scene_revision: revision,
-        transforms,
-        attachments: attachments(&session)?,
+    // One operator gesture: every write below becomes one synchronized transaction.
+    session.gesture(|| {
+        let ids: BTreeSet<Uuid> = transforms.iter().map(|transform| transform.id).collect();
+        if ids.is_empty() || ids.len() != transforms.len() {
+            return Err("Set each selected CAD entity's transform exactly once".to_owned());
+        }
+        if !ids.is_subset(&selectable_ids(&session)?) {
+            return Err("One or more selected CAD entities belong to a locked layer".to_owned());
+        }
+        check_revision(&session, expected_scene_revision)?;
+        let before = session.with(|document| {
+            let patch = document
+                .patch_snapshot()
+                .map_err(|error| error.to_string())?;
+            selected_transforms(&patch, &ids)
+        })?;
+        if before.len() != ids.len() {
+            return Err("One or more selected CAD entities no longer exist".to_owned());
+        }
+        let held = attachments(&session)?
+            .into_iter()
+            .filter(|attachment| ids.contains(&attachment.fixture_id))
+            .collect::<Vec<_>>();
+        let revision = apply_transforms(&session, expected_scene_revision, &transforms)?;
+        cad.history.lock().record_move(TransformRecord {
+            before,
+            after: transforms.clone(),
+            before_attachments: held.clone(),
+            after_attachments: held,
+        });
+        emit_scene_delta(&app, &session, &cad, revision, Vec::new())?;
+        Ok(TransformOutcome {
+            scene_revision: revision,
+            transforms,
+            attachments: attachments(&session)?,
+        })
     })
 }
 
@@ -280,22 +286,25 @@ pub fn cad_add(
     expected_scene_revision: u64,
     fixtures: Vec<serde_json::Value>,
 ) -> Result<AddOutcome, String> {
-    if fixtures.is_empty() {
-        return Err("There is nothing to add".to_owned());
-    }
-    check_revision(&session, expected_scene_revision)?;
-    let record = DeleteRecord {
-        fixtures,
-        attachments: Vec::new(),
-    };
-    let scene_revision = restore(&app, &session, &cad, &record)?;
-    let added_ids = record.ids();
-    let mut history = cad.history.lock();
-    history.undo.push(Step::Add(record));
-    history.redo.clear();
-    Ok(AddOutcome {
-        scene_revision,
-        added_ids,
+    // One operator gesture: every write below becomes one synchronized transaction.
+    session.gesture(|| {
+        if fixtures.is_empty() {
+            return Err("There is nothing to add".to_owned());
+        }
+        check_revision(&session, expected_scene_revision)?;
+        let record = DeleteRecord {
+            fixtures,
+            attachments: Vec::new(),
+        };
+        let scene_revision = restore(&app, &session, &cad, &record)?;
+        let added_ids = record.ids();
+        let mut history = cad.history.lock();
+        history.undo.push(Step::Add(record));
+        history.redo.clear();
+        Ok(AddOutcome {
+            scene_revision,
+            added_ids,
+        })
     })
 }
 
@@ -426,13 +435,16 @@ pub fn cad_undo(
     cad: tauri::State<'_, CadState>,
     expected_scene_revision: u64,
 ) -> Result<TransformOutcome, String> {
-    take(
-        &app,
-        &session,
-        &cad,
-        expected_scene_revision,
-        Direction::Back,
-    )
+    // One operator gesture: every write below becomes one synchronized transaction.
+    session.gesture(|| {
+        take(
+            &app,
+            &session,
+            &cad,
+            expected_scene_revision,
+            Direction::Back,
+        )
+    })
 }
 
 #[tauri::command]
@@ -442,13 +454,16 @@ pub fn cad_redo(
     cad: tauri::State<'_, CadState>,
     expected_scene_revision: u64,
 ) -> Result<TransformOutcome, String> {
-    take(
-        &app,
-        &session,
-        &cad,
-        expected_scene_revision,
-        Direction::Forward,
-    )
+    // One operator gesture: every write below becomes one synchronized transaction.
+    session.gesture(|| {
+        take(
+            &app,
+            &session,
+            &cad,
+            expected_scene_revision,
+            Direction::Forward,
+        )
+    })
 }
 
 #[cfg(test)]

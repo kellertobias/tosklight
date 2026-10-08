@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ShowSyncTransactionOutcome",
+  "type": "object",
+  "properties": {
+    "applied": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ShowSyncAppliedObject"
+      }
+    },
+    "association_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ShowSyncConflict"
+      }
+    },
+    "event_sequence": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "metadata": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "patch_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "replayed": {
+      "description": "`true` when this answers a retry of a request the show already applied.",
+      "type": "boolean"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "show_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "show_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "status": {
+      "$ref": "#/$defs/ShowSyncStatus"
+    }
+  },
+  "required": [
+    "request_id",
+    "association_id",
+    "show_id",
+    "status",
+    "replayed",
+    "show_revision",
+    "patch_revision",
+    "applied",
+    "metadata",
+    "conflicts",
+    "event_sequence"
+  ],
+  "$defs": {
+    "ShowSyncAppliedObject": {
+      "type": "object",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "revision": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "revision",
+        "deleted"
+      ]
+    },
+    "ShowSyncConflict": {
+      "description": "A field left as Control holds it, with both sides so the client keeps a recoverable draft.",
+      "type": "object",
+      "properties": {
+        "base": true,
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "Object kind, `patched_fixture`, or `metadata`.",
+          "type": "string"
+        },
+        "mine": true,
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/ShowSyncConflictReason"
+        },
+        "theirs": true,
+        "theirs_revision": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "path",
+        "base",
+        "mine",
+        "theirs",
+        "theirs_revision",
+        "reason"
+      ]
+    },
+    "ShowSyncConflictReason": {
+      "type": "string",
+      "enum": [
+        "field_changed",
+        "object_deleted",
+        "object_modified",
+        "object_exists"
+      ]
+    },
+    "ShowSyncStatus": {
+      "oneOf": [
+        {
+          "description": "Every edit applied or already held its value.",
+          "type": "string",
+          "const": "accepted"
+        },
+        {
+          "description": "At least one field conflicted; every other field applied.",
+          "type": "string",
+          "const": "conflicted"
+        }
+      ]
+    }
+  }
+}

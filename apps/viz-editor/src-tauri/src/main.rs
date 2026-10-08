@@ -24,6 +24,7 @@ mod recent;
 mod session;
 #[cfg(test)]
 mod session_source_tests;
+mod sync;
 mod underlay;
 mod venue_groups;
 mod venue_models;
@@ -265,6 +266,8 @@ fn setup_editor(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> 
     let library = prepare_fixture_library(source, &app_data).map_err(std::io::Error::other)?;
     let session = app.state::<session::Session>();
     session.set_library_path(library);
+    session.set_binding_store(sync::SyncBindingStore::at(app_data.join("show-sync")));
+    sync::install(app.handle(), &session);
     if let Ok(config) = app.path().app_config_dir() {
         let legacy = config
             .parent()
@@ -402,7 +405,12 @@ fn main() {
             discovery::show_library::desk_shows,
             discovery::show_library::load_desk_show,
             discovery::show_library::source_desk,
-            discovery::show_library::save_to_source_desk,
+            discovery::show_library::publish_to_desk,
+            sync::sync_status,
+            sync::sync_conflicts,
+            sync::resolve_sync_conflict,
+            sync::dismiss_sync_error,
+            sync::set_sync_online,
             discovery::take_live_dmx_inputs_from_desk,
             dmx_input::received_dmx,
             dmx_input::stop_received_dmx,

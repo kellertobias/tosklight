@@ -8,6 +8,7 @@ mod profile_revision;
 mod repository;
 mod schedule_occurrence;
 mod store;
+mod sync_requests;
 mod transaction;
 mod venue_copies;
 
@@ -28,6 +29,7 @@ pub use schedule_occurrence::{
     ScheduleOccurrenceClaim, ScheduleOccurrenceClaimResult, ScheduleOccurrenceRecord,
     ScheduleOccurrenceResolution, ScheduleOccurrenceStatus, SkippedScheduleOccurrence,
 };
+pub use sync_requests::{SYNC_APPLIED_REQUEST_RETENTION, SyncAppliedRequest, SyncRequestRecord};
 pub use transaction::{PortableShowCommit, PortableShowTransaction};
 
 pub(crate) use migration::{SHOW_SCHEMA_VERSION, migrate_show, validate_show_connection};
@@ -43,6 +45,8 @@ mod candidate_tests;
 mod migration_tests;
 #[cfg(test)]
 mod schedule_occurrence_tests;
+#[cfg(test)]
+mod sync_requests_tests;
 #[cfg(test)]
 mod tests;
 pub use candidate::{

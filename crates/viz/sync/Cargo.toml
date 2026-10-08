@@ -1,0 +1,27 @@
+[package]
+name = "viz-sync"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+axum.workspace = true
+futures-util.workspace = true
+light-application.workspace = true
+light-core = { path = "../../shared/core" }
+light-fixture = { path = "../../shared/fixture" }
+light-patch-wire.workspace = true
+light-show = { path = "../../shared/show" }
+light-wire.workspace = true
+parking_lot.workspace = true
+reqwest.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+uuid.workspace = true
+viz-document = { path = "../document" }
+
+[lints]
+workspace = true

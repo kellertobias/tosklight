@@ -163,27 +163,30 @@ pub fn update_fixture_profile(
     cad: tauri::State<'_, crate::cad::CadState>,
     fixture_id: Uuid,
 ) -> Answer<OutcomeDto> {
-    let library = crate::session::open_library(&session)
-        .ok_or_else(|| "This computer has no fixture library.".to_owned())?;
-    let prepared = session.change(|document| {
-        let update = plan(document, &library, fixture_id)?
-            .ok_or_else(|| "This element is already on the newest version.".to_owned())?;
-        let mut profile = update.profile.clone();
-        profile.revision = update.to_revision;
-        document
-            .retain_fixture_profile(serde_json::to_value(&profile).map_err(|e| e.to_string())?)
-            .map_err(|error| error.to_string())?;
-        let snapshot = document
-            .patch_snapshot()
-            .map_err(|error| error.to_string())?;
-        let fixture = snapshot
-            .fixtures
-            .iter()
-            .find(|fixture| fixture.patch.fixture_id.0 == fixture_id)
-            .ok_or_else(|| "That element is no longer in the show.".to_owned())?;
-        Ok(mutation(fixture, &profile))
-    })?;
-    apply_patch_mutation(&app, &session, &cad, Some(window.label()), prepared)
+    // One operator gesture: every write below becomes one synchronized transaction.
+    session.gesture(|| {
+        let library = crate::session::open_library(&session)
+            .ok_or_else(|| "This computer has no fixture library.".to_owned())?;
+        let prepared = session.change(|document| {
+            let update = plan(document, &library, fixture_id)?
+                .ok_or_else(|| "This element is already on the newest version.".to_owned())?;
+            let mut profile = update.profile.clone();
+            profile.revision = update.to_revision;
+            document
+                .retain_fixture_profile(serde_json::to_value(&profile).map_err(|e| e.to_string())?)
+                .map_err(|error| error.to_string())?;
+            let snapshot = document
+                .patch_snapshot()
+                .map_err(|error| error.to_string())?;
+            let fixture = snapshot
+                .fixtures
+                .iter()
+                .find(|fixture| fixture.patch.fixture_id.0 == fixture_id)
+                .ok_or_else(|| "That element is no longer in the show.".to_owned())?;
+            Ok(mutation(fixture, &profile))
+        })?;
+        apply_patch_mutation(&app, &session, &cad, Some(window.label()), prepared)
+    })
 }
 
 /// The write that moves one element onto a profile revision the show now holds.

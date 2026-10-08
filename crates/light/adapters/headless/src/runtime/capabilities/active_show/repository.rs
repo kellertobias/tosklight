@@ -83,6 +83,18 @@ impl ActiveShowRepository {
         self.store.advance_replacement_revisions(show, patch)
     }
 
+    pub(crate) fn adopt_sync_applied_requests(&self, source: &Self) -> Result<usize, StoreError> {
+        self.store.adopt_sync_applied_requests(&source.store)
+    }
+
+    pub(crate) fn sync_applied_request(
+        &self,
+        association_id: uuid::Uuid,
+        request_id: &str,
+    ) -> Result<Option<light_show::SyncAppliedRequest>, StoreError> {
+        self.store.sync_applied_request(association_id, request_id)
+    }
+
     pub(crate) fn apply_portable_transaction(
         &self,
         transaction: PortableShowTransaction,

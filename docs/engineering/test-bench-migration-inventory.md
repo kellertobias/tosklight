@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **396 root cases across 123 files**.
+Default catalog: **403 root cases across 124 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -88,6 +88,13 @@ Default catalog: **396 root cases across 123 files**.
 | 114-semantic-dynamic-reuse-across-groups.spec.ts | BENCH-DYNAMIC-REUSE-001 @bench @ui › one targetless Dynamic applied to two mover Groups runs on each Group's own Virtual Playback and nowhere else | repository contract | @bench @ui | semantic-dynamic-reuse-across-groups | standard failure evidence | parallel | migrated-semantic-world |
 | 115-semantic-temp-release-shutdown.spec.ts | BENCH-TEMP-RELEASE-001 @bench @ui › a Temp runs a Sunstrip Cuelist with its timing, follows into the release, and turns itself off once nothing is held | repository contract | @bench @ui | semantic-temp-release-shutdown | standard failure evidence | parallel | migrated-semantic-world |
 | 116-position-reference-3d-points.spec.ts | POSITION-REFERENCE-001 @ui › the column appears with a 3D Point, stores the reference and reports the point's pose | repository contract | @ui | position-reference-3d-points | standard failure evidence | parallel | pending-semantic-migration |
+| 117-control-architect-show-sync.spec.ts | ARCHITECT-SYNC-01 @api edits travel both ways without Save and survive restarting both applications | repository contract | @api | control-architect-show-sync | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 117-control-architect-show-sync.spec.ts | ARCHITECT-SYNC-02 @api independent edits both survive and a same-field conflict keeps both drafts | repository contract | @api | control-architect-show-sync | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 117-control-architect-show-sync.spec.ts | ARCHITECT-SYNC-03 @api offline edits survive a restart, apply once in order, and a lost reply is retried once | repository contract | @api | control-architect-show-sync | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 117-control-architect-show-sync.spec.ts | ARCHITECT-SYNC-04 @api a show switch holds edits Offline and Save As forks the show | repository contract | @api | control-architect-show-sync | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 117-control-architect-show-sync.spec.ts | ARCHITECT-SYNC-05 @api damaged journal, mirror and binding index recover without losing the document | repository contract | @api | control-architect-show-sync | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 117-control-architect-show-sync.spec.ts | ARCHITECT-SYNC-06 @api a standalone document sends nothing anywhere | repository contract | @api | control-architect-show-sync | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 117-control-architect-show-sync.spec.ts | ARCHITECT-SYNC-07 @api a thousand Architect edits a minute keep the desk outputting without reloading | repository contract | @api | control-architect-show-sync | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 117-position-operator-controls.spec.ts | POSITION-CONTROLS-001 @ui › pages, modal geometry and inert navigation | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 117-position-operator-controls.spec.ts | POSITION-CONTROLS-004 @ui › the held joystick moves without pointer moves and stops on centre, release, blur and close | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |
 | 117-position-operator-controls.spec.ts | POSITION-CONTROLS-003 @ui › hardware encode/N edits Pan in degrees and the first X offset activates Target atomically | docs/testing/34-position-operator-controls.md | @ui | position-operator-controls | standard failure evidence | parallel | pending-semantic-migration |

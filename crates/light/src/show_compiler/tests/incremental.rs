@@ -272,3 +272,62 @@ fn touched_legacy_dynamic_writes_through_its_inferred_spatial_mapping() {
     assert_eq!(migrated["phase"]["ordering"]["type"], "grid_linear");
     assert_eq!(migrated["future_dynamic"], json!({"preserved": true}));
 }
+
+/// Characterizes the kind matrix in `docs/engineering/show-sync.md`: every object kind an
+/// Architect synchronizes is invisible to the compiled runtime, so a sync commit of those kinds
+/// installs the live runtime unchanged instead of recompiling the show.
+#[test]
+fn synchronized_architect_kinds_share_every_compiled_projection() {
+    let (_store, document) = normalized_document();
+    let previous = prepare_show_candidate(&document, document.transaction())
+        .unwrap()
+        .into_parts()
+        .1;
+    let mut transaction = document.transaction();
+    for kind in crate::show_sync::SHOW_SYNC_OBJECT_KINDS {
+        let body = if *kind == "patch_layer" {
+            json!({"id": "sync", "name": "Synced", "order": 1})
+        } else {
+            json!({"name": format!("synced {kind}")})
+        };
+        transaction.put(*kind, "sync", body);
+    }
+    transaction.set_metadata("architect.venue", "Hall A");
+    let next = prepare_normalized_show_candidate_incremental(&document, transaction, &previous)
+        .unwrap()
+        .into_parts()
+        .1;
+    assert!(Arc::ptr_eq(&next.fixtures, &previous.fixtures));
+    assert!(Arc::ptr_eq(&next.cue_lists, &previous.cue_lists));
+    assert!(Arc::ptr_eq(&next.dynamics, &previous.dynamics));
+    assert!(Arc::ptr_eq(&next.playbacks, &previous.playbacks));
+    assert!(Arc::ptr_eq(&next.playback_pages, &previous.playback_pages));
+    assert!(Arc::ptr_eq(&next.routes, &previous.routes));
+    assert!(Arc::ptr_eq(
+        &next.control_mappings,
+        &previous.control_mappings
+    ));
+    assert!(Arc::ptr_eq(&next.groups, &previous.groups));
+    assert_eq!(next.revision, previous.revision + 1);
+}
+
+/// The counterpart: desk kinds Control compiles are rebuilt by the same incremental path, so a
+/// sync of them would recompile — which is why they are not synchronized object kinds.
+#[test]
+fn compiled_desk_kinds_rebuild_their_projection() {
+    let (_store, document) = normalized_document();
+    let previous = prepare_show_candidate(&document, document.transaction())
+        .unwrap()
+        .into_parts()
+        .1;
+    let mut group = document.object("group", "front").unwrap().body().clone();
+    group["name"] = json!("Front wash");
+    let mut transaction = document.transaction();
+    transaction.put("group", "front", group);
+    let next = prepare_normalized_show_candidate_incremental(&document, transaction, &previous)
+        .unwrap()
+        .into_parts()
+        .1;
+    assert!(!Arc::ptr_eq(&next.groups, &previous.groups));
+    assert!(Arc::ptr_eq(&next.cue_lists, &previous.cue_lists));
+}

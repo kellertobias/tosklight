@@ -43,6 +43,8 @@ impl Discovery {
             name: editor_name(),
             show,
             port,
+            desk_id: None,
+            show_id: None,
         }) {
             Ok(advertiser) => *self.advertiser.lock() = Some(advertiser),
             Err(error) => eprintln!("this editor will not be discoverable: {error}"),
@@ -140,7 +142,6 @@ fn deduplicate_desk_peers(peers: Vec<DeskPeer>) -> Vec<DeskPeer> {
 }
 
 pub(crate) mod show_library;
-pub(crate) use show_library::DeskSource;
 
 /// Preview only the selected desk's compatible output routes as this document's live inputs.
 ///
@@ -625,6 +626,8 @@ mod tests {
             role: Role::Desk,
             name: "IPv4 desk".into(),
             show: Some("Show".into()),
+            desk_id: None,
+            show_id: None,
             addresses: vec![format!("[::1]:{port}"), format!("127.0.0.1:{port}")],
             instance: "desk.local".into(),
         };
@@ -675,6 +678,8 @@ mod tests {
             role: Role::Desk,
             name: "Clean desk".into(),
             show: Some("IPv4 Tour".into()),
+            desk_id: None,
+            show_id: None,
             addresses: vec![format!("[::1]:{port}"), format!("127.0.0.1:{port}")],
             instance: "clean.local".into(),
         };
@@ -717,6 +722,8 @@ mod tests {
             role: Role::Desk,
             name: "Clean desk".into(),
             show: Some("IPv4 Tour".into()),
+            desk_id: None,
+            show_id: None,
             addresses: vec![format!("127.0.0.1:{port}")],
             instance: "clean.local".into(),
         };
@@ -736,6 +743,8 @@ mod tests {
             role: Role::Desk,
             name: "Stale desk".into(),
             show: Some("Old show".into()),
+            desk_id: None,
+            show_id: None,
             addresses: vec![format!("127.0.0.1:{port}")],
             instance: "stale.local".into(),
         };

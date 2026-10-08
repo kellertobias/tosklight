@@ -11,6 +11,7 @@ import {
 } from "../../state/builtInMappings";
 import type { BuiltInWindow } from "../../types";
 import { DeskSettingsModal } from "../modals/DeskSettingsModal";
+import { architectSyncDetail, useArchitectSyncActive } from "./architectSync";
 import { Clock } from "./Clock";
 import { type ShowIndicator, useShowIndicator } from "./showIndicator";
 
@@ -34,6 +35,7 @@ export function LeftDock({
 		showIdentity?: string;
 		showIndicator?: ShowIndicator;
 		clock?: ReactNode;
+		architectSync?: boolean;
 	};
 } = {}) {
 	const { state, dispatch } = useApp();
@@ -43,6 +45,8 @@ export function LeftDock({
 	const suppressUntil = useRef(0);
 	const runtimeShowIndicator = useShowIndicator();
 	const showIndicator = presentation?.showIndicator ?? runtimeShowIndicator;
+	const runtimeArchitectSync = useArchitectSyncActive();
+	const architectSync = presentation?.architectSync ?? runtimeArchitectSync;
 	const showIdentity =
 		presentation?.showIdentity ??
 		(activeShow?.revision_copy
@@ -51,6 +55,7 @@ export function LeftDock({
 	const identityDetail = activeShow?.revision_copy
 		? `${showIdentity}. Source: ${activeShow.revision_copy.show_name}, Revision ${activeShow.revision_copy.revision} · ${activeShow.revision_copy.revision_name}. Created ${new Date(activeShow.revision_copy.copied_at).toLocaleString()}. ${showIndicator.detail}`
 		: `${showIndicator.label}. ${showIndicator.detail}`;
+	const identityTitle = `${identityDetail}${architectSyncDetail(architectSync)}`;
 	const showingDesktops = state.dockMode === "desks";
 	const nextMode = showingDesktops ? "builtins" : "desks";
 	const visibleBuiltIns = builtInsForShift(state.shiftArmed);
@@ -59,8 +64,8 @@ export function LeftDock({
 		<aside className="left-dock">
 			<Button
 				className={`dock-identity ${activeShow?.revision_copy ? "revision-copy-active" : ""}`}
-				aria-label={`Open show menu. ${identityDetail}`}
-				title={identityDetail}
+				aria-label={`Open show menu. ${identityTitle}`}
+				title={identityTitle}
 				onClick={() =>
 					dispatch({ type: "SET_MODAL", modal: "setupOpen", value: true })
 				}
@@ -78,6 +83,9 @@ export function LeftDock({
 					</span>{" "}
 					{showIdentity}
 				</b>
+				{architectSync && (
+					<span className="dock-architect-sync">⇄ Architect</span>
+				)}
 			</Button>
 
 			<Button
