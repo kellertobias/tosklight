@@ -100,14 +100,20 @@ impl ContributionContext<'_> {
             _ => None,
         };
         // TL-544 G1: an interrupted crossing starts from its live pose, not its held source.
-        let Some((value, pending)) = interpolate_pending(
-            previous.or(declared.as_ref()),
-            frame
-                .previous_pending(attribute)
-                .filter(|_| declared.is_none()),
-            target,
-            progress,
-        ) else {
+        let native_sample = previous.zip(target).and_then(|(from, to)| {
+            self.family_start?
+                .sample_native_transition(from, to, progress)
+        });
+        let Some((value, pending)) = native_sample.map(|value| (value, None)).or_else(|| {
+            interpolate_pending(
+                previous.or(declared.as_ref()),
+                frame
+                    .previous_pending(attribute)
+                    .filter(|_| declared.is_none()),
+                target,
+                progress,
+            )
+        }) else {
             return;
         };
         let family_evidence = crate::source_evidence::family_owner(key, &value)

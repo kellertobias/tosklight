@@ -618,12 +618,13 @@ pub(crate) fn execute_virtual(
         if let Some(origin) = activation_origin {
             playback.record_activation_at(identity, origin);
         }
-        for peer in virtual_exclusion_peers(exclusion_zones, address) {
-            peer_effect = peer_effect.combine(
-                playback
-                    .release_at_mutation(PlaybackIdentity::Virtual(peer))?
-                    .effect,
-            );
+        let peers: Vec<_> = virtual_exclusion_peers(exclusion_zones, address)
+            .into_iter()
+            .map(PlaybackIdentity::Virtual)
+            .collect();
+        playback.adopt_solo_handover(identity, &peers)?;
+        for peer in peers {
+            peer_effect = peer_effect.combine(playback.release_at_mutation(peer)?.effect);
         }
     }
     Ok(EnginePlaybackOutcome::Changed(

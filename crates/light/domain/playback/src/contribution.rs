@@ -27,6 +27,17 @@ pub type SnapOverride<'a> = &'a dyn Fn(FixtureId, &AttributeKey) -> bool;
 /// was rather than jumping back.
 pub trait FamilyStartSource: Send + Sync {
     fn family_start(&self, fixture: FixtureId, attribute: &AttributeKey) -> Option<AttributeValue>;
+
+    /// Sample a representation requiring this generation's pinned physical source model.
+    /// Unsupported pairs retain their compatibility hold; no destination model is guessed.
+    fn sample_native_transition(
+        &self,
+        _from: &AttributeValue,
+        _to: &AttributeValue,
+        _progress: f32,
+    ) -> Option<AttributeValue> {
+        None
+    }
 }
 
 /// The installed [`FamilyStartSource`]; empty keeps the hold-until-complete behaviour.

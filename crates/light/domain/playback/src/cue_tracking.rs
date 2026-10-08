@@ -525,6 +525,74 @@ impl PlaybackEngine {
                 .any(|(candidate, _)| *candidate == identity)
     }
 
+    /// Carry the current static Cue output of Solo peers into the incoming Cue's transition.
+    /// Peers can become logically Off immediately without creating an unowned black interval.
+    /// This is separate from ordinary Off/Release, which continue to remove ownership at once.
+    pub fn adopt_solo_handover(
+        &mut self,
+        incoming: PlaybackIdentity,
+        peers: &[PlaybackIdentity],
+    ) -> Result<(), String> {
+        if self.dynamic_assignment_at(incoming).is_some() {
+            return Ok(());
+        }
+        let key = self.runtime_key_at(incoming)?;
+        let peer_keys: HashSet<_> = peers
+            .iter()
+            .filter_map(|peer| self.runtime_key_at(*peer).ok())
+            .filter(|peer| *peer != key)
+            .collect();
+        if peer_keys.is_empty() {
+            return Ok(());
+        }
+        let now = self.clock.now();
+        let mut retained: HashMap<AttributeAddress, PlaybackContribution> = HashMap::new();
+        for row in self.contributions_with_context(now, None) {
+            if !peer_keys.contains(&PlaybackKey::CueList(row.source.cue_list_id)) {
+                continue;
+            }
+            let address = (row.value.fixture_id, row.value.attribute.clone());
+            let replace = retained.get(&address).is_none_or(|old| {
+                let incoming = &row.value;
+                let previous = &old.value;
+                if incoming.priority != previous.priority {
+                    return incoming.priority > previous.priority;
+                }
+                if incoming.merge_mode == light_core::MergeMode::Htp {
+                    return incoming.value.normalized().unwrap_or(0.)
+                        > previous.value.normalized().unwrap_or(0.);
+                }
+                (incoming.changed_at, row.transition_ordinal)
+                    > (previous.changed_at, old.transition_ordinal)
+            });
+            if replace {
+                retained.insert(address, row);
+            }
+        }
+        if retained.is_empty() {
+            return Ok(());
+        }
+        let ordinal = crate::source_evidence::take_occurrence_ordinal(
+            &mut self.next_source_occurrence_ordinal,
+        );
+        let playback = self
+            .active
+            .get_mut(&key)
+            .ok_or("incoming Solo playback is not active")?;
+        playback.deleted_cue_transition_source = Some(
+            retained
+                .into_values()
+                .map(PlaybackRetainedValue::from)
+                .collect(),
+        );
+        playback.begin_source_history(
+            now,
+            ordinal,
+            &self.compiled_cue_lists[&playback.cue_list_id],
+        );
+        Ok(())
+    }
+
     pub fn release_at_mutation(
         &mut self,
         identity: PlaybackIdentity,
