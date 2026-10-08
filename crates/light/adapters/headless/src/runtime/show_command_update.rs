@@ -55,7 +55,11 @@ fn parse_mode(
     match body.first().map(String::as_str) {
         Some("TRACKED") => (CommandUpdateMode::Tracked, &body[1..]),
         Some("KNOWN") => (CommandUpdateMode::Known, &body[1..]),
-        Some("ALL") if body.get(1).is_none_or(|token| token != "PRESET") => {
+        Some("ALL")
+            if body.get(1).is_none_or(|token| {
+                token != "PRESET" && !token.chars().all(|character| character.is_ascii_digit())
+            }) =>
+        {
             (CommandUpdateMode::All, &body[1..])
         }
         _ => {
@@ -255,6 +259,9 @@ fn playback_cue_request(
 }
 
 fn preset_address(tokens: &[String]) -> Result<light_programmer::PresetAddress, String> {
+    if tokens.len() == 2 {
+        return command_preset_address(tokens);
+    }
     let [family, keyword, number] = tokens else {
         return Err("Preset Update must be <family> PRESET <number>".into());
     };
@@ -409,6 +416,21 @@ mod tests {
                 .unwrap()
         );
         assert!(preset_address(&["2".into(), ".".into(), "22".into()]).is_err());
+        let single_mixed = ["ALL".into(), "3".into()];
+        assert_eq!(
+            parse_mode(&single_mixed, update::RecordUpdateOption::Smart),
+            (CommandUpdateMode::Update, &single_mixed[..])
+        );
+        assert_eq!(
+            preset_address(&single_mixed).unwrap().family,
+            light_programmer::PresetFamily::Mixed
+        );
+        assert_eq!(
+            preset_address(&["INTENSITY".into(), "190".into()])
+                .unwrap()
+                .number,
+            190
+        );
         let mixed = ["ALL".into(), "PRESET".into(), "3".into()];
         assert_eq!(
             parse_mode(&mixed, update::RecordUpdateOption::Smart),

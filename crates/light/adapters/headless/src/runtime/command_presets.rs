@@ -319,10 +319,40 @@ fn apply_live_group_values(
 pub(super) fn command_preset_address(
     tokens: &[String],
 ) -> Result<light_programmer::PresetAddress, String> {
+    if let [family, number] = tokens {
+        return named_command_preset_address(family, number);
+    }
+    if let [family, keyword, number] = tokens
+        && keyword == "PRESET"
+    {
+        return named_command_preset_address(family, number);
+    }
     if tokens.len() != 3 || tokens[1] != "." {
-        return Err("expected <preset-type> . <preset-number>".into());
+        return Err(
+            "expected <family> [PRESET] <preset-number> or <preset-type>.<preset-number>".into(),
+        );
     }
     light_programmer::PresetAddress::parse(&format!("{}.{}", tokens[0], tokens[2]))
+}
+
+fn named_command_preset_address(
+    family: &str,
+    number: &str,
+) -> Result<light_programmer::PresetAddress, String> {
+    let family = match family {
+        "ALL" => light_programmer::PresetFamily::Mixed,
+        "INTENSITY" => light_programmer::PresetFamily::Intensity,
+        "COLOR" => light_programmer::PresetFamily::Color,
+        "POSITION" => light_programmer::PresetFamily::Position,
+        "BEAM" => light_programmer::PresetFamily::Beam,
+        _ => return Err(format!("unknown Preset family {family}")),
+    };
+    light_programmer::PresetAddress::new(
+        family,
+        number
+            .parse::<u32>()
+            .map_err(|_| "Preset number is invalid")?,
+    )
 }
 
 pub(super) fn command_preset_family(id: &str) -> Result<light_programmer::PresetFamily, String> {
@@ -374,4 +404,37 @@ pub(super) fn command_preset_has_values(
         }
     }
     Ok(applicable)
+}
+
+#[cfg(test)]
+mod named_address_tests {
+    use super::*;
+
+    #[test]
+    fn documented_shifted_family_and_doubled_family_addresses_match_numeric_addresses() {
+        for (name, number) in [
+            ("ALL", 0),
+            ("INTENSITY", 1),
+            ("COLOR", 2),
+            ("POSITION", 3),
+            ("BEAM", 4),
+        ] {
+            let expected =
+                light_programmer::PresetAddress::parse(&format!("{number}.190")).unwrap();
+            assert_eq!(
+                command_preset_address(&[name.into(), "190".into()]).unwrap(),
+                expected
+            );
+            assert_eq!(
+                command_preset_address(&[name.into(), "PRESET".into(), "190".into()]).unwrap(),
+                expected
+            );
+            assert_eq!(
+                command_preset_address(&[number.to_string(), ".".into(), "190".into()]).unwrap(),
+                expected
+            );
+        }
+        assert!(command_preset_address(&["COLOR".into(), "0".into()]).is_err());
+        assert!(command_preset_address(&["UNKNOWN".into(), "190".into()]).is_err());
+    }
 }
