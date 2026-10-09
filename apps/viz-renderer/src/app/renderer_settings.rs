@@ -14,8 +14,14 @@ impl Application {
         };
         let before = self.preferences.to_file();
         let interfaces = self.preferences.listen_interfaces.clone();
+        // A UI Connect has the same endpoint authority as an explicit CLI connection.
+        // Keep launch options unchanged, while still adopting ordinary rendering settings.
+        let mut adoption_options = self.options.clone();
+        if self.source_authority == super::SourceAuthority::External {
+            adoption_options.desk_requested = true;
+        }
         self.preferences
-            .adopt_file(&update.settings.to_file(), &self.options);
+            .adopt_file(&update.settings.to_file(), &adoption_options);
         if self.preferences.to_file() == before {
             return;
         }

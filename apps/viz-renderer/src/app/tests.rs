@@ -258,3 +258,177 @@ fn stale_or_absent_dmx_holds_the_last_pose_and_cannot_fake_a_release() {
         ui::DmxCameraControlStatus::Local { can_release: false }
     );
 }
+
+#[test]
+fn source_connect_overrides_local_ports_for_same_and_changed_kind() {
+    for old_authority in [SourceAuthority::LocalShow, SourceAuthority::LocalPlanner] {
+        for old_kind in [ProviderKind::PlanningSoftware, ProviderKind::LightingDesk] {
+            let mut application = Application::new(Options {
+                planning_server_requested: true,
+                ..Options::default()
+            });
+            application.preferences.source = old_kind;
+            application.preferences.host = "127.0.0.1".into();
+            application.preferences.port = 1; // Refused test-only endpoint; never the running desk.
+            application.source_authority = old_authority;
+            application.quick_settings.toggle(&application.preferences);
+            application.quick_settings.move_tab(-1);
+            application.quick_settings.staged.source = ProviderKind::PlanningSoftware;
+            application.quick_settings.staged.host = "127.0.0.1".into();
+            application.quick_settings.staged.port_text = "1".into();
+            application.quick_settings.selected = application
+                .quick_settings
+                .rows()
+                .iter()
+                .position(|row| *row == ui::Row::Connect)
+                .unwrap();
+            let outcome = application
+                .quick_settings
+                .activate(&mut application.preferences);
+            application.apply_outcome(outcome);
+            application.session.as_mut().unwrap().shutdown();
+            assert_eq!(application.source_authority, SourceAuthority::External);
+            assert_eq!(
+                application.connection_endpoint(Some(50691), Some(64025)),
+                ("127.0.0.1".into(), 1)
+            );
+        }
+    }
+}
+
+#[test]
+fn source_selection_cancel_and_invalid_preserve_local_authority() {
+    let mut application = Application::new(Options {
+        planning_server_requested: true,
+        ..Options::default()
+    });
+    application.source_authority = SourceAuthority::LocalShow;
+    application.quick_settings.toggle(&application.preferences);
+    application.quick_settings.move_tab(-1);
+    application.quick_settings.staged.port_text = "0".into();
+    application.quick_settings.selected = application
+        .quick_settings
+        .rows()
+        .iter()
+        .position(|row| *row == ui::Row::Connect)
+        .unwrap();
+    let outcome = application
+        .quick_settings
+        .activate(&mut application.preferences);
+    assert!(matches!(outcome, QuickSettingsOutcome::Invalid(_)));
+    application.apply_outcome(outcome);
+    application.quick_settings.selected = application
+        .quick_settings
+        .rows()
+        .iter()
+        .position(|row| *row == ui::Row::Cancel)
+        .unwrap();
+    let cancelled = application
+        .quick_settings
+        .activate(&mut application.preferences);
+    assert_eq!(cancelled, QuickSettingsOutcome::Close);
+    application.apply_outcome(cancelled);
+    assert_eq!(application.source_authority, SourceAuthority::LocalShow);
+    assert_eq!(
+        application.connection_endpoint(Some(50691), Some(64025)),
+        ("127.0.0.1".into(), 50691)
+    );
+    assert!(application.session.is_none());
+}
+
+#[test]
+fn source_selection_cli_and_local_return_choose_only_active_endpoint() {
+    let options = Options::from_arguments(
+        ["--planning-server", "127.0.0.1", "--port", "56084"]
+            .into_iter()
+            .map(str::to_owned),
+    )
+    .unwrap();
+    let mut application = Application::new(options);
+    assert_eq!(application.source_authority, SourceAuthority::External);
+    assert_eq!(
+        application.connection_endpoint(Some(50691), Some(64025)),
+        ("127.0.0.1".into(), 56084)
+    );
+    application.source_authority = SourceAuthority::LocalShow;
+    assert_eq!(
+        application.connection_endpoint(Some(50691), Some(64025)),
+        ("127.0.0.1".into(), 50691)
+    );
+    application.source_authority = SourceAuthority::LocalPlanner;
+    assert_eq!(
+        application.connection_endpoint(Some(50691), Some(64025)),
+        ("127.0.0.1".into(), 64025)
+    );
+}
+
+#[test]
+fn source_selection_external_rejects_connected_endpoint_override_but_accepts_fog() {
+    struct SettingsProvider(Option<viz_scene::RendererSettingsUpdate>);
+    impl viz_scene::SceneProvider for SettingsProvider {
+        fn capabilities(&self) -> viz_scene::ProviderCapabilities {
+            viz_scene::ProviderCapabilities {
+                kind: ProviderKind::PlanningSoftware,
+                available: true,
+                unavailable_reason: None,
+                default_host: "127.0.0.1".into(),
+                default_port: 5310,
+                uses_network_input: true,
+            }
+        }
+        fn poll(&mut self) -> Vec<viz_scene::ProviderEvent> {
+            self.0
+                .take()
+                .map(viz_scene::ProviderEvent::RendererSettings)
+                .into_iter()
+                .collect()
+        }
+        fn request_resync(&mut self) {}
+        fn shutdown(&mut self) {}
+    }
+
+    let mut application = Application::new(Options::default());
+    application.source_authority = SourceAuthority::External;
+    application.preferences.source = ProviderKind::PlanningSoftware;
+    application.preferences.host = "127.0.0.1".into();
+    application.preferences.port = 56084;
+    let launch_options = application.options.clone();
+    let settings = viz_scene::RendererSettings {
+        source: "lighting_desk".into(),
+        host: "other-endpoint.invalid".into(),
+        port: 64025,
+        quality: Some("draft".into()),
+        fog: 0.02,
+        ..application.preferences.renderer_settings()
+    };
+    let mut session = Session::new(
+        Box::new(SettingsProvider(Some(viz_scene::RendererSettingsUpdate {
+            revision: 2,
+            source: "editor".into(),
+            changed: vec!["quality".into(), "fog".into()],
+            settings,
+        }))),
+        ProviderKind::PlanningSoftware,
+        Instant::now(),
+    );
+    session.pump(Instant::now());
+    application.adopt_connected_renderer_settings(&mut session);
+
+    assert_eq!(
+        application.preferences.quality_override,
+        Some(viz_scene::RenderQuality::Draft)
+    );
+    assert_eq!(application.preferences.atmosphere.amount, 0.02);
+    assert_eq!(
+        application.preferences.source,
+        ProviderKind::PlanningSoftware
+    );
+    assert_eq!(application.preferences.host, "127.0.0.1");
+    assert_eq!(application.preferences.port, 56084);
+    assert_eq!(
+        application.options.desk_requested,
+        launch_options.desk_requested
+    );
+    assert_eq!(application.options.host, launch_options.host);
+    assert_eq!(application.options.port, launch_options.port);
+}
