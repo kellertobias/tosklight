@@ -55,37 +55,8 @@ pub fn bind_mvr_sources(
             }
         };
         let Some((path, bytes)) = member else {
-            let spec = mvr_source_spec(fixture);
-            let profiles = installed_profiles
-                .iter()
-                .flat_map(|profile| {
-                    profile.modes.iter().filter_map(|mode| {
-                        matches_mvr_definition_metadata(
-                            &profile.manufacturer,
-                            &profile.short_name,
-                            &profile.name,
-                            &mode.name,
-                            &spec,
-                            &fixture.gdtf_mode,
-                        )
-                        .then_some((profile.id, profile.revision, mode.id))
-                    })
-                })
-                .collect::<Vec<_>>();
-            let definitions = legacy
-                .iter()
-                .copied()
-                .filter(|definition| {
-                    matches_mvr_definition_metadata(
-                        &definition.manufacturer,
-                        &definition.model,
-                        &definition.name,
-                        &definition.mode,
-                        &spec,
-                        &fixture.gdtf_mode,
-                    )
-                })
-                .collect::<Vec<_>>();
+            let (profiles, definitions) =
+                matching_installed_sources(fixture, installed_profiles, &legacy);
             let key = match (profiles.as_slice(), definitions.as_slice()) {
                 ([key], []) => *key,
                 ([], [definition]) => {
@@ -136,29 +107,13 @@ pub fn bind_mvr_sources(
             continue;
         };
         let parsed_profile = parsed.entry(path.to_owned()).or_insert_with(|| {
-            let mut imported = light_fixture::gdtf::read::import_profile(bytes).map_err(|error| error.to_string())?;
-            let unknown = unknown_attributes(&imported.profile);
-            if !unknown.is_empty() {
-                // A manually mapped library import may supply operator-approved canonical
-                // attributes, but only with the exact archive and current source association.
-                let digest = &imported.profile.source_gdtf.as_ref().expect("canonical source").archive_sha256;
-                let candidates = installed_profiles.iter().filter(|profile| {
-                    profile.source_gdtf.as_ref().is_some_and(|source| source.archive_sha256 == *digest && source.matches_profile(profile).unwrap_or(false))
-                        && unknown_attributes(profile).is_empty()
-                }).collect::<Vec<_>>();
-                if let [mapped] = candidates.as_slice() {
-                    imported.profile = (*mapped).clone();
-                    result.warnings.push(format!("{path}: using the verified source mapping from Fixture Library"));
-                } else {
-                    return Err(format!("unmapped GDTF attributes {}; import this exact archive in Fixture Library and map them before MVR import (requires one verified mapping)", unknown.join(", ")));
-                }
-            }
-            for diagnostic in imported.diagnostics {
-                result.warnings.push(format!("{path}: {}: {}", diagnostic.node, diagnostic.message));
-            }
-            let index = result.new_profiles.len();
-            result.new_profiles.push(imported.profile);
-            Ok(index)
+            import_mvr_profile(
+                path,
+                bytes,
+                installed_profiles,
+                &unknown_attributes,
+                &mut result,
+            )
         });
         match parsed_profile {
             Ok(index) => {
@@ -196,6 +151,96 @@ pub fn bind_mvr_sources(
         }
     }
     Ok(result)
+}
+
+fn matching_installed_sources<'a>(
+    fixture: &light_mvr::MvrFixture,
+    installed_profiles: &[FixtureProfile],
+    legacy: &[&'a FixtureDefinition],
+) -> (Vec<(FixtureId, u32, Uuid)>, Vec<&'a FixtureDefinition>) {
+    let spec = mvr_source_spec(fixture);
+    let profiles = installed_profiles
+        .iter()
+        .flat_map(|profile| {
+            profile.modes.iter().filter_map(|mode| {
+                matches_mvr_definition_metadata(
+                    &profile.manufacturer,
+                    &profile.short_name,
+                    &profile.name,
+                    &mode.name,
+                    &spec,
+                    &fixture.gdtf_mode,
+                )
+                .then_some((profile.id, profile.revision, mode.id))
+            })
+        })
+        .collect::<Vec<_>>();
+    let definitions = legacy
+        .iter()
+        .copied()
+        .filter(|definition| {
+            matches_mvr_definition_metadata(
+                &definition.manufacturer,
+                &definition.model,
+                &definition.name,
+                &definition.mode,
+                &spec,
+                &fixture.gdtf_mode,
+            )
+        })
+        .collect::<Vec<_>>();
+    (profiles, definitions)
+}
+
+fn import_mvr_profile(
+    path: &str,
+    bytes: &[u8],
+    installed_profiles: &[FixtureProfile],
+    unknown_attributes: &impl Fn(&FixtureProfile) -> Vec<String>,
+    result: &mut MvrDefinitions,
+) -> Result<usize, String> {
+    let mut imported =
+        light_fixture::gdtf::read::import_profile(bytes).map_err(|error| error.to_string())?;
+    let unknown = unknown_attributes(&imported.profile);
+    if !unknown.is_empty() {
+        // A manually mapped library import may supply operator-approved canonical
+        // attributes, but only with the exact archive and current source association.
+        let digest = &imported
+            .profile
+            .source_gdtf
+            .as_ref()
+            .expect("canonical source")
+            .archive_sha256;
+        let candidates = installed_profiles
+            .iter()
+            .filter(|profile| {
+                profile.source_gdtf.as_ref().is_some_and(|source| {
+                    source.archive_sha256 == *digest
+                        && source.matches_profile(profile).unwrap_or(false)
+                }) && unknown_attributes(profile).is_empty()
+            })
+            .collect::<Vec<_>>();
+        if let [mapped] = candidates.as_slice() {
+            imported.profile = (*mapped).clone();
+            result.warnings.push(format!(
+                "{path}: using the verified source mapping from Fixture Library"
+            ));
+        } else {
+            return Err(format!(
+                "unmapped GDTF attributes {}; import this exact archive in Fixture Library and map them before MVR import (requires one verified mapping)",
+                unknown.join(", ")
+            ));
+        }
+    }
+    for diagnostic in imported.diagnostics {
+        result.warnings.push(format!(
+            "{path}: {}: {}",
+            diagnostic.node, diagnostic.message
+        ));
+    }
+    let index = result.new_profiles.len();
+    result.new_profiles.push(imported.profile);
+    Ok(index)
 }
 
 fn source_member<'a>(
