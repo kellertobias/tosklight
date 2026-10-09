@@ -275,6 +275,7 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 		usePlaybackRuntimeActions: () => ({
 			poolPlaybackAction: mocks.poolPlaybackAction,
 		}),
+		usePlaybackRuntimeAuthority: () => null,
 		usePlaybackRuntimeStatus: () => ({
 			status: mocks.runtimeReady ? "ready" : "loading",
 			error: null,
@@ -1068,14 +1069,14 @@ describe("PlaybackFaderBank Record targets", () => {
 		);
 		expect(screen.getByText("RECORD TARGET")).toBeInTheDocument();
 		const surfaces = [
-					screen.getByRole("button", {
-						name: "Playback representation page 3 playback 1",
-					}),
-					screen.getByRole("button", { name: "GO +" }),
-					screen.getByRole("button", { name: "GO −" }),
-					screen.getByRole("button", { name: "FLASH" }),
-					screen.getByRole("slider", { name: "Master" }),
-				];
+			screen.getByRole("button", {
+				name: "Playback representation page 3 playback 1",
+			}),
+			screen.getByRole("button", { name: "GO +" }),
+			screen.getByRole("button", { name: "GO −" }),
+			screen.getByRole("button", { name: "FLASH" }),
+			screen.getByRole("slider", { name: "Master" }),
+		];
 		for (const surface of surfaces) {
 			expect(fireEvent.pointerDown(surface, { pointerId: 4 })).toBe(true);
 			fireEvent.click(surface);
@@ -1116,9 +1117,12 @@ describe("PlaybackFaderBank Record targets", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "GO −" }));
 		fireEvent.click(screen.getByRole("button", { name: "FLASH" }));
-		fireEvent.input(screen.getByRole("slider", { name: "Page 3 playback 1 fader" }), {
-			target: { value: "42" },
-		});
+		fireEvent.input(
+			screen.getByRole("slider", { name: "Page 3 playback 1 fader" }),
+			{
+				target: { value: "42" },
+			},
+		);
 		expect(mocks.recordCue).not.toHaveBeenCalled();
 
 		fireEvent.click(screen.getByRole("button", { name: "GO +" }));
@@ -1139,44 +1143,41 @@ describe("PlaybackFaderBank Record targets", () => {
 		["Add Cue", "overwrite", false],
 		["Merge Cue", "merge", true],
 		["Overwrite Cue", "overwrite", true],
-	] as const)(
-		"asks for %s when the target contains exactly one Cue",
-		async (label, operation, exactCue) => {
-			assignPlayback();
-			mocks.state.storeArmed = true;
-			mocks.scopedCueLists[0].cues = [
-				{
-					id: "cue-2-0",
-					number: "2.0",
-					name: "Look",
-					fade_millis: 0,
-					delay_millis: 0,
-					trigger: { type: "manual" },
-					changes: [],
-				},
-			];
-			render(<PlaybackFaderBank count={1} />);
-			fireEvent.click(
-				screen.getByRole("button", {
-					name: "Playback representation page 1 playback 1",
-				}),
-			);
-			expect(
-				await screen.findByRole("dialog", { name: "Record Cue choice" }),
-			).toBeInTheDocument();
-			fireEvent.click(screen.getByRole("button", { name: label }));
-			await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
-			expect(mocks.recordCue).toHaveBeenCalledWith({
-				target: { kind: "page_slot", page: 1, slot: 1 },
-				operation,
-				...(exactCue ? { cueNumber: "2.0" } : {}),
-				timing: {},
-				cueOnly: false,
-				capturePolicy: "current_capture",
-				activationPolicy: "go_to_if_normal",
-			});
-		},
-	);
+	] as const)("asks for %s when the target contains exactly one Cue", async (label, operation, exactCue) => {
+		assignPlayback();
+		mocks.state.storeArmed = true;
+		mocks.scopedCueLists[0].cues = [
+			{
+				id: "cue-2-0",
+				number: "2.0",
+				name: "Look",
+				fade_millis: 0,
+				delay_millis: 0,
+				trigger: { type: "manual" },
+				changes: [],
+			},
+		];
+		render(<PlaybackFaderBank count={1} />);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Playback representation page 1 playback 1",
+			}),
+		);
+		expect(
+			await screen.findByRole("dialog", { name: "Record Cue choice" }),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: label }));
+		await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
+		expect(mocks.recordCue).toHaveBeenCalledWith({
+			target: { kind: "page_slot", page: 1, slot: 1 },
+			operation,
+			...(exactCue ? { cueNumber: "2.0" } : {}),
+			timing: {},
+			cueOnly: false,
+			capturePolicy: "current_capture",
+			activationPolicy: "go_to_if_normal",
+		});
+	});
 
 	it.each([
 		["merge", "RECORD ", "merge"],
@@ -1184,50 +1185,47 @@ describe("PlaybackFaderBank Record targets", () => {
 		["add_cue", "RECORD ", "add_cue"],
 		["merge", "RECORD ADD CUE ", "add_cue"],
 		["add_cue", "RECORD SMART ", null],
-	] as const)(
-		"records with the stored %s default or the line's one-off option (%s)",
-		async (recordDefault, commandLine, operation) => {
-			assignPlayback();
-			mocks.state.storeArmed = true;
-			mocks.recordDefault = recordDefault;
-			mocks.commandLine = commandLine;
-			mocks.scopedCueLists[0].cues = [
-				{
-					id: "cue-2-0",
-					number: "2.0",
-					name: "Look",
-					fade_millis: 0,
-					delay_millis: 0,
-					trigger: { type: "manual" },
-					changes: [],
-				},
-			];
-			render(<PlaybackFaderBank count={1} />);
-			fireEvent.click(
-				screen.getByRole("button", {
-					name: "Playback representation page 1 playback 1",
-				}),
-			);
-			if (operation === null) {
-				expect(
-					await screen.findByRole("dialog", { name: "Record Cue choice" }),
-				).toBeInTheDocument();
-				expect(mocks.recordCue).not.toHaveBeenCalled();
-				return;
-			}
-			await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
+	] as const)("records with the stored %s default or the line's one-off option (%s)", async (recordDefault, commandLine, operation) => {
+		assignPlayback();
+		mocks.state.storeArmed = true;
+		mocks.recordDefault = recordDefault;
+		mocks.commandLine = commandLine;
+		mocks.scopedCueLists[0].cues = [
+			{
+				id: "cue-2-0",
+				number: "2.0",
+				name: "Look",
+				fade_millis: 0,
+				delay_millis: 0,
+				trigger: { type: "manual" },
+				changes: [],
+			},
+		];
+		render(<PlaybackFaderBank count={1} />);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Playback representation page 1 playback 1",
+			}),
+		);
+		if (operation === null) {
 			expect(
-				screen.queryByRole("dialog", { name: "Record Cue choice" }),
-			).toBeNull();
-			expect(mocks.recordCue).toHaveBeenCalledWith(
-				expect.objectContaining({
-					target: { kind: "page_slot", page: 1, slot: 1 },
-					operation,
-				}),
-			);
-			expect(mocks.recordCue.mock.calls[0][0]).not.toHaveProperty("cueNumber");
-		},
-	);
+				await screen.findByRole("dialog", { name: "Record Cue choice" }),
+			).toBeInTheDocument();
+			expect(mocks.recordCue).not.toHaveBeenCalled();
+			return;
+		}
+		await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
+		expect(
+			screen.queryByRole("dialog", { name: "Record Cue choice" }),
+		).toBeNull();
+		expect(mocks.recordCue).toHaveBeenCalledWith(
+			expect.objectContaining({
+				target: { kind: "page_slot", page: 1, slot: 1 },
+				operation,
+			}),
+		);
+		expect(mocks.recordCue.mock.calls[0][0]).not.toHaveProperty("cueNumber");
+	});
 
 	it.each([
 		["touch", false],

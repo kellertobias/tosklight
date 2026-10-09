@@ -469,6 +469,30 @@ describe("System Controls running Playback authority", () => {
 		});
 	});
 
+	it("displays the canonical Cuelist address without changing physical release identity", async () => {
+		const original = OBJECTS[SHOW_A].cue_list;
+		OBJECTS[SHOW_A].cue_list = original.map((object, index) => ({
+			...object,
+			body: {
+				...object.body,
+				pool_number: index === 0 ? 101 : 102,
+				legacy_pool_aliases: [],
+			},
+		}));
+		try {
+			harness();
+			await waitFor(() => expect(latest?.ready).toBe(true));
+			expect(latest?.mappedSources[0]).toMatchObject({
+				cueListNumber: 101,
+				identity: { kind: "playback", playback_number: 12 },
+				locations: [{ page: 1, slot: 7 }],
+			});
+		} finally {
+			cleanup();
+			OBJECTS[SHOW_A].cue_list = original;
+		}
+	});
+
 	it("refuses release and exposes no stale rows while exact runtime is loading", async () => {
 		const runtime = new RuntimeBackend();
 		runtime.suspended.add(SHOW_A);

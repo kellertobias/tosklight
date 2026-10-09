@@ -138,7 +138,7 @@ function runningSource(
 		} as RunningCueListSource["cueList"],
 		cue: {
 			id: `${cueListId}-cue-1`,
-		number: playbackNumber == null ? "3" : "1",
+			number: playbackNumber == null ? "3" : "1",
 		} as RunningCueListSource["cue"],
 	};
 }
@@ -399,18 +399,14 @@ describe("SystemControlsModal", () => {
 		expect(screen.getByText("Main playback")).toBeInTheDocument();
 		expect(screen.getByText("Virtual Cuelist")).toBeInTheDocument();
 		expect(screen.getByText("Circle · Dynamic 7")).toBeInTheDocument();
-		expect(
-			screen.queryByText("Operator · This desk"),
-		).not.toBeInTheDocument();
+		expect(screen.queryByText("Operator · This desk")).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
 		expect(screen.getByText("Operator · This desk")).toBeInTheDocument();
 		expect(
 			screen.queryByRole("button", { name: "Close" }),
 		).not.toBeInTheDocument();
 		expect(
-			screen.getByText(
-				"1 selected fixture · 3 values · 1 session · Connected",
-			),
+			screen.getByText("1 selected fixture · 3 values · 1 session · Connected"),
 		).toBeInTheDocument();
 		expect(legacyReads).toBe(0);
 	});
@@ -445,11 +441,17 @@ describe("SystemControlsModal", () => {
 	});
 
 	it("distinguishes page slot from pool owner when stopping a mapped Cuelist", () => {
-		mapped.locations = [{ page: 1, slot: 7 }, { page: 2, slot: 3 }];
+		mapped.locations = [
+			{ page: 1, slot: 7 },
+			{ page: 2, slot: 3 },
+		];
 		render(<SystemControlsModal />);
-		expect(screen.getByText(/Page 1 · Playback 7, Page 2 · Playback 3 · Pool 12/))
-			.toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Turn off Playback Main playback" }));
+		expect(
+			screen.getByText(/Page 1 · Playback 7, Page 2 · Playback 3/),
+		).toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Turn off Playback Main playback" }),
+		);
 		expect(release).toHaveBeenCalledWith(mapped);
 		expect(mapped.identity).toEqual({ kind: "playback", playback_number: 12 });
 	});

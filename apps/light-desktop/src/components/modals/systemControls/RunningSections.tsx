@@ -117,8 +117,8 @@ function PlaybackRow({
 						: playback.playbackNumber == null
 							? "Direct Cuelist"
 							: playback.locations?.length
-								? `${playback.locations.map(({ page, slot }) => `Page ${page} · Playback ${slot}`).join(", ")} · Pool ${playback.playbackNumber}`
-								: `Playback pool ${playback.playbackNumber}`}{" "}
+								? `${playback.locations.map(({ page, slot }) => `Page ${page} · Playback ${slot}`).join(", ")}`
+								: `Playback assignment ${playback.playbackNumber}`}{" "}
 					· Cue {cueNumber} · {Math.round(playback.runtime.master * 100)}% ·{" "}
 					{playback.runtime.paused ? "Paused" : "Running"}
 				</small>

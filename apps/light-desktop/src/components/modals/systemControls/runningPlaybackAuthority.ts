@@ -26,6 +26,8 @@ import {
 } from "../../../features/showObjects/ShowObjectsState";
 import { useShowObjectKindsView } from "../../../features/showObjects/ShowObjectsView";
 
+import { cuelistPoolCatalog } from "../../../features/playbackTopology/cuelistPoolCatalog";
+
 const SHOW_KINDS = ["cue_list", "playback", "playback_page"] as const;
 const NO_SOURCES: readonly RunningCueListSource[] = [];
 const NO_DYNAMICS: readonly RunningDynamic[] = [];
@@ -151,15 +153,15 @@ function portableModel(
 	pageObjects: ReturnType<typeof usePlaybackPages>,
 ) {
 	const cueLists = cueListObjects.map((object) => object.body);
-	const playbacks = playbackObjects
-		.map((object) => object.body)
+	const allPlaybacks = playbackObjects.map((object) => object.body);
+	const playbacks = allPlaybacks
 		.filter(targetsCueList)
 		.sort((left, right) => left.number - right.number);
-	const cueListNumbers = new Map<string, number>();
-	for (const playback of playbacks) {
-		if (!cueListNumbers.has(playback.target.cue_list_id))
-			cueListNumbers.set(playback.target.cue_list_id, playback.number);
-	}
+	const cueListNumbers = new Map(
+		cuelistPoolCatalog(cueLists, allPlaybacks, pageObjects.length === 0)
+			.filter((entry) => !entry.legacyAlias)
+			.map((entry) => [entry.cueList.id, entry.canonicalNumber]),
+	);
 	return {
 		cueLists,
 		playbacks,
