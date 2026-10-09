@@ -132,6 +132,21 @@ export function saveEdit(
 						degrees: vector[editAxis],
 					},
 		);
+	if (edit === "mode" && definition && controller.ui.replacingFixture) {
+		const revision = controller.ui.replacementRevision;
+		const profile = definition.profile_snapshot;
+		const headMapping = selected.logical_heads.map(head => ({ fixtureId: head.fixture_id,
+			targetProfileHeadId: controller.ui.replacementHeads[head.fixture_id] === "__unmapped"
+				? null : controller.ui.replacementHeads[head.fixture_id] }));
+		if (!revision || !profile || !definition.mode_id || headMapping.some(head => !head.targetProfileHeadId && head.targetProfileHeadId !== null)) {
+			controller.ui.setEditError("Choose a target head or explicitly leave unmatched for every existing logical head.");
+			return;
+		}
+		void applyFixtureIntent(controller, {type: "replace_profile", profileId: profile.id,
+			profileRevision: profile.revision, modeId: definition.mode_id, headMapping,
+			expectedShowRevision: revision.show, expectedPatchRevision: revision.patch });
+		return;
+	}
 	if (edit === "mode" && definition) {
 		const highlight_overrides = compatibleHighlightOverrides(
 			definition,
@@ -214,7 +229,9 @@ async function applyFixtureIntent(
 		)
 	)
 		completeEdit(controller);
-	else controller.ui.setEditError("The fixture update could not be applied.");
+	else controller.ui.setEditError(controller.patch.error || (action.type === "replace_profile"
+		? "The replacement could not be applied. Reopen Product / mode to review the current fixture and its head mapping."
+		: "The fixture update could not be applied."));
 }
 
 export async function saveVectorSpread(

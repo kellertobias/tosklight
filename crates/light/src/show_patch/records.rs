@@ -88,7 +88,21 @@ pub(super) fn build_records(
     command
         .fixtures
         .iter()
-        .map(|input| build_record(stored, profiles, input, references))
+        .map(|input| {
+            let mapping = command.fixture_updates.iter().find_map(|update| {
+                if update.fixture_id != input.patch.fixture_id {
+                    return None;
+                }
+                if let super::PatchFixtureUpdateAction::ReplaceProfile { head_mapping, .. } =
+                    &update.action
+                {
+                    Some(head_mapping.as_slice())
+                } else {
+                    None
+                }
+            });
+            build_record(stored, profiles, input, references, mapping)
+        })
         .collect()
 }
 
@@ -164,6 +178,7 @@ fn build_record(
     profiles: &ResolvedProfiles,
     input: &PatchFixtureCandidate,
     references: &PositionReferences,
+    mapping: Option<&[super::PatchHeadReplacement]>,
 ) -> Result<StagedFixture, ActionError> {
     let mode = profiles.mode(input.profile)?;
     let existing = stored.get(input.patch.fixture_id);
@@ -171,7 +186,7 @@ fn build_record(
         .map(|existing| existing.record.patch())
         .transpose()
         .map_err(patch_error)?;
-    let mut patch = normalized_patch(input, existing_patch.as_ref(), mode, references)?;
+    let mut patch = normalized_patch(input, existing_patch.as_ref(), mode, references, mapping)?;
     let changed = record_changed(existing, existing_patch.as_ref(), input.profile, &patch)?;
     let record = updated_record(
         existing.map(|existing| existing.record.clone()),
@@ -193,6 +208,7 @@ fn normalized_patch(
     existing: Option<&PatchedFixturePatch>,
     mode: &ResolvedMode,
     references: &PositionReferences,
+    mapping: Option<&[super::PatchHeadReplacement]>,
 ) -> Result<PatchedFixturePatch, ActionError> {
     let mut patch = input.patch.clone();
     // Preserved observations may be stale after replacement. An authored change must match
@@ -230,7 +246,11 @@ fn normalized_patch(
     let existing_heads = existing
         .map(|patch| patch.logical_heads.clone())
         .unwrap_or_default();
-    patch.logical_heads = reconcile_heads(mode.logical_heads(), existing_heads)?;
+    patch.logical_heads = if let Some(mapping) = mapping {
+        super::replacement::replace_heads(mode.logical_heads(), existing_heads, mapping)?
+    } else {
+        reconcile_heads(mode.logical_heads(), existing_heads)?
+    };
     patch.position_master = references.resolve(
         patch.fixture_id,
         patch.position_master,

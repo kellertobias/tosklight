@@ -70,6 +70,12 @@ pub(super) fn plan_patch<P: ShowPatchPorts>(
     expanded.fixture_updates.clear();
     let materialized = materialize_touched_legacy_profiles(document, &stored, &expanded)?;
     let profiles = ResolvedProfiles::resolve(document, &expanded, materialized, ports)?;
+    super::replacement::reconcile_replacements(
+        &stored,
+        &profiles,
+        &mut expanded,
+        &command.fixture_updates,
+    )?;
     let fixtures = assign_placement_addresses(&expanded, &profiles)?;
     let fixtures = apply_vector_spreads(fixtures, &command.vector_spreads)?;
     Ok(PatchPlan { profiles, fixtures })
@@ -127,7 +133,7 @@ fn stage_patch(
         remove_fixture_ids: command.remove_fixture_ids.clone(),
         placements: Vec::new(),
         vector_spreads: Vec::new(),
-        fixture_updates: Vec::new(),
+        fixture_updates: command.fixture_updates.clone(),
     };
     let references = position_references(document, &stored, &profiles, &assigned_command);
     let fixtures = build_records(&stored, &profiles, &assigned_command, &references)?;

@@ -21,6 +21,8 @@ pub(super) struct ResolvedModes {
 
 pub(super) struct ResolvedMode {
     logical_heads: Vec<ResolvedLogicalHead>,
+    pub(super) dmx_patchable: bool,
+    pub(super) channel_limits: BTreeMap<Uuid, u32>,
     projection: PatchModeProjection,
     /// Whether this mode makes its fixture a 3D Point: a reference object other placements can
     /// take as their position reference.
@@ -161,6 +163,21 @@ impl ResolvedMode {
             None
         };
         Ok(Self {
+            dmx_patchable: !matches!(
+                profile["patch_policy"].as_str(),
+                Some("visual_only" | "internal")
+            ),
+            channel_limits: mode["channels"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|channel| {
+                    let resolution: light_fixture::ChannelResolution =
+                        serde_json::from_value(channel["resolution"].clone())
+                            .map_err(|e| invalid(format!("replacement channel resolution: {e}")))?;
+                    Ok((required_uuid(channel, "id")?, resolution.max_raw()))
+                })
+                .collect::<Result<_, ActionError>>()?,
             logical_heads,
             projection: PatchModeProjection {
                 position_calibration_identity: position_context

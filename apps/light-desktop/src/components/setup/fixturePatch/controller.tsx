@@ -198,6 +198,10 @@ function usePatchPlacementState() {
 function usePatchEditState() {
 	const [edit, setEdit] = useState<EditKind>(null);
 	const [editText, setEditText] = useState("");
+	const [replacingFixture, setReplacingFixture] = useState(false);
+	const [replacementQuery, setReplacementQuery] = useState("");
+	const [replacementHeads, setReplacementHeads] = useState<Record<string, string>>({});
+	const [replacementRevision, setReplacementRevision] = useState<{show: number; patch: number} | null>(null);
 	const [editSplitDrafts, setEditSplitDrafts] = useState<
 		Record<number, string>
 	>({});
@@ -232,6 +236,10 @@ function usePatchEditState() {
 		setEdit,
 		editText,
 		setEditText,
+		replacingFixture, setReplacingFixture,
+		replacementQuery, setReplacementQuery,
+		replacementHeads, setReplacementHeads,
+		replacementRevision, setReplacementRevision,
 		editSplitDrafts,
 		setEditSplitDrafts,
 		editError,
@@ -409,14 +417,14 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 	const ui = usePatchUiState(props.csvImportRequest);
 	const data = usePatchDerivedState(server, patch, ui);
 	useEffect(() => {
-		if (!data.family) return;
+		if (!data.family || ui.replacingFixture) return;
 		if (
 			!data.family.modes.some(
 				(item) => fixtureDefinitionKey(item) === ui.definitionKey,
 			)
 		)
 			ui.setDefinitionKey(fixtureDefinitionKey(data.family.modes[0]));
-	}, [data.family, ui.definitionKey]);
+	}, [data.family, ui.definitionKey, ui.replacingFixture]);
 	return {
 		server,
 		patch,

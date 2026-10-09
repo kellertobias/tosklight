@@ -39,6 +39,41 @@
       "properties": {
         "action": {
           "type": "string",
+          "const": "replace_profile"
+        },
+        "head_mapping": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchHeadReplacement"
+          }
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "action",
+        "profile_id",
+        "profile_revision",
+        "mode_id",
+        "head_mapping"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
           "const": "set_masters"
         },
         "grand_master_enabled": {
@@ -532,6 +567,26 @@
         "name",
         "display_srgb",
         "visualizer_srgb"
+      ]
+    },
+    "PatchHeadReplacement": {
+      "description": "Explicit decision for one existing logical programming target; null leaves it dormant.",
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "target_profile_head_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "fixture_id"
       ]
     },
     "PatchInstalledFixtureAppearance": {

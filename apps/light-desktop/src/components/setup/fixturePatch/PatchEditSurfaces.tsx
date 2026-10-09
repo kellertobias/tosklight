@@ -135,7 +135,8 @@ export function FixtureEditDialog() {
 	const controller = usePatchController();
 	const { edit } = controller.ui;
 	if (!edit || !controller.data.selected || edit === "address") return null;
-	const close = () => requestFixtureEditClose(controller);
+	const replacingPending = controller.ui.replacingFixture && controller.patch.pendingFixtureIds.has(controller.data.selected.fixture_id);
+	const close = () => { if (!replacingPending) requestFixtureEditClose(controller); };
 	if ((edit === "location" || edit === "rotation") && controller.ui.editAxis) {
 		const axis = controller.ui.editAxis;
 		const label = `${edit === "location" ? "Location" : "Rotation"} ${axis.toUpperCase()} (${edit === "location" ? "meter" : "degree"})`;
@@ -227,15 +228,18 @@ export function FixtureEditDialog() {
 								? undefined
 								: {
 										id: "set",
-										label: "Set",
+										label: replacingPending ? "Replacing fixture…" : "Set",
+										disabled: replacingPending,
 										variant: "primary",
 										onPress: () => saveEdit(controller),
 									}
 						}
 						closeLabel={`Cancel fixture ${edit}`}
+						closeDisabled={replacingPending}
 						onClose={close}
 					/>
 					<EditError />
+					{replacingPending && <p role="status">Validating and applying the replacement. The current fixture remains visible until the authoritative result arrives.</p>}
 					<FixtureEditFields />
 				</section>
 			</div>
@@ -551,27 +555,39 @@ function vectorEditTitle(
 function ModeField() {
 	const controller = usePatchController();
 	const family = controller.data.selectedModeFamily;
+	const {ui} = controller;
 	if (!family) return null;
-	return (
-		// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
-		<label>
-			Product / mode
-			<Select
-				aria-label="Product / mode"
-				value={controller.ui.definitionKey}
-				onChange={(event) => controller.ui.setDefinitionKey(event.target.value)}
-			>
-				{family.modes.map((mode) => (
-					<option
-						value={fixtureDefinitionKey(mode)}
-						key={fixtureDefinitionKey(mode)}
-					>
-						{mode.mode} · {mode.footprint}ch
-					</option>
-				))}
+	const query = ui.replacementQuery.trim().toLowerCase();
+	const modes = ui.replacingFixture ? controller.data.availableDefinitions.filter(mode =>
+		fixtureDefinitionKey(mode) === ui.definitionKey || `${mode.manufacturer} ${mode.name || mode.model} ${mode.mode}`.toLowerCase().includes(query)) : family.modes;
+	const target = controller.data.definition;
+	const selected = controller.data.selected;
+	const targetHeads = target?.profile_snapshot?.modes.find(mode => mode.id === target.mode_id)?.heads ?? [];
+	return <>
+		{ui.replacingFixture && <label>Find replacement<TextInput aria-label="Find replacement" value={ui.replacementQuery} onChange={event => ui.setReplacementQuery(event.target.value)} /></label>}
+		<label>Product / mode
+			<Select aria-label="Product / mode" value={ui.definitionKey}
+				onChange={event => { ui.setDefinitionKey(event.target.value); ui.setReplacementHeads({}); }}>
+				{modes.map(mode => <option value={fixtureDefinitionKey(mode)} key={fixtureDefinitionKey(mode)}>
+					{ui.replacingFixture ? `${mode.manufacturer} · ${mode.name || mode.model} · ` : ""}{mode.mode} · {mode.footprint}ch
+				</option>)}
 			</Select>
 		</label>
-	);
+		{!ui.replacingFixture && <Button onClick={() => {ui.setReplacingFixture(true); ui.setReplacementHeads({});}}>Replace fixture with another product</Button>}
+		{ui.replacingFixture && <>
+			<p>The fixture number, placement, groups and stored programming stay attached to this fixture. Choose each logical head correspondence explicitly. Unmatched heads keep dormant programming; new heads receive new identities.</p>
+			<p>Existing root and copy addresses are retained by split number and checked against the new footprint. New splits start unpatched. Incompatible installed calibration remains stored with its original identity and needs revalidation. Direct colors may only approximate on another model; unsupported attributes remain passive.</p>
+			{(selected?.logical_heads ?? []).map(head => <label key={head.fixture_id}>
+				Existing head {head.head_index + 1}
+				<Select aria-label={`Replacement for head ${head.head_index + 1}`} value={ui.replacementHeads[head.fixture_id] ?? ""}
+					onChange={event => ui.setReplacementHeads({...ui.replacementHeads, [head.fixture_id]: event.target.value})}>
+					<option value="">Choose correspondence</option>
+					<option value="__unmapped">Leave unmatched — keep dormant programming</option>
+					{targetHeads.map((head,index) => ({head,index})).filter(({head}) => !head.master_shared).map(({head,index}) => <option key={head.id} value={head.id}>{head.name || "Head"} · {index + 1}</option>)}
+				</Select>
+			</label>)}
+		</>}
+	</>;
 }
 
 export function FixtureAddressDialog() {

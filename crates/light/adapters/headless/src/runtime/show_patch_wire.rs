@@ -45,6 +45,25 @@ pub(crate) fn application_update_command(
     request: wire::PatchFixtureUpdateRequest,
 ) -> Result<application::PatchFixturesCommand, String> {
     let action = match request.action {
+        wire::PatchFixtureUpdateAction::ReplaceProfile {
+            profile_id,
+            profile_revision,
+            mode_id,
+            head_mapping,
+        } => application::PatchFixtureUpdateAction::ReplaceProfile {
+            profile: fixture::PatchedFixtureProfileReference {
+                profile_id: FixtureId(profile_id),
+                profile_revision,
+                mode_id,
+            },
+            head_mapping: head_mapping
+                .into_iter()
+                .map(|entry| application::PatchHeadReplacement {
+                    fixture_id: FixtureId(entry.fixture_id),
+                    target_profile_head_id: entry.target_profile_head_id,
+                })
+                .collect(),
+        },
         wire::PatchFixtureUpdateAction::SetMasters {
             group_masters_enabled,
             grand_master_enabled,

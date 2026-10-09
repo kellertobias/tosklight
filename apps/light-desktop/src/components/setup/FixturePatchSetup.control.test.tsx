@@ -3442,3 +3442,53 @@ describe("installed Color calibration through setup", () => {
   expect(screen.queryByRole("dialog", {name})).not.toBeInTheDocument();
  });
 });
+
+
+it("requires explicit cross-family head correspondence and submits one sparse replacement", async () => {
+	const fixture = splitFixture();
+	const source = fixture.definition.profile_snapshot!;
+	source.modes[0].heads[0].master_shared = false;
+	fixture.logical_heads = [{fixture_id: "old-logical", profile_head_id: source.modes[0].heads[0].id, head_index: 0}];
+	const replacement = blankFixtureProfile(); replacement.id = "replacement-profile"; replacement.revision = 1;
+	replacement.manufacturer = "Other manufacturer"; replacement.name = "Wheel mover";
+	replacement.modes[0].id = "replacement-mode"; replacement.modes[0].heads[0].master_shared = false;
+	replacement.modes[0].heads[0].name = "Optical head";
+	server.fixtureProfiles = [source, replacement]; server.patch.fixtures = [fixture];
+	state.patchSetArmed = true;
+	render(<FixturePatchSetup />);
+	const row = screen.getByRole("row", {name:/17 Split Wash 17/}) as HTMLTableRowElement;
+	fireEvent.click(within(row.cells[3]).getByRole("button"));
+	fireEvent.click(screen.getByRole("button", {name:"Replace fixture with another product"}));
+	const picker = screen.getByRole("button", {name:/Acme.*Split Wash.*Default.*4ch/});
+	fireEvent.click(picker);
+	const option = screen.getByRole("option", {name:/Other manufacturer.*Wheel mover/}) as HTMLOptionElement;
+	fireEvent.click(option);
+	const dialog = document.querySelector(".patch-edit-modal") as HTMLElement;
+	fireEvent.click(within(dialog).getByRole("button", {name:"Set"}));
+	expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
+	expect(screen.getByRole("alert")).toHaveTextContent("every existing logical head");
+	fireEvent.click(screen.getByRole("button", {name:/Choose correspondence/}));
+	fireEvent.click(screen.getByRole("option", {name:/Optical head/}));
+	fireEvent.click(within(dialog).getByRole("button", {name:"Set"}));
+	await waitFor(() => expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith("fixture-split", null,
+		{type:"replace_profile",profileId:"replacement-profile",profileRevision:replacement.revision,modeId:"replacement-mode",
+		 headMapping:[{fixtureId:"old-logical",targetProfileHeadId:replacement.modes[0].heads[0].id}],
+		 expectedShowRevision:1,expectedPatchRevision:1}));
+	expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
+});
+
+
+it("cancels cross-family replacement without sending any patch mutation", () => {
+	const fixture = splitFixture(); server.fixtureProfiles = [fixture.definition.profile_snapshot!];
+	server.patch.fixtures = [fixture]; state.patchSetArmed = true;
+	render(<FixturePatchSetup />);
+	const row = screen.getByRole("row", {name:/17 Split Wash 17/}) as HTMLTableRowElement;
+	fireEvent.click(within(row.cells[3]).getByRole("button"));
+	fireEvent.click(screen.getByRole("button", {name:"Replace fixture with another product"}));
+	fireEvent.click(screen.getByRole("button", {name:"Cancel fixture mode"}));
+	expect(document.querySelector(".patch-edit-modal")).toBeNull();
+	expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
+	expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
+});

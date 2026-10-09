@@ -189,6 +189,35 @@ Older portable shows may still contain raw per-fixture Highlight override maps. 
 
 ![Fixture-library browser used while patching](../../assets/screenshots/workflows/patch-add-fixture.png)
 
+## Replace a physical fixture
+
+In Control, arm **SET**, open the fixture's **Fixture / mode** cell, and choose
+**Replace fixture with another product**. Search by manufacturer, product or mode, then
+choose the replacement personality. This changes the existing fixture; its number, root
+identity, placement and stored programming stay attached to it.
+
+Choose a target for every existing logical head. Correspondences preserve those logical
+programming identities even when the replacement mode orders its heads differently.
+**Leave unmatched — keep dormant programming** is an explicit decision: existing references
+remain stored, but cannot drive a missing head. New unmatched heads receive new identities.
+No correspondence is inferred from head names or indices.
+
+Review the new footprint before pressing **Set**. Root and multi-patch addresses are retained
+by split number; new splits start unpatched, and removed splits stop output. Overlaps or an
+invalid footprint reject the entire replacement. If the show changed while the dialog was
+open, reopen the editor and review the replacement again. Cancelling before **Set** writes nothing.
+After **Set**, the dialog shows **Replacing fixture…** and waits for the atomic result.
+
+Identity-bound installed calibration remains stored with its original source identity and
+becomes inactive when the replacement is incompatible; revalidate or explicitly author a
+new calibration. Semantic color and aim programming resolve through the replacement's
+capabilities. A color wheel may approximate a requested color, unsupported attributes remain
+passive, and Direct colors retain their original recipe with best-effort translation on a
+foreign model. Save/reopen and inspect emitted DMX after a replacement.
+
+This replacement confirmation is currently available in Control. Architect's existing
+same-product mode editor remains separate.
+
 ## Multi-patch
 
 Multi-patch gives one logical fixture additional physical output instances. Use it when several physical units must always share the same logical programming. Every instance uses the same embedded fixture profile and values but has its own per-split universe/address assignments, optional stage position, and physical Pan/Tilt inversion. The same independent footprint and overlap checks apply to every instance. Do not use multi-patch for separately selectable heads; use a multi-head fixture definition instead.

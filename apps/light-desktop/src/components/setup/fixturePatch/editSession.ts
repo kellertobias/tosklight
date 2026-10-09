@@ -36,6 +36,11 @@ function beginFixtureEdit(
 ) {
 	const { ui } = controller;
 	ui.setEditError("");
+	ui.setReplacingFixture(false);
+	ui.setReplacementQuery("");
+	ui.setReplacementHeads({});
+	ui.setReplacementRevision(controller.patch.showRevision != null && controller.patch.patchRevision != null
+		? {show: controller.patch.showRevision, patch: controller.patch.patchRevision} : null);
 	ui.setSelectedFixture(fixture.fixture_id);
 	if (kind === "number") ui.setEditText(String(fixtureDisplayId(fixture)));
 	else if (kind === "name")

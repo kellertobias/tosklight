@@ -483,6 +483,10 @@ describe("Patch v2 network boundary", () => {
 		action: PatchFixtureUpdateAction;
 		wireAction: Record<string, unknown>;
 	}>([
+		{ action: {type: "replace_profile", profileId: PROFILE_ID, profileRevision: 3, modeId: MODE_ID,
+			headMapping: [{fixtureId: FIXTURE_ID, targetProfileHeadId: null}], expectedShowRevision: 9, expectedPatchRevision: 7},
+			wireAction: {action:"replace_profile",profile_id:PROFILE_ID,profile_revision:3,mode_id:MODE_ID,
+				head_mapping:[{fixture_id:FIXTURE_ID,target_profile_head_id:null}]} },
 		{
 			action: {
 				type: "set_masters",
@@ -1433,4 +1437,19 @@ it("carries authoritative Color identities through a snapshot and replacement de
  expect(current.definition.color_calibration_context?.identities).toEqual([replacement]);
  expect(current.color_calibration).toEqual(calibration);
  expect(current.color_calibration?.paths[0].source_identity.profile_revision).toBe(3);
+});
+
+
+it("replacement consent retains reviewed revisions and never rebases a stale mapping automatically", async () => {
+	const transport = new FakePatchTransport([snapshot(10,4,10,[{...fixtureProjection(),fixtureRevision:7}]), snapshot(10,4,10,[{...fixtureProjection(),fixtureRevision:7}])]);
+	transport.patchFixtureUpdate.mockRejectedValue(new PatchTransportError("stale replacement consent",409,5,false));
+	const session = patchSession(transport); await session.start();
+	const before = session.store.getSnapshot().fixtures[0];
+	await expect(session.updateFixtureIntent(FIXTURE_ID,null,{type:"replace_profile",profileId:PROFILE_ID,profileRevision:3,
+		modeId:MODE_ID,headMapping:[],expectedShowRevision:9,expectedPatchRevision:3})).rejects.toThrow("stale replacement consent");
+	expect(transport.patchFixtureUpdate).toHaveBeenCalledTimes(1);
+	expect(transport.patchFixtureUpdate.mock.calls[0].slice(2,5)).toEqual([7,3,9]);
+	expect(transport.snapshot).toHaveBeenCalledTimes(2);
+	expect(session.store.getSnapshot().fixtures[0]).toEqual(before);
+	session.stop();
 });

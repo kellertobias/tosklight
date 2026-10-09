@@ -8,6 +8,7 @@ mod projection;
 mod query;
 mod record_index;
 mod records;
+mod replacement;
 mod replay;
 mod service;
 mod update;
@@ -17,7 +18,7 @@ mod vector_spread;
 pub use model::{
     PatchChange, PatchFixtureAxis, PatchFixtureCandidate, PatchFixtureProjection,
     PatchFixtureUpdateAction, PatchFixtureUpdateIntent, PatchFixturesCommand, PatchFixturesResult,
-    PatchModeProjection, PatchOperatorAddressOverride, PatchPlacementIntent,
+    PatchHeadReplacement, PatchModeProjection, PatchOperatorAddressOverride, PatchPlacementIntent,
     PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
     PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
 };

@@ -55,6 +55,12 @@ pub struct PatchFixtureUpdateIntent {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PatchFixtureUpdateAction {
+    /// Deliberate physical replacement. Every existing logical head needs an explicit
+    /// mapping decision; None retains its programming as dormant, never guessed.
+    ReplaceProfile {
+        profile: PatchedFixtureProfileReference,
+        head_mapping: Vec<PatchHeadReplacement>,
+    },
     SetMasters {
         group_masters_enabled: bool,
         grand_master_enabled: bool,
@@ -99,6 +105,12 @@ pub enum PatchFixtureUpdateAction {
     SetFreeze {
         freeze: FixtureFreezeState,
     },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PatchHeadReplacement {
+    pub fixture_id: FixtureId,
+    pub target_profile_head_id: Option<Uuid>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

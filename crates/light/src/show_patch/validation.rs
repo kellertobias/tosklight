@@ -131,6 +131,35 @@ pub(super) fn validate_action(
 
 fn validate_fixture_update(action: &PatchFixtureUpdateAction) -> Result<(), ActionError> {
     match action {
+        PatchFixtureUpdateAction::ReplaceProfile {
+            profile,
+            head_mapping,
+        } => {
+            if profile.profile_id.0.is_nil()
+                || profile.mode_id.is_nil()
+                || profile.profile_revision == 0
+            {
+                return Err(invalid(
+                    "replacement profile requires non-nil IDs and a positive revision",
+                ));
+            }
+            let mut old = std::collections::HashSet::new();
+            let mut new = std::collections::HashSet::new();
+            for mapping in head_mapping {
+                if mapping.fixture_id.0.is_nil() || !old.insert(mapping.fixture_id) {
+                    return Err(invalid(
+                        "replacement head_mapping requires unique existing logical fixture IDs",
+                    ));
+                }
+                if let Some(target) = mapping.target_profile_head_id
+                    && (target.is_nil() || !new.insert(target))
+                {
+                    return Err(invalid(
+                        "replacement head_mapping target IDs must be non-nil and unique",
+                    ));
+                }
+            }
+        }
         PatchFixtureUpdateAction::SetRotationAxis { degrees, .. } => {
             if !degrees.is_finite() {
                 return Err(invalid("fixture rotation must be finite"));

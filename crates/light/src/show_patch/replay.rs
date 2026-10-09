@@ -158,6 +158,9 @@ fn command_bytes(command: &PatchFixturesCommand) -> usize {
 
 fn update_bytes(update: &super::PatchFixtureUpdateIntent) -> usize {
     match &update.action {
+        PatchFixtureUpdateAction::ReplaceProfile { head_mapping, .. } => {
+            head_mapping.capacity() * size_of::<super::PatchHeadReplacement>()
+        }
         PatchFixtureUpdateAction::SetInstalledAppearance { appearance } => {
             appearance_bytes(appearance)
         }

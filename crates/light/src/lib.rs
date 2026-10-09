@@ -235,8 +235,8 @@ pub use show_compiler::{PreparedShowCandidate, prepare_show_candidate};
 pub use show_patch::{
     PatchChange, PatchFixtureAxis, PatchFixtureCandidate, PatchFixtureProjection,
     PatchFixtureUpdateAction, PatchFixtureUpdateIntent, PatchFixturesCommand, PatchFixturesResult,
-    PatchModeProjection, PatchOperatorAddressOverride, PatchPerformancePhase, PatchPlacementIntent,
-    PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
+    PatchHeadReplacement, PatchModeProjection, PatchOperatorAddressOverride, PatchPerformancePhase,
+    PatchPlacementIntent, PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
     PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
     ShowPatchPorts, ShowPatchService,
 };

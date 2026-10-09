@@ -298,6 +298,11 @@ function toWireFixtureUpdateAction(
 	action: PatchFixtureUpdateAction,
 ): WirePatchFixtureUpdateAction {
 	switch (action.type) {
+		case "replace_profile":
+			return { action: action.type, profile_id: action.profileId,
+				profile_revision: action.profileRevision, mode_id: action.modeId,
+				head_mapping: action.headMapping.map(head => ({fixture_id: head.fixtureId,
+					target_profile_head_id: head.targetProfileHeadId})) };
 		case "set_masters":
 			return {
 				action: action.type,

@@ -196,6 +196,7 @@ pub struct CounterPorts {
     path: PathBuf,
     show_id: ShowId,
     profile: FixtureProfileRevision,
+    extra_profiles: Vec<FixtureProfileRevision>,
     failure: FailurePoint,
     counters: Arc<Counters>,
     profile_resolution: Arc<ProfileResolutionControl>,
@@ -210,10 +211,15 @@ impl CounterPorts {
             path,
             show_id,
             profile,
+            extra_profiles: Vec::new(),
             failure,
             counters: Arc::new(Counters::default()),
             profile_resolution: Arc::new(ProfileResolutionControl::default()),
         }
+    }
+
+    pub fn add_profile(&mut self, profile: FixtureProfileRevision) {
+        self.extra_profiles.push(profile);
     }
 
     pub const fn show_id(&self) -> ShowId {
@@ -405,12 +411,19 @@ impl ActiveShowPorts for CounterPorts {
 impl ShowPatchPorts for CounterPorts {
     fn resolve_profile_revision(
         &self,
-        _profile_id: FixtureId,
-        _revision: Revision,
+        profile_id: FixtureId,
+        revision: Revision,
     ) -> Result<FixtureProfileRevision, ActionError> {
         self.counters.library_reads.fetch_add(1, Ordering::SeqCst);
         self.profile_resolution.pause_if_enabled();
-        Ok(self.profile.clone())
+        Ok(self
+            .extra_profiles
+            .iter()
+            .find(|profile| {
+                profile.id().profile_id() == profile_id && profile.id().revision() == revision
+            })
+            .unwrap_or(&self.profile)
+            .clone())
     }
 
     fn reconcile_patch_change(&self, _change: &PatchChange) {

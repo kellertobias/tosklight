@@ -1189,3 +1189,60 @@ pub(super) async fn post_patch_update(
         .await
         .unwrap()
 }
+
+#[tokio::test]
+async fn v2_patch_replacement_is_sparse_guarded_and_replay_safe() {
+    let (state, data_dir) = test_state();
+    let (source_id, source_mode) = install_patch_route_profile(&state);
+    let mut target = light_fixture::FixtureProfile::blank();
+    target.manufacturer = "Other manufacturer".into();
+    target.name = "Replacement product".into();
+    target.modes[0].heads[0].master_shared = false;
+    let target = state.installation.save_fixture_profile(target, 0).unwrap();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Sparse replacement route").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show_for_patch_test(&app, &token, show_id).await;
+    let initial = post_patch(
+        &app,
+        &token,
+        show_id,
+        Some(0),
+        valid_patch_request_for(source_id, source_mode, "replacement-seed"),
+    )
+    .await;
+    assert_eq!(initial.status(), StatusCode::OK);
+    let initial = json(initial).await;
+    let fixture = &initial["fixtures"][0];
+    let fixture_id = fixture["fixture_id"].as_str().unwrap();
+    let request = serde_json::json!({"request_id":"replace-other-product","expected_fixture_revision":fixture["fixture_revision"],
+        "expected_patch_revision":initial["patch_revision"],"expected_show_revision":initial["show_revision"],
+        "multipatch_instance_id":null,"action":"replace_profile","profile_id":target.id.0,"profile_revision":target.revision,
+        "mode_id":target.modes[0].id,"head_mapping":[],"future_replacement_context":{"accepted":true}});
+    let changed = post_patch_update(&app, &token, show_id, fixture_id, request.clone()).await;
+    let status = changed.status();
+    let changed = json(changed).await;
+    assert_eq!(status, StatusCode::OK, "{changed}");
+    assert_eq!(changed["fixtures"][0]["fixture_id"], fixture["fixture_id"]);
+    assert_eq!(
+        changed["fixtures"][0]["profile_id"],
+        serde_json::json!(target.id.0)
+    );
+    assert_eq!(changed["fixtures"][0]["location"], fixture["location"]);
+    assert_eq!(
+        changed["fixtures"][0]["fixture_number"],
+        fixture["fixture_number"]
+    );
+    let replay = post_patch_update(&app, &token, show_id, fixture_id, request.clone()).await;
+    assert_eq!(replay.status(), StatusCode::OK);
+    assert_eq!(json(replay).await["replayed"], true);
+    let mut stale = request;
+    stale["request_id"] = serde_json::json!("stale-replacement");
+    let rejected = post_patch_update(&app, &token, show_id, fixture_id, stale).await;
+    assert_eq!(rejected.status(), StatusCode::CONFLICT);
+    let after = json(get_patch(&app, &token, show_id).await).await;
+    assert_eq!(after["patch_revision"], changed["patch_revision"]);
+    assert_eq!(after["fixtures"][0], changed["fixtures"][0]);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
