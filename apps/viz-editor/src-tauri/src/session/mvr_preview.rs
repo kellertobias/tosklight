@@ -20,6 +20,16 @@ impl Session {
         let token = Uuid::new_v4().to_string();
         let preview = &prepared.preview;
         let dto = MvrPreviewDto {
+            profile_conflicts: preview
+                .profile_conflicts
+                .iter()
+                .map(|c| MvrProfileConflictDto {
+                    profile_id: c.profile_id.to_string(),
+                    revision: c.revision,
+                    name: c.name.clone(),
+                    fixtures: c.fixtures.iter().map(ToString::to_string).collect(),
+                })
+                .collect(),
             token: token.clone(),
             warnings: preview.warnings.clone(),
             fixtures: preview
@@ -53,6 +63,15 @@ impl Session {
         token: &str,
         resolutions: HashMap<Uuid, MvrImportResolution>,
     ) -> Answer<MvrImportReport> {
+        self.apply_mvr_with_identity_copies(token, resolutions, false)
+    }
+
+    pub(super) fn apply_mvr_with_identity_copies(
+        &self,
+        token: &str,
+        resolutions: HashMap<Uuid, MvrImportResolution>,
+        copy_conflicting_profiles: bool,
+    ) -> Answer<MvrImportReport> {
         let _lifecycle = self.document_lifecycle.lock();
         let mut pending = self.pending_mvr.lock();
         let preview = pending
@@ -65,7 +84,11 @@ impl Session {
         // Keep the staged inputs if a decision fails; successful application consumes the token.
         let report = self.change(|document| {
             let outcome = document
-                .import_prepared_mvr(preview.prepared.clone(), resolutions)
+                .import_prepared_mvr_with_identity_copies(
+                    preview.prepared.clone(),
+                    resolutions,
+                    copy_conflicting_profiles,
+                )
                 .map_err(|e| e.to_string())?;
             Ok(MvrImportReport {
                 imported_fixtures: outcome.imported_fixtures,
@@ -180,7 +203,11 @@ mod tests {
         let path = files.archive();
         let first = session.prepare_mvr(path.to_str().unwrap()).unwrap();
         let second = session.prepare_mvr(path.to_str().unwrap()).unwrap();
-        assert!(session.apply_mvr(&first.token, HashMap::new()).is_err());
+        assert!(
+            session
+                .apply_mvr_with_identity_copies(&first.token, HashMap::new(), true)
+                .is_err()
+        );
         session.cancel_mvr(&first.token);
         assert!(session.pending_mvr.lock().is_some());
         session.cancel_mvr(&second.token);
@@ -189,7 +216,11 @@ mod tests {
         session
             .open_path(&files.path("two.show"), Some("Two"))
             .unwrap();
-        assert!(session.apply_mvr(&third.token, HashMap::new()).is_err());
+        assert!(
+            session
+                .apply_mvr_with_identity_copies(&third.token, HashMap::new(), true)
+                .is_err()
+        );
     }
 
     #[test]

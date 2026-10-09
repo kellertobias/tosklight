@@ -1,5 +1,6 @@
 import {act,cleanup,renderHook,render,screen,fireEvent} from "@testing-library/react";
 import {afterEach,describe,expect,it,vi} from "vitest";
+import {MvrImportPreview} from "./QuickSetupDialogs";
 import {MvrInspectionProgress} from "./MvrInspectionProgress";
 import {useMvrController} from "./QuickSetupModal";
 import type {ShowLifecycleActions} from "../../features/showLifecycle/ShowLifecycleContext";
@@ -82,4 +83,46 @@ describe("MVR visible progress",()=>{
         expect(screen.queryByRole("button",{name:"Cancel inspection"})).toBeNull();
         expect(screen.getByText(/Wait for completion/)).toBeTruthy();
     });
+});
+
+
+describe("explicit immutable MVR profile identity consent",()=>{
+    const conflicting={...preview, profile_conflicts:[{profile_id:"profile",revision:1,name:"JB-Lighting JBLED A7",fixtures:["a","b"]}]};
+    it("requires explicit consent and sends that intent without changing fixture address decisions",async()=>{
+        const test=setup(Promise.resolve(conflicting));
+        await act(async()=>{await test.result.current.inspectMvr(new File(["rig"],"Rig.mvr"));});
+        expect(test.result.current.copyConflictingProfiles).toBe(false);
+        await act(async()=>{await test.result.current.applyMvr();});
+        expect(test.lifecycle.applyMvr).not.toHaveBeenCalled();
+        act(()=>test.result.current.setCopyConflictingProfiles(true));
+        await act(async()=>{await test.result.current.applyMvr();});
+        expect(test.lifecycle.applyMvr).toHaveBeenCalledWith("late",expect.objectContaining({copy_conflicting_profiles:true,resolutions:{}}));
+    });
+    it("cannot reuse consent or a retained apply callback after cancellation and reinspection",async()=>{
+        const test=setup(Promise.resolve(conflicting));
+        await act(async()=>{await test.result.current.inspectMvr(new File(["first"],"First.mvr"));});
+        act(()=>test.result.current.setCopyConflictingProfiles(true));
+        const staleApply=test.result.current.applyMvr;
+        act(()=>test.result.current.setMvrMode(null));
+        await act(async()=>{await staleApply();});
+        expect(test.lifecycle.applyMvr).not.toHaveBeenCalled();
+        act(()=>test.result.current.setMvrMode("new"));
+        test.lifecycle.previewMvr.mockResolvedValueOnce({...conflicting,token:"new"});
+        await act(async()=>{await test.result.current.inspectMvr(new File(["second"],"Second.mvr"));});
+        expect(test.result.current.copyConflictingProfiles).toBe(false);
+        await act(async()=>{await test.result.current.applyMvr();});
+        expect(test.lifecycle.applyMvr).not.toHaveBeenCalled();
+    });
+});
+
+
+it("renders immutable collision details and a disabled apply button until checked",()=>{
+    const consent=vi.fn();
+    const model={mvr:{mvrPreview:{...preview,profile_conflicts:[{profile_id:"profile",revision:1,name:"JB-Lighting JBLED A7",fixtures:["a","b"]}]},mvrMode:"new",mvrName:"Imported rig",mvrBusy:false,copyConflictingProfiles:false,setCopyConflictingProfiles:consent,setMvrName:vi.fn(),applyMvr:vi.fn()}};
+    render(<MvrImportPreview model={model as unknown as Parameters<typeof MvrImportPreview>[0]["model"]}/>);
+    expect(screen.getByText(/JB-Lighting JBLED A7.*revision 1.*2 fixtures/)).toBeTruthy();
+    expect(screen.getByText(/Existing profiles and unrelated fixtures stay unchanged/)).toBeTruthy();
+    expect(screen.getByRole("button",{name:"Create and Open Show"})).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox",{name:"Import conflicting profiles as new identities"}));
+    expect(consent).toHaveBeenCalledWith(true);
 });

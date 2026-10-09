@@ -316,6 +316,7 @@ export interface TextDocument {
 }
 
 export interface MvrImportPreview {
+    profile_conflicts?: Array<{profile_id:string;revision:number;name:string;fixtures:string[]}>;
 	token: string;
 	fixtures: Array<{
 		uuid: string;

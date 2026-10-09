@@ -29,6 +29,142 @@ fn typed_identity(profile: &FixtureProfile) -> Result<String, ActionError> {
     mvr_profile_identity(serde_json::to_value(profile).map_err(|error| invalid(error.to_string()))?)
 }
 
+/// Read-only preview of native immutable collisions; embedded GDTF revisions use their existing
+/// reservation policy. Every affected fixture is listed even when modes share one profile.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MvrProfileConflict {
+    pub profile_id: Uuid,
+    pub revision: u32,
+    pub name: String,
+    pub fixtures: Vec<Uuid>,
+}
+
+pub fn mvr_profile_conflicts(
+    staged: &MvrDefinitions,
+    slots: &MvrProfileSlots,
+    resolutions: &HashMap<Uuid, super::MvrImportResolution>,
+) -> Result<Vec<MvrProfileConflict>, ActionError> {
+    let mut contents = slots.clone();
+    let mut sources = BTreeMap::new();
+    for (uuid, definition) in &staged.definitions {
+        if staged.imported_profiles.contains_key(uuid)
+            || matches!(
+                resolutions.get(uuid),
+                Some(super::MvrImportResolution::Skip)
+            )
+        {
+            continue;
+        }
+        if let Some(profile) = definition.profile_snapshot.as_deref() {
+            let key = (profile.id.0, u64::from(profile.revision));
+            contents
+                .entry(key)
+                .or_default()
+                .insert(typed_identity(profile)?);
+            let source = sources.entry(key).or_insert_with(|| MvrProfileConflict {
+                profile_id: profile.id.0,
+                revision: profile.revision,
+                name: format!("{} {}", profile.manufacturer, profile.name),
+                fixtures: Vec::new(),
+            });
+            source.fixtures.push(*uuid);
+        }
+    }
+    let mut conflicts = Vec::new();
+    for (key, mut source) in sources {
+        if contents[&key].len() > 1 {
+            source.fixtures.sort();
+            conflicts.push(source);
+        }
+    }
+    Ok(conflicts)
+}
+
+/// Only exact native revision slots constrain collision consent. A newer unrelated revision or
+/// an embedded GDTF import still uses its established execution-time revision allocation.
+pub fn mvr_native_profile_slots(
+    staged: &MvrDefinitions,
+    slots: &MvrProfileSlots,
+) -> MvrProfileSlots {
+    staged
+        .definitions
+        .iter()
+        .filter(|(uuid, _)| !staged.imported_profiles.contains_key(uuid))
+        .filter_map(|(_, definition)| definition.profile_snapshot.as_deref())
+        .filter_map(|profile| {
+            let key = (profile.id.0, u64::from(profile.revision));
+            slots.get(&key).map(|contents| (key, contents.clone()))
+        })
+        .collect()
+}
+
+/// Explicit operator consent copies only conflicting exact snapshots. Original slots and source
+/// evidence remain unchanged. The new identity invalidates the old source association naturally;
+/// never recalculate its fingerprint and accidentally verify an edited or unverified archive.
+pub fn reserve_mvr_profiles_with_identity_copies(
+    staged: &mut MvrDefinitions,
+    slots: &mut MvrProfileSlots,
+    resolutions: &HashMap<Uuid, super::MvrImportResolution>,
+    copy_conflicting_profiles: bool,
+) -> Result<(), ActionError> {
+    if copy_conflicting_profiles {
+        let conflicts = mvr_profile_conflicts(staged, slots, resolutions)?;
+        let keys = conflicts
+            .iter()
+            .map(|c| (c.profile_id, c.revision))
+            .collect::<BTreeSet<_>>();
+        let mut copies = BTreeMap::new();
+        let mut replacements = Vec::new();
+        for (uuid, definition) in &staged.definitions {
+            if staged.imported_profiles.contains_key(uuid)
+                || matches!(
+                    resolutions.get(uuid),
+                    Some(super::MvrImportResolution::Skip)
+                )
+            {
+                continue;
+            }
+            let Some(profile) = definition.profile_snapshot.as_deref() else {
+                continue;
+            };
+            if !keys.contains(&(profile.id.0, profile.revision)) {
+                continue;
+            }
+            let key = (profile.id.0, profile.revision, typed_identity(profile)?);
+            let index = if let Some(index) = copies.get(&key) {
+                *index
+            } else {
+                let mut copy = profile.clone();
+                loop {
+                    copy.id = light_core::FixtureId::new();
+                    if !slots.keys().any(|(id, _)| *id == copy.id.0)
+                        && !staged.new_profiles.iter().any(|p| p.id == copy.id)
+                    {
+                        break;
+                    }
+                }
+                copy.revision = 1;
+                copy.validate().map_err(|e| invalid(e.to_string()))?;
+                let index = staged.new_profiles.len();
+                staged.new_profiles.push(copy);
+                copies.insert(key, index);
+                index
+            };
+            replacements.push((*uuid, index));
+        }
+        for (uuid, index) in replacements {
+            staged.imported_profiles.insert(uuid, index);
+        }
+        for source in conflicts {
+            staged.warnings.push(format!(
+                "{} revision {}: imported {} fixtures using new profile identities; original profiles remain unchanged. Identity-bound installed calibration remains retained and inactive until revalidated for the new profile identity. Retained GDTF source evidence keeps its original association and may need revalidation; export generates GDTF when it no longer matches.",
+                source.name, source.revision, source.fixtures.len(),
+            ));
+        }
+    }
+    reserve_mvr_profiles(staged, slots, resolutions)
+}
+
 pub fn reserve_mvr_profiles(
     staged: &mut MvrDefinitions,
     slots: &mut MvrProfileSlots,
@@ -332,5 +468,140 @@ mod tests {
             );
             assert_eq!(staged.definitions[&uuid].revision, 1);
         }
+    }
+    #[test]
+    fn mvr_explicit_identity_copy_remaps_shared_modes_without_replacing_original_or_verifying_source()
+     {
+        let mut original: FixtureProfile =
+            serde_json::from_value(legacy_profile_document()).unwrap();
+        let mut second = original.modes[0].clone();
+        second.id = Uuid::new_v4();
+        second.name = "Second mode".into();
+        original.modes.push(second);
+        let archive = light_fixture::gdtf::profile::package_profile(&original).unwrap();
+        original.source_gdtf =
+            Some(light_fixture::ProfileGdtfSource::associate(&original, &archive).unwrap());
+        assert!(
+            original
+                .source_gdtf
+                .as_ref()
+                .unwrap()
+                .matches_profile(&original)
+                .unwrap()
+        );
+        let mut installed = original.clone();
+        installed.notes = "Different installed calibration".into();
+        let old_key = (original.id.0, 1);
+        let mut slots = MvrProfileSlots::from([(
+            old_key,
+            BTreeSet::from([typed_identity(&installed).unwrap()]),
+        )]);
+        let before_slots = slots.clone();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let mut staged = MvrDefinitions {
+            definitions: HashMap::from([
+                (
+                    a,
+                    original.resolved_definition(original.modes[0].id).unwrap(),
+                ),
+                (
+                    b,
+                    original.resolved_definition(original.modes[1].id).unwrap(),
+                ),
+            ]),
+            ..Default::default()
+        };
+        let before = staged.definitions.clone();
+        let conflicts = mvr_profile_conflicts(&staged, &slots, &HashMap::new()).unwrap();
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].fixtures.len(), 2);
+        assert_eq!(slots, before_slots);
+        assert_eq!(
+            serde_json::to_value(&staged.definitions).unwrap(),
+            serde_json::to_value(&before).unwrap()
+        );
+        let mut rejected = staged.clone();
+        assert_eq!(
+            reserve_mvr_profiles_with_identity_copies(
+                &mut rejected,
+                &mut slots,
+                &HashMap::new(),
+                false
+            )
+            .unwrap_err()
+            .kind,
+            ActionErrorKind::Conflict
+        );
+        assert_eq!(slots, before_slots);
+        reserve_mvr_profiles_with_identity_copies(&mut staged, &mut slots, &HashMap::new(), true)
+            .unwrap();
+        assert_eq!(staged.new_profiles.len(), 1);
+        let copy = &staged.new_profiles[0];
+        assert_ne!(copy.id, original.id);
+        assert_eq!(copy.revision, 1);
+        assert_eq!(slots[&old_key], before_slots[&old_key]);
+        for (uuid, mode) in [(a, original.modes[0].id), (b, original.modes[1].id)] {
+            assert_eq!(staged.definitions[&uuid].profile_id, Some(copy.id));
+            assert_eq!(staged.definitions[&uuid].mode_id, Some(mode));
+            assert_eq!(
+                staged.definitions[&uuid]
+                    .profile_snapshot
+                    .as_deref()
+                    .unwrap()
+                    .id,
+                copy.id
+            );
+        }
+        assert_eq!(copy.source_gdtf, original.source_gdtf);
+        assert!(
+            !copy
+                .source_gdtf
+                .as_ref()
+                .unwrap()
+                .matches_profile(copy)
+                .unwrap()
+        );
+        let mut expected = before[&a].profile_snapshot.as_deref().unwrap().clone();
+        expected.id = copy.id;
+        expected.revision = 1;
+        assert_eq!(
+            serde_json::to_value(copy).unwrap(),
+            serde_json::to_value(expected).unwrap(),
+            "only the explicit identity changes; modes, calibration and geometry remain exact"
+        );
+        assert!(
+            staged
+                .warnings
+                .iter()
+                .any(|s| s.contains("original association"))
+        );
+    }
+
+    #[test]
+    fn mvr_skipped_conflicting_profiles_do_not_create_identity_copies() {
+        let original = profile();
+        let uuid = Uuid::new_v4();
+        let mut staged = MvrDefinitions {
+            definitions: HashMap::from([(
+                uuid,
+                original.resolved_definition(original.modes[0].id).unwrap(),
+            )]),
+            ..Default::default()
+        };
+        let mut slots =
+            MvrProfileSlots::from([((original.id.0, 1), BTreeSet::from(["different".into()]))]);
+        let before = slots.clone();
+        let resolutions = HashMap::from([(uuid, super::super::MvrImportResolution::Skip)]);
+        assert!(
+            mvr_profile_conflicts(&staged, &slots, &resolutions)
+                .unwrap()
+                .is_empty()
+        );
+        reserve_mvr_profiles_with_identity_copies(&mut staged, &mut slots, &resolutions, true)
+            .unwrap();
+        assert_eq!(slots, before);
+        assert!(staged.new_profiles.is_empty());
+        assert!(staged.warnings.is_empty());
     }
 }

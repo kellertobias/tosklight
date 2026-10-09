@@ -186,6 +186,21 @@ impl ActiveShowResource {
         light_application::MvrImportService::new(self.service.clone()).apply(action, ports)
     }
 
+    pub(in crate::runtime) fn apply_mvr_import_at_preview_revision<
+        P: light_application::ShowPatchPorts,
+    >(
+        &self,
+        action: light_application::ActionEnvelope<light_application::ApplyActiveMvrImportCommand>,
+        expected: Option<(
+            light_show::PortableShowRevision,
+            light_show::PortablePatchRevision,
+        )>,
+        ports: &P,
+    ) -> Result<light_application::ActiveMvrImportResult, light_application::ActionError> {
+        light_application::MvrImportService::new(self.service.clone())
+            .apply_at_preview_revision(action, expected, ports)
+    }
+
     #[cfg(test)]
     pub(in crate::runtime) fn patch_profile_resolution_probe(
         &self,

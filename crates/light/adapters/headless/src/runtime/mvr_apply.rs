@@ -9,7 +9,7 @@ pub(super) async fn apply_mvr_import(
     State(state): State<AppState>,
     Path(token): Path<Uuid>,
     headers: HeaderMap,
-    Json(input): Json<ApplyMvrImport>,
+    crate::tolerant_json::TolerantJson(input): crate::tolerant_json::TolerantJson<ApplyMvrImport>,
 ) -> Result<Json<ApplyMvrResult>, ApiError> {
     let session = authenticate(&state, &headers)?;
     let staged = state
@@ -23,11 +23,34 @@ pub(super) async fn apply_mvr_import(
         new_show,
         existing_show_id,
         resolutions,
+        copy_conflicting_profiles,
     } = input;
     if new_show.is_some() == existing_show_id.is_some() {
         return Err(ApiError::bad_request(
             "choose exactly one MVR import destination",
         ));
+    }
+    if staged.destination_id != existing_show_id {
+        return Err(ApiError::conflict(
+            "MVR destination differs from its preview. Inspect the archive again for this destination.",
+        ));
+    }
+    let destination_revision = staged.destination_revision;
+    if let Some(id) = existing_show_id {
+        let entry = state
+            .installation
+            .show(light_core::ShowId(id))
+            .map_err(ApiError::store)?
+            .ok_or_else(|| ApiError::not_found("show"))?;
+        let current = ActiveShowRepository::open(&entry.path)
+            .map_err(ApiError::store)?
+            .portable_document()
+            .map_err(ApiError::store)?;
+        if destination_revision != Some((current.revision(), current.patch_revision())) {
+            return Err(ApiError::conflict(
+                "MVR destination changed after preview. Inspect the archive again before importing.",
+            ));
+        }
     }
     let worker_state = state.clone();
     let worker_resolutions = resolutions.clone();
@@ -38,6 +61,8 @@ pub(super) async fn apply_mvr_import(
             &mut bindings,
             existing_show_id,
             &worker_resolutions,
+            copy_conflicting_profiles,
+            &staged.profile_slots,
         )?;
         Ok::<_, ApiError>(bindings)
     })
@@ -46,6 +71,7 @@ pub(super) async fn apply_mvr_import(
     let (entry, is_new, open_after) = import_destination(&state, new_show, existing_show_id)?;
     let import = ActiveMvrImport {
         entry,
+        destination_revision,
         document: staged.document,
         definitions: bindings.definitions,
         new_profiles: bindings.new_profiles,

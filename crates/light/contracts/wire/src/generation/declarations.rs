@@ -544,6 +544,7 @@ fn show_library(config: &Config) -> Vec<String> {
         MvrApplyOutcome::decl(config),
         MvrImportPreview::decl(config),
         MvrPreviewFixture::decl(config),
+        MvrProfileConflict::decl(config),
         MvrExportSummary::decl(config),
         ShowObjectRecord::decl(config),
         ShowObjectCollectionSnapshot::decl(config),

@@ -753,3 +753,50 @@ fn mvr_missing_full_library_revision_never_publishes_a_stripped_catalog() {
 }
 
 mod binding_candidates;
+
+#[test]
+fn preview_destination_revision_rejects_non_patch_edits_before_prepare_and_atomic_commit() {
+    for edited_after_prepare in [false, true] {
+        let rig = Rig::new();
+        let preview = rig.document();
+        let expected = Some((preview.revision(), preview.patch_revision()));
+        let envelope = rig.envelope(
+            vec![mvr_fixture(Uuid::from_u128(0x68099), "Preview", 1, 1)],
+            vec![fixture_definition(1)],
+        );
+        let prepared = if edited_after_prepare {
+            Some(
+                rig.service
+                    .prepare_at_preview_revision(envelope.clone(), expected, &rig.ports)
+                    .unwrap(),
+            )
+        } else {
+            None
+        };
+        let mut transaction = preview.transaction();
+        transaction.put(
+            "group",
+            "1",
+            serde_json::json!({"name":"Edited since preview","fixtures":[]}),
+        );
+        rig.ports
+            .store()
+            .apply_portable_transaction(transaction)
+            .unwrap();
+        let edited = rig.document();
+        assert_ne!(edited.revision(), preview.revision());
+        assert_eq!(edited.patch_revision(), preview.patch_revision());
+        let error = if let Some(prepared) = prepared {
+            rig.service.commit(prepared, &rig.ports).unwrap_err()
+        } else {
+            rig.service
+                .apply_at_preview_revision(envelope, expected, &rig.ports)
+                .unwrap_err()
+        };
+        assert_eq!(error.kind, ActionErrorKind::Conflict);
+        assert_eq!(rig.document(), edited);
+        assert_eq!(count(&rig.ports.counters.backups), 0);
+        assert_eq!(count(&rig.ports.counters.commits), 0);
+        assert_eq!(count(&rig.ports.counters.runtime_installs), 0);
+    }
+}

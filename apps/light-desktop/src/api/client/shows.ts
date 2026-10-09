@@ -25,6 +25,7 @@ export type ShowOpenTransition =
 	| "safe_blackout";
 
 export interface MvrApplyInput {
+    copy_conflicting_profiles?: boolean;
 	new_show?: { name: string; open_after_import: boolean };
 	existing_show_id?: string;
 	resolutions?: Record<
@@ -230,6 +231,7 @@ export class ShowApiClient {
 		);
 		return this.action({
 			type: "apply_mvr",
+            copy_conflicting_profiles: input.copy_conflicting_profiles ?? false,
 			token,
 			destination,
 			resolutions,

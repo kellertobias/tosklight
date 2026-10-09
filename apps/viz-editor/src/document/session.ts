@@ -56,6 +56,7 @@ export interface MvrImportReport {
 
 /** What an MVR archive holds, read before anything is written. */
 export interface MvrPreview {
+    profileConflicts?: Array<{profileId:string;revision:number;name:string;fixtures:string[]}>;
 	token: string;
 	warnings: string[];
 	fixtures: MvrPreviewFixture[];
@@ -504,8 +505,8 @@ export const documentSession = {
 	rename: (name: string) => invoke<void>("rename_document", { name }),
 	exportMvr: (path: string) => invoke<number>("export_mvr", { path }),
 	previewMvr: (path: string) => invoke<MvrPreview>("preview_mvr", { path }),
-	importMvr: (token: string, resolutions: Record<string, MvrResolution> = {}) =>
-		invoke<MvrImportReport>("import_mvr", { token, resolutions }),
+	importMvr: (token: string, resolutions: Record<string, MvrResolution> = {}, copyConflictingProfiles = false) =>
+		invoke<MvrImportReport>("import_mvr", { token, resolutions, copyConflictingProfiles }),
 	cancelMvrPreview: (token: string) => invoke<void>("cancel_mvr_preview", { token }),
 	/** The desks on the network that have a show to offer. */
 	deskShows: (address: string) => invoke<DeskShow[]>("desk_shows", { address }),

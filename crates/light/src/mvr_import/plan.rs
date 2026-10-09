@@ -210,9 +210,14 @@ fn plan_document(
             continue;
         }
         let embedded = embedded_fixtures.get(&source.uuid);
-        let Some(definition) = embedded
-            .map(|embedded| embedded.fixture.definition.clone())
-            .or_else(|| command_definitions.get(&source.uuid).cloned())
+        // The trusted preview binding may contain an explicitly copied immutable profile.
+        // Native metadata still supplies fixture placement/settings, but must not undo that
+        // profile identity choice at apply time. Callers without a prepared binding keep the
+        // original native fallback.
+        let Some(definition) = command_definitions
+            .get(&source.uuid)
+            .cloned()
+            .or_else(|| embedded.map(|embedded| embedded.fixture.definition.clone()))
         else {
             changes.transaction.put(
                 "unresolved_mvr_fixture",

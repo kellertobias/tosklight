@@ -176,6 +176,8 @@ pub enum ShowLibraryAction {
         open: bool,
     },
     ApplyMvr {
+        #[serde(default)]
+        copy_conflicting_profiles: bool,
         token: Uuid,
         destination: MvrImportDestination,
         #[serde(default)]
@@ -269,12 +271,22 @@ pub struct MvrApplyOutcome {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct MvrImportPreview {
+    #[serde(default)]
+    pub profile_conflicts: Vec<MvrProfileConflict>,
     pub token: Uuid,
     pub fixtures: Vec<MvrPreviewFixture>,
     pub scenery: usize,
     pub missing_profiles: Vec<String>,
     pub warnings: Vec<String>,
     pub address_conflicts: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct MvrProfileConflict {
+    pub profile_id: Uuid,
+    pub revision: u32,
+    pub name: String,
+    pub fixtures: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

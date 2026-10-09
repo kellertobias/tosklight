@@ -144,6 +144,9 @@ export function useMvrController(lifecycle: ReturnType<typeof useShowLifecycle>)
 	const [mvrTarget, setMvrTarget] = useState<ShowEntry | null>(null);
 	const [mvrPreview, setMvrPreview] = useState<MvrImportPreview | null>(null);
 	const [mvrName, setMvrName] = useState("");
+    const [copyConflictingProfiles,setCopyConsentState] = useState(false);
+    const copyConsent = useRef(false);
+    function setCopyConflictingProfiles(value:boolean) {copyConsent.current=value;setCopyConsentState(value);}
 	const [mvrBusy, setMvrBusy] = useState(false);
     const [mvrOperation,setMvrOperation] = useState<"inspect"|"apply"|null>(null);
     const [mvrStartedAt,setMvrStartedAt] = useState<number|null>(null);
@@ -175,6 +178,7 @@ export function useMvrController(lifecycle: ReturnType<typeof useShowLifecycle>)
         acceptedPreview.current=null;
         const abort=new AbortController();inspectionAbort.current=abort;
         setMvrBusy(true);setMvrOperation("inspect");setMvrStartedAt(Date.now());
+        setCopyConflictingProfiles(false);
         setMvrInspectionFile({name:file.name,size:file.size});setMvrError("");setMvrPreview(null);
         try {
             if(!lifecycle) throw new Error("The desk connection is unavailable. Reconnect and choose the MVR again.");
@@ -216,6 +220,7 @@ export function useMvrController(lifecycle: ReturnType<typeof useShowLifecycle>)
 
 	async function applyMvr() {
         if (!mvrPreview || acceptedPreview.current!==mvrPreview || applying.current || inspectionAbort.current) return;
+        if ((mvrPreview.profile_conflicts?.length ?? 0)>0 && !copyConsent.current) return;
         applying.current=true;setMvrOperation("apply");setMvrStartedAt(Date.now());setMvrError("");
         setMvrBusy(true);
 		try {
@@ -226,8 +231,9 @@ export function useMvrController(lifecycle: ReturnType<typeof useShowLifecycle>)
 					? {
 							new_show: { name: mvrName.trim(), open_after_import: true },
 							resolutions: mvrResolutions,
+                            copy_conflicting_profiles: copyConsent.current,
 						}
-					: { existing_show_id: mvrTarget!.id, resolutions: mvrResolutions },
+					: { existing_show_id: mvrTarget!.id, resolutions: mvrResolutions, copy_conflicting_profiles: copyConsent.current },
 			);
 			acceptedPreview.current=null;
 			setMvrMode(null);
@@ -258,6 +264,7 @@ export function useMvrController(lifecycle: ReturnType<typeof useShowLifecycle>)
 		mvrPreview,
 		setMvrPreview,
 		mvrName,
+        copyConflictingProfiles,setCopyConflictingProfiles,
 		setMvrName,
 		mvrBusy,
 		mvrFilePickerTrigger,

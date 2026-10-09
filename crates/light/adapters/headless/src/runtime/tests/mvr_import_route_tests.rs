@@ -633,3 +633,238 @@ async fn mvr_native_metadata_precedes_standard_source_and_conflicts_before_creat
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+fn native_conflict_archive(profile: &FixtureProfile) -> MvrDocument {
+    let mut entries = Vec::new();
+    let mut fixtures = Vec::new();
+    for (id, address) in [(0x68001, 1), (0x68002, 20)] {
+        let source = source(id, "Native.gdtf", address);
+        let (mut fixture, _, _) = schema_v2_direct_fixture();
+        fixture.fixture_id = light_core::FixtureId(source.uuid);
+        fixture.fixture_number = Some(id as u32);
+        fixture.name = source.name.clone();
+        fixture.address = Some(address);
+        fixture.definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+        entries.push(serde_json::json!({"mvr_uuid":source.uuid,"fixture":fixture}));
+        fixtures.push(source);
+    }
+    MvrDocument {
+        fixtures,
+        files: HashMap::from([(
+            light_application::mvr_export::TOSKLIGHT_MVR_FIXTURE_METADATA_PATH.into(),
+            serde_json::to_vec(&serde_json::json!({"version":1,"fixtures":entries})).unwrap(),
+        )]),
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn mvr_native_collision_preview_requires_consent_and_copies_shared_fixture_references_atomically()
+ {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let profile = pan_profile();
+    let mut installed = profile.clone();
+    installed.notes = "Existing immutable notes".into();
+    state
+        .installation
+        .publish_fixture_profile_revision(&installed)
+        .unwrap();
+    let before = state
+        .installation
+        .fixture_profile_revision_document(installed.id, installed.revision)
+        .unwrap();
+    let original_count = state.installation.fixture_profiles().unwrap().len();
+    let archive = native_conflict_archive(&profile);
+    let shown = preview(&app, &token, &archive, None).await;
+    assert_eq!(shown["profile_conflicts"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        shown["profile_conflicts"][0]["fixtures"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        state.installation.fixture_profiles().unwrap().len(),
+        original_count,
+        "preview never publishes"
+    );
+    let action = |shown: &serde_json::Value, copy: bool, name: &str| {
+        show_action_request(
+            &token,
+            serde_json::json!({
+                "type":"apply_mvr", "token":shown["token"], "destination":{"type":"new_show","name":name}, "resolutions":[], "copy_conflicting_profiles":copy,
+            }),
+        )
+    };
+    let rejected = app
+        .clone()
+        .oneshot(action(&shown, false, "Must not be created"))
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::CONFLICT);
+    assert!(
+        !state
+            .installation
+            .data_dir()
+            .join("shows/Must not be created.show")
+            .exists()
+    );
+    assert_eq!(
+        state.installation.fixture_profiles().unwrap().len(),
+        original_count
+    );
+    let shown = preview(&app, &token, &archive, None).await;
+    let accepted = app
+        .clone()
+        .oneshot(action(&shown, true, "Explicit native identity copy"))
+        .await
+        .unwrap();
+    let status = accepted.status();
+    let result = json(accepted).await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    let result = &result["result"]["result"];
+    assert_eq!(result["imported_fixtures"], 2);
+    assert_eq!(result["unresolved_fixtures"], 0);
+    let show = stored_show(&state, result);
+    let copied = show
+        .fixture_profile_revisions()
+        .iter()
+        .find(|p| p.profile()["name"] == profile.name && p.id().profile_id() != profile.id)
+        .unwrap();
+    assert_eq!(copied.profile()["notes"], profile.notes);
+    let imported = show
+        .objects_of_kind("patched_fixture")
+        .filter(|o| o.body()["profile_id"] == copied.id().profile_id().0.to_string())
+        .count();
+    assert_eq!(
+        imported, 2,
+        "all imported fixtures refer to the same copied immutable profile"
+    );
+    assert_eq!(
+        state
+            .installation
+            .fixture_profile_revision_document(installed.id, installed.revision)
+            .unwrap(),
+        before
+    );
+    assert_eq!(
+        state
+            .installation
+            .fixture_profile_revisions(installed.id)
+            .unwrap()
+            .into_iter()
+            .map(|p| p.revision)
+            .collect::<Vec<_>>(),
+        vec![installed.revision]
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn mvr_native_collision_consent_is_stale_when_the_exact_profile_slot_changes() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let profile = pan_profile();
+    let archive = native_conflict_archive(&profile);
+    let shown = preview(&app, &token, &archive, None).await;
+    assert!(shown["profile_conflicts"].as_array().unwrap().is_empty());
+    let mut installed = profile.clone();
+    installed.notes = "Appeared after preview".into();
+    state
+        .installation
+        .publish_fixture_profile_revision(&installed)
+        .unwrap();
+    let response=app.clone().oneshot(show_action_request(&token,serde_json::json!({
+        "type":"apply_mvr","token":shown["token"],"destination":{"type":"new_show","name":"Stale identity consent"},"resolutions":[],"copy_conflicting_profiles":true,
+    }))).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert!(
+        !state
+            .installation
+            .data_dir()
+            .join("shows/Stale identity consent.show")
+            .exists()
+    );
+    assert_eq!(
+        state
+            .installation
+            .fixture_profile_revisions(installed.id)
+            .unwrap()
+            .into_iter()
+            .map(|p| p.revision)
+            .collect::<Vec<_>>(),
+        vec![installed.revision]
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn mvr_native_collision_consent_rejects_a_destination_edited_after_preview() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let profile = pan_profile();
+    let mut installed = profile.clone();
+    installed.notes = "Existing immutable revision".into();
+    state
+        .installation
+        .publish_fixture_profile_revision(&installed)
+        .unwrap();
+    let archive = native_conflict_archive(&profile);
+    let path = data_dir.join("shows/Stale destination.show");
+    initialise_show(&path, "Stale destination").unwrap();
+    let entry = state
+        .installation
+        .upsert_show("Stale destination", &path.display().to_string(), false)
+        .unwrap();
+    let store = ActiveShowRepository::open(&path).unwrap();
+    store.set_identity(entry.id, &entry.name, None).unwrap();
+    let shown = preview(&app, &token, &archive, Some(entry.id)).await;
+    assert_eq!(shown["profile_conflicts"].as_array().unwrap().len(), 1);
+    let previewed = store.portable_document().unwrap();
+    store
+        .put_object(
+            "group",
+            "1",
+            &serde_json::json!({"name":"Changed after preview","fixtures":[]}),
+            0,
+        )
+        .unwrap();
+    let edited = store.portable_document().unwrap();
+    assert_ne!(edited.revision(), previewed.revision());
+    assert_eq!(
+        edited.patch_revision(),
+        previewed.patch_revision(),
+        "the complete show token also protects non-patch changes"
+    );
+    let library_before = state.installation.fixture_profiles().unwrap().len();
+    let response = app.clone().oneshot(show_action_request(&token,serde_json::json!({
+        "type":"apply_mvr", "token":shown["token"], "destination":{"type":"existing_show","show_id":entry.id}, "resolutions":[], "copy_conflicting_profiles":true,
+    }))).await.unwrap();
+    let status = response.status();
+    let body = json(response).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        store.portable_document().unwrap(),
+        edited,
+        "stale consent must not mutate the edited show"
+    );
+    assert_eq!(
+        state.installation.fixture_profiles().unwrap().len(),
+        library_before,
+        "stale consent cannot publish cloned profiles"
+    );
+    assert_eq!(
+        state
+            .installation
+            .fixture_profile_revision_document(installed.id, installed.revision)
+            .unwrap()
+            .unwrap()["notes"],
+        installed.notes
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

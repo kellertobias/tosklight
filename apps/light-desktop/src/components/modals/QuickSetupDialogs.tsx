@@ -338,7 +338,7 @@ function MvrFixtureRow({
 	);
 }
 
-function MvrImportPreview({ model }: ModelProps) {
+export function MvrImportPreview({ model }: ModelProps) {
 	const mvr = model.mvr;
 	if (!mvr.mvrPreview) return null;
 	return (
@@ -360,6 +360,32 @@ function MvrImportPreview({ model }: ModelProps) {
 					</p>
 				))}
 			</div>
+			{(mvr.mvrPreview.profile_conflicts?.length ?? 0) > 0 && (
+				<div className="modal-warning">
+					<p>These immutable fixture profiles differ from this computer's existing revisions:</p>
+					<ul>
+						{mvr.mvrPreview.profile_conflicts?.map((conflict) => (
+							<li key={`${conflict.profile_id}:${conflict.revision}`}>
+								{conflict.name} · revision {conflict.revision} · {conflict.fixtures.length} fixtures
+							</li>
+						))}
+					</ul>
+					<label>
+						<input
+							type="checkbox"
+							checked={mvr.copyConflictingProfiles}
+							onChange={(event) => mvr.setCopyConflictingProfiles(event.target.checked)}
+							disabled={mvr.mvrBusy}
+						/> Import conflicting profiles as new identities
+					</label>
+					<p>
+						The exact archive profiles are copied. Existing profiles and unrelated fixtures stay unchanged.
+						Identity-bound installed calibration is retained and becomes inactive until revalidated for the new
+						profile identity. Retained GDTF source evidence keeps its original association; export generates
+						GDTF if it no longer matches.
+					</p>
+				</div>
+			)}
 			{mvr.mvrMode === "new" && (
 				<TextInput
 					clearable
@@ -376,7 +402,7 @@ function MvrImportPreview({ model }: ModelProps) {
 			</div>
 			<Button
 				className="primary"
-				disabled={mvr.mvrBusy || (mvr.mvrMode === "new" && !mvr.mvrName.trim())}
+				disabled={mvr.mvrBusy || (mvr.mvrMode === "new" && !mvr.mvrName.trim()) || ((mvr.mvrPreview.profile_conflicts?.length ?? 0)>0 && !mvr.copyConflictingProfiles)}
 				onClick={() => void mvr.applyMvr()}
 			>
 				{mvr.mvrBusy
