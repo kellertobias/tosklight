@@ -205,13 +205,14 @@ export class ShowApiClient {
 		return this.transport.blob(`/api/v2/shows/${id}/download`);
 	}
 
-	previewMvr(file: File, showId?: string): Promise<MvrImportPreview> {
+	previewMvr(file: File, showId?: string, signal?: AbortSignal): Promise<MvrImportPreview> {
 		const query = showId ? `?show_id=${encodeURIComponent(showId)}` : "";
 		return this.transport.request(`/api/v2/mvr/imports/preview${query}`, {
 			method: "POST",
 			headers: { "content-type": "application/octet-stream" },
 			body: file,
-		});
+            signal,
+        });
 	}
 
 	applyMvr(token: string, input: MvrApplyInput): Promise<MvrApplyResult> {

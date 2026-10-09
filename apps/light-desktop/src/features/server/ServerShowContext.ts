@@ -39,6 +39,7 @@ export interface ServerShowContext {
 	previewMvr: (
 		file: File,
 		showId?: string,
+        signal?: AbortSignal,
 	) => Promise<import("../../api/types").MvrImportPreview>;
 	applyMvr: (
 		token: string,

@@ -10,7 +10,7 @@ export function createMvrActions(
 > {
 	const { api, setError, setShows, refresh } = model;
 	return {
-		previewMvr: (file, showId) => api.shows.previewMvr(file, showId),
+		previewMvr: (file, showId, signal) => api.shows.previewMvr(file, showId, signal),
 		applyMvr: async (token, input) => {
 			try {
 				const result = await api.shows.applyMvr(token, input);

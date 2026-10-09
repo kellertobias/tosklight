@@ -1,3 +1,5 @@
+import {ErrorAlert} from "@tosklight/ui";
+import {MvrInspectionProgress} from "./MvrInspectionProgress";
 import {
 	Button,
 	Input,
@@ -401,8 +403,11 @@ function MvrDialog({ model }: ModelProps) {
 			>
 				<ModalTitleBar
 					title={mvr.mvrMode === "new" ? "New Show from MVR" : "Add MVR to Show"}
-					onClose={() => mvr.setMvrMode(null)}
+                    closeDisabled={mvr.mvrOperation === "apply"}
+                    onClose={() => mvr.setMvrMode(null)}
 				/>
+                {mvr.mvrOperation && mvr.mvrStartedAt !== null && <MvrInspectionProgress operation={mvr.mvrOperation} startedAt={mvr.mvrStartedAt} file={mvr.mvrInspectionFile} onCancel={()=>mvr.setMvrMode(null)}/>}
+                {mvr.mvrError && <ErrorAlert role="alert">{mvr.mvrError}</ErrorAlert>}
 				{needsShow && <MvrShowPicker model={model} />}
 				{!needsShow && <MvrFilePicker model={model} />}
 				<MvrImportPreview model={model} />
