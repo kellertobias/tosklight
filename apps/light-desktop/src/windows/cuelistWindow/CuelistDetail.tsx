@@ -80,6 +80,42 @@ interface CuelistDetailProps {
 	viewOnly?: boolean;
 }
 
+function CuelistDetailHeader({
+	props,
+	selection,
+}: {
+	props: CuelistDetailProps;
+	selection: ReturnType<typeof useSelectedCuelist>;
+}) {
+	if (props.compact) return null;
+	return (
+		<WindowHeader
+			title={`Cuelist View · Cuelist ${props.selectedCuelist}${selection.cueList?.name ? ` · ${selection.cueList.name}` : ""}`}
+			info={{
+				primary: selection.active ? "Running" : "Ready",
+				secondary: `Revision ${selection.selectedCueObject?.revision ?? 0}${selection.cueList ? ` · ${selection.cueList.mode} · priority ${selection.cueList.priority}` : ""}`,
+			}}
+			groups={[
+				{
+					id: "cuelist-navigation",
+					actions: [
+						{
+							id: "pool",
+							label: "← Cuelist Pool",
+							onPress: props.onOpenPool,
+						},
+						{
+							id: "settings",
+							label: "Cuelist Settings",
+							onPress: props.onOpenSettings,
+						},
+					],
+				},
+			]}
+		/>
+	);
+}
+
 export function CuelistDetail(props: CuelistDetailProps) {
 	const [propertyEditor, setPropertyEditor] = useState<{
 		index: number;
@@ -119,32 +155,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 		props.cueInformationBlock === "current" ? "Current Cue" : "Next Cue";
 	return (
 		<div className="cuelist-window">
-			{!props.compact && (
-				<WindowHeader
-					title={`Cuelist View · Cuelist ${props.selectedCuelist}${selection.cueList?.name ? ` · ${selection.cueList.name}` : ""}`}
-					info={{
-						primary: selection.active ? "Running" : "Ready",
-						secondary: `Revision ${selection.selectedCueObject?.revision ?? 0}${selection.cueList ? ` · ${selection.cueList.mode} · priority ${selection.cueList.priority}` : ""}`,
-					}}
-					groups={[
-						{
-							id: "cuelist-navigation",
-							actions: [
-								{
-									id: "pool",
-									label: "← Cuelist Pool",
-									onPress: props.onOpenPool,
-								},
-								{
-									id: "settings",
-									label: "Cuelist Settings",
-									onPress: props.onOpenSettings,
-								},
-							],
-						},
-					]}
-				/>
-			)}
+			<CuelistDetailHeader props={props} selection={selection} />
 			<CuePresetWarnings cues={cues} active={props.active} />
 			<div
 				className={`sequence-layout ${props.cueInformationBlock !== "off" ? "with-cue-information" : ""}`.trim()}

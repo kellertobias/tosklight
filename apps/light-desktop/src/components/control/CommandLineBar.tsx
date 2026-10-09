@@ -119,6 +119,55 @@ function openSystemControlsModal(
 	dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
 }
 
+function useProgrammerHardwareKeys(
+	numericPad: ReturnType<typeof useNumericPadController>,
+	dispatch: ReturnType<typeof useApp>["dispatch"],
+	toggleControlMode: () => void,
+) {
+	useEffect(() => {
+		const toggle = () => toggleControlMode();
+		const programmerKey = (event: Event) => {
+			const key = (event as CustomEvent<string>).detail;
+			const shiftedKey = {
+				"shift-cue": "CUE",
+				"shift-playback": "PLAYBACK",
+				"shift-escape": "ESC",
+				"shift-enter": "ENT",
+				"shift-preload": "PRE",
+				"shift-mov": "MOV",
+			} as const;
+			if (key in shiftedKey) {
+				numericPad.pressShifted(shiftedKey[key as keyof typeof shiftedKey]);
+				return;
+			}
+			if (key === "running-output") {
+				dispatch({
+					type: "SET_MODAL",
+					modal: "systemControlsOpen",
+					value: true,
+				});
+				return;
+			}
+			if (key === "playback") numericPad.press("PLAYBACK", "hardware");
+			if (key === "off") numericPad.press("OFF", "hardware");
+			if (key === "diff") numericPad.press("DIFF", "hardware");
+			if (key === "cue") numericPad.press("CUE", "hardware");
+			if (key === "escape") numericPad.press("ESC", "hardware");
+			if (key === "enter") numericPad.press("ENT", "hardware");
+			if (key === "preload") numericPad.press("PRE", "hardware");
+			if (key === "mov") numericPad.press("MOV", "hardware");
+		};
+		window.addEventListener("light:control-mode-toggle", toggle);
+		window.addEventListener("light:programmer-key", programmerKey);
+		const stopRecordModals = listenForRecordModals(dispatch);
+		return () => {
+			stopRecordModals();
+			window.removeEventListener("light:control-mode-toggle", toggle);
+			window.removeEventListener("light:programmer-key", programmerKey);
+		};
+	});
+}
+
 function useCommandLineBarModel() {
 	const { state, dispatch } = useApp();
 	const hardwareAttached = useHardwareConnected();
@@ -214,48 +263,7 @@ function useCommandLineBarModel() {
 	const openSystemControls = () =>
 		openSystemControlsModal(dispatch, deskDiagnostics.length > 0);
 	const toggleControlMode = () => dispatch({ type: "TOGGLE_CONTROL_MODE" });
-	useEffect(() => {
-		const toggle = () => toggleControlMode();
-		const programmerKey = (event: Event) => {
-			const key = (event as CustomEvent<string>).detail;
-			const shiftedKey = {
-				"shift-cue": "CUE",
-				"shift-playback": "PLAYBACK",
-				"shift-escape": "ESC",
-				"shift-enter": "ENT",
-				"shift-preload": "PRE",
-				"shift-mov": "MOV",
-			} as const;
-			if (key in shiftedKey) {
-				numericPad.pressShifted(shiftedKey[key as keyof typeof shiftedKey]);
-				return;
-			}
-			if (key === "running-output") {
-				dispatch({
-					type: "SET_MODAL",
-					modal: "systemControlsOpen",
-					value: true,
-				});
-				return;
-			}
-			if (key === "playback") numericPad.press("PLAYBACK", "hardware");
-			if (key === "off") numericPad.press("OFF", "hardware");
-			if (key === "diff") numericPad.press("DIFF", "hardware");
-			if (key === "cue") numericPad.press("CUE", "hardware");
-			if (key === "escape") numericPad.press("ESC", "hardware");
-			if (key === "enter") numericPad.press("ENT", "hardware");
-			if (key === "preload") numericPad.press("PRE", "hardware");
-			if (key === "mov") numericPad.press("MOV", "hardware");
-		};
-		window.addEventListener("light:control-mode-toggle", toggle);
-		window.addEventListener("light:programmer-key", programmerKey);
-		const stopRecordModals = listenForRecordModals(dispatch);
-		return () => {
-			stopRecordModals();
-			window.removeEventListener("light:control-mode-toggle", toggle);
-			window.removeEventListener("light:programmer-key", programmerKey);
-		};
-	});
+	useProgrammerHardwareKeys(numericPad, dispatch, toggleControlMode);
 	useCommandLineShortcuts(hardware, {
 		completed,
 		commandLine: command.text,

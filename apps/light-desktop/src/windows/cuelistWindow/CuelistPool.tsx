@@ -182,6 +182,67 @@ function poolCueNumbers(
 	return cueList?.cues.map((cue) => cue.number) ?? [];
 }
 
+function selectPoolSetSource(
+	number: number,
+	playback: CuelistPoolEntry | null,
+	props: CuelistPoolProps,
+	dispatch: ReturnType<typeof useApp>["dispatch"],
+) {
+	if (!playback) {
+		props.onMessage(
+			`Cuelist ${number} is empty · record it before assigning it to a playback.`,
+		);
+		return;
+	}
+	if (!props.builtIn) props.onSelectLocalCuelist(number);
+	dispatch({ type: "SET_CUELIST_SET_TARGET", value: number });
+	dispatch({ type: "SET_PRESET_SET_ARMED", value: false });
+}
+
+function releasePoolCueList(
+	playback: CuelistPoolEntry | null,
+	runtimeActions: ReturnType<typeof usePlaybackRuntimeActions>,
+	directRuntimes: ReturnType<typeof useDirectCueListProjectionMap>,
+	assignedRuntimes: ReturnType<typeof usePlaybackProjectionMap>,
+	props: CuelistPoolProps,
+	command: ReturnType<typeof useCommandLineSurface>,
+) {
+	if (!playback) return;
+	if (!runtimeActions) {
+		props.onMessage(
+			"Cuelist Off is unavailable while Playback authority is loading.",
+		);
+		return;
+	}
+	void runtimeActions
+		.releaseCueListSource({
+			identity:
+				runtimeMaster(
+					directRuntimes.projections.get(playback.cueList.id),
+				) == null &&
+				playback.assignment &&
+				runtimeMaster(assignedRuntimes.get(playback.assignment.number)) !=
+					null
+					? {
+							kind: "playback",
+							playback_number: playback.assignment.number,
+						}
+					: { kind: "direct_cue_list", cue_list_id: playback.cueList.id },
+			cueListId: playback.cueList.id,
+		})
+		.then(async (outcome) => {
+			if (outcome) {
+				props.onMessage("");
+				await command.reset();
+			} else {
+				props.onMessage(
+					"Cuelist Off was rejected; the OFF target remains armed.",
+				);
+			}
+		});
+	return;
+}
+
 function useCuelistPoolActions(props: CuelistPoolProps) {
 	const command = useCommandLineSurface({
 		enabled: props.active,
@@ -224,20 +285,6 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			held.current = true;
 			props.onOpenSettings(number);
 		}, 650);
-	};
-	const selectSetSource = (
-		number: number,
-		playback: CuelistPoolEntry | null,
-	) => {
-		if (!playback) {
-			props.onMessage(
-				`Cuelist ${number} is empty · record it before assigning it to a playback.`,
-			);
-			return;
-		}
-		if (!props.builtIn) props.onSelectLocalCuelist(number);
-		dispatch({ type: "SET_CUELIST_SET_TARGET", value: number });
-		dispatch({ type: "SET_PRESET_SET_ARMED", value: false });
 	};
 	const openContextSettings = (
 		number: number,
@@ -290,39 +337,14 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			return;
 		}
 		if (offPending) {
-			if (!playback) return;
-			if (!runtimeActions) {
-				props.onMessage(
-					"Cuelist Off is unavailable while Playback authority is loading.",
-				);
-				return;
-			}
-			void runtimeActions
-				.releaseCueListSource({
-					identity:
-						runtimeMaster(
-							directRuntimes.projections.get(playback.cueList.id),
-						) == null &&
-						playback.assignment &&
-						runtimeMaster(assignedRuntimes.get(playback.assignment.number)) !=
-							null
-							? {
-									kind: "playback",
-									playback_number: playback.assignment.number,
-								}
-							: { kind: "direct_cue_list", cue_list_id: playback.cueList.id },
-					cueListId: playback.cueList.id,
-				})
-				.then(async (outcome) => {
-					if (outcome) {
-						props.onMessage("");
-						await command.reset();
-					} else {
-						props.onMessage(
-							"Cuelist Off was rejected; the OFF target remains armed.",
-						);
-					}
-				});
+			releasePoolCueList(
+				playback,
+				runtimeActions,
+				directRuntimes,
+				assignedRuntimes,
+				props,
+				command,
+			);
 			return;
 		}
 		if (state.updateArmed) {
@@ -356,7 +378,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			return;
 		}
 		if (state.cueListSetArmed) {
-			selectSetSource(number, playback);
+			selectPoolSetSource(number, playback, props, dispatch);
 			return;
 		}
 		if (!playback) return;

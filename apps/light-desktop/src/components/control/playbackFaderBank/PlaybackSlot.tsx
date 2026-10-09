@@ -49,6 +49,31 @@ function useReleasePlaybackSlot(
 	);
 }
 
+function playbackCardStyle(
+	hasPlayback: boolean,
+	color: string,
+	footprint: PlaybackSlotProjection["footprint"],
+	presentationStyle?: CSSProperties,
+): CSSProperties | undefined {
+	return hasPlayback
+		? ({
+				"--playback-color": color,
+				...(footprint
+					? {
+							gridColumn: `${footprint.columnStart} / span ${footprint.columnSpan}`,
+							gridRow: `${footprint.rowStart} / span ${footprint.rowSpan}`,
+						}
+					: {}),
+				...presentationStyle,
+			} as CSSProperties)
+		: footprint
+			? ({
+					gridColumn: `${footprint.columnStart} / span ${footprint.columnSpan}`,
+					gridRow: `${footprint.rowStart} / span ${footprint.rowSpan}`,
+				} as CSSProperties)
+			: undefined;
+}
+
 export function PlaybackSlot({
 	controller,
 	slotData,
@@ -147,23 +172,12 @@ export function PlaybackSlot({
 			})
 		: null;
 	const className = `${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
-	const cardStyle = playback
-		? ({
-				"--playback-color": playbackColor,
-				...(slotData.footprint
-					? {
-							gridColumn: `${slotData.footprint.columnStart} / span ${slotData.footprint.columnSpan}`,
-							gridRow: `${slotData.footprint.rowStart} / span ${slotData.footprint.rowSpan}`,
-						}
-					: {}),
-				...presentation?.style,
-			} as CSSProperties)
-		: slotData.footprint
-			? ({
-					gridColumn: `${slotData.footprint.columnStart} / span ${slotData.footprint.columnSpan}`,
-					gridRow: `${slotData.footprint.rowStart} / span ${slotData.footprint.rowSpan}`,
-				} as CSSProperties)
-			: undefined;
+	const cardStyle = playbackCardStyle(
+		Boolean(playback),
+		playbackColor,
+		slotData.footprint,
+		presentation?.style,
+	);
 	if (controller.hardware)
 		return (
 			<HardwarePlaybackCard

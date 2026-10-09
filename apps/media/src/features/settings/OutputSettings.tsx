@@ -540,6 +540,58 @@ function SoundOutputFields({
 	);
 }
 
+function outputDraftEdit(
+	mode: "all" | "picture" | "sound" | "dmx",
+	draft: OutputDraft,
+): UpdateOutputConfiguration {
+	const {
+		targetKind,
+		monitorBy,
+		monitorValue,
+		fullscreen,
+		width,
+		height,
+		presentation,
+		framesPerSecond,
+		soundOutputKind,
+		soundOutputName,
+		personality,
+		protocol,
+		universe,
+		startAddress,
+	} = draft;
+	const edit: UpdateOutputConfiguration = { requestId: requestId() };
+	if (mode === "all" || mode === "picture") {
+		Object.assign(edit, {
+			targetKind,
+			...(targetKind === "monitor"
+				? { monitorBy, monitorValue: monitorValue.trim(), fullscreen }
+				: {}),
+			width,
+			height,
+			presentation,
+			...(presentation === "fixed-fps" ? { framesPerSecond } : {}),
+		});
+	}
+	if (mode === "all" || mode === "sound") {
+		Object.assign(edit, {
+			soundOutputKind,
+			...(soundOutputKind === "device"
+				? { soundOutputName: soundOutputName.trim() }
+				: {}),
+		});
+	}
+	if (mode === "all" || mode === "dmx") {
+		Object.assign(edit, {
+			personality,
+			protocol,
+			universe,
+			startAddress,
+		});
+	}
+	return edit;
+}
+
 export function OutputEditor({
 	output,
 	busy,
@@ -613,36 +665,7 @@ export function OutputEditor({
 			className="media-settings-form"
 			onSubmit={(event) => {
 				event.preventDefault();
-				const edit: UpdateOutputConfiguration = { requestId: requestId() };
-				if (mode === "all" || mode === "picture") {
-					Object.assign(edit, {
-						targetKind,
-						...(targetKind === "monitor"
-							? { monitorBy, monitorValue: monitorValue.trim(), fullscreen }
-							: {}),
-						width,
-						height,
-						presentation,
-						...(presentation === "fixed-fps" ? { framesPerSecond } : {}),
-					});
-				}
-				if (mode === "all" || mode === "sound") {
-					Object.assign(edit, {
-						soundOutputKind,
-						...(soundOutputKind === "device"
-							? { soundOutputName: soundOutputName.trim() }
-							: {}),
-					});
-				}
-				if (mode === "all" || mode === "dmx") {
-					Object.assign(edit, {
-						personality,
-						protocol,
-						universe,
-						startAddress,
-					});
-				}
-				onSave(edit);
+				onSave(outputDraftEdit(mode, draft));
 			}}
 		>
 			{mode !== "dmx" && mode !== "sound" && (
