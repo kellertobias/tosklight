@@ -103,8 +103,8 @@ Start without Dynamics, loops, chasers or follow chains. Snapshot resting DMX fi
 | PRG-01 | Set color and Position, record presets, record a cue from preset recall. Clear programmer with playback stopped. | Output returns to original resting values; merely storing a cue does not start it. Preset content/count/preview correct. |
 | PRG-02 | Recall preset A on fixture 1 only, preset B on fixture 2 only; inspect all others. | Exactly selected fixtures receive compatible values, no stale selection or universal-preset scope leak. |
 | PRG-03 | Store this as cue 1 of list 101; clear; assign list to physical playback; start; clear again. | First clear returns rest until playback starts; second clear leaves playback DMX unchanged and ownership from cue. |
-| PRG-04 | Select fixture, edit recalled preset color/Position, use Record Merge into preset. Restart cue and inspect stored cue/preset. | Merge keeps unrelated preset values. User expectation: cues using preset reflect update. Explicitly test linkage; materialized recall without propagation is an acceptance gap, not assumed pass. |
-| PRG-05 | Repeat independently with Update → Targets; inspect offered targets, choose preset and commit/cancel. | Correct source targets offered; only chosen objects change; cancel unchanged. Test Smart vs Merge/default modes per scenario 24. |
+| PRG-04 | Run the cue, select fixture, edit recalled preset color/Position, use Record Merge into preset, then clear the programmer without GO or reload. | Merge keeps unrelated preset values. The already running linked cue adopts the changed source after Clear, proven by actual Art-Net and sACN. A restart-only change does not pass live propagation. |
+| PRG-05 | Repeat independently with Update → Targets while the linked cue runs; inspect offered targets, choose preset and commit/cancel, then Clear without GO or reload. | Correct source targets offered; only chosen objects change; cancel unchanged. Committed source changes reach the already running linked cue after Clear. Test Smart vs Merge/default modes per scenario 24. |
 | PRG-06 | Add cues 2–4; unequal In/Out fade and delay, per-attribute time where supported; GO, GO-minus, pause, load next, interrupt and release. | Correct tracked values/ownership, timed DMX frames and live state. No loops required. |
 | PRG-07 | Add Follow/TIME triggers after linear baseline; start/stop/restart list. | Exact trigger origin, no stuck clock or runaway sequence. Existing release/Temp contract remains valid. |
 | PRG-08 | Repeat recording by target-pool touch, explicit cue address and playback target, on software/hardware layouts. | Recording consumes target interaction instead of also firing playback. Record Merge and Update preserve their own semantics. |
@@ -191,7 +191,7 @@ Read the relevant numbered help pages immediately before each phase. Existing fo
 
 Resolve these with actual observation; do not weaken the user's request silently:
 
-- Existing initiative notes say general cue→preset live linking is deferred, whereas the requested workflow expects preset changes to update cues. PRG-04/05 explicitly tests and reports the difference.
+- Older initiative notes deferred general cue→preset live linking. The release acceptance contract requires live propagation in PRG-04/05; verify the current build without restarting or reloading the running cue.
 - Group selection can be live or frozen; use live references for propagation tests.
 - Solo steady-state exclusivity and ongoing outgoing fade contribution are different assertions.
 - Physical color closeness and aim cannot be signed off by software simulation alone; TL-523 covers real rig acceptance.
@@ -218,3 +218,14 @@ User clarification, 2026-10-08: disruptive red errors are reserved for loss of D
 Create the full case/variant ledger before testing. Include every row above, even if prerequisites block it. Finish with: tested and passed variants; failed cases/Defined issues; blockers and required equipment/decisions; untouched cases; license inventory; gallery index; saved test-show revision; settings restored; human sign-off still needed. Link candidate retest and supporting automated checks. No marketing readiness or public-release recommendation while required gates remain blocked.
 
 Initial run: `2026-10-08-initial`, evidence under canonical `visual-inspection/release-acceptance/2026-10-08-initial/`. This run begins with environment/UI reconnaissance; consult its `results.md` for actual observations. No behavior is marked passed solely from this plan or historical tests.
+
+## Regression gates discovered during the first acceptance run
+
+Repeat these on every applicable rebuilt candidate. Keep seeded compatibility inputs distinct from objects authored through the current UI. Preserve failed captures; add new step IDs for reruns.
+
+| ID | UI procedure | Expected and evidence |
+| --- | --- | --- |
+| SET-09 | Import an MVR containing genuine immutable profile UUID/revision collisions. Inspect unchecked default, explicitly choose copy, create a separate show, save/reload. | Apply requires explicit consent; original library/show profiles remain unchanged. New identities preserve modes/placement and retain source/calibration revalidation warnings. XML names decode once, including ampersands, quotes and Unicode. Compare all fixture counts and copied bindings. |
+| PRG-10 | Load a prepared legacy derived Aim preset, recall it, record/run a linked cue, move its target, then Clear without GO. Separately convert the same source through supported modern RECORD AT FIXTURE, save/reopen. | Running cue follows the derived source and target geometry; source identity remains stable. No false missing-literal warning. Capture documented pan/tilt slots and account for equivalent continuous aim solutions; nominal geometry does not prove physical calibration. |
+| CAD-09 | Load a supported legacy show copy, select Back Truss Segment1 through Elements, enter X−3 then−2.5, Undo/Redo. Repeat rotation, ordered multi-selection, explicit copy pose, gizmo interleaving and reopen. | Loading completes canonical migration before editing, retains recoverable original backup, refuses unsupported/corrupt inputs safely. Each successful numeric Enter is one atomic exact-pose Undo step; metadata/bindings remain intact. Failed/no-op edits do not corrupt history. |
+| PB-10 | Reassign an already used physical playback to another cue list without GO or reload between assignments; then GO, Clear, Stop. Repeat virtual/OSC/hardware paths where supported. | The playback resolves the newly assigned source immediately. Clear retains cue output; exact-owner Stop releases it and restores underlying values. No stale address or unrelated owner stop. |
