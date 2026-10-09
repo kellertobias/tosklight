@@ -384,6 +384,8 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
         dynamic_changes: vec![],
         group_changes: static_slots(fixture_footprint)
             .map(|slot| GroupCueChange {
+                preset_reference: None,
+                replacement_projections: Default::default(),
                 group_id: GROUP_ID.into(),
                 attribute: slot_attribute(slot),
                 value: Some(AttributeValue::Normalized(
@@ -396,6 +398,8 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
             .collect(),
     };
     let cue_list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: "Benchmark playback".into(),
         priority: 10,

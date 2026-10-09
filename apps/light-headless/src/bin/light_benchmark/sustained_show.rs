@@ -610,6 +610,8 @@ fn demo_playback_for_groups(group_ids: &[String]) -> (CueList, PlaybackDefinitio
         group_changes: group_ids
             .iter()
             .map(|group_id| GroupCueChange {
+                preset_reference: None,
+                replacement_projections: Default::default(),
                 group_id: group_id.clone(),
                 attribute: AttributeKey::intensity(),
                 value: Some(AttributeValue::Normalized(0.6)),
@@ -620,6 +622,8 @@ fn demo_playback_for_groups(group_ids: &[String]) -> (CueList, PlaybackDefinitio
             .collect(),
     };
     let cue_list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: "Sustained benchmark-show playback".into(),
         priority: 10,

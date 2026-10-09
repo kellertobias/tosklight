@@ -147,6 +147,8 @@ fn generated_document() -> Result<(ShowStore, PortableShowDocument), String> {
         ShowStore::create(":memory:", "Mutation benchmark").map_err(|error| error.to_string())?;
     for index in 0..CUE_LISTS {
         let cue = CueList {
+            pool_number: None,
+            legacy_pool_aliases: Vec::new(),
             id: CueListId(Uuid::from_u128(10_000 + index as u128)),
             name: format!("Cue list {index}"),
             priority: 0,
