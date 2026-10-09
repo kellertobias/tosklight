@@ -1,4 +1,9 @@
-import type { ReplacementProgramProjection } from "./generated/light-wire";
+import type { ReplacementProgramProjection } from "./types/replacementProjection";
+export type {
+	ReplacementProgramProjection,
+	ReplacementProfileContext,
+	ReplacementHeadTarget,
+} from "./types/replacementProjection";
 import type { PresetFamily } from "../presetFamilies";
 import type { GroupSpatialSelectionMapping } from "./generated/light-wire";
 import type { ShowEntry } from "./types/desk";

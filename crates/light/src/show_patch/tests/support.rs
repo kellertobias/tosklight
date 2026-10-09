@@ -345,7 +345,8 @@ impl ActiveShowUnitOfWork for CounterUnitOfWork {
             ));
         }
         // Match the real active-show adapter's atomic feature marker stamping.
-        transaction.stamp_programming_contract(light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT);
+        transaction
+            .stamp_programming_contract(light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT);
         let commit = self
             .show
             .apply_portable_transaction(transaction)

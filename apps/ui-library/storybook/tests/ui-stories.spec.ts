@@ -2697,11 +2697,22 @@ test("generic and application-owned pool stories preserve their slot contracts",
 		"data-pool-slot-id",
 		"1",
 	);
+	// Both assignments point at the same Main Sequence object: canonical 1 and legacy alias 4.
+	// Search follows authored Cuelist names, not the Side Sequence playback label.
 	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("Main");
-	await expect(page.locator(".cuelist-card")).toHaveCount(1);
+	const mainCards = page.locator(".cuelist-card");
+	await expect(mainCards).toHaveCount(2);
+	await expect(mainCards.nth(0)).toHaveAttribute("data-pool-slot-id", "1");
+	await expect(mainCards.nth(1)).toHaveAttribute("data-pool-slot-id", "4");
+	await expect(mainCards.nth(0)).toContainText("Main Sequence");
+	await expect(mainCards.nth(1)).toContainText("Main Sequence");
+	await expect(mainCards.nth(0)).not.toContainText("Alias of Cuelist");
+	await expect(mainCards.nth(1)).toContainText("Alias of Cuelist 1");
 	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("Side");
-	const filteredCuelist = page.locator(".cuelist-card").first();
-	await expect(page.locator(".cuelist-card")).toHaveCount(1);
+	await expect(page.locator(".cuelist-card")).toHaveCount(0);
+	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("4");
+	const filteredCuelist = page.locator('.cuelist-card[data-pool-slot-id="4"]');
+	await expect(filteredCuelist).toHaveCount(1);
 	await expect(filteredCuelist.locator(".number")).toHaveText("4");
 	await expect(filteredCuelist).toHaveAttribute("data-pool-slot-id", "4");
 	await expect(filteredCuelist).toHaveAttribute("data-pool-position", "0");

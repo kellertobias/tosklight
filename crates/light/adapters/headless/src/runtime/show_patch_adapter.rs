@@ -205,9 +205,8 @@ impl ActiveShowPorts for ServerShowPatchPorts {
         &self,
         snapshot: EngineSnapshot,
     ) -> Result<Self::PreparedRuntime, ActionError> {
-        self.state
-            .output
-            .prepare_snapshot(snapshot)
+        let prepared = self.state.output.prepare_snapshot(snapshot);
+        prepared
             .map(|prepared| {
                 prepared
                     .with_replacement_migrations(self.programming_replacement.read().plans.clone())

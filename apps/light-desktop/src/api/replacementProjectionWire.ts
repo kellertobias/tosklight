@@ -9,7 +9,7 @@ import { WireValidationError } from "./wireValidation";
 import type {
 	ReplacementProgramProjection,
 	ReplacementProfileContext,
-} from "./generated/light-wire";
+} from "./types/replacementProjection";
 
 function uuidAt(value: unknown, path: string): string {
 	const id = stringAt(value, path);

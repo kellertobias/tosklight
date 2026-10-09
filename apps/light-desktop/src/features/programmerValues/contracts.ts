@@ -1,4 +1,4 @@
-import type { ReplacementProgramProjection } from "../../api/generated/light-wire";
+import type { ReplacementProgramProjection } from "../../api/types";
 import type {
 	ColorAdoptionInput,
 	ColorAdoptionOutcome,

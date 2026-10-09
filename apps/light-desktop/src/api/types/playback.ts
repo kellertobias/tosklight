@@ -1,6 +1,6 @@
+import type { ReplacementProgramProjection } from "./replacementProjection";
 import type {
 	CueTimingRuntimeProjection,
-	ReplacementProgramProjection,
 	PlaybackCueTransition as GeneratedPlaybackCueTransition,
 } from "../generated/light-wire";
 import type { SpeedSnapshot } from "./configuration";
