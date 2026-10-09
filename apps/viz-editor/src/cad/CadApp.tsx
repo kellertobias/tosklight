@@ -2,9 +2,11 @@ import { formatErrorDetails } from "@tosklight/ui";
 import { save } from "@tauri-apps/plugin-dialog";
 import { Button, SelectField, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type DocumentSummary, documentSession } from "../document/session";
 import { beginWindowDrag } from "../WindowChrome";
+import { fitCadGeometry } from "./planGeometry";
+import { visibleEntities } from "./cutPlanes";
 import { CadTileViewBar } from "./CadTileViewBar";
 import {
 	DEFAULT_GRID,
@@ -40,7 +42,6 @@ import {
 	newTile,
 	legacyTopDownPlanPoint,
 	normaliseQuarterTurns,
-	projectPoint,
 	removeSplitSide,
 	type SelectionChange,
 	setSplitRatio,
@@ -94,18 +95,6 @@ const NO_PAPERWORK = {
 	showDate: "",
 };
 
-/** The camera that fits the whole rig into one tile, or null when there is nothing to fit. */
-function fitTileCamera(
-	entities: Parameters<typeof fittedCamera>[0] | undefined,
-	layout: Parameters<typeof findTile>[0],
-	id: string,
-) {
-	const tile = entities?.length ? findTile(layout, id) : undefined;
-	return tile && entities
-		? fittedCamera(entities, tile.view, tile.rotationQuarterTurns)
-		: null;
-}
-
 /**
  * A scene write that carries an older rig or selection revision than the one already held keeps
  * the newer half of each.
@@ -143,6 +132,11 @@ export function keepNewerHalves(
 
 export function CadApp() {
 	const [scene, setScene] = useState<CadSceneSnapshot | null>(null);
+	const viewportElements = useRef(new Map<string, HTMLCanvasElement>());
+	const registerViewport = useCallback((id: string, element: HTMLCanvasElement | null) => {
+		if (element) viewportElements.current.set(id, element);
+		else viewportElements.current.delete(id);
+	}, []);
 	const [layout, setLayout] = useState<TileNode>(restoreLayout);
 	const [settings, setSettings] = useState<CadSettings>(restoreSettings);
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -387,9 +381,23 @@ export function CadApp() {
 		setLayout((current) => mapTile(current, id, change));
 	}
 
-	function fit(id: string) {
-		const camera = fitTileCamera(scene?.entities, layout, id);
-		if (camera) updateTile(id, (tile) => ({ ...tile, camera }));
+	function fit(id: string, view?: CadViewDirection, rotation?: number) {
+		const tile = findTile(layout, id);
+		const viewport = viewportElements.current.get(id);
+		if (!tile || !scene) return;
+		const hasSize = viewport && viewport.clientWidth > 0 && viewport.clientHeight > 0;
+		const nextView = view ?? tile.view;
+		const nextRotation = rotation ?? tile.rotationQuarterTurns;
+		const camera = hasSize
+			? fittedCamera(
+				visibleEntities(scene.entities, nextView, tile.cutPlanes), nextView, nextRotation,
+				new Map(scene.drawings.map(drawing => [drawing.id, drawing])),
+				viewport.clientWidth, viewport.clientHeight,
+			)
+			: tile.camera;
+		updateTile(id, current => ({
+			...current, view: nextView, rotationQuarterTurns: nextRotation, camera,
+		}));
 	}
 
 	useCadShortcuts((shortcut) => {
@@ -413,8 +421,8 @@ export function CadApp() {
 		}
 		const tileId = activeTile(layout, activeTileId)?.id;
 		if (!tileId) return;
-		const fit = (view: CadViewDirection) => (scene ? fittedCamera(scene.entities, view, 0) : null);
-		updateTile(tileId, (tile) => shortcutTile(tile, shortcut, fit));
+		if (shortcut.type === "view") return fit(tileId, shortcut.view, 0);
+		updateTile(tileId, (tile) => shortcutTile(tile, shortcut, () => null));
 	});
 
 	return (
@@ -483,6 +491,7 @@ export function CadApp() {
 							onTransforms={turn}
 							onDuplicateMove={copy}
 							onFit={fit}
+							onViewportElement={registerViewport}
 							printMode={printMode}
 							underlays={underlayState.underlays}
 							printPages={printPages}
@@ -651,7 +660,8 @@ export interface CadTileProps {
 	onDuplicateMove?(delta: [number, number, number], entityIds: readonly string[]): Promise<void>;
 	/** Commits a turn of the rotate handle: each fixture's new place and rotation. */
 	onTransforms?(placements: NonNullable<CadTransformPreview["placements"]>): Promise<void>;
-	onFit(id: string): void;
+	onFit(id: string, view?: CadViewDirection, rotation?: number): void;
+	onViewportElement?(id: string, element: HTMLCanvasElement | null): void;
 	printMode: boolean;
 	underlays: readonly CadUnderlay[];
 	printPages: readonly CadPrintPage[];
@@ -876,15 +886,7 @@ function rotateTile(props: CadTileProps, tile: ViewportTile, delta: -1 | 1) {
 	const rotationQuarterTurns = normaliseQuarterTurns(
 		tile.rotationQuarterTurns + delta,
 	);
-	props.onTile(tile.id, (current) => ({
-		...current,
-		rotationQuarterTurns,
-		camera: fittedCamera(
-			props.scene.entities,
-			current.view,
-			rotationQuarterTurns,
-		),
-	}));
+	props.onFit(tile.id, tile.view, rotationQuarterTurns);
 }
 
 /** Centre of the orientation circle and the radius its rotate arrows run along, in its wrap's pixels. */
@@ -1122,25 +1124,14 @@ function axisLabel(value: { axis: WorldAxis; sign: 1 | -1 }) {
 }
 
 export function fittedCamera(
-	entities: readonly CadSceneSnapshot["entities"][number][],
+	entities: readonly CadEntity[],
 	view: CadViewDirection,
 	rotationQuarterTurns: number,
+	drawings: Parameters<typeof fitCadGeometry>[1],
+	viewportWidth: number,
+	viewportHeight: number,
 ): TileCamera {
-	if (!entities.length) return { pan: [0, 0], zoom: 0.08 };
-	const positions = entities.map((entity) =>
-		projectPoint(entity.positionMillimetres, view, rotationQuarterTurns),
-	);
-	const minX = Math.min(...positions.map((position) => position[0]));
-	const maxX = Math.max(...positions.map((position) => position[0]));
-	const minY = Math.min(...positions.map((position) => position[1]));
-	const maxY = Math.max(...positions.map((position) => position[1]));
-	return {
-		pan: [-(minX + maxX) / 2, -(minY + maxY) / 2],
-		zoom: Math.max(
-			0.008,
-			Math.min(0.2, 900 / Math.max(5000, maxX - minX, maxY - minY)),
-		),
-	};
+	return fitCadGeometry(entities, drawings, view, rotationQuarterTurns, viewportWidth, viewportHeight);
 }
 
 function restoreLayout(): TileNode {

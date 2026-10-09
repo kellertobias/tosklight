@@ -1,4 +1,4 @@
-import { type WheelEvent, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { type WheelEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { flushSync } from "react-dom";
 import { annotationsForView } from "./annotationGeometry";
 import { CadGrid, type CadGridSettings, DEFAULT_GRID } from "./cadGrid";
@@ -49,6 +49,7 @@ const NO_UNDERLAYS: readonly CadUnderlay[] = [];
 const NO_PRINT_PAGES: readonly CadPrintPage[] = [];
 
 interface CadViewportProps {
+	onViewportElement?(element: HTMLCanvasElement | null): void;
 	entities: readonly CadEntity[];
 	drawings: readonly CadDrawing[];
 	selectedIds: readonly string[];
@@ -272,6 +273,7 @@ function useViewportGestures(context: CadViewportContext) {
 }
 
 export function CadViewport({
+	onViewportElement,
 	entities,
 	drawings,
 	selectedIds,
@@ -298,6 +300,10 @@ export function CadViewport({
 	...gestureCallbacks
 }: CadViewportProps) {
 	const canvas = useRef<HTMLCanvasElement>(null);
+	const registerCanvas = useCallback((element: HTMLCanvasElement | null) => {
+		canvas.current = element;
+		onViewportElement?.(element);
+	}, [onViewportElement]);
 	// Everything drawn below — canvas, grid, labels, scale bar, print frames — reads this one camera,
 	// which is the pan or zoom in flight, so they all move together.
 	const liveCamera = useAnchoredCamera(canvas, committedCamera, onCamera);
@@ -358,7 +364,7 @@ export function CadViewport({
 			onWheel={zoomFromWheel(liveCamera.latest, liveCamera.settle)}
 		>
 			<canvas
-				ref={canvas}
+				ref={registerCanvas}
 				className="cad-canvas"
 				aria-label={`CAD ${view.replaceAll("_", " ")} viewport`}
 				data-floor-datum={view === "top_down" ? "hidden" : "visible"}

@@ -8,6 +8,7 @@
  */
 import {
 	entityPlanGeometry,
+	isPositionPoint,
 	type PlanGeometry,
 	type PlanPoint,
 	rotateDeskPoint,
@@ -18,7 +19,7 @@ import type {
 	CadViewDirection,
 	TileCamera,
 } from "./types";
-import { planeDelta, projectPoint } from "./types";
+import { directionIndicator, planeDelta, projectPoint } from "./types";
 
 /** The axis a move is constrained to while a drag is in flight. */
 export type MoveAxis = "plane" | "horizontal" | "vertical";
@@ -34,44 +35,58 @@ export function fitCadOverview(
 	viewportWidth: number,
 	viewportHeight: number,
 ): TileCamera {
+	const camera = fitCadGeometry(
+		entities, drawings, OVERVIEW_VIEW, OVERVIEW_ROTATION_QUARTER_TURNS,
+		viewportWidth, viewportHeight, false,
+	);
+	// Preserve the Show overview's existing zoom limit; interactive CAD Fit has no clipping floor.
+	return { ...camera, zoom: Math.max(0.001, camera.zoom) };
+}
+
+/** Uses the same geometry as the renderer, measured in actual CSS viewport pixels. */
+export function fitCadGeometry(
+	entities: readonly CadEntity[],
+	drawings: ReadonlyMap<string, CadDrawing>,
+	view: CadViewDirection,
+	rotationQuarterTurns: number,
+	viewportWidth: number,
+	viewportHeight: number,
+	includeDirectionIndicators = true,
+): TileCamera {
 	if (!entities.length) return { pan: [0, 0], zoom: 0.08 };
-	const points: PlanPoint[] = [];
+	let minX = Infinity;
+	let maxX = -Infinity;
+	let minY = Infinity;
+	let maxY = -Infinity;
+	const include = (point: PlanPoint) => {
+		minX = Math.min(minX, point[0]);
+		maxX = Math.max(maxX, point[0]);
+		minY = Math.min(minY, point[1]);
+		maxY = Math.max(maxY, point[1]);
+	};
 	for (const entity of entities) {
 		const geometry = worldGeometry(
-			entity,
-			entityPlanGeometry(entity, drawings.get(entity.drawingId), OVERVIEW_VIEW),
-			OVERVIEW_VIEW,
-			OVERVIEW_ROTATION_QUARTER_TURNS,
+			entity, entityPlanGeometry(entity, drawings.get(entity.drawingId), view),
+			view, rotationQuarterTurns,
 		);
-		for (const triangle of geometry.triangles) points.push(...triangle.points);
-		for (const outline of geometry.outlines) points.push(...outline);
-		for (const line of geometry.lines) points.push(...line.points);
+		for (const triangle of geometry.triangles) for (const point of triangle.points) include(point);
+		for (const outline of geometry.outlines) for (const point of outline) include(point);
+		for (const line of geometry.lines) for (const point of line.points) include(point);
+		if (includeDirectionIndicators && entity.kind !== "venue" && !isPositionPoint(entity)) {
+			const centre = projectPoint(entity.positionMillimetres, view, rotationQuarterTurns);
+			for (const point of directionIndicator(entity, centre, view, rotationQuarterTurns)) include(point);
+		}
 	}
-	if (!points.length) {
-		points.push(
-			...entities.map((entity) =>
-				projectPoint(
-					entity.positionMillimetres,
-					OVERVIEW_VIEW,
-					OVERVIEW_ROTATION_QUARTER_TURNS,
-				),
-			),
-		);
+	if (minX === Infinity) {
+		for (const entity of entities) include(projectPoint(entity.positionMillimetres, view, rotationQuarterTurns));
 	}
-	const minX = Math.min(...points.map((point) => point[0]));
-	const maxX = Math.max(...points.map((point) => point[0]));
-	const minY = Math.min(...points.map((point) => point[1]));
-	const maxY = Math.max(...points.map((point) => point[1]));
 	const width = Math.max(500, maxX - minX);
 	const height = Math.max(500, maxY - minY);
 	const availableWidth = Math.max(1, viewportWidth - 64);
 	const availableHeight = Math.max(1, viewportHeight - 64);
 	return {
 		pan: [-(minX + maxX) / 2, -(minY + maxY) / 2],
-		zoom: Math.max(
-			0.001,
-			Math.min(2.5, availableWidth / width, availableHeight / height),
-		),
+		zoom: Math.min(2.5, availableWidth / width, availableHeight / height),
 	};
 }
 

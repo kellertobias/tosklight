@@ -1,6 +1,6 @@
 import { Button } from "@tosklight/ui";
 import { CadDepthMenu } from "./CadDepthMenu";
-import { type CadTileProps, fittedCamera } from "./CadApp";
+import { type CadTileProps } from "./CadApp";
 import { CAD_VIEW_LABELS, type ViewportTile } from "./types";
 import "./cadViewControls.css";
 
@@ -34,12 +34,7 @@ export function CadTileViewBar({
 					value={node.view}
 					onChange={(event) => {
 						const view = event.currentTarget.value as ViewportTile["view"];
-						onTile(node.id, (tile) => ({
-							...tile,
-							view,
-							rotationQuarterTurns: 0,
-							camera: fittedCamera(scene.entities, view, 0),
-						}));
+						onFit(node.id, view, 0);
 					}}
 				>
 					{Object.entries(CAD_VIEW_LABELS).map(([value, label]) => (

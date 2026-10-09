@@ -112,6 +112,7 @@ vi.mock("./CadTileViewBar", async (importOriginal) => {
 const drawnX = vi.hoisted(() => [] as number[]);
 vi.mock("./CadViewport", () => ({
 	CadViewport: ({
+		onViewportElement,
 		view,
 		rotationQuarterTurns,
 		camera,
@@ -122,6 +123,7 @@ vi.mock("./CadViewport", () => ({
 		onMove,
 		showCoordinateOrigins,
 	}: {
+		onViewportElement?(element: HTMLCanvasElement | null): void;
 		view: string;
 		rotationQuarterTurns: number;
 		camera: { pan: [number, number]; zoom: number };
@@ -140,6 +142,15 @@ vi.mock("./CadViewport", () => ({
 			drawnX.push(entities[0].positionMillimetres[0] + (preview?.deltaMillimetres[0] ?? 0));
 		return (
 			<button
+				ref={element => {
+					if (element && !Object.prototype.hasOwnProperty.call(element, "clientWidth")) {
+						Object.defineProperties(element, {
+							clientWidth: { value: 800, configurable: true },
+							clientHeight: { value: 600, configurable: true },
+						});
+					}
+					onViewportElement?.(element as unknown as HTMLCanvasElement | null);
+				}}
 				type="button"
 				data-testid="cad-canvas"
 				data-rotation={rotationQuarterTurns}
@@ -1145,7 +1156,8 @@ describe("the CAD planning screen", () => {
 		const canvas = screen.getByTestId("cad-canvas");
 		expect(canvas).toHaveAttribute("data-zoom", "0.08");
 		fireEvent.change(direction, { target: { value: "left_to_right" } });
-		expect(canvas).toHaveAttribute("data-zoom", "0.18");
+		expect(Number(canvas.getAttribute("data-zoom"))).toBeGreaterThan(0.18);
+		expect(Number(canvas.getAttribute("data-zoom"))).toBeLessThanOrEqual(2.5);
 		expect(
 			screen.queryByRole("button", { name: /Rotate top-down view/ }),
 		).not.toBeInTheDocument();
@@ -1175,6 +1187,28 @@ describe("the CAD planning screen", () => {
 			}),
 		);
 		expect(canvas).toHaveAttribute("data-rotation", "0");
+	});
+
+	it("Fit uses each measured split viewport again after resize without writing placements", async () => {
+		mocks.snapshot.mockResolvedValue({ ...snapshot, entities: [{ ...snapshot.entities[0],
+			kind: "venue", fixtureType: "venue", scenery: {kind: "box", chords: 0, pattern: "standard"},
+			positionMillimetres: [9000, -4000, 6000], sizeMillimetres: [30000, 12000, 18000],
+		}] });
+		render(<ModalProvider><CadApp /></ModalProvider>);
+		fireEvent.click(await screen.findByRole("button", {name: "Add viewport right"}));
+		const canvases = screen.getAllByTestId("cad-canvas");
+		Object.defineProperties(canvases[0], {clientWidth: {value: 410, configurable: true}, clientHeight: {value: 760, configurable: true}});
+		Object.defineProperties(canvases[1], {clientWidth: {value: 900, configurable: true}, clientHeight: {value: 330, configurable: true}});
+		const fitButtons = screen.getAllByRole("button", {name: "Fit"});
+		fireEvent.click(fitButtons[0]); fireEvent.click(fitButtons[1]);
+		expect(Number(canvases[0].getAttribute("data-zoom"))).toBeCloseTo((410 - 64) / 30000);
+		expect(Number(canvases[1].getAttribute("data-zoom"))).toBeCloseTo((330 - 64) / 12000);
+		expect(canvases[0]).toHaveAttribute("data-pan", "-9000,4000");
+		Object.defineProperty(canvases[0], "clientWidth", {value: 240, configurable: true});
+		fireEvent.click(fitButtons[0]);
+		expect(Number(canvases[0].getAttribute("data-zoom"))).toBeCloseTo((240 - 64) / 30000);
+		expect(mocks.transform).not.toHaveBeenCalled(); expect(mocks.setTransforms).not.toHaveBeenCalled();
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
 	});
 
 	it("keeps snapping inside the Settings modal", async () => {
