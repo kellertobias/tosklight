@@ -50,6 +50,8 @@ pub(super) fn point_target(point: FixtureId) -> AttributeValue {
 
 pub(super) fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "TL-544 G1".into(),
         priority: 0,

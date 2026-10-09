@@ -445,7 +445,38 @@ impl ServerPlaybackPorts<'_> {
         id: light_core::CueListId,
         action: PlaybackAction,
     ) -> Result<PlaybackExecution, ActionError> {
+        if matches!(action, PlaybackAction::Select { pressed: true }) {
+            if !self
+                .state
+                .output
+                .snapshot()
+                .cue_lists
+                .iter()
+                .any(|list| list.id == id)
+            {
+                return Err(invalid("Cuelist does not exist"));
+            }
+            let show = self
+                .state
+                .active_show
+                .current()
+                .clone()
+                .ok_or_else(|| invalid("no show is open"))?;
+            let before = self
+                .state
+                .installation
+                .selected_cue_list(context.desk_id, show.id)
+                .map_err(|error| invalid(error.to_string()))?;
+            self.state
+                .installation
+                .set_selected_cue_list(context.desk_id, show.id, Some(id))
+                .map_err(|error| invalid(error.to_string()))?;
+            return Ok(PlaybackExecution::Target {
+                changed: before != Some(id),
+            });
+        }
         let command = match action {
+            PlaybackAction::GoTo(cue_number) => CueListPlaybackAction::Jump(cue_number),
             PlaybackAction::Go { pressed: true } => CueListPlaybackAction::Go,
             PlaybackAction::Back { pressed: true } => CueListPlaybackAction::Back,
             PlaybackAction::Pause { pressed: true } => CueListPlaybackAction::Pause,

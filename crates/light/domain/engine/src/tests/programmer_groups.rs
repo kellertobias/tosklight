@@ -244,6 +244,8 @@ fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
         automatic_restore: false,
     });
     let cue_list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Deduplicated".into(),
         priority: 10,

@@ -83,6 +83,25 @@
           "properties": {
             "kind": {
               "type": "string",
+              "const": "cuelist_pool"
+            },
+            "number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 1000,
+              "minimum": 1
+            }
+          },
+          "required": [
+            "kind",
+            "number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
               "const": "pool"
             },
             "playback_number": {

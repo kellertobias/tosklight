@@ -174,6 +174,8 @@ fn media_fixture() -> (PatchedFixture, FixtureId) {
 
 fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Registry fades".into(),
         priority: 10,

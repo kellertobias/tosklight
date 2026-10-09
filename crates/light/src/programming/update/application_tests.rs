@@ -900,6 +900,8 @@ fn group_body_with_id(id: &str) -> Value {
 
 fn cue_list_body(id: CueListId, cue: Cue) -> Value {
     serde_json::to_value(CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: "Cuelist 1".into(),
         priority: 0,

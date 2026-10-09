@@ -249,6 +249,45 @@ impl DeskStore {
         Ok(())
     }
 
+    /// Explicit Cuelist selection is separate from physical Playback selection and scoped to a show.
+    pub fn selected_cue_list(
+        &self,
+        desk: Uuid,
+        show: ShowId,
+    ) -> Result<Option<light_core::CueListId>, StoreError> {
+        let stored: Option<String> = self.conn.query_row("SELECT cue_list_id FROM control_desk_cuelist_selections WHERE desk_id=?1 AND show_id=?2", params![desk.to_string(), show.0.to_string()], |row| row.get(0)).optional()?;
+        stored
+            .map(|value| {
+                Uuid::parse_str(&value)
+                    .map(light_core::CueListId)
+                    .map_err(|error| StoreError::Invalid(error.to_string()))
+            })
+            .transpose()
+    }
+
+    pub fn set_selected_cue_list(
+        &self,
+        desk: Uuid,
+        show: ShowId,
+        selected: Option<light_core::CueListId>,
+    ) -> Result<(), StoreError> {
+        if selected.is_some_and(|id| id.0.is_nil()) {
+            return Err(StoreError::Invalid("Cuelist identity cannot be nil".into()));
+        }
+        match selected {
+            Some(id) => {
+                self.conn.execute("INSERT INTO control_desk_cuelist_selections(desk_id,show_id,cue_list_id) VALUES (?1,?2,?3) ON CONFLICT(desk_id,show_id) DO UPDATE SET cue_list_id=excluded.cue_list_id", params![desk.to_string(), show.0.to_string(), id.0.to_string()])?;
+            }
+            None => {
+                self.conn.execute(
+                    "DELETE FROM control_desk_cuelist_selections WHERE desk_id=?1 AND show_id=?2",
+                    params![desk.to_string(), show.0.to_string()],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn selected_playback(&self, desk: Uuid, show: ShowId) -> Result<Option<u16>, StoreError> {
         self.conn
             .query_row(
@@ -293,6 +332,10 @@ pub(super) fn delete_desks(
     desk_ids: &[String],
 ) -> Result<(), StoreError> {
     for desk_id in desk_ids {
+        transaction.execute(
+            "DELETE FROM control_desk_cuelist_selections WHERE desk_id=?1",
+            params![desk_id],
+        )?;
         transaction.execute("DELETE FROM control_desk_pages WHERE desk_id=?1", [desk_id])?;
         transaction.execute(
             "DELETE FROM control_desk_selections WHERE desk_id=?1",

@@ -306,6 +306,9 @@ pub struct PlaybackDeskProjection {
     pub desk_id: Uuid,
     pub active_page: u8,
     pub selected_playback: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub selected_cue_list: Option<Uuid>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

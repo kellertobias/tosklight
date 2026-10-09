@@ -282,6 +282,8 @@ fn osc_mapping(action: ControlAction) -> light_control::ControlMapping {
 
 fn mapped_test_cue_list() -> light_playback::CueList {
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Mapped".into(),
         priority: 0,

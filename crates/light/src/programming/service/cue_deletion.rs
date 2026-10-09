@@ -129,6 +129,9 @@ fn resolve_request<P: ProgrammingCueDeletionPorts>(
     ports: &P,
 ) -> Result<ResolvedCueDeletionRequest, ActionError> {
     let address = match request.address {
+        ProgrammingCueDeletionAddress::CuelistPool { number } => {
+            CueListAddress::CuelistPool { number }
+        }
         ProgrammingCueDeletionAddress::Pool { playback_number } => {
             CueListAddress::Pool { playback_number }
         }

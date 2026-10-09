@@ -116,6 +116,8 @@ fn execution_cue_list() -> CueList {
     let mut second = Cue::new(CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.trigger = CueTrigger::Timecode { frame: 10 };
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId(Uuid::from_u128(3)),
         name: "Timeline".into(),
         priority: 0,

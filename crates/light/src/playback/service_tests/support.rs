@@ -80,6 +80,7 @@ pub(super) fn test_desk(desk_id: Uuid) -> PlaybackDeskProjection {
         desk_id,
         active_page: 1,
         selected_playback: None,
+        selected_cue_list: None,
     }
 }
 

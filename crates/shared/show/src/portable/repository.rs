@@ -145,14 +145,18 @@ pub(crate) fn restore_staged_undo(
     expected_object_revision: Revision,
     history_row_id: i64,
     updated_at: &str,
+    restored_body: &Value,
 ) -> Result<Revision, StoreError> {
     let current = current_object(tx, key.kind(), key.id())?
         .ok_or_else(|| StoreError::Sql(rusqlite::Error::QueryReturnedNoRows))?;
     ensure_expected(Some(&current), expected_object_revision)?;
-    let previous = previous_history(tx, key.kind(), key.id())?;
+    let mut previous = previous_history(tx, key.kind(), key.id())?;
     if previous.row_id != history_row_id {
         return Err(StoreError::Invalid("object undo history changed".into()));
     }
+    // Keep the guarded history row, while writing exactly the migrated body compiled
+    // by the candidate. Forward history still retains the original current body.
+    previous.body_json = serde_json::to_string(restored_body)?;
     let revision = next_revision(expected_object_revision)?;
     archive_redo(tx, key, current)?;
     restore_history(tx, key, &previous, revision, updated_at, "object_history")?;

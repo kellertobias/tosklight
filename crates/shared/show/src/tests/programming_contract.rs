@@ -661,3 +661,54 @@ fn feature_two_only_for_live_references_and_never_downgrades_after_reopen() {
     drop(reopened);
     remove(&path);
 }
+
+#[test]
+fn independent_cuelist_pool_requires_three_without_upgrading_literal_or_dynamic_files() {
+    let (path, store) = create("independent-cuelist-contract");
+    let mut document = store.portable_document().unwrap();
+    let mut literal = document.transaction();
+    literal.put("cue_list", "literal", json!({"cues": []}));
+    literal.put("dynamic", "dynamic", json!({"pool_number":101, "lanes":[]}));
+    literal.check_programming_contract(3).unwrap();
+    literal.stamp_programming_contract(3);
+    let commit = store.apply_portable_transaction(literal).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(1)
+    );
+    validate_show_programming_contract(&path, 1).unwrap();
+
+    let body = json!({"pool_number":101,"legacy_pool_aliases":[190],"cues":[]});
+    let mut independent = document.transaction();
+    independent.put("cue_list", "literal", body.clone());
+    assert!(independent.check_programming_contract(2).is_err());
+    independent.check_programming_contract(3).unwrap();
+    independent.stamp_programming_contract(3);
+    let commit = store.apply_portable_transaction(independent).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(3)
+    );
+    assert!(validate_show_programming_contract(&path, 2).is_err());
+    validate_show_programming_contract(&path, 3).unwrap();
+    drop(store);
+    let reopened = ShowStore::open(&path).unwrap();
+    let mut document = reopened.portable_document().unwrap();
+    assert_eq!(
+        document.objects_of_kind("cue_list").next().unwrap().body(),
+        &body
+    );
+    let mut later = document.transaction();
+    later.put("preset", "1.9", json!({"values":{}}));
+    later.stamp_programming_contract(3);
+    let commit = reopened.apply_portable_transaction(later).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(3)
+    );
+    drop(reopened);
+    remove(&path);
+}

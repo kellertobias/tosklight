@@ -582,7 +582,7 @@ fn the_packaged_default_show_is_semantic_after_the_tl552_swap() {
     assert_eq!(startup.active_show_error, None);
     assert_eq!(
         startup.engine.supported_programming_contract(),
-        SEMANTIC_CONTRACT
+        light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT
     );
     assert!(!startup.engine.snapshot().fixtures.is_empty());
     let default_path = startup
@@ -716,11 +716,11 @@ fn the_startup_harness_is_scoped_to_its_call() {
         "zoom intent needs contract 1"
     );
     drop(at_zero);
-    // Without the harness the test binary reports production's contract (TL-552: 1).
+    // Without the harness the test binary reports current production reader capability.
     let plain = startup_state::StartupState::load(desk.options()).unwrap();
     assert_eq!(
         plain.engine.supported_programming_contract(),
-        SEMANTIC_CONTRACT
+        light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT
     );
     assert_eq!(
         plain.active_show_error, None,
@@ -811,4 +811,285 @@ async fn the_preset_writer_stamps_the_marker_only_at_contract_one() {
         light_show::validate_show_programming_contract(&entry.path, contract).unwrap();
         let _ = std::fs::remove_dir_all(&data_dir);
     }
+}
+
+async fn record_first_live_cue_through_real_startup(
+    contract: Option<u16>,
+) -> (ContractDesk, ContractShow) {
+    record_first_live_cue_with_target(contract, false).await
+}
+
+async fn record_first_live_cue_with_target(
+    contract: Option<u16>,
+    independent: bool,
+) -> (ContractDesk, ContractShow) {
+    let desk = ContractDesk::new("live-reference-production-startup");
+    let show = desk.create_show("First live Cue");
+    let fixture = fixture_for(&rgbw(), 0x6859002);
+    let fixture_id = fixture.fixture_id;
+    show.patch(&fixture);
+    let instance = Uuid::from_u128(0x685100);
+    let preset = Preset {
+        instance_id: Some(instance),
+        family: PresetFamily::Intensity,
+        number: 1,
+        universal_values: HashMap::from([(
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5),
+        )]),
+        ..Default::default()
+    };
+    show.put("preset", "1.1", serde_json::to_value(preset).unwrap());
+    if independent {
+        let mut speed = light_playback::PlaybackDefinition::new_cue_list(
+            101,
+            "Speed A",
+            light_core::CueListId::new(),
+        );
+        speed.target = light_playback::PlaybackTarget::SpeedGroup { group: "A".into() };
+        speed.reset_incompatible_layout();
+        show.put("playback", "101", serde_json::to_value(speed).unwrap());
+    }
+    desk.activate(&show);
+    let startup = match contract {
+        Some(contract) => desk.load_at(contract),
+        None => startup_state::StartupState::load(desk.options()).unwrap(),
+    };
+    assert_eq!(startup.active_show_error, None);
+    assert_eq!(
+        startup.engine.supported_programming_contract(),
+        contract.unwrap_or(light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT)
+    );
+    let served = desk.serve(startup).await;
+    if independent {
+        served
+            .state
+            .installation
+            .update_configuration(|configuration| configuration.start_after_first_recording = true);
+    }
+    let app = router(served.state.clone());
+    let (token, session) = login(&app, "Operator").await;
+    let session = light_core::SessionId(Uuid::parse_str(&session).unwrap());
+    let selection_revision = served.state.programming.select(session, [fixture_id]);
+    let before = show.store().portable_document().unwrap();
+    let post = |path: &str, body: serde_json::Value| {
+        Request::post(path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("x-tosk-show", show.entry.id.0.to_string())
+            .header(
+                header::IF_MATCH,
+                format!("\"{}\"", before.revision().value()),
+            )
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    let recall = app
+        .clone()
+        .oneshot(post(
+            "/api/v2/presets/recall",
+            serde_json::json!({
+                "address":{"family":"intensity","number":1},
+                "expected_preset_revision":before.object("preset", "1.1").unwrap().revision(),
+                "expected_show_revision":before.revision().value(),
+                "expected_programmer_revision":0,
+                "expected_capture_mode_revision":0,
+                "expected_selection_revision":selection_revision,
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        recall.status(),
+        StatusCode::OK,
+        "actual source recall: {}",
+        json(recall).await
+    );
+    let captured = served.state.programming.get(session).unwrap();
+    assert!(
+        !captured.preset_provenance.is_empty(),
+        "actual recall must attach a stable source"
+    );
+    let record = app
+        .oneshot(post(
+            "/api/v2/cues/record",
+            serde_json::json!({
+                "request_id":"first-linked-cue-from-production-startup",
+                "target": if independent { serde_json::json!({"kind":"cuelist_pool","number":101}) } else { serde_json::json!({"kind":"pool","playback_number":30}) },
+                "operation":"overwrite", "cue_number":null, "timing":{}, "cue_only":false,
+                "name":null, "capture_policy":"current_capture", "activation_policy":"hold",
+            }),
+        ))
+        .await
+        .unwrap();
+    let status = record.status();
+    let result = json(record).await;
+    let after = show.store().portable_document().unwrap();
+    if contract == Some(1) {
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{result}");
+        assert!(
+            result.to_string().contains("runtime supports 1"),
+            "{result}"
+        );
+        assert_eq!(
+            after.revision(),
+            before.revision(),
+            "rejected runtime preparation cannot commit"
+        );
+        assert_eq!(
+            after.programming_contract_marker(),
+            before.programming_contract_marker()
+        );
+        assert_eq!(after.objects_of_kind("cue_list").count(), 0);
+        assert!(after.object("playback", "30").is_none());
+        assert_eq!(
+            served.state.programming.get(session).unwrap().values,
+            captured.values,
+            "rejection preserves programmer values"
+        );
+    } else {
+        assert_eq!(status, StatusCode::OK, "first linked Cue: {result}");
+        assert_eq!(
+            after.programming_contract_marker(),
+            light_show::ProgrammingContractMarker::Declared(if independent { 3 } else { 2 })
+        );
+        let list = after.objects_of_kind("cue_list").next().unwrap();
+        if independent {
+            assert_eq!(list.body()["pool_number"], 101);
+            assert_eq!(after.objects_of_kind("playback").count(), 1);
+            assert_eq!(
+                after.object("playback", "101").unwrap().body(),
+                before.object("playback", "101").unwrap().body()
+            );
+            assert_eq!(
+                served
+                    .state
+                    .installation
+                    .selected_cue_list(desk.desk().desk().unwrap().id, show.entry.id)
+                    .unwrap(),
+                Some(
+                    serde_json::from_value::<light_playback::CueList>(list.body().clone())
+                        .unwrap()
+                        .id
+                )
+            );
+            assert!(result["projections"]["playback"].is_null());
+            assert!(result["projections"]["page"].is_null());
+            assert!(
+                served
+                    .state
+                    .installation
+                    .configuration()
+                    .start_after_first_recording
+            );
+            {
+                let id = serde_json::from_value::<light_playback::CueList>(list.body().clone())
+                    .unwrap()
+                    .id;
+                let runtime = served
+                    .state
+                    .output
+                    .playback_runtime_status_for_direct_cue_list(id)
+                    .expect("first independent Cue must take live");
+                assert_eq!(
+                    runtime.playback.current_cue_id.map(|id| id.to_string()),
+                    list.body()["cues"][0]["id"].as_str().map(str::to_owned)
+                );
+                assert!(
+                    served
+                        .state
+                        .programming
+                        .get(session)
+                        .unwrap()
+                        .values
+                        .is_empty()
+                );
+            }
+        }
+        assert_eq!(
+            list.body()["cues"][0]["changes"][0]["preset_reference"]["preset_instance_id"],
+            instance.to_string()
+        );
+    }
+    served.close().await;
+    (desk, show)
+}
+
+#[tokio::test]
+async fn production_startup_records_first_live_reference_and_reopens_feature_two_and_three() {
+    let (desk, show) = record_first_live_cue_through_real_startup(None).await;
+    let startup = startup_state::StartupState::load(desk.options()).unwrap();
+    assert_eq!(
+        startup.active_show_error, None,
+        "production must reopen its own live-reference file"
+    );
+    assert_eq!(
+        startup.engine.snapshot().cue_lists[0].cues[0].changes[0].value,
+        Some(AttributeValue::Normalized(0.5))
+    );
+    drop(startup);
+    let old = desk.load_at(1);
+    assert!(
+        old.active_show_error.is_some(),
+        "contract1 reader refuses feature2"
+    );
+    drop(old);
+    let store = show.store();
+    let document = store.portable_document().unwrap();
+    let list = document.objects_of_kind("cue_list").next().unwrap();
+    let mut body = list.body().clone();
+    body["pool_number"] = serde_json::json!(30);
+    let mut transaction = document.transaction();
+    transaction.put("cue_list", list.key().id().to_owned(), body);
+    transaction.stamp_programming_contract(3);
+    store.apply_portable_transaction(transaction).unwrap();
+    drop(store);
+    let old = desk.load_at(2);
+    assert!(
+        old.active_show_error.is_some(),
+        "contract2 reader refuses feature3"
+    );
+    drop(old);
+    let startup = startup_state::StartupState::load(desk.options()).unwrap();
+    assert_eq!(
+        startup.active_show_error, None,
+        "current production accepts feature3"
+    );
+    assert_eq!(startup.engine.snapshot().cue_lists[0].pool_number, Some(30));
+}
+
+#[tokio::test]
+async fn legacy_startup_runtime_rejects_live_record_before_portable_commit_and_preserves_programmer()
+ {
+    let (_desk, _show) = record_first_live_cue_through_real_startup(Some(1)).await;
+}
+
+#[tokio::test]
+async fn production_startup_records_independent_101_selects_uuid_and_preserves_speed_assignment() {
+    let (desk, show) = record_first_live_cue_with_target(None, true).await;
+    let reopened = startup_state::StartupState::load(desk.options()).unwrap();
+    assert_eq!(reopened.active_show_error, None);
+    let snapshot = reopened.engine.snapshot();
+    let list = snapshot
+        .cue_lists
+        .iter()
+        .find(|list| list.pool_number == Some(101))
+        .unwrap();
+    assert_eq!(list.cues.len(), 1);
+    assert_eq!(snapshot.playbacks.len(), 1);
+    assert!(matches!(
+        snapshot.playbacks[0].target,
+        light_playback::PlaybackTarget::SpeedGroup { .. }
+    ));
+    assert_eq!(
+        desk.load_at(2)
+            .active_show_error
+            .unwrap()
+            .contains("programming contract 3"),
+        true
+    );
+    assert_eq!(
+        show.store().programming_contract_marker().unwrap(),
+        light_show::ProgrammingContractMarker::Declared(3)
+    );
 }

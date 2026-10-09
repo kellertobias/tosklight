@@ -133,22 +133,20 @@ fn assignment_playback(
     let snapshot = state.output.snapshot();
     let (name, color, icon, target) = match source[0].as_str() {
         "CUELIST" => {
-            let playback = snapshot
-                .playbacks
+            let id = super::show_command_update::cuelist_pool_id(&snapshot, number)?;
+            let list = snapshot
+                .cue_lists
                 .iter()
-                .find(|playback| playback.number == number)
-                .filter(|playback| {
-                    matches!(
-                        playback.target,
-                        light_playback::PlaybackTarget::CueList { .. }
-                    )
-                })
+                .find(|list| list.id == id)
                 .ok_or_else(|| format!("Cuelist {number} does not exist"))?;
+            let presentation = snapshot.playbacks.iter().find(|playback| matches!(playback.target, light_playback::PlaybackTarget::CueList { cue_list_id } if cue_list_id == id));
             (
-                playback.name.clone(),
-                playback.color.clone(),
-                playback.presentation_icon.clone(),
-                playback.target.clone(),
+                list.name.clone(),
+                presentation
+                    .map(|definition| definition.color.clone())
+                    .unwrap_or_else(|| "#20c997".into()),
+                presentation.and_then(|definition| definition.presentation_icon.clone()),
+                light_playback::PlaybackTarget::CueList { cue_list_id: id },
             )
         }
         "DYNAMIC" => {

@@ -41,6 +41,8 @@ fn preload_atomicity_test_snapshot() -> EngineSnapshot {
     let first_cue_list_id = light_core::CueListId::new();
     let second_cue_list_id = light_core::CueListId::new();
     let cue_list = |id, name: &str| light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: name.into(),
         priority: 0,
@@ -148,6 +150,8 @@ fn preload_auto_off_test_snapshot() -> EngineSnapshot {
 fn matter_test_snapshot() -> EngineSnapshot {
     let cue_list_id = light_core::CueListId::new();
     let cue_list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: "Matter look".into(),
         priority: 0,

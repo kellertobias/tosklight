@@ -1,5 +1,7 @@
 fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
     let list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: list_id,
         name: "Shared".into(),
         priority: 0,

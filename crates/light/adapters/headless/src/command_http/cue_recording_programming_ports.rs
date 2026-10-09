@@ -163,9 +163,7 @@ fn resolve_command_target(
             light_application::ProgrammingCueRecordTarget::SelectedPlayback
         }
         CueRecordCommandTarget::Cuelist { number } => {
-            light_application::ProgrammingCueRecordTarget::Pool {
-                playback_number: number,
-            }
+            light_application::ProgrammingCueRecordTarget::CuelistPool { number }
         }
         CueRecordCommandTarget::Playback(CommandPlaybackTarget::CurrentPage { slot }) => {
             let show = ports
@@ -209,6 +207,74 @@ impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {
         commit: &light_application::ProgrammingCueCommit,
     ) -> Result<light_application::ProgrammingCueCommitResult, ActionError> {
         super::cue_recording_ports::commit(self.state(), context, commit)
+    }
+
+    fn select_recorded_cuelist(&self, context: &ActionContext, cue_list_id: light_core::CueListId) {
+        let selection_context = context.clone().with_request_id(format!(
+            "{}:cuelist-select",
+            context.request_id.as_deref().unwrap_or("record")
+        ));
+        let result = super::super::playback_service::execute(
+            self.state(),
+            Some(self.session()),
+            Some(&self.session().desk),
+            selection_context,
+            light_application::PlaybackCommand {
+                address: light_application::PlaybackAddress::CueList(cue_list_id),
+                action: light_application::PlaybackAction::Select { pressed: true },
+                surface: playback_surface(context.source),
+            },
+        );
+        if let Err(error) = result {
+            super::super::emit(
+                self.state(),
+                "cue_record_selection_failed",
+                serde_json::json!({ "cue_list_id": cue_list_id.0, "error": error.message }),
+            );
+        }
+    }
+
+    fn activate_recorded_cuelist(
+        &self,
+        context: &ActionContext,
+        cue_list_id: light_core::CueListId,
+        cue_number: light_application::CueNumber,
+    ) -> Option<light_application::ProgrammingCueActivationCompletion> {
+        let result = super::super::playback_service::execute(
+            self.state(),
+            Some(self.session()),
+            Some(&self.session().desk),
+            context.clone(),
+            light_application::PlaybackCommand {
+                address: light_application::PlaybackAddress::CueList(cue_list_id),
+                action: light_application::PlaybackAction::GoTo(cue_number),
+                surface: playback_surface(context.source),
+            },
+        );
+        let result = match result {
+            Ok(result) => result,
+            Err(error) => {
+                super::super::emit(
+                    self.state(),
+                    "cue_record_activation_failed",
+                    serde_json::json!({ "cue_list_id": cue_list_id.0, "error": error.message }),
+                );
+                return None;
+            }
+        };
+        let projection = result
+            .related
+            .iter()
+            .find(|related| {
+                related.projection.requested
+                    == light_application::PlaybackRuntimeIdentity::DirectCueList(cue_list_id)
+            })
+            .map(|related| related.projection.clone())
+            .unwrap_or(result.projection);
+        Some(light_application::ProgrammingCueActivationCompletion {
+            projection,
+            event_sequence: result.event_sequence,
+        })
     }
 
     fn activate_recorded_cue(

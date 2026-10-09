@@ -216,6 +216,7 @@ impl PlaybackPorts for FakeBackend {
             desk_id: context.desk_id,
             active_page: 1,
             selected_playback: None,
+            selected_cue_list: None,
         }))
     }
 }

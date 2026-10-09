@@ -168,6 +168,8 @@ fn cue_group_spread_re_resolves_against_current_membership_on_recall() {
         automatic_restore: false,
     });
     let list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: list_id,
         name: "Wave".into(),
         priority: 10,
@@ -239,6 +241,8 @@ fn cue_group_spread_uses_shared_spatial_ranks() {
         automatic_restore: false,
     });
     let list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: list_id,
         name: "Mapped".into(),
         priority: 10,

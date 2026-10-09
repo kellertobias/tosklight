@@ -19,9 +19,11 @@ export function decodeCueListBody(
 ): CueList {
 	const body = recordAt(value, path);
 	const id = stringAt(body.id, `${path}.id`);
+	const poolMetadata = decodePoolMetadata(body, path);
 	// Portable objects can retain a legacy storage key; `body.id` is the Cuelist identity.
 	return {
 		...body,
+		...poolMetadata,
 		id,
 		name: plainStringAt(body.name, `${path}.name`),
 		priority: signedIntegerAt(body.priority, `${path}.priority`),
@@ -68,6 +70,49 @@ export function decodeCueListBody(
 	} as CueList;
 }
 
+function decodePoolMetadata(body: Record<string, unknown>, path: string) {
+	const number = body.pool_number;
+	const address = (value: unknown, addressPath: string) => {
+		const parsed = integerAt(value, addressPath);
+		if (parsed < 1 || parsed > 1000)
+			throw new WireValidationError(
+				addressPath,
+				"Cuelist address must be within 1-1000",
+				value,
+			);
+		return parsed;
+	};
+	const poolNumber =
+		number == null ? number : address(number, `${path}.pool_number`);
+	const aliases =
+		body.legacy_pool_aliases === undefined
+			? undefined
+			: arrayAt(body.legacy_pool_aliases, `${path}.legacy_pool_aliases`).map(
+					(alias, index) =>
+						address(alias, `${path}.legacy_pool_aliases[${index}]`),
+				);
+	if (aliases?.length && poolNumber == null)
+		throw new WireValidationError(
+			`${path}.legacy_pool_aliases`,
+			"Cuelist aliases require a canonical number",
+			aliases,
+		);
+	if (
+		aliases &&
+		(new Set(aliases).size !== aliases.length ||
+			aliases.includes(poolNumber as number))
+	)
+		throw new WireValidationError(
+			`${path}.legacy_pool_aliases`,
+			"Cuelist aliases must be distinct from the canonical number",
+			aliases,
+		);
+	return {
+		...(number === undefined ? {} : { pool_number: poolNumber }),
+		...(aliases === undefined ? {} : { legacy_pool_aliases: aliases }),
+	};
+}
+
 function decodeCue(value: unknown, path: string): Cue {
 	const cue = recordAt(value, path);
 	return {
@@ -105,11 +150,23 @@ function decodeCueChange(
 		...change,
 		[idKey]: stringAt(change[idKey], `${path}.${idKey}`),
 		attribute: stringAt(change.attribute, `${path}.attribute`),
-		...(change.preset_reference == null ? {} : { preset_reference: decodePresetReference(change.preset_reference, `${path}.preset_reference`, stringAt(change.attribute, `${path}.attribute`)) }),
+		...(change.preset_reference == null
+			? {}
+			: {
+					preset_reference: decodePresetReference(
+						change.preset_reference,
+						`${path}.preset_reference`,
+						stringAt(change.attribute, `${path}.attribute`),
+					),
+				}),
 		value:
 			change.value == null
 				? null
-				: decodeAttributeValue(change.value, `${path}.value`, idKey === "group_id" ? "group" : "fixture"),
+				: decodeAttributeValue(
+						change.value,
+						`${path}.value`,
+						idKey === "group_id" ? "group" : "fixture",
+					),
 		automatic_restore: optionalBoolean(
 			change,
 			"automatic_restore",

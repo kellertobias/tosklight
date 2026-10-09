@@ -274,6 +274,8 @@ mod tests {
 
     fn list(cues: Vec<Cue>) -> CueList {
         CueList {
+            pool_number: None,
+            legacy_pool_aliases: Vec::new(),
             id: CueListId::new(),
             name: "Source".into(),
             priority: 0,

@@ -7,6 +7,7 @@ pub mod action;
 pub mod active_show;
 pub mod command_macro;
 pub mod command_macro_runtime;
+pub mod cuelist_pool;
 pub mod dynamics;
 pub mod event;
 pub mod fixture_position;
@@ -58,6 +59,7 @@ pub use command_macro_runtime::{
     CommandMacroRunRequest, CommandMacroRuntimeSnapshot, CommandMacroSequenceOutcome,
     CommandMacroTrigger, DEFAULT_MACRO_HISTORY_LIMIT, wait_for_macro_delay,
 };
+pub use cuelist_pool::cuelist_pool_catalog;
 pub use dynamics::{
     DynamicControllerUpdate, DynamicFixAtBatchCommand, DynamicFixAtCaptureCommand,
     DynamicFixAtCommand, DynamicFixAtEnvironment, DynamicFixAtValue, DynamicOffCommand,

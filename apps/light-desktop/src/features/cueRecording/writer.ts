@@ -1,8 +1,6 @@
+import { cuelistPoolCatalog } from "../playbackTopology/cuelistPoolCatalog";
 import type { PlaybackRuntimeStore } from "../playbackRuntime/store";
-import type {
-	ShowObject,
-	ShowObjectKind,
-} from "../showObjects/contracts";
+import type { ShowObject, ShowObjectKind } from "../showObjects/contracts";
 import type { ShowObjectsStore } from "../showObjects/store";
 import type {
 	CueRecordingActions,
@@ -38,10 +36,16 @@ export class CueRecordingWriter implements CueRecordingActions {
 		const snapshot = this.options.store.getSnapshot();
 		const generation = snapshot.authorityGeneration;
 		const revision = snapshot.showRevision;
-		if (revision == null) return this.fail("Authoritative Show revision is loading");
+		if (revision == null)
+			return this.fail("Authoritative Show revision is loading");
 		const selectedPlayback =
 			input.target.kind === "selected_playback"
 				? this.options.selectedPlayback()
+				: null;
+		const selectedCueList =
+			input.target.kind === "selected_playback"
+				? (this.options.playbackRuntimeStore.getSnapshot().desk
+						?.selected_cue_list ?? null)
 				: null;
 		try {
 			return await this.attempt(input, revision, generation);
@@ -53,6 +57,7 @@ export class CueRecordingWriter implements CueRecordingActions {
 				input.target,
 				generation,
 				selectedPlayback,
+				selectedCueList,
 			);
 			if (!this.isCurrent(generation)) return null;
 			// Recording a Cue names no single object, so the desk pins the whole show's revision —
@@ -142,7 +147,13 @@ export class CueRecordingWriter implements CueRecordingActions {
 		const installs = [
 			{ kind: "cue_list" as const, objectId: cueList.id, object: cueList },
 			...(playback
-				? [{ kind: "playback" as const, objectId: playback.id, object: playback }]
+				? [
+						{
+							kind: "playback" as const,
+							objectId: playback.id,
+							object: playback,
+						},
+					]
 				: []),
 			...(page
 				? [
@@ -173,6 +184,7 @@ export class CueRecordingWriter implements CueRecordingActions {
 		target: CueRecordTarget,
 		generation: number,
 		selectedPlayback: number | null,
+		selectedCueList: string | null,
 	) {
 		const failure = transportFailure(error);
 		if (failure?.status !== 409) return;
@@ -183,19 +195,41 @@ export class CueRecordingWriter implements CueRecordingActions {
 				generation,
 			);
 		if (!this.isCurrent(generation)) return;
-		await this.repairTarget(target, generation, selectedPlayback);
+		await this.repairTarget(
+			target,
+			generation,
+			selectedPlayback,
+			selectedCueList,
+		);
 	}
 
 	private async repairTarget(
 		target: CueRecordTarget,
 		generation: number,
 		selectedPlayback: number | null,
+		selectedCueList: string | null,
 	) {
+		if (target.kind === "cuelist_pool") {
+			const snapshot = this.options.store.getSnapshot();
+			const entry = cuelistPoolCatalog(
+				snapshot.cueLists.map((object) => object.body),
+				snapshot.playbacks.map((object) => object.body),
+				snapshot.playbackPages.length === 0,
+			).find((candidate) => candidate.number === target.number);
+			const object =
+				entry &&
+				snapshot.cueLists.find((object) => object.body.id === entry.cueList.id);
+			return object
+				? this.repairObject("cue_list", object.id, generation)
+				: undefined;
+		}
 		if (target.kind === "cue_list")
-			return this.repairObject("cue_list", target.cueListId, generation);
+			return this.repairCueList(target.cueListId, generation);
 		if (target.kind === "pool")
 			return this.repairPlayback(target.playbackNumber, generation);
 		if (target.kind === "selected_playback") {
+			if (selectedCueList)
+				return this.repairCueList(selectedCueList, generation);
 			return selectedPlayback == null
 				? undefined
 				: this.repairPlayback(selectedPlayback, generation);
@@ -206,7 +240,8 @@ export class CueRecordingWriter implements CueRecordingActions {
 			generation,
 		);
 		if (target.kind === "virtual") {
-			const virtual = page?.body.virtual_playbacks[String(target.playbackNumber)];
+			const virtual =
+				page?.body.virtual_playbacks[String(target.playbackNumber)];
 			if (virtual?.target.type === "cue_list")
 				await this.repairObject(
 					"cue_list",
@@ -217,6 +252,13 @@ export class CueRecordingWriter implements CueRecordingActions {
 		}
 		const playback = page?.body.slots[String(target.slot)];
 		if (playback != null) await this.repairPlayback(playback, generation);
+	}
+
+	private repairCueList(id: string, generation: number) {
+		const object = this.options.store
+			.getSnapshot()
+			.cueLists.find((object) => object.body.id === id);
+		return this.repairObject("cue_list", object?.id ?? id, generation);
 	}
 
 	private async repairPlayback(number: number, generation: number) {

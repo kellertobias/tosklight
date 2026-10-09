@@ -217,6 +217,8 @@ fn template_cue_list(
         })
         .collect();
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: "Main".into(),
         priority: 0,

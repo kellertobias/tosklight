@@ -100,6 +100,8 @@ fn canonical_extension_controls_use_authoritative_output_and_playback_services()
     assert!(state.output.control_projection().blackout);
 
     let cue_list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Extension CueList".into(),
         priority: 0,

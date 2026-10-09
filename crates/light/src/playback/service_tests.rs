@@ -92,6 +92,7 @@ impl PlaybackPorts for FakePorts {
             desk_id: context.desk_id,
             active_page: *self.current_page.lock(),
             selected_playback: None,
+            selected_cue_list: None,
         }))
     }
 }
@@ -219,6 +220,7 @@ impl PlaybackUnitOfWork for PublishingOperation {
             desk_id: self.context.desk_id,
             active_page: 2,
             selected_playback: Some(7),
+            selected_cue_list: None,
         };
         PlaybackOperation::with_events(
             "committed",
@@ -832,6 +834,7 @@ impl PlaybackPorts for OrderedPorts {
             desk_id: context.desk_id,
             active_page: 1,
             selected_playback: None,
+            selected_cue_list: None,
         }))
     }
 }

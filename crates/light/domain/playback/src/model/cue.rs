@@ -216,6 +216,12 @@ pub enum RestartMode {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CueList {
+    /// Independent operator Cuelist address. Absent until legacy topology is migrated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool_number: Option<u16>,
+    /// Previously valid numeric Cuelist addresses retained by lossless legacy migration.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub legacy_pool_aliases: Vec<u16>,
     pub id: CueListId,
     pub name: String,
     pub priority: i16,
@@ -509,6 +515,7 @@ impl CueList {
         })
     }
     pub fn validate(&self) -> Result<(), String> {
+        crate::cue_pool::validate_pool_metadata(self)?;
         if !self.speed_multiplier.is_finite() || !(0.01..=100.0).contains(&self.speed_multiplier) {
             return Err("speed multiplier must be within 0.01-100".into());
         }

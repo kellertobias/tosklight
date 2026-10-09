@@ -47,6 +47,13 @@ impl CueList {
             })
             .max()
             .unwrap_or(0)
+            .max(
+                if self.pool_number.is_some() || !self.legacy_pool_aliases.is_empty() {
+                    light_core::programming::INDEPENDENT_CUELIST_POOL_CONTRACT
+                } else {
+                    0
+                },
+            )
     }
 
     /// Cue changes remain sparse, but each written value is a complete, valid semantic owner.

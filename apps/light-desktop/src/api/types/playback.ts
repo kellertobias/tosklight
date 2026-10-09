@@ -123,6 +123,8 @@ export interface VisualizationSnapshot {
 }
 
 export interface CueList {
+	pool_number?: number | null;
+	legacy_pool_aliases?: number[];
 	id: string;
 	name: string;
 	cues: Cue[];

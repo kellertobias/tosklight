@@ -178,6 +178,13 @@ impl PortableShowObjectUndo {
         self.expected_object_revision
     }
 
+    /// Migrate a historical body before its guarded atomic restoration. The history row and
+    /// revision condition remain intact, so this cannot turn Undo into an ordinary overwrite.
+    pub fn with_migrated_body(mut self, body: Value) -> Self {
+        self.body = body;
+        self
+    }
+
     pub(super) fn into_parts(self) -> (PortableShowObjectKey, Value, Revision, i64) {
         (
             self.key,

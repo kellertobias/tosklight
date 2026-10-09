@@ -18,6 +18,8 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
         automatic_restore: false,
     });
     let list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: list_id,
         name: "Live group".into(),
         priority: 10,

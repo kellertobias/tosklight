@@ -738,6 +738,8 @@ fn install_optics_cues(live: &Live) {
     second.changes = vec![focus_change, zoom_change];
     second.fade_millis = 0;
     let list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Optics".into(),
         priority: 10,

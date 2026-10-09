@@ -14,10 +14,7 @@ import type {
 	CueRecordingTransport,
 	RecordCueInput,
 } from "./contracts";
-import {
-	CueRecordingWriter,
-	type CueRecordingWriterOptions,
-} from "./writer";
+import { CueRecordingWriter, type CueRecordingWriterOptions } from "./writer";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 const CUE_LIST_ID = "22222222-2222-4222-8222-222222222222";
@@ -209,8 +206,11 @@ function deferred<T>() {
 describe("CueRecordingWriter", () => {
 	it("installs one response atomically and ignores its later canonical event", async () => {
 		const record = vi.fn(
-			async (_showId: string, _revision: number, request: CueRecordingRequest) =>
-				outcome(request.requestId),
+			async (
+				_showId: string,
+				_revision: number,
+				request: CueRecordingRequest,
+			) => outcome(request.requestId),
 		);
 		const { store, playbackRuntimeStore, writer } = setup(record);
 		const unrelatedGroups = store.getSnapshot().groups;
@@ -246,7 +246,11 @@ describe("CueRecordingWriter", () => {
 
 	it("preserves equal-revision Playback topology from a Cue response", async () => {
 		const record = vi.fn(
-			async (_showId: string, _revision: number, request: CueRecordingRequest) =>
+			async (
+				_showId: string,
+				_revision: number,
+				request: CueRecordingRequest,
+			) =>
 				outcome(request.requestId, {
 					playback: playback(1),
 					page: page(1),
@@ -309,7 +313,9 @@ describe("CueRecordingWriter", () => {
 		expect(store.getSnapshot().cueLists).toBe(afterEvent.cueLists);
 		expect(store.getSnapshot().playbacks).toBe(afterEvent.playbacks);
 		expect(store.getSnapshot().playbackPages).toBe(afterEvent.playbackPages);
-		expect(store.getSnapshot().cueLists[0].body.cues[0].name).toBe("Event first");
+		expect(store.getSnapshot().cueLists[0].body.cues[0].name).toBe(
+			"Event first",
+		);
 		expect(
 			playbackRuntimeStore.getSnapshot().projections.get("playback:7")?.[0]
 				.target,
@@ -318,7 +324,11 @@ describe("CueRecordingWriter", () => {
 
 	it("replays one ambiguous request with the identical request ID", async () => {
 		const record = vi.fn(
-			async (_showId: string, _revision: number, request: CueRecordingRequest) => {
+			async (
+				_showId: string,
+				_revision: number,
+				request: CueRecordingRequest,
+			) => {
 				if (record.mock.calls.length === 1)
 					throw new CueRecordingActionError(
 						"connection lost",
@@ -343,7 +353,11 @@ describe("CueRecordingWriter", () => {
 
 	it("settles replayed no-change without cloning projections or runtime state", async () => {
 		const record = vi.fn(
-			async (_showId: string, _revision: number, request: CueRecordingRequest) =>
+			async (
+				_showId: string,
+				_revision: number,
+				request: CueRecordingRequest,
+			) =>
 				outcome(request.requestId, {
 					status: "no_change",
 					replayed: true,
@@ -371,8 +385,11 @@ describe("CueRecordingWriter", () => {
 
 	it("blocks after a cursor gap until scoped hydration restores the Show revision", async () => {
 		const record = vi.fn(
-			async (_showId: string, _revision: number, request: CueRecordingRequest) =>
-				outcome(request.requestId),
+			async (
+				_showId: string,
+				_revision: number,
+				request: CueRecordingRequest,
+			) => outcome(request.requestId),
 		);
 		const { store, writer, onError } = setup(record);
 		store.beginEventResync();
@@ -523,6 +540,57 @@ describe("CueRecordingWriter", () => {
 		]);
 	});
 
+	it("repairs an independent alias by its actual storage key without loading physical Playback101", async () => {
+		const original = cueList(1, "Original");
+		original.id = "legacy-list-key";
+		original.body.pool_number = 30;
+		original.body.legacy_pool_aliases = [101];
+		const repaired = { ...original, revision: 9 };
+		const loadObject = vi.fn(
+			async (_show: string, kind: ShowObjectKind, id: string) =>
+				kind === "cue_list" && id === original.id ? repaired : null,
+		);
+		const { store, writer } = setup(
+			vi.fn(async () => {
+				throw conflictError(9);
+			}),
+			loadObject,
+		);
+		store.setCollection(SHOW_ID, "cue_list", [original], 10);
+		expect(
+			await writer.record(input({ kind: "cuelist_pool", number: 101 })),
+		).toBeNull();
+		expect(loadObject.mock.calls).toEqual([
+			[SHOW_ID, "cue_list", "legacy-list-key"],
+		]);
+	});
+
+	it("repairs the captured explicit Cuelist selection even when the desk changes during the request", async () => {
+		const pending = deferred<CueRecordingOutcome>();
+		const loadObject = vi.fn(async () => cueList(9, "Repaired"));
+		const { writer, playbackRuntimeStore } = setup(
+			vi.fn(async () => pending.promise),
+			loadObject,
+		);
+		const desk = {
+			scope: { show_id: SHOW_ID, show_revision: 7 },
+			desk_id: "desk-a",
+			active_page: 1,
+			selected_playback: 101,
+			selected_cue_list: CUE_LIST_ID,
+		};
+		playbackRuntimeStore.applyDesk(desk, 1);
+		const writing = writer.record(input({ kind: "selected_playback" }));
+		await Promise.resolve();
+		playbackRuntimeStore.applyDesk(
+			{ ...desk, selected_cue_list: "another-list" },
+			2,
+		);
+		pending.reject(conflictError(9));
+		expect(await writing).toBeNull();
+		expect(loadObject.mock.calls).toEqual([[SHOW_ID, "cue_list", CUE_LIST_ID]]);
+	});
+
 	it("does not let a stale conflict repair overwrite a newer event", async () => {
 		const repair = deferred<ShowObject | null>();
 		const loadObject = vi.fn(async () => repair.promise);
@@ -542,9 +610,7 @@ describe("CueRecordingWriter", () => {
 		repair.resolve(cueList(9, "Stale repair"));
 
 		expect(await writing).toBeNull();
-		expect(store.getSnapshot().cueLists).toEqual([
-			cueList(10, "Newer event"),
-		]);
+		expect(store.getSnapshot().cueLists).toEqual([cueList(10, "Newer event")]);
 	});
 
 	it("ignores a late outcome after same-show server authority replacement", async () => {
@@ -567,9 +633,7 @@ describe("CueRecordingWriter", () => {
 		expect(await writing).toBeNull();
 		expect(loadObject).not.toHaveBeenCalled();
 		expect(onError).not.toHaveBeenCalled();
-		expect(store.getSnapshot().cueLists).toEqual([
-			cueList(20, "Replacement"),
-		]);
+		expect(store.getSnapshot().cueLists).toEqual([cueList(20, "Replacement")]);
 	});
 
 	it("ignores a late conflict after same-show server authority replacement", async () => {
@@ -592,9 +656,7 @@ describe("CueRecordingWriter", () => {
 		expect(loadObject).not.toHaveBeenCalled();
 		expect(onError).not.toHaveBeenCalled();
 		expect(store.getSnapshot()).toMatchObject({ showRevision: 20 });
-		expect(store.getSnapshot().cueLists).toEqual([
-			cueList(20, "Replacement"),
-		]);
+		expect(store.getSnapshot().cueLists).toEqual([cueList(20, "Replacement")]);
 	});
 
 	it("rejects a mismatched transport outcome without installing it", async () => {

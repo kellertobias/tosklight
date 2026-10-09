@@ -192,9 +192,10 @@ async fn pbk_and_cuelist_selection_are_distinct_authoritative_commands() {
             .installation
             .selected_playback(scenario.session.desk.id, show_id)
             .unwrap(),
-        Some(1)
+        Some(2)
     );
 
+    assert!(scenario.state.installation.selected_cue_list(scenario.session.desk.id, show_id).unwrap().is_some());
     let response = scenario
         .execute("reject-playback-alias", Some("PLAYBACK 2"))
         .await;

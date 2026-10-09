@@ -385,6 +385,8 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
     };
     let store = ShowStore::open(&show_path).unwrap();
     let cue_list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Main".into(),
         priority: 0,

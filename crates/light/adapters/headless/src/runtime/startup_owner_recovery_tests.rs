@@ -108,6 +108,8 @@ fn seed(invalid: bool, missing_group: bool, random: bool) -> Saved {
     // coupling the test to a particular saved physical/virtual Playback assignment.
     let cue_list = light_core::CueListId::new();
     let cue = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list,
         name: "Startup owner recovery".into(),
         priority: 0,

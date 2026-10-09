@@ -1,19 +1,28 @@
 import { useMemo } from "react";
-import { useCueListRuntime } from "../../features/playbackRuntime/PlaybackRuntimeView";
+import {
+	useCueListRuntime,
+	useDirectCueListProjectionMap,
+} from "../../features/playbackRuntime/PlaybackRuntimeView";
+import { legacyPlaybackRuntime } from "../../features/playbackRuntime/legacy";
+import { cuelistPoolCatalog } from "../../features/playbackTopology/cuelistPoolCatalog";
 import {
 	useCueLists,
 	usePlaybackDefinitions,
+	usePlaybackPages,
 } from "../../features/showObjects/ShowObjectsState";
 
 export function useCuelistPool() {
+	const lists = useCueLists();
 	const playbacks = usePlaybackDefinitions();
+	const pages = usePlaybackPages();
 	return useMemo(
 		() =>
-			playbacks
-				.map((object) => object.body)
-				.filter((definition) => definition.target.type === "cue_list")
-				.sort((left, right) => left.number - right.number),
-		[playbacks],
+			cuelistPoolCatalog(
+				lists.map((object) => object.body),
+				playbacks.map((object) => object.body),
+				pages.length === 0,
+			),
+		[lists, playbacks, pages],
 	);
 }
 
@@ -21,45 +30,41 @@ export function useSelectedCuelist(
 	selectedCuelist: number | null,
 	enabled = true,
 	fixedCueListId?: string,
+	assignmentNumber?: number | null,
 ) {
 	const pool = useCuelistPool();
 	const cueLists = useCueLists();
-	const hasFixedCueListId = fixedCueListId !== undefined;
-	const selectedPlaybackDefinition = hasFixedCueListId
-		? pool.find(
-				(definition) =>
-					definition.target.type === "cue_list" &&
-					definition.target.cue_list_id === fixedCueListId,
-			)
-		: pool.find((definition) => definition.number === selectedCuelist);
-	const selectedDefinition =
-		selectedPlaybackDefinition?.target.type === "cue_list"
-			? selectedPlaybackDefinition
-			: undefined;
-	const selectedCueListId = hasFixedCueListId
-		? fixedCueListId
-		: selectedDefinition?.target.type === "cue_list"
-			? selectedDefinition.target.cue_list_id
-			: null;
-	const legacyFirstCueObject =
-		!hasFixedCueListId && pool.length === 0 && selectedCuelist === 1
-			? cueLists[0]
-			: undefined;
-	const selectedCueObject = selectedCueListId
-		? cueLists.find((candidate) => candidate.body.id === selectedCueListId)
-		: legacyFirstCueObject;
-	const cueList = selectedCueObject?.body;
-	// The exact Cuelist runtime is the only live authority; an absent projection
-	// means "not running", never a reason to read a broad Playback snapshot.
-	const active = useCueListRuntime(
-		enabled ? selectedCueListId : null,
-		selectedDefinition?.number,
+	const entry =
+		fixedCueListId !== undefined
+			? pool.find((entry) => entry.cueList.id === fixedCueListId)
+			: pool.find((entry) => entry.number === selectedCuelist);
+	const id = fixedCueListId ?? entry?.cueList.id ?? null;
+	const selectedCueObject = id
+		? cueLists.find((object) => object.body.id === id)
+		: undefined;
+	const ownerNumber =
+		assignmentNumber === null
+			? undefined
+			: (assignmentNumber ??
+				(entry?.cueList.pool_number == null
+					? entry?.assignment?.number
+					: undefined));
+	const assigned = useCueListRuntime(
+		enabled && ownerNumber != null ? id : null,
+		ownerNumber,
 	);
+	const direct = useDirectCueListProjectionMap(
+		enabled && id ? [id] : [],
+		enabled,
+	);
+	const projection = id ? direct.projections.get(id) : undefined;
+	const active =
+		ownerNumber != null ? assigned : legacyPlaybackRuntime(projection);
 	return {
 		pool,
-		selectedPlaybackDefinition,
+		selectedPlaybackDefinition: entry,
 		selectedCueObject,
-		cueList,
+		cueList: selectedCueObject?.body,
 		active,
 	};
 }

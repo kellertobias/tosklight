@@ -181,6 +181,12 @@ fn validate_timing(name: &str, value: Option<u64>) -> Result<(), String> {
 
 fn target(value: wire::CueRecordTarget) -> Result<application::ProgrammingCueRecordTarget, String> {
     Ok(match value {
+        wire::CueRecordTarget::CuelistPool { number } => {
+            if !(1..=1000).contains(&number) {
+                return Err("Cuelist number must be within 1-1000".into());
+            }
+            application::ProgrammingCueRecordTarget::CuelistPool { number }
+        }
         wire::CueRecordTarget::Pool { playback_number }
             if (1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
         {

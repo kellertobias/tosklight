@@ -166,6 +166,7 @@ pub(super) fn desk_projection(
             desk_id: context.desk_id,
             active_page: 1,
             selected_playback: None,
+            selected_cue_list: None,
         }));
     };
     let active_page = ports
@@ -186,6 +187,11 @@ pub(super) fn desk_projection(
         desk_id: context.desk_id,
         active_page,
         selected_playback,
+        selected_cue_list: ports
+            .state
+            .installation
+            .selected_cue_list(context.desk_id, show.id)
+            .map_err(|error| invalid(error.to_string()))?,
     }))
 }
 

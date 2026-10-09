@@ -568,6 +568,10 @@ export function decodePlaybackDesk(
 			projection.active_page,
 			`${path}.active_page`,
 		),
+		selected_cue_list:
+			projection.selected_cue_list == null
+				? null
+				: stringAt(projection.selected_cue_list, `${path}.selected_cue_list`),
 		selected_playback: nullable(
 			projection.selected_playback,
 			`${path}.selected_playback`,

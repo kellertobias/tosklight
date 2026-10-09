@@ -287,6 +287,8 @@ fn test_cue_list(name: &str, changes: Vec<CueChange>) -> CueList {
     let mut cue = Cue::new(1_u16.into());
     cue.changes = changes;
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: name.into(),
         priority: 10,
@@ -415,6 +417,8 @@ fn mib_snapshot(fixtures: Vec<PatchedFixture>, fixture_ids: &[FixtureId]) -> Eng
         lit.changes.push(position);
     }
     let cue_list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "MIB".into(),
         priority: 10,

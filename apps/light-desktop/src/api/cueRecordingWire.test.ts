@@ -112,16 +112,19 @@ function changedOutcome(overrides: Record<string, unknown> = {}) {
 }
 
 function noChangeOutcome(overrides: Record<string, unknown> = {}) {
-	const { show_event_sequence: _sequence, runtime: _runtime, ...base } =
-		changedOutcome({
-			status: "no_change",
-			show_revision: 7,
-			projections: {
-				cue_list: wireCueList(1),
-				playback: wirePlayback(),
-				page: wirePage(),
-			},
-		});
+	const {
+		show_event_sequence: _sequence,
+		runtime: _runtime,
+		...base
+	} = changedOutcome({
+		status: "no_change",
+		show_revision: 7,
+		projections: {
+			cue_list: wireCueList(1),
+			playback: wirePlayback(),
+			page: wirePage(),
+		},
+	});
 	return { ...base, ...overrides };
 }
 
@@ -141,10 +144,9 @@ function runtime(showId = SHOW_ID) {
 
 describe("Cue recording v2 wire", () => {
 	it("encodes every target shape and only action-time metadata", () => {
-		const targets: Array<[
-			CueRecordingRequest["target"],
-			Record<string, unknown>,
-		]> = [
+		const targets: Array<
+			[CueRecordingRequest["target"], Record<string, unknown>]
+		> = [
 			[
 				{ kind: "pool", playbackNumber: 7 },
 				{ kind: "pool", playback_number: 7 },
@@ -299,9 +301,7 @@ describe("Cue recording v2 wire", () => {
 			changedOutcome({
 				projections: {
 					cue_list: wireCueList(),
-					playback: wirePlayback(
-						"88888888-8888-4888-8888-888888888888",
-					),
+					playback: wirePlayback("88888888-8888-4888-8888-888888888888"),
 					page: null,
 				},
 			}),
@@ -430,15 +430,18 @@ describe("Cue recording v2 wire", () => {
 				projections: {
 					cue_list: wireCueList(),
 					playback: wirePlayback(),
-					page: { ...wirePage(), body: { ...wirePage().body, slots: { 2: 9 } } },
+					page: {
+						...wirePage(),
+						body: { ...wirePage().body, slots: { 2: 9 } },
+					},
 				},
 			}),
 			"$.projections.page.body.slots.2",
 		],
 	] as const)("rejects %s topology", (_label, action, value, path) => {
-		expect(() =>
-			decodeCueRecordingOutcome(value, action, SHOW_ID, 7),
-		).toThrow(path);
+		expect(() => decodeCueRecordingOutcome(value, action, SHOW_ID, 7)).toThrow(
+			path,
+		);
 	});
 
 	it("rejects event fields on no-change and missing changed event identity", () => {
@@ -499,5 +502,63 @@ describe("Cue recording v2 wire", () => {
 				user_id: "foreign-user",
 			}),
 		).toThrow("$.user_id");
+	});
+});
+
+describe("independent Cuelist recording topology", () => {
+	it("encodes an independent number without interpreting it as a Playback", () => {
+		expect(
+			encodeCueRecordingRequest(request({ kind: "cuelist_pool", number: 101 }))
+				.target,
+		).toEqual({ kind: "cuelist_pool", number: 101 });
+	});
+	it("accepts canonical and preserved alias addresses with a legacy storage key", () => {
+		const body = {
+			...cueListBody(),
+			pool_number: 30,
+			legacy_pool_aliases: [101],
+		};
+		const outcome = changedOutcome({
+			projections: {
+				cue_list: { id: "legacy-list-key", revision: 2, body },
+				playback: null,
+				page: null,
+			},
+		});
+		for (const number of [30, 101])
+			expect(
+				decodeCueRecordingOutcome(
+					outcome,
+					request({ kind: "cuelist_pool", number }),
+					SHOW_ID,
+					7,
+				).projections.cueList.body.id,
+			).toBe(CUE_LIST_ID);
+	});
+	it("rejects a different number and same-number physical Playback topology", () => {
+		const body = { ...cueListBody(), pool_number: 101 };
+		const projections = {
+			cue_list: { ...wireCueList(), body },
+			playback: null,
+			page: null,
+		};
+		expect(() =>
+			decodeCueRecordingOutcome(
+				changedOutcome({ projections }),
+				request({ kind: "cuelist_pool", number: 102 }),
+				SHOW_ID,
+				7,
+			),
+		).toThrow();
+		expect(() =>
+			decodeCueRecordingOutcome(
+				changedOutcome({
+					projections: { ...projections, playback: wirePlayback() },
+				}),
+				request({ kind: "cuelist_pool", number: 101 }),
+				SHOW_ID,
+				7,
+			),
+		).toThrow();
 	});
 });

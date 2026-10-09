@@ -318,6 +318,8 @@ fn test_scope() -> PlaybackShowScope {
 
 fn cue_list() -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Shared".into(),
         priority: 0,

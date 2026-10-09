@@ -17,6 +17,7 @@ pub(super) struct Stored<T> {
 
 pub(super) struct ResolvedCueTarget {
     pub cue_list: Option<Stored<CueList>>,
+    pub pool_number: Option<u16>,
     pub playback: Option<Stored<PlaybackDefinition>>,
     pub page: Option<Stored<PlaybackPage>>,
     pub concrete_playback_number: Option<u16>,
@@ -35,6 +36,22 @@ pub(super) fn resolve_target(
     commit: &ProgrammingCueCommit,
 ) -> Result<ResolvedCueTarget, ActionError> {
     match commit.environment().target {
+        ProgrammingCueResolvedTarget::CuelistPool { number } => {
+            let catalog = crate::cuelist_pool_catalog(document)?;
+            let cue_list = catalog
+                .resolve(number)
+                .map(|id| required_cue_list(document, id))
+                .transpose()?;
+            Ok(ResolvedCueTarget {
+                cue_list,
+                pool_number: Some(number),
+                playback: None,
+                page: None,
+                concrete_playback_number: None,
+                page_slot: None,
+                virtual_address: None,
+            })
+        }
         ProgrammingCueResolvedTarget::CueList { cue_list_id } => Ok(ResolvedCueTarget {
             cue_list: Some(required_cue_list(document, cue_list_id)?),
             playback: None,
@@ -42,6 +59,7 @@ pub(super) fn resolve_target(
             concrete_playback_number: None,
             page_slot: None,
             virtual_address: None,
+            pool_number: None,
         }),
         ProgrammingCueResolvedTarget::Playback {
             playback_number,
@@ -86,6 +104,7 @@ fn resolve_playback(
         concrete_playback_number: Some(playback_number),
         page_slot,
         virtual_address: None,
+        pool_number: None,
     })
 }
 
@@ -111,6 +130,7 @@ fn resolve_empty_page_slot(
         concrete_playback_number: Some(playback_number),
         page_slot: Some(page_slot),
         virtual_address: None,
+        pool_number: None,
     })
 }
 
@@ -140,6 +160,7 @@ fn resolve_virtual(
         concrete_playback_number: Some(address.number().get()),
         page_slot: None,
         virtual_address: Some(address),
+        pool_number: None,
     })
 }
 

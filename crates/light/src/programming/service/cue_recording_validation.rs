@@ -46,6 +46,9 @@ const fn unsafe_javascript_integer(value: u64) -> bool {
 
 fn validate_target(target: ProgrammingCueRecordTarget) -> Result<(), ActionError> {
     match target {
+        ProgrammingCueRecordTarget::CuelistPool { number } if !(1..=1000).contains(&number) => {
+            Err(invalid("Cuelist number must be within 1-1000"))
+        }
         ProgrammingCueRecordTarget::Pool { playback_number }
             if !(1..=1_000).contains(&playback_number) =>
         {
@@ -68,6 +71,14 @@ pub(super) fn validate_environment(
     environment: &ProgrammingCueRecordingEnvironment,
 ) -> Result<(), ActionError> {
     let target_matches = match (request.target, environment.target) {
+        (
+            ProgrammingCueRecordTarget::CuelistPool { number },
+            ProgrammingCueResolvedTarget::CuelistPool { number: resolved },
+        ) => number == resolved,
+        (
+            ProgrammingCueRecordTarget::SelectedPlayback,
+            ProgrammingCueResolvedTarget::CueList { .. },
+        ) => true,
         (
             ProgrammingCueRecordTarget::Pool { playback_number },
             ProgrammingCueResolvedTarget::Playback {
@@ -134,7 +145,11 @@ pub(super) fn validate_completion(
         == (completion.changed
             && completion.projections.cue_list.object_revision == 1
             && (completion.projections.playback.is_some()
-                || matches!(request.target, ProgrammingCueRecordTarget::Virtual { .. })));
+                || matches!(
+                    request.target,
+                    ProgrammingCueRecordTarget::Virtual { .. }
+                        | ProgrammingCueRecordTarget::CuelistPool { .. }
+                )));
     if event_matches
         && revision_matches
         && creation_matches
@@ -178,6 +193,12 @@ fn topology_matches(commit: &ProgrammingCueCommit, result: &ProgrammingCueCommit
         return false;
     };
     match commit.environment().target {
+        ProgrammingCueResolvedTarget::CuelistPool { number } => {
+            (cue_list.pool_number == Some(number) || cue_list.legacy_pool_aliases.contains(&number))
+                && projections.playback.is_none()
+                && projections.page.is_none()
+                && result.concrete_playback_number.is_none()
+        }
         ProgrammingCueResolvedTarget::CueList { cue_list_id } => {
             cue_list.id == cue_list_id
                 && projections.playback.is_none()

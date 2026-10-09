@@ -10,6 +10,8 @@ use uuid::Uuid;
 
 fn normalized_document() -> (light_show::ShowStore, light_show::PortableShowDocument) {
     let cue = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Main".into(),
         priority: 0,

@@ -1136,6 +1136,24 @@ describe("CuelistWindow pool recording", () => {
 				presentation_icon: "★",
 			},
 		];
+		mocks.playbacks.cue_lists = [
+			{
+				id: "main",
+				name: "No icon",
+				priority: 0,
+				mode: "sequence",
+				looped: false,
+				cues: [],
+			},
+			{
+				id: "encore",
+				name: "Explicit icon",
+				priority: 0,
+				mode: "sequence",
+				looped: false,
+				cues: [],
+			},
+		];
 		const authority = createCommandLineTestAuthority();
 		const { container } = render(
 			authority.wrap(<CuelistWindow compact cueListTab="pool" />),
@@ -1146,7 +1164,7 @@ describe("CuelistWindow pool recording", () => {
 		expect(cards[1].querySelector(".pool-card-icon")).toHaveTextContent("★");
 	});
 
-	it("shows reserved non-Cuelist identities and preserves their assignment when Record is armed", async () => {
+	it("records independent Cuelist101 while preserving physical SpeedGroup101", async () => {
 		mocks.playbacks.pool = [
 			{
 				number: 101,
@@ -1168,15 +1186,16 @@ describe("CuelistWindow pool recording", () => {
 		const reserved = container.querySelector<HTMLButtonElement>(
 			'[data-pool-slot-id="101"]',
 		)!;
-		expect(reserved).toHaveTextContent("Reserved · Speed A");
-		expect(reserved).toHaveTextContent("Assigned to another playback type");
-		expect(reserved).not.toHaveClass("empty", "store-target");
+		expect(reserved).toHaveTextContent("Empty");
+		expect(reserved).toHaveClass("empty", "store-target");
 		fireEvent.click(reserved);
-		expect(container.querySelector(".pool-message")).toHaveTextContent(
-			"Choose an empty number; the existing assignment is preserved.",
+		await waitFor(() =>
+			expect(mocks.recordCue).toHaveBeenCalledWith(
+				expect.objectContaining({
+					target: { kind: "cuelist_pool", number: 101 },
+				}),
+			),
 		);
-		expect(mocks.recordCue).not.toHaveBeenCalled();
-		expect(authority.writes).toEqual([]);
 		expect(JSON.stringify(mocks.playbacks.pool)).toBe(before);
 	});
 
@@ -1195,7 +1214,7 @@ describe("CuelistWindow pool recording", () => {
 		);
 		await waitFor(() =>
 			expect(mocks.recordCue).toHaveBeenCalledWith({
-				target: { kind: "pool", playbackNumber: 1 },
+				target: { kind: "cuelist_pool", number: 1 },
 				operation: "overwrite",
 				timing: {},
 				cueOnly: false,
@@ -1234,6 +1253,16 @@ describe("CuelistWindow pool recording", () => {
 				go_activates: true,
 				auto_off: true,
 				xfade_millis: 0,
+			},
+		];
+		mocks.playbacks.cue_lists = [
+			{
+				id: "main",
+				name: "Main sequence",
+				priority: 0,
+				mode: "sequence",
+				looped: false,
+				cues: [],
 			},
 		];
 		const { container } = render(<CuelistWindow compact cueListTab="pool" />);

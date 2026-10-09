@@ -145,6 +145,8 @@ fn stage_layout_migration_generates_automatic_2d_and_preserves_legacy_manual_ent
 fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
     let cue_list_id = CueListId::new();
     let cue_list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: "Legacy Chaser".into(),
         priority: 0,
@@ -281,6 +283,8 @@ fn duplicate_cue_ids_are_repaired_deterministically_once_without_losing_raw_fiel
     let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     second.id = duplicate_id;
     let cue_list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: "Duplicate Cue IDs".into(),
         priority: 0,
@@ -788,6 +792,8 @@ fn legacy_dynamic_phase_ordering_migrates_losslessly_across_pool_cue_and_playbac
         automatic_restore: false,
     });
     let cue_list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Legacy Dynamic fallback".into(),
         priority: 0,
@@ -1269,6 +1275,8 @@ fn retired_strobe_identity_migrates_losslessly_across_show_value_owners() {
         light_core::AttributeValue::Normalized(0.6),
     ));
     let cue_list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Legacy Strobe".into(),
         priority: 0,
@@ -1770,6 +1778,8 @@ fn legacy_cmy_static_values_migrate_inverse_to_rgb_without_losing_unknown_data()
         automatic_restore: false,
     });
     let cue_list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Legacy CMY".into(),
         priority: 0,

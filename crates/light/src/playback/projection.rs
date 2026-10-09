@@ -289,6 +289,7 @@ pub struct PlaybackDeskProjection {
     pub desk_id: Uuid,
     pub active_page: u8,
     pub selected_playback: Option<u16>,
+    pub selected_cue_list: Option<CueListId>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

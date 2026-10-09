@@ -200,6 +200,8 @@ fn transfer_cue_list(
     cues: Vec<light_playback::Cue>,
 ) -> light_playback::CueList {
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: name.into(),
         priority: 0,

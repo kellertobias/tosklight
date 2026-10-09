@@ -52,7 +52,22 @@ pub fn required_object_programming_contract(body: &Value) -> u16 {
                 })
             })
         });
-    if referenced { 2 } else { 1 }
+    // Dynamic objects also have pool_number; only Cuelist-shaped bodies own this feature.
+    let independent_pool = body.get("cues").is_some_and(Value::is_array)
+        && (body
+            .get("pool_number")
+            .is_some_and(|number| !number.is_null())
+            || body
+                .get("legacy_pool_aliases")
+                .and_then(Value::as_array)
+                .is_some_and(|aliases| !aliases.is_empty()));
+    if independent_pool {
+        3
+    } else if referenced {
+        2
+    } else {
+        1
+    }
 }
 
 /// Whole family a legacy scalar programming address belongs to.

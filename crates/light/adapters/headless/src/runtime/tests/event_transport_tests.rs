@@ -812,6 +812,8 @@ fn test_playback_scope() -> PlaybackShowScope {
 
 fn chaser() -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Event transport Chaser".into(),
         priority: 0,

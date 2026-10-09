@@ -486,6 +486,10 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         );
         assert!(mapped.ok, "{:?}", mapped.error);
     }
+    let snapshot = scenario.state.output.snapshot();
+    let first_playback = snapshot.playback_pages.iter().find(|page| page.number == 4).unwrap().slots[&7];
+    let second_playback = snapshot.playback_pages.iter().find(|page| page.number == 5).unwrap().slots[&7];
+    assert_ne!(first_playback, second_playback);
     scenario
         .state
         .installation
@@ -512,7 +516,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
             last_highlight_action: None,
         },
     );
-    for playback in [41, 42] {
+    for playback in [first_playback, second_playback] {
         assert_eq!(
             scenario
                 .playback_action_for(
@@ -530,8 +534,8 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
             StatusCode::OK
         );
     }
-    assert!(playback_is_enabled(&scenario, 41));
-    assert!(playback_is_enabled(&scenario, 42));
+    assert!(playback_is_enabled(&scenario, first_playback));
+    assert!(playback_is_enabled(&scenario, second_playback));
 
     scenario
         .state
@@ -547,8 +551,8 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         &[OscArgument::Bool(true)],
         Some("127.0.0.1:9030"),
     ));
-    assert!(!playback_is_enabled(&scenario, 41));
-    assert!(playback_is_enabled(&scenario, 42));
+    assert!(!playback_is_enabled(&scenario, first_playback));
+    assert!(playback_is_enabled(&scenario, second_playback));
     assert_eq!(
         scenario
             .state
@@ -578,7 +582,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
                 scenario.session.desk.id,
                 serde_json::json!({
                     "request_id":"off-target-go-again",
-                    "address":{"kind":"playback","playback_number":41},
+                    "address":{"kind":"playback","playback_number":first_playback},
                     "action":{"type":"go","pressed":true},
                     "surface":"physical",
                 }),
@@ -587,7 +591,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
             .status(),
         StatusCode::OK
     );
-    assert!(playback_is_enabled(&scenario, 41));
+    assert!(playback_is_enabled(&scenario, first_playback));
     scenario
         .state
         .installation
@@ -607,8 +611,8 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         &[OscArgument::Float(0.25)],
         Some("127.0.0.1:9030"),
     ));
-    assert!(!playback_is_enabled(&scenario, 41));
-    assert!(playback_is_enabled(&scenario, 42));
+    assert!(!playback_is_enabled(&scenario, first_playback));
+    assert!(playback_is_enabled(&scenario, second_playback));
     let explicit = scenario
         .state
         .events
@@ -643,7 +647,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         &[OscArgument::Bool(true)],
         Some("127.0.0.1:9030"),
     ));
-    assert!(!playback_is_enabled(&scenario, 42));
+    assert!(!playback_is_enabled(&scenario, second_playback));
 
     scenario
         .state
@@ -658,7 +662,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         &[OscArgument::Bool(true)],
         Some("127.0.0.1:9030"),
     ));
-    assert!(!playback_is_enabled(&scenario, 42));
+    assert!(!playback_is_enabled(&scenario, second_playback));
     assert_eq!(
         scenario
             .state
@@ -847,12 +851,12 @@ fn stored_cue_list(
     scenario: &CommandHttpScenario,
     playback: u16,
 ) -> (
-    light_playback::PlaybackDefinition,
+    Option<light_playback::PlaybackDefinition>,
     light_show::VersionedObject,
     light_playback::CueList,
 ) {
     let entry = scenario.state.active_show.current().clone().unwrap();
-    cue_list_for_playback(
+    stored_cuelist_pool(
         &ActiveShowRepository::open(&entry.path).unwrap(),
         &scenario.state.output.snapshot(),
         playback,

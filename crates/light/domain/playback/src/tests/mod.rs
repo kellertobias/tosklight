@@ -13,6 +13,8 @@ fn value(fixture: FixtureId, attribute: &str, value: f32) -> CueChange {
 }
 fn list(cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Main".into(),
         priority: 10,

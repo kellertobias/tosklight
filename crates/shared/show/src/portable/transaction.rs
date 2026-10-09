@@ -429,6 +429,7 @@ fn apply_writes(
                 undo.expected_object_revision,
                 undo.history_row_id,
                 &updated_at,
+                &body,
             )?,
             (None, Some(redo)) => restore_staged_redo(
                 tx,

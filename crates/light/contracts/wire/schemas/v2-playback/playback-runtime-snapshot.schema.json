@@ -614,6 +614,13 @@
         "scope": {
           "$ref": "#/$defs/PlaybackShowScope"
         },
+        "selected_cue_list": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
         "selected_playback": {
           "type": [
             "integer",

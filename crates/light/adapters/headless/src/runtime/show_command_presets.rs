@@ -289,107 +289,80 @@ fn transfer_cuelist(
     let source_number = numbered_object(source, "CUELIST")?;
     let destination_number = numbered_object(destination, "CUELIST")?;
     let (entry, store) = active_show_store(state)?;
-    let playbacks = store
-        .objects("playback")
+    let source_number = source_number
+        .parse::<u16>()
+        .map_err(|_| "Cuelist source is invalid")?;
+    let destination_number = destination_number
+        .parse::<u16>()
+        .map_err(|_| "Cuelist destination is invalid")?;
+    if !(1..=1000).contains(&source_number) || !(1..=1000).contains(&destination_number) {
+        return Err("Cuelist addresses must be within 1-1000".into());
+    }
+    let document = store
+        .portable_document()
         .map_err(|error| error.to_string())?;
-    let source_playback = playbacks
-        .iter()
-        .find(|object| object.id == source_number)
+    let catalog =
+        light_application::cuelist_pool_catalog(&document).map_err(|error| error.message)?;
+    let source_id = catalog
+        .resolve(source_number)
         .ok_or_else(|| format!("Cuelist {source_number} does not exist"))?;
-    if playbacks
-        .iter()
-        .any(|object| object.id == destination_number)
-    {
+    if catalog.resolve(destination_number).is_some() {
         return Err(format!("Cuelist {destination_number} already exists"));
     }
-    let definition: light_playback::PlaybackDefinition =
-        serde_json::from_value(source_playback.body.clone())
-            .map_err(|error| format!("Cuelist {source_number} playback is invalid: {error}"))?;
-    let light_playback::PlaybackTarget::CueList { cue_list_id } = definition.target else {
-        return Err(format!("playback {source_number} is not a Cuelist"));
-    };
-    let cue_lists = store
-        .objects("cue_list")
-        .map_err(|error| error.to_string())?;
-    let source_list = cue_lists
-        .iter()
-        .find(|object| object.id == cue_list_id.0.to_string())
-        .ok_or_else(|| format!("Cuelist {source_number} body does not exist"))?;
-
-    let mut destination_playback = source_playback.body.clone();
-    destination_playback["number"] = serde_json::json!(
-        destination_number
-            .parse::<u16>()
-            .map_err(|_| "Cuelist destination is invalid")?
-    );
     let mut mutations = Vec::new();
+    let mut source_body = None;
+    for object in store
+        .objects("cue_list")
+        .map_err(|error| error.to_string())?
+    {
+        let mut list: light_playback::CueList =
+            serde_json::from_value(object.body.clone()).map_err(|error| error.to_string())?;
+        catalog.migrate(&mut list)?;
+        let mut body = object.body.clone();
+        body["pool_number"] = serde_json::json!(list.pool_number);
+        body["legacy_pool_aliases"] = serde_json::json!(list.legacy_pool_aliases);
+        if list.id == source_id {
+            source_body = Some(body.clone());
+            if operation == "MOVE" {
+                if Some(source_number) == list.pool_number {
+                    body["pool_number"] = serde_json::json!(destination_number);
+                } else {
+                    // Move an explicit alias without changing the canonical address.
+                    list.legacy_pool_aliases
+                        .retain(|number| *number != source_number);
+                    list.legacy_pool_aliases.push(destination_number);
+                    body["legacy_pool_aliases"] = serde_json::json!(list.legacy_pool_aliases);
+                }
+            }
+        }
+        if body != object.body {
+            mutations.push(
+                put_active_show_object(
+                    light_application::ActiveShowObjectKind::CueList,
+                    object.id,
+                    object.revision,
+                    body,
+                )
+                .map_err(|error| error.message)?,
+            );
+        }
+    }
     if operation == "COPY" {
-        let new_list_id = light_core::CueListId::new();
-        let mut destination_list = source_list.body.clone();
-        destination_list["id"] = serde_json::json!(new_list_id);
-        remap_copied_cue_ids(&mut destination_list)?;
-        destination_playback["target"]["cue_list_id"] = serde_json::json!(new_list_id);
+        let mut body = source_body.ok_or("source Cuelist body is missing")?;
+        let id = light_core::CueListId::new();
+        body["id"] = serde_json::json!(id);
+        body["pool_number"] = serde_json::json!(destination_number);
+        body["legacy_pool_aliases"] = serde_json::json!([]);
+        remap_copied_cue_ids(&mut body)?;
         mutations.push(
             put_active_show_object(
                 light_application::ActiveShowObjectKind::CueList,
-                new_list_id.0.to_string(),
+                id.0.to_string(),
                 0,
-                destination_list,
+                body,
             )
             .map_err(|error| error.message)?,
         );
-    }
-    mutations.push(
-        put_active_show_object(
-            light_application::ActiveShowObjectKind::Playback,
-            destination_number.clone(),
-            0,
-            destination_playback,
-        )
-        .map_err(|error| error.message)?,
-    );
-    if operation == "MOVE" {
-        for page in store
-            .objects("playback_page")
-            .map_err(|error| error.to_string())?
-        {
-            let mut body = page.body.clone();
-            let mut changed = false;
-            if let Some(slots) = body
-                .get_mut("slots")
-                .and_then(serde_json::Value::as_object_mut)
-            {
-                for value in slots.values_mut() {
-                    if value
-                        .as_u64()
-                        .is_some_and(|number| number.to_string() == source_number)
-                    {
-                        *value = serde_json::json!(
-                            destination_number
-                                .parse::<u16>()
-                                .map_err(|_| "Cuelist destination is invalid")?
-                        );
-                        changed = true;
-                    }
-                }
-            }
-            if changed {
-                mutations.push(
-                    put_active_show_object(
-                        light_application::ActiveShowObjectKind::PlaybackPage,
-                        page.id,
-                        page.revision,
-                        body,
-                    )
-                    .map_err(|error| error.message)?,
-                );
-            }
-        }
-        mutations.push(delete_active_show_object(
-            light_application::ActiveShowObjectKind::Playback,
-            source_playback.id.clone(),
-            source_playback.revision,
-        ));
     }
     let action = active_show_object_action(context.clone(), entry.id, mutations);
     run_active_show_object_action_in_programming_interaction(state, action)

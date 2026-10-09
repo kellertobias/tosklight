@@ -142,6 +142,8 @@ fn cue_only_owner_release_restores_every_component_hold() {
 
 fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Main".into(),
         priority: 12,

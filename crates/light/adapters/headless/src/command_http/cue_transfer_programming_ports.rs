@@ -49,13 +49,22 @@ impl ServerProgrammingPorts<'_> {
         ) {
             return Ok(());
         }
-        let playback_number = self
+        let explicit = self
             .state()
             .installation
-            .selected_playback(self.session().desk.id, request.show_id)
-            .map_err(|error| error.to_string())?
-            .ok_or("no Cuelist is selected on this desk")?;
-        let concrete = ProgrammingCueTransferAddress::Pool { playback_number };
+            .selected_cue_list(self.session().desk.id, request.show_id)
+            .map_err(|error| error.to_string())?;
+        let concrete = if let Some(id) = explicit {
+            ProgrammingCueTransferAddress::CueList { id }
+        } else {
+            let playback_number = self
+                .state()
+                .installation
+                .selected_playback(self.session().desk.id, request.show_id)
+                .map_err(|error| error.to_string())?
+                .ok_or("no Cuelist is selected on this desk")?;
+            ProgrammingCueTransferAddress::Pool { playback_number }
+        };
         if matches!(
             request.source.address,
             ProgrammingCueTransferAddress::SelectedCuelist

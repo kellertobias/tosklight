@@ -685,6 +685,8 @@ fn group_release(group_id: &str) -> GroupCueChange {
 
 fn cue_list(id: CueListId, name: &str, cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: name.into(),
         priority: 0,

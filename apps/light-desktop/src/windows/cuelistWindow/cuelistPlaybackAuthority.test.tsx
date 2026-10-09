@@ -104,6 +104,7 @@ vi.mock("../../features/cueRecording/CueRecordingProvider", () => ({
 }));
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 	usePortableGroups: () => [],
+	usePresets: () => [],
 	useShowObjectCollectionsReady: () => true,
 	useShowObjectsStore: () => mocks.showObjectsStore,
 	useCueLists: () =>
@@ -194,7 +195,7 @@ function cueListBody(id: string, name: string, cueNames: string[]): CueList {
 }
 
 interface CuelistRuntime {
-	playbackNumber: number;
+	playbackNumber: number | null;
 	cueIndex: number;
 	master: number;
 }
@@ -205,13 +206,14 @@ function cueListRuntimeProjection(
 	cueListId: string,
 	runtime: CuelistRuntime,
 ): PlaybackProjection {
-	const base = cueProjection(runtime.playbackNumber, runtime.cueIndex);
+	const base = cueProjection(runtime.playbackNumber ?? 0, runtime.cueIndex);
 	if (base.target !== "cue_list" || !base.runtime)
 		throw new Error("The shared fixture must produce a live Cuelist runtime");
 	const live = base.runtime;
 	return {
 		...base,
 		requested,
+		playback_number: runtime.playbackNumber,
 		cue_list_id: cueListId,
 		runtime: { ...live, master: runtime.master },
 	};
@@ -224,6 +226,7 @@ function cueListRuntimeProjection(
 class PlaybackAuthority {
 	sequence = 10;
 	selectedPlayback: number | null = null;
+	selectedCueList: string | null = null;
 	readonly cuelists = new Map<string, CuelistRuntime>();
 	readonly snapshotRequests: PlaybackIdentity[][] = [];
 	readonly subscriptions: PlaybackEventScope[] = [];
@@ -236,7 +239,11 @@ class PlaybackAuthority {
 	}
 
 	desk(): PlaybackDesk {
-		return { ...deskProjection(1), selected_playback: this.selectedPlayback };
+		return {
+			...deskProjection(1),
+			selected_playback: this.selectedPlayback,
+			selected_cue_list: this.selectedCueList,
+		};
 	}
 
 	cuelistProjection(cueListId: string): PlaybackProjection | null {
@@ -247,6 +254,26 @@ class PlaybackAuthority {
 			cueListId,
 			runtime,
 		);
+	}
+
+	directProjection(cueListId: string): PlaybackProjection | null {
+		const list = mocks.cueLists.find((list) => list.id === cueListId);
+		if (!list) return null;
+		const requested: PlaybackIdentity = {
+			kind: "direct_cue_list",
+			cue_list_id: cueListId,
+		};
+		const runtime = this.cuelists.get(cueListId);
+		if (runtime?.playbackNumber === null)
+			return cueListRuntimeProjection(requested, cueListId, runtime);
+		return {
+			scope: { show_id: SHOW_ID, show_revision: 1 },
+			requested,
+			playback_number: null,
+			target: "cue_list",
+			cue_list_id: cueListId,
+			runtime: null,
+		};
 	}
 
 	playbackProjection(playbackNumber: number): PlaybackProjection | null {
@@ -267,6 +294,8 @@ class PlaybackAuthority {
 		if (this.pending) return new Promise<PlaybackSnapshot>(() => undefined);
 		const projections = identities
 			.map((identity) => {
+				if (identity.kind === "direct_cue_list")
+					return this.directProjection(identity.cue_list_id);
 				if (identity.kind === "cue_list")
 					return this.cuelistProjection(identity.cue_list_id);
 				if (identity.kind === "playback")
@@ -427,6 +456,35 @@ function followSelectionPane() {
 }
 
 describe("Cuelist follow-selection desk authority", () => {
+	it("follows an explicit stable Cuelist UUID instead of its unrelated physical number", async () => {
+		mocks.cueLists[0].pool_number = 30;
+		mocks.cueLists[1].pool_number = 101;
+		authority.selectedPlayback = 1;
+		authority.selectedCueList = ENCORE_CUE_LIST;
+		authority.cuelists.set(ENCORE_CUE_LIST, {
+			playbackNumber: null,
+			cueIndex: 0,
+			master: 0.5,
+		});
+		const view = renderCuelistWindow(followSelectionPane());
+		await settle();
+		expect(within(view.container).getByText("Encore look")).toBeInTheDocument();
+		expect(
+			within(view.container).queryByText("Main opening"),
+		).not.toBeInTheDocument();
+		expect(authority.requestedKeys()).toContain("direct-cuelist:encore");
+		authority.selectedCueList = null;
+		await act(async () => {
+			authority.publishDesk();
+			await Promise.resolve();
+		});
+		await waitFor(() =>
+			expect(
+				within(view.container).getByText("Main opening"),
+			).toBeInTheDocument(),
+		);
+	});
+
 	it("follows only the exact desk projection's selected playback", async () => {
 		authority.selectedPlayback = 1;
 		const view = renderCuelistWindow(followSelectionPane());
@@ -645,7 +703,12 @@ describe("Cuelist Pool master authority", () => {
 		await settle();
 
 		expect(authority.requestedKeys()).toEqual(
-			new Set(["playback:1", "playback:2"]),
+			new Set([
+				"playback:1",
+				"playback:2",
+				"direct-cuelist:main",
+				"direct-cuelist:encore",
+			]),
 		);
 		expect(mocks.showObjectKindsView).toHaveBeenCalledWith(
 			["cue_list", "playback", "playback_page"],
@@ -703,11 +766,13 @@ describe("Cuelist Pool workflows over scoped authority", () => {
 			return dialog;
 		});
 		expect(choice).toHaveTextContent("Add CueMerge CueOverwrite Cue");
-		fireEvent.click(within(choice).getByRole("button", { name: "Overwrite Cue" }));
+		fireEvent.click(
+			within(choice).getByRole("button", { name: "Overwrite Cue" }),
+		);
 
 		await waitFor(() =>
 			expect(mocks.recordCue).toHaveBeenCalledWith({
-				target: { kind: "cue_list", cueListId: ENCORE_CUE_LIST },
+				target: { kind: "cuelist_pool", number: 2 },
 				operation: "overwrite",
 				cueNumber: "1",
 				timing: {},
@@ -730,7 +795,7 @@ describe("Cuelist Pool workflows over scoped authority", () => {
 		fireEvent.click(ui.getByText("Main").closest("button")!);
 		await waitFor(() =>
 			expect(mocks.recordCue).toHaveBeenCalledWith({
-				target: { kind: "cue_list", cueListId: MAIN_CUE_LIST },
+				target: { kind: "cuelist_pool", number: 1 },
 				operation: "overwrite",
 				timing: {},
 				cueOnly: false,

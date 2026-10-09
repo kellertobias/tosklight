@@ -289,6 +289,7 @@ pub(in crate::runtime) fn desk_projection(
         desk_id: projection.desk_id,
         active_page: projection.active_page,
         selected_playback: projection.selected_playback,
+        selected_cue_list: projection.selected_cue_list.map(|id| id.0),
     }
 }
 

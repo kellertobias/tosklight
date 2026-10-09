@@ -76,6 +76,7 @@ interface CuelistDetailProps {
 	onOpenSettings: () => void;
 	thumbnails?: Record<number, string>;
 	fixedCueListId?: string;
+	assignmentNumber?: number | null;
 	viewOnly?: boolean;
 }
 
@@ -89,6 +90,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 		props.selectedCuelist,
 		props.active,
 		props.fixedCueListId,
+		props.assignmentNumber,
 	);
 	const cues = selection.cueList?.cues ?? NO_CUES;
 	const editor = useCueEditor({
@@ -110,8 +112,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 			? cues[selection.active?.cue_index ?? -1]
 			: props.cueInformationBlock === "next"
 				? cues.find(
-						(cue) =>
-							cue.number === selection.active?.effective_next_cue_number,
+						(cue) => cue.number === selection.active?.effective_next_cue_number,
 					)
 				: undefined;
 	const informationLabel =
@@ -126,18 +127,21 @@ export function CuelistDetail(props: CuelistDetailProps) {
 						secondary: `Revision ${selection.selectedCueObject?.revision ?? 0}${selection.cueList ? ` · ${selection.cueList.mode} · priority ${selection.cueList.priority}` : ""}`,
 					}}
 					groups={[
-						{ id: "cuelist-navigation", actions: [
-							{
-								id: "pool",
-								label: "← Cuelist Pool",
-								onPress: props.onOpenPool,
-							},
-							{
-								id: "settings",
-								label: "Cuelist Settings",
-								onPress: props.onOpenSettings,
-							},
-						] },
+						{
+							id: "cuelist-navigation",
+							actions: [
+								{
+									id: "pool",
+									label: "← Cuelist Pool",
+									onPress: props.onOpenPool,
+								},
+								{
+									id: "settings",
+									label: "Cuelist Settings",
+									onPress: props.onOpenSettings,
+								},
+							],
+						},
 					]}
 				/>
 			)}

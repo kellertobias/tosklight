@@ -401,6 +401,8 @@ fn backup_count(data_dir: &std::path::Path) -> usize {
 
 fn cue_list(name: &str) -> light_playback::CueList {
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: name.into(),
         priority: 0,

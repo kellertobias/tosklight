@@ -127,7 +127,7 @@ impl CommandContractScenario {
     execute_programmer_command(&self.state, &self.session, "RECORD CUELIST 25 CUE 2.5").unwrap();
     let snapshot = self.state.output.snapshot();
     let (_, _, cue_list) =
-        cue_list_for_playback(&ActiveShowRepository::open(&self.show_path).unwrap(), &snapshot, 25).unwrap();
+        stored_cuelist_pool(&ActiveShowRepository::open(&self.show_path).unwrap(), &snapshot, 25).unwrap();
     assert_eq!(
         cue_list
             .cues
@@ -152,7 +152,7 @@ impl CommandContractScenario {
         "RECORD CUELIST 25 CUE 2.5 DELAY 0",
     )
     .unwrap();
-    let (_, _, cue_list) = cue_list_for_playback(
+    let (_, _, cue_list) = stored_cuelist_pool(
         &ActiveShowRepository::open(&self.show_path).unwrap(),
         &self.state.output.snapshot(),
         25,
@@ -168,11 +168,9 @@ impl CommandContractScenario {
         light_playback::CueTrigger::Follow { delay_millis: 0 }
     ));
 
-    self.state
-        .installation.set_selected_playback(self.session.desk.id, self.show_id, Some(25))
-        .unwrap();
+    execute_programmer_command(&self.state, &self.session, "CUELIST 25").unwrap();
     execute_programmer_command(&self.state, &self.session, "RECORD CUE 7").unwrap();
-    let (_, _, selected_list) = cue_list_for_playback(
+    let (_, _, selected_list) = stored_cuelist_pool(
         &ActiveShowRepository::open(&self.show_path).unwrap(),
         &self.state.output.snapshot(),
         25,
@@ -197,7 +195,7 @@ impl CommandContractScenario {
     };
     set_only_color();
     execute_programmer_command(&self.state, &self.session, "RECORD + CUELIST 25 CUE 2.5").unwrap();
-    let (_, _, cue_list) = cue_list_for_playback(
+    let (_, _, cue_list) = stored_cuelist_pool(
         &ActiveShowRepository::open(&self.show_path).unwrap(),
         &self.state.output.snapshot(),
         25,
@@ -207,7 +205,7 @@ impl CommandContractScenario {
     assert_eq!(merged.group_changes.len(), 2);
 
     execute_programmer_command(&self.state, &self.session, "RECORD - CUELIST 25 CUE 2.5").unwrap();
-    let (_, _, cue_list) = cue_list_for_playback(
+    let (_, _, cue_list) = stored_cuelist_pool(
         &ActiveShowRepository::open(&self.show_path).unwrap(),
         &self.state.output.snapshot(),
         25,
@@ -222,7 +220,7 @@ impl CommandContractScenario {
 
     set_only_color();
     execute_programmer_command(&self.state, &self.session, "RECORD CUELIST 25 CUE 2.5").unwrap();
-    let (_, _, cue_list) = cue_list_for_playback(
+    let (_, _, cue_list) = stored_cuelist_pool(
         &ActiveShowRepository::open(&self.show_path).unwrap(),
         &self.state.output.snapshot(),
         25,
@@ -237,7 +235,7 @@ impl CommandContractScenario {
     std::sync::Arc::make_mut(&mut programmer.group_values).clear();
     self.state.programming.restore(programmer);
     execute_programmer_command(&self.state, &self.session, "RECORD - CUELIST 25 CUE 2.5").unwrap();
-    let (_, _, cue_list) = cue_list_for_playback(
+    let (_, _, cue_list) = stored_cuelist_pool(
         &ActiveShowRepository::open(&self.show_path).unwrap(),
         &self.state.output.snapshot(),
         25,
@@ -291,7 +289,7 @@ fn command_line_at_timing_defaults_to_immediate_and_preserves_explicit_time_sema
 }
 
 #[test]
-fn new_cuelist_and_playback_record_is_one_active_show_batch() {
+fn standalone_cuelist_record_is_one_active_show_batch() {
     let scenario = CommandContractScenario::new();
     execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
     let before = ActiveShowRepository::open(&scenario.show_path)
@@ -315,7 +313,7 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
         .unwrap();
     assert_eq!(after.revision().value(), before.revision().value() + 1);
     assert_eq!(after.objects_of_kind("cue_list").count(), 1);
-    assert!(after.object("playback", "25").is_some());
+    assert!(after.object("playback", "25").is_none());
     assert_eq!(
         command_show_object_backup_count(&scenario.data_dir),
         // One interval-gated recovery checkpoint per show (api-rules §8).
@@ -323,7 +321,7 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     );
     assert_eq!(
         scenario.state.events.latest_sequence(),
-        before_events + 2
+        before_events + 3
     );
     let runtime = scenario.state.output.snapshot();
     assert_eq!(runtime.revision, after.revision().value());
@@ -334,7 +332,7 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     ) else {
         panic!("expected one active-show Record event");
     };
-    assert_eq!(events.len(), 2);
+    assert_eq!(events.len(), 3);
     let show_event = events
         .iter()
         .find(|event| matches!(event.payload, light_application::ApplicationEvent::Show(_)))
@@ -345,9 +343,8 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     else {
         panic!("expected one typed object batch");
     };
-    assert_eq!(change.changes.len(), 2);
+    assert_eq!(change.changes.len(), 1);
     assert_eq!(change.changes[0].kind, light_application::ActiveShowObjectKind::CueList);
-    assert_eq!(change.changes[1].kind, light_application::ActiveShowObjectKind::Playback);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -416,7 +413,7 @@ fn assign_cuelist_page_assignment_is_one_lossless_active_show_batch() {
 }
 
 #[test]
-fn new_cuelist_and_playback_record_conflict_cannot_leave_a_partial_cuelist() {
+fn standalone_cuelist_record_preserves_same_number_special_playback() {
     let scenario = CommandContractScenario::new();
     execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
     let conflicting = light_playback::PlaybackDefinition {
@@ -453,36 +450,36 @@ fn new_cuelist_and_playback_record_conflict_cannot_leave_a_partial_cuelist() {
     let event_sequence = scenario.state.events.latest_sequence();
     let backups = command_show_object_backup_count(&scenario.data_dir);
 
-    let error = execute_programmer_command(
+    execute_programmer_command(
         &scenario.state,
         &scenario.session,
         "RECORD CUELIST 25 CUE 1",
     )
-    .unwrap_err();
-    assert!(error.contains("25"), "{error}");
+    .unwrap();
 
     let after = ActiveShowRepository::open(&scenario.show_path)
         .unwrap()
         .portable_document()
         .unwrap();
-    assert_eq!(after.revision(), before.revision());
-    assert_eq!(after.objects_of_kind("cue_list").count(), 0);
+    assert_eq!(after.revision().value(), before.revision().value() + 1);
+    assert_eq!(after.objects_of_kind("cue_list").count(), 1);
     assert_eq!(after.object("playback", "25").unwrap().revision(), 1);
-    assert!(Arc::ptr_eq(&scenario.state.output.snapshot(), &runtime));
-    assert_eq!(scenario.state.events.latest_sequence(), event_sequence + 1);
+    assert!(!Arc::ptr_eq(&scenario.state.output.snapshot(), &runtime));
+    assert_eq!(after.object("playback", "25").unwrap().body(), before.object("playback", "25").unwrap().body());
+    assert_eq!(scenario.state.events.latest_sequence(), event_sequence + 3);
     let light_application::EventReplay::Events(events) = scenario.state.events.replay(
         event_sequence,
         &light_application::EventFilter::default(),
     ) else {
         panic!("expected one rejected command event");
     };
-    assert!(events.iter().all(|event| !matches!(
+    assert_eq!(events.iter().filter(|event| matches!(
         event.payload,
         light_application::ApplicationEvent::Show(_)
-    )));
+    )).count(), 1);
     assert_eq!(
         command_show_object_backup_count(&scenario.data_dir),
-        backups
+        backups.max(1)
     );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
@@ -617,12 +614,14 @@ fn typed_link_command_stores_the_destination_cue_identity() {
     )
     .unwrap();
     scenario.verify_cue_creation_and_timing();
-    let command = "LINK SET 25 CUE 1 AT CUE 7 DELAY 0.25";
+    execute_programmer_command(&scenario.state, &scenario.session, "ASSIGN CUELIST 25 AT PBK 25").unwrap();
+    let assigned = scenario.state.output.snapshot().playback_pages.iter().find(|page| page.number == 1).unwrap().slots[&25];
+    let command = format!("LINK SET {assigned} CUE 1 AT CUE 7 DELAY 0.25");
     assert!(
         scenario
             .state
             .programming
-            .set_command_line(scenario.session.id, command.into())
+            .set_command_line(scenario.session.id, command.clone().into())
     );
 
     let response = dispatch_live_action(
@@ -633,14 +632,14 @@ fn typed_link_command_stores_the_destination_cue_identity() {
             "link-cue",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
                 light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
-                    value: command.into(),
+                    value: command.clone().into(),
                 },
             ),
         ),
     );
 
     assert!(response.ok, "{:?}", response.error);
-    let (_, _, cue_list) = cue_list_for_playback(
+    let (_, _, cue_list) = stored_cuelist_pool(
         &ActiveShowRepository::open(&scenario.show_path).unwrap(),
         &scenario.state.output.snapshot(),
         25,
@@ -663,4 +662,57 @@ fn typed_link_command_stores_the_destination_cue_identity() {
     assert_eq!(command_line.visible_text(), "FIXTURE");
     assert!(command_line.pristine);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[test]
+fn undocumented_new_cuelist_rejects_without_authored_mutation() {
+    let scenario = CommandContractScenario::new();
+    execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
+    let before = ActiveShowRepository::open(&scenario.show_path).unwrap().portable_document().unwrap();
+    let values = scenario.state.programming.get(scenario.session.id).unwrap().values;
+    assert!(execute_programmer_command(&scenario.state, &scenario.session, "NEW CUELIST 101").is_err());
+    let after = ActiveShowRepository::open(&scenario.show_path).unwrap().portable_document().unwrap();
+    assert_eq!(before.revision(), after.revision());
+    assert!(after.objects_of_kind("cue_list").next().is_none());
+    assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().values, values);
+}
+
+#[test]
+fn selected_link_uses_standalone_uuid_and_preserves_physical_set_target() {
+    let scenario = CommandContractScenario::new();
+    execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
+    execute_programmer_command(&scenario.state, &scenario.session, "RECORD CUELIST 101 CUE 1").unwrap();
+    execute_programmer_command(&scenario.state, &scenario.session, "RECORD CUELIST 101 CUE 7").unwrap();
+    let mut special = light_playback::PlaybackDefinition::new_cue_list(101, "Special", light_core::CueListId::new());
+    special.target = light_playback::PlaybackTarget::GrandMaster;
+    special.reset_incompatible_layout();
+    let raw = serde_json::to_value(special).unwrap();
+    ActiveShowRepository::open(&scenario.show_path).unwrap().put_object("playback", "101", &raw, 0).unwrap();
+    let entry = scenario.state.active_show.current().clone().unwrap();
+    scenario.state.output.replace_snapshot(load_engine_snapshot(&entry).unwrap()).unwrap();
+    let linked = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
+        &scenario.session, "standalone-link",
+        light_wire::v2::live_action::LiveAction::CommandLineExecute(
+            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                value: "LINK CUE 1 AT CUE 7 DELAY 0.25".into(),
+            }),
+    ));
+    assert!(linked.ok, "{:?}", linked.error);
+    let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
+    let (_, _, list) = stored_cuelist_pool(&store, &scenario.state.output.snapshot(), 101).unwrap();
+    let destination = list.cues.iter().find(|item| item.number == cue("7")).unwrap().id;
+    assert!(matches!(list.cues.iter().find(|item| item.number == cue("1")).unwrap().trigger,
+        light_playback::CueTrigger::Link { cue_id, delay_millis: 250 } if cue_id == destination));
+    assert_eq!(store.objects("playback").unwrap().iter().find(|object| object.id == "101").unwrap().body, raw);
+    let before = store.portable_revision().unwrap();
+    let rejected = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
+        &scenario.session, "physical-link-special",
+        light_wire::v2::live_action::LiveAction::CommandLineExecute(
+            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                value: "LINK SET 101 CUE 1 AT CUE 7".into(),
+            }),
+    ));
+    assert!(!rejected.ok);
+    assert!(rejected.error.as_deref().unwrap().contains("not assigned to a Cuelist"));
+    assert_eq!(store.portable_revision().unwrap(), before);
 }

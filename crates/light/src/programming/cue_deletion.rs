@@ -16,6 +16,7 @@ use uuid::Uuid;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ProgrammingCueDeletionAddress {
     Pool { playback_number: u16 },
+    CuelistPool { number: u16 },
     CurrentPage { expected_page: u8, slot: u8 },
     PageSlot { page: u8, slot: u8 },
 }

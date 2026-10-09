@@ -1332,6 +1332,8 @@ async fn preload_record_intent_stores_the_pending_scene_and_replays_once() {
 
 fn test_cue_list() -> light_playback::CueList {
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Main".into(),
         priority: 0,

@@ -256,6 +256,8 @@ mod tests {
             AttributeValue::Normalized(0.7),
         ));
         let list = CueList {
+            pool_number: None,
+            legacy_pool_aliases: Vec::new(),
             id: CueListId::new(),
             name: String::new(),
             priority: 0,
@@ -312,6 +314,8 @@ mod tests {
             AttributeValue::Normalized(0.7),
         ));
         let list = CueList {
+            pool_number: None,
+            legacy_pool_aliases: Vec::new(),
             id: CueListId::new(),
             name: String::new(),
             priority: 0,

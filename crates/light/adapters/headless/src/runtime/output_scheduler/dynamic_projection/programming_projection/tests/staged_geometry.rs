@@ -705,6 +705,8 @@ fn legacy_definition(attribute: &str, value: f32) -> DynamicDefinition {
 
 pub(super) fn test_cue_list(cues: Vec<light_playback::Cue>) -> light_playback::CueList {
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Hybrid sources".into(),
         priority: 10,
@@ -966,6 +968,8 @@ fn hybrid_retains_final_move_in_black_underlay_when_scalar_intensity_changes_pos
         })
         .collect();
     let cue_list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Hybrid MIB baseline".into(),
         priority: 10,

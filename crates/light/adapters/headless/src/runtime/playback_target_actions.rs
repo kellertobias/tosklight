@@ -277,8 +277,16 @@ pub(super) fn select_playback_target(
         .installation
         .selected_playback(desk.id, show.id)
         .map_err(ApiError::store)?;
+    let selected_cue_list = state
+        .installation
+        .selected_cue_list(desk.id, show.id)
+        .map_err(ApiError::store)?;
+    state
+        .installation
+        .set_selected_cue_list(desk.id, show.id, None)
+        .map_err(ApiError::store)?;
     if selected == Some(definition.number) {
-        return Ok(false);
+        return Ok(selected_cue_list.is_some());
     }
     state
         .installation

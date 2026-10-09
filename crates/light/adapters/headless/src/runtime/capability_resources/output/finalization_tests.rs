@@ -628,6 +628,8 @@ fn cue_list(definition: &DynamicDefinition, fixture_id: FixtureId) -> light_play
         automatic_restore: false,
     });
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Destination Cue owner".into(),
         priority: 0,

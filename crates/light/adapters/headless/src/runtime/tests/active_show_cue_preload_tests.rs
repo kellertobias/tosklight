@@ -335,6 +335,8 @@ fn seed_cue_preload_show(entry: &ShowEntry, cue_list_id: light_core::CueListId) 
         delay_millis: None,
     });
     let cue_list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: "Main".into(),
         priority: 0,

@@ -39,6 +39,9 @@ fn resolve_target(
     snapshot: &light_engine::EngineSnapshot,
 ) -> Result<ProgrammingCueResolvedTarget, ActionError> {
     match target {
+        ProgrammingCueRecordTarget::CuelistPool { number } => {
+            Ok(ProgrammingCueResolvedTarget::CuelistPool { number })
+        }
         ProgrammingCueRecordTarget::Pool { playback_number } => {
             Ok(ProgrammingCueResolvedTarget::Playback {
                 playback_number,
@@ -67,6 +70,13 @@ fn selected_playback(
         .current()
         .clone()
         .ok_or_else(|| not_found("no show is open"))?;
+    if let Some(cue_list_id) = state
+        .installation
+        .selected_cue_list(context.desk_id, show.id)
+        .map_err(|error| invalid(error.to_string()))?
+    {
+        return Ok(ProgrammingCueResolvedTarget::CueList { cue_list_id });
+    }
     let playback_number = state
         .installation
         .selected_playback(context.desk_id, show.id)
@@ -114,6 +124,19 @@ fn active_cue(
     state: &AppState,
     target: ProgrammingCueResolvedTarget,
 ) -> Result<Option<PlaybackCueReference>, ActionError> {
+    let pool_id = if let ProgrammingCueResolvedTarget::CuelistPool { number } = target {
+        let show = state
+            .active_show
+            .current()
+            .clone()
+            .ok_or_else(|| not_found("no show is open"))?;
+        let document = crate::runtime::ActiveShowRepository::open(&show.path)
+            .and_then(|store| store.portable_document())
+            .map_err(|error| invalid(error.to_string()))?;
+        light_application::cuelist_pool_catalog(&document)?.resolve(number)
+    } else {
+        None
+    };
     let runtime = state.output.playback_runtime_status();
     let mut candidates = runtime.iter().filter(|status| match target {
         ProgrammingCueResolvedTarget::Playback {
@@ -121,6 +144,9 @@ fn active_cue(
         } => status.playback.playback_number == Some(playback_number),
         ProgrammingCueResolvedTarget::CueList { cue_list_id } => {
             status.playback.cue_list_id == cue_list_id
+        }
+        ProgrammingCueResolvedTarget::CuelistPool { .. } => {
+            pool_id == Some(status.playback.cue_list_id)
         }
         ProgrammingCueResolvedTarget::EmptyPageSlot(_) => false,
         ProgrammingCueResolvedTarget::Virtual { address } => {

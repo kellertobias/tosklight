@@ -190,6 +190,97 @@ fn failed_first_record_activation_preserves_programmer_values() {
 }
 
 #[test]
+fn failed_standalone_first_record_activation_retains_values_and_replays_without_duplicate_commit() {
+    struct StandalonePorts {
+        inner: TestPorts,
+        selected: Mutex<Option<CueListId>>,
+        committed: Mutex<Option<ProgrammingCueCommitResult>>,
+    }
+    impl ProgrammingCueRecordingPorts for StandalonePorts {
+        fn authorize_cue_recording(&self, _: &ActionContext) -> Result<(), ActionError> {
+            Ok(())
+        }
+        fn cue_recording_environment(
+            &self,
+            _: &ActionContext,
+            _: &ProgrammingCueRecordRequest,
+        ) -> Result<ProgrammingCueRecordingEnvironment, ActionError> {
+            self.inner.environments.fetch_add(1, Ordering::Relaxed);
+            Ok(ProgrammingCueRecordingEnvironment {
+                target: ProgrammingCueResolvedTarget::CuelistPool { number: 101 },
+                active_cue: None,
+                cuelist_auto_off_at_zero_default: false,
+                cuelist_auto_off_flash_release_default: false,
+                start_after_first_recording: true,
+            })
+        }
+        fn commit_cue(
+            &self,
+            _: &ActionContext,
+            _: &ProgrammingCueCommit,
+        ) -> Result<ProgrammingCueCommitResult, ActionError> {
+            self.inner.commits.fetch_add(1, Ordering::Relaxed);
+            let mut result = self.inner.completion();
+            Arc::make_mut(&mut result.projections.cue_list.raw_body)["pool_number"] =
+                serde_json::json!(101);
+            result.projections.playback = None;
+            result.concrete_playback_number = None;
+            *self.committed.lock() = Some(result.clone());
+            Ok(result)
+        }
+        fn activate_recorded_cue(
+            &self,
+            _: &ActionContext,
+            _: u16,
+            _: CueNumber,
+        ) -> Option<ProgrammingCueActivationCompletion> {
+            panic!("standalone Cuelist must not activate an unrelated physical playback");
+        }
+        fn select_recorded_cuelist(&self, _: &ActionContext, id: CueListId) {
+            *self.selected.lock() = Some(id);
+        }
+        fn activate_recorded_cuelist(
+            &self,
+            _: &ActionContext,
+            id: CueListId,
+            _: CueNumber,
+        ) -> Option<ProgrammingCueActivationCompletion> {
+            assert_eq!(*self.selected.lock(), Some(id));
+            self.inner.activations.fetch_add(1, Ordering::Relaxed);
+            None
+        }
+    }
+    let setup = Setup::normal();
+    let ports = StandalonePorts {
+        inner: TestPorts::changed(setup.show_id, 101),
+        selected: Mutex::new(None),
+        committed: Mutex::new(None),
+    };
+    let values_before = setup.registry.get(setup.session).unwrap().values;
+    let mut request = setup.envelope(
+        "standalone-failed-start",
+        ProgrammingCueActivationPolicy::Hold,
+    );
+    request.command.target = ProgrammingCueRecordTarget::CuelistPool { number: 101 };
+    let result = setup
+        .service
+        .handle_cue_recording(request.clone(), &ports)
+        .unwrap();
+    assert!(ports.committed.lock().is_some());
+    assert!(ports.selected.lock().is_some());
+    assert_eq!(
+        setup.registry.get(setup.session).unwrap().values,
+        values_before
+    );
+    let replay = setup.service.handle_cue_recording(request, &ports).unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.outcome, result.outcome);
+    assert_eq!(ports.inner.environments.load(Ordering::Relaxed), 1);
+    assert_eq!(ports.inner.commits.load(Ordering::Relaxed), 1);
+    assert_eq!(ports.inner.activations.load(Ordering::Relaxed), 1);
+}
+
+#[test]
 fn active_preload_fallback_releases_only_after_an_accepted_commit_and_never_activates() {
     let setup = Setup::active_preload();
     let ports = TestPorts::changed(setup.show_id, 7);
@@ -627,6 +718,8 @@ impl TestPorts {
             cue.id = self.cue_id;
         }
         let cue_list = light_playback::CueList {
+            pool_number: None,
+            legacy_pool_aliases: Vec::new(),
             id: cue_list_id,
             name: "Test".into(),
             priority: 0,

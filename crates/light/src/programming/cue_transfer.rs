@@ -24,6 +24,12 @@ pub enum ProgrammingCueTransferAddress {
     Pool {
         playback_number: u16,
     },
+    CuelistPool {
+        number: u16,
+    },
+    CueList {
+        id: light_core::CueListId,
+    },
     PageSlot {
         page: u8,
         slot: u8,

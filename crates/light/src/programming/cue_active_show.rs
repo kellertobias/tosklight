@@ -52,17 +52,19 @@ fn complete_recording<P: ProgrammingCueActiveShowPorts>(
     let PreparedRecording {
         mut result,
         changed_kinds,
+        companion_projections,
     } = completed.state;
     let Some(commit) = completed.commit else {
         return result;
     };
     result.show_revision = commit.revision();
     ports.reconcile_programming_cue(&result.projections);
-    let changes = changed_kinds
+    let mut changes: Vec<_> = changed_kinds
         .into_iter()
         .filter_map(|kind| projection_for_kind(&result, kind))
         .map(object_change)
         .collect();
+    changes.extend(companion_projections.iter().map(object_change));
     result.event_sequence = Some(
         events
             .publish(EventDraft::active_show_objects_changed(
@@ -81,6 +83,7 @@ fn complete_recording<P: ProgrammingCueActiveShowPorts>(
 pub(super) struct PreparedRecording {
     result: ProgrammingCueCommitResult,
     changed_kinds: Vec<ActiveShowObjectKind>,
+    companion_projections: Vec<ProgrammingCueObjectProjection>,
 }
 
 fn projection_for_kind(

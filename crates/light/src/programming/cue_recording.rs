@@ -32,6 +32,9 @@ pub struct ProgrammingCueRecordRequest {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProgrammingCueRecordTarget {
+    CuelistPool {
+        number: u16,
+    },
     Pool {
         playback_number: u16,
     },
@@ -100,6 +103,9 @@ impl ApplicationCommand for ProgrammingCueRecordRequest {
 /// One environment-resolved recording target. Empty page slots are allocated transactionally.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProgrammingCueResolvedTarget {
+    CuelistPool {
+        number: u16,
+    },
     CueList {
         cue_list_id: CueListId,
     },
@@ -400,6 +406,17 @@ pub trait ProgrammingCueRecordingPorts: Send + Sync {
         context: &ActionContext,
         commit: &ProgrammingCueCommit,
     ) -> Result<ProgrammingCueCommitResult, ActionError>;
+
+    fn select_recorded_cuelist(&self, _context: &ActionContext, _cue_list_id: CueListId) {}
+
+    fn activate_recorded_cuelist(
+        &self,
+        _context: &ActionContext,
+        _cue_list_id: CueListId,
+        _cue_number: CueNumber,
+    ) -> Option<ProgrammingCueActivationCompletion> {
+        None
+    }
 
     /// Attempts to take one just-recorded Cue live after the portable commit. A coherent
     /// already-current runtime may return a completion without an event; adapters audit an

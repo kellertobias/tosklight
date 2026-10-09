@@ -85,6 +85,20 @@ fn playback_definition(
         })
 }
 
+pub(super) fn cuelist_pool_id(
+    snapshot: &EngineSnapshot,
+    number: u16,
+) -> Result<light_core::CueListId, String> {
+    let catalog = light_playback::CueListPoolCatalog::build(
+        snapshot.cue_lists.as_slice(),
+        snapshot.playbacks.as_slice(),
+        false,
+    )?;
+    catalog
+        .resolve(number)
+        .ok_or_else(|| format!("Cuelist {number} does not exist"))
+}
+
 fn playback_cue_list_id(
     snapshot: &EngineSnapshot,
     number: u16,
@@ -193,6 +207,13 @@ fn selected_cue_request(
         .current()
         .clone()
         .ok_or("no show is open")?;
+    if let Some(id) = state
+        .installation
+        .selected_cue_list(session.desk.id, show.id)
+        .map_err(|error| error.to_string())?
+    {
+        return explicit_cue_request(snapshot, id, None, parse_cue_number(tokens)?, mode);
+    }
     let playback = state
         .installation
         .selected_playback(session.desk.id, show.id)
@@ -222,8 +243,8 @@ fn cuelist_cue_request(
     }
     explicit_cue_request(
         snapshot,
-        playback_cue_list_id(snapshot, number)?,
-        Some(number),
+        cuelist_pool_id(snapshot, number)?,
+        None,
         parse_cue_number(&tokens[2..])?,
         mode,
     )

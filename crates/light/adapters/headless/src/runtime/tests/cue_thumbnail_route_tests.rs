@@ -29,6 +29,8 @@ fn cue_list_body(cue_ids: &[Uuid]) -> serde_json::Value {
         })
         .collect();
     serde_json::to_value(light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId(Uuid::new_v4()),
         name: "Main".into(),
         priority: 0,

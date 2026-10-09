@@ -121,6 +121,8 @@ mod tests {
         let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
         cue.actions.extend(action);
         CueList {
+            pool_number: None,
+            legacy_pool_aliases: Vec::new(),
             id: CueListId(Uuid::from_u128(id)),
             name: "Graph".into(),
             priority: 0,

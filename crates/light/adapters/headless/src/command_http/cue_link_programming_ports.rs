@@ -35,29 +35,42 @@ impl ServerProgrammingPorts<'_> {
     ) -> Result<Option<String>, String> {
         let (entry, store) = super::super::command_presets::active_show_store(self.state())?;
         let snapshot = self.state().output.snapshot();
-        let playback_number = match parsed.address {
-            CueLinkAddress::Selected => self
-                .state()
+        let selected_cue_list = if matches!(parsed.address, CueLinkAddress::Selected) {
+            self.state()
                 .installation
-                .selected_playback(context.desk_id, entry.id)
+                .selected_cue_list(context.desk_id, entry.id)
                 .map_err(|error| error.to_string())?
-                .ok_or("no playback is selected")?,
-            CueLinkAddress::Pool { playback_number } => playback_number,
-            CueLinkAddress::PageSlot { page, slot } => snapshot
-                .playback_pages
-                .iter()
-                .find(|candidate| candidate.number == page)
-                .and_then(|candidate| candidate.slots.get(&slot))
-                .copied()
-                .ok_or("page playback is unassigned")?,
+        } else {
+            None
         };
-        let definition = snapshot
-            .playbacks
-            .iter()
-            .find(|definition| definition.number == playback_number)
-            .ok_or("playback does not exist")?;
-        let PlaybackTarget::CueList { cue_list_id } = definition.target else {
-            return Err("playback is not assigned to a Cuelist".into());
+        let cue_list_id = if let Some(id) = selected_cue_list {
+            id
+        } else {
+            let playback_number = match parsed.address {
+                CueLinkAddress::Selected => self
+                    .state()
+                    .installation
+                    .selected_playback(context.desk_id, entry.id)
+                    .map_err(|error| error.to_string())?
+                    .ok_or("no playback is selected")?,
+                CueLinkAddress::Pool { playback_number } => playback_number,
+                CueLinkAddress::PageSlot { page, slot } => snapshot
+                    .playback_pages
+                    .iter()
+                    .find(|candidate| candidate.number == page)
+                    .and_then(|candidate| candidate.slots.get(&slot))
+                    .copied()
+                    .ok_or("page playback is unassigned")?,
+            };
+            let definition = snapshot
+                .playbacks
+                .iter()
+                .find(|definition| definition.number == playback_number)
+                .ok_or("playback does not exist")?;
+            let PlaybackTarget::CueList { cue_list_id } = definition.target else {
+                return Err("playback is not assigned to a Cuelist".into());
+            };
+            cue_list_id
         };
         let object = store
             .objects("cue_list")

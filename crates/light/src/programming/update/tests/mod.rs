@@ -68,6 +68,8 @@ pub(super) fn change(fixture_id: FixtureId, name: &str, value: f32) -> CueChange
 
 pub(super) fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId(Uuid::from_u128(900)),
         name: "Cuelist 1".into(),
         priority: 0,

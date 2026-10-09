@@ -769,6 +769,8 @@ fn cue_list(id: CueListId, cue_id: Uuid, level: f32) -> Value {
         AttributeValue::Normalized(level),
     )];
     serde_json::to_value(CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: "Existing".into(),
         priority: 0,
@@ -793,3 +795,40 @@ fn cue_list(id: CueListId, cue_id: Uuid, level: f32) -> Value {
 
 #[path = "cue_semantic_storage_tests.rs"]
 mod semantic_storage;
+
+#[test]
+fn independent_empty_cuelist_101_preserves_reserved_playback_and_creates_no_assignment() {
+    let rig = TestRig::new();
+    let mut definition =
+        light_playback::PlaybackDefinition::new_cue_list(101, "Reserved speed", CueListId::new());
+    definition.target = light_playback::PlaybackTarget::SpeedGroup { group: "A".into() };
+    definition.reset_incompatible_layout();
+    let speed = serde_json::to_value(definition).unwrap();
+    rig.seed("playback", "101", speed.clone());
+    let commit = rig.commit(
+        ProgrammingCueRecordTarget::CuelistPool { number: 101 },
+        ProgrammingCueResolvedTarget::CuelistPool { number: 101 },
+        ProgrammingCueRecordOperation::Overwrite,
+        None,
+        capture(0.75),
+    );
+    let result = rig
+        .service
+        .commit_programming_cue(&rig.context(), &commit, &rig.ports)
+        .unwrap();
+    assert!(result.created_topology);
+    assert!(result.projections.playback.is_none());
+    assert!(result.projections.page.is_none());
+    assert_eq!(result.concrete_playback_number, None);
+    assert_eq!(result.projections.cue_list.raw_body["pool_number"], 101);
+    assert_eq!(
+        result.projections.cue_list.raw_body["cues"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let document = rig.document();
+    assert_eq!(document.object("playback", "101").unwrap().body(), &speed);
+    assert_eq!(document.objects_of_kind("playback").count(), 1);
+}

@@ -48,3 +48,12 @@ the applicable compatibility and recovery path above.
   guidance. Save/reopen, one-time legacy identity migration, literal isolation and active-Cue
   refresh have source regressions; packaged operator acceptance is recorded separately.
   See [the feature plan](plans/live-cue-preset-references.md).
+
+- **Independent Cuelist addresses (TL-683), feature contract 3.** Cuelist and physical
+  Playback numbers are separate namespaces. An independent-numbering mutation preserves
+  meaningful legacy addresses as explicit canonical numbers and aliases, without rewriting
+  physical assignments or Cue programming. Only authored Cuelist address metadata requires
+  marker 3; existing contract-1/2 files retain their marker until this feature is used. Readers
+  supporting at most 2 refuse marker 3. Ambiguous legacy addresses are rejected. See
+  [the compatibility plan](plans/independent-cuelist-addresses.md). Implementation and operator
+  acceptance remain separately tracked in the release evidence.

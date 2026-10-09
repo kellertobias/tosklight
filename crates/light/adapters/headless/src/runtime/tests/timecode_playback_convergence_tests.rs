@@ -374,6 +374,8 @@ fn install_timecode_playbacks(state: &AppState, timecode_id: light_playback::Tim
         });
     let cue_list_id = light_core::CueListId(Uuid::from_u128(701));
     let cue_list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: "Automatic Timecode".into(),
         priority: 0,

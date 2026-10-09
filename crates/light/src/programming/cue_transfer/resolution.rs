@@ -110,6 +110,10 @@ fn cue_list_address(address: ProgrammingCueTransferAddress) -> Result<CueListAdd
                 "selected Cuelist must be resolved by the initiating desk",
             ));
         }
+        ProgrammingCueTransferAddress::CuelistPool { number } => {
+            CueListAddress::CuelistPool { number }
+        }
+        ProgrammingCueTransferAddress::CueList { id } => CueListAddress::CueList { id },
         ProgrammingCueTransferAddress::Pool { playback_number } => {
             CueListAddress::Pool { playback_number }
         }
@@ -173,6 +177,12 @@ fn validate_endpoint(endpoint: &ProgrammingCueTransferEndpoint) -> Result<(), Ac
 
 fn validate_address(address: ProgrammingCueTransferAddress) -> Result<(), ActionError> {
     match address {
+        ProgrammingCueTransferAddress::CuelistPool { number } if !(1..=1000).contains(&number) => {
+            Err(invalid("Cuelist number must be within 1-1000"))
+        }
+        ProgrammingCueTransferAddress::CueList { id } if id.0.is_nil() => {
+            Err(invalid("Cuelist identity cannot be nil"))
+        }
         ProgrammingCueTransferAddress::SelectedCuelist => Err(invalid(
             "selected Cuelist must be resolved by the initiating desk",
         )),

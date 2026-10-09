@@ -52,15 +52,16 @@ export function CuelistWindow({
 	const firstAvailableCuelist = pool[0]?.number ?? 1;
 	const hasFixedCueListId = fixedCueListId !== undefined;
 	const fixedDefinition = hasFixedCueListId
-		? pool.find(
-				(definition) =>
-					definition.target.type === "cue_list" &&
-					definition.target.cue_list_id === fixedCueListId,
-			)
+		? pool.find((definition) => definition.cueList.id === fixedCueListId)
 		: undefined;
+	const selectedByDesk = playbackDesk?.selected_cue_list
+		? pool.find((entry) => entry.cueList.id === playbackDesk.selected_cue_list)
+		: pool.find(
+				(entry) => entry.assignment?.number === playbackDesk?.selected_playback,
+			);
 	const paneSelectedCuelist =
 		cueListSource === "follow-selection"
-			? (playbackDesk?.selected_playback ?? null)
+			? (selectedByDesk?.canonicalNumber ?? null)
 			: hasFixedCueListId
 				? (fixedDefinition?.number ?? null)
 				: (fixedCueListNumber ?? firstAvailableCuelist);
@@ -88,10 +89,7 @@ export function CuelistWindow({
 		(definition) => definition.number === settingsCuelist,
 	);
 	const speedGroupsBpm = useSpeedGroupsBpm() ?? DEFAULT_SPEED_GROUPS_BPM;
-	const settingsCueListId =
-		settingsDefinition?.target.type === "cue_list"
-			? settingsDefinition.target.cue_list_id
-			: null;
+	const settingsCueListId = settingsDefinition?.cueList.id ?? null;
 	const settingsCueObject = settingsCueListId
 		? cueLists.find((candidate) => candidate.body.id === settingsCueListId)
 		: undefined;
@@ -135,6 +133,13 @@ export function CuelistWindow({
 			onOpenSettings={() => openSettings(selectedCuelist)}
 			thumbnails={thumbnails}
 			fixedCueListId={fixedCueListId}
+			assignmentNumber={
+				cueListSource === "follow-selection"
+					? playbackDesk?.selected_cue_list
+						? null
+						: (playbackDesk?.selected_playback ?? undefined)
+					: undefined
+			}
 			viewOnly={viewOnly}
 		/>
 	);
