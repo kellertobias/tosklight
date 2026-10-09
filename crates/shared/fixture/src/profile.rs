@@ -12,6 +12,7 @@ pub mod direct_color_samples;
 mod encoding_plan;
 mod error;
 pub mod forward;
+pub(crate) mod gdtf_color_compatibility;
 mod geometry;
 mod geometry_model;
 mod migration;

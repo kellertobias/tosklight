@@ -15,6 +15,7 @@ use light_core::AttributeKey;
 /// prediction and readouts then share one Position graph.
 pub fn apply_runtime_profile_compatibility(profile: &mut FixtureProfile) {
     apply_jbled_a7_shutter_compatibility(profile);
+    super::gdtf_color_compatibility::apply(profile);
     super::apply_derived_color_physical(profile);
     super::apply_derived_position_physical(profile);
     super::apply_derived_zoom_physical(profile);
