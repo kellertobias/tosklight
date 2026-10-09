@@ -341,6 +341,7 @@ fn main() {
             cad::history::cad_add,
             cad::history::cad_change_annotation,
             cad::history::cad_set_transforms,
+            cad::numeric_placement::cad_set_numeric_transforms,
             cad::history::cad_redo,
             cad::cad_export_pdf,
             visualizer::open_visualizer,

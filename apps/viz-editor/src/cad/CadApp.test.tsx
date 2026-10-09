@@ -51,6 +51,7 @@ const mocks = vi.hoisted(() => ({
 	delete: vi.fn(),
 	add: vi.fn(),
 	setTransforms: vi.fn(),
+	setNumericTransforms: vi.fn(),
 	exportPdf: vi.fn(),
 	onSceneDelta: vi.fn(),
 	onSelectionDelta: vi.fn(),
@@ -472,14 +473,14 @@ describe("the CAD planning screen", () => {
 		await screen.findByTestId("cad-canvas");
 		const info = await screen.findByRole("region", { name: "Info" });
 		await waitFor(() =>
-			expect(within(info).getByLabelText("Notes")).toHaveValue("Use secondary safety"),
-		);
+			expect(within(info).getByLabelText("Notes")).toHaveValue("Use secondary safety"));
 		// Generic holds what the element is; where it stands is under Placement.
 		expect(within(info).queryByLabelText("Position X")).toBeNull();
 		const notes = within(info).getByLabelText("Notes");
 		fireEvent.change(notes, { target: { value: "Check clamp" } });
 		fireEvent.blur(notes);
-		expect(documentMocks.saveFixtureNote).toHaveBeenCalledWith({ fixtureId, note: "Check clamp" });
+		expect(documentMocks.saveFixtureNote).toHaveBeenCalledWith({ fixtureId, note: "Check clamp",
+		});
 
 		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
 		expect(within(info).queryByLabelText("Notes")).toBeNull();
@@ -492,14 +493,19 @@ describe("the CAD planning screen", () => {
 		fireEvent.change(x, { target: { value: "1.25" } });
 		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
 		fireEvent.keyDown(x, { key: "Enter" });
-		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
-		expect(transportMocks.patchFixtures.mock.calls[0][2].fixtures[0]).toMatchObject({
-			fixtureId,
-			location: { x: 1250, y: 0, z: 4000 },
-		});
+		await waitFor(() => expect(mocks.setNumericTransforms).toHaveBeenCalledWith(9, [
+				{
+					id: fixtureId,
+			positionMillimetres: [1250, 0, 4000],
+					rotationDegrees: [0, 0, 0],
+				},
+		]),
+		);
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
 
 		const aside = screen.getByRole("complementary", { name: "Info" });
-		const handle = within(aside).getByRole("separator", { name: "Resize side panel" });
+		const handle = within(aside).getByRole("separator", { name: "Resize side panel",
+		});
 		fireEvent.keyDown(handle, { key: "ArrowLeft" });
 		expect(aside.style.width).toBe("320px");
 		expect(workspace.get("tosklight:viz-editor:cad-sidebar-width:v1")).toBe("320");
@@ -770,7 +776,8 @@ describe("the CAD planning screen", () => {
 			...snapshot,
 			entities: [
 				original,
-				{ ...original, id: copyId, dmxAddress: "2.1", positionMillimetres: [2000, 0, 4000] },
+				{ ...original, id: copyId, dmxAddress: "2.1", positionMillimetres: [2000, 0, 4000],
+				},
 			],
 		});
 		const copy = {
@@ -798,33 +805,39 @@ describe("the CAD planning screen", () => {
 		);
 		const info = await screen.findByRole("region", { name: "Info" });
 		const chooser = within(info).getByRole("combobox", { name: "Copy" });
-		expect(within(chooser).getAllByRole("option").map((option) => option.textContent)).toEqual([
-			"Original · 1.1",
-			"Copy 1 · 2.1",
-		]);
+		expect(
+			within(chooser)
+				.getAllByRole("option")
+				.map((option) => option.textContent),
+		).toEqual(["Original · 1.1",
+			"Copy 1 · 2.1"]);
 		// Notes belong to the fixture, so they say they change every copy.
 		expect(within(info).getByLabelText("Notes (all copies)")).toBeInTheDocument();
 
 		fireEvent.change(chooser, { target: { value: copyId } });
 		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
 		await waitFor(() =>
-			expect(within(info).getByLabelText("Position X")).toHaveValue("2"),
-		);
+			expect(within(info).getByLabelText("Position X")).toHaveValue("2"));
 		const x = within(info).getByLabelText("Position X");
 		fireEvent.change(x, { target: { value: "3.5" } });
 		fireEvent.keyDown(x, { key: "Enter" });
-		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
-		const written = transportMocks.patchFixtures.mock.calls[0][2].fixtures[0];
-		expect(written.location).toEqual({ x: 0, y: 0, z: 4000 });
-		expect(written.multipatch).toEqual([{ ...copy, location: { x: 3500, y: 0, z: 4000 } }]);
+		await waitFor(() => expect(mocks.setNumericTransforms).toHaveBeenCalledWith(9, [
+				{
+					id: copyId,
+					positionMillimetres: [3500, 0, 4000],
+					rotationDegrees: [0, 0, 0],
+				},
+			]),
+		);
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
 
 		// A copy's name is its own; the fixture keeps its name.
 		fireEvent.click(screen.getByRole("tab", { name: "Generic" }));
 		const name = within(info).getByLabelText("Name");
 		fireEvent.change(name, { target: { value: "Profile Stage 1 SR" } });
 		fireEvent.blur(name);
-		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(2));
-		const renamed = transportMocks.patchFixtures.mock.calls[1][2].fixtures[0];
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
+		const renamed = transportMocks.patchFixtures.mock.calls[0][2].fixtures[0];
 		expect(renamed.name).toBe("Profile Stage 1");
 		expect(renamed.multipatch[0].name).toBe("Profile Stage 1 SR");
 	});
@@ -1109,15 +1122,18 @@ describe("the CAD planning screen", () => {
 
 		fireEvent.change(x, { target: { value: "1 … 3" } });
 		fireEvent.keyDown(x, { key: "Enter" });
-		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
-		expect(
-			transportMocks.patchFixtures.mock.calls[0][2].fixtures.map(
-				(fixture: { fixtureId: string; location: { x: number } }) => [fixture.fixtureId, fixture.location.x],
-			),
-		).toEqual([
-			[fixtureId, 1000],
-			[secondFixtureId, 3000],
-		]);
+		await waitFor(() => expect(mocks.setNumericTransforms).toHaveBeenCalledWith(9, [
+				{ id: fixtureId,
+					positionMillimetres: [1000, 0, 4000],
+					rotationDegrees: [0, 0, 0],
+				},
+				{ id: secondFixtureId,
+					positionMillimetres: [3000, 0, 4000],
+					rotationDegrees: [0, 0, 0],
+				},
+			]),
+		);
+		expect(transportMocks.patchFixtures).not.toHaveBeenCalled();
 
 		const rotation = within(info).getByLabelText("Rotation Z");
 		fireEvent.change(rotation, { target: { value: "not a range" } });
@@ -1125,18 +1141,17 @@ describe("the CAD planning screen", () => {
 		expect(rotation).toHaveValue("0");
 
 		fireEvent.click(within(info).getByRole("button", { name: "Placement Assistant" }));
-		const assistant = await screen.findByRole("dialog", { name: "Placement Assistant" });
+		const assistant = await screen.findByRole("dialog", { name: "Placement Assistant",
+		});
 		fireEvent.click(within(assistant).getByRole("button", { name: "Circle" }));
 		const radius = within(assistant).getByLabelText("Radius");
 		fireEvent.change(radius, { target: { value: "5" } });
 		fireEvent.keyDown(radius, { key: "Enter" });
 		fireEvent.click(within(assistant).getByRole("button", { name: "Apply" }));
-		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(2));
+		await waitFor(() => expect(transportMocks.patchFixtures).toHaveBeenCalledTimes(1));
 		// A whole circle of two, around the middle of where they stood.
 		expect(
-			transportMocks.patchFixtures.mock.calls[1][2].fixtures.map(
-				(fixture: { location: unknown }) => fixture.location,
-			),
+			transportMocks.patchFixtures.mock.calls[0][2].fixtures.map((fixture: { location: unknown }) => fixture.location),
 		).toEqual([
 			{ x: 7000, y: 0, z: 4000 },
 			{ x: -3000, y: 0, z: 4000 },
