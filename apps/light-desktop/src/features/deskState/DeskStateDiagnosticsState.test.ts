@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { currentOutputDiagnostics } from "./DeskStateDiagnosticsState";
 
 describe("current desk output diagnostics", () => {
-	it("keeps only actual current enabled send failure critical and retires on send recovery", () => {
+	it.each(["art_net", "sacn"])("keeps only actual current enabled %s send failure critical and retires on send recovery", (protocol) => {
 		const route = {
-			protocol: "art_net",
+			protocol,
 			universe: 50,
 			destination: "127.0.0.1:16454",
 			enabled: true,

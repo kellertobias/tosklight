@@ -599,3 +599,117 @@ fn route_diagnostic(route: &OutputRoute) -> Option<RouteDiagnostic> {
         enabled: route.enabled,
     })
 }
+
+#[cfg(test)]
+mod os_send_health_tests {
+    use super::*;
+
+    fn route(protocol: Protocol, universe: u16, destination: SocketAddr) -> OutputRoute {
+        OutputRoute {
+            target: Default::default(),
+            protocol,
+            logical_universe: 1,
+            destination_universe: universe,
+            delivery_mode: Some(DeliveryMode::Unicast),
+            destination: Some(destination),
+            enabled: true,
+            minimum_slots: 512,
+        }
+    }
+
+    async fn payload(receiver: &UdpSocket, offset: usize) {
+        let mut bytes = [0; 1024];
+        let (size, _) =
+            tokio::time::timeout(Duration::from_secs(1), receiver.recv_from(&mut bytes))
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(size, offset + DMX_SLOTS);
+        assert!(bytes[offset..size].iter().all(|byte| *byte == 0x55));
+    }
+
+    /// Change only this isolated instance's private transport, keeping valid IPv4 routes.
+    /// Explicit IPV6_V6ONLY avoids dual-stack acceptance; no localized errno assertion.
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+    #[tokio::test]
+    async fn actual_os_send_failure_preserves_healthy_artnet_and_same_sacn_route_recovers() {
+        let mut output = NetworkOutput::bind(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            [9; 16],
+            "isolated OS health",
+        )
+        .await
+        .unwrap();
+        let healthy = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let recovered = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let routes = [
+            route(Protocol::ArtNet, 10, healthy.local_addr().unwrap()),
+            route(Protocol::Sacn, 11, recovered.local_addr().unwrap()),
+        ];
+        let frames = HashMap::from([(1, [0x55; DMX_SLOTS])]);
+        let mut sequences = HashMap::new();
+        let socket = socket2::Socket::new(
+            socket2::Domain::IPV6,
+            socket2::Type::DGRAM,
+            Some(socket2::Protocol::UDP),
+        )
+        .unwrap();
+        socket.set_only_v6(true).unwrap();
+        socket
+            .bind(&SocketAddr::new(IpAddr::V6(std::net::Ipv6Addr::LOCALHOST), 0).into())
+            .unwrap();
+        socket.set_nonblocking(true).unwrap();
+        output.sacn = UdpSocket::from_std(socket.into()).unwrap();
+        assert_eq!(
+            output
+                .send_routes(&routes, &frames, &HashMap::from([(1, 512)]), &mut sequences)
+                .await
+                .unwrap(),
+            1
+        );
+        payload(&healthy, 18).await;
+        let failed = output.current_route_delivery(&routes);
+        assert_eq!(
+            failed[0].delivery_state,
+            super::super::peers::RouteDeliveryState::Sending
+        );
+        assert_eq!(
+            failed[1].delivery_state,
+            super::super::peers::RouteDeliveryState::SendFailed
+        );
+        let error = failed[1].current_error.as_deref().unwrap();
+        assert!(
+            !error.is_empty() && !error.contains("injected"),
+            "actual OS error: {error}"
+        );
+        assert_eq!(output.route_send_errors()[0].protocol, Protocol::Sacn);
+        assert_eq!(
+            output.route_send_errors()[0].destination,
+            recovered.local_addr().unwrap()
+        );
+        assert_eq!(output.route_send_errors()[0].errors, 1);
+        output.sacn = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        assert_eq!(
+            output
+                .send_routes(&routes, &frames, &HashMap::from([(1, 512)]), &mut sequences)
+                .await
+                .unwrap(),
+            2
+        );
+        payload(&healthy, 18).await;
+        payload(&recovered, 126).await;
+        assert!(
+            output
+                .current_route_delivery(&routes)
+                .iter()
+                .all(|status| status.delivery_state
+                    == super::super::peers::RouteDeliveryState::Sending
+                    && status.current_error.is_none())
+        );
+        assert_eq!(
+            output.route_send_errors()[0].errors,
+            1,
+            "successful same-route recovery retains history"
+        );
+    }
+}
