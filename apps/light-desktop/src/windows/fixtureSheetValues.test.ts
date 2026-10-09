@@ -5,6 +5,7 @@ import type {
 	PatchedFixture,
 	VisualizationSnapshot,
 } from "../api/types";
+import type { AttributeValue } from "../api/types/playback";
 import { fixtureSheetSnapshotsEqual } from "./fixtureSheetProjection";
 import { fixtureSheetTargets } from "./fixtureSheetTargets";
 import {
@@ -344,11 +345,15 @@ describe("Fixture Sheet attribute-group values", () => {
 	});
 	it("shows native Red/Green/Blue output when the semantic registry publishes no Color descriptors", () => {
 		const target = fixtureSheetTargets(fixture())[0];
-		const semanticRegistry = registry.filter((descriptor) => !descriptor.id.startsWith("color."));
+		const semanticRegistry = registry.filter(
+			(descriptor) => !descriptor.id.startsWith("color."),
+		);
 		const groups = fixtureSheetGroupValues({
 			target,
 			registry: semanticRegistry,
-			values: new Map([["color.red", { kind: "normalized" as const, value: 0.5 }]]),
+			values: new Map([
+				["color.red", { kind: "normalized" as const, value: 0.5 }],
+			]),
 			preloadValues: undefined,
 			programmerAttributes: new Set(["color"]),
 			dynamicStack: [],
@@ -399,7 +404,11 @@ describe("Fixture Sheet attribute-group values", () => {
 		it("shows an idle mover's commanded default pose as the encoders do", () => {
 			// DMX 128/255 on a nominal 540° Pan travel: the encoder reads Pan 1.1°.
 			const shown = commanded(empty(), [
-				{ fixture_id: "fixture-1", pan_degrees: 1.0588236, tilt_degrees: 0.5294118 },
+				{
+					fixture_id: "fixture-1",
+					pan_degrees: 1.0588236,
+					tilt_degrees: 0.5294118,
+				},
 			]);
 			expect(pan(shown)).toMatchObject({ text: "1.1°", source: "default" });
 		});
@@ -436,5 +445,241 @@ describe("Fixture Sheet attribute-group values", () => {
 			expect(pan(commanded(empty(), [])).text).toBe("—");
 			expect(withCommandedPositions(null)).toBeNull();
 		});
+	});
+});
+
+describe("whole Color family presentation", () => {
+	it("reads retained Direct identity instead of inventing native scalar zeroes", () => {
+		const value = directFamily();
+		const values = fixtureSheetValueIndex({
+			...snapshot("now"),
+			values: [{ fixture_id: "fixture-1", attribute: "color", value }],
+		}).get("fixture-1");
+		const groups = fixtureSheetGroupValues({
+			target: fixtureSheetTargets(fixture())[0],
+			registry,
+			values,
+			preloadValues: undefined,
+			programmerAttributes: new Set(),
+			dynamicStack: [],
+			preloadDynamicStack: [],
+		});
+		expect(groups.color.members).toHaveLength(1);
+		expect(groups.color.members[0]).toMatchObject({
+			attribute: "color",
+			value,
+			text: "Direct · unknown appearance",
+			source: "playback",
+		});
+		expect(groups.color.accessibleName).toContain("profile");
+		expect(value.value).toMatchObject({
+			recipe: { channels: [{ raw: 32 }, { raw: 64 }] },
+		});
+	});
+});
+
+function directFamily(): AttributeValue {
+	return {
+		kind: "color_program",
+		value: {
+			kind: "direct",
+			recipe: {
+				source: {
+					profile_id: "profile",
+					profile_revision: 1,
+					mode_id: "full",
+					head_id: "main",
+					path_id: "main",
+					profile_digest: "digest",
+					native_layout_signature: "layout",
+					model_revision: 0,
+				},
+				channels: [
+					{ channel_id: "red", function_id: "red", raw: 32 },
+					{ channel_id: "blue", function_id: "blue", raw: 64 },
+				],
+			},
+			portable: {
+				model_revision: 0,
+				visible: null,
+				uv: null,
+				quality: "unknown",
+				limitations: [],
+			},
+		},
+	};
+}
+
+describe("Color family lanes and identities", () => {
+	function group(
+		values: Map<string, AttributeValue> | undefined,
+		pending?: Map<string, AttributeValue>,
+	) {
+		return fixtureSheetGroupValues({
+			target: fixtureSheetTargets(fixture())[0],
+			registry,
+			values,
+			preloadValues: pending,
+			programmerAttributes: new Set(),
+			dynamicStack: [],
+			preloadDynamicStack: [],
+		}).color;
+	}
+	it("leaves absent Normal unavailable while preserving pending Direct, and omits identical pending", () => {
+		const direct = directFamily();
+		const pending = group(undefined, new Map([["color", direct]]));
+		expect(pending.members[0]).toMatchObject({
+			value: null,
+			text: "Unavailable",
+			source: "default",
+			preloadValue: direct,
+			preloadText: "Direct · unknown appearance",
+		});
+		expect(
+			group(new Map([["color", direct]]), new Map([["color", direct]]))
+				.members[0].preloadValue,
+		).toBeNull();
+	});
+	it("keeps family Dynamic identity and ordinary base despite changing sampled values", () => {
+		const direct = directFamily();
+		const dynamic = {
+			...snapshot("now").dynamic_stack![0],
+			attribute: "color",
+			entry_type: "dynamic" as const,
+			value: { kind: "normalized" as const, value: 0.7 },
+		};
+		const options = {
+			target: fixtureSheetTargets(fixture())[0],
+			registry,
+			values: new Map([["color", direct]]),
+			preloadValues: undefined,
+			programmerAttributes: new Set(["color"]),
+			dynamicStack: [dynamic],
+			preloadDynamicStack: [{ ...dynamic, pending: true }],
+		};
+		const first = fixtureSheetGroupValues(options).color;
+		const second = fixtureSheetGroupValues({
+			...options,
+			dynamicStack: [{ ...dynamic, value: { kind: "normalized", value: 0.1 } }],
+		}).color;
+		expect(first.members[0]).toMatchObject({
+			value: direct,
+			source: "programmer",
+		});
+		expect(first.members[0].dynamics.map((item) => item.lane)).toEqual([
+			"normal",
+			"preload",
+		]);
+		expect(first.members[0].text).toEqual(second.members[0].text);
+	});
+	it("retains a family Dynamic identity even when no ordinary Color base exists", () => {
+		const dynamic = {
+			...snapshot("now").dynamic_stack![0],
+			attribute: "color",
+			entry_type: "dynamic" as const,
+		};
+		const result = fixtureSheetGroupValues({
+			target: fixtureSheetTargets(fixture())[0],
+			registry,
+			values: undefined,
+			preloadValues: undefined,
+			programmerAttributes: new Set(),
+			dynamicStack: [dynamic],
+			preloadDynamicStack: [],
+		}).color;
+		expect(result.members[0]).toMatchObject({
+			attribute: "color",
+			value: null,
+			text: "Unavailable",
+		});
+		expect(result.members[0].dynamics).toHaveLength(1);
+	});
+
+	it("indexes separate logical owners without borrowing a parent's family", () => {
+		const direct = directFamily();
+		const indexed = fixtureSheetValueIndex({
+			...snapshot("now"),
+			values: [
+				{ fixture_id: "root", attribute: "color", value: direct },
+				{
+					fixture_id: "head",
+					attribute: "color",
+					value: { kind: "color_xyz", value: { x: 0, y: 0, z: 0 } },
+				},
+			],
+		});
+		expect(group(indexed.get("head")).members[0].text).toBe("Color");
+		expect(indexed.get("other")).toBeUndefined();
+	});
+});
+
+it("preserves actual legacy RGB scalars on a target that also advertises Color", () => {
+	const patched = fixture();
+	patched.definition.heads[0].parameters.push({
+		...patched.definition.heads[0].parameters[1],
+		attribute: "color",
+	});
+	const target = fixtureSheetTargets(patched)[0];
+	const values = new Map<string, AttributeValue>([
+		["color.red", { kind: "normalized", value: 0.5 }],
+	]);
+	const options = {
+		target,
+		registry,
+		values,
+		preloadValues: undefined,
+		programmerAttributes: new Set<string>(),
+		dynamicStack: [],
+		preloadDynamicStack: [],
+	};
+	const legacy = fixtureSheetGroupValues(options).color;
+	expect(
+		legacy.members.find((member) => member.attribute === "color.red"),
+	).toMatchObject({
+		value: { kind: "normalized", value: 0.5 },
+		text: "50%",
+		source: "playback",
+	});
+	expect(legacy.members.some((member) => member.attribute === "color")).toBe(
+		false,
+	);
+	const dynamic = {
+		...snapshot("now").dynamic_stack![0],
+		attribute: "color",
+		entry_type: "dynamic" as const,
+	};
+	const dynamicLegacy = fixtureSheetGroupValues({
+		...options,
+		dynamicStack: [dynamic],
+	}).color;
+	expect(dynamicLegacy.members[0]).toMatchObject({
+		attribute: "color.red",
+		text: "50%",
+	});
+	expect(dynamicLegacy.members[0].dynamics[0].attribute).toBe("color");
+	const pendingScalar = fixtureSheetGroupValues({
+		...options,
+		values: undefined,
+		preloadValues: values,
+	}).color;
+	expect(pendingScalar.members[0]).toMatchObject({
+		attribute: "color.red",
+		preloadText: "50%",
+	});
+
+	const whole = fixtureSheetGroupValues({
+		...options,
+		values: new Map([...values, ["color", directFamily()]]),
+	}).color;
+	expect(whole.members).toHaveLength(1);
+	expect(whole.members[0].text).toBe("Direct · unknown appearance");
+	const pending = fixtureSheetGroupValues({
+		...options,
+		preloadValues: new Map([["color", directFamily()]]),
+	}).color;
+	expect(pending.members[0]).toMatchObject({
+		attribute: "color",
+		value: null,
+		preloadText: "Direct · unknown appearance",
 	});
 });

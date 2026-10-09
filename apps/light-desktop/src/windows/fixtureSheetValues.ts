@@ -1,5 +1,6 @@
 import type { AttributeDescriptor, VisualizationSnapshot } from "../api/types";
 import type { AttributeValue } from "../api/types/playback";
+import { presentColorProgram } from "../components/control/parameterControls/familyValuePresentation";
 import type { ValueSource } from "../types";
 import type { FixtureSheetTarget } from "./fixtureSheetTargets";
 import { targetDefault, targetHasAttribute } from "./fixtureSheetTargets";
@@ -37,7 +38,7 @@ export interface FixtureSheetDynamicIdentity {
 export interface FixtureSheetMemberValue {
 	attribute: string;
 	label: string;
-	value: AttributeValue;
+	value: AttributeValue | null;
 	text: string;
 	preloadValue: AttributeValue | null;
 	preloadText: string | null;
@@ -133,12 +134,7 @@ export function fixtureSheetValueIndex(snapshot: VisualizationSnapshot | null) {
 	return result;
 }
 
-/**
- * The native Red/Green/Blue channels the sheet shows for the Color group. Under the semantic
- * programming contract the registry publishes no encoder descriptors for them (Color is edited
- * as one Color Intent), yet the visualization still reports their output, so the sheet keeps
- * its colour dot and readable values for every fixture that has them.
- */
+/** Legacy scalar-only snapshots; never substitute these descriptors for a whole Color family. */
 const NATIVE_RGB_DESCRIPTORS: readonly AttributeDescriptor[] = (
 	[
 		["color.red", "Red", 1],
@@ -182,12 +178,33 @@ export function fixtureSheetGroupValues({
 		...registry,
 		...NATIVE_RGB_DESCRIPTORS.filter((descriptor) => !known.has(descriptor.id)),
 	];
+	const familyColor = usesWholeColor(
+		target,
+		fullRegistry,
+		values,
+		preloadValues,
+		dynamicStack,
+		preloadDynamicStack,
+	);
 	return Object.fromEntries(
 		FIXTURE_SHEET_ATTRIBUTE_GROUPS.map((group) => {
+			if (group === "color" && familyColor) {
+				return [
+					group,
+					colorFamilyGroup(
+						values?.get("color"),
+						preloadValues?.get("color"),
+						programmerAttributes,
+						dynamicStack,
+						preloadDynamicStack,
+					),
+				];
+			}
 			const descriptors = fullRegistry
 				.filter(
 					(descriptor) =>
 						descriptor.encoder_group === group &&
+						(group !== "color" || descriptor.id !== "color") &&
 						!descriptor.retired &&
 						targetHasAttribute(target, descriptor.id),
 				)
@@ -197,7 +214,7 @@ export function fixtureSheetGroupValues({
 						(left.encoder_slot ?? 0) - (right.encoder_slot ?? 0) ||
 						left.label.localeCompare(right.label),
 				);
-			const members = descriptors.map((descriptor) => {
+			const members = descriptors.map((descriptor, index) => {
 				const fallback: AttributeValue = {
 					kind: "normalized",
 					value: targetDefault(target, descriptor.id),
@@ -224,8 +241,7 @@ export function fixtureSheetGroupValues({
 					label: descriptor.label,
 					value,
 					text:
-						(group === "position" &&
-							positionAxisText(descriptor.id, values)) ||
+						(group === "position" && positionAxisText(descriptor.id, values)) ||
 						formatFixtureSheetValue(value, descriptor, target),
 					preloadValue,
 					preloadText:
@@ -234,6 +250,12 @@ export function fixtureSheetGroupValues({
 							: formatFixtureSheetValue(preloadValue, descriptor, target),
 					source,
 					dynamics: [
+						...(group === "color" && index === 0
+							? [
+									...dynamicIdentities(dynamicStack, "color", "normal"),
+									...dynamicIdentities(preloadDynamicStack, "color", "preload"),
+								]
+							: []),
 						...dynamicIdentities(
 							dynamicStack,
 							descriptor.id,
@@ -277,6 +299,120 @@ export function fixtureSheetGroupValues({
 	) as FixtureSheetGroupValues;
 }
 
+/** Real legacy values win over capability-only family fallback, but never over authored Color. */
+function usesWholeColor(
+	target: FixtureSheetTarget,
+	registry: readonly AttributeDescriptor[],
+	values: ReadonlyMap<string, AttributeValue> | undefined,
+	pending: ReadonlyMap<string, AttributeValue> | undefined,
+	normalDynamics: readonly FixtureSheetDynamicEntry[],
+	pendingDynamics: readonly FixtureSheetDynamicEntry[],
+) {
+	if (values?.has("color") || pending?.has("color")) return true;
+	const scalar = (value: AttributeValue | undefined) =>
+		value &&
+		["normalized", "spread", "discrete", "raw_dmx", "raw_dmx_exact"].includes(
+			value.kind,
+		);
+	const legacy = registry.some(
+		(descriptor) =>
+			descriptor.encoder_group === "color" &&
+			descriptor.id !== "color" &&
+			!descriptor.retired &&
+			targetHasAttribute(target, descriptor.id) &&
+			(scalar(values?.get(descriptor.id)) ||
+				scalar(pending?.get(descriptor.id))),
+	);
+	return (
+		!legacy &&
+		(targetHasAttribute(target, "color") ||
+			[...normalDynamics, ...pendingDynamics].some(
+				(entry) =>
+					entry.attribute === "color" && entry.entry_type === "dynamic",
+			))
+	);
+}
+
+/** Whole requested Color, including an explicitly absent Normal base with a pending value. */
+function colorFamilyGroup(
+	value: AttributeValue | undefined,
+	pending: AttributeValue | undefined,
+	programmerAttributes: ReadonlySet<string>,
+	normalDynamics: readonly FixtureSheetDynamicEntry[],
+	pendingDynamics: readonly FixtureSheetDynamicEntry[],
+): FixtureSheetGroupValue {
+	const preloadValue =
+		pending && (!value || !fixtureSheetAttributeValuesEqual(pending, value))
+			? pending
+			: null;
+	const source = programmerAttributes.has("color")
+		? "programmer"
+		: value
+			? "playback"
+			: "default";
+	const text = colorFamilyText(value);
+	const preloadText = preloadValue ? colorFamilyText(preloadValue) : null;
+	const dynamics = [
+		...dynamicIdentities(normalDynamics, "color", "normal"),
+		...dynamicIdentities(pendingDynamics, "color", "preload"),
+	];
+	const provenance = colorFamilyProvenance(value);
+	const pendingProvenance = colorFamilyProvenance(preloadValue ?? undefined);
+	return {
+		id: "color",
+		available: value != null || pending != null,
+		source,
+		members: [
+			{
+				attribute: "color",
+				label: "Color",
+				value: value ?? null,
+				text,
+				preloadValue,
+				preloadText,
+				source,
+				dynamics,
+			},
+		],
+		accessibleName: `Color: ${text}${provenance}${preloadText ? `; Preload ${preloadText}${pendingProvenance}` : ""}${dynamics.map((item) => `; ${item.accessibleName}`).join("")}`,
+	};
+}
+
+function colorFamilyProvenance(value: AttributeValue | undefined) {
+	if (value?.kind !== "color_program" || value.value.kind !== "direct")
+		return "";
+	const source = value.value.recipe.source;
+	return `; Direct source profile ${source.profile_id} revision ${source.profile_revision}, mode ${source.mode_id}, head ${source.head_id}, path ${source.path_id}`;
+}
+
+function colorFamilyText(value: AttributeValue | undefined) {
+	if (!value) return "Unavailable";
+	if (value.kind === "color_xyz") return "Color";
+	if (value.kind !== "color_program") return "Unavailable";
+	const program = presentColorProgram(value.value, () => null, {
+		unknownAppearanceLabel: "unknown appearance",
+	});
+	if (program.kind === "semantic")
+		return program.uvOnly
+			? "Color intent · UV-only"
+			: program.requestedVisibleBlack
+				? "Color intent · black"
+				: value.value.kind === "semantic" && value.value.intent.spreads?.length
+					? "Color intent · spread"
+					: "Color intent";
+	if (value.value.kind === "direct" && value.value.recipe.spreads?.length)
+		return "Direct · spread; unknown appearance";
+	const visible = program.portable.visible;
+	return visible.kind === "unknown"
+		? "Direct · unknown appearance"
+		: visible.black
+			? program.portable.uv.kind === "known" &&
+				program.portable.uv.amount.requested > 0
+				? "Direct · UV-only"
+				: "Direct · black"
+			: "Direct · source appearance";
+}
+
 export function fixtureSheetGroupLabel(group: FixtureSheetAttributeGroup) {
 	return group[0]?.toUpperCase() + group.slice(1);
 }
@@ -284,7 +420,7 @@ export function fixtureSheetGroupLabel(group: FixtureSheetAttributeGroup) {
 export function fixtureSheetNormalizedValue(
 	member: FixtureSheetMemberValue | undefined,
 ) {
-	return member?.value.kind === "normalized" ? member.value.value : null;
+	return member?.value?.kind === "normalized" ? member.value.value : null;
 }
 
 function groupSource(members: readonly FixtureSheetMemberValue[]): ValueSource {
@@ -350,16 +486,18 @@ function formatFixtureSheetValue(
 			return formatNormalized(value.value, descriptor);
 		case "discrete":
 			return semanticValueLabel(value.value, descriptor.id, target);
-        case "group_family":
-            // Fixture projections normally arrive materialized. Group summaries retain an
-            // explicit mixed indication instead of choosing an arbitrary member's appearance.
-            return "Group values";
+		case "group_family":
+			// Fixture projections normally arrive materialized. Group summaries retain an
+			// explicit mixed indication instead of choosing an arbitrary member's appearance.
+			return "Group values";
 		case "color_program":
 			return value.value.kind === "semantic" ? "Color intent" : "Direct color";
 		case "position":
 			return value.value.kind === "angles" ? "Angles" : "Target";
 		case "zoom":
-			return value.value.opening_degrees.kind === "value" ? `${formatNumber(value.value.opening_degrees.value)}°` : "Spread";
+			return value.value.opening_degrees.kind === "value"
+				? `${formatNumber(value.value.opening_degrees.value)}°`
+				: "Spread";
 		case "color_xyz":
 			return `XYZ ${formatNumber(value.value.x)}, ${formatNumber(value.value.y)}, ${formatNumber(value.value.z)}`;
 		case "spread":
