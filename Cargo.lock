@@ -8400,6 +8400,7 @@ dependencies = [
  "png 0.18.1",
  "pollster",
  "rfd 0.15.4",
+ "rusqlite",
  "serde",
  "serde_json",
  "tokio",
