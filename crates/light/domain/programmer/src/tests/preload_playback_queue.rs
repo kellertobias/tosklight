@@ -127,3 +127,163 @@ fn undo_redo_and_failed_transaction_track_exact_queue_state() {
     assert_eq!(registry.preload_playback_actions(session).unwrap().len(), 1);
     assert_eq!(registry.preload_playback_queue_generation(session), Some(3));
 }
+
+#[test]
+fn inspection_removal_keeps_dynamic_and_group_release_order_and_live_state() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    registry.start(session);
+    let fixture = FixtureId::new();
+    let attribute = AttributeKey::intensity();
+    {
+        let mut states = registry.state.write();
+        let state = states.as_mut().unwrap();
+        state.preload_dynamic_pending = Arc::new(
+            [9, 2, 7]
+                .map(|programmer_order| light_dynamics::DynamicAddressValue {
+                    fixture_id: fixture,
+                    attribute: attribute.clone(),
+                    programmer_order,
+                    changed_at_millis: 0,
+                    value: light_dynamics::DynamicSemanticValue::Release,
+                })
+                .into(),
+        );
+        state.preload_group_release_pending = [8, 1, 6]
+            .map(|programmer_order| crate::GroupReleaseProgrammerValue {
+                group_id: "3".into(),
+                attribute: attribute.clone(),
+                programmer_order,
+                changed_at_millis: 0,
+            })
+            .into();
+    }
+    let before = registry.get(session).unwrap();
+    let content = registry.preload_pending_values(session).unwrap();
+    assert_eq!(
+        content
+            .dynamic_values
+            .iter()
+            .map(|v| v.programmer_order)
+            .collect::<Vec<_>>(),
+        [9, 2, 7]
+    );
+    assert_eq!(
+        content
+            .group_release_values
+            .iter()
+            .map(|v| v.programmer_order)
+            .collect::<Vec<_>>(),
+        [8, 1, 6]
+    );
+    assert!(registry.remove_preload_dynamic_value(session, 1));
+    assert!(registry.remove_preload_group_release(session, 1));
+    let after = registry.get(session).unwrap();
+    assert_eq!(
+        after
+            .preload_dynamic_pending
+            .iter()
+            .map(|v| v.programmer_order)
+            .collect::<Vec<_>>(),
+        [9, 7]
+    );
+    assert_eq!(
+        after
+            .preload_group_release_pending
+            .iter()
+            .map(|v| v.programmer_order)
+            .collect::<Vec<_>>(),
+        [8, 6]
+    );
+    assert_eq!(after.values, before.values);
+    assert_eq!(after.dynamic_values, before.dynamic_values);
+    assert_eq!(after.group_release_values, before.group_release_values);
+    let depth = registry.undo_depth(session).unwrap();
+    assert!(!registry.remove_preload_dynamic_value(session, 99));
+    assert!(!registry.remove_preload_group_release(session, 99));
+    assert_eq!(registry.undo_depth(session), Some(depth));
+}
+
+#[test]
+fn inspector_static_removal_preserves_coexisting_release_rows_and_nonempty_live() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    registry.start(session);
+    let fixture = FixtureId::new();
+    let attribute = AttributeKey::intensity();
+    registry.set(
+        session,
+        fixture,
+        attribute.clone(),
+        AttributeValue::Normalized(0.6),
+    );
+    registry.arm_preload(session, true);
+    assert!(registry.apply_preload_values(
+        session,
+        &[
+            crate::PreloadProgrammerValueMutation::SetFixture {
+                fixture_id: fixture,
+                attribute: attribute.clone(),
+                value: AttributeValue::Normalized(0.8),
+                timing: Default::default()
+            },
+            crate::PreloadProgrammerValueMutation::SetGroup {
+                group_id: "3".into(),
+                attribute: attribute.clone(),
+                value: AttributeValue::Normalized(0.4),
+                timing: Default::default()
+            },
+        ]
+    ));
+    {
+        let mut states = registry.state.write();
+        let state = states.as_mut().unwrap();
+        state.preload_dynamic_pending = Arc::new(vec![light_dynamics::DynamicAddressValue {
+            fixture_id: fixture,
+            attribute: attribute.clone(),
+            programmer_order: 90,
+            changed_at_millis: 0,
+            value: light_dynamics::DynamicSemanticValue::Release,
+        }]);
+        state
+            .preload_group_release_pending
+            .push(crate::GroupReleaseProgrammerValue {
+                group_id: "3".into(),
+                attribute: attribute.clone(),
+                programmer_order: 91,
+                changed_at_millis: 0,
+            });
+    }
+    let before = registry.get(session).unwrap();
+    assert!(!before.values.is_empty());
+    assert!(registry.apply_preload_values(
+        session,
+        &[
+            crate::PreloadProgrammerValueMutation::RemoveFixtureValue {
+                fixture_id: fixture,
+                attribute: attribute.clone()
+            },
+            crate::PreloadProgrammerValueMutation::RemoveGroupValue {
+                group_id: "3".into(),
+                attribute: attribute.clone()
+            },
+        ]
+    ));
+    let after = registry.get(session).unwrap();
+    assert!(after.preload_pending.is_empty());
+    assert!(after.preload_group_pending.is_empty());
+    assert_eq!(
+        after.preload_dynamic_pending,
+        before.preload_dynamic_pending
+    );
+    assert_eq!(
+        after.preload_group_release_pending,
+        before.preload_group_release_pending
+    );
+    assert_eq!(after.values, before.values);
+    assert!(registry.undo(session));
+    assert_eq!(
+        registry.get(session).unwrap().preload_pending,
+        before.preload_pending
+    );
+}

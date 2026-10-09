@@ -70,12 +70,25 @@ pub struct ProgrammingPreloadGroupValue {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
+pub struct ProgrammingPreloadGroupReleaseValue {
+    pub group_id: String,
+    pub attribute: String,
+    #[ts(type = "number")]
+    pub programmer_order: u64,
+    #[ts(type = "number")]
+    pub changed_at_millis: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct ProgrammingPreloadValuesProjection {
     #[ts(type = "number")]
     pub revision: u64,
     pub fixture_values: Vec<ProgrammingPreloadFixtureValue>,
     pub group_values: Vec<ProgrammingPreloadGroupValue>,
     pub dynamic_values: Vec<ProgrammingDynamicValue>,
+    #[serde(default)]
+    pub group_release_values: Vec<ProgrammingPreloadGroupReleaseValue>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

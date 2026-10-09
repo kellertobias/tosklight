@@ -21,6 +21,15 @@ export type ProgrammerPreloadLifecycleAction =
 			expectedPlaybackEventSequence: number;
 	  }
 	| { type: "clear_pending" }
+	| {
+			type: "remove_pending_fixture_value";
+			fixtureId: string;
+			attribute: string;
+	  }
+	| { type: "remove_pending_group_value"; groupId: string; attribute: string }
+	| { type: "remove_pending_playback"; index: number }
+	| { type: "remove_pending_dynamic"; index: number }
+	| { type: "remove_pending_group_release"; index: number }
 	| { type: "release" };
 
 export interface ProgrammerPreloadLifecycleRequest {
@@ -82,7 +91,36 @@ export interface ProgrammerPreloadLifecycleActions {
 	clearPending(
 		requestId?: string,
 	): Promise<ProgrammerPreloadLifecycleOutcome | null>;
-	release(requestId?: string): Promise<ProgrammerPreloadLifecycleOutcome | null>;
+	removePendingDynamic(
+		index: number,
+		expectedValuesRevision: number,
+		requestId?: string,
+	): Promise<ProgrammerPreloadLifecycleOutcome | null>;
+	removePendingGroupRelease(
+		index: number,
+		expectedValuesRevision: number,
+		requestId?: string,
+	): Promise<ProgrammerPreloadLifecycleOutcome | null>;
+	removePendingFixtureValue(
+		fixtureId: string,
+		attribute: string,
+		expectedValuesRevision: number,
+		requestId?: string,
+	): Promise<ProgrammerPreloadLifecycleOutcome | null>;
+	removePendingGroupValue(
+		groupId: string,
+		attribute: string,
+		expectedValuesRevision: number,
+		requestId?: string,
+	): Promise<ProgrammerPreloadLifecycleOutcome | null>;
+	removePendingPlayback(
+		index: number,
+		expectedQueueRevision: number,
+		requestId?: string,
+	): Promise<ProgrammerPreloadLifecycleOutcome | null>;
+	release(
+		requestId?: string,
+	): Promise<ProgrammerPreloadLifecycleOutcome | null>;
 }
 
 export type ProgrammerPreloadLifecycleErrorKind =

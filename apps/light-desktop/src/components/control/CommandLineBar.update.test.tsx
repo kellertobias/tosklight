@@ -692,6 +692,22 @@ describe("Shift+Record Update gestures", () => {
 		expect(server.setCommandLine).not.toHaveBeenCalled();
 	});
 
+	it("holds the physical Preload button to inspect without executing GO", () => {
+		preloadLifecycle.armed = true;
+		render(<CommandLineBar />);
+		const button = screen.getByRole("button", { name: "PRELOAD GO" });
+		fireEvent.pointerDown(button);
+		act(() => vi.advanceTimersByTime(1200));
+		fireEvent.pointerUp(button);
+		fireEvent.click(button);
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_MODAL",
+			modal: "preloadStoreOpen",
+			value: true,
+		});
+		expect(preloadLifecycle.actions.go).not.toHaveBeenCalled();
+	});
+
 	it("keeps single, second-press, and long-press software gestures mutually exclusive", async () => {
 		const menu = vi.fn();
 		const settings = vi.fn();

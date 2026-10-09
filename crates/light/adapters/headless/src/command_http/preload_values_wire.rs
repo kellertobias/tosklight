@@ -158,6 +158,16 @@ pub(super) fn projection_from_application(
 ) -> wire::ProgrammingPreloadValuesProjection {
     wire::ProgrammingPreloadValuesProjection {
         revision: projection.revision,
+        group_release_values: projection
+            .group_release_values
+            .iter()
+            .map(|entry| wire::ProgrammingPreloadGroupReleaseValue {
+                group_id: entry.group_id.clone(),
+                attribute: entry.attribute.0.to_string(),
+                programmer_order: entry.programmer_order,
+                changed_at_millis: entry.changed_at_millis,
+            })
+            .collect(),
         fixture_values: projection
             .fixture_values
             .iter()

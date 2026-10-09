@@ -101,34 +101,127 @@ impl ProgrammingService {
         session_id: SessionId,
         before: &Snapshot,
     ) -> Result<MutationResult, ActionError> {
-        let (changed, commit, operation) = match action.command.action {
-            ProgrammingPreloadLifecycleAction::Enter => {
-                let capture = ports.capture_programmer_on_preload(&action.context);
-                self.programmers.arm_preload(session_id, capture);
-                let changed =
-                    self.programmers.capture_mode(session_id) != Some(before.capture_mode);
-                (changed, None, "preload.enter")
-            }
-            ProgrammingPreloadLifecycleAction::Go { .. } => {
-                let commit = ports.commit_preload(&action.context, &action.command)?;
-                (true, Some(commit), "preload.go")
-            }
-            ProgrammingPreloadLifecycleAction::ClearPending => {
-                self.programmers.clear_preload_pending(session_id);
-                let changed = self.programmers.preload_values_generation(session_id)
-                    != Some(before.preload_values_generation)
-                    || self
+        let (changed, commit, operation) =
+            match action.command.action {
+                ProgrammingPreloadLifecycleAction::Enter => {
+                    let capture = ports.capture_programmer_on_preload(&action.context);
+                    self.programmers.arm_preload(session_id, capture);
+                    let changed =
+                        self.programmers.capture_mode(session_id) != Some(before.capture_mode);
+                    (changed, None, "preload.enter")
+                }
+                ProgrammingPreloadLifecycleAction::Go { .. } => {
+                    let commit = ports.commit_preload(&action.context, &action.command)?;
+                    (true, Some(commit), "preload.go")
+                }
+                ProgrammingPreloadLifecycleAction::RemovePendingDynamic { index } => {
+                    if !self
                         .programmers
-                        .preload_playback_queue_generation(session_id)
-                        != Some(before.preload_playback_queue_generation);
-                (changed, None, "preload.clear")
-            }
-            ProgrammingPreloadLifecycleAction::Release => (
-                self.programmers.release_preload(session_id),
-                None,
-                "preload.release",
-            ),
-        };
+                        .remove_preload_dynamic_value(session_id, index)
+                    {
+                        return Err(ActionError::new(
+                            crate::ActionErrorKind::Invalid,
+                            "Pending Preload dynamic index is no longer available",
+                        ));
+                    }
+                    (true, None, "preload.remove_dynamic")
+                }
+                ProgrammingPreloadLifecycleAction::RemovePendingGroupRelease { index } => {
+                    if !self
+                        .programmers
+                        .remove_preload_group_release(session_id, index)
+                    {
+                        return Err(ActionError::new(
+                            crate::ActionErrorKind::Invalid,
+                            "Pending Preload Group Release index is no longer available",
+                        ));
+                    }
+                    (true, None, "preload.remove_group_release")
+                }
+                ProgrammingPreloadLifecycleAction::RemovePendingFixtureValue {
+                    ref fixture_id,
+                    ref attribute,
+                } => {
+                    let pending = self
+                        .programmers
+                        .preload_pending_values(session_id)
+                        .ok_or_else(preload_unavailable)?;
+                    if !pending.fixture_values.iter().any(|entry| {
+                        entry.fixture_id == *fixture_id && entry.attribute == *attribute
+                    }) {
+                        return Err(ActionError::new(
+                            crate::ActionErrorKind::Invalid,
+                            "Displayed pending fixture value is no longer available",
+                        ));
+                    }
+                    let changed = self.programmers.apply_preload_values(
+                        session_id,
+                        &[
+                            light_programmer::PreloadProgrammerValueMutation::RemoveFixtureValue {
+                                fixture_id: *fixture_id,
+                                attribute: attribute.clone(),
+                            },
+                        ],
+                    );
+                    (changed, None, "preload.remove_fixture_value")
+                }
+                ProgrammingPreloadLifecycleAction::RemovePendingGroupValue {
+                    ref group_id,
+                    ref attribute,
+                } => {
+                    let pending = self
+                        .programmers
+                        .preload_pending_values(session_id)
+                        .ok_or_else(preload_unavailable)?;
+                    if !pending
+                        .group_values
+                        .iter()
+                        .any(|entry| entry.group_id == *group_id && entry.attribute == *attribute)
+                    {
+                        return Err(ActionError::new(
+                            crate::ActionErrorKind::Invalid,
+                            "Displayed pending Group value is no longer available",
+                        ));
+                    }
+                    let changed = self.programmers.apply_preload_values(
+                        session_id,
+                        &[
+                            light_programmer::PreloadProgrammerValueMutation::RemoveGroupValue {
+                                group_id: group_id.clone(),
+                                attribute: attribute.clone(),
+                            },
+                        ],
+                    );
+                    (changed, None, "preload.remove_group_value")
+                }
+                ProgrammingPreloadLifecycleAction::RemovePendingPlayback { index } => {
+                    if !self
+                        .programmers
+                        .remove_preload_playback_action(session_id, index)
+                    {
+                        return Err(ActionError::new(
+                            crate::ActionErrorKind::Invalid,
+                            "Pending Preload playback action index is no longer available",
+                        ));
+                    }
+                    (true, None, "preload.remove_playback")
+                }
+                ProgrammingPreloadLifecycleAction::ClearPending => {
+                    self.programmers.clear_preload_pending(session_id);
+                    let changed = self.programmers.preload_values_generation(session_id)
+                        != Some(before.preload_values_generation)
+                        || self
+                            .programmers
+                            .preload_playback_queue_generation(session_id)
+                            != Some(before.preload_playback_queue_generation);
+                    (changed, None, "preload.clear")
+                }
+                ProgrammingPreloadLifecycleAction::Release => (
+                    self.programmers.release_preload(session_id),
+                    None,
+                    "preload.release",
+                ),
+            };
         let warning = if commit.is_none() && changed {
             ports.persist_preload_lifecycle(&action.context, operation)
         } else {

@@ -67,12 +67,52 @@ export function captureLifecycleAuthority(
 	const capture = readyCapture(options, captureModeScope);
 	const values = readyValues(options, valuesScope);
 	const queue = readyQueue(options, queueScope);
+	if (
+		typeof action === "object" &&
+		action.type === "remove_pending_playback" &&
+		(queue.revision !== action.expectedQueueRevision ||
+			!Number.isSafeInteger(action.index) ||
+			action.index < 0 ||
+			action.index >= queue.actions.length)
+	)
+		throw new Error(
+			"The displayed pending playback action changed; inspect the current queue and retry",
+		);
+	if (typeof action === "object" && action.type !== "remove_pending_playback") {
+		const available =
+			action.type === "remove_pending_fixture_value"
+				? values.fixtureValues.some(
+						(entry) =>
+							entry.fixtureId === action.fixtureId &&
+							entry.attribute === action.attribute,
+					)
+				: action.type === "remove_pending_group_value"
+					? values.groupValues.some(
+							(entry) =>
+								entry.groupId === action.groupId &&
+								entry.attribute === action.attribute,
+						)
+					: Number.isSafeInteger(action.index) &&
+						action.index >= 0 &&
+						action.index <
+							((action.type === "remove_pending_dynamic"
+								? values.dynamicValues
+								: values.groupReleaseValues
+							)?.length ?? 0);
+		if (values.revision !== action.expectedValuesRevision || !available)
+			throw new Error(
+				"The displayed pending programmer change changed; inspect the current values and retry",
+			);
+	}
+
 	const selectionRevision = readySelection(options, selectionScope);
 	const show = options.showStore.getSnapshot();
 	if (show.showId !== options.scope.showId)
 		throw new Error("The active Show authority is unavailable");
-	const runtimeScope = action === "go" ? options.runtimeStore.captureScope() : null;
-	const runtime = runtimeScope === null ? null : readyRuntime(options, runtimeScope);
+	const runtimeScope =
+		action === "go" ? options.runtimeStore.captureScope() : null;
+	const runtime =
+		runtimeScope === null ? null : readyRuntime(options, runtimeScope);
 	if (options.readPreloadActive() === null)
 		throw new Error("Authoritative Preload lifecycle status is unavailable");
 	return {
@@ -185,13 +225,28 @@ function requestAction(
 	showId: string,
 	runtime: { showRevision: number | null; eventSequence: number | null } | null,
 ): ProgrammerPreloadLifecycleAction {
+	if (typeof action === "object") {
+		if (action.type === "remove_pending_fixture_value")
+			return {
+				type: action.type,
+				fixtureId: action.fixtureId,
+				attribute: action.attribute,
+			};
+		if (action.type === "remove_pending_group_value")
+			return {
+				type: action.type,
+				groupId: action.groupId,
+				attribute: action.attribute,
+			};
+		return { type: action.type, index: action.index };
+	}
 	if (action !== "go") return { type: action };
 	if (runtime?.showRevision == null || runtime.eventSequence == null)
 		throw new Error("Authoritative Playback runtime is unavailable");
 	return {
-			type: "go",
-			showId,
-			expectedShowRevision: runtime.showRevision,
-			expectedPlaybackEventSequence: runtime.eventSequence,
-		};
+		type: "go",
+		showId,
+		expectedShowRevision: runtime.showRevision,
+		expectedPlaybackEventSequence: runtime.eventSequence,
+	};
 }

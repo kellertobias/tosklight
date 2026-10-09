@@ -11,7 +11,7 @@ pub(crate) fn command(
         expected_values_revision: exact(request.expected_values_revision),
         expected_queue_revision: exact(request.expected_queue_revision),
         expected_selection_revision: exact(request.expected_selection_revision),
-        action: match request.action {
+        action: match request.action.clone() {
             wire::ProgrammingPreloadLifecycleAction::Enter {} => {
                 application::ProgrammingPreloadLifecycleAction::Enter
             }
@@ -24,6 +24,29 @@ pub(crate) fn command(
                 expected_show_revision: exact(expected_show_revision),
                 expected_playback_event_sequence: exact(expected_playback_event_sequence),
             },
+            wire::ProgrammingPreloadLifecycleAction::RemovePendingDynamic { index } => {
+                application::ProgrammingPreloadLifecycleAction::RemovePendingDynamic { index }
+            }
+            wire::ProgrammingPreloadLifecycleAction::RemovePendingGroupRelease { index } => {
+                application::ProgrammingPreloadLifecycleAction::RemovePendingGroupRelease { index }
+            }
+            wire::ProgrammingPreloadLifecycleAction::RemovePendingFixtureValue {
+                fixture_id,
+                attribute,
+            } => application::ProgrammingPreloadLifecycleAction::RemovePendingFixtureValue {
+                fixture_id: light_core::FixtureId(fixture_id),
+                attribute: light_core::AttributeKey(attribute.into()),
+            },
+            wire::ProgrammingPreloadLifecycleAction::RemovePendingGroupValue {
+                group_id,
+                attribute,
+            } => application::ProgrammingPreloadLifecycleAction::RemovePendingGroupValue {
+                group_id,
+                attribute: light_core::AttributeKey(attribute.into()),
+            },
+            wire::ProgrammingPreloadLifecycleAction::RemovePendingPlayback { index } => {
+                application::ProgrammingPreloadLifecycleAction::RemovePendingPlayback { index }
+            }
             wire::ProgrammingPreloadLifecycleAction::ClearPending {} => {
                 application::ProgrammingPreloadLifecycleAction::ClearPending
             }

@@ -21,6 +21,14 @@ pub enum PreloadProgrammerValueMutation {
         value: AttributeValue,
         timing: PreloadProgrammerValueTiming,
     },
+    RemoveFixtureValue {
+        fixture_id: FixtureId,
+        attribute: AttributeKey,
+    },
+    RemoveGroupValue {
+        group_id: String,
+        attribute: AttributeKey,
+    },
     ReleaseFixture {
         fixture_id: FixtureId,
         attribute: AttributeKey,
@@ -64,6 +72,7 @@ pub struct PreloadProgrammerValuesContent {
     pub fixture_values: Vec<PreloadProgrammerFixtureValue>,
     pub group_values: Vec<PreloadProgrammerGroupValue>,
     pub dynamic_values: Vec<DynamicAddressValue>,
+    pub group_release_values: Vec<crate::GroupReleaseProgrammerValue>,
 }
 
 impl ProgrammerRegistry {
@@ -97,7 +106,15 @@ impl ProgrammerRegistry {
         let Some(state) = states.as_mut() else {
             return false;
         };
-        if !state.blind || !state.preload_capture_programmer {
+        if (!state.blind || !state.preload_capture_programmer)
+            && !mutations.iter().all(|entry| {
+                matches!(
+                    entry,
+                    PreloadProgrammerValueMutation::RemoveFixtureValue { .. }
+                        | PreloadProgrammerValueMutation::RemoveGroupValue { .. }
+                )
+            })
+        {
             return false;
         }
         let fixture_index = FixtureValueIndex::new(&state.preload_pending);
@@ -174,6 +191,7 @@ fn content(state: &crate::ProgrammerState) -> PreloadProgrammerValuesContent {
         fixture_values,
         group_values,
         dynamic_values: state.preload_dynamic_pending.to_vec(),
+        group_release_values: state.preload_group_release_pending.clone(),
     }
 }
 
@@ -232,6 +250,17 @@ fn mutation_changes(
                         && matches!(stored.value, light_dynamics::DynamicSemanticValue::Release)
                 })
         }
+        PreloadProgrammerValueMutation::RemoveFixtureValue {
+            fixture_id,
+            attribute,
+        } => fixture_index.get(*fixture_id, attribute).is_some(),
+        PreloadProgrammerValueMutation::RemoveGroupValue {
+            group_id,
+            attribute,
+        } => state
+            .preload_group_pending
+            .get(group_id)
+            .is_some_and(|values| values.contains_key(attribute)),
         PreloadProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
@@ -336,6 +365,18 @@ fn apply_mutation(
             });
             state.prune_released_fixture_colors();
         }
+        PreloadProgrammerValueMutation::RemoveFixtureValue {
+            fixture_id,
+            attribute,
+        } => {
+            fixture_batch.release(*fixture_id, attribute);
+        }
+        PreloadProgrammerValueMutation::RemoveGroupValue {
+            group_id,
+            attribute,
+        } => {
+            release_group(state, group_id, attribute);
+        }
         PreloadProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
@@ -425,6 +466,10 @@ fn referenced_order(
             attribute,
             ..
         }
+        | PreloadProgrammerValueMutation::RemoveFixtureValue {
+            fixture_id,
+            attribute,
+        }
         | PreloadProgrammerValueMutation::ReleaseFixture {
             fixture_id,
             attribute,
@@ -437,6 +482,10 @@ fn referenced_order(
             group_id,
             attribute,
             ..
+        }
+        | PreloadProgrammerValueMutation::RemoveGroupValue {
+            group_id,
+            attribute,
         }
         | PreloadProgrammerValueMutation::ReleaseGroup {
             group_id,

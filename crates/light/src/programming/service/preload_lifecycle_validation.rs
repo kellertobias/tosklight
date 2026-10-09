@@ -32,7 +32,7 @@ impl ProgrammingService {
             .selection(session_id)
             .ok_or_else(preload_unavailable)?
             .revision;
-        match request.action {
+        match &request.action {
             ProgrammingPreloadLifecycleAction::Enter => {
                 assert_expected(
                     request.expected_capture_mode_revision,
@@ -43,6 +43,37 @@ impl ProgrammingService {
                     request.expected_selection_revision,
                     selection,
                     "Programmer selection",
+                )
+            }
+            ProgrammingPreloadLifecycleAction::RemovePendingDynamic { .. }
+            | ProgrammingPreloadLifecycleAction::RemovePendingGroupRelease { .. }
+            | ProgrammingPreloadLifecycleAction::RemovePendingFixtureValue { .. }
+            | ProgrammingPreloadLifecycleAction::RemovePendingGroupValue { .. } => {
+                if !matches!(
+                    request.expected_values_revision,
+                    ProgrammingPreloadRevisionExpectation::Exact(_)
+                ) {
+                    return Err(ActionError::new(
+                        ActionErrorKind::Invalid,
+                        "Removing a displayed Preload change requires an exact values revision",
+                    ));
+                }
+                assert_expected(request.expected_values_revision, values, "Preload values")
+            }
+            ProgrammingPreloadLifecycleAction::RemovePendingPlayback { .. } => {
+                if !matches!(
+                    request.expected_queue_revision,
+                    ProgrammingPreloadRevisionExpectation::Exact(_)
+                ) {
+                    return Err(ActionError::new(
+                        ActionErrorKind::Invalid,
+                        "Removing a displayed Preload action requires an exact queue revision",
+                    ));
+                }
+                assert_expected(
+                    request.expected_queue_revision,
+                    queue,
+                    "Preload playback queue",
                 )
             }
             ProgrammingPreloadLifecycleAction::ClearPending => {

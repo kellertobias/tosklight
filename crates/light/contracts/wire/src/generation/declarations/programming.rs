@@ -228,6 +228,7 @@ fn programming_preload(config: &Config) -> Vec<String> {
         ProgrammingPreloadAttributeValue::decl(config),
         ProgrammingPreloadFixtureValue::decl(config),
         ProgrammingPreloadGroupValue::decl(config),
+        ProgrammingPreloadGroupReleaseValue::decl(config),
         ProgrammingPreloadValuesProjection::decl(config),
         ProgrammingPreloadValuesChange::decl(config),
         ProgrammingPreloadValuesSnapshot::decl(config),

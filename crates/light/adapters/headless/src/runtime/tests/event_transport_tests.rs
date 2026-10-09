@@ -735,6 +735,7 @@ fn programmer_preload_values_draft(_user_id: Uuid, revision: u64) -> EventDraft 
         ProgrammingPreloadValuesChange {
             projection: ProgrammingPreloadValuesProjection {
                 dynamic_values: Vec::new(),
+                group_release_values: Vec::new(),
                 revision,
                 fixture_values: Vec::new(),
                 group_values: Vec::new(),

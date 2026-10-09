@@ -4189,6 +4189,34 @@
         "fade"
       ]
     },
+    "ProgrammingPreloadGroupReleaseValue": {
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "changed_at_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "group_id": {
+          "type": "string"
+        },
+        "programmer_order": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "group_id",
+        "attribute",
+        "programmer_order",
+        "changed_at_millis"
+      ]
+    },
     "ProgrammingPreloadGroupValue": {
       "type": "object",
       "properties": {
@@ -4379,6 +4407,13 @@
             "$ref": "#/$defs/ProgrammingPreloadFixtureValue"
           }
         },
+        "group_release_values": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProgrammingPreloadGroupReleaseValue"
+          }
+        },
         "group_values": {
           "type": "array",
           "items": {
@@ -4396,7 +4431,8 @@
         "revision",
         "fixture_values",
         "group_values",
-        "dynamic_values"
+        "dynamic_values",
+        "group_release_values"
       ]
     },
     "ProgrammingScalarIntent": {

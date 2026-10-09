@@ -6,6 +6,7 @@ import {
 	decodeProgrammerPreloadValuesSnapshot,
 	encodeProgrammerPreloadValuesActionRequest,
 } from "./programmerPreloadValuesWire";
+import { decodeProgrammerPreloadValuesProjection } from "./programmerPreloadValuesWireProjection";
 import { WireValidationError } from "./wireValidation";
 
 const SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -124,7 +125,8 @@ describe("Preload Programmer values snapshot wire", () => {
 
 	it("rejects a snapshot carrying an undeclared field", () => {
 		const candidate = snapshot();
-		(candidate.projection as Record<string, unknown>).user_id = OTHER_SESSION_ID;
+		(candidate.projection as Record<string, unknown>).user_id =
+			OTHER_SESSION_ID;
 		expect(() => decodeProgrammerPreloadValuesSnapshot(candidate)).toThrow(
 			/user_id/,
 		);
@@ -146,9 +148,9 @@ describe("Preload Programmer values snapshot wire", () => {
 		for (const mutate of mutations) {
 			const candidate = structuredClone(snapshot());
 			mutate(candidate);
-			expect(() =>
-				decodeProgrammerPreloadValuesSnapshot(candidate),
-			).toThrow(/declared wire field/);
+			expect(() => decodeProgrammerPreloadValuesSnapshot(candidate)).toThrow(
+				/declared wire field/,
+			);
 		}
 	});
 });
@@ -253,9 +255,7 @@ describe("Preload Programmer values mutation wire", () => {
 
 	it("decodes changed and sparse no-change outcomes", () => {
 		expect(
-			decodeProgrammerPreloadValuesActionOutcome(
-				changedOutcome(),
-				"request-1"),
+			decodeProgrammerPreloadValuesActionOutcome(changedOutcome(), "request-1"),
 		).toMatchObject({
 			status: "changed",
 			requestId: "request-1",
@@ -270,9 +270,7 @@ describe("Preload Programmer values mutation wire", () => {
 		delete (noChange as Partial<ReturnType<typeof changedOutcome>>)
 			.event_sequence;
 		expect(
-			decodeProgrammerPreloadValuesActionOutcome(
-				noChange,
-				"request-1"),
+			decodeProgrammerPreloadValuesActionOutcome(noChange, "request-1"),
 		).toEqual({
 			status: "no_change",
 			requestId: "request-1",
@@ -286,7 +284,8 @@ describe("Preload Programmer values mutation wire", () => {
 
 	it("rejects an undeclared action projection field, materialized no-op, and extras", () => {
 		const undeclared = changedOutcome();
-		(undeclared.projection as Record<string, unknown>).user_id = OTHER_SESSION_ID;
+		(undeclared.projection as Record<string, unknown>).user_id =
+			OTHER_SESSION_ID;
 		expect(() =>
 			decodeProgrammerPreloadValuesActionOutcome(undeclared, "request-1"),
 		).toThrow(/user_id/);
@@ -298,7 +297,8 @@ describe("Preload Programmer values mutation wire", () => {
 		expect(() =>
 			decodeProgrammerPreloadValuesActionOutcome(
 				{ ...changedOutcome(), extra: true },
-				"request-1"),
+				"request-1",
+			),
 		).toThrow(/declared wire field/);
 	});
 
@@ -331,9 +331,7 @@ describe("Preload Programmer values mutation wire", () => {
 
 describe("Preload Programmer values event wire", () => {
 	it("decodes the replaceable projection object", () => {
-		expect(
-			decodeProgrammerPreloadValuesEventMessage(preloadEvent()),
-		).toEqual({
+		expect(decodeProgrammerPreloadValuesEventMessage(preloadEvent())).toEqual({
 			type: "event",
 			sequence: 19,
 			correlationId: CORRELATION_ID,
@@ -382,24 +380,27 @@ describe("Preload Programmer values event wire", () => {
 
 	it("strictly decodes cursor and gap control messages", () => {
 		expect(
-			decodeProgrammerPreloadValuesEventMessage(
-				{ type: "ready", cursor: { sequence: 3 } }),
+			decodeProgrammerPreloadValuesEventMessage({
+				type: "ready",
+				cursor: { sequence: 3 },
+			}),
 		).toEqual({ type: "ready", cursor: 3 });
 		expect(() =>
-			decodeProgrammerPreloadValuesEventMessage(
-				{ type: "ready", cursor: { sequence: 3, extra: true } }),
+			decodeProgrammerPreloadValuesEventMessage({
+				type: "ready",
+				cursor: { sequence: 3, extra: true },
+			}),
 		).toThrow(/declared wire field/);
 		expect(() =>
-			decodeProgrammerPreloadValuesEventMessage(
-				{
-					type: "gap",
-					gap: {
-						after_sequence: 3,
-						oldest_available: 5,
-						latest_sequence: 9,
-						extra: true,
-					},
-				}),
+			decodeProgrammerPreloadValuesEventMessage({
+				type: "gap",
+				gap: {
+					after_sequence: 3,
+					oldest_available: 5,
+					latest_sequence: 9,
+					extra: true,
+				},
+			}),
 		).toThrow(/declared wire field/);
 	});
 });
@@ -411,21 +412,59 @@ describe("Preload Programmer semantic component edit intents", () => {
 	const wireTiming = { fade: false, fade_millis: null, delay_millis: 75 };
 	const anglePan = [
 		{ kind: "activate_angles" },
-		{ kind: "scalar", component: { kind: "pan" }, operation: { kind: "set", value: { kind: "spread", value: [-90, 90] } } },
+		{
+			kind: "scalar",
+			component: { kind: "pan" },
+			operation: { kind: "set", value: { kind: "spread", value: [-90, 90] } },
+		},
 	] as const;
 	const targetXyz = [
 		{ kind: "target", reference: { kind: "origin" } },
-		{ kind: "scalar", component: { kind: "target_x" }, operation: { kind: "relative", value: 1 } },
-		{ kind: "scalar", component: { kind: "target_y" }, operation: { kind: "relative", value: 0 } },
-		{ kind: "scalar", component: { kind: "target_z" }, operation: { kind: "set", value: { kind: "value", value: 3 } } },
+		{
+			kind: "scalar",
+			component: { kind: "target_x" },
+			operation: { kind: "relative", value: 1 },
+		},
+		{
+			kind: "scalar",
+			component: { kind: "target_y" },
+			operation: { kind: "relative", value: 0 },
+		},
+		{
+			kind: "scalar",
+			component: { kind: "target_z" },
+			operation: { kind: "set", value: { kind: "value", value: 3 } },
+		},
 	] as const;
-	const pointTarget = [{ kind: "target", reference: { kind: "point", point_id: POINT_ID } }] as const;
+	const pointTarget = [
+		{ kind: "target", reference: { kind: "point", point_id: POINT_ID } },
+	] as const;
 	const whiteBlendUv = [
-		{ kind: "scalar", component: { kind: "color", component: "uv" }, operation: { kind: "relative", value: -0.2 } },
-		{ kind: "scalar", component: { kind: "color", component: "white_blend" }, operation: { kind: "set", value: { kind: "value", value: 1 } } },
+		{
+			kind: "scalar",
+			component: { kind: "color", component: "uv" },
+			operation: { kind: "relative", value: -0.2 },
+		},
+		{
+			kind: "scalar",
+			component: { kind: "color", component: "white_blend" },
+			operation: { kind: "set", value: { kind: "value", value: 1 } },
+		},
 	] as const;
-	const focus = [{ kind: "scalar", component: { kind: "focus" }, operation: { kind: "set", value: { kind: "value", value: 0.2 } } }] as const;
-	const zoom = [{ kind: "scalar", component: { kind: "zoom" }, operation: { kind: "relative", value: 4 } }] as const;
+	const focus = [
+		{
+			kind: "scalar",
+			component: { kind: "focus" },
+			operation: { kind: "set", value: { kind: "value", value: 0.2 } },
+		},
+	] as const;
+	const zoom = [
+		{
+			kind: "scalar",
+			component: { kind: "zoom" },
+			operation: { kind: "relative", value: 4 },
+		},
+	] as const;
 
 	function request(
 		requestId: string,
@@ -456,7 +495,9 @@ describe("Preload Programmer semantic component edit intents", () => {
 		["Focus", "focus", focus],
 		["Zoom", "zoom", zoom],
 	])("preserves ordered %s edits with Preload revisions", (_name, attribute, edits) => {
-		expect(request("preload-edit", attribute, edits, { fixtureIds: [FIXTURE_ID] })).toEqual({
+		expect(
+			request("preload-edit", attribute, edits, { fixtureIds: [FIXTURE_ID] }),
+		).toEqual({
 			request_id: "preload-edit",
 			expected_revision: 21,
 			expected_capture_mode_revision: 8,
@@ -473,7 +514,12 @@ describe("Preload Programmer semantic component edit intents", () => {
 	});
 
 	it("keeps live Group addressing distinct from fixture addressing", () => {
-		expect(request("preload-group", "position", anglePan, { fixtureIds: [], groupId: GROUP_ID }).action).toMatchObject({
+		expect(
+			request("preload-group", "position", anglePan, {
+				fixtureIds: [],
+				groupId: GROUP_ID,
+			}).action,
+		).toMatchObject({
 			fixture_ids: [],
 			group_id: GROUP_ID,
 			operation: { type: "component_edits", edits: anglePan },
@@ -493,17 +539,38 @@ describe("Preload Programmer semantic component edit intents", () => {
 				timing,
 			},
 		});
-		expect(encoded.action).toMatchObject({ operation: { type: "relative_step", delta: 0.1 } });
+		expect(encoded.action).toMatchObject({
+			operation: { type: "relative_step", delta: 0.1 },
+		});
 	});
 
 	it("rejects malformed component edits before transport", () => {
-		expect(() => request("bad", "zoom", [{ kind: "scalar", component: { kind: "zoom" }, operation: { kind: "absolute", value: 1 } }], { fixtureIds: [FIXTURE_ID] })).toThrow(/\$\.action\.operation\.edits\[0\]\.operation\.kind/);
+		expect(() =>
+			request(
+				"bad",
+				"zoom",
+				[
+					{
+						kind: "scalar",
+						component: { kind: "zoom" },
+						operation: { kind: "absolute", value: 1 },
+					},
+				],
+				{ fixtureIds: [FIXTURE_ID] },
+			),
+		).toThrow(/\$\.action\.operation\.edits\[0\]\.operation\.kind/);
 		expect(() =>
 			encodeProgrammerPreloadValuesActionRequest({
 				requestId: "bad-op",
 				expectedPreloadRevision: 1,
 				expectedCaptureModeRevision: 1,
-				action: { action: "apply_intent", fixtureIds: [FIXTURE_ID], attribute: "zoom", operation: { type: "merge" } as never, timing },
+				action: {
+					action: "apply_intent",
+					fixtureIds: [FIXTURE_ID],
+					attribute: "zoom",
+					operation: { type: "merge" } as never,
+					timing,
+				},
 			}),
 		).toThrow(WireValidationError);
 	});
@@ -526,7 +593,11 @@ describe("Preload Programmer values gesture finish wire", () => {
 			request_id: "finish-1",
 			expected_revision: 6,
 			expected_capture_mode_revision: 4,
-			action: { type: "finish_gesture", attribute: "pan", undo_group: "gesture-1" },
+			action: {
+				type: "finish_gesture",
+				attribute: "pan",
+				undo_group: "gesture-1",
+			},
 		});
 	});
 
@@ -550,5 +621,62 @@ describe("Preload Programmer values gesture finish wire", () => {
 			expect(() => encodeProgrammerPreloadValuesActionRequest(invalid)).toThrow(
 				WireValidationError,
 			);
+	});
+});
+
+describe("Preload inspection release projection", () => {
+	it("retains unsorted dynamic release and ordered Group ownership, with absent/empty backward compatibility", () => {
+		const legacy = projection();
+		expect(
+			decodeProgrammerPreloadValuesProjection(legacy, "$").groupReleaseValues,
+		).toBeUndefined();
+		expect(
+			decodeProgrammerPreloadValuesProjection(
+				{ ...legacy, group_release_values: [] },
+				"$",
+			),
+		).toEqual(decodeProgrammerPreloadValuesProjection(legacy, "$"));
+		const result = decodeProgrammerPreloadValuesProjection(
+			{
+				...legacy,
+				dynamic_values: [9, 2].map((programmer_order) => ({
+					fixture_id: FIXTURE_ID,
+					attribute: "intensity",
+					programmer_order,
+					changed_at_millis: 12,
+					value: { type: "release" },
+				})),
+				group_release_values: [8, 1].map((programmer_order) => ({
+					group_id: "3",
+					attribute: "intensity",
+					programmer_order,
+					changed_at_millis: 12,
+				})),
+			},
+			"$",
+		);
+		expect(result.dynamicValues?.map((row) => row.programmerOrder)).toEqual([
+			9, 2,
+		]);
+		expect(
+			result.groupReleaseValues?.map((row) => row.programmerOrder),
+		).toEqual([8, 1]);
+		expect(() =>
+			decodeProgrammerPreloadValuesProjection(
+				{
+					...legacy,
+					group_release_values: [
+						{
+							group_id: "3",
+							attribute: "intensity",
+							programmer_order: 1,
+							changed_at_millis: 0,
+							unknown: true,
+						},
+					],
+				},
+				"$",
+			),
+		).toThrow(WireValidationError);
 	});
 });
