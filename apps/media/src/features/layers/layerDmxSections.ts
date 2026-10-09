@@ -171,7 +171,11 @@ export function playbackRangeControls(
 	catalog?: CatalogView,
 ): ControlSection["controls"] {
 	const framesPerSecond = output.frameRate;
-	const clip = resolveAddress(catalog, layer.address.folder, layer.address.file);
+	const clip = resolveAddress(
+		catalog,
+		layer.address.folder,
+		layer.address.file,
+	);
 	const length = clipLengthReadout(clipLengthOf(clip.item), framesPerSecond);
 	return [
 		{
@@ -192,21 +196,21 @@ export function playbackRangeControls(
 			},
 		},
 		...(
-		[
-			["in-point", "In point", layer.inPoint, "start"],
-			["out-point", "Out point", layer.outPoint, "end"],
-		] as const
-	).map(([id, label, frames, reference]) => ({
-		id,
-		label,
-		kind: "point-time" as const,
-		value: frames,
-		reference,
-		framesPerSecond,
-		display: pointDisplay(reference, frames, framesPerSecond),
-		disabled,
-		group: "Playback range",
-	})),
+			[
+				["in-point", "In point", layer.inPoint, "start"],
+				["out-point", "Out point", layer.outPoint, "end"],
+			] as const
+		).map(([id, label, frames, reference]) => ({
+			id,
+			label,
+			kind: "point-time" as const,
+			value: frames,
+			reference,
+			framesPerSecond,
+			display: pointDisplay(reference, frames, framesPerSecond),
+			disabled,
+			group: "Playback range",
+		})),
 	];
 }
 
@@ -375,6 +379,23 @@ function modelControls(
 			group: MODEL_GROUP,
 		},
 	];
+}
+
+/** The live card summarizes the two canonical DMX banks, not retired layer effect slots. */
+export function effectBankSummary(
+	banks: LayerState["effectBanks"],
+	presets: ReadonlyArray<{ slot: number; name: string }>,
+): string {
+	const names = new Map(presets.map((preset) => [preset.slot, preset.name]));
+	return (
+		banks
+			.filter((bank) => bank.select > 0 && bank.strength > 0)
+			.map(
+				(bank) =>
+					`Bank ${bank.index + 1} · ${names.get(bank.select) ?? `Slot ${bank.select}`}`,
+			)
+			.join(" · ") || "None"
+	);
 }
 
 export function effectBankSection(
