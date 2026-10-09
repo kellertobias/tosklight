@@ -166,6 +166,9 @@ export function OutputSettings({
 					}
 				/>
 			)}
+			{(mode === "sound" || mode === "all") && output.soundOutputInventory && (
+				<Button size="compact" onClick={configuration.reload}>Refresh audio devices</Button>
+			)}
 			{direct && pendingRestart && (
 				<>
 					<RestartNotice mode={mode} />
@@ -487,18 +490,29 @@ function SoundOutputFields({
 	kind,
 	name,
 	availableDevices,
+	inventory,
 	setKind,
 	setName,
 }: {
 	kind: OutputConfigurationView["soundOutputKind"];
 	name: string;
 	availableDevices: string[];
+	inventory: OutputConfigurationView["soundOutputInventory"];
 	setKind: Dispatch<SetStateAction<OutputConfigurationView["soundOutputKind"]>>;
 	setName: Dispatch<SetStateAction<string>>;
 }) {
 	return (
 		<fieldset>
 			<legend>Sound output</legend>
+			{inventory?.state === "loading" && (
+				<p role="status">Discovering audio output devices… Settings remain available.</p>
+			)}
+			{inventory?.state === "stalled" && (
+				<p role="status">Audio device discovery is taking longer than expected. Settings remain available. Refresh to check again; restart Pixel if discovery does not recover.</p>
+			)}
+			{inventory?.state === "failed" && (
+				<p role="status">Audio devices could not be discovered: {inventory.error}. Your selected output is retained. Refresh to try again.</p>
+			)}
 			<SelectField
 				label="Sound output"
 				value={kind}
@@ -518,7 +532,7 @@ function SoundOutputFields({
 				<SelectField
 					label="Device"
 					value={name}
-					options={deviceOptions(availableDevices, name)}
+					options={deviceOptions(availableDevices, name, inventory === undefined || inventory?.state === "ready")}
 					onChange={setName}
 				/>
 			)}
@@ -697,6 +711,7 @@ export function OutputEditor({
 					kind={soundOutputKind}
 					name={soundOutputName}
 					availableDevices={output.availableSoundOutputs}
+					inventory={output.soundOutputInventory}
 					setKind={setSoundOutputKind}
 					setName={setSoundOutputName}
 				/>
@@ -881,10 +896,10 @@ function resolveMonitor(
 	return undefined;
 }
 
-function deviceOptions(devices: string[], selected: string) {
+function deviceOptions(devices: string[], selected: string, discoveryComplete = true) {
 	const options = devices.map((device) => ({ value: device, label: device }));
 	if (selected && !devices.includes(selected)) {
-		options.unshift({ value: selected, label: `${selected} · unavailable` });
+		options.unshift({ value: selected, label: discoveryComplete ? `${selected} · unavailable` : `${selected} · saved selection` });
 	}
 	return options;
 }

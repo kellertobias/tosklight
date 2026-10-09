@@ -328,6 +328,24 @@ pub const OUTPUT_RESTART_FIELDS: [&str; 11] = [
     "personality",
 ];
 
+/// Optional audio discovery is independent of stored output settings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "kebab-case")]
+pub enum SoundOutputDiscoveryState {
+    Loading,
+    Ready,
+    Failed,
+    Stalled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SoundOutputInventoryView {
+    pub state: SoundOutputDiscoveryState,
+    pub has_successful_snapshot: bool,
+    pub error: Option<String>,
+}
+
 /// The output settings an operator can inspect and edit.
 ///
 /// This deliberately does not expose the retired status overlay. Library transcoding is not an
@@ -363,6 +381,9 @@ pub struct OutputConfigurationView {
     pub available_monitors: Vec<AvailableMonitorView>,
     /// Audio outputs the operating system currently reports.
     pub available_sound_outputs: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub sound_output_inventory: Option<SoundOutputInventoryView>,
     /// What this output maps onto a rig, and how its canvas is divided across screens.
     pub pixel_map: super::PixelMapView,
     /// `two-layers` or `eight-layers`.
@@ -422,7 +443,7 @@ impl OutputConfigurationView {
         output: &OutputConfiguration,
         active: &OutputConfiguration,
         available_monitors: Vec<crate::diagnostics::MonitorDevice>,
-        available_sound_outputs: Vec<String>,
+        inventory: crate::diagnostics::OutputDeviceInventory,
     ) -> Self {
         let values = OutputConfigurationValuesView::of(output);
         let active = OutputConfigurationValuesView::of(active);
@@ -454,7 +475,25 @@ impl OutputConfigurationView {
                     refresh_millihertz: monitor.refresh_millihertz,
                 })
                 .collect(),
-            available_sound_outputs,
+            available_sound_outputs: inventory.devices,
+            sound_output_inventory: Some(SoundOutputInventoryView {
+                state: match inventory.state {
+                    crate::diagnostics::OutputDeviceDiscoveryState::Loading => {
+                        SoundOutputDiscoveryState::Loading
+                    }
+                    crate::diagnostics::OutputDeviceDiscoveryState::Ready => {
+                        SoundOutputDiscoveryState::Ready
+                    }
+                    crate::diagnostics::OutputDeviceDiscoveryState::Failed => {
+                        SoundOutputDiscoveryState::Failed
+                    }
+                    crate::diagnostics::OutputDeviceDiscoveryState::Stalled => {
+                        SoundOutputDiscoveryState::Stalled
+                    }
+                },
+                has_successful_snapshot: inventory.has_successful_snapshot,
+                error: inventory.error,
+            }),
             personality: values.personality.clone(),
             protocol: values.protocol.clone(),
             universe: values.universe,
@@ -1015,7 +1054,10 @@ mod tests {
                 height: 2160,
                 refresh_millihertz: Some(59_940),
             }],
-            vec!["Display 2".to_owned()],
+            crate::diagnostics::OutputDeviceInventory {
+                devices: vec!["Display 2".to_owned()],
+                ..Default::default()
+            },
         );
 
         assert_eq!(view.target_kind, "monitor");
