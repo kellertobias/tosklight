@@ -229,6 +229,63 @@ impl ColorCalibrationContext {
             identities,
         })
     }
+    /// Bind a compiler-verified transient compatibility projection without replacing the
+    /// immutable identity used to replay and predict an authored native recipe. This is not
+    /// an authoring/calibration API: only the portable compiler calls it after verifying the
+    /// retained profile and applying the repository-owned compatibility projection.
+    pub(crate) fn rebind_verified_runtime_projection(
+        &mut self,
+        profile: &FixtureProfile,
+        mode_id: Uuid,
+    ) -> Result<(), String> {
+        let projected = profile
+            .native_color_identities(mode_id)
+            .map_err(|e| e.to_string())?;
+        let same_layout = |old: &NativeColorIdentity, new: &NativeColorIdentity| {
+            old.profile_id == new.profile_id
+                && old.profile_revision == new.profile_revision
+                && old.mode_id == new.mode_id
+                && old.head_id == new.head_id
+                && old.path_id == new.path_id
+                && old.native_layout_signature == new.native_layout_signature
+        };
+        if self.mode.id != mode_id
+            || self.identities.len() != projected.len()
+            || self
+                .identities
+                .iter()
+                .any(|old| !projected.iter().any(|new| same_layout(old, new)))
+        {
+            return Err("runtime compatibility changed immutable native Color layout".into());
+        }
+        let mode = profile
+            .mode(mode_id)
+            .ok_or("runtime Color mode is missing")?;
+        let controls = self
+            .mode
+            .color_physical
+            .as_ref()
+            .ok_or("authoritative Color context has no model")?
+            .paths
+            .iter()
+            .flat_map(|path| path.controls.iter())
+            .copied()
+            .collect::<std::collections::HashSet<_>>();
+        for id in controls {
+            let original = self.mode.channels.iter().find(|channel| channel.id == id);
+            let current = mode.channels.iter().find(|channel| channel.id == id);
+            if original.is_none()
+                || current.is_none()
+                || serde_json::to_value(original).map_err(|error| error.to_string())?
+                    != serde_json::to_value(current).map_err(|error| error.to_string())?
+            {
+                return Err("runtime compatibility changed immutable native Color control".into());
+            }
+        }
+        self.mode = mode.clone();
+        self.validate_runtime_profile(profile, mode_id)
+    }
+
     /// Verify the selected optical interpretation without rehashing a compact runtime profile.
     /// Unrelated compatibility repairs (such as shutter functions) do not change Color identity.
     pub fn validate_runtime_profile(

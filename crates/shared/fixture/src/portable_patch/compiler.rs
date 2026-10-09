@@ -269,6 +269,18 @@ fn validate_resolved_profile(
     profile
         .validate()
         .map_err(|error| invalid_profile(expected, error))?;
+    // The native identity stays pinned to immutable authoring data, while forward fitting
+    // validates the exact runtime optical interpretation produced above.
+    let color_contexts = color_contexts
+        .into_iter()
+        .map(|(mode_id, context)| {
+            let mut context = (*context).clone();
+            context
+                .rebind_verified_runtime_projection(&profile, mode_id)
+                .map_err(|error| invalid_profile(expected, error))?;
+            Ok((mode_id, std::sync::Arc::new(context)))
+        })
+        .collect::<Result<HashMap<_, _>, PortablePatchError>>()?;
     Ok(CachedProfile {
         definition: profile,
         color_contexts,
