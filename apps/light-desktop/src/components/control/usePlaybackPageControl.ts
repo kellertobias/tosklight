@@ -27,7 +27,7 @@ export function usePlaybackPageControl() {
 	const activePage = topology.pages.find(
 		(page) => page.body.number === activePageNumber,
 	);
-	const ready = topology.ready && runtimeReady && activePage != null;
+	const ready = topology.ready && runtimeReady && desk != null;
 	const operation = useScopedPageOperation([
 		topology.ready,
 		runtimeReady,
@@ -54,10 +54,11 @@ export function usePlaybackPageControl() {
 		if (!ready) return;
 		if (!state.playbackSetArmed) return setPagePickerOpen(true);
 		dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
+		if (!activePage) return setPagePickerOpen(true);
 		setRenamePage(activePage);
 	};
 	const openPageRename = () => {
-		if (!ready) return;
+		if (!ready || !activePage) return;
 		dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
 		setRenamePage(activePage);
 	};
@@ -74,7 +75,7 @@ export function usePlaybackPageControl() {
 		const createPage = topologyActions?.createPage;
 		const setActivePage = runtimeActions?.setActivePage;
 		const token =
-			ready && activePageNumber != null && setActivePage
+			ready && activePage != null && activePageNumber != null && setActivePage
 				? operation.begin("next")
 				: null;
 		if (token == null || !setActivePage || activePageNumber == null) return;
@@ -97,9 +98,11 @@ export function usePlaybackPageControl() {
 		busy: operation.busy,
 		canAdvance:
 			ready &&
+			activePage != null &&
 			activePageNumber != null &&
 			canAdvancePlaybackPage(pages, activePageNumber),
-		currentPageName: activePage?.body.name ?? "Loading…",
+		currentPageName:
+			activePage?.body.name ?? (ready ? "Not available" : "Loading…"),
 		pageFailure: operation.failure,
 		pagePickerOpen,
 		previousPageNumber,
