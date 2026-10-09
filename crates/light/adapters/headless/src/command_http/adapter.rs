@@ -24,7 +24,7 @@ pub(crate) enum ExistingCommandOutcome {
 
 pub(crate) fn prevalidate_typed_command(
     state: &AppState,
-    _session: &Session,
+    session: &Session,
     command: &str,
     context: &ActionContext,
 ) -> Result<bool, String> {
@@ -34,6 +34,21 @@ pub(crate) fn prevalidate_typed_command(
             return Err("no show is open".into());
         }
         return Ok(true);
+    }
+    if let Some((selection, _)) = selection_prefixed_group_record(command)? {
+        state
+            .programming
+            .with_detached_command(session.id, |programming| {
+                let mut detached_state = state.clone();
+                detached_state.programming = programming.clone();
+                super::super::programmer_commands::execute_programmer_command_from(
+                    &detached_state,
+                    session,
+                    &selection,
+                    context,
+                )
+                .map(|_| ())
+            })?;
     }
     let object = object_command(command)?;
     if object.is_some_and(|command| {
@@ -391,6 +406,8 @@ pub(super) fn preset_record_aim_target(command: &str) -> Result<Option<u32>, Str
 pub(super) fn group_record_command(
     command: &str,
 ) -> Result<Option<(String, light_application::ProgrammingGroupRecordOperation)>, String> {
+    let command = selection_prefixed_group_record(command)?
+        .map_or_else(|| command.to_owned(), |(_, record)| record);
     let tokens = command.split_whitespace().collect::<Vec<_>>();
     let parsed = match tokens.as_slice() {
         [record, group, id] if is_record(record) && group.eq_ignore_ascii_case("GROUP") => Some((
@@ -414,6 +431,42 @@ pub(super) fn group_record_command(
         _ => None,
     };
     Ok(parsed)
+}
+
+/// Only a selection may precede Group recording; do not turn value/show commands into a pipeline.
+pub(super) fn selection_prefixed_group_record(
+    command: &str,
+) -> Result<Option<(String, String)>, String> {
+    let words = command.split_whitespace().collect::<Vec<_>>();
+    let Some(index) = words.iter().position(|word| is_record(word)) else {
+        return Ok(None);
+    };
+    if index == 0 {
+        return Ok(None);
+    }
+    let record = words[index..].join(" ");
+    if group_record_command(&record)?.is_none() {
+        return Ok(None);
+    }
+    let selection = words[..index].join(" ");
+    let (tokens, timing) = super::super::tokenize_programmer_command(&selection)?;
+    let first = tokens.first().map(String::as_str).unwrap_or("");
+    if !matches!(
+        first,
+        "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS" | "GROUP" | "DEGROUP" | "DEGRP" | "+"
+    ) && first.parse::<u32>().is_err()
+    {
+        return Ok(None);
+    }
+    if timing.fade
+        || timing.delay_millis.is_some()
+        || tokens
+            .iter()
+            .any(|token| matches!(token.as_str(), "AT" | "FIXAT" | "RELEASE" | "DYNAMIC"))
+    {
+        return Err("only a fixture or Group selection may precede RECORD GROUP".into());
+    }
+    Ok(Some((selection, record)))
 }
 
 fn is_record(token: &str) -> bool {

@@ -88,4 +88,20 @@ fn group_record_parser_owns_only_exact_untimed_group_commands() {
         super::adapter::group_record_command("DELETE PRESET 7").unwrap(),
         None
     );
+    for (command, operation) in [
+        ("FIXTURE 1 THRU 4 RECORD GROUP 21", Operation::Overwrite),
+        ("F4 + F2 REC + GROUP 21", Operation::Merge),
+        ("GROUP 1 RECORD - GROUP 21", Operation::Subtract),
+    ] {
+        assert_eq!(
+            super::adapter::group_record_command(command).unwrap(),
+            Some(("21".into(), operation))
+        );
+        assert_eq!(compatibility_only_family(command).unwrap(), None);
+    }
+    assert!(super::adapter::group_record_command("FIXTURE 1 AT 50 RECORD GROUP 21").is_err());
+    assert_eq!(
+        super::adapter::group_record_command("FIXTURE 1 RECORD GROUP 21 TIME 1").unwrap(),
+        None
+    );
 }

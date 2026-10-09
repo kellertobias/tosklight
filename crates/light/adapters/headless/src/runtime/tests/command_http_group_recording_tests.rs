@@ -687,3 +687,72 @@ async fn websocket_group_request_replay_skips_history_persistence_and_events() {
     assert_eq!(scenario.history_len(), history);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
+
+#[tokio::test]
+async fn selection_prefixed_group_record_preserves_order_and_rejects_atomically() {
+    let scenario = CommandHttpScenario::new().await;
+    scenario.create_and_open_show("Selection prefixed Group").await;
+    let fixtures = (1..=4).map(|number| {
+        let mut fixture = schema_v2_direct_fixture().0;
+        fixture.fixture_number = Some(number);
+        fixture.address = Some(1 + (number as u16 - 1) * 8);
+        fixture
+    }).collect::<Vec<_>>();
+    let ids = fixtures.iter().map(|fixture| fixture.fixture_id).collect::<Vec<_>>();
+    let entry = scenario.state.active_show.current().unwrap();
+    let store = ShowStore::open(&entry.path).unwrap();
+    for fixture in &fixtures {
+        store.put_object("patched_fixture", &fixture.fixture_id.0.to_string(), &serde_json::to_value(fixture).unwrap(), 0).unwrap();
+    }
+    drop(store);
+    scenario.state.output.replace_snapshot(EngineSnapshot {
+        fixtures: fixtures.into(), ..EngineSnapshot::default()
+    }).unwrap();
+    scenario.state.programming.select(scenario.session.id, [ids[3]]);
+    let response = scenario.execute("prefixed-group", Some("FIXTURE 1 THRU 4 RECORD GROUP 21")).await;
+    let body = json(response).await;
+    assert_eq!(body["outcome"], "accepted", "{body}");
+    let group = scenario.state.output.snapshot().groups.iter().find(|group| group.id == "21").cloned().unwrap();
+    assert_eq!(group.fixtures, ids);
+    assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().selected, ids);
+    let response = scenario.execute("bad-prefixed-group", Some("FIXTURE invalid RECORD GROUP 22")).await;
+    assert_eq!(json(response).await["outcome"], "rejected");
+    assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().selected, ids);
+    assert!(scenario.state.output.snapshot().groups.iter().all(|group| group.id != "22"));
+
+    // Literal abbreviations retain the desk's existing default target rather than switching modes.
+    scenario.state.programming.update_command_line(scenario.session.id, |current| (
+        current.text.clone(), light_programmer::CommandTarget::Group, current.pristine,
+    ));
+    let response = scenario.execute("short-prefixed-group", Some("F4 + F2 REC GROUP 23")).await;
+    assert_eq!(json(response).await["outcome"], "accepted");
+    assert_eq!(scenario.state.output.snapshot().groups.iter().find(|group| group.id == "23").unwrap().fixtures, [ids[3], ids[1]]);
+    assert_eq!(scenario.state.programming.command_line_state(scenario.session.id).unwrap().target, light_programmer::CommandTarget::Group);
+
+    // Attached OSC Enter executes the shared desk line through the same recording bridge.
+    let source: SocketAddr = "127.0.0.1:9018".parse().unwrap();
+    scenario.state.integrations.register_osc_subscriber("prefixed-group".into(), OscSubscriber {
+        capability: light_core::SurfaceCapability::Programming, path: "main".into(),
+        target: source, command_source: source, session_id: scenario.session.id,
+        last_seen: Instant::now(), shifted: false, shift_held: false,
+        update_record_started: None, update_first_release: None, last_highlight_action: None,
+    });
+    scenario.state.programming.set_command_line(scenario.session.id, "F3 + F1 RECORD GROUP 24".into());
+    assert!(handle_programmer_osc(&scenario.state, "/light/main/programmer/enter", &[OscArgument::Bool(true)], Some("127.0.0.1:9018")));
+    assert_eq!(scenario.state.output.snapshot().groups.iter().find(|group| group.id == "24").unwrap().fixtures, [ids[2], ids[0]]);
+    assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().selected, [ids[2], ids[0]]);
+
+    // A valid selection followed by a rejected recording must roll back the initiating selection.
+    scenario.state.active_show.replace_current(None);
+    let response = scenario.execute("no-show-prefixed-group", Some("F4 RECORD GROUP 25")).await;
+    assert_eq!(json(response).await["outcome"], "rejected");
+    assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().selected, [ids[2], ids[0]]);
+    assert!(scenario.state.output.snapshot().groups.iter().all(|group| group.id != "25"));
+    let context = operator_action_context(&scenario.session, light_application::ActionSource::Http);
+    assert!(matches!(command_http::execute_manual_command_without_line_cleanup(
+        &scenario.state, &scenario.session, &context, "F4 RECORD GROUP 25",
+    ), Some(light_application::ProgrammingExecution::Rejected { .. })));
+    assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().selected, [ids[2], ids[0]]);
+
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}

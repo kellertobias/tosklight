@@ -156,11 +156,28 @@ impl<'a> ServerProgrammingPorts<'a> {
         context: &ActionContext,
         command: &str,
     ) -> Option<ProgrammingExecution> {
-        let (group_id, operation) = super::adapter::group_record_command(command)
-            .ok()
-            .flatten()?;
-        let result =
-            self.execute_group_recording(programmers, context, group_id, operation, command);
+        let (group_id, operation) = match super::adapter::group_record_command(command) {
+            Ok(Some(parsed)) => parsed,
+            Ok(None) => return None,
+            Err(error) => return Some(self.recording_execution(context, command, Err(error))),
+        };
+        let result = self
+            .state
+            .programming
+            .programmers()
+            .with_transaction(self.session.id, || {
+                if let Some((selection, _)) =
+                    super::adapter::selection_prefixed_group_record(command)?
+                {
+                    super::super::programmer_commands::execute_programmer_command_from(
+                        self.state,
+                        self.session,
+                        &selection,
+                        context,
+                    )?;
+                }
+                self.execute_group_recording(programmers, context, group_id, operation, command)
+            });
         Some(self.recording_execution(context, command, result))
     }
 
