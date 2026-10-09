@@ -811,6 +811,8 @@ build_media_and_open() {
 # builds it, and it never has to be present for the desk to run.
 build_visualizer() {
   require cargo
+  # Open Show needs a matching private server even for a bare installed bundle.
+  build_visualizer_headless
   echo "Building the standalone visualizer..."
   cargo build --release --manifest-path "$ROOT/Cargo.toml" -p viz-renderer
   echo "Visualizer built: $TARGET_DIR/release/viz-renderer"
@@ -822,6 +824,7 @@ build_visualizer() {
     bash "$ROOT/tools/bundle-visualizer-macos.sh" \
       "$TARGET_DIR/release/viz-editor" \
       "$TARGET_DIR/release/viz-renderer" \
+      "$TARGET_DIR/release/light-headless" \
       "$LIGHT_ARTIFACTS_DIR/build/patch-mcp/tosklight-patch-mcp.mjs" \
       "$TARGET_DIR/release/bundle/macos"
     # The release seals this bundle too. Without it only the linker's ad-hoc executable signature
@@ -926,7 +929,6 @@ build_visualizer_and_open() {
   # Build every helper before starting a desk, so a compile error cannot leave a new service behind.
   build_visualizer
   build_viz_editor
-  build_visualizer_headless
   open_visualizer "$@"
 }
 

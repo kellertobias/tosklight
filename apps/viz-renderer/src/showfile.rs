@@ -142,9 +142,17 @@ fn free_port() -> Result<u16, String> {
 /// Where the private server keeps its data. Repository-owned scratch work belongs under the
 /// artifacts tree; each opening creates its own owned workspace below this grouping directory.
 fn scratch_directory(show: &Path) -> Result<PathBuf, String> {
-    let base = std::env::var_os("LIGHT_TMP_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".artifacts/tmp"));
+    let base = scratch_base(
+        std::env::var_os("LIGHT_TMP_DIR").map(PathBuf::from),
+        std::env::current_exe().ok().as_deref(),
+        std::env::consts::OS,
+        std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from),
+        std::env::var_os("LOCALAPPDATA").map(PathBuf::from),
+        std::env::var_os("XDG_CACHE_HOME").map(PathBuf::from),
+        std::env::temp_dir(),
+    )?;
     let key: String = show
         .to_string_lossy()
         .chars()
@@ -160,6 +168,82 @@ fn scratch_directory(show: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(&directory)
         .map_err(|error| format!("could not prepare {}: {error}", directory.display()))?;
     Ok(directory)
+}
+
+/// A caller-specified scratch destination wins. Bare development binaries recognize their
+/// actual repository artifact ancestry; installed binaries use writable user-owned cache state,
+/// never the launch working directory or a compile-time checkout path.
+fn scratch_base(
+    override_path: Option<PathBuf>,
+    executable: Option<&Path>,
+    platform: &str,
+    home: Option<PathBuf>,
+    local_app_data: Option<PathBuf>,
+    xdg_cache: Option<PathBuf>,
+    temporary: PathBuf,
+) -> Result<PathBuf, String> {
+    if let Some(path) = override_path.filter(|path| !path.as_os_str().is_empty()) {
+        return Ok(path);
+    }
+    if let Some(path) = executable.and_then(repository_scratch_base) {
+        return Ok(path);
+    }
+    let home = home.filter(|path| path.is_absolute());
+    let cache = match platform {
+        "macos" => home.map(|path| path.join("Library/Caches/ToskLight/Visualizer")),
+        "windows" => local_app_data
+            .filter(|path| path.is_absolute())
+            .map(|path| path.join("ToskLight/Visualizer/Cache")),
+        _ => xdg_cache
+            .filter(|path| path.is_absolute())
+            .or_else(|| home.map(|path| path.join(".cache")))
+            .map(|path| path.join("tosklight/visualizer")),
+    };
+    if let Some(path) = cache {
+        return Ok(path);
+    }
+    if temporary.is_absolute() {
+        return Ok(temporary.join("tosklight/visualizer"));
+    }
+    Err(
+        "no absolute writable scratch root is available; set LIGHT_TMP_DIR to a writable directory"
+            .to_owned(),
+    )
+}
+
+fn repository_scratch_base(executable: &Path) -> Option<PathBuf> {
+    if !executable.is_absolute() {
+        return None;
+    }
+    let artifact = executable
+        .ancestors()
+        .find(|path| path.file_name().is_some_and(|name| name == ".artifacts"))?;
+    let repository = artifact.parent()?;
+    // A coincidentally named folder in an installed application is not a checkout. Require
+    // the actual workspace, renderer manifest and canonical artifact layout beside it.
+    let workspace = std::fs::read_to_string(repository.join("Cargo.toml")).ok()?;
+    let renderer = std::fs::read_to_string(repository.join("apps/viz-renderer/Cargo.toml")).ok()?;
+    let layout = std::fs::read_to_string(repository.join("tools/artifact-layout.conf")).ok()?;
+    if !workspace.lines().any(|line| line.trim() == "[workspace]")
+        || !renderer
+            .lines()
+            .any(|line| line.trim() == "name = \"viz-renderer\"")
+    {
+        return None;
+    }
+    let relative = Path::new(
+        layout
+            .lines()
+            .find_map(|line| line.strip_prefix("TMP_ROOT="))?,
+    );
+    if relative.as_os_str().is_empty()
+        || relative
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return None;
+    }
+    Some(artifact.join(relative))
 }
 
 /// Each opening owns a distinct private document and desk directory. The private server may
@@ -377,6 +461,148 @@ mod tests {
         drop(hosted);
         assert!(!directory.exists());
         assert_eq!(std::fs::read(&original).unwrap(), bytes);
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+    #[test]
+    fn standalone_scratch_without_wrapper_is_absolute_and_app_owned() {
+        let root = std::env::current_dir().unwrap();
+        let home = root.join(".artifacts/tmp/fake-user");
+        let temporary = root.join(".artifacts/tmp/fake-os-temp");
+        let installed = root.join("Installed.app/Contents/MacOS/viz-renderer");
+        let resolved = scratch_base(
+            None,
+            Some(&installed),
+            "macos",
+            Some(home.clone()),
+            None,
+            None,
+            temporary,
+        )
+        .unwrap();
+        assert!(
+            resolved.is_absolute(),
+            "standalone scratch must not depend on launch cwd: {}",
+            resolved.display()
+        );
+        assert_eq!(resolved, home.join("Library/Caches/ToskLight/Visualizer"));
+    }
+
+    #[test]
+    fn scratch_roots_preserve_overrides_and_platform_defaults_without_cwd() {
+        let root = std::env::current_dir()
+            .unwrap()
+            .join(".artifacts/tmp/scratch-root-inputs");
+        let home = root.join("user");
+        let app_data = root.join("local-data");
+        let cache = root.join("xdg");
+        let temp = root.join("temp");
+        let resolve = |platform, home, local, xdg| {
+            scratch_base(None, None, platform, home, local, xdg, temp.clone()).unwrap()
+        };
+        assert_eq!(
+            resolve("windows", Some(home.clone()), Some(app_data.clone()), None),
+            app_data.join("ToskLight/Visualizer/Cache")
+        );
+        assert_eq!(
+            resolve("linux", Some(home.clone()), None, Some(cache.clone())),
+            cache.join("tosklight/visualizer")
+        );
+        assert_eq!(
+            resolve(
+                "linux",
+                Some(home.clone()),
+                None,
+                Some(PathBuf::from("relative-cache"))
+            ),
+            home.join(".cache/tosklight/visualizer")
+        );
+        assert_eq!(
+            resolve("macos", None, None, None),
+            temp.join("tosklight/visualizer")
+        );
+        assert_eq!(
+            resolve("windows", None, Some(PathBuf::from("relative")), None),
+            temp.join("tosklight/visualizer")
+        );
+        for explicit in [
+            root.join("explicit"),
+            PathBuf::from("deliberate-relative-override"),
+        ] {
+            assert_eq!(
+                scratch_base(
+                    Some(explicit.clone()),
+                    None,
+                    "macos",
+                    Some(home.clone()),
+                    None,
+                    None,
+                    temp.clone()
+                )
+                .unwrap(),
+                explicit
+            );
+        }
+        assert_eq!(
+            scratch_base(
+                Some(PathBuf::new()),
+                None,
+                "macos",
+                None,
+                None,
+                None,
+                temp.clone()
+            )
+            .unwrap(),
+            temp.join("tosklight/visualizer")
+        );
+        assert!(
+            scratch_base(
+                None,
+                None,
+                "macos",
+                Some(PathBuf::from("relative-user")),
+                None,
+                None,
+                PathBuf::from("relative-temp")
+            )
+            .unwrap_err()
+            .contains("LIGHT_TMP_DIR")
+        );
+    }
+
+    #[test]
+    fn repository_scratch_requires_real_artifact_ancestry_and_checkout_contract() {
+        let parent = scratch_directory(Path::new("repo-scratch-contract"))
+            .unwrap()
+            .join(uuid::Uuid::new_v4().to_string());
+        std::fs::create_dir_all(&parent).unwrap();
+        let executable = parent.join(".artifacts/build/cargo/release/viz-renderer");
+        assert!(repository_scratch_base(&executable).is_none());
+        std::fs::create_dir_all(parent.join("tools")).unwrap();
+        std::fs::create_dir_all(parent.join("apps/viz-renderer")).unwrap();
+        std::fs::write(parent.join("Cargo.toml"), "[workspace]\n").unwrap();
+        std::fs::write(
+            parent.join("apps/viz-renderer/Cargo.toml"),
+            "[package]\nname = \"viz-renderer\"\n",
+        )
+        .unwrap();
+        std::fs::write(parent.join("tools/artifact-layout.conf"), "TMP_ROOT=tmp\n").unwrap();
+        assert_eq!(
+            repository_scratch_base(&executable),
+            Some(parent.join(".artifacts/tmp"))
+        );
+        let installed = parent
+            .ancestors()
+            .last()
+            .unwrap()
+            .join("Applications/Installed.app/Contents/MacOS/viz-renderer");
+        assert!(repository_scratch_base(&installed).is_none());
+        std::fs::write(
+            parent.join("tools/artifact-layout.conf"),
+            "TMP_ROOT=../escape\n",
+        )
+        .unwrap();
+        assert!(repository_scratch_base(&executable).is_none());
         std::fs::remove_dir_all(parent).unwrap();
     }
 }

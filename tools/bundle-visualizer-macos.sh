@@ -3,7 +3,8 @@
 # Assemble the ToskLight Architect macOS application bundle.
 #
 # Architect is one product with two executables: the Rig Editor an operator launches, and the
-# renderer it owns and starts as an accessory. The editor is the bundle's executable, so opening
+# renderer it owns and starts as an accessory, plus the private show server used by Open Show.
+# The editor is the bundle's executable, so opening
 # the application opens the editor — the renderer is a helper beside it, found by name, and never
 # the thing a double-click runs.
 #
@@ -11,21 +12,22 @@
 # a bundle for it and this assembles the layout by hand instead. Release staging can then treat
 # every macOS product the same way.
 #
-# usage: bundle-visualizer-macos.sh EDITOR_BINARY RENDERER_BINARY MCP_SERVER OUTPUT_DIR [VERSION]
+# usage: bundle-visualizer-macos.sh EDITOR_BINARY RENDERER_BINARY HEADLESS_BINARY MCP_SERVER OUTPUT_DIR [VERSION]
 
 set -euo pipefail
 
-if [[ $# -lt 4 || $# -gt 5 ]]; then
-  echo "usage: bundle-visualizer-macos.sh EDITOR_BINARY RENDERER_BINARY MCP_SERVER OUTPUT_DIR [VERSION]" >&2
+if [[ $# -lt 5 || $# -gt 6 ]]; then
+  echo "usage: bundle-visualizer-macos.sh EDITOR_BINARY RENDERER_BINARY HEADLESS_BINARY MCP_SERVER OUTPUT_DIR [VERSION]" >&2
   exit 2
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EDITOR_BINARY="$1"
 RENDERER_BINARY="$2"
-MCP_SERVER="$3"
-OUTPUT_DIR="$4"
-VERSION="${5:-${LIGHT_RELEASE_VERSION:-0.1.0}}"
+HEADLESS_BINARY="$3"
+MCP_SERVER="$4"
+OUTPUT_DIR="$5"
+VERSION="${6:-${LIGHT_RELEASE_VERSION:-0.1.0}}"
 PRODUCT_NAME="ToskLight Architect"
 IDENTIFIER="de.tokenet.tosklight.visualizer"
 ICON="$ROOT/apps/viz-editor/src-tauri/icons/icon.icns"
@@ -36,6 +38,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 [[ -f "$EDITOR_BINARY" ]] || { echo "error: no rig editor binary at $EDITOR_BINARY" >&2; exit 1; }
 [[ -f "$RENDERER_BINARY" ]] || { echo "error: no renderer binary at $RENDERER_BINARY" >&2; exit 1; }
+[[ -f "$HEADLESS_BINARY" ]] || { echo "error: no private show server at $HEADLESS_BINARY" >&2; exit 1; }
 [[ -f "$MCP_SERVER" ]] || { echo "error: no Architect MCP server at $MCP_SERVER" >&2; exit 1; }
 # The Viz Editor owns the icon set both products share, so a missing icon means the icon set was
 # never generated and a silently unbadged bundle would be worse than a failed build.
@@ -50,6 +53,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # the product would make the editor find itself instead.
 install -m 0755 "$EDITOR_BINARY" "$APP/Contents/MacOS/$PRODUCT_NAME"
 install -m 0755 "$RENDERER_BINARY" "$APP/Contents/MacOS/viz-renderer"
+install -m 0755 "$HEADLESS_BINARY" "$APP/Contents/MacOS/light-headless"
 install -m 0644 "$ICON" "$APP/Contents/Resources/icon.icns"
 install -m 0644 "$MCP_SERVER" "$APP/Contents/Resources/tosklight-patch-mcp.mjs"
 
