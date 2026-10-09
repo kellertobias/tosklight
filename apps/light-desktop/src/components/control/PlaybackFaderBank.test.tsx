@@ -1277,6 +1277,65 @@ describe("PlaybackFaderBank Record targets", () => {
 
 describe("PlaybackFaderBank action dispatch and persistence", () => {
 	beforeEach(resetPlaybackFaderMocks);
+	it.each([
+		false,
+		true,
+	])("uses the controllable master for software and physical position for hardware (%s)", async (hardware) => {
+		assignPlayback();
+		mocks.hardwareConnected = hardware;
+		mocks.playbacks.active = [
+			{
+				playback_number: 7,
+				cue_list_id: "front",
+				cue_index: 0,
+				master: 1,
+				fader_position: 0,
+				fader_pickup_required: true,
+				fader_pickup_target: 1,
+			},
+		];
+		render(<PlaybackFaderBank count={1} />);
+		const slider = screen.getByRole("slider", {
+			name: hardware ? "Page 1 playback 1 fader" : "Master",
+		});
+		expect(slider).toHaveValue(hardware ? "0" : "100");
+		if (hardware) {
+			expect(document.querySelector(".hardware-fader")).toHaveAttribute(
+				"data-pickup-physical",
+				"0",
+			);
+			expect(document.querySelector(".hardware-fader")).toHaveAttribute(
+				"data-pickup-target",
+				"1",
+			);
+		} else {
+			expect(slider.closest("label")).toHaveTextContent("100%");
+			vi.spyOn(slider, "getBoundingClientRect").mockReturnValue({
+				top: 100,
+				bottom: 500,
+				height: 400,
+				width: 100,
+				left: 0,
+				right: 100,
+				x: 0,
+				y: 100,
+				toJSON: () => undefined,
+			});
+			fireEvent.pointerDown(slider, {
+				clientX: 50,
+				clientY: 120,
+				pointerId: 1,
+			});
+			fireEvent.pointerUp(slider, { clientX: 50, clientY: 120, pointerId: 1 });
+			await waitFor(() =>
+				expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "master", {
+					value: 1,
+					surface: "virtual",
+				}),
+			);
+		}
+	});
+
 	it("commits rapid and slow touch fader changes as absolute virtual-surface values", async () => {
 		assignPlayback({ target: { type: "group", group_id: "group-front" } });
 		render(<PlaybackFaderBank count={1} />);

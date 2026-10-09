@@ -71,7 +71,12 @@ export function PlaybackSlot({
 		? Math.min(configuredButtons, playback.button_count ?? configuredButtons)
 		: configuredButtons;
 	const hasFader = (row?.has_fader ?? true) && (playback?.has_fader ?? true);
-	const value = playbackFaderValue(playback, active, runtimeProjection);
+	const value = playbackFaderValue(
+		playback,
+		active,
+		runtimeProjection,
+		controller.hardware,
+	);
 	const kind = playbackKind(playback?.target.type);
 	const playbackColor = resolvePlaybackColor(kind, playback?.color);
 	useReleasePlaybackSlot(controller, playback, slot);
