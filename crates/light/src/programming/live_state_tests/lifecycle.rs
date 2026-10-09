@@ -118,7 +118,7 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
     let EventReplay::Events(published) = events.replay(cursor, &EventFilter::default()) else {
         panic!("lifecycle events should remain replayable")
     };
-    assert_eq!(published.len(), 4);
+    assert_eq!(published.len(), 5);
     assert!(published.iter().all(|event| event.desk_id.is_none()));
     assert!(
         published
@@ -134,7 +134,11 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert_eq!(lifecycle.len(), 1);
+    assert_eq!(lifecycle.len(), 2);
+    assert!(
+        matches!(&lifecycle[0].delta, ProgrammingLifecycleDelta::Remove { programmer_id } if *programmer_id == old_programmer_id)
+    );
+    assert_eq!(lifecycle[1].revision, lifecycle[0].revision + 1);
     let priority = published
         .iter()
         .filter_map(|event| match &event.payload {
@@ -150,7 +154,7 @@ fn target_user_replacement_is_monotonic_exact_once_and_invalidates_old_values_re
     };
     assert_eq!(projection.revision, 1);
     assert_eq!(projection.priority, 100);
-    let ProgrammingLifecycleDelta::Upsert { programmer } = &lifecycle[0].delta else {
+    let ProgrammingLifecycleDelta::Upsert { programmer } = &lifecycle[1].delta else {
         panic!("replacement should upsert the new Programmer identity")
     };
     assert_ne!(programmer.programmer_id, old_programmer_id);
