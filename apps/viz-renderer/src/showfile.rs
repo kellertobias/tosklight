@@ -41,6 +41,17 @@ impl HostedShow {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn for_test_child(child: Child, path: &Path) -> Self {
+        let workspace = PreviewWorkspace::create(&scratch_directory(path).unwrap(), path).unwrap();
+        Self {
+            child,
+            port: 0,
+            path: path.to_path_buf(),
+            _workspace: workspace,
+        }
+    }
+
     pub fn port(&self) -> u16 {
         self.port
     }
@@ -74,6 +85,7 @@ fn private_server_command(binary: &Path, data_dir: &Path, show: &Path, port: u16
     command
         .arg("--data-dir")
         .arg(data_dir)
+        .arg("--visualizer-preview")
         .arg("--show")
         .arg(show)
         .arg("--bind")
@@ -272,7 +284,9 @@ impl PreviewWorkspace {
 
     fn start(&self, binary: &Path, port: u16) -> Result<Child, String> {
         private_server_command(binary, &self.directory, &self.snapshot, port)
-            .stdin(Stdio::null())
+            // The held parent writer is the preview lifetime lease; OS closure also covers
+            // native terminate/abnormal parent exit that bypasses Rust destructors.
+            .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -328,6 +342,7 @@ mod tests {
             5311,
         );
         let arguments = command.get_args().collect::<Vec<_>>();
+        assert!(arguments.contains(&OsStr::new("--visualizer-preview")));
         assert!(
             arguments
                 .windows(2)

@@ -257,6 +257,11 @@ pub(super) async fn update_native_media_effect(
             "native Media effect request_id is required",
         ));
     }
+    if !state.output.permits_external_delivery() {
+        return Err(ApiError::forbidden(
+            "This private visualizer preview cannot control a Media Server. Make this change from the Light controller.",
+        ));
+    }
     let endpoint = native_media_endpoint(&state, fixture_id)?;
     let base = format!("http://{endpoint}/api/v2");
     let client = native_media_client()?;
@@ -513,6 +518,11 @@ pub(super) async fn update_native_media_text(
     if input.request_id.trim().is_empty() {
         return Err(ApiError::bad_request(
             "native Media text request_id is required",
+        ));
+    }
+    if !state.output.permits_external_delivery() {
+        return Err(ApiError::forbidden(
+            "This private visualizer preview cannot control a Media Server. Make this change from the Light controller.",
         ));
     }
     let endpoint = native_media_endpoint(&state, fixture_id)?;

@@ -17,6 +17,7 @@ fn options(path: &Path) -> startup_options::StartupOptions {
         extensions_dir: Some(path.join("extensions")),
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
+        visualizer_preview: false,
         osc_bind_override: Some("127.0.0.1:0".parse().unwrap()),
         output_bind_override: Some("127.0.0.1".parse().unwrap()),
     }
@@ -562,4 +563,223 @@ async fn running_server_report_failure_drops_queued_state_and_unstarted_schedule
     );
     drop(desk);
     std::fs::remove_dir_all(saved.dir).unwrap();
+}
+
+#[tokio::test]
+async fn visualizer_preview_real_startup_publishes_frames_without_any_delivery_path() {
+    struct CancelOnDrop(CancellationToken);
+    impl Drop for CancelOnDrop {
+        fn drop(&mut self) {
+            self.0.cancel();
+        }
+    }
+    let directory = directory();
+    let mut preview_options = options(&directory);
+    preview_options.visualizer_preview = true;
+    preview_options.test_bench = false;
+    let startup = StartupState::load(preview_options).unwrap();
+    let originals = startup_state::OriginalStartupOwners::capture(&startup.persistent).unwrap();
+    let ServedStartupForTests {
+        state,
+        mut resources,
+    } = ServedStartupForTests::start(startup).await;
+    startup_state::finalize_restored_owners_for_startup(&state, originals).unwrap();
+    let art = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let sacn = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let routes = [
+        (light_output::Protocol::ArtNet, art.local_addr().unwrap()),
+        (light_output::Protocol::Sacn, sacn.local_addr().unwrap()),
+    ]
+    .map(|(protocol, destination)| light_output::OutputRoute {
+        target: Default::default(),
+        protocol,
+        logical_universe: 1,
+        destination_universe: 1,
+        delivery_mode: Some(light_output::DeliveryMode::Unicast),
+        destination: Some(destination),
+        enabled: true,
+        minimum_slots: 512,
+    });
+    let mut snapshot = (*state.output.snapshot()).clone();
+    snapshot.routes = Arc::new(routes.to_vec());
+    state.output.replace_snapshot(snapshot).unwrap();
+    let _cancel_on_drop = CancelOnDrop(resources.cancellation.clone());
+    resources.scheduler.start_rendering().unwrap();
+    let supervisors = CapabilitySupervisors::start(
+        resources.cancellation,
+        resources.output_cancellation,
+        resources.scheduler,
+        &state,
+    );
+    assert!(!state.output.permits_external_delivery());
+    let preview_tasks = supervisors.runtime_task_count();
+    let frame = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            if let Some(frame) = state.output.latest_visualization_frame() {
+                break frame;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(frame.source_snapshot.routes.as_ref(), &routes);
+    assert!(
+        !frame.source_snapshot.fixtures.is_empty(),
+        "supported default show fixtures must remain available to the visualizer"
+    );
+    assert!(
+        frame.sequence > 0,
+        "ordinary scheduler must keep publishing semantic preview frames"
+    );
+    assert_eq!(
+        state
+            .output
+            .send_network_routes(
+                &routes,
+                &HashMap::from([(1, [77; 512])]),
+                &HashMap::from([(1, 512)])
+            )
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(state.output.send_retained_output().await.unwrap(), 0);
+    state.output.terminate_routes(&routes).await;
+    supervisors.shutdown().await.unwrap();
+    drop(state);
+    let mut packet = [0; 1200];
+    for receiver in [&art, &sacn] {
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(30),
+                receiver.recv_from(&mut packet)
+            )
+            .await
+            .is_err(),
+            "neither ordinary, retained, explicit, safe-shutdown nor termination delivery may escape preview authority"
+        );
+    }
+    let live_directory = directory.join("normal-live");
+    let live = StartupState::load(options(&live_directory)).unwrap();
+    let ServedStartupForTests {
+        state: live_state,
+        mut resources,
+    } = ServedStartupForTests::start(live).await;
+    assert!(live_state.output.permits_external_delivery());
+    let mut live_snapshot = (*live_state.output.snapshot()).clone();
+    live_snapshot.fixtures = Arc::new(
+        live_snapshot
+            .fixtures
+            .iter()
+            .cloned()
+            .map(|mut fixture| {
+                fixture.direct_control = None;
+                fixture
+            })
+            .collect(),
+    );
+    live_snapshot.routes = Arc::new(Vec::new());
+    live_state.output.replace_snapshot(live_snapshot).unwrap();
+    resources.scheduler.start_rendering().unwrap();
+    let live_supervisors = CapabilitySupervisors::start(
+        resources.cancellation,
+        resources.output_cancellation,
+        resources.scheduler,
+        &live_state,
+    );
+    assert_eq!(
+        live_supervisors.runtime_task_count(),
+        preview_tasks + 2,
+        "Live must retain both media identity and Speed Group publisher tasks, preview must spawn neither"
+    );
+    live_supervisors.shutdown().await.unwrap();
+    drop(live_state);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[tokio::test]
+async fn visualizer_preview_http_refuses_external_media_writes_but_keeps_reads_and_live_policy() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let root = directory();
+    for preview in [true, false] {
+        let mut startup_options = options(&root.join(if preview { "preview" } else { "live" }));
+        startup_options.visualizer_preview = preview;
+        let served =
+            ServedStartupForTests::start(StartupState::load(startup_options).unwrap()).await;
+        let app = router(served.state.clone());
+        let login = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v2/sessions")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"username":"Operator"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(login.status(), StatusCode::OK);
+        let bytes = login.into_body().collect().await.unwrap().to_bytes();
+        let login: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let token = login["token"].as_str().unwrap();
+        // No endpoint lookup is allowed for a preview write, even when the target is missing.
+        // A normal desk must keep its ordinary missing-fixture response instead of this refusal.
+        let fixture = FixtureId::new().0;
+        for (suffix, body) in [
+            (
+                "layers/0/effects/update",
+                serde_json::json!({"request_id":"isolated-effect", "control_id":"opacity", "number_value":1}),
+            ),
+            (
+                "text/1/1/update",
+                serde_json::json!({"request_id":"isolated-text", "text":"isolated test"}),
+            ),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::post(format!("/api/v2/media-servers/{fixture}/native/{suffix}"))
+                        .header("authorization", format!("Bearer {token}"))
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                if preview {
+                    StatusCode::FORBIDDEN
+                } else {
+                    StatusCode::NOT_FOUND
+                }
+            );
+            if preview {
+                let bytes = response.into_body().collect().await.unwrap().to_bytes();
+                let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                assert!(body["error"].as_str().unwrap().contains("Light controller"));
+            }
+        }
+        let read = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/v2/media-servers/{fixture}/native"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            read.status(),
+            StatusCode::NOT_FOUND,
+            "read/query paths must remain available under preview policy"
+        );
+        drop(app);
+        served.close().await;
+    }
+    std::fs::remove_dir_all(root).unwrap();
 }

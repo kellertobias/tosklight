@@ -112,12 +112,24 @@ struct CachedVisualizationOrdinary {
 
 #[derive(Clone)]
 pub(in crate::runtime) struct OutputControlCapability {
+    delivery_policy: output_scheduler::PhysicalDeliveryPolicy,
     control: Arc<Mutex<OutputControl>>,
 }
 
 impl OutputControlCapability {
     pub(in crate::runtime) fn new(control: Arc<Mutex<OutputControl>>) -> Self {
-        Self { control }
+        Self {
+            control,
+            delivery_policy: Default::default(),
+        }
+    }
+
+    pub(in crate::runtime) fn with_delivery_policy(
+        mut self,
+        policy: output_scheduler::PhysicalDeliveryPolicy,
+    ) -> Self {
+        self.delivery_policy = policy;
+        self
     }
 
     fn lock(&self) -> parking_lot::MutexGuard<'_, OutputControl> {
@@ -257,6 +269,11 @@ impl OutputResource {
         // An output that stalled must report the stall, not the last healthy window it filled.
         health.refresh_recent(std::time::Instant::now());
         health.clone()
+    }
+
+    /// Process authority, unaffected by copied show or mutable desk configuration.
+    pub(in crate::runtime) fn permits_external_delivery(&self) -> bool {
+        self.control.delivery_policy == output_scheduler::PhysicalDeliveryPolicy::Live
     }
 
     pub(in crate::runtime) fn latest_visualization_frame(
@@ -1181,7 +1198,9 @@ impl OutputResource {
         &self,
         document: &light_output::UsbEndpointDocument,
     ) -> Result<(), String> {
-        self.usb.configure(document)
+        self.control
+            .delivery_policy
+            .configure_usb(&self.usb, document)
     }
 
     pub(in crate::runtime) async fn lock_usb_configuration(

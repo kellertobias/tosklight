@@ -432,3 +432,76 @@ fn source_selection_external_rejects_connected_endpoint_override_but_accepts_fog
     assert_eq!(application.options.host, launch_options.host);
     assert_eq!(application.options.port, launch_options.port);
 }
+
+#[cfg(unix)]
+#[test]
+fn native_exit_cleanup_stops_retained_preview_without_stopping_unrelated_process() {
+    struct TestChild(std::process::Child);
+    impl Drop for TestChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let mut unrelated = TestChild(
+        std::process::Command::new("/bin/sleep")
+            .arg("60")
+            .spawn()
+            .unwrap(),
+    );
+    let child = std::process::Command::new("/bin/sleep")
+        .arg("60")
+        .spawn()
+        .unwrap();
+    let owned_id = child.id();
+    let directory = std::path::PathBuf::from(std::env::var_os("LIGHT_TMP_DIR").unwrap())
+        .join(format!("renderer-exit-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("preview.show");
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE metadata(value TEXT); INSERT INTO metadata VALUES('original');",
+        )
+        .unwrap();
+    drop(connection);
+    let mut application = Application::new(Options {
+        helper: true,
+        ..Default::default()
+    });
+    application.hosted_show = Some(crate::showfile::HostedShow::for_test_child(child, &path));
+    application.source_authority = SourceAuthority::External;
+    application.shutdown_owned_sources();
+    assert!(application.hosted_show.is_none());
+    let still_alive = std::process::Command::new("/bin/kill")
+        .args(["-0", &owned_id.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .unwrap()
+        .success();
+    assert!(!still_alive, "owned preview must be reaped at native exit");
+    assert!(unrelated.0.try_wait().unwrap().is_none());
+    application.shutdown_owned_sources();
+    assert!(unrelated.0.try_wait().unwrap().is_none());
+    let second = std::process::Command::new("/bin/sleep")
+        .arg("60")
+        .spawn()
+        .unwrap();
+    let second_id = second.id();
+    application.hosted_show = Some(crate::showfile::HostedShow::for_test_child(second, &path));
+    application.close_show_file();
+    assert!(application.hosted_show.is_none());
+    assert!(
+        !std::process::Command::new("/bin/kill")
+            .args(["-0", &second_id.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success(),
+        "Close Show must reap the same owned child even after reconnecting externally"
+    );
+    assert!(unrelated.0.try_wait().unwrap().is_none());
+    std::fs::remove_dir_all(directory).unwrap();
+}

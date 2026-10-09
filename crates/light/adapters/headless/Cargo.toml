@@ -72,6 +72,7 @@ cpal = { version = "0.18.2", optional = true }
 crossbeam-queue = { version = "0.3", optional = true }
 
 [dev-dependencies]
+light-usb-dmx-core = { path = "../usb-dmx-core" }
 tokio = { workspace = true, features = ["test-util"] }
 
 [target.'cfg(unix)'.dependencies]

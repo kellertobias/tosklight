@@ -470,6 +470,7 @@ fn startup_load_restores_persisted_dynamic_runtime_and_programmer_identity() {
         extensions_dir: Some(data_dir.join("extensions")),
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
+        visualizer_preview: false,
         osc_bind_override: None,
         output_bind_override: None,
     })
@@ -557,6 +558,7 @@ fn startup_loads_legacy_dynamic_phase_spread_as_uniform() {
         extensions_dir: Some(data_dir.join("extensions")),
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
+        visualizer_preview: false,
         osc_bind_override: None,
         output_bind_override: None,
     })

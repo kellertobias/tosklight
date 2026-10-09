@@ -484,6 +484,16 @@ impl Application {
         }
     }
 
+    /// Stop only private sources this renderer owns, including a retained inactive preview.
+    pub(crate) fn shutdown_owned_sources(&mut self) {
+        // Native termination need not unwind Application; the exiting callback owns cleanup.
+        self.hosted_show.take();
+        self.planning_window.take();
+        if let Some(session) = self.session.as_mut() {
+            session.shutdown();
+        }
+    }
+
     /// Close an opened show file and return to the desk the preferences name.
     pub fn close_show_file(&mut self) {
         self.lasting_failure = None;
@@ -1346,9 +1356,7 @@ impl ApplicationHandler for Application {
         // made in the final seconds before they closed the window.
         self.next_preferences_save = Instant::now();
         self.save_preferences();
-        if let Some(session) = self.session.as_mut() {
-            session.shutdown();
-        }
+        self.shutdown_owned_sources();
     }
 }
 

@@ -109,6 +109,8 @@ fn main() {
     let mut application = app::Application::new(options);
     if let Err(error) = event_loop.run_app(&mut application) {
         eprintln!("window system: {error}");
+        application.shutdown_owned_sources();
+        drop(application);
         std::process::exit(1);
     }
 }

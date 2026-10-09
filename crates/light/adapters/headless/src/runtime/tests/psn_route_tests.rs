@@ -579,6 +579,7 @@ async fn older_duplicate_bindings_load_and_restart_without_rewriting_or_aliasing
         extensions_dir: Some(data_dir.join("extensions")),
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
+        visualizer_preview: false,
         osc_bind_override: None,
         output_bind_override: None,
     })
