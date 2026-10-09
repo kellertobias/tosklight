@@ -494,8 +494,14 @@ fn install_playback_frame(
 }
 
 fn compile_default_values(snapshot: &EngineSnapshot) -> crate::ResolvedValues {
+    compile_fixture_default_values(&snapshot.fixtures)
+}
+
+pub(crate) fn compile_fixture_default_values(
+    fixtures: &[light_fixture::PatchedFixture],
+) -> crate::ResolvedValues {
     let mut values = crate::ResolvedValues::default();
-    for fixture in snapshot.fixtures.iter() {
+    for fixture in fixtures {
         for parameter in fixture
             .definition
             .heads

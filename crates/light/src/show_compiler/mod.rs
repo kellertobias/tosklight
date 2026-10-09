@@ -104,7 +104,15 @@ fn compile_show_candidate_incremental(
     }
 
     if dirty.cue_lists
-        || ((dirty.presets || dirty.native_sources)
+        || ((dirty.presets
+            || dirty.native_sources
+            || (dirty.fixtures
+                && candidate.objects_of_kind("preset").any(|object| {
+                    object
+                        .body()
+                        .get("aim_at_fixture_number")
+                        .is_some_and(|value| value.is_number())
+                })))
             && previous.cue_lists.iter().any(|list| {
                 list.required_programming_contract()
                     >= light_core::programming::LIVE_PRESET_REFERENCE_CONTRACT

@@ -48,6 +48,52 @@ pub(super) fn decode_cue_lists(
                 )));
             }
         }
+        // Derived Aim bodies intentionally have no literal Position map. Materialize only this
+        // runtime projection; preserve the portable body and immutable live-reference identity.
+        let requested = lists
+            .iter()
+            .flat_map(|list| &list.cues)
+            .flat_map(|cue| {
+                cue.changes
+                    .iter()
+                    .filter_map(|change| change.preset_reference.as_ref())
+                    .chain(
+                        cue.group_changes
+                            .iter()
+                            .filter_map(|change| change.preset_reference.as_ref()),
+                    )
+            })
+            .filter(|reference| {
+                matches!(
+                    reference.source_owner,
+                    light_core::PresetValueOwner::Universal
+                ) && reference.source_attribute.0.as_ref() == "position"
+            })
+            .filter_map(|reference| {
+                catalog
+                    .get(&reference.preset_instance_id)?
+                    .aim_at_fixture_number
+            })
+            .collect::<std::collections::HashSet<_>>();
+        if !requested.is_empty() {
+            let fixtures = super::patch::compile_patch(candidate)?;
+            let targets = light_engine::saved_aim_targets(&fixtures, requested);
+            for preset in catalog.values_mut() {
+                if let Some(number) = preset.aim_at_fixture_number {
+                    preset
+                        .universal_values
+                        .remove(&light_core::AttributeKey("position".into()));
+                    if let Some(intent) = targets.get(&number) {
+                        preset.universal_values.insert(
+                            light_core::AttributeKey("position".into()),
+                            light_core::AttributeValue::Position(std::sync::Arc::new(
+                                intent.clone(),
+                            )),
+                        );
+                    }
+                }
+            }
+        }
         let presets = catalog;
         let native = super::native_sources::compile(candidate, None)?;
         for cue in lists.iter_mut().flat_map(|list| &mut list.cues) {

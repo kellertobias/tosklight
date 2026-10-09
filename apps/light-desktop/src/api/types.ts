@@ -399,6 +399,8 @@ export type GroupFixtureSource =
 	| { type: "references"; references: GroupReference[] };
 
 export interface StoredPreset {
+	/** Legacy derived Aim source; semantic recording stores Position directly. */
+	aim_at_fixture_number?: number | null;
 	instance_id?: string | null;
 	name: string;
 	number: number;

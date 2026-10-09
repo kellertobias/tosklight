@@ -183,6 +183,10 @@ impl PointProjectionIndex {
         )
     }
 
+    pub(crate) fn resolve_saved(&self, values: &FrameValues) -> Pooled<Vec<ResolvedPointPose>> {
+        self.resolve_reading(|owner, name, _| values.value(owner, name), true)
+    }
+
     /// Read a prepared token without taking its dense storage or changing static Current.
     /// Compiled final Point freezes shadow values exactly as the final render's override does.
     pub(crate) fn resolve_pre_freeze(

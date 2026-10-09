@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 //! Deterministic bridge from fixture attributes and playbacks to immutable DMX universe frames.
 
+mod aim_target;
+pub use aim_target::{aim_target_from_geometry, saved_aim_targets};
+
 mod physical_projection;
 pub use physical_projection::{PhysicalForwardFrame, PhysicalInstanceOutput, PhysicalModelSupport};
 mod channel_slots;
