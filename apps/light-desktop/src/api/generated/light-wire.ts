@@ -657,7 +657,7 @@ export type PlaybackAction = { "type": "go", pressed: boolean, } | { "type": "ba
 export type PendingPlaybackAction = "toggle" | "go" | "back" | "off" | "on" | "temporary_on" | "temporary_off" | "dynamic_pause" | "dynamic_restart" | "dynamic_double_speed" | "dynamic_half_speed" | "dynamic_learn_speed" | { "fader": { value_permyriad: number, } };
 export type PlaybackOutcome = { "status": "applied" } | { "status": "no_change" } | { "status": "captured", pending: PendingPlaybackAction, };
 export type PlaybackDurability = "durable" | "persistence_pending";
-export type PlaybackRuntimeIdentity = { "kind": "playback", playback_number: number, } | { "kind": "virtual", page: number, playback_number: number, } | { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, };
+export type PlaybackRuntimeIdentity = { "kind": "playback", playback_number: number, } | { "kind": "virtual", page: number, playback_number: number, } | { "kind": "cue_list", cue_list_id: string, } | { "kind": "direct_cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, };
 export type PlaybackShowScope = { show_id: string, show_revision: number, };
 export type PlaybackCueReference = { id: string, number: string, };
 export type DeletedCueHoldProjection = { deleted_number: string, previous_number: string | null, next_number: string | null, };
@@ -668,7 +668,11 @@ export type ManualXFadeDirection = "towards_high" | "towards_low";
 export type SoundLossReason = "source_unavailable" | "no_usable_signal" | "low_confidence" | "tempo_outside_range" | "waiting_for_analysis";
 export type SpeedSource = "manual" | "sound" | "held_sound" | "manual_fallback";
 export type SoundStatus = { "status": "disabled" } | { "status": "active", detected_bpm: number, confidence: number, } | { "status": "holding", reason: SoundLossReason, remaining_millis: number, } | { "status": "manual_fallback", reason: SoundLossReason, };
-export type CueListRuntimeProjection = { cue_index: number, previous_index: number | null, current: PlaybackCueReference | null, loaded: PlaybackCueReference | null, normal_next: PlaybackCueReference | null, effective_next: PlaybackCueReference | null, effective_next_is_loaded: boolean, deleted_cue_hold: DeletedCueHoldProjection | null, paused: boolean, activated_at: string, paused_at: string | null, cue_timing: CueTimingRuntimeProjection | null, transition_ordinal: number, master: number, fader_position: number, fader_pickup_required: boolean, fader_pickup_target: number | null, flash: boolean, temporary: boolean, temporary_active: boolean, temporary_master: number, swap_active: boolean, enabled: boolean, transition_timing_bypassed: boolean, manual_xfade_position: number, manual_xfade_direction: ManualXFadeDirection, manual_xfade_progress: number, };
+export type CueListRuntimeProjection = {
+/**
+ * Exact activation owner; absent from older runtime snapshots.
+ */
+owner?: PlaybackRuntimeIdentity | null, cue_index: number, previous_index: number | null, current: PlaybackCueReference | null, loaded: PlaybackCueReference | null, normal_next: PlaybackCueReference | null, effective_next: PlaybackCueReference | null, effective_next_is_loaded: boolean, deleted_cue_hold: DeletedCueHoldProjection | null, paused: boolean, activated_at: string, paused_at: string | null, cue_timing: CueTimingRuntimeProjection | null, transition_ordinal: number, master: number, fader_position: number, fader_pickup_required: boolean, fader_pickup_target: number | null, flash: boolean, temporary: boolean, temporary_active: boolean, temporary_master: number, swap_active: boolean, enabled: boolean, transition_timing_bypassed: boolean, manual_xfade_position: number, manual_xfade_direction: ManualXFadeDirection, manual_xfade_progress: number, };
 export type DynamicPlaybackRuntimeState = "off" | "zero" | "pending" | "active" | "paused" | "hidden" | "failed";
 export type DynamicPlaybackControllerStatus = "winning" | "losing" | "missing";
 export type DynamicPlaybackSpeedSource = "fixed" | "speed_group";
@@ -1504,7 +1508,13 @@ desk_identity: string, active_show: string | null, active_show_last_loaded_at: s
  */
 architect_sync_active: boolean, };
 export type RuntimeVisualizationDiagnostics = { normal_subscribers: number, preload_subscribers: number, projections: number, projection_micros: number, payload_bytes: number, source_age_millis: number, skipped_source_frames: number, snapshot_requests: number, snapshot_projection_micros: number, snapshot_serialization_micros: number, snapshot_payload_bytes: number, snapshot_source_frame: number, snapshot_source_age_millis: number, stream_serializations: number, stream_serialization_micros: number, stream_payload_bytes: number, stream_sends: number, stream_send_micros: number, stream_send_failures: number, stream_queue_depth: number, stream_queue_drops: number, };
-export type RuntimeDiagnosticsSnapshot = { output: RuntimeOutputHealth, output_bind_ip: string, output_routes: unknown, route_send_errors: unknown, active_programmers: unknown, active_playbacks: unknown, move_in_black: unknown, timecode_source: string | null, media_servers: unknown, snapshot_revision: number, programmer_action_timing: unknown, visualization: RuntimeVisualizationDiagnostics, extensions: unknown, compatibility_reports: unknown, };
+export type RuntimeDiagnosticsSnapshot = { output: RuntimeOutputHealth, output_bind_ip: string,
+/**
+ * Absent on older servers. OS send acceptance does not prove receiver health.
+ */
+output_delivery_status?: Array<RuntimeOutputDeliveryStatus>, output_routes: unknown, route_send_errors: unknown, active_programmers: unknown, active_playbacks: unknown, move_in_black: unknown, timecode_source: string | null, media_servers: unknown, snapshot_revision: number, programmer_action_timing: unknown, visualization: RuntimeVisualizationDiagnostics, extensions: unknown, compatibility_reports: unknown, };
+export type RuntimeRouteDeliveryState = "awaiting_first_send" | "sending" | "send_failed";
+export type RuntimeOutputDeliveryStatus = { protocol: string, universe: number, destination: string, delivery_state: RuntimeRouteDeliveryState, current_error: string | null, };
 export type RuntimePerformanceDiagnosticsSnapshot = { output: RuntimeOutputHealth, programmer_action_timing: unknown, visualization: RuntimeVisualizationDiagnostics, };
 export type ScheduleDefinition = { id: string, name: string, enabled: boolean, trigger: ScheduleTrigger, target: ScheduleTarget, };
 export type ScheduleTrigger = { "type": "interval", every_seconds: number,

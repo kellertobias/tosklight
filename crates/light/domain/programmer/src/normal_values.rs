@@ -82,7 +82,7 @@ impl ProgrammerRegistry {
         let fixture_index = FixtureValueIndex::new(&state.values);
         let changed = mutations
             .iter()
-            .map(|mutation| mutation_changes(state, &fixture_index, mutation))
+            .map(|mutation| mutation_changes(state, &fixture_index, mutation, true))
             .collect::<Vec<_>>();
         drop(fixture_index);
         if !changed.iter().any(|changed| *changed) {
@@ -162,7 +162,7 @@ impl ProgrammerRegistry {
         let fixture_index = FixtureValueIndex::new(&state.values);
         let changed = mutations
             .iter()
-            .map(|mutation| mutation_changes(state, &fixture_index, mutation))
+            .map(|mutation| mutation_changes(state, &fixture_index, mutation, false))
             .collect::<Vec<_>>();
         drop(fixture_index);
         let transition = NormalPresetRecallTransition {
@@ -196,7 +196,11 @@ fn mutation_changes(
     state: &crate::ProgrammerState,
     fixture_index: &FixtureValueIndex<'_>,
     mutation: &NormalProgrammerValueMutation,
+    detach_reference: bool,
 ) -> bool {
+    if detach_reference && referenced_order(state, mutation).is_some() {
+        return true;
+    }
     match mutation {
         NormalProgrammerValueMutation::SetFixture {
             fixture_id,
@@ -288,6 +292,9 @@ fn apply_mutation(
     changed_at: chrono::DateTime<chrono::Utc>,
     fixture_batch: &mut FixtureValueBatch,
 ) {
+    if let Some(order) = referenced_order(state, mutation) {
+        Arc::make_mut(&mut state.preset_provenance).remove(&order);
+    }
     match mutation {
         NormalProgrammerValueMutation::SetFixture {
             fixture_id,
@@ -385,4 +392,39 @@ fn release_group(state: &mut crate::ProgrammerState, group_id: &str, attribute: 
             Arc::make_mut(&mut state.group_values).remove(group_id);
         }
     }
+}
+
+fn referenced_order(
+    state: &crate::ProgrammerState,
+    mutation: &NormalProgrammerValueMutation,
+) -> Option<u64> {
+    let order = match mutation {
+        NormalProgrammerValueMutation::SetFixture {
+            fixture_id,
+            attribute,
+            ..
+        }
+        | NormalProgrammerValueMutation::ReleaseFixture {
+            fixture_id,
+            attribute,
+        } => state
+            .values
+            .iter()
+            .find(|stored| stored.fixture_id == *fixture_id && stored.attribute == *attribute)
+            .map(|stored| stored.programmer_order),
+        NormalProgrammerValueMutation::SetGroup {
+            group_id,
+            attribute,
+            ..
+        }
+        | NormalProgrammerValueMutation::ReleaseGroup {
+            group_id,
+            attribute,
+        } => state
+            .group_values
+            .get(group_id)
+            .and_then(|values| values.get(attribute))
+            .map(|stored| stored.programmer_order),
+    };
+    order.filter(|order| state.preset_provenance.contains_key(order))
 }

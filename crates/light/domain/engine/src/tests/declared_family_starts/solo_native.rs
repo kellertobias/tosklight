@@ -7,6 +7,9 @@ use crate::{
 use light_core::{NativeColorValue, programming::NativeColorObservation};
 use light_playback::{PlaybackPage, VirtualPlaybackAddress};
 
+#[path = "physical_start.rs"]
+mod physical_start;
+
 fn rig() -> (
     Engine,
     FixtureId,

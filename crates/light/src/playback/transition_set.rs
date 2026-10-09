@@ -106,6 +106,18 @@ fn publish_change(
 
 fn compare_identity(left: &PlaybackRuntimeIdentity, right: &PlaybackRuntimeIdentity) -> Ordering {
     match (left, right) {
+        (
+            PlaybackRuntimeIdentity::DirectCueList(left),
+            PlaybackRuntimeIdentity::DirectCueList(right),
+        ) => left.0.as_bytes().cmp(right.0.as_bytes()),
+        (PlaybackRuntimeIdentity::DirectCueList(_), PlaybackRuntimeIdentity::Group(_)) => {
+            Ordering::Less
+        }
+        (PlaybackRuntimeIdentity::Group(_), PlaybackRuntimeIdentity::DirectCueList(_)) => {
+            Ordering::Greater
+        }
+        (PlaybackRuntimeIdentity::DirectCueList(_), _) => Ordering::Greater,
+        (_, PlaybackRuntimeIdentity::DirectCueList(_)) => Ordering::Less,
         (PlaybackRuntimeIdentity::Playback(left), PlaybackRuntimeIdentity::Playback(right)) => {
             left.cmp(right)
         }

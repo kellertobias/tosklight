@@ -150,6 +150,7 @@ fn a_media_cue_carries_the_slots_it_would_transmit_with_tracking_and_group_value
     );
     let mut second = cue(2, vec![set(a.fixture_id, "intensity", 0.5)]);
     second.group_changes.push(GroupCueChange {
+        preset_reference: None,
         group_id: "screens".into(),
         attribute: AttributeKey("media.file".into()),
         value: Some(AttributeValue::Normalized(9.0 / 255.0)),
@@ -160,6 +161,7 @@ fn a_media_cue_carries_the_slots_it_would_transmit_with_tracking_and_group_value
     let released = cue(
         3,
         vec![CueChange {
+            preset_reference: None,
             fixture_id: layer(&a, 1),
             attribute: AttributeKey("media.file".into()),
             value: None,

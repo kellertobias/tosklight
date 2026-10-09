@@ -11,6 +11,61 @@ fn cue(value: &str) -> light_playback::CueNumber {
 }
 
 #[test]
+fn automatic_follow_and_wait_publish_exact_direct_feedback_without_assignment_aliases() {
+    let cue_list = cue_list();
+    let id = cue_list.id;
+    let previous = light_playback::PlaybackCueReference {
+        id: cue_list.cues[0].id,
+        number: cue_list.cues[0].number.clone(),
+    };
+    let current = light_playback::PlaybackCueReference {
+        id: cue_list.cues[1].id,
+        number: cue_list.cues[1].number.clone(),
+    };
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.register_definition(definition(1, id)).unwrap();
+    engine.go(id).unwrap();
+    engine.go(id).unwrap();
+    for cause in [
+        light_playback::AutomaticPlaybackTransitionCause::Follow,
+        light_playback::AutomaticPlaybackTransitionCause::Wait,
+    ] {
+        let transition = light_playback::AutomaticPlaybackTransition {
+            playback_number: None,
+            cue_list_id: id,
+            previous: previous.clone(),
+            current: current.clone(),
+            cause,
+            transition_ordinal: 2,
+            advanced_steps: 1,
+        };
+        let status = engine.runtime_status_for_cue_list(id).unwrap();
+        let exact = automatic_source_projection(test_scope(), &transition, Some(&status)).unwrap();
+        assert_eq!(
+            exact.projection.requested,
+            PlaybackRuntimeIdentity::DirectCueList(id)
+        );
+        assert_eq!(
+            exact.projection.cue_list_runtime().unwrap().owner,
+            Some(PlaybackRuntimeIdentity::DirectCueList(id))
+        );
+        assert_eq!(
+            exact.projection.current_cue().unwrap().number,
+            current.number
+        );
+        engine.on(1).unwrap();
+        let reassigned = engine.runtime_status_for_cue_list(id).unwrap();
+        let retired =
+            automatic_source_projection(test_scope(), &transition, Some(&reassigned)).unwrap();
+        assert!(retired.projection.cue_list_runtime().is_none());
+        engine.release(id);
+        engine.go(id).unwrap();
+        engine.go(id).unwrap();
+    }
+}
+
+#[test]
 fn every_assignment_projects_one_shared_cuelist_runtime() {
     let cue_list = cue_list();
     let cue_list_id = cue_list.id;

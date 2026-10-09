@@ -643,6 +643,7 @@ fn transfer_cue() -> Cue {
 fn final_cue() -> Cue {
     let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(3.0).unwrap());
     cue.changes.push(CueChange {
+        preset_reference: None,
         fixture_id: FixtureId(Uuid::from_u128(11)),
         attribute: AttributeKey::intensity(),
         value: None,
@@ -665,6 +666,7 @@ fn destination_cue() -> Cue {
 
 fn group_set(group_id: &str, value: f32) -> GroupCueChange {
     GroupCueChange {
+        preset_reference: None,
         group_id: group_id.into(),
         attribute: AttributeKey::intensity(),
         value: Some(AttributeValue::Normalized(value)),

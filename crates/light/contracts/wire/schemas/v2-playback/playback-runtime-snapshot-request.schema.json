@@ -87,6 +87,24 @@
         {
           "type": "object",
           "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "kind": {
+              "type": "string",
+              "const": "direct_cue_list"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "group_id": {
               "type": "string",
               "maxLength": 256,

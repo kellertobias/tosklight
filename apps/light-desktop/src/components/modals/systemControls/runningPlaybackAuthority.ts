@@ -1,5 +1,9 @@
 import { useCallback, useMemo } from "react";
-import type { CueList, PlaybackDefinition, PlaybackPage } from "../../../api/types";
+import type {
+	CueList,
+	PlaybackDefinition,
+	PlaybackPage,
+} from "../../../api/types";
 import type { CueListRuntimeSource } from "../../../features/playbackRuntime/actionWriter";
 import type {
 	PlaybackIdentity,
@@ -12,6 +16,7 @@ import {
 	usePlaybackProjectionMap,
 	usePlaybackRuntimeActions,
 	usePlaybackRuntimeStatus,
+	useVirtualPlaybackProjectionMap,
 } from "../../../features/playbackRuntime/PlaybackRuntimeView";
 import {
 	useCueLists,
@@ -32,7 +37,12 @@ type CueListPlayback = PlaybackDefinition & {
 	target: { type: "cue_list"; cue_list_id: string };
 };
 
-export interface RunningCueListSource extends CueListRuntimeSource {
+export interface RunningCueListSource
+	extends Omit<CueListRuntimeSource, "identity"> {
+	identity: Extract<
+		PlaybackIdentity,
+		{ kind: "playback" | "virtual" | "cue_list" | "direct_cue_list" }
+	>;
 	key: string;
 	/** Stable Cuelist Pool number, independent of the surface runtime identity. */
 	cueListNumber?: number | null;
@@ -58,7 +68,9 @@ export interface RunningPlaybackAuthority {
 	mappedSources: readonly RunningCueListSource[];
 	virtualSources: readonly RunningCueListSource[];
 	dynamics: readonly RunningDynamic[];
-	release(source: CueListRuntimeSource): Promise<PlaybackOutcome | null>;
+	release(
+		source: RunningCueListSource | CueListRuntimeSource,
+	): Promise<PlaybackOutcome | null>;
 }
 
 export function useRunningPlaybackAuthority(
@@ -79,27 +91,44 @@ export function useRunningPlaybackAuthority(
 	const mapped = usePlaybackProjectionMap(
 		runtimeEnabled ? model.playbackNumbers : [],
 	);
+	const virtual = useVirtualPlaybackProjectionMap(
+		runtimeEnabled ? model.virtualAddresses : [],
+	);
 	const direct = useDirectCueListProjectionMap(
 		runtimeEnabled ? model.cueListIds : [],
 		runtimeEnabled,
 	);
 	const needsRuntime =
-		model.playbackNumbers.length > 0 || model.cueListIds.length > 0;
+		model.playbackNumbers.length > 0 ||
+		model.virtualAddresses.length > 0 ||
+		model.cueListIds.length > 0;
 	const status = usePlaybackRuntimeStatus(runtimeEnabled && needsRuntime);
 	const derived = useMemo(
-		() => deriveSources(model, mapped, direct.projections),
-		[direct.projections, mapped, model],
+		() => deriveSources(model, mapped, virtual, direct.projections),
+		[virtual, mapped, model, direct.projections],
 	);
 	const runtimeReady =
 		!needsRuntime ||
-		(status.status === "ready" && derived.mappedReady && direct.ready);
+		(status.status === "ready" &&
+			derived.mappedReady &&
+			derived.virtualReady &&
+			direct.ready);
 	const ready = enabled && collectionsReady && runtimeReady;
 	const actions = usePlaybackRuntimeActions();
 	const canRelease = ready && actions !== null;
 	const release = useCallback(
-		(source: CueListRuntimeSource) =>
+		(source: RunningCueListSource | CueListRuntimeSource) =>
 			canRelease && actions
-				? actions.releaseCueListSource(source)
+				? source.identity.kind === "virtual"
+					? actions.virtualPlaybackAction(
+							source.identity.page,
+							source.identity.playback_number,
+							"off",
+						)
+					: actions.releaseCueListSource({
+							identity: source.identity,
+							cueListId: source.cueListId,
+						})
 				: Promise.resolve(null),
 		[actions, canRelease],
 	);
@@ -136,7 +165,14 @@ function portableModel(
 		playbacks,
 		cueListNumbers,
 		cueListIds: cueLists.map((cueList) => cueList.id),
+		// Cuelist-requested projections aggregate all owners and erase source identity.
+		// Running rows must subscribe to exact physical/virtual addresses instead.
 		playbackNumbers: playbacks.map((playback) => playback.number),
+		virtualAddresses: pageObjects.flatMap(({ body: page }) =>
+			Object.entries(page.virtual_playbacks)
+				.filter(([, definition]) => targetsCueList(definition))
+				.map(([slot]) => ({ page: page.number, playbackNumber: Number(slot) })),
+		),
 		pages: pageObjects.map((object) => object.body),
 	};
 }
@@ -144,6 +180,7 @@ function portableModel(
 function deriveSources(
 	model: ReturnType<typeof portableModel>,
 	mapped: ReadonlyMap<number, PlaybackProjection | undefined>,
+	virtual: ReadonlyMap<string, PlaybackProjection | undefined>,
 	direct: ReadonlyMap<string, PlaybackProjection | undefined>,
 ) {
 	const cueLists = new Map(
@@ -157,7 +194,7 @@ function deriveSources(
 			return [];
 		}
 		const runtime = projection.runtime;
-		return runtime
+		return runtime?.enabled && ownsRuntime(projection)
 			? [
 					source(
 						projection,
@@ -170,24 +207,54 @@ function deriveSources(
 				]
 			: [];
 	});
-	const virtualSources = model.cueLists.flatMap((cueList) => {
-		const projection = direct.get(cueList.id);
-		if (!isDirectRuntime(projection, cueList.id)) return [];
+	let virtualReady = true;
+	const virtualSources = model.virtualAddresses.flatMap((address) => {
+		const projection = virtual.get(
+			`virtual:${address.page}.${address.playbackNumber}`,
+		);
+		if (
+			!projection ||
+			projection.target !== "cue_list" ||
+			projection.requested.kind !== "virtual"
+		) {
+			virtualReady = false;
+			return [];
+		}
+		const cueList = cueLists.get(projection.cue_list_id);
 		const runtime = projection.runtime;
-		return runtime
+		return runtime?.enabled && ownsRuntime(projection)
 			? [
 					source(
 						projection,
 						runtime,
 						cueList,
-						model.cueListNumbers.get(cueList.id) ?? null,
+						model.cueListNumbers.get(projection.cue_list_id) ?? null,
 					),
 				]
 			: [];
 	});
-	const sources = [...mappedSources, ...virtualSources];
+	const directSources = model.cueLists.flatMap((cueList) => {
+		const projection = direct.get(cueList.id);
+		if (
+			projection?.target !== "cue_list" ||
+			projection.requested.kind !== "direct_cue_list" ||
+			!projection.runtime?.enabled ||
+			!ownsRuntime(projection)
+		)
+			return [];
+		return [
+			source(
+				projection,
+				projection.runtime,
+				cueList,
+				model.cueListNumbers.get(cueList.id) ?? null,
+			),
+		];
+	});
+	const sources = [...mappedSources, ...virtualSources, ...directSources];
 	return {
 		mappedReady,
+		virtualReady,
 		mappedSources,
 		virtualSources,
 		sources,
@@ -205,19 +272,30 @@ function source(
 ): RunningCueListSource {
 	const playbackNumber = projection.playback_number;
 	const identity: PlaybackIdentity =
-		playbackNumber == null
-			? { kind: "cue_list", cue_list_id: projection.cue_list_id }
-			: { kind: "playback", playback_number: playbackNumber };
+		projection.requested.kind === "virtual" ||
+		projection.requested.kind === "direct_cue_list"
+			? projection.requested
+			: playbackNumber == null
+				? { kind: "cue_list", cue_list_id: projection.cue_list_id }
+				: { kind: "playback", playback_number: playbackNumber };
 	return {
 		key: identityKey(identity),
 		identity,
 		cueListId: projection.cue_list_id,
 		cueListNumber,
 		playbackNumber,
-		locations: playbackNumber == null ? [] : pages.flatMap((page) =>
-			Object.entries(page.slots).filter(([, number]) => number === playbackNumber)
-				.map(([slot]) => ({ page: page.number, slot: Number(slot) })),
-		).sort((a, b) => a.page - b.page || a.slot - b.slot),
+		locations:
+			identity.kind === "virtual"
+				? [{ page: identity.page, slot: identity.playback_number }]
+				: playbackNumber == null
+					? []
+					: pages
+							.flatMap((page) =>
+								Object.entries(page.slots)
+									.filter(([, number]) => number === playbackNumber)
+									.map(([slot]) => ({ page: page.number, slot: Number(slot) })),
+							)
+							.sort((a, b) => a.page - b.page || a.slot - b.slot),
 		label:
 			playback?.name ||
 			cueList?.name ||
@@ -239,14 +317,10 @@ function matchesPlayback(
 	);
 }
 
-function isDirectRuntime(
-	projection: PlaybackProjection | undefined,
-	cueListId: string,
-): projection is CueListProjection {
+function ownsRuntime(projection: CueListProjection): boolean {
+	const owner = projection.runtime?.owner;
 	return (
-		projection?.playback_number === null &&
-		projection.target === "cue_list" &&
-		projection.cue_list_id === cueListId
+		owner != null && identityKey(owner) === identityKey(projection.requested)
 	);
 }
 

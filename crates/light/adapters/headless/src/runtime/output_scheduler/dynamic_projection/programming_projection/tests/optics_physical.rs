@@ -657,6 +657,7 @@ fn two_heads_driving_one_shared_zoom_control_are_rejected_never_last_writer_wins
 fn a_recalled_zoom_preset_reaches_its_opening_on_differing_optics_and_leaves_focus() {
     // One universal Zoom preset (25° Field); a Zoom effect reads it through Current.
     let preset = light_programmer::Preset {
+        instance_id: None,
         name: "Zoom 25".into(),
         family: light_programmer::PresetFamily::Beam,
         number: 1,

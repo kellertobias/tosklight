@@ -128,6 +128,21 @@ impl ProgrammingService {
         } else {
             false
         };
+        let origins = super::super::preset_recall_plan::preset_value_origins(
+            &selection,
+            environment
+                .resolved_aim
+                .as_deref()
+                .unwrap_or(&environment.preset),
+            &environment.groups,
+            &environment.stage_positions,
+        );
+        let provenance_changed = self.programmers.attach_preset_provenance(
+            identity.session_id,
+            &origins,
+            target == ProgrammingPresetRecallTarget::Preload,
+            !normal_changed && !preload_changed,
+        );
         let after = Snapshot::read(
             &self.programmers,
             action.context.desk_id,
@@ -149,8 +164,10 @@ impl ProgrammingService {
             preload_values_revision,
             capture_mode_revision,
             target,
-            normal_changed,
-            preload_changed,
+            normal_changed
+                || (provenance_changed && target == ProgrammingPresetRecallTarget::Programmer),
+            preload_changed
+                || (provenance_changed && target == ProgrammingPresetRecallTarget::Preload),
         )
     }
 

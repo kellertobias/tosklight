@@ -300,6 +300,18 @@
 	background: #0c1115;
 }
 
+.cue-preset-warnings {
+	flex: 0 0 auto;
+	max-height: 96px;
+	overflow: auto;
+	padding: 8px 14px;
+	background: var(--panel);
+	border-bottom: 1px solid var(--line2);
+	color: var(--text);
+}
+
+.cue-preset-warnings ul { margin: 0; padding-left: 18px; }
+
 .cue-information-block > strong {
 	color: var(--muted);
 	font-size: 11px;

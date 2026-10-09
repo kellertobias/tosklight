@@ -9,6 +9,7 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
     let list_id = light_core::CueListId::new();
     let mut cue = light_playback::Cue::new(1_u16.into());
     cue.group_changes.push(light_playback::GroupCueChange {
+        preset_reference: None,
         group_id: "live".into(),
         attribute: AttributeKey::intensity(),
         value: Some(AttributeValue::Normalized(0.6)),

@@ -30,6 +30,18 @@ impl CueList {
                             .iter()
                             .map(|v| v.value.required_programming_contract()),
                     )
+                    .chain(
+                        cue.changes
+                            .iter()
+                            .filter(|change| change.preset_reference.is_some())
+                            .map(|_| light_core::programming::LIVE_PRESET_REFERENCE_CONTRACT),
+                    )
+                    .chain(
+                        cue.group_changes
+                            .iter()
+                            .filter(|change| change.preset_reference.is_some())
+                            .map(|_| light_core::programming::LIVE_PRESET_REFERENCE_CONTRACT),
+                    )
                     .max()
                     .unwrap_or(0)
             })
@@ -40,6 +52,26 @@ impl CueList {
     /// Cue changes remain sparse, but each written value is a complete, valid semantic owner.
     pub fn validate_programming(&self) -> Result<(), IntentError> {
         for cue in &self.cues {
+            for change in &cue.changes {
+                if let Some(reference) = &change.preset_reference {
+                    reference.validate(&change.attribute)?;
+                    if change.value.is_none() {
+                        return Err(IntentError(
+                            "a released Cue address cannot retain a Preset reference".into(),
+                        ));
+                    }
+                }
+            }
+            for change in &cue.group_changes {
+                if let Some(reference) = &change.preset_reference {
+                    reference.validate(&change.attribute)?;
+                    if change.value.is_none() {
+                        return Err(IntentError(
+                            "a released Group Cue address cannot retain a Preset reference".into(),
+                        ));
+                    }
+                }
+            }
             let mut masks = std::collections::HashSet::new();
             for change in &cue.dynamic_changes {
                 change.value.validate_programming_at(&change.attribute)?;

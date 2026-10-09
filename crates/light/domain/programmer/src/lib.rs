@@ -23,6 +23,7 @@ mod preload_playback_queue;
 mod preload_release;
 mod preload_values;
 mod preset_capture;
+mod preset_provenance;
 mod presets;
 mod programming_validation;
 mod registry;

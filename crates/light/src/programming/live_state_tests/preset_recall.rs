@@ -71,6 +71,7 @@ impl RecallSetup {
         let intensity = AttributeKey::intensity();
         let pan = AttributeKey("pan".into());
         let preset = Preset {
+            instance_id: None,
             name: "Look".into(),
             aim_at_fixture_number: None,
             family: PresetFamily::Mixed,

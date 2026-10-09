@@ -1,3 +1,4 @@
+mod cue_presets;
 mod dynamic_presets;
 mod migrations;
 mod native_sources;
@@ -88,7 +89,13 @@ fn compile_show_candidate_incremental(
             native_sources::compile(candidate, Some(&previous.native_color_sources))?;
     }
 
-    if dirty.cue_lists {
+    if dirty.cue_lists
+        || ((dirty.presets || dirty.native_sources)
+            && previous.cue_lists.iter().any(|list| {
+                list.required_programming_contract()
+                    >= light_core::programming::LIVE_PRESET_REFERENCE_CONTRACT
+            }))
+    {
         snapshot.cue_lists = objects::decode_cue_lists(candidate)?.into();
     }
     if dirty.dynamics || dirty.presets || dirty.groups {

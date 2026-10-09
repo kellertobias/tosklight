@@ -8,6 +8,7 @@ import {
 	stringAt,
 } from "./playbackWirePrimitives";
 import { decodeAttributeValue } from "./programmerValuesWireProjection";
+import { decodePresetReference } from "./presetReferenceWire";
 import type { Cue, CueList } from "./types";
 import { WireValidationError } from "./wireValidation";
 
@@ -104,6 +105,7 @@ function decodeCueChange(
 		...change,
 		[idKey]: stringAt(change[idKey], `${path}.${idKey}`),
 		attribute: stringAt(change.attribute, `${path}.attribute`),
+		...(change.preset_reference == null ? {} : { preset_reference: decodePresetReference(change.preset_reference, `${path}.preset_reference`, stringAt(change.attribute, `${path}.attribute`)) }),
 		value:
 			change.value == null
 				? null

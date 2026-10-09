@@ -134,6 +134,7 @@ pub(super) fn prepare_preload_cue(
             cue.group_changes
                 .retain(|change| change.group_id != *group_id || change.attribute != *attribute);
             cue.group_changes.push(light_playback::GroupCueChange {
+                preset_reference: None,
                 group_id: group_id.clone(),
                 attribute: attribute.clone(),
                 value: Some(scoped.value.clone()),

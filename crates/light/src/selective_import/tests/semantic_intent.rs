@@ -31,6 +31,7 @@ pub(super) fn key_of(owner: ProgrammingOwner) -> AttributeKey {
 
 pub(super) fn color_preset(fixture: FixtureId) -> Preset {
     Preset {
+        instance_id: Some(Uuid::from_u128(fixture.0.as_u128() ^ (2_u128 << 96))),
         name: "Semantic color".into(),
         family: PresetFamily::Color,
         number: 1,
@@ -56,6 +57,7 @@ pub(super) fn color_preset(fixture: FixtureId) -> Preset {
 
 pub(super) fn position_preset(fixture: FixtureId, point: Uuid) -> Preset {
     Preset {
+        instance_id: Some(Uuid::from_u128(fixture.0.as_u128() ^ (3_u128 << 96))),
         name: "Semantic position".into(),
         family: PresetFamily::Position,
         number: 1,
@@ -82,6 +84,7 @@ pub(super) fn position_preset(fixture: FixtureId, point: Uuid) -> Preset {
 /// Focus and Zoom are separate owners: the fixture stores Focus only, universal stores Zoom only.
 pub(super) fn beam_preset(fixture: FixtureId) -> Preset {
     Preset {
+        instance_id: Some(Uuid::from_u128(fixture.0.as_u128() ^ (4_u128 << 96))),
         name: "Semantic beam".into(),
         family: PresetFamily::Beam,
         number: 1,
@@ -108,6 +111,7 @@ pub(super) fn cue_changes(
     let fixture_change =
         |owner: ProgrammingOwner, value| CueChange::set(fixture, key_of(owner), value);
     let group_change = |owner: ProgrammingOwner, value| GroupCueChange {
+        preset_reference: None,
         group_id: GROUP.into(),
         attribute: key_of(owner),
         value: Some(value),

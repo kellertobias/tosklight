@@ -262,5 +262,5 @@ pub use dynamics::{
 };
 pub use programming::{
     materialize_preset_fixture_values, materialize_preset_fixture_values_with_native_models,
-    plan_preset_selection_values, preload_preset_mutations,
+    plan_preset_selection_values, preload_preset_mutations, preset_value_origins,
 };

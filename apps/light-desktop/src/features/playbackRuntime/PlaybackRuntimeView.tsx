@@ -418,7 +418,13 @@ export function useDirectCueListProjectionMap(
 	const canonical = enabled ? [...new Set(cueListIds)].sort() : [];
 	const key = JSON.stringify(canonical);
 	const identities = useMemo(
-		() => canonical.map(cueListIdentity),
+		() =>
+			canonical.map(
+				(cue_list_id): PlaybackIdentity => ({
+					kind: "direct_cue_list",
+					cue_list_id,
+				}),
+			),
 		// The canonical Cuelist key owns array equality.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[key],
@@ -518,16 +524,13 @@ function directCueListSelection(
 	let ready = true;
 	const projections = new Map<string, PlaybackProjection | undefined>();
 	for (const cueListId of cueListIds) {
-		const candidates = state.projections.get(`cuelist:${cueListId}`);
+		const candidates = state.projections.get(`direct-cuelist:${cueListId}`);
 		const requested = candidates?.filter(
 			(projection) =>
-				projection.requested.kind === "cue_list" &&
+				projection.requested.kind === "direct_cue_list" &&
 				projection.requested.cue_list_id === cueListId,
 		);
-		// A mapped projection can share the same Cuelist key and replace the
-		// request-shaped copy in the normalized store. Its presence still proves
-		// that the exact Cuelist snapshot completed; only direct-row selection
-		// remains restricted to an explicitly Cuelist-requested projection.
+		// The exact direct source stays separate from Cuelist aggregate aliases.
 		if (!candidates?.length) ready = false;
 		projections.set(
 			cueListId,

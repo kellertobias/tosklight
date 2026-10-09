@@ -205,6 +205,7 @@ impl PlaybackEngine {
                 let effective = loaded.or(linked).or(normal);
                 let cue_timing = cue_list.and_then(|list| self.cue_timing_status(&playback, list));
                 PlaybackRuntimeStatus {
+                    source: playback.sequence_master_source(),
                     normal_next_cue_id: normal.map(|cue| cue.id),
                     normal_next_cue_number: normal.map(|cue| cue.number.clone()),
                     effective_next_cue_id: effective.map(|cue| cue.id),
@@ -324,6 +325,18 @@ impl PlaybackEngine {
         status.temporary_master = temporary_master;
         status.swap_active = swap_active;
         Some(status)
+    }
+
+    /// The original unassigned source only; assignment aggregates erase this distinction.
+    pub fn runtime_status_for_direct_cue_list(
+        &self,
+        cue_list_id: CueListId,
+    ) -> Option<PlaybackRuntimeStatus> {
+        self.runtime_status().into_iter().find(|status| {
+            status.playback.cue_list_id == cue_list_id
+                && status.playback.playback_number.is_none()
+                && status.playback.playback_identity.is_none()
+        })
     }
 
     fn apply_assignment_feedback(

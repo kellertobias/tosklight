@@ -29,6 +29,7 @@ fn setup() -> (Engine, Arc<ManualClock>, FixtureId, FixtureId) {
         automatic_restore: false,
     });
     cue_list.cues[0].group_changes.push(GroupCueChange {
+        preset_reference: None,
         group_id: "front".into(),
         attribute: AttributeKey::intensity(),
         value: Some(AttributeValue::Normalized(0.6)),

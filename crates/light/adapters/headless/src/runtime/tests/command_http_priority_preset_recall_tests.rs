@@ -147,6 +147,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
         StatusCode::OK
     );
     let preset = light_programmer::Preset {
+        instance_id: None,
         name: "Document look".into(),
         family: light_programmer::PresetFamily::Intensity,
         number: 1,
@@ -375,6 +376,7 @@ async fn preset_recall_http_redirects_fixture_and_live_group_values_to_pending_p
         StatusCode::OK
     );
     let preset = light_programmer::Preset {
+        instance_id: None,
         name: "Pending look".into(),
         family: light_programmer::PresetFamily::Intensity,
         number: 1,
@@ -527,6 +529,7 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
         .programming
         .select(scenario.session.id, [fixture]);
     let preset = light_programmer::Preset {
+        instance_id: None,
         name: "Typed WS look".into(),
         family: light_programmer::PresetFamily::Intensity,
         number: 3,

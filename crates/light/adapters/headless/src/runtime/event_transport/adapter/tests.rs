@@ -487,6 +487,7 @@ fn programming_values_keep_the_full_projection_and_action_identity() {
         ProgrammingValuesChange {
             delta: light_application::ProgrammingValuesDelta {
                 group_values: vec![light_programmer::ProgrammerGroupUpdate {
+                    preset_reference: None,
                     group_id: "2.1".into(),
                     attribute: AttributeKey::intensity(),
                     value: AttributeValue::Normalized(0.75),
@@ -502,6 +503,7 @@ fn programming_values_keep_the_full_projection_and_action_identity() {
                 revision: 7,
                 fixture_values: Vec::new(),
                 group_values: vec![light_programmer::ProgrammerGroupUpdate {
+                    preset_reference: None,
                     group_id: "2.1".into(),
                     attribute: AttributeKey::intensity(),
                     value: AttributeValue::Normalized(0.75),

@@ -76,11 +76,13 @@ fn write_cue_event(
             });
             if let Some(change) = existing {
                 change.value = Some(value.value.clone());
+                change.preset_reference = value.preset_reference.clone();
                 change.automatic_restore = false;
                 change.fade_millis = value.fade_millis;
                 change.delay_millis = value.delay_millis;
             } else if append_if_missing {
                 cue.changes.push(CueChange {
+                    preset_reference: value.preset_reference.clone(),
                     fixture_id: value.fixture_id,
                     attribute: value.attribute.clone(),
                     value: Some(value.value.clone()),
@@ -98,11 +100,13 @@ fn write_cue_event(
             });
             if let Some(change) = existing {
                 change.value = Some(value.value.clone());
+                change.preset_reference = value.preset_reference.clone();
                 change.automatic_restore = false;
                 change.fade_millis = value.fade_millis;
                 change.delay_millis = value.delay_millis;
             } else if append_if_missing {
                 cue.group_changes.push(GroupCueChange {
+                    preset_reference: value.preset_reference.clone(),
                     group_id: value.group_id.clone(),
                     attribute: value.attribute.clone(),
                     value: Some(value.value.clone()),

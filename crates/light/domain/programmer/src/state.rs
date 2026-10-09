@@ -22,6 +22,8 @@ pub(crate) struct ProgrammerValueTiming {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ProgrammerSnapshot {
+    #[serde(default)]
+    pub preset_provenance: Arc<std::collections::HashMap<u64, light_core::PresetValueReference>>,
     pub selected: Vec<FixtureId>,
     pub selection_expression: Option<SelectionExpression>,
     /// Shared with the live state, so taking an Undo checkpoint costs a reference count rather
@@ -49,6 +51,8 @@ pub struct ProgrammerSnapshot {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProgrammerState {
+    #[serde(default)]
+    pub preset_provenance: Arc<std::collections::HashMap<u64, light_core::PresetValueReference>>,
     pub id: ProgrammerId,
     pub session_id: SessionId,
     pub priority: i16,
@@ -199,6 +203,7 @@ impl ProgrammerState {
             .values
             .iter()
             .map(|value| ProgrammerFixtureUpdate {
+                preset_reference: self.preset_provenance.get(&value.programmer_order).cloned(),
                 fixture_id: value.fixture_id,
                 attribute: value.attribute.clone(),
                 value: value.value.clone(),
@@ -222,6 +227,10 @@ impl ProgrammerState {
                 attributes
                     .iter()
                     .map(move |(attribute, value)| ProgrammerGroupUpdate {
+                        preset_reference: self
+                            .preset_provenance
+                            .get(&value.programmer_order)
+                            .cloned(),
                         group_id: group_id.clone(),
                         attribute: attribute.clone(),
                         value: value.value.clone(),
@@ -246,6 +255,8 @@ impl ProgrammerState {
 /// One exact fixture/attribute value authored in the normal programmer.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProgrammerFixtureUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset_reference: Option<light_core::PresetValueReference>,
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,
     pub value: AttributeValue,
@@ -261,6 +272,8 @@ pub struct ProgrammerFixtureUpdate {
 /// One exact Group/attribute value authored in the normal programmer.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProgrammerGroupUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset_reference: Option<light_core::PresetValueReference>,
     pub group_id: String,
     pub attribute: AttributeKey,
     pub value: AttributeValue,

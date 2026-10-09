@@ -331,3 +331,101 @@ fn compiled_desk_kinds_rebuild_their_projection() {
     assert!(!Arc::ptr_eq(&next.groups, &previous.groups));
     assert!(Arc::ptr_eq(&next.cue_lists, &previous.cue_lists));
 }
+
+#[test]
+fn live_preset_edit_recompiles_active_cue_without_restarting_or_changing_literals() {
+    use light_core::{AttributeKey, AttributeValue, PresetValueOwner, PresetValueReference};
+    use light_engine::{CueListPlaybackAction, Engine, EnginePlaybackCommand};
+    use light_playback::CueChange;
+    let (store, mut document) = normalized_document();
+    let (_, mut fixture, _) = super::support::portable_fixture();
+    for (logical, head) in fixture
+        .logical_heads
+        .iter_mut()
+        .zip(fixture.definition.heads.iter().filter(|head| !head.shared))
+    {
+        logical.head_index = head.index;
+    }
+    fixture.logical_heads.truncate(
+        fixture
+            .definition
+            .heads
+            .iter()
+            .filter(|head| !head.shared)
+            .count(),
+    );
+    let target = fixture.logical_heads[0].fixture_id;
+    let attribute = AttributeKey::intensity();
+    let mut preset: light_programmer::Preset =
+        serde_json::from_value(document.object("preset", "1.1").unwrap().body().clone()).unwrap();
+    let identity = preset.instance_id.unwrap();
+    preset.values.insert(
+        target,
+        std::collections::HashMap::from([(attribute.clone(), AttributeValue::Normalized(0.75))]),
+    );
+    let mut list: CueList =
+        serde_json::from_value(document.object("cue_list", "main").unwrap().body().clone())
+            .unwrap();
+    let list_id = list.id;
+    let mut linked = CueChange::set(target, attribute.clone(), AttributeValue::Normalized(0.75));
+    linked.preset_reference = Some(PresetValueReference {
+        preset_instance_id: identity,
+        source_owner: PresetValueOwner::Fixture { fixture_id: target },
+        source_attribute: attribute.clone(),
+        sample_rank: None,
+        member_fixture: Some(target),
+    });
+    list.cues[0].changes.push(linked);
+    list.cues[0].changes.push(CueChange::set(
+        target,
+        AttributeKey("beam.focus".into()),
+        AttributeValue::Normalized(0.4),
+    ));
+    let mut seed = document.transaction();
+    seed.put("preset", "1.1", serde_json::to_value(&preset).unwrap());
+    seed.put("cue_list", "main", serde_json::to_value(list).unwrap());
+    let (seed, mut previous) = prepare_show_candidate(&document, seed)
+        .unwrap()
+        .into_parts();
+    let commit = store.apply_portable_transaction(seed).unwrap();
+    document.apply_commit(&commit);
+    previous.fixtures = vec![fixture].into();
+    let engine = Engine::new(light_programmer::ProgrammerRegistry::default());
+    engine.replace_snapshot(previous.clone()).unwrap();
+    engine
+        .execute_playback(EnginePlaybackCommand::CueList {
+            id: list_id,
+            action: CueListPlaybackAction::GoAt(chrono::Utc::now() - chrono::Duration::seconds(1)),
+        })
+        .unwrap();
+    let active = engine.active_playbacks();
+    assert_eq!(active.len(), 1);
+    preset
+        .values
+        .get_mut(&target)
+        .unwrap()
+        .insert(attribute.clone(), AttributeValue::Normalized(0.25));
+    let mut edit = document.transaction();
+    edit.put("preset", "1.1", serde_json::to_value(preset).unwrap());
+    let (_, next) = prepare_normalized_show_candidate_incremental(&document, edit, &previous)
+        .unwrap()
+        .into_parts();
+    assert!(!Arc::ptr_eq(&previous.cue_lists, &next.cue_lists));
+    engine.replace_snapshot(next).unwrap();
+    assert_eq!(engine.active_playbacks().len(), 1);
+    let contributions = engine.playback_contributions_at(chrono::Utc::now());
+    assert!(
+        contributions
+            .iter()
+            .any(|row| row.value.fixture_id == target
+                && row.value.attribute == attribute
+                && row.value.value == AttributeValue::Normalized(0.25))
+    );
+    assert!(
+        contributions
+            .iter()
+            .any(|row| row.value.fixture_id == target
+                && row.value.attribute.0.as_ref() == "beam.focus"
+                && row.value.value == AttributeValue::Normalized(0.4))
+    );
+}

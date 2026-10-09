@@ -33,6 +33,7 @@ export function decodePlaybackIdentity(
 		"playback",
 		"virtual",
 		"cue_list",
+		"direct_cue_list",
 		"group",
 	]);
 	if (kind === "playback")
@@ -52,7 +53,7 @@ export function decodePlaybackIdentity(
 				`${path}.playback_number`,
 			),
 		};
-	if (kind === "cue_list")
+	if (kind === "cue_list" || kind === "direct_cue_list")
 		return {
 			kind,
 			cue_list_id: stringAt(identity.cue_list_id, `${path}.cue_list_id`),
@@ -95,7 +96,10 @@ function decodeCueTriggerTiming(
 	};
 }
 
-function decodeCueTiming(value: unknown, path: string): CueTimingRuntimeProjection {
+function decodeCueTiming(
+	value: unknown,
+	path: string,
+): CueTimingRuntimeProjection {
 	const timing = recordAt(value, path);
 	return {
 		cue_id: stringAt(timing.cue_id, `${path}.cue_id`),
@@ -103,10 +107,7 @@ function decodeCueTiming(value: unknown, path: string): CueTimingRuntimeProjecti
 			timing.in_delay_millis,
 			`${path}.in_delay_millis`,
 		),
-		in_fade_millis: integerAt(
-			timing.in_fade_millis,
-			`${path}.in_fade_millis`,
-		),
+		in_fade_millis: integerAt(timing.in_fade_millis, `${path}.in_fade_millis`),
 		out_delay_millis: integerAt(
 			timing.out_delay_millis,
 			`${path}.out_delay_millis`,
@@ -138,6 +139,14 @@ function decodeCueRuntime(
 ): CueListRuntimeProjection {
 	const runtime = recordAt(value, path);
 	return {
+		...(runtime.owner === undefined
+			? {}
+			: {
+					owner:
+						runtime.owner === null
+							? null
+							: decodePlaybackIdentity(runtime.owner, `${path}.owner`),
+				}),
 		cue_index: integerAt(runtime.cue_index, `${path}.cue_index`),
 		previous_index: nullable(
 			runtime.previous_index,

@@ -1,5 +1,22 @@
 use super::*;
 
+#[test]
+fn direct_cue_list_selector_round_trips_without_changing_aggregate_identity() {
+    let id = uuid::Uuid::from_u128(7);
+    let exact = wire::PlaybackRuntimeIdentity::DirectCueList { cue_list_id: id };
+    let aggregate = wire::PlaybackRuntimeIdentity::CueList { cue_list_id: id };
+    let mapped = application_identities(vec![exact.clone(), aggregate.clone()]).unwrap();
+    assert_ne!(mapped[0], mapped[1]);
+    assert_eq!(wire_identity(mapped[0].clone()), exact);
+    assert_eq!(wire_identity(mapped[1].clone()), aggregate);
+    assert!(
+        application_identities(vec![wire::PlaybackRuntimeIdentity::DirectCueList {
+            cue_list_id: uuid::Uuid::nil()
+        }])
+        .is_err()
+    );
+}
+
 fn request(request_id: &str) -> wire::PlaybackActionRequest {
     wire::PlaybackActionRequest {
         request_id: request_id.into(),

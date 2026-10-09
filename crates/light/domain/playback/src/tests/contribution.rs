@@ -7,6 +7,7 @@ fn cue_release_removes_only_its_cuelist_contribution_and_reveals_the_underlay() 
     owned.changes.push(value(fixture, "intensity", 1.0));
     let mut released = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
     released.changes.push(CueChange {
+        preset_reference: None,
         fixture_id: fixture,
         attribute: AttributeKey::intensity(),
         value: None,
@@ -104,6 +105,7 @@ fn semantic_move_in_black_retains_missing_underlay_and_omits_a_release_target() 
         dark.changes.push(value(fixture, "intensity", 0.0));
         if release {
             dark.changes.push(CueChange {
+                preset_reference: None,
                 fixture_id: fixture,
                 attribute: AttributeKey("position".into()),
                 value: Some(target.clone()),
@@ -115,6 +117,7 @@ fn semantic_move_in_black_retains_missing_underlay_and_omits_a_release_target() 
         let mut lit = Cue::new(cue_number(2.0));
         lit.changes.push(value(fixture, "intensity", 1.0));
         lit.changes.push(CueChange {
+            preset_reference: None,
             fixture_id: fixture,
             attribute: AttributeKey("position".into()),
             value: (!release).then(|| target.clone()),

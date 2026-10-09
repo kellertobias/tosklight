@@ -181,6 +181,9 @@ pub enum ManualXFadeDirection {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct PlaybackRuntimeStatus {
+    /// Original activation owner, before assignment-local projection rewrites.
+    #[serde(skip)]
+    pub source: SequenceMasterSource,
     #[serde(flatten)]
     pub playback: ActivePlayback,
     pub normal_next_cue_id: Option<Uuid>,

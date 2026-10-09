@@ -17,6 +17,24 @@ use std::{
 /// survives two missed announcements.
 pub const PEER_TIMEOUT: Duration = Duration::from_secs(25);
 
+/// Latest actual OS send outcome, independent of accumulated diagnostic history.
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RouteDeliveryState {
+    AwaitingFirstSend,
+    Sending,
+    SendFailed,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct CurrentRouteDelivery {
+    pub protocol: Protocol,
+    pub universe: Universe,
+    pub destination: SocketAddr,
+    pub delivery_state: RouteDeliveryState,
+    pub current_error: Option<String>,
+}
+
 /// Send activity of one route destination.
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct RouteActivity {
@@ -81,6 +99,7 @@ struct RouteRecord {
     last_sent: Option<Instant>,
     last_error: Option<(String, Instant)>,
     errors: u64,
+    current_error: Option<String>,
 }
 
 struct PollerRecord {
@@ -122,7 +141,9 @@ fn millis(since: Instant, now: Instant) -> u64 {
 
 impl PeerRegistry {
     pub(crate) fn record_sent(&mut self, key: (Protocol, Universe, SocketAddr), at: Instant) {
-        self.routes.entry(key).or_default().last_sent = Some(at);
+        let record = self.routes.entry(key).or_default();
+        record.last_sent = Some(at);
+        record.current_error = None;
     }
 
     pub(crate) fn record_send_error(
@@ -133,7 +154,30 @@ impl PeerRegistry {
     ) {
         let record = self.routes.entry(key).or_default();
         record.errors += 1;
+        record.current_error = Some(message.clone());
         record.last_error = Some((message, at));
+    }
+
+    pub(crate) fn current_delivery(
+        &self,
+        key: (Protocol, Universe, SocketAddr),
+    ) -> CurrentRouteDelivery {
+        let record = self.routes.get(&key);
+        let current_error = record.and_then(|record| record.current_error.clone());
+        let delivery_state = if current_error.is_some() {
+            RouteDeliveryState::SendFailed
+        } else if record.is_some_and(|record| record.last_sent.is_some()) {
+            RouteDeliveryState::Sending
+        } else {
+            RouteDeliveryState::AwaitingFirstSend
+        };
+        CurrentRouteDelivery {
+            protocol: key.0,
+            universe: key.1,
+            destination: key.2,
+            delivery_state,
+            current_error,
+        }
     }
 
     /// `(key, errors)` of every destination that failed at least once.

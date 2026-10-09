@@ -8,6 +8,7 @@ pub(super) fn cue_projection(number: u16, cue_number: f64) -> PlaybackRuntimePro
         target: PlaybackTargetProjection::CueList {
             cue_list_id: light_core::CueListId(Uuid::from_u128(80)),
             runtime: Some(Box::new(CueListRuntimeProjection {
+                owner: None,
                 cue_index: cue_number as usize - 1,
                 previous_index: None,
                 current: Some(PlaybackCueReference {

@@ -1246,7 +1246,11 @@ fn dynamics_persist_preset_fallbacks_losslessly_before_the_preset_is_deleted() {
 
     let migrated_refs = [
         ("dynamic", "7", migrated_dynamic),
-        ("preset", "1.1", objects[1].2.clone()),
+        (
+            "preset",
+            "1.1",
+            candidate.object("preset", "1.1").unwrap().body().clone(),
+        ),
     ];
     let (_, migrated_document) = document_with_objects(&migrated_refs);
     let mut idempotent = migrated_document.transaction();
@@ -1748,6 +1752,7 @@ fn legacy_cmy_static_values_migrate_inverse_to_rgb_without_losing_unknown_data()
         light_core::AttributeValue::Normalized(0.2),
     ));
     cue.group_changes.push(light_playback::GroupCueChange {
+        preset_reference: None,
         group_id: "front".into(),
         attribute: cyan.clone(),
         value: Some(light_core::AttributeValue::Spread(vec![0.0, 0.25, 1.0])),

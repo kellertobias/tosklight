@@ -200,6 +200,7 @@ pub(super) fn programmer_cue(
             attributes
                 .iter()
                 .map(|(attribute, value)| light_playback::GroupCueChange {
+                    preset_reference: None,
                     group_id: group.clone(),
                     attribute: attribute.clone(),
                     value: Some(value.value.clone()),

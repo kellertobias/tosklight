@@ -138,6 +138,9 @@ impl PresetAddress {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct Preset {
+    /// Assigned once by portable migration/creation, preserved across edits and Move.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_id: Option<uuid::Uuid>,
     pub name: String,
     pub family: PresetFamily,
     /// Pool-local number. Legacy Presets decode as zero until their show-object address supplies

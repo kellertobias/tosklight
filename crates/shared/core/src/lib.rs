@@ -10,6 +10,8 @@ mod color_math;
 pub use color_math::{rgb_to_hsv, srgb_to_xyz, xyz_to_linear_srgb, xyz_to_srgb};
 mod frame_address;
 mod physical;
+mod preset_reference;
+pub use preset_reference::{PresetValueOwner, PresetValueReference};
 pub mod programming;
 pub mod spatial;
 mod surface;

@@ -1,4 +1,4 @@
-use super::peers::{NetworkActivity, PeerRegistry};
+use super::peers::{CurrentRouteDelivery, NetworkActivity, PeerRegistry};
 use super::{EncodedPacket, encode_routes, next_sequence};
 use crate::{DMX_SLOTS, DeliveryMode, DmxFrame, OutputRoute, Protocol, sacn_data_packet};
 use light_core::Universe;
@@ -170,6 +170,20 @@ impl NetworkOutput {
         let mut errors = self.route_error_snapshot();
         errors.sort_by_key(|error| (error.protocol as u8, error.universe, error.destination));
         errors
+    }
+
+    /// Only configured, enabled network targets can report current delivery failure.
+    pub fn current_route_delivery(&self, routes: &[OutputRoute]) -> Vec<CurrentRouteDelivery> {
+        let peers = self.peers.lock().expect("network peer mutex poisoned");
+        let mut targets = HashSet::new();
+        Self::route_diagnostics(routes)
+            .into_iter()
+            .filter(|route| route.enabled)
+            .filter_map(|route| {
+                let key = (route.protocol, route.universe, route.destination);
+                targets.insert(key).then(|| peers.current_delivery(key))
+            })
+            .collect()
     }
 
     pub fn route_diagnostics(routes: &[OutputRoute]) -> Vec<RouteDiagnostic> {

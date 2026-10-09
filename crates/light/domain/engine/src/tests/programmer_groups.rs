@@ -235,6 +235,7 @@ fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
         AttributeValue::Normalized(1.0),
     ));
     cue.group_changes.push(light_playback::GroupCueChange {
+        preset_reference: None,
         group_id: "group".into(),
         attribute: AttributeKey::intensity(),
         value: Some(AttributeValue::Normalized(0.5)),

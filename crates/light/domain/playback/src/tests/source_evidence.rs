@@ -502,6 +502,7 @@ fn generated_restoration_and_unresolved_group_rows_are_unknown() {
         let mut cue = focus(1.0, FixtureId::new(), 0.4, 0);
         if group {
             cue.group_changes.push(GroupCueChange {
+                preset_reference: None,
                 group_id: "1".into(),
                 attribute: AttributeKey("focus".into()),
                 value: Some(AttributeValue::Normalized(0.4)),

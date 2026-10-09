@@ -8,6 +8,17 @@ import type { AttributeValue } from "@tosklight/patch/stage-geometry";
 
 export type PlaybackCueTransition = GeneratedPlaybackCueTransition;
 
+export interface PresetValueReference {
+	preset_instance_id: string;
+	source_owner:
+		| { type: "universal" }
+		| { type: "fixture"; fixture_id: string }
+		| { type: "group"; group_id: string };
+	source_attribute: string;
+	sample_rank?: [number, number] | null;
+	member_fixture?: string | null;
+}
+
 export interface Cue {
 	id?: string;
 	cue_only?: boolean;
@@ -22,6 +33,7 @@ export interface Cue {
 	out_delay_link?: "in_fade";
 	trigger: { type: string; [key: string]: unknown };
 	changes: Array<{
+		preset_reference?: PresetValueReference | null;
 		fixture_id: string;
 		attribute: string;
 		value: AttributeValue | null;
@@ -30,6 +42,7 @@ export interface Cue {
 		delay_millis?: number;
 	}>;
 	group_changes?: Array<{
+		preset_reference?: PresetValueReference | null;
 		group_id: string;
 		attribute: string;
 		value: AttributeValue | null;

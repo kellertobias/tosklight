@@ -887,7 +887,9 @@ fn playback_routes(change: &PlaybackRuntimeChange) -> (Option<EventObject>, Vec<
         routes.push(match &change.projection.requested {
             PlaybackRuntimeIdentity::Playback(number) => EventObject::playback(*number),
             PlaybackRuntimeIdentity::Virtual(address) => EventObject::virtual_playback(*address),
-            PlaybackRuntimeIdentity::CueList(id) => EventObject::cue_list(id.0),
+            PlaybackRuntimeIdentity::CueList(id) | PlaybackRuntimeIdentity::DirectCueList(id) => {
+                EventObject::cue_list(id.0)
+            }
             PlaybackRuntimeIdentity::Group(id) => EventObject::group(id.as_str()),
         });
     }

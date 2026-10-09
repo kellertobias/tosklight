@@ -62,6 +62,7 @@ fn static_changes(fixture: FixtureId, point: FixtureId) -> Vec<CueDynamicChange>
 
 fn group_change(group: &str, fixture: FixtureId) -> GroupCueChange {
     GroupCueChange {
+        preset_reference: None,
         group_id: group.into(),
         attribute: key_of(ProgrammingOwner::Color),
         value: Some(group_family(

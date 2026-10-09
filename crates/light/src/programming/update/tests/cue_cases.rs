@@ -365,6 +365,7 @@ fn cue_fixture_and_group_addresses_track_independently() {
     let fixture = fixture(1);
     let mut first = cue(1.0, vec![change(fixture, "intensity", 0.2)]);
     first.group_changes.push(GroupCueChange {
+        preset_reference: None,
         group_id: "front".into(),
         attribute: attribute("intensity"),
         value: Some(normalized(0.4)),
@@ -378,6 +379,7 @@ fn cue_fixture_and_group_addresses_track_independently() {
         dynamic_values: Vec::new(),
         fixture_values: vec![fixture_update(fixture, "intensity", 0.8, 1)],
         group_values: vec![ProgrammerGroupUpdate {
+            preset_reference: None,
             group_id: "front".into(),
             attribute: attribute("intensity"),
             value: normalized(0.9),
@@ -476,6 +478,7 @@ fn focus_and_zoom_update_independently_at_their_own_tracked_sources() {
     };
     let update = |key: &AttributeKey, value: AttributeValue| ProgrammerUpdateContent {
         fixture_values: vec![ProgrammerFixtureUpdate {
+            preset_reference: None,
             fixture_id: fixture,
             attribute: key.clone(),
             value,

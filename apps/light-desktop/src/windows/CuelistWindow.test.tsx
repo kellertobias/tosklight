@@ -115,6 +115,7 @@ vi.mock("../features/cueRecording/CueRecordingProvider", () => ({
 	useCueRecording: () => ({ record: mocks.recordCue }),
 }));
 vi.mock("../features/showObjects/ShowObjectsState", () => ({
+	usePresets: () => [],
 	usePortableGroups: () => [],
 	useShowObjectCollectionsReady: () => true,
 	useShowObjectsStore: () => mocks.showObjectsStore,

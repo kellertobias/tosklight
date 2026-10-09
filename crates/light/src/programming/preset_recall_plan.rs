@@ -550,3 +550,125 @@ mod tests;
 
 #[cfg(test)]
 mod family_tests;
+
+/// Provenance follows exactly the recall owner's precedence; it is never inferred from equality.
+pub fn preset_value_origins(
+    selection: &ProgrammerSelection,
+    preset: &Preset,
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    positions: &HashMap<FixtureId, light_dynamics::Position3d>,
+) -> Vec<(
+    light_core::PresetValueOwner,
+    AttributeKey,
+    light_core::PresetValueReference,
+)> {
+    use light_core::{PresetValueOwner as Owner, PresetValueReference};
+    let Some(instance) = preset.instance_id else {
+        return Vec::new();
+    };
+    let live = live_group_targets(selection);
+    let mut origins = Vec::new();
+    let mut append = |target: Owner, source: Owner, attribute: &AttributeKey, rank, member| {
+        let reference = PresetValueReference {
+            preset_instance_id: instance,
+            source_owner: source,
+            source_attribute: attribute.clone(),
+            sample_rank: rank,
+            member_fixture: member,
+        };
+        origins.retain(|(existing, key, _)| existing != &target || key != attribute);
+        origins.push((target, attribute.clone(), reference));
+    };
+    if live.is_empty() {
+        for (rank, fixture) in selection.selected.iter().enumerate() {
+            for attribute in sorted_attributes(&preset.universal_values) {
+                append(
+                    Owner::Fixture {
+                        fixture_id: *fixture,
+                    },
+                    Owner::Universal,
+                    attribute,
+                    Some((rank, selection.selected.len())),
+                    Some(*fixture),
+                );
+            }
+        }
+    }
+    for fixture in &selection.selected {
+        if let Some(values) = preset.values.get(fixture) {
+            for attribute in sorted_attributes(values) {
+                append(
+                    Owner::Fixture {
+                        fixture_id: *fixture,
+                    },
+                    Owner::Fixture {
+                        fixture_id: *fixture,
+                    },
+                    attribute,
+                    None,
+                    Some(*fixture),
+                );
+            }
+        }
+    }
+    let selected = selection.selected.iter().copied().collect::<HashSet<_>>();
+    let mut group_ids = preset
+        .group_values
+        .keys()
+        .filter(|id| !live.contains(id))
+        .collect::<Vec<_>>();
+    group_ids.sort();
+    for group in group_ids {
+        if let Ok(resolved) = light_programmer::resolve_group_spatial(group, groups, positions) {
+            let ranking = resolved.ranked_selection;
+            for fixture in ranking
+                .ordered_fixture_ids
+                .iter()
+                .filter(|fixture| selected.contains(fixture))
+            {
+                for attribute in sorted_attributes(&preset.group_values[group]) {
+                    append(
+                        Owner::Fixture {
+                            fixture_id: *fixture,
+                        },
+                        Owner::Group {
+                            group_id: group.clone(),
+                        },
+                        attribute,
+                        Some((ranking.rank_by_fixture[fixture], ranking.rank_count)),
+                        Some(*fixture),
+                    );
+                }
+            }
+        }
+    }
+    for group in live {
+        for attribute in sorted_attributes(&preset.universal_values) {
+            append(
+                Owner::Group {
+                    group_id: group.clone(),
+                },
+                Owner::Universal,
+                attribute,
+                None,
+                None,
+            );
+        }
+        if let Some(values) = preset.group_values.get(&group) {
+            for attribute in sorted_attributes(values) {
+                append(
+                    Owner::Group {
+                        group_id: group.clone(),
+                    },
+                    Owner::Group {
+                        group_id: group.clone(),
+                    },
+                    attribute,
+                    None,
+                    None,
+                );
+            }
+        }
+    }
+    origins
+}

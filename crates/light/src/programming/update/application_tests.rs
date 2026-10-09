@@ -870,6 +870,7 @@ fn preset_body(fixture: FixtureId, level: f32) -> Value {
 
 fn preset_body_number(fixture: FixtureId, level: f32, number: u32) -> Value {
     let preset = Preset {
+        instance_id: None,
         name: format!("Intensity {number}"),
         family: PresetFamily::Intensity,
         number,

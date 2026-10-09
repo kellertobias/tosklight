@@ -182,6 +182,7 @@ fn semantic_capture(intent: &Intent) -> CueRecordingCapture {
             .fixtures
             .iter()
             .map(|(fixture_id, attribute, value)| CueRecordingFixtureValue {
+                preset_reference: None,
                 fixture_id: *fixture_id,
                 attribute: attribute.clone(),
                 value: value.clone(),
@@ -195,6 +196,7 @@ fn semantic_capture(intent: &Intent) -> CueRecordingCapture {
             .groups
             .iter()
             .map(|(group_id, attribute, value)| CueRecordingGroupValue {
+                preset_reference: None,
                 group_id: group_id.clone(),
                 attribute: attribute.clone(),
                 value: value.clone(),
@@ -239,6 +241,7 @@ fn expected_group_changes(intent: &Intent) -> Vec<GroupCueChange> {
             .groups
             .iter()
             .map(|(group_id, attribute, value)| GroupCueChange {
+                preset_reference: None,
                 group_id: group_id.clone(),
                 attribute: attribute.clone(),
                 value: Some(value.clone()),

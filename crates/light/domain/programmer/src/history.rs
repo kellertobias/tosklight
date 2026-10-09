@@ -14,6 +14,7 @@ impl ProgrammerState {
 
     pub(crate) fn snapshot(&self) -> ProgrammerSnapshot {
         ProgrammerSnapshot {
+            preset_provenance: Arc::clone(&self.preset_provenance),
             selected: self.selected.clone(),
             selection_expression: self.selection_expression.clone(),
             values: self.values.clone(),
@@ -39,6 +40,7 @@ impl ProgrammerState {
     }
 
     pub(crate) fn restore_snapshot(&mut self, snapshot: ProgrammerSnapshot, now: DateTime<Utc>) {
+        self.preset_provenance = snapshot.preset_provenance;
         self.selected = snapshot.selected;
         self.selection_expression = snapshot.selection_expression;
         self.values = snapshot.values;

@@ -326,6 +326,7 @@ fn seed_cue_preload_show(entry: &ShowEntry, cue_list_id: light_core::CueListId) 
     let mut cue = light_playback::Cue::new(cue("1"));
     cue.id = Uuid::from_u128(0xc001);
     cue.group_changes.push(light_playback::GroupCueChange {
+        preset_reference: None,
         group_id: "1".into(),
         attribute: light_core::AttributeKey::intensity(),
         value: Some(light_core::AttributeValue::Normalized(0.1)),

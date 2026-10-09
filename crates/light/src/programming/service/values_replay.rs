@@ -195,6 +195,7 @@ mod tests {
             revision: 1,
             fixture_values: Vec::new(),
             group_values: vec![ProgrammerGroupUpdate {
+                preset_reference: None,
                 group_id: "front".into(),
                 attribute: AttributeKey::intensity(),
                 value: AttributeValue::Spread(vec![0.5; spread_len]),

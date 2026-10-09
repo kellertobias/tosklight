@@ -152,6 +152,35 @@ pub(super) fn apply_command_preset(
         live_group_targets,
         programmer_fade_millis,
     );
+    let selection = light_programmer::ProgrammerSelection {
+        selected: selected.to_vec(),
+        expression: current_expression,
+        ..Default::default()
+    };
+    let positions = state
+        .output
+        .snapshot()
+        .dynamic_stage_positions
+        .iter()
+        .map(|(id, position)| {
+            (
+                *id,
+                light_dynamics::Position3d {
+                    x: f64::from(position.x),
+                    y: f64::from(position.y),
+                    z: f64::from(position.z),
+                },
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let origins = light_application::preset_value_origins(&selection, &preset, &groups, &positions);
+    let preload = state
+        .programming
+        .get(session.id)
+        .is_some_and(|programmer| programmer.blind && programmer.preload_capture_programmer);
+    state
+        .programming
+        .attach_preset_provenance(session.id, &origins, preload, false);
     state.programming.set_modes(
         session.id,
         None,
@@ -220,7 +249,16 @@ fn apply_position_preset(
         session,
         &mutations,
         Some(format!("preset:{id}")),
-    )
+    )?;
+    let origins = light_application::preset_value_origins(&selection, preset, groups, &positions);
+    let preload = state
+        .programming
+        .get(session.id)
+        .is_some_and(|programmer| programmer.blind && programmer.preload_capture_programmer);
+    state
+        .programming
+        .attach_preset_provenance(session.id, &origins, preload, false);
+    Ok(())
 }
 
 fn apply_selected_fixture_values(
@@ -319,6 +357,16 @@ fn apply_live_group_values(
 pub(super) fn command_preset_address(
     tokens: &[String],
 ) -> Result<light_programmer::PresetAddress, String> {
+    if let [packed] = tokens {
+        for family in ["ALL", "INTENSITY", "COLOR", "POSITION", "BEAM"] {
+            if let Some(number) = packed.strip_prefix(family)
+                && !number.is_empty()
+                && number.chars().all(|character| character.is_ascii_digit())
+            {
+                return named_command_preset_address(family, number);
+            }
+        }
+    }
     if let [family, number] = tokens {
         return named_command_preset_address(family, number);
     }

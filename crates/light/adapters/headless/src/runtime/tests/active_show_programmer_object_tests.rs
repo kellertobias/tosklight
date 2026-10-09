@@ -787,6 +787,11 @@ fn preset_body(
     number: u32,
 ) -> serde_json::Value {
     serde_json::to_value(light_programmer::Preset {
+        instance_id: Some(Uuid::from_u128(
+            0x70000000000040008000000000000000
+                | ((family.type_number() as u128) << 32)
+                | u128::from(number),
+        )),
         name: name.into(),
         aim_at_fixture_number: None,
         family,
@@ -1081,6 +1086,7 @@ async fn active_preload_preset_uses_one_typed_show_boundary_and_returns_its_even
             "1.4",
             &serde_json::json!({
                 "name":"Before",
+                "instance_id":Uuid::from_u128(0x70000000000040008000000100000004),
                 "family":"Intensity",
                 "number":4,
                 "values":{},

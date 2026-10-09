@@ -229,6 +229,18 @@
             }
           ]
         },
+        "owner": {
+          "description": "Exact activation owner; absent from older runtime snapshots.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackRuntimeIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "paused": {
           "type": "boolean"
         },
@@ -269,6 +281,7 @@
         }
       },
       "required": [
+        "owner",
         "cue_index",
         "previous_index",
         "current",
@@ -2503,6 +2516,24 @@
             "kind": {
               "type": "string",
               "const": "cue_list"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "kind": {
+              "type": "string",
+              "const": "direct_cue_list"
             }
           },
           "additionalProperties": false,

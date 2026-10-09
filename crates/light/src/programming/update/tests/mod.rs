@@ -38,6 +38,7 @@ pub(super) fn fixture_update(
     programmer_order: u64,
 ) -> ProgrammerFixtureUpdate {
     ProgrammerFixtureUpdate {
+        preset_reference: None,
         fixture_id,
         attribute: attribute(name),
         value: normalized(value),

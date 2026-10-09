@@ -74,6 +74,7 @@ mod controls;
 mod cue_dynamic_sources;
 mod cue_recording;
 mod cue_tracking;
+mod direct_projection;
 mod identity;
 mod macro_target;
 mod master;

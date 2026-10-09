@@ -48,6 +48,9 @@ export type ExistingContentMode = "update_existing" | "add_new";
 /** Operator-facing subset mapped from the runtime diagnostics wire response. */
 export interface RuntimeDiagnostics {
 	outputRoutes: unknown;
+	outputDeliveryStatus?:
+		| readonly import("./generated/light-wire").RuntimeOutputDeliveryStatus[]
+		| null;
 }
 export type UpdateTargetFilter =
 	| "eligible_for_update_existing"
@@ -217,7 +220,7 @@ export interface HelpTopic {
 	live: boolean;
 }
 export interface FileRoot {
-    network?: boolean;
+	network?: boolean;
 	id: string;
 	label: string;
 	icon: string;
@@ -342,8 +345,10 @@ export * from "./types/fixtures";
 export * from "./types/playback";
 
 /** The diagnostics view consumes the relevant slice of the generated output contract. */
-export type DmxSnapshot = Pick<import("./generated/light-wire").OutputDmxSnapshot,
-    "revision" | "universes" | "overrides">;
+export type DmxSnapshot = Pick<
+	import("./generated/light-wire").OutputDmxSnapshot,
+	"revision" | "universes" | "overrides"
+>;
 
 export interface VersionedObject<T = Record<string, unknown>> {
 	kind: string;
@@ -394,6 +399,7 @@ export type GroupFixtureSource =
 	| { type: "references"; references: GroupReference[] };
 
 export interface StoredPreset {
+	instance_id?: string | null;
 	name: string;
 	number: number;
 	values: Record<string, Record<string, unknown>>;

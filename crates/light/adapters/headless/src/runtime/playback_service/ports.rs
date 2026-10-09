@@ -200,6 +200,9 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
             (_, None) => return Ok(Vec::new()),
         };
         let mut related = Vec::new();
+        if let SharedTarget::CueList(cue_list_id) = &shared_target {
+            related.push(PlaybackRuntimeIdentity::DirectCueList(*cue_list_id));
+        }
         let snapshot = self.state.output.snapshot();
         related.extend(
             snapshot

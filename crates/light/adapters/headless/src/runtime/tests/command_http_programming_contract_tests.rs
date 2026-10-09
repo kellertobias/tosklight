@@ -68,6 +68,7 @@ async fn unavailable_programming_contract_rejects_command_presets_before_selecti
     };
     scenario.state.active_show.replace_current(Some(entry));
     let preset = light_programmer::Preset {
+        instance_id: None,
         name:"Turns".into(), family:light_programmer::PresetFamily::Position, number:7,
         values:HashMap::from([(fixture, HashMap::from([(
             light_core::AttributeKey("position".into()),

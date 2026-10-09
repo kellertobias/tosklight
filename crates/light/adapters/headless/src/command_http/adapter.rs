@@ -356,11 +356,14 @@ pub(super) fn preset_record_address(
         .is_some_and(|token| matches!(token.as_str(), "RECORD" | "REC"))
         || timing.fade_millis.is_some()
         || timing.delay_millis.is_some()
-        || !(tokens.len() == 4 || preset_record_aim_target(command)?.is_some())
     {
         return Ok(None);
     }
-    Ok(super::super::command_preset_address(&tokens[1..4]).ok())
+    let (_, body) = super::record_update_option::parse_option(&tokens[1..]);
+    if preset_record_aim_target(command)?.is_some() {
+        return Ok(super::super::command_preset_address(&tokens[1..4]).ok());
+    }
+    Ok(super::super::command_preset_address(body).ok())
 }
 
 /// Only the exact existing Aim suffix is a typed relation recording command.
@@ -805,5 +808,40 @@ mod object_command_tests {
         assert!(object_command("MACRO 0").is_err());
         assert!(object_command("MACRO 1 GO").is_err());
         assert!(object_command("MACRO 70000").is_err());
+    }
+}
+
+#[cfg(test)]
+mod named_preset_record_tests {
+    use super::*;
+
+    #[test]
+    fn typed_record_routes_named_numeric_and_merge_addresses_without_swallowing_cues() {
+        for command in [
+            "RECORD INTENSITY 190",
+            "RECORD INTENSITY190",
+            "RECORD INTENSITY PRESET 190",
+            "RECORD 1.190",
+            "RECORD MERGE INTENSITY 190",
+        ] {
+            let address = preset_record_address(command).unwrap().unwrap();
+            assert_eq!(address.family, light_programmer::PresetFamily::Intensity);
+            assert_eq!(address.number, 190);
+        }
+        assert!(
+            preset_record_address("RECORD CUELIST 190")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            preset_record_address("RECORD MERGE CUE 1")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            preset_record_address("RECORD COLOR 12 FADE 1")
+                .unwrap()
+                .is_none()
+        );
     }
 }

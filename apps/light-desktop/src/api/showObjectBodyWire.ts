@@ -1,4 +1,5 @@
 import { decodeAttributeValue } from "./programmerValuesWireProjection";
+import { presetInstanceIdAt } from "./presetReferenceWire";
 import type {
 	StoredDeskLayout,
 	StoredStageLayout,
@@ -144,6 +145,7 @@ function decodePreset(value: unknown, path: string): StoredPreset {
  const groups = Object.fromEntries(Object.entries(recordAt(body.group_values === undefined ? {} : body.group_values, `${path}.group_values`)).map(([id, values]) => [id, decodeMap(values, `${path}.group_values.${id}`, "group")]));
  return {
   ...body, name: plainStringAt(body.name, `${path}.name`), number: integerAt(body.number, `${path}.number`), values,
+  ...(body.instance_id == null ? {} : { instance_id: presetInstanceIdAt(body.instance_id, `${path}.instance_id`) }),
   ...(body.group_values === undefined ? {} : { group_values: groups }),
   ...(body.universal_values === undefined ? {} : { universal_values: decodeMap(body.universal_values, `${path}.universal_values`, "independent") }),
  };

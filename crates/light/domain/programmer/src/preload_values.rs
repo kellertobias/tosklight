@@ -210,6 +210,9 @@ fn mutation_changes(
     fixture_index: &FixtureValueIndex<'_>,
     mutation: &PreloadProgrammerValueMutation,
 ) -> bool {
+    if referenced_order(state, mutation).is_some() {
+        return true;
+    }
     match mutation {
         PreloadProgrammerValueMutation::SetFixture {
             fixture_id,
@@ -306,6 +309,9 @@ fn apply_mutation(
     changed_at: chrono::DateTime<chrono::Utc>,
     fixture_batch: &mut FixtureValueBatch,
 ) {
+    if let Some(order) = referenced_order(state, mutation) {
+        Arc::make_mut(&mut state.preset_provenance).remove(&order);
+    }
     match mutation {
         PreloadProgrammerValueMutation::SetFixture {
             fixture_id,
@@ -406,4 +412,39 @@ fn release_group(state: &mut crate::ProgrammerState, group_id: &str, attribute: 
             state.preload_group_pending.remove(group_id);
         }
     }
+}
+
+fn referenced_order(
+    state: &crate::ProgrammerState,
+    mutation: &PreloadProgrammerValueMutation,
+) -> Option<u64> {
+    let order = match mutation {
+        PreloadProgrammerValueMutation::SetFixture {
+            fixture_id,
+            attribute,
+            ..
+        }
+        | PreloadProgrammerValueMutation::ReleaseFixture {
+            fixture_id,
+            attribute,
+        } => state
+            .preload_pending
+            .iter()
+            .find(|stored| stored.fixture_id == *fixture_id && stored.attribute == *attribute)
+            .map(|stored| stored.programmer_order),
+        PreloadProgrammerValueMutation::SetGroup {
+            group_id,
+            attribute,
+            ..
+        }
+        | PreloadProgrammerValueMutation::ReleaseGroup {
+            group_id,
+            attribute,
+        } => state
+            .preload_group_pending
+            .get(group_id)
+            .and_then(|values| values.get(attribute))
+            .map(|stored| stored.programmer_order),
+    };
+    order.filter(|order| state.preset_provenance.contains_key(order))
 }

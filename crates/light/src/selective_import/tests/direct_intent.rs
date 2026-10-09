@@ -48,7 +48,7 @@ fn preset_body(source: &NativeFixture, number: u16, portable: Value) -> Value {
         source.fixture_id.0.to_string(),
         json!({"color": direct(&source.identity, &source.channels, portable)}),
     );
-    json!({"name":format!("Direct {number}"),"family":"Color","number":number,
+    json!({"instance_id": Uuid::from_u128(source.fixture_id.0.as_u128() ^ (u128::from(number) << 96)), "name":format!("Direct {number}"),"family":"Color","number":number,
         "values":values,"group_values":{},"universal_values":{}})
 }
 

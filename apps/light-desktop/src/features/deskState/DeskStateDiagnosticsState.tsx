@@ -43,13 +43,16 @@ export function DeskStateDiagnosticsProvider({
 			return;
 		}
 		let current = true;
+		let inspectionGeneration = 0;
 		const refresh = async () => {
+			const generation = ++inspectionGeneration;
 			try {
 				const snapshot = await readDiagnostics();
-				if (current) setSnapshot(snapshot);
+				if (current && generation === inspectionGeneration)
+					setSnapshot(snapshot);
 			} catch {
-				// Connection/authentication faults already belong to the shared shell status lane.
-				if (current) setSnapshot(null);
+				// Failed inspection does not prove DMX loss or recovery. Preserve the last
+				// authoritative outcome until a successful health read replaces it.
 			}
 		};
 		void refresh();
@@ -79,16 +82,57 @@ interface OutputRouteDiagnostic {
 	universe: number;
 	destination: string;
 	enabled: boolean;
+	deliveryMode?: string;
 }
 
 export function currentOutputDiagnostics(
 	snapshot: RuntimeDiagnostics,
-	outputRoutes: readonly VersionedObject<OutputRoute>[] = [],
+	outputRoutes?: readonly VersionedObject<OutputRoute>[],
 ): readonly DeskStateDiagnostic[] {
 	const routes = decodeOutputRoutes(snapshot.outputRoutes).filter(
 		(route) => route.enabled,
 	);
 	const grouped = new Map<string, OutputRouteDiagnostic[]>();
+	const deliveryFailures = (snapshot.outputDeliveryStatus ?? [])
+		.filter(
+			(status) =>
+				status.delivery_state === "send_failed" &&
+				routes.some(
+					(route) =>
+						route.protocol === status.protocol &&
+						route.universe === status.universe &&
+						route.destination === status.destination,
+				),
+		)
+		.filter(
+			(status) =>
+				outputRoutes === undefined ||
+				outputRoutes.some(
+					({ body }) =>
+						body.enabled &&
+						body.target?.kind !== "usb_endpoint" &&
+						body.protocol === status.protocol &&
+						body.destination_universe === status.universe &&
+						(body.destination === status.destination ||
+							(!body.destination &&
+								routes.some(
+									(route) =>
+										route.protocol === status.protocol &&
+										route.universe === status.universe &&
+										route.destination === status.destination &&
+										(route.deliveryMode === "broadcast" ||
+											route.deliveryMode === "multicast"),
+								))),
+				),
+		)
+		.map((status) => ({
+			id: `delivery-failed-${slug(status.protocol)}-${status.universe}-${slug(status.destination)}`,
+			capabilityLoss: "dmx_output" as const,
+			title: `${protocolLabel(status.protocol)} output failed · universe ${status.universe} · ${status.destination}`,
+			summary: `The latest DMX send to ${status.destination} failed: ${status.current_error}`,
+			action:
+				"Check the output interface and destination in Setup → Outputs. This alert clears after a successful send or disabling the route.",
+		}));
 	for (const route of routes) {
 		const key = `${route.protocol}\u0000${route.universe}\u0000${route.destination}`;
 		const existing = grouped.get(key);
@@ -104,7 +148,7 @@ export function currentOutputDiagnostics(
 			action: `Open Setup → Outputs and disable or remove the duplicate route for ${protocolLabel(route.protocol)} universe ${route.universe} at ${route.destination}.`,
 		}));
 	const usbClaims = new Map<string, OutputRoute[]>();
-	for (const route of outputRoutes.map((entry) => entry.body)) {
+	for (const route of (outputRoutes ?? []).map((entry) => entry.body)) {
 		if (!route.enabled || route.target?.kind !== "usb_endpoint") continue;
 		const claims = usbClaims.get(route.target.endpoint_id);
 		if (claims) claims.push(route);
@@ -126,7 +170,7 @@ export function currentOutputDiagnostics(
 					"Open Setup → Outputs and disable or remove the extra device routes. Keep only the intended logical universe for this USB DMX device.",
 			};
 		});
-	return [...networkDuplicates, ...usbDuplicates];
+	return [...deliveryFailures, ...networkDuplicates, ...usbDuplicates];
 }
 
 function decodeOutputRoutes(value: unknown): OutputRouteDiagnostic[] {
@@ -148,6 +192,10 @@ function decodeOutputRoutes(value: unknown): OutputRouteDiagnostic[] {
 				universe: route.universe,
 				destination: route.destination,
 				enabled: route.enabled,
+				deliveryMode:
+					typeof route.delivery_mode === "string"
+						? route.delivery_mode
+						: undefined,
 			},
 		];
 	});

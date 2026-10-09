@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Atomic candidate mutation guarded by one whole-show revision.
 #[derive(Clone, Debug)]
 pub struct PortableShowTransaction {
+    pub(crate) programming_contract_floor: u16,
     pub(super) expected: PortableShowRevision,
     pub(super) writes: BTreeMap<PortableShowObjectKey, Value>,
     pub(super) undoes: BTreeMap<PortableShowObjectKey, PortableShowUndoCondition>,
@@ -94,6 +95,7 @@ impl PortableShowCommit {
 impl PortableShowTransaction {
     pub fn new(expected: PortableShowRevision) -> Self {
         Self {
+            programming_contract_floor: 0,
             expected,
             writes: BTreeMap::new(),
             undoes: BTreeMap::new(),
@@ -271,7 +273,13 @@ impl PortableShowTransaction {
 impl PortableShowDocument {
     /// Starts a candidate transaction against this exact document revision.
     pub fn transaction(&self) -> PortableShowTransaction {
-        PortableShowTransaction::new(self.revision())
+        let mut transaction = PortableShowTransaction::new(self.revision());
+        if let crate::ProgrammingContractMarker::Declared(version) =
+            self.programming_contract_marker()
+        {
+            transaction.programming_contract_floor = version;
+        }
+        transaction
     }
 }
 
@@ -353,6 +361,7 @@ fn apply_changes(
     changes: PortableShowTransaction,
 ) -> Result<AppliedChanges, StoreError> {
     let PortableShowTransaction {
+        programming_contract_floor: _,
         expected: _,
         writes,
         undoes,

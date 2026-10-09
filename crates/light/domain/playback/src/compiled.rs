@@ -242,6 +242,7 @@ mod tests {
         ));
         let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
         second.changes.push(CueChange {
+            preset_reference: None,
             fixture_id: fixture,
             attribute: attribute.clone(),
             value: None,

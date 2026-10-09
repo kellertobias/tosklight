@@ -593,6 +593,79 @@ impl PlaybackEngine {
         Ok(())
     }
 
+    /// Adopt only Color pairs authored by the incoming Cue, from the last accepted output.
+    /// This is an activation source, not an additional producer or fabricated author evidence.
+    pub fn adopt_published_color_start(
+        &mut self,
+        incoming: PlaybackIdentity,
+        value_at: &dyn Fn(FixtureId, &AttributeKey) -> Option<AttributeValue>,
+    ) -> Result<(), String> {
+        if self.dynamic_assignment_at(incoming).is_some() {
+            return Ok(());
+        }
+        let key = self.runtime_key_at(incoming)?;
+        let Some(active) = self.active.get(&key).filter(|active| active.enabled) else {
+            return Ok(());
+        };
+        let compiled = &self.compiled_cue_lists[&active.cue_list_id];
+        let priority = self.cue_lists[&active.cue_list_id].priority;
+        let retained: Vec<_> = compiled
+            .attributes_through(active.cue_index)
+            .iter()
+            .filter_map(|attribute| {
+                let target = attribute.value(active.cue_index, active.tracking_wrap)?;
+                let address = (attribute.fixture_id(), attribute.attribute().clone());
+                let start = value_at(address.0, &address.1)?;
+                // Cross-model/semantic-to-Direct crossings need appearance capture at the physical
+                // adapter. Do not pretend an unsupported pair is a continuous native transition.
+                use light_core::programming::ColorProgram;
+                let compatible = match (&start, target) {
+                    (AttributeValue::ColorProgram(a), AttributeValue::ColorProgram(b)) => {
+                        match (a.as_ref(), b.as_ref()) {
+                            (
+                                ColorProgram::Direct { recipe: a, .. },
+                                ColorProgram::Direct { recipe: b, .. },
+                            ) => a.source == b.source,
+                            (ColorProgram::Semantic { .. }, ColorProgram::Semantic { .. }) => true,
+                            _ => false,
+                        }
+                    }
+                    _ => false,
+                };
+                compatible.then(|| PlaybackRetainedValue {
+                    timed: TimedValue {
+                        fixture_id: address.0,
+                        attribute: address.1,
+                        value: start.clone(),
+                        priority,
+                        changed_at: active.activated_at,
+                        programmer_order: 0,
+                        merge_mode: light_core::MergeMode::Ltp,
+                        fade: false,
+                        fade_millis: None,
+                        delay_millis: None,
+                    },
+                    family_evidence: None,
+                    pending_transition: None,
+                })
+            })
+            .collect();
+        if retained.is_empty() {
+            return Ok(());
+        }
+        let ordinal = crate::source_evidence::take_occurrence_ordinal(
+            &mut self.next_source_occurrence_ordinal,
+        );
+        let active = self.active.get_mut(&key).expect("validated active Cue");
+        active.deleted_cue_transition_source = Some(retained);
+        active.begin_source_history(
+            active.activated_at,
+            ordinal,
+            &self.compiled_cue_lists[&active.cue_list_id],
+        );
+        Ok(())
+    }
+
     pub fn release_at_mutation(
         &mut self,
         identity: PlaybackIdentity,

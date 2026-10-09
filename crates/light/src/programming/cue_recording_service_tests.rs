@@ -744,6 +744,7 @@ fn runtime_projection(show_id: ShowId, playback: u16, cue_id: Uuid) -> PlaybackR
         target: PlaybackTargetProjection::CueList {
             cue_list_id: CueListId::new(),
             runtime: Some(Box::new(CueListRuntimeProjection {
+                owner: None,
                 cue_index: 0,
                 previous_index: None,
                 current: Some(PlaybackCueReference {

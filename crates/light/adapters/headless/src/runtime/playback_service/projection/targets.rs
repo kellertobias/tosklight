@@ -11,7 +11,7 @@ use light_control::speed::{
 };
 use light_core::CueListId;
 use light_engine::EngineSnapshot;
-use light_playback::PlaybackRuntimeStatus;
+use light_playback::{PlaybackIdentity, PlaybackRuntimeStatus};
 
 use super::super::super::{application_millis, speed_group_index};
 use super::super::{ServerPlaybackPorts, invalid};
@@ -37,6 +37,26 @@ pub(super) fn cue_list_projection(
 fn runtime_projection(status: &PlaybackRuntimeStatus) -> CueListRuntimeProjection {
     let playback = &status.playback;
     CueListRuntimeProjection {
+        owner: status
+            .source
+            .playback_identity
+            .or_else(|| {
+                status
+                    .source
+                    .playback_number
+                    .and_then(|number| PlaybackIdentity::physical(number).ok())
+            })
+            .map(|identity| match identity {
+                PlaybackIdentity::Physical(number) => {
+                    PlaybackRuntimeIdentity::Playback(number.get())
+                }
+                PlaybackIdentity::Virtual(address) => PlaybackRuntimeIdentity::Virtual(address),
+            })
+            .or_else(|| {
+                (status.source.playback_number.is_none()
+                    && status.source.playback_identity.is_none())
+                .then_some(PlaybackRuntimeIdentity::DirectCueList(playback.cue_list_id))
+            }),
         cue_index: playback.cue_index,
         previous_index: playback.previous_index,
         current: cue(playback.current_cue_id, playback.current_cue_number.clone()),

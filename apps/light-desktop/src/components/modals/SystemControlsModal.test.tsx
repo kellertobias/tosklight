@@ -150,6 +150,8 @@ const mapped = runningSource(12, "cue-list-1", "Main playback", {
 const direct = runningSource(null, "cue-list-2", "Virtual Cuelist", {
 	paused: true,
 });
+direct.identity = { kind: "virtual", page: 1, playback_number: 1001 };
+direct.key = "virtual:1.1001";
 const playbackAuthority = {
 	ready: true,
 	loading: false,

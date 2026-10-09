@@ -483,6 +483,49 @@ describe("PlaybackRuntimeActionWriter", () => {
 		);
 	});
 
+	it("releases an independently hydrated direct selector and installs its related exact result", async () => {
+		const aggregate = directCueProjection();
+		if (aggregate.target !== "cue_list")
+			throw new Error("Expected cue fixture");
+		const identity = {
+			kind: "direct_cue_list" as const,
+			cue_list_id: aggregate.cue_list_id,
+		};
+		const exact = { ...aggregate, requested: identity };
+		const store = new PlaybackRuntimeStore();
+		store.reset(SHOW_ID, DESK_ID);
+		store.installSnapshot(playbackSnapshot([identity], 10, [exact]), [
+			identity,
+		]);
+		const applyAction = vi.fn(async (_showId, _deskId, request) => ({
+			...outcome(request, released(aggregate), 12),
+			related: [{ projection: released(exact), event_sequence: 11 }],
+		}));
+		const writer = new PlaybackRuntimeActionWriter({
+			showId: SHOW_ID,
+			deskId: DESK_ID,
+			store,
+			applyAction,
+		});
+		expect(
+			await writer.releaseCueListSource({
+				identity,
+				cueListId: aggregate.cue_list_id,
+			}),
+		).not.toBeNull();
+		expect(applyAction.mock.calls[0][2].address).toEqual({
+			kind: "cue_list",
+			cue_list_id: aggregate.cue_list_id,
+		});
+		const result = store
+			.getSnapshot()
+			.projections.get(`direct-cuelist:${aggregate.cue_list_id}`)?.[0];
+		if (result?.target !== "cue_list")
+			throw new Error("Expected exact direct result");
+		expect(result.runtime).toBeNull();
+		expect(store.getSnapshot().error).toBeNull();
+	});
+
 	it("deduplicates a mapped release event arriving after its response", async () => {
 		const store = readyStore();
 		const projection = released(cueProjection());

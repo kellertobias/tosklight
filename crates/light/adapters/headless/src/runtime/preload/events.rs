@@ -184,7 +184,9 @@ fn event_playback_number(identity: &PlaybackIdentity) -> Option<u16> {
     match identity {
         PlaybackIdentity::Playback(number) => Some(*number),
         PlaybackIdentity::Virtual(address) => Some(address.number().get()),
-        PlaybackIdentity::CueList(_) | PlaybackIdentity::Group(_) => None,
+        PlaybackIdentity::CueList(_)
+        | PlaybackIdentity::DirectCueList(_)
+        | PlaybackIdentity::Group(_) => None,
     }
 }
 
@@ -215,7 +217,8 @@ fn identity_sort_key(identity: PlaybackIdentity) -> (u8, u128) {
             u128::from(address.page()) * 10_000 + u128::from(address.number().get()),
         ),
         PlaybackIdentity::CueList(id) => (2, id.0.as_u128()),
-        PlaybackIdentity::Group(_) => (3, 0),
+        PlaybackIdentity::DirectCueList(id) => (3, id.0.as_u128()),
+        PlaybackIdentity::Group(_) => (4, 0),
     }
 }
 

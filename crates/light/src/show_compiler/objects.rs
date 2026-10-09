@@ -27,8 +27,56 @@ pub(super) fn decode<T: DeserializeOwned>(
 pub(super) fn decode_cue_lists(
     candidate: PortableShowCandidate<'_>,
 ) -> Result<Vec<CueList>, ActionError> {
-    let lists: Vec<CueList> = decode(candidate, "cue_list")?;
-    for list in &lists {
+    let mut lists: Vec<CueList> = decode(candidate, "cue_list")?;
+    if lists.iter().flat_map(|list| &list.cues).any(|cue| {
+        cue.changes
+            .iter()
+            .any(|change| change.preset_reference.is_some())
+            || cue
+                .group_changes
+                .iter()
+                .any(|change| change.preset_reference.is_some())
+    }) {
+        let presets: Vec<Preset> = decode(candidate, "preset")?;
+        let mut catalog = HashMap::new();
+        for preset in presets {
+            if let Some(id) = preset.instance_id
+                && catalog.insert(id, preset).is_some()
+            {
+                return Err(invalid_candidate(format!(
+                    "duplicate Preset instance identity {id}; recreate the copied Preset before linking Cues"
+                )));
+            }
+        }
+        let presets = catalog;
+        let native = super::native_sources::compile(candidate, None)?;
+        for cue in lists.iter_mut().flat_map(|list| &mut list.cues) {
+            for change in &mut cue.changes {
+                if change.value.is_some()
+                    && let Some(reference) = &change.preset_reference
+                    && let Some(value) = super::cue_presets::resolve(reference, &presets, &native)
+                {
+                    change.value = Some(value);
+                }
+            }
+            for change in &mut cue.group_changes {
+                if change.value.is_some()
+                    && let Some(reference) = &change.preset_reference
+                    && let Some(value) = super::cue_presets::resolve(reference, &presets, &native)
+                {
+                    change.value = Some(value);
+                }
+            }
+        }
+    }
+    for list in &mut lists {
+        if list.required_programming_contract()
+            >= light_core::programming::LIVE_PRESET_REFERENCE_CONTRACT
+        {
+            // Cue-only baselines are derived from current live source values, never stale
+            // materialized restoration rows persisted by an earlier source generation.
+            light_playback::refresh_cue_only_restorations(list);
+        }
         list.validate_programming().map_err(|error| {
             invalid_candidate(format!("invalid cue list {}: {error}", list.id.0))
         })?;
@@ -109,6 +157,14 @@ pub(super) fn decode_dynamics(
             dynamics
                 .iter()
                 .map(light_dynamics::DynamicDefinition::required_programming_contract),
+        )
+        .chain(
+            candidate
+                .objects_of_kind("cue_list")
+                .filter(|object| {
+                    light_show::required_object_programming_contract(object.body()) > 1
+                })
+                .map(|_| light_core::programming::LIVE_PRESET_REFERENCE_CONTRACT),
         )
         .max()
         .unwrap_or(0);

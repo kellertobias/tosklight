@@ -135,6 +135,7 @@ fn preset_store_modes_are_explicit() {
     let fixture = FixtureId::new();
     let other = FixtureId::new();
     let mut preset = Preset {
+        instance_id: None,
         name: "A".into(),
         family: PresetFamily::Intensity,
         number: 1,
@@ -148,6 +149,7 @@ fn preset_store_modes_are_explicit() {
     };
     preset.store(
         Preset {
+            instance_id: None,
             name: String::new(),
             family: PresetFamily::Intensity,
             number: 1,
@@ -168,6 +170,7 @@ fn preset_store_modes_are_explicit() {
     assert!(preset.values.contains_key(&other));
     preset.store(
         Preset {
+            instance_id: None,
             name: "B".into(),
             family: PresetFamily::Mixed,
             number: 1,
@@ -481,4 +484,151 @@ fn one_shared_whole_colour_consolidates_into_a_universal_color_preset() {
     }))
     .unwrap();
     assert!(!legacy.is_universal());
+}
+
+#[test]
+fn recalled_origin_is_captured_and_same_value_touch_detaches_only_that_address() {
+    use light_core::{PresetValueOwner, PresetValueReference};
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    registry.start(session);
+    let a = FixtureId::new();
+    let b = FixtureId::new();
+    let attribute = AttributeKey("intensity".into());
+    registry.set_many(
+        session,
+        [a, b].map(|fixture| (fixture, attribute.clone(), AttributeValue::Normalized(0.5))),
+    );
+    let identity = uuid::Uuid::new_v4();
+    let origins = [a, b].map(|fixture| {
+        (
+            PresetValueOwner::Fixture {
+                fixture_id: fixture,
+            },
+            attribute.clone(),
+            PresetValueReference {
+                preset_instance_id: identity,
+                source_owner: PresetValueOwner::Universal,
+                source_attribute: attribute.clone(),
+                sample_rank: None,
+                member_fixture: Some(fixture),
+            },
+        )
+    });
+    assert!(registry.attach_preset_provenance(session, &origins, false, true));
+    let capture = registry
+        .capture_cue_recording(session, crate::CueRecordingSource::CurrentCapture)
+        .unwrap();
+    assert!(
+        capture
+            .fixture_values
+            .iter()
+            .all(|value| value.preset_reference.is_some())
+    );
+    let recall = [a, b].map(
+        |fixture_id| crate::NormalProgrammerValueMutation::SetFixture {
+            fixture_id,
+            attribute: attribute.clone(),
+            value: AttributeValue::Normalized(0.5),
+            timing: Default::default(),
+        },
+    );
+    let context = "preset:1.1".to_owned();
+    assert!(
+        !registry
+            .apply_normal_preset_recall(session, &recall, context.clone())
+            .unwrap()
+            .values_changed
+    );
+    assert!(
+        !registry
+            .apply_normal_preset_recall(session, &recall, context)
+            .unwrap()
+            .changed()
+    );
+    assert!(!registry.attach_preset_provenance(session, &origins, false, true));
+    assert_eq!(
+        registry
+            .capture_cue_recording(session, crate::CueRecordingSource::CurrentCapture)
+            .unwrap()
+            .fixture_values,
+        capture.fixture_values
+    );
+    assert!(registry.apply_normal_values(
+        session,
+        &[crate::NormalProgrammerValueMutation::SetFixture {
+            fixture_id: a,
+            attribute: attribute.clone(),
+            value: AttributeValue::Normalized(0.5),
+            timing: Default::default()
+        }]
+    ));
+    let capture = registry
+        .capture_cue_recording(session, crate::CueRecordingSource::CurrentCapture)
+        .unwrap();
+    assert!(
+        capture
+            .fixture_values
+            .iter()
+            .find(|value| value.fixture_id == a)
+            .unwrap()
+            .preset_reference
+            .is_none()
+    );
+    assert!(
+        capture
+            .fixture_values
+            .iter()
+            .find(|value| value.fixture_id == b)
+            .unwrap()
+            .preset_reference
+            .is_some()
+    );
+}
+
+#[test]
+fn persisted_clear_cannot_reuse_an_old_reference_edit_identity() {
+    use light_core::{PresetValueOwner, PresetValueReference};
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    registry.start(session);
+    let fixture = FixtureId::new();
+    let attribute = AttributeKey::intensity();
+    registry.set(
+        session,
+        fixture,
+        attribute.clone(),
+        AttributeValue::Normalized(0.5),
+    );
+    let reference = PresetValueReference {
+        preset_instance_id: uuid::Uuid::new_v4(),
+        source_owner: PresetValueOwner::Universal,
+        source_attribute: attribute.clone(),
+        sample_rank: None,
+        member_fixture: Some(fixture),
+    };
+    registry.attach_preset_provenance(
+        session,
+        &[(
+            PresetValueOwner::Fixture {
+                fixture_id: fixture,
+            },
+            attribute.clone(),
+            reference,
+        )],
+        false,
+        false,
+    );
+    registry.clear_normal_values(session);
+    let restored: ProgrammerState =
+        serde_json::from_value(serde_json::to_value(registry.get(session).unwrap()).unwrap())
+            .unwrap();
+    let reopened = ProgrammerRegistry::default();
+    reopened.restore(restored);
+    reopened.set(session, fixture, attribute, AttributeValue::Normalized(0.5));
+    let capture = reopened
+        .capture_cue_recording(session, crate::CueRecordingSource::CurrentCapture)
+        .unwrap();
+    assert_eq!(capture.fixture_values.len(), 1);
+    assert!(capture.fixture_values[0].preset_reference.is_none());
 }

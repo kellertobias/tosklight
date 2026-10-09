@@ -118,7 +118,7 @@ impl Engine {
     pub fn new(programmers: ProgrammerRegistry) -> Self {
         Self::with_programming_contract_support(
             programmers,
-            light_core::programming::PROGRAMMING_CONTRACT_VERSION,
+            light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT,
         )
     }
 

@@ -223,11 +223,29 @@ impl<'a> ServerProgrammingPorts<'a> {
     ) -> Result<(usize, Option<String>, bool), String> {
         let show_id = self.active_show_id()?;
         let context = recording_context(context, "preset-record");
+        let (tokens, _) = super::super::tokenize_programmer_command(raw_command)?;
+        let (option, _) = super::record_update_option::parse_option(&tokens[1..]);
+        let mode = match option
+            .unwrap_or_else(|| super::record_update_option::record_default(self.state))
+        {
+            light_application::programming_update::RecordUpdateOption::Smart => {
+                light_programmer::PresetStoreMode::Overwrite
+            }
+            light_application::programming_update::RecordUpdateOption::Merge => {
+                light_programmer::PresetStoreMode::Merge
+            }
+            light_application::programming_update::RecordUpdateOption::AddExisting => {
+                light_programmer::PresetStoreMode::AddMissingFixtures
+            }
+            light_application::programming_update::RecordUpdateOption::AddCue => {
+                return Err("Add Cue applies to Cues, not Presets".into());
+            }
+        };
         let command = light_application::ProgrammingPresetRecordRequest {
             show_id,
             address,
             name: format!("Preset {}", address.storage_key()),
-            mode: light_programmer::PresetStoreMode::Overwrite,
+            mode,
             expected_object_revision:
                 light_application::ProgrammingPresetRevisionExpectation::Current,
             expected_show_revision: None,

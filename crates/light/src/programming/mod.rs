@@ -165,4 +165,5 @@ mod tests;
 pub use preset_recall_plan::{
     as_preload as preload_preset_mutations, materialize_preset_fixture_values,
     materialize_preset_fixture_values_with_native_models, plan_preset_selection_values,
+    preset_value_origins,
 };

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn mapped_cue_action_uses_playback_service_and_publishes_one_osc_event() {
+fn mapped_cue_action_publishes_one_osc_transition_per_exact_and_aggregate_identity() {
     let (state, data_dir) = test_state();
     let cue_list = mapped_test_cue_list();
     let cue_list_id = cue_list.id;
@@ -33,16 +33,75 @@ fn mapped_cue_action_uses_playback_service_and_publishes_one_osc_event() {
     ) else {
         panic!("mapped Cue event should be retained");
     };
-    assert_eq!(events.len(), 1);
-    assert_eq!(events[0].desk_id, None);
-    assert_eq!(
-        events[0].source,
-        light_application::EventSource::Action(light_application::ActionSource::Osc)
+    // The pool aggregate and the exact direct owner are independent subscribers. One
+    // OSC action publishes each identity once; only its primary event owns the GO.
+    assert_eq!(events.len(), 2);
+    let mut changes = Vec::new();
+    for event in &events {
+        assert_eq!(event.desk_id, None);
+        assert_eq!(
+            event.source,
+            light_application::EventSource::Action(light_application::ActionSource::Osc)
+        );
+        assert_eq!(event.correlation_id, events[0].correlation_id);
+        let light_application::ApplicationEvent::Playback(
+            light_application::PlaybackEvent::RuntimeChanged(change),
+        ) = &event.payload
+        else {
+            panic!("mapped Cue event must be a runtime projection");
+        };
+        changes.push(change.as_ref());
+    }
+    for identity in [
+        light_application::PlaybackRuntimeIdentity::CueList(cue_list_id),
+        light_application::PlaybackRuntimeIdentity::DirectCueList(cue_list_id),
+    ] {
+        assert_eq!(
+            changes
+                .iter()
+                .filter(|change| change.projection.requested == identity)
+                .count(),
+            1,
+            "each subscriber identity receives exactly one projection"
+        );
+    }
+    let aggregate = changes
+        .iter()
+        .find(|change| {
+            change.projection.requested
+                == light_application::PlaybackRuntimeIdentity::CueList(cue_list_id)
+        })
+        .unwrap();
+    let direct = changes
+        .iter()
+        .find(|change| {
+            change.projection.requested
+                == light_application::PlaybackRuntimeIdentity::DirectCueList(cue_list_id)
+        })
+        .unwrap();
+    assert!(
+        direct.transition.is_none(),
+        "related owner feedback does not execute another GO"
     );
-    assert!(matches!(
-        &events[0].payload,
-        light_application::ApplicationEvent::Playback(_)
-    ));
+    let transition = aggregate.transition.as_ref().expect("GO advances one Cue");
+    assert_eq!(transition.cue_list_id, cue_list_id.0);
+    assert_eq!(
+        transition.cause,
+        light_application::PlaybackTransitionCause::Go
+    );
+    assert_eq!(transition.current.as_ref().unwrap().number, cue("1"));
+    for change in &changes {
+        let runtime = change.projection.cue_list_runtime().unwrap();
+        assert!(runtime.enabled);
+        assert_eq!(
+            runtime.owner,
+            Some(light_application::PlaybackRuntimeIdentity::DirectCueList(
+                cue_list_id
+            ))
+        );
+        assert_eq!(runtime.current, transition.current);
+        assert_eq!(runtime.transition_ordinal, transition.transition_ordinal);
+    }
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

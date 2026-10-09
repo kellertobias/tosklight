@@ -159,6 +159,7 @@ fn cue_group_spread_re_resolves_against_current_membership_on_recall() {
     let list_id = light_core::CueListId::new();
     let mut cue = light_playback::Cue::new(1_u16.into());
     cue.group_changes.push(light_playback::GroupCueChange {
+        preset_reference: None,
         group_id: "wave".into(),
         attribute: AttributeKey::intensity(),
         value: Some(AttributeValue::Spread(vec![1.0, 0.0, 1.0])),
@@ -229,6 +230,7 @@ fn cue_group_spread_uses_shared_spatial_ranks() {
     let list_id = light_core::CueListId::new();
     let mut cue = light_playback::Cue::new(1_u16.into());
     cue.group_changes.push(light_playback::GroupCueChange {
+        preset_reference: None,
         group_id: "mapped".into(),
         attribute: AttributeKey::intensity(),
         value: Some(AttributeValue::Spread(vec![1.0, 0.0, 1.0])),

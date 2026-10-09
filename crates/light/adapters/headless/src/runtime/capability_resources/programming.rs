@@ -1,6 +1,21 @@
 use super::*;
 
 impl ProgrammingResource {
+    pub(in crate::runtime) fn attach_preset_provenance(
+        &self,
+        session: SessionId,
+        origins: &[(
+            light_core::PresetValueOwner,
+            light_core::AttributeKey,
+            light_core::PresetValueReference,
+        )],
+        preload: bool,
+        checkpoint: bool,
+    ) -> bool {
+        self.programmers
+            .attach_preset_provenance(session, origins, preload, checkpoint)
+    }
+
     /// Enter after activation and before the ActiveShowService operation mutex. Existing
     /// commands reuse the reentrant Programmer gate. Desk ownership remains with interaction
     /// and selection callbacks, which must not be nested under another non-reentrant desk gate.

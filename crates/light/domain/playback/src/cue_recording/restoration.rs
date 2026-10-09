@@ -218,6 +218,7 @@ fn fixture_restorations(
         .iter()
         .filter(|change| !change.automatic_restore && !explicit.contains(&change.address()))
         .map(|change| CueChange {
+            preset_reference: None,
             fixture_id: change.fixture_id,
             attribute: change.attribute.clone(),
             value: state.get(&change.address()).cloned(),
@@ -243,6 +244,7 @@ fn group_restorations(
         .iter()
         .filter(|change| !change.automatic_restore && !explicit.contains(&group_address(change)))
         .map(|change| GroupCueChange {
+            preset_reference: None,
             group_id: change.group_id.clone(),
             attribute: change.attribute.clone(),
             value: state.get(&group_address(change)).cloned(),

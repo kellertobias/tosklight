@@ -219,6 +219,7 @@ async fn mvr_reimport_updates_patch_and_geometry_only_and_never_rebinds_semantic
             .unwrap();
         let position = ProgrammingOwner::Position.key();
         let aim_preset = Preset {
+            instance_id: None,
             name: "TL-560 aim".into(),
             family: PresetFamily::Position,
             number: 1,
@@ -248,6 +249,7 @@ async fn mvr_reimport_updates_patch_and_geometry_only_and_never_rebinds_semantic
             universal_values: HashMap::new(),
         };
         let color_preset = Preset {
+            instance_id: None,
             name: "TL-560 front".into(),
             family: PresetFamily::Color,
             number: 1,
@@ -423,6 +425,7 @@ async fn mvr_reimport_leaves_desk_patched_media_layers_and_their_media_color_unt
             .unwrap();
         let color = ProgrammingOwner::Color.key();
         let preset = Preset {
+            instance_id: None,
             name: "TL-560 media".into(),
             family: PresetFamily::Color,
             number: 2,

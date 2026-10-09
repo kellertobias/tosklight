@@ -184,6 +184,7 @@ fn transfer_cue(
 
 fn transfer_group_change(group_id: &str, value: f32) -> light_playback::GroupCueChange {
     light_playback::GroupCueChange {
+        preset_reference: None,
         group_id: group_id.into(),
         attribute: light_core::AttributeKey::intensity(),
         value: Some(light_core::AttributeValue::Normalized(value)),

@@ -122,6 +122,7 @@ impl OperationalScenario {
     async fn exercise_presets_and_playback(&self) {
         let session = authenticate_token(&self.state, &self.token).unwrap();
         let preset = light_programmer::Preset {
+            instance_id: None,
             name: "Three quarter".into(),
             family: light_programmer::PresetFamily::Intensity,
             number: 1,

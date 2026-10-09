@@ -66,6 +66,18 @@ Preset families are Mixed, Intensity, Color, Position, and Beam. Intensity store
 
 Each family is a separate pool with its own local preset numbers. The command-line address combines type and number: `0.1` is Mixed 1, `1.1` is Intensity 1, `2.1` is Color 1, `3.1` is Position 1, and `4.1` is Beam 1. The dotted address is not a global preset ID, so all five presets numbered 1 can coexist.
 
+When you recall a Preset and record its values into a Cue, those addresses retain their source
+Preset. Merging or updating that Preset changes the linked Cue values, including a Cue that is
+already running. Clear the Programmer to see playback alone. Editing a recalled value directly
+before recording stores that address independently; the other recalled addresses keep their links.
+Older Cues containing only recorded values remain independent.
+
+Moving a Preset preserves its links. Copying it creates a separate source. Deleting the source,
+or removing an attribute it supplied, makes a Cue use its recorded fallback; Cuelist View explains
+the missing source and how to restore or re-record it. A new Preset at the old number does not
+take over that link. Shows containing these links require a runtime that supports live Preset
+references; an older runtime refuses the show rather than silently changing its behavior.
+
 The lower-left corner of every stored Group and Preset tile shows how many fixtures it holds. A Group
 tile reads its member count, for example `8 fx`. A Preset tile reads `active/defined`, for example
 `3/8 fx`. The

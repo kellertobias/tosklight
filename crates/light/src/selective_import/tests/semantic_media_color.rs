@@ -99,6 +99,7 @@ fn group_color(layer: Uuid) -> AttributeValue {
 
 fn preset(layers: [FixtureId; 2]) -> Preset {
     Preset {
+        instance_id: None,
         name: "Media colour".into(),
         family: PresetFamily::Color,
         number: 1,
@@ -122,6 +123,7 @@ fn cue_list(layers: [FixtureId; 2]) -> Value {
         color(warm_white_3200()),
     )];
     let group_changes = vec![GroupCueChange {
+        preset_reference: None,
         group_id: GROUP.into(),
         attribute: key_of(ProgrammingOwner::Color),
         value: Some(group_color(layers[0].0)),

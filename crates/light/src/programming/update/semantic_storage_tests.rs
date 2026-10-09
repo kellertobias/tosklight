@@ -660,6 +660,7 @@ fn preset_object_id(family: PresetFamily) -> &'static str {
 
 fn preset_from(family: PresetFamily, intent: &Intent) -> Preset {
     let mut preset = Preset {
+        instance_id: None,
         name: format!("TL-627 {family:?}"),
         family,
         number: 1,
@@ -952,6 +953,7 @@ fn cue_with(number: f64, intent: &Intent) -> Cue {
         .groups
         .iter()
         .map(|(group_id, attribute, value)| GroupCueChange {
+            preset_reference: None,
             group_id: group_id.clone(),
             attribute: attribute.clone(),
             value: Some(value.clone()),

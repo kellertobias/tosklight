@@ -5,6 +5,7 @@ import { useCommandLineSurface } from "../../components/control/commandLine/useC
 import type { Cue } from "../../api/types";
 import type { WindowProps } from "../windowTypes";
 import { CuePropertyModal } from "./CueProperties";
+import { CuePresetWarnings } from "./CuePresetWarnings";
 import {
 	type CueEditableProperty,
 	CueTable,
@@ -140,6 +141,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 					]}
 				/>
 			)}
+			<CuePresetWarnings cues={cues} active={props.active} />
 			<div
 				className={`sequence-layout ${props.cueInformationBlock !== "off" ? "with-cue-information" : ""}`.trim()}
 			>

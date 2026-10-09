@@ -30,7 +30,7 @@ pub(in crate::runtime) fn automatic_changes(
     }
     transitions
         .into_iter()
-        .map(|transition| {
+        .flat_map(|transition| {
             let requested = transition.playback_number.map_or(
                 PlaybackRuntimeIdentity::CueList(transition.cue_list_id),
                 PlaybackRuntimeIdentity::Playback,
@@ -43,7 +43,9 @@ pub(in crate::runtime) fn automatic_changes(
                         .and_then(|identity| engine.playback_runtime_status_at(identity))
                 },
             );
-            AutomaticPlaybackProjection {
+            let exact_status = engine.playback_runtime_status_for_cue_list(transition.cue_list_id);
+            let exact = automatic_source_projection(scope, &transition, exact_status.as_ref());
+            let aggregate = AutomaticPlaybackProjection {
                 projection: cue_list_projection(
                     scope,
                     requested,
@@ -52,9 +54,40 @@ pub(in crate::runtime) fn automatic_changes(
                     status.as_ref(),
                 ),
                 transition,
-            }
+            };
+            std::iter::once(aggregate).chain(exact)
         })
         .collect()
+}
+
+/// Additional exact source feedback leaves the existing aggregate/assignment event unchanged.
+pub(super) fn automatic_source_projection(
+    scope: PlaybackShowScope,
+    transition: &light_playback::AutomaticPlaybackTransition,
+    status: Option<&light_playback::PlaybackRuntimeStatus>,
+) -> Option<AutomaticPlaybackProjection> {
+    let (requested, number) = match status.and_then(|status| status.source.playback_identity) {
+        Some(PlaybackIdentity::Virtual(address)) => (
+            PlaybackRuntimeIdentity::Virtual(address),
+            Some(address.number().get()),
+        ),
+        _ if transition.playback_number.is_none() => (
+            PlaybackRuntimeIdentity::DirectCueList(transition.cue_list_id),
+            None,
+        ),
+        _ => return None,
+    };
+    let status = if matches!(requested, PlaybackRuntimeIdentity::DirectCueList(_)) {
+        status.filter(|status| {
+            status.source.playback_number.is_none() && status.source.playback_identity.is_none()
+        })
+    } else {
+        status
+    };
+    Some(AutomaticPlaybackProjection {
+        projection: cue_list_projection(scope, requested, number, transition.cue_list_id, status),
+        transition: transition.clone(),
+    })
 }
 
 pub(super) fn projection(
@@ -80,6 +113,17 @@ pub(super) fn projection(
                 .state
                 .output
                 .playback_runtime_status_for_cue_list(cue_list_id)
+                .as_ref(),
+        )),
+        PlaybackRuntimeIdentity::DirectCueList(cue_list_id) => Ok(cue_list_projection(
+            scope,
+            identity,
+            None,
+            cue_list_id,
+            ports
+                .state
+                .output
+                .playback_runtime_status_for_direct_cue_list(cue_list_id)
                 .as_ref(),
         )),
         PlaybackRuntimeIdentity::Group(ref group_id) => {
@@ -164,6 +208,19 @@ fn project_identity(
                 .state
                 .output
                 .playback_runtime_status_for_cue_list(cue_list_id);
+            result.push(cue_list_projection(
+                scope,
+                identity,
+                None,
+                cue_list_id,
+                status.as_ref(),
+            ));
+        }
+        PlaybackRuntimeIdentity::DirectCueList(cue_list_id) => {
+            let status = ports
+                .state
+                .output
+                .playback_runtime_status_for_direct_cue_list(cue_list_id);
             result.push(cue_list_projection(
                 scope,
                 identity,

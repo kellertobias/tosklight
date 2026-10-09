@@ -67,6 +67,9 @@ pub(super) fn execute_preset_mutation(
         let destination_id = destination.storage_key();
         let mut destination_body = source_object.body.clone();
         destination_body["number"] = serde_json::json!(destination.number);
+        if operation == "COPY" {
+            destination_body["instance_id"] = serde_json::json!(uuid::Uuid::new_v4());
+        }
         let mut mutations = vec![
             put_active_show_object(
                 light_application::ActiveShowObjectKind::Preset,

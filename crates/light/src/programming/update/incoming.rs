@@ -14,6 +14,14 @@ pub(super) enum IncomingValue<'a> {
 }
 
 impl IncomingValue<'_> {
+    pub(super) fn preset_reference(&self) -> Option<&light_core::PresetValueReference> {
+        match self {
+            Self::Fixture(value) => value.preset_reference.as_ref(),
+            Self::Group(value) => value.preset_reference.as_ref(),
+            Self::Dynamic(_) => None,
+        }
+    }
+
     pub(super) fn programmer_order(&self) -> u64 {
         match self {
             Self::Fixture(value) => value.programmer_order,

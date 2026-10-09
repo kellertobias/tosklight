@@ -43,7 +43,7 @@ export type PlaybackDeskPageApply = (
 
 type CueListPlaybackIdentity = Extract<
 	PlaybackIdentity,
-	{ kind: "playback" | "cue_list" }
+	{ kind: "playback" | "cue_list" | "direct_cue_list" }
 >;
 
 export interface CueListRuntimeSource {
@@ -274,7 +274,11 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		if (!this.isCurrent(scope)) return null;
 		this.assertRunningCueListSource(source);
 		const request = cueListReleaseRequest(source);
-		const token = this.options.store.beginRequest(source.identity);
+		const token = this.options.store.beginRequest(
+			source.identity.kind === "direct_cue_list"
+				? { kind: "cue_list", cue_list_id: source.cueListId }
+				: source.identity,
+		);
 		try {
 			const outcome = await this.options.applyAction(
 				this.options.showId,
@@ -332,7 +336,8 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 				? source.identity.playback_number
 				: null;
 		if (
-			source.identity.kind === "cue_list" &&
+			(source.identity.kind === "cue_list" ||
+				source.identity.kind === "direct_cue_list") &&
 			source.identity.cue_list_id !== source.cueListId
 		)
 			throw new Error("Cuelist release identity does not match its source");

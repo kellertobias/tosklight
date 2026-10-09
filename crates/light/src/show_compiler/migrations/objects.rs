@@ -468,6 +468,9 @@ fn migrate_preset(object: PortableShowCandidateObject<'_>) -> Result<Value, Acti
     preset
         .reconcile_address(object.key().id())
         .map_err(|error| invalid_object(object, error))?;
+    if preset.instance_id.is_none() {
+        preset.instance_id = Some(uuid::Uuid::new_v4());
+    }
     let after = serde_json::to_value(preset).map_err(|error| invalid_object(object, error))?;
     let mut migrated = object.body().clone();
     lossless_json::apply_delta(&mut migrated, &before, &after);

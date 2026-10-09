@@ -203,6 +203,7 @@ fn fix_at_command_accepts_a_named_preset_batch_with_timing() {
     };
     state.active_show.replace_current(Some(entry.clone()));
     let preset = light_programmer::Preset {
+        instance_id: None,
         name: "Half".into(),
         family: light_programmer::PresetFamily::Intensity,
         number: 7,

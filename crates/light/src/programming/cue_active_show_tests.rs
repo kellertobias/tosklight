@@ -736,6 +736,7 @@ fn capture(level: f32) -> CueRecordingCapture {
         dynamic_values: Vec::new(),
         source: CueRecordingCapturedSource::Normal,
         fixture_values: vec![CueRecordingFixtureValue {
+            preset_reference: None,
             fixture_id: FixtureId(Uuid::from_u128(10)),
             attribute: AttributeKey::intensity(),
             value: AttributeValue::Normalized(level),

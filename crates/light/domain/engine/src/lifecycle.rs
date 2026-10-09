@@ -732,6 +732,7 @@ fn resolved_group_changes(
     values
         .into_iter()
         .map(|(fixture_id, value)| CueChange {
+            preset_reference: change.preset_reference.clone(),
             fixture_id,
             attribute: change.attribute.clone(),
             value,

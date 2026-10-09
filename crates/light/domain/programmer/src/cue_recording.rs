@@ -38,6 +38,8 @@ impl Error for CueRecordingCaptureError {}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CueRecordingFixtureValue {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset_reference: Option<light_core::PresetValueReference>,
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,
     pub value: AttributeValue,
@@ -49,6 +51,8 @@ pub struct CueRecordingFixtureValue {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CueRecordingGroupValue {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset_reference: Option<light_core::PresetValueReference>,
     pub group_id: String,
     pub attribute: AttributeKey,
     pub value: AttributeValue,
@@ -107,10 +111,24 @@ fn capture(state: &ProgrammerState, requested: CueRecordingSource) -> CueRecordi
     let source = captured_source(state, requested);
     let (fixture_values, group_values, group_release_values, dynamic_values) =
         source_values(state, source);
+    let mut fixture_values = ordered_fixture_values(fixture_values);
+    let mut group_values = ordered_group_values(group_values);
+    for value in &mut fixture_values {
+        value.preset_reference = state
+            .preset_provenance
+            .get(&value.programmer_order)
+            .cloned();
+    }
+    for value in &mut group_values {
+        value.preset_reference = state
+            .preset_provenance
+            .get(&value.programmer_order)
+            .cloned();
+    }
     CueRecordingCapture {
         source,
-        fixture_values: ordered_fixture_values(fixture_values),
-        group_values: ordered_group_values(group_values),
+        fixture_values,
+        group_values,
         group_release_values: ordered_group_release_values(group_release_values),
         dynamic_values: ordered_dynamic_values(dynamic_values),
     }
@@ -241,6 +259,7 @@ fn ordered_group_values(
 
 fn fixture_value(value: &TimedValue) -> CueRecordingFixtureValue {
     CueRecordingFixtureValue {
+        preset_reference: None,
         fixture_id: value.fixture_id,
         attribute: value.attribute.clone(),
         value: value.value.clone(),
@@ -257,6 +276,7 @@ fn group_value(
     value: &GroupProgrammerValue,
 ) -> CueRecordingGroupValue {
     CueRecordingGroupValue {
+        preset_reference: None,
         group_id: group_id.to_owned(),
         attribute: attribute.clone(),
         value: value.value.clone(),

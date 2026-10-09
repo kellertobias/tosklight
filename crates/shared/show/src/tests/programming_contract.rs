@@ -615,3 +615,49 @@ fn contract_one_writers_refuse_legacy_programming_before_storing_it() {
 fn marker_of(store: &ShowStore) -> ProgrammingContractMarker {
     store.programming_contract_marker().unwrap()
 }
+
+#[test]
+fn feature_two_only_for_live_references_and_never_downgrades_after_reopen() {
+    let (path, store) = create("live-preset-contract");
+    let mut document = store.portable_document().unwrap();
+    let mut literal = document.transaction();
+    literal.put("cue_list", "literal", json!({"cues": [{"changes": []}]}));
+    literal.check_programming_contract(2).unwrap();
+    literal.stamp_programming_contract(2);
+    let commit = store.apply_portable_transaction(literal).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(1)
+    );
+    validate_show_programming_contract(&path, 1).unwrap();
+
+    let reference = json!({"preset_instance_id": uuid::Uuid::new_v4(), "source_owner": {"type": "universal"}, "source_attribute": "intensity"});
+    let mut linked = document.transaction();
+    linked.put("cue_list", "linked", json!({"cues": [{"changes": [{"attribute":"intensity", "value":normalized(0.5), "preset_reference":reference}]}]}));
+    assert!(linked.check_programming_contract(1).is_err());
+    linked.check_programming_contract(2).unwrap();
+    linked.stamp_programming_contract(2);
+    let commit = store.apply_portable_transaction(linked).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(2)
+    );
+    assert!(validate_show_programming_contract(&path, 1).is_err());
+    validate_show_programming_contract(&path, 2).unwrap();
+    drop(store);
+    let reopened = ShowStore::open(&path).unwrap();
+    let mut document = reopened.portable_document().unwrap();
+    let mut later = document.transaction();
+    later.put("preset", "1.9", json!({"values":{}, "universal_values":{}}));
+    later.stamp_programming_contract(2);
+    let commit = reopened.apply_portable_transaction(later).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(2)
+    );
+    drop(reopened);
+    remove(&path);
+}

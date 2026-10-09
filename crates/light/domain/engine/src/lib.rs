@@ -45,6 +45,7 @@ mod move_in_black_runtime;
 mod playback;
 mod playback_batch;
 mod playback_exclusion;
+mod playback_start;
 mod point_projection;
 mod position_adoption;
 pub use position_adoption::{PositionCommandedOwnerReadout, PositionCommandedReadout};
@@ -113,6 +114,7 @@ pub use playback_batch::{
     PreparedPreloadPlaybackBatch,
 };
 pub use playback_exclusion::PoolPlaybackTransition;
+pub use playback_start::PlaybackStartFrame;
 pub use point_projection::{POINT_AXIS_METRES, ResolvedPointPose};
 pub use render_phases::{
     accumulated_microseconds, enabled as render_phases_enabled, reset as reset_render_phases,

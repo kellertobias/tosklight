@@ -728,6 +728,14 @@ impl OutputResource {
             .playback_runtime_status_for_cue_list(cue_list_id)
     }
 
+    pub(in crate::runtime) fn playback_runtime_status_for_direct_cue_list(
+        &self,
+        cue_list_id: light_core::CueListId,
+    ) -> Option<light_playback::PlaybackRuntimeStatus> {
+        self.engine
+            .playback_runtime_status_for_direct_cue_list(cue_list_id)
+    }
+
     pub(in crate::runtime) fn set_cue_external_completion_millis(
         &self,
         cue_list_id: light_core::CueListId,
@@ -858,8 +866,13 @@ impl OutputResource {
         started_at: chrono::DateTime<chrono::Utc>,
         fallback_millis: u64,
     ) -> Result<light_engine::PreparedPlaybackBatch, String> {
-        self.engine
-            .prepare_playback_batch(commands, started_at, fallback_millis)
+        let start = self.published_playback_start();
+        self.engine.prepare_playback_batch_from_published(
+            commands,
+            started_at,
+            fallback_millis,
+            start.as_ref(),
+        )
     }
 
     pub(in crate::runtime) fn install_prepared_playback_batch(
@@ -920,7 +933,18 @@ impl OutputResource {
         &self,
         command: EnginePlaybackCommand,
     ) -> Result<EnginePlaybackOutcome, String> {
-        self.engine.execute_playback(command)
+        let start = self.published_playback_start();
+        self.engine
+            .execute_playback_from_published(command, start.as_ref())
+    }
+
+    // Read the immutable publisher before acquiring any Playback or Dynamic guard.
+    fn published_playback_start(&self) -> Option<light_engine::PlaybackStartFrame> {
+        let frame = self.latest_visualization_frame()?;
+        Some(light_engine::PlaybackStartFrame::from_published(
+            frame.source_snapshot.clone(),
+            frame.values.clone(),
+        ))
     }
 
     pub(in crate::runtime) fn playback_control_state_at(
@@ -937,11 +961,13 @@ impl OutputResource {
         exclusion_zones: &[Vec<u16>],
         activation_origin: Option<light_playback::PlaybackActivationOrigin>,
     ) -> Result<light_engine::PoolPlaybackTransition, String> {
-        self.engine.execute_pool_playback_with_activation(
+        let start = self.published_playback_start();
+        self.engine.execute_pool_playback_with_published_activation(
             number,
             action,
             exclusion_zones,
             activation_origin,
+            start.as_ref(),
         )
     }
 
@@ -1119,6 +1145,15 @@ impl OutputResource {
         self.network
             .as_ref()
             .map(|output| output.route_send_errors())
+            .unwrap_or_default()
+    }
+
+    pub(in crate::runtime) fn current_route_delivery(
+        &self,
+    ) -> Vec<light_output::CurrentRouteDelivery> {
+        self.network
+            .as_ref()
+            .map(|output| output.current_route_delivery(&self.snapshot().routes))
             .unwrap_or_default()
     }
 

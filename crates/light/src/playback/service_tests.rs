@@ -895,7 +895,9 @@ fn missing_projection(identity: PlaybackRuntimeIdentity) -> PlaybackRuntimeProje
     let playback_number = match &identity {
         PlaybackRuntimeIdentity::Playback(number) => Some(*number),
         PlaybackRuntimeIdentity::Virtual(address) => Some(address.number().get()),
-        PlaybackRuntimeIdentity::CueList(_) | PlaybackRuntimeIdentity::Group(_) => None,
+        PlaybackRuntimeIdentity::CueList(_)
+        | PlaybackRuntimeIdentity::DirectCueList(_)
+        | PlaybackRuntimeIdentity::Group(_) => None,
     };
     PlaybackRuntimeProjection {
         scope: test_scope(),

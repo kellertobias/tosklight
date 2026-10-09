@@ -52,6 +52,16 @@ pub(in crate::runtime) fn application_identities(
             wire::PlaybackRuntimeIdentity::CueList { .. } => {
                 Err("cue_list_id must not be nil".into())
             }
+            wire::PlaybackRuntimeIdentity::DirectCueList { cue_list_id }
+                if !cue_list_id.is_nil() =>
+            {
+                Ok(application::PlaybackRuntimeIdentity::DirectCueList(
+                    light_core::CueListId(cue_list_id),
+                ))
+            }
+            wire::PlaybackRuntimeIdentity::DirectCueList { .. } => {
+                Err("cue_list_id must not be nil".into())
+            }
             wire::PlaybackRuntimeIdentity::Group { group_id } => {
                 application::PlaybackGroupId::new(&group_id)
                     .map(application::PlaybackRuntimeIdentity::Group)
@@ -335,6 +345,11 @@ fn wire_identity(identity: application::PlaybackRuntimeIdentity) -> wire::Playba
         }
         application::PlaybackRuntimeIdentity::CueList(cue_list_id) => {
             wire::PlaybackRuntimeIdentity::CueList {
+                cue_list_id: cue_list_id.0,
+            }
+        }
+        application::PlaybackRuntimeIdentity::DirectCueList(cue_list_id) => {
+            wire::PlaybackRuntimeIdentity::DirectCueList {
                 cue_list_id: cue_list_id.0,
             }
         }

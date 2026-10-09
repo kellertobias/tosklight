@@ -38,6 +38,14 @@ fn tracked_fixture_changes(source: &CueList, source_index: usize) -> Vec<CueChan
         .state_at_index(source_index)
         .into_iter()
         .map(|((fixture_id, attribute), value)| CueChange {
+            preset_reference: source
+                .cues
+                .iter()
+                .take(source_index.saturating_add(1))
+                .flat_map(|cue| &cue.changes)
+                .rev()
+                .find(|change| change.fixture_id == fixture_id && change.attribute == attribute)
+                .and_then(|change| change.preset_reference.clone()),
             fixture_id,
             attribute,
             value: Some(value),
@@ -64,6 +72,14 @@ fn tracked_group_changes(source: &CueList, source_index: usize) -> Vec<GroupCueC
     let mut changes = state
         .into_iter()
         .map(|((group_id, attribute), value)| GroupCueChange {
+            preset_reference: source
+                .cues
+                .iter()
+                .take(source_index.saturating_add(1))
+                .flat_map(|cue| &cue.group_changes)
+                .rev()
+                .find(|change| change.group_id == group_id && change.attribute == attribute)
+                .and_then(|change| change.preset_reference.clone()),
             group_id,
             attribute,
             value: Some(value),
@@ -118,6 +134,7 @@ mod tests {
             AttributeValue::Normalized(1.0),
         ));
         cue_one.group_changes.push(GroupCueChange {
+            preset_reference: None,
             group_id: "1".into(),
             attribute: AttributeKey("pan".into()),
             value: Some(AttributeValue::Normalized(0.25)),
@@ -196,6 +213,7 @@ mod tests {
         ]);
         let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
         second.changes.push(CueChange {
+            preset_reference: None,
             fixture_id: released,
             attribute: AttributeKey::intensity(),
             value: None,
@@ -232,6 +250,7 @@ mod tests {
 
     fn timed_fixture_set(fixture_id: FixtureId, value: f32) -> CueChange {
         CueChange {
+            preset_reference: None,
             fixture_id,
             attribute: AttributeKey::intensity(),
             value: Some(AttributeValue::Normalized(value)),
@@ -243,6 +262,7 @@ mod tests {
 
     fn timed_group_set(group_id: &str, value: f32) -> GroupCueChange {
         GroupCueChange {
+            preset_reference: None,
             group_id: group_id.into(),
             attribute: AttributeKey::intensity(),
             value: Some(AttributeValue::Normalized(value)),
