@@ -751,3 +751,5 @@ fn mvr_missing_full_library_revision_never_publishes_a_stripped_catalog() {
             .any(|warning| warning.contains("disappeared during preview"))
     );
 }
+
+mod binding_candidates;

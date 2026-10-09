@@ -304,22 +304,45 @@ pub fn resolve_mvr_definition(
     definitions: &[FixtureDefinition],
     fixture: &MvrFixture,
 ) -> Option<FixtureDefinition> {
-    let normalized = fixture.gdtf_spec.replace('\\', "/").to_ascii_lowercase();
-    let spec = normalized
-        .rsplit('/')
-        .next()
-        .unwrap_or(&normalized)
-        .trim_end_matches(".gdtf");
+    let spec = mvr_source_spec(fixture);
     let mut matches = definitions.iter().filter(|definition| {
-        definition.mode.eq_ignore_ascii_case(&fixture.gdtf_mode)
-            && (definition.model.eq_ignore_ascii_case(spec)
-                || definition.name.eq_ignore_ascii_case(spec)
-                || format!("{}@{}", definition.manufacturer, definition.model)
-                    .eq_ignore_ascii_case(spec))
+        matches_mvr_definition_metadata(
+            &definition.manufacturer,
+            &definition.model,
+            &definition.name,
+            &definition.mode,
+            &spec,
+            &fixture.gdtf_mode,
+        )
     });
     let first = matches.next()?;
     // A name is only a fallback when it has one meaning in this library.
     matches.next().is_none().then(|| first.clone())
+}
+
+/// Preserve the installed-definition fallback's basename and alias rules without projection.
+pub(super) fn mvr_source_spec(fixture: &MvrFixture) -> String {
+    let normalized = fixture.gdtf_spec.replace('\\', "/").to_ascii_lowercase();
+    normalized
+        .rsplit('/')
+        .next()
+        .unwrap_or(&normalized)
+        .trim_end_matches(".gdtf")
+        .to_owned()
+}
+
+pub(super) fn matches_mvr_definition_metadata(
+    manufacturer: &str,
+    model: &str,
+    name: &str,
+    mode: &str,
+    spec: &str,
+    requested_mode: &str,
+) -> bool {
+    mode.eq_ignore_ascii_case(requested_mode)
+        && (model.eq_ignore_ascii_case(spec)
+            || name.eq_ignore_ascii_case(spec)
+            || format!("{manufacturer}@{model}").eq_ignore_ascii_case(spec))
 }
 
 fn validate_unique_source_ids(fixtures: &[MvrFixture]) -> Result<(), ActionError> {

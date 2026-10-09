@@ -1,9 +1,9 @@
 //! Canonical source/mode binding shared by Control and Architect. No writes occur here.
-use super::resolve_mvr_definition;
+use super::plan::{matches_mvr_definition_metadata, mvr_source_spec};
 use crate::{ActionError, ActionErrorKind};
 use light_core::FixtureId;
 use light_fixture::{FixtureDefinition, FixtureProfile};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 fn invalid(message: impl Into<String>) -> ActionError {
     ActionError::new(ActionErrorKind::Invalid, message)
@@ -24,26 +24,18 @@ pub fn bind_mvr_sources(
     mut resolve_revision: impl FnMut(FixtureId, u32) -> Result<Option<FixtureProfile>, ActionError>,
     unknown_attributes: impl Fn(&FixtureProfile) -> Vec<String>,
 ) -> Result<MvrDefinitions, ActionError> {
-    let mut installed = Vec::new();
-    for profile in installed_profiles {
-        let mut catalog = profile.clone();
-        catalog.source_gdtf = None;
-        for mode in &catalog.modes {
-            installed.push(
-                catalog
-                    .resolved_definition(mode.id)
-                    .map_err(|error| invalid(error.to_string()))?,
-            );
-        }
-    }
-    for legacy in legacy_definitions {
-        if !installed
-            .iter()
-            .any(|definition| definition.id == legacy.id)
-        {
-            installed.push(legacy.clone());
-        }
-    }
+    // Match cheap catalog metadata first. Projection validates and calibrates a full profile;
+    // unrelated library entries must not add that work (or errors) to this MVR preview.
+    let mut installed_ids = installed_profiles
+        .iter()
+        .filter(|profile| !profile.modes.is_empty())
+        .map(|profile| profile.id)
+        .collect::<HashSet<_>>();
+    let legacy = legacy_definitions
+        .iter()
+        .filter(|definition| installed_ids.insert(definition.id))
+        .collect::<Vec<_>>();
+    let mut installed_projections = HashMap::<(FixtureId, u32, Uuid), FixtureDefinition>::new();
     let native = crate::mvr_export::tosklight_mvr_fixture_metadata(document);
     let mut result = MvrDefinitions::default();
     let mut parsed = HashMap::<String, Result<usize, String>>::new();
@@ -63,34 +55,84 @@ pub fn bind_mvr_sources(
             }
         };
         let Some((path, bytes)) = member else {
-            if let Some(mut definition) = resolve_mvr_definition(&installed, fixture) {
-                // Catalogs may omit source bytes. Capture the authoritative immutable snapshot.
-                if let (Some(profile_id), Some(mode_id)) =
-                    (definition.profile_id, definition.mode_id)
-                {
-                    let Some(profile) = resolve_revision(profile_id, definition.revision)? else {
-                        result.warnings.push(format!(
-                            "{}: the installed profile revision disappeared during preview; preview again",
-                            fixture.name,
-                        ));
+            let spec = mvr_source_spec(fixture);
+            let profiles = installed_profiles
+                .iter()
+                .flat_map(|profile| {
+                    profile.modes.iter().filter_map(|mode| {
+                        matches_mvr_definition_metadata(
+                            &profile.manufacturer,
+                            &profile.short_name,
+                            &profile.name,
+                            &mode.name,
+                            &spec,
+                            &fixture.gdtf_mode,
+                        )
+                        .then_some((profile.id, profile.revision, mode.id))
+                    })
+                })
+                .collect::<Vec<_>>();
+            let definitions = legacy
+                .iter()
+                .copied()
+                .filter(|definition| {
+                    matches_mvr_definition_metadata(
+                        &definition.manufacturer,
+                        &definition.model,
+                        &definition.name,
+                        &definition.mode,
+                        &spec,
+                        &fixture.gdtf_mode,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let key = match (profiles.as_slice(), definitions.as_slice()) {
+                ([key], []) => *key,
+                ([], [definition]) => {
+                    if let (Some(profile_id), Some(mode_id)) =
+                        (definition.profile_id, definition.mode_id)
+                    {
+                        (profile_id, definition.revision, mode_id)
+                    } else {
+                        result
+                            .definitions
+                            .insert(fixture.uuid, (*definition).clone());
                         continue;
-                    };
-                    if profile.id != profile_id || profile.revision != definition.revision {
-                        return Err(invalid(
-                            "installed MVR profile resolver returned a different revision",
-                        ));
                     }
-                    definition = profile
-                        .resolved_definition(mode_id)
-                        .map_err(|error| invalid(error.to_string()))?;
                 }
-                result.definitions.insert(fixture.uuid, definition);
-            } else {
-                result.warnings.push(format!(
-                    "{}: archive {} is absent and no unique installed profile/mode matches",
-                    fixture.name, fixture.gdtf_spec
-                ));
+                _ => {
+                    result.warnings.push(format!(
+                        "{}: archive {} is absent and no unique installed profile/mode matches",
+                        fixture.name, fixture.gdtf_spec
+                    ));
+                    continue;
+                }
+            };
+            if let std::collections::hash_map::Entry::Vacant(entry) =
+                installed_projections.entry(key)
+            {
+                // Catalogs may omit source bytes. Retain the authoritative immutable snapshot.
+                let Some(profile) = resolve_revision(key.0, key.1)? else {
+                    result.warnings.push(format!(
+                        "{}: the installed profile revision disappeared during preview; preview again",
+                        fixture.name,
+                    ));
+                    continue;
+                };
+                if profile.id != key.0 || profile.revision != key.1 {
+                    return Err(invalid(
+                        "installed MVR profile resolver returned a different revision",
+                    ));
+                }
+                entry.insert(
+                    profile
+                        .resolved_definition(key.2)
+                        .map_err(|error| invalid(error.to_string()))?,
+                );
             }
+            result
+                .definitions
+                .insert(fixture.uuid, installed_projections[&key].clone());
             continue;
         };
         let parsed_profile = parsed.entry(path.to_owned()).or_insert_with(|| {
