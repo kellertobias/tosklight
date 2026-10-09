@@ -187,35 +187,8 @@ async fn execute_action(
             root_id,
             path,
         } => execute_export_mvr_file(state, show_id, data_base64, name, root_id, path),
-        Action::SaveCopyToPeer {
-            instance,
-            source_show_id,
-            name,
-            root_id,
-            path,
-            is_base_show,
-        } => {
-            execute_save_copy_to_peer(
-                state,
-                request_id,
-                instance,
-                source_show_id,
-                name,
-                root_id,
-                path,
-                is_base_show,
-            )
-            .await
-        }
-        Action::ExportMvrToPeer {
-            instance,
-            show_id,
-            name,
-            root_id,
-            path,
-        } => {
-            execute_export_mvr_to_peer(state, request_id, instance, show_id, name, root_id, path)
-                .await
+        action @ (Action::SaveCopyToPeer { .. } | Action::ExportMvrToPeer { .. }) => {
+            execute_peer_export_action(state, request_id, action).await
         }
         Action::Create {
             name,
@@ -308,6 +281,47 @@ async fn execute_action(
             )
             .await
         }
+    }
+}
+
+async fn execute_peer_export_action(
+    state: &AppState,
+    request_id: &str,
+    action: wire::ShowLibraryAction,
+) -> Result<wire::ShowLibraryActionResult, ApiError> {
+    use wire::ShowLibraryAction as Action;
+    match action {
+        Action::SaveCopyToPeer {
+            instance,
+            source_show_id,
+            name,
+            root_id,
+            path,
+            is_base_show,
+        } => {
+            execute_save_copy_to_peer(
+                state,
+                request_id,
+                instance,
+                source_show_id,
+                name,
+                root_id,
+                path,
+                is_base_show,
+            )
+            .await
+        }
+        Action::ExportMvrToPeer {
+            instance,
+            show_id,
+            name,
+            root_id,
+            path,
+        } => {
+            execute_export_mvr_to_peer(state, request_id, instance, show_id, name, root_id, path)
+                .await
+        }
+        _ => unreachable!("peer export action was validated by show-library dispatch"),
     }
 }
 
