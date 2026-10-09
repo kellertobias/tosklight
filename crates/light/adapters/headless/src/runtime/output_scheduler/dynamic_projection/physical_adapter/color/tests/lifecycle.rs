@@ -870,3 +870,119 @@ fn recorded_direct_cues_keep_tagged_identity_through_reload_replacement_group_an
     };
     assert_eq!(recipe.source, identity(&source), "pinned identity survives");
 }
+
+/// Local retained-profile acceptance: the immutable original and saved recipes stay untouched
+/// across actual Cue recording and SQLite reopen, while the compiler may project optical units.
+#[test]
+#[ignore = "requires retained legacy profile and saved Direct recipes from local acceptance evidence"]
+fn retained_legacy_direct_color_reopens_and_resolves_exact_saved_controls() {
+    use light_fixture::PatchedHead;
+    let profile_path = std::env::var("LIGHT_FIXTURE_ACCEPTANCE_PROFILE").expect("profile input");
+    let recipes_path = std::env::var("LIGHT_FIXTURE_ACCEPTANCE_PROGRAMS").expect("recipe input");
+    let profile: FixtureProfile =
+        serde_json::from_slice(&std::fs::read(profile_path).unwrap()).unwrap();
+    let original_body = serde_json::to_value(&profile).unwrap();
+    let programs: Vec<ColorProgram> =
+        serde_json::from_slice(&std::fs::read(recipes_path).unwrap()).unwrap();
+    assert_eq!(programs.len(), 2, "saved red and blue recipes");
+    let mode = &profile.modes[0];
+    let show = Show::new();
+    let original_revision = FixtureProfileRevision::from_profile(original_body.clone()).unwrap();
+    show.store()
+        .insert_fixture_profile_revision(&original_revision)
+        .unwrap();
+    let mut targets = Vec::new();
+    for (index, program) in programs.iter().enumerate() {
+        let ColorProgram::Direct { recipe, .. } = program else {
+            panic!("saved Direct recipe required")
+        };
+        assert_eq!(recipe.source.mode_id, mode.id);
+        assert_eq!(recipe.source.profile_id, profile.id.0);
+        let head_index = mode
+            .heads
+            .iter()
+            .position(|head| head.id == recipe.source.head_id)
+            .unwrap();
+        let root = FixtureId::new();
+        let target = FixtureId::new();
+        let mut placed = fixture(&profile, root, index as u32 + 1, index as u16 * 20 + 1);
+        placed.logical_heads = vec![PatchedHead {
+            profile_head_id: Some(recipe.source.head_id),
+            head_index: head_index as u16,
+            fixture_id: target,
+        }];
+        let record = PortablePatchedFixtureRecord::from_runtime_fixture(&placed).unwrap();
+        show.put("patched_fixture", &root.0.to_string(), record.into_body());
+        targets.push(target);
+        show.programmers.set(
+            show.session,
+            target,
+            ProgrammingOwner::Color.key(),
+            AttributeValue::ColorProgram(Arc::new(program.clone())),
+        );
+        show.programmers.set(
+            show.session,
+            target,
+            AttributeKey("intensity".into()),
+            AttributeValue::Normalized(1.0),
+        );
+    }
+    show.record(1.0);
+    let saved_list = show.cue_list();
+    for _ in 0..2 {
+        let snapshot = show.compile();
+        assert_eq!(
+            show.cue_list(),
+            saved_list,
+            "reopen must not rewrite saved recipes"
+        );
+        let retained = show
+            .store()
+            .resolve_fixture_profile_revision(profile.id, profile.revision.into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            retained.profile(),
+            original_revision.profile(),
+            "SQLite must preserve the immutable original profile body"
+        );
+        assert_eq!(
+            retained.digest(),
+            original_revision.digest(),
+            "SQLite must preserve the original profile digest"
+        );
+        let output = Output::new();
+        output.go(snapshot, 1.0);
+        for (target, program) in targets.iter().zip(&programs) {
+            assert_eq!(
+                output.played_value(*target),
+                AttributeValue::ColorProgram(Arc::new(program.clone()))
+            );
+            let (_, result) = output.resolve_played(*target);
+            assert_eq!(
+                result.quality.direct.as_ref().unwrap().replay,
+                DirectReplayOutcome::Exact
+            );
+            let ColorProgram::Direct { recipe, .. } = program else {
+                unreachable!()
+            };
+            assert_eq!(result.writes.len(), recipe.channels.len());
+            for channel in &recipe.channels {
+                let write = result
+                    .writes
+                    .iter()
+                    .find(|write| write.channel_id == channel.channel_id)
+                    .expect("every saved native control is written");
+                assert_eq!(
+                    write.raw, channel.raw,
+                    "original recipe control must replay exactly"
+                );
+            }
+            assert!(
+                result.writes.iter().any(|write| write.raw > 0),
+                "red/blue must not become black"
+            );
+        }
+    }
+    assert_eq!(serde_json::to_value(&profile).unwrap(), original_body);
+}
