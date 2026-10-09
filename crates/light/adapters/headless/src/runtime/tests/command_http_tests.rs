@@ -37,3 +37,5 @@ mod tl560_direct_undo;
 
 #[path = "position_intent_authoring_tests.rs"]
 mod position_intent_authoring;
+
+mod release_command_regressions;

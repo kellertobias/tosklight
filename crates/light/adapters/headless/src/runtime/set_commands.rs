@@ -164,14 +164,16 @@ fn assignment_playback(
             ) {
                 return Err("targetless Dynamics cannot be assigned directly to a Playback".into());
             }
-            let revision = existing_assignment(state, context, target_address)?
-                .and_then(|playback| match playback.target {
-                    light_playback::PlaybackTarget::Dynamic { assignment } => {
-                        assignment.revision.checked_add(1)
-                    }
-                    _ => Some(1),
-                })
-                .ok_or("Dynamic Playback assignment revision is exhausted")?;
+            let revision = match existing_assignment(state, context, target_address)? {
+                Some(light_playback::PlaybackDefinition {
+                    target: light_playback::PlaybackTarget::Dynamic { assignment },
+                    ..
+                }) => assignment
+                    .revision
+                    .checked_add(1)
+                    .ok_or("Dynamic Playback assignment revision is exhausted")?,
+                _ => 1,
+            };
             let target = light_playback::PlaybackTarget::Dynamic {
                 assignment: light_playback::DynamicPlaybackAssignment {
                     dynamic: light_dynamics::DynamicReference {

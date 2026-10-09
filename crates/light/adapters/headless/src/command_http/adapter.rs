@@ -548,6 +548,14 @@ pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static
     if super::speed_group_binding_command::parse(command)?.is_some() {
         return Ok(Some("Speed Group binding"));
     }
+    // Assignment is an atomic show-object action, even when its source is a Dynamic.
+    if command
+        .split_whitespace()
+        .next()
+        .is_some_and(|token| token.eq_ignore_ascii_case("ASSIGN"))
+    {
+        return Ok(Some("ASSIGN"));
+    }
     if command
         .split_whitespace()
         .any(|token| token.eq_ignore_ascii_case("DYNAMIC"))
