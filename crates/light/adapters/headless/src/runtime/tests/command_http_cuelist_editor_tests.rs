@@ -26,9 +26,8 @@ async fn set_cuelist_editor_http_and_osc_keypad_open_unassigned_uuid_without_pro
         assert_eq!(response.status(), StatusCode::OK, "key {key}: {}", json(response).await);
     }
     assert_eq!(cuelist_editor_events(&scenario).len(), 2, "literal SET/CUE/CUE keypad opens same UUID");
-    // Bare attached SET is an existing contextual window action; keep that convention.
-    // Start SET through the shared software keypad, then complete the authoritative line
-    // from the attached OSC keys, as the same desk supports mixed control surfaces.
+    // Starting through software and completing through OSC must share the same prefix,
+    // just as the pure OSC sequence below does. Selection-context SET remains contextual.
     assert_eq!(scenario.press_key(&scenario.token, "SET", "editor-osc-prefix").await.status(), StatusCode::OK);
     assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().command_line.trim(), "SET");
     let source: SocketAddr = "127.0.0.1:9135".parse().unwrap();
@@ -85,5 +84,51 @@ async fn set_cuelist_editor_keeps_shifted_assign_and_existing_physical_set_addre
     let response = scenario.execute("independent-editor-after-assign", Some("SET CUELIST 15")).await;
     assert_eq!(response.status(), StatusCode::OK, "{}", json(response).await);
     assert_eq!(cuelist_editor_events(&scenario)[0]["value"], stored_cue_list(&scenario, 15).2.id.0.to_string());
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn pure_osc_set_cue_cue_opens_editor_without_assignment_or_programmer_changes() {
+    let scenario = CommandHttpScenario::new().await;
+    scenario.create_and_open_show("Pure OSC Cuelist editor").await;
+    set_cue_record_value(&scenario);
+    let response = scenario.execute("osc-editor-seed104", Some("RECORD CUELIST 104 CUE 1")).await;
+    assert_eq!(response.status(), StatusCode::OK, "{}", json(response).await);
+    let (_, object, list) = stored_cue_list(&scenario, 104);
+    let revision = active_show_revision(&scenario);
+    let before = json(scenario.values_snapshot().await).await["projection"].clone();
+    let source: SocketAddr = "127.0.0.1:9140".parse().unwrap();
+    scenario.state.integrations.register_osc_subscriber("pure-editor".into(), OscSubscriber {
+        capability: light_core::SurfaceCapability::Programming,
+        path: "desk".into(), target: source, command_source: source,
+        session_id: scenario.session.id, last_seen: Instant::now(), shifted: false, shift_held: false,
+        update_record_started: None, update_first_release: None, last_highlight_action: None,
+    });
+    for (key, expected) in [("set", "SET"), ("cue", "SET CUE"), ("cue", "SET CUELIST"),
+        ("digit-1", "SET CUELIST 1"), ("digit-0", "SET CUELIST 10"), ("digit-4", "SET CUELIST 104"), ("enter", "")] {
+        for pressed in [true, false] {
+            handle_programmer_osc(&scenario.state, &format!("/light/desk/programmer/{key}"),
+                &[OscArgument::Bool(pressed)], Some("127.0.0.1:9140"));
+            assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().command_line.trim(), expected,
+                "actual OSC key {key} pressed={pressed} preserves authoritative editor prefix");
+        }
+    }
+    let events = cuelist_editor_events(&scenario);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["value"], list.id.0.to_string());
+    assert_eq!(events[0]["desk_id"], scenario.session.desk.id.to_string());
+    assert!(!scenario.state.events.audit_events().iter().any(|event| event.kind == "desk_action" && event.payload["action"] == "set"),
+        "empty SET must not dispatch contextual Assign and race the authoritative prefix");
+    assert_eq!(active_show_revision(&scenario), revision);
+    assert_eq!(json(scenario.values_snapshot().await).await["projection"].clone(), before);
+    assert_eq!(stored_cue_list(&scenario, 104).1.body, object.body);
+    assert!(scenario.state.output.playback_runtime().is_empty());
+    // Shifted SET remains the documented Assign keyword, with release harmless.
+    for (key, pressed) in [("shift", true), ("set", true), ("set", false), ("shift", false)] {
+        handle_programmer_osc(&scenario.state, &format!("/light/desk/programmer/{key}"),
+            &[OscArgument::Bool(pressed)], Some("127.0.0.1:9140"));
+    }
+    assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().command_line.trim(), "ASSIGN");
+    assert_eq!(cuelist_editor_events(&scenario).len(), 1);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

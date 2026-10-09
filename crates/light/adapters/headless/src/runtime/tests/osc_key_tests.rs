@@ -61,6 +61,14 @@ fn focused_macro_editor_routes_attached_keypad_input_without_mutating_command_li
             && event.payload["source"] == "osc"
     }));
 
+    state.programming.set_command_line(session.id, String::new());
+    assert!(handle_programmer_osc(&state, "/light/main/programmer/set",
+        &[OscArgument::Bool(true)], Some("127.0.0.1:9018")));
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "",
+        "claimed file-input context has priority over the empty SET editor prefix");
+    assert!(state.events.audit_events().iter().any(|event| event.kind == "file_input_action"
+        && event.payload["action"] == "set" && event.payload["instance_id"] == "macro-editor:acceptance"));
+
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -156,6 +164,9 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
             last_highlight_action: None,
         },
     );
+    // A literal selection context keeps bare SET as a contextual configuration action.
+    // Empty SET is covered separately as the authoritative editor-command prefix.
+    state.programming.set_command_line(session.id, "GROUP".into());
     let pressed = [OscArgument::Bool(true)];
     handle_control_event(
         &state,
@@ -181,7 +192,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
                     == Some(&OscArgument::String("hardware-set-1".into()))
         }
     ));
-    assert_eq!(state.programming.get(session.id).unwrap().command_line, "");
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "GROUP");
     assert!(state.events.audit_events().iter().any(|event| {
         event.kind == "desk_action"
             && event.payload["action"] == "set"
@@ -246,6 +257,15 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         timings_before_release,
         "Programmer key release is not measured as another action"
     );
+    state.programming.set_command_target(session.id, "GROUP".into());
+    state.programming.set_command_line(session.id, "FIXTURE".into());
+    let contextual_before = state.events.audit_events().iter()
+        .filter(|event| event.kind == "desk_action" && event.payload["action"] == "set").count();
+    handle_programmer_osc(&state, "/light/main/programmer/set", &pressed, Some("127.0.0.1:9010"));
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "FIXTURE");
+    state.programming.set_command_target(session.id, "FIXTURE".into());
+    assert_eq!(state.events.audit_events().iter()
+        .filter(|event| event.kind == "desk_action" && event.payload["action"] == "set").count(), contextual_before + 1);
     state
         .programming
         .set_command_line(session.id, "COPY".into());
