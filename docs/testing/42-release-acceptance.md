@@ -82,6 +82,21 @@ For each finding write `briefings/<finding-ID>.md`: impact/severity, candidate/e
 | MAP-05 | Recall/run original presets and cues after replacement, repeat Dynamics and save/reopen. | Same intent, supported aim/Zoom, compatible source behavior and no deleted reference. Record before/after DMX and visible/physical evidence. Compare numerical resolution and attainable gamut, not invented exactness. |
 | MAP-06 | Inspect current calibration forms, invalid data, cancel, independent copies and stale profile/mode/geometry measurements. Write guided-calibration design proposal. | Honest provenance/quality and saved-state behavior; identify live versus save-only calibration using witnessed output. Design remains TL-672 in Defined; no implementation. |
 
+
+### Replacement history and explicit ownership regression
+
+Use an isolated show and a real replacement whose master attributes move to two independently controlled heads. Record the exact old/new profile revisions, fixture UUIDs, source attributes and operator choices. Choose the replacement projection explicitly in the UI; missing decisions must reject before persistence and leave patch, programming and output unchanged. Fresh master programming after replacement must follow the new profile contract, without inheriting the old fixture root's consent.
+
+Repeat these independent sequences with actual Art-Net and sACN captures:
+
+1. Program the old root at 40%, replace, then Undo and Redo. Replacement creates no separate Programmer edit: Undo reverses the prior value edit while physical topology stays installed; Redo restores the consented intent to both destination heads.
+2. Program at 40%, Clear, replace while the programmer is empty, then Undo Clear. The restored historical intent reaches both heads. Repeat when a historical-only Color or Position attribute requires another decision; the preview must request that consent or reject safely rather than guess.
+3. Program 40%, change to 80%, replace, then Undo and Redo. Values follow the ordinary edit history while consented destination ownership remains correct.
+4. Repeat for pending and active Preload, including Undo/Redo and Clear. No unrelated normal, pending or active values change.
+5. After replacement, make a fresh explicit master edit. It follows only the new profile's documented master behavior. Undo restores the prior mapped intent; Redo restores the fresh edit without a stale projection envelope.
+
+Save a named revision and reopen through the UI. Repeat stored preset/cue/group output and the existing repeated-replacement tests. Keep transient Programmer history proof separate from persisted programming proof. Neither equal values nor fixture numbers establish source identity.
+
 Downloaded test inputs must have provenance and checksums. Initial research leads: [GDTF Share](https://gdtf-share.com/) and its [download/revision guide](https://gdtf-share.com/help/users/gdtf_share/). A source discovered online is not yet a downloaded or imported fixture. Never execute scripts from a fixture archive.
 
 ## Phase 2 — Settings and network output
