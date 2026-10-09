@@ -34,6 +34,8 @@ struct NativeMediaOutputConfiguration {
 #[derive(Deserialize)]
 struct NativeMediaOutputSummary {
     id: String,
+    #[serde(default)]
+    name: Option<String>,
 }
 
 const OUTDATED_SERVER: &str = "This Media Server needs an update before the desk can patch it. \
@@ -191,30 +193,42 @@ pub(super) async fn inspect_discovered_native_media_server(
              persists, update ToskLight Media.",
         );
     };
-    let outputs = futures_util::future::join_all(summaries.into_iter().map(|summary| {
+    let inspections = futures_util::future::join_all(summaries.into_iter().map(|summary| {
         let client = client.clone();
         let url = format!("{base}/outputs/{}/configuration", summary.id);
         let fallback = summary.id.parse::<Uuid>().ok();
         async move {
-            let value = match native_media_get::<serde_json::Value>(&client, &url).await {
-                Ok(value) => value,
-                // An outputs list without per-output configuration is an older server.
-                Err(_) => serde_json::json!({}),
-            };
-            classify_media_output(fallback, value)
+            match native_media_get::<serde_json::Value>(&client, &url).await {
+                Ok(value) => Ok(classify_media_output(fallback, value)),
+                Err(error) => Err(format!(
+                    "{} ({}) configuration unavailable: {}. Refresh discovery to retry; \
+                     patching this output requires a received compatible configuration.",
+                    summary.name.as_deref().unwrap_or("Output"),
+                    summary.id,
+                    error.message
+                )),
+            }
         }
     }))
-    .await
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>();
-    let error = if outputs.is_empty() {
-        Some(
-            "The Media Server has no readable output configuration. Refresh discovery; if it \
-              persists, update ToskLight Media.",
-        )
+    .await;
+    let mut outputs = Vec::new();
+    let mut failures = Vec::new();
+    for inspection in inspections {
+        match inspection {
+            Ok(Some(output)) => outputs.push(output),
+            Ok(None) => failures.push(
+                "An output returned configuration without a usable identity. Refresh discovery."
+                    .to_owned(),
+            ),
+            Err(error) => failures.push(error),
+        }
+    }
+    let error = if !failures.is_empty() {
+        Some(failures.join("\n"))
+    } else if outputs.is_empty() {
+        Some("The Media Server has no readable output configuration. Refresh discovery.".to_owned())
     } else if outputs.iter().all(|output| output.mode.is_none()) {
-        Some(OUTDATED_SERVER)
+        Some(OUTDATED_SERVER.to_owned())
     } else {
         None
     };
@@ -226,7 +240,7 @@ pub(super) async fn inspect_discovered_native_media_server(
         status: health.status,
         instance: Some(health.instance),
         outputs,
-        error: error.map(str::to_owned),
+        error,
     }
 }
 
