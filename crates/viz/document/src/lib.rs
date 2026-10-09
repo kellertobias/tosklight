@@ -15,6 +15,7 @@
 //! no export step, no second format.
 
 mod inputs;
+mod load;
 mod media;
 mod mvr;
 mod ports;
@@ -123,7 +124,7 @@ impl PlanningDocument {
     /// Opens an existing show file, whether this application or the desk wrote it.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, DocumentError> {
         let path = path.as_ref().to_path_buf();
-        let show_id = ShowStore::open(&path)?.id()?;
+        let show_id = load::open_canonical(&path)?;
         Ok(Self::assemble(path, show_id))
     }
 

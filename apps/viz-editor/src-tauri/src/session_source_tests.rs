@@ -20,6 +20,70 @@ fn session_with_store(directory: &std::path::Path) -> Session {
 }
 
 #[test]
+fn rejected_canonical_open_keeps_the_current_document() {
+    let directory = temporary("canonical-open-recovery");
+    let current = directory.join("current.show");
+    let rejected = directory.join("future.show");
+    let document = viz_document::PlanningDocument::create(&current, "Current").unwrap();
+    let current_id = document.show_id();
+    drop(document);
+    viz_document::PlanningDocument::create(&rejected, "Future").unwrap();
+    let store = light_show::ShowStore::open(&rejected).unwrap();
+    store
+        .set_metadata_values(&[("light.programming_contract", "65535")])
+        .unwrap();
+    drop(store);
+    let original = std::fs::read(&rejected).unwrap();
+    let session = session_with_store(&directory);
+    session.open(&current).unwrap();
+    // Real synchronization authority, using an unpolled current-thread runtime: no sockets,
+    // remote writes or live application. A failed load must not discard this engine.
+    struct OfflineHost;
+    impl viz_sync::DocumentHost for OfflineHost {
+        fn apply_remote(
+            &self,
+            _: &mut dyn FnMut(&viz_document::PlanningDocument) -> Result<bool, String>,
+        ) -> Result<(), String> {
+            Err("offline test host".into())
+        }
+        fn status_changed(&self, _: &viz_sync::SyncStatus) {}
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    session.set_sync_host(std::sync::Arc::new(OfflineHost), runtime.handle().clone());
+    let binding = SyncBinding::new(
+        None,
+        current_id.0,
+        "http://127.0.0.1:1".into(),
+        "Offline desk".into(),
+        0,
+    );
+    session.open_from_desk(&current, binding.clone()).unwrap();
+    session.sync_engine().unwrap().set_online(false);
+    let status = serde_json::to_value(session.sync_engine().unwrap().status()).unwrap();
+    assert!(session.open(&rejected).unwrap_err().contains("65535"));
+    assert_eq!(
+        session.with(|document| Ok(document.show_id())).unwrap(),
+        current_id
+    );
+    assert_eq!(
+        session.sync_engine().unwrap().binding().association_id,
+        binding.association_id
+    );
+    assert_eq!(
+        serde_json::to_value(session.sync_engine().unwrap().status()).unwrap(),
+        status
+    );
+    assert_eq!(std::fs::read(&rejected).unwrap(), original);
+    session.set_binding(None).unwrap();
+    drop(session);
+    drop(runtime);
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn a_binding_survives_reopening_but_does_not_travel_with_portable_copies() {
     let directory = temporary("binding-source");
     let path = directory.join("source.show");

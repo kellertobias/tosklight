@@ -326,7 +326,6 @@ impl Session {
     }
 
     fn open_path_locked(&self, path: &Path, created: Option<&str>) -> Answer<DocumentSummary> {
-        self.stop_sync();
         let document = match created {
             Some(name) => PlanningDocument::create(path, name),
             None => PlanningDocument::open(path),
@@ -334,6 +333,7 @@ impl Session {
         .map_err(|error| error.to_string())?;
         let document = self.attach_library(document)?;
         let summary = summarize(&document)?;
+        self.stop_sync();
         self.source.open(document);
         *self.pending_mvr.lock() = None;
         self.document_generation
