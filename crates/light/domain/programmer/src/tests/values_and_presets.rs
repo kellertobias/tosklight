@@ -632,3 +632,89 @@ fn persisted_clear_cannot_reuse_an_old_reference_edit_identity() {
     assert_eq!(capture.fixture_values.len(), 1);
     assert!(capture.fixture_values[0].preset_reference.is_none());
 }
+
+#[test]
+fn modern_position_store_supersedes_legacy_aim_only_when_authoritative() {
+    let identity = uuid::Uuid::new_v4();
+    let original = Preset {
+        instance_id: Some(identity),
+        name: "Follow target".into(),
+        family: PresetFamily::Position,
+        number: 7,
+        aim_at_fixture_number: Some(5),
+        ..Default::default()
+    };
+    let position = AttributeValue::Position(std::sync::Arc::new(
+        light_core::programming::PositionIntent::target(
+            light_core::programming::TargetReference::Origin,
+            [1.0, 2.0, 3.0],
+        ),
+    ));
+    for mode in [PresetStoreMode::Overwrite, PresetStoreMode::Merge] {
+        for owner in [0, 1, 2] {
+            let mut incoming = Preset {
+                family: PresetFamily::Position,
+                number: 7,
+                ..Default::default()
+            };
+            let values = [(AttributeKey("position".into()), position.clone())].into();
+            match owner {
+                0 => incoming.universal_values = values,
+                1 => {
+                    incoming.values.insert(FixtureId::new(), values);
+                }
+                _ => {
+                    incoming.group_values.insert("1".into(), values);
+                }
+            }
+            let mut stored = original.clone();
+            stored.store(incoming, mode);
+            assert_eq!(
+                stored.aim_at_fixture_number, None,
+                "{mode:?}, owner {owner}"
+            );
+            assert_eq!(stored.instance_id, Some(identity));
+            assert_eq!(stored.name, original.name);
+        }
+    }
+    for mode in [PresetStoreMode::Merge, PresetStoreMode::AddMissingFixtures] {
+        let mut stored = original.clone();
+        stored.store(
+            Preset {
+                family: PresetFamily::Position,
+                ..Default::default()
+            },
+            mode,
+        );
+        assert_eq!(
+            stored.aim_at_fixture_number,
+            Some(5),
+            "empty {mode:?} preserves legacy relation"
+        );
+    }
+    let mut stored = original.clone();
+    stored.store(
+        Preset {
+            family: PresetFamily::Position,
+            universal_values: [(AttributeKey("position".into()), position)].into(),
+            ..Default::default()
+        },
+        PresetStoreMode::AddMissingFixtures,
+    );
+    assert_eq!(
+        stored.aim_at_fixture_number,
+        Some(5),
+        "Add Missing does not replace the existing relation"
+    );
+    let mut stored = original.clone();
+    stored.store(
+        Preset {
+            family: PresetFamily::Position,
+            aim_at_fixture_number: Some(6),
+            ..Default::default()
+        },
+        PresetStoreMode::Overwrite,
+    );
+    assert_eq!(stored.aim_at_fixture_number, Some(6));
+    assert_eq!(stored.instance_id, Some(identity));
+}

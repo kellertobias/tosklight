@@ -7,7 +7,10 @@ pub(in crate::runtime) fn target_intent_from_frame(
     number: u32,
 ) -> Result<Option<PositionIntent>, String> {
     light_engine::aim_target_from_geometry(
-        &source.snapshot().fixtures, source.points(), source.mounts(), number,
+        &source.snapshot().fixtures,
+        source.points(),
+        source.mounts(),
+        number,
     )
 }
 

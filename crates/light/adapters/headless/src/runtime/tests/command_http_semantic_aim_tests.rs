@@ -201,132 +201,164 @@ async fn semantic_aim_v2_validates_missing_target_before_empty_selection_without
 
 #[tokio::test]
 async fn semantic_aim_record_stores_target_and_group_recall_keeps_live_owner() {
-    let scenario = CommandHttpScenario::new().await;
-    scenario.create_and_open_show("Stored semantic Aim").await;
-    let (point, mover, _) =
-        super::super::aim_point_tests::install_semantic_aim_rig(&scenario.state);
-    let show = scenario.state.active_show.current().clone().unwrap();
-    let rig = scenario.state.output.snapshot();
-    let group = rig.groups[0].clone();
-    ActiveShowRepository::open(&show.path)
-        .unwrap()
-        .put_object("group", "1", &serde_json::to_value(group).unwrap(), 0)
-        .unwrap();
-    let response = scenario
-        .execute("record-semantic-aim", Some("RECORD 3.7 AT FIXTURE 5"))
-        .await;
-    let status = response.status();
-    let outcome = json(response).await;
-    assert_eq!(status, StatusCode::OK, "{outcome:?}");
-    let show = scenario.state.active_show.current().clone().unwrap();
-    let repository = ActiveShowRepository::open(&show.path).unwrap();
-    let object = repository
-        .objects("preset")
-        .unwrap()
-        .into_iter()
-        .find(|object| object.id == "3.7")
-        .unwrap_or_else(|| panic!("Aim record did not create a preset: {outcome:?}"));
-    let recorded_body = object.body;
-    let preset: light_programmer::Preset = serde_json::from_value(recorded_body.clone()).unwrap();
-    assert_eq!(preset.aim_at_fixture_number, None);
-    assert!(preset.values.is_empty() && preset.group_values.is_empty());
-    assert_eq!(
-        preset.universal_values[&light_core::AttributeKey("position".into())],
-        requested(point)
-    );
-    // Record reconciles from the portable show; this authoring fixture rig is intentionally
-    // test-local, so restore its captured fixture models before the second target observation.
-    scenario
-        .state
-        .output
-        .replace_snapshot(light_engine::EngineSnapshot {
-            revision: scenario.state.output.snapshot().revision + 1,
-            ..rig.as_ref().clone()
-        })
-        .unwrap();
-    let response = scenario
-        .execute("overwrite-semantic-aim", Some("RECORD 3.7 AT FIXTURE 901"))
-        .await;
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "{:?}",
-        json(response).await
-    );
-    let overwritten = repository
-        .objects("preset")
-        .unwrap()
-        .into_iter()
-        .find(|object| object.id == "3.7")
-        .unwrap();
-    assert_ne!(
-        overwritten.body, recorded_body,
-        "the existing Target was overwritten"
-    );
-    let response = scenario
-        .press_key(&scenario.token, "UND", "undo-overwritten-aim")
-        .await;
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "{:?}",
-        json(response).await
-    );
-    let restored = repository
-        .objects("preset")
-        .unwrap()
-        .into_iter()
-        .find(|object| object.id == "3.7")
-        .unwrap();
-    assert_eq!(
-        restored.body, recorded_body,
-        "overwrite Undo restores the prior Target rather than deleting it"
-    );
-    assert_eq!(
+    for converting_legacy in [false, true] {
+        let scenario = CommandHttpScenario::new().await;
+        scenario.create_and_open_show("Stored semantic Aim").await;
+        let (point, mover, _) =
+            super::super::aim_point_tests::install_semantic_aim_rig(&scenario.state);
+        let show = scenario.state.active_show.current().clone().unwrap();
+        let rig = scenario.state.output.snapshot();
+        let group = rig.groups[0].clone();
+        ActiveShowRepository::open(&show.path)
+            .unwrap()
+            .put_object("group", "1", &serde_json::to_value(group).unwrap(), 0)
+            .unwrap();
+        let identity = uuid::Uuid::new_v4();
+        let mut legacy = legacy_aim(901);
+        legacy.instance_id = Some(identity);
+        legacy.name = "Preset 3.7".into();
+        let mut legacy_body = serde_json::to_value(legacy).unwrap();
+        legacy_body["future_extension"] = serde_json::json!({"retained":true});
+        if converting_legacy {
+            ActiveShowRepository::open(&show.path)
+                .unwrap()
+                .put_object("preset", "3.7", &legacy_body, 0)
+                .unwrap();
+        }
+        let response = scenario
+            .execute("record-semantic-aim", Some("RECORD 3.7 AT FIXTURE 5"))
+            .await;
+        let status = response.status();
+        let outcome = json(response).await;
+        assert_eq!(status, StatusCode::OK, "{outcome:?}");
+        let show = scenario.state.active_show.current().clone().unwrap();
+        let repository = ActiveShowRepository::open(&show.path).unwrap();
+        let object = repository
+            .objects("preset")
+            .unwrap()
+            .into_iter()
+            .find(|object| object.id == "3.7")
+            .unwrap_or_else(|| panic!("Aim record did not create a preset: {outcome:?}"));
+        let recorded_body = object.body;
+        let preset: light_programmer::Preset =
+            serde_json::from_value(recorded_body.clone()).unwrap();
+        assert_eq!(preset.aim_at_fixture_number, None);
+        assert_eq!(preset.name, "Preset 3.7");
+        if converting_legacy {
+            assert_eq!(preset.instance_id, Some(identity));
+            assert_eq!(
+                recorded_body["future_extension"],
+                legacy_body["future_extension"]
+            );
+        }
+        assert!(preset.values.is_empty() && preset.group_values.is_empty());
+        assert_eq!(
+            preset.universal_values[&light_core::AttributeKey("position".into())],
+            requested(point)
+        );
+        // Record reconciles from the portable show; this authoring fixture rig is intentionally
+        // test-local, so restore its captured fixture models before the second target observation.
         scenario
-            .execute("recall-live-aim", Some("GROUP 1 AT 3.7"))
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
-    assert!(programmer.values.is_empty());
-    assert_eq!(
-        programmer.group_values["1"][&light_core::AttributeKey("position".into())].value,
-        requested(point)
-    );
-    assert_eq!(
-        scenario
-            .execute("recall-frozen-aim", Some("DEGRP 1 AT 3.7"))
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
-    assert!(
-        programmer
-            .values
-            .iter()
-            .any(|value| value.fixture_id == mover && value.value == requested(point))
-    );
-    for request_id in ["undo-frozen-aim", "undo-live-aim", "undo-recorded-aim"] {
-        let response = scenario.press_key(&scenario.token, "UND", request_id).await;
+            .state
+            .output
+            .replace_snapshot(light_engine::EngineSnapshot {
+                revision: scenario.state.output.snapshot().revision + 1,
+                ..rig.as_ref().clone()
+            })
+            .unwrap();
+        let response = scenario
+            .execute("overwrite-semantic-aim", Some("RECORD 3.7 AT FIXTURE 901"))
+            .await;
         assert_eq!(
             response.status(),
             StatusCode::OK,
-            "{request_id}: {:?}",
+            "{:?}",
             json(response).await
         );
-    }
-    assert!(
-        repository
+        let overwritten = repository
             .objects("preset")
             .unwrap()
-            .iter()
-            .all(|object| object.id != "3.7"),
-        "Record undo removes the newly created Target preset"
-    );
-    let _ = std::fs::remove_dir_all(scenario.data_dir);
+            .into_iter()
+            .find(|object| object.id == "3.7")
+            .unwrap();
+        assert_ne!(
+            overwritten.body, recorded_body,
+            "the existing Target was overwritten"
+        );
+        let response = scenario
+            .press_key(&scenario.token, "UND", "undo-overwritten-aim")
+            .await;
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "{:?}",
+            json(response).await
+        );
+        let restored = repository
+            .objects("preset")
+            .unwrap()
+            .into_iter()
+            .find(|object| object.id == "3.7")
+            .unwrap();
+        assert_eq!(
+            restored.body, recorded_body,
+            "overwrite Undo restores the prior Target rather than deleting it"
+        );
+        assert_eq!(
+            scenario
+                .execute("recall-live-aim", Some("GROUP 1 AT 3.7"))
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
+        assert!(programmer.values.is_empty());
+        assert_eq!(
+            programmer.group_values["1"][&light_core::AttributeKey("position".into())].value,
+            requested(point)
+        );
+        assert_eq!(
+            scenario
+                .execute("recall-frozen-aim", Some("DEGRP 1 AT 3.7"))
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
+        assert!(
+            programmer
+                .values
+                .iter()
+                .any(|value| value.fixture_id == mover && value.value == requested(point))
+        );
+        for request_id in ["undo-frozen-aim", "undo-live-aim", "undo-recorded-aim"] {
+            let response = scenario.press_key(&scenario.token, "UND", request_id).await;
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "{request_id}: {:?}",
+                json(response).await
+            );
+        }
+        let restored = repository
+            .objects("preset")
+            .unwrap()
+            .into_iter()
+            .find(|object| object.id == "3.7");
+        if converting_legacy {
+            assert_eq!(
+                restored.unwrap().body,
+                legacy_body,
+                "conversion Undo restores exact legacy source"
+            );
+        } else {
+            assert!(
+                restored.is_none(),
+                "Record undo removes the newly created Target preset"
+            );
+        }
+        let _ = std::fs::remove_dir_all(scenario.data_dir);
+    }
 }
 
 #[tokio::test]

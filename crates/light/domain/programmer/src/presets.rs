@@ -296,6 +296,30 @@ impl Preset {
             self.name = incoming.name;
         }
         self.family = incoming.family;
+        // A retained legacy relation wins over literal Position maps during recall/compilation.
+        // Replace that relation together with an authoritative overwrite, or detach it when a
+        // Merge supplies modern Position intent. An empty Merge and Add Missing do not replace
+        // the existing relation; never infer conversion merely from unrelated incoming values.
+        if mode == PresetStoreMode::Overwrite {
+            self.aim_at_fixture_number = incoming.aim_at_fixture_number;
+        } else if mode == PresetStoreMode::Merge
+            && incoming
+                .universal_values
+                .values()
+                .chain(incoming.values.values().flat_map(|values| values.values()))
+                .chain(
+                    incoming
+                        .group_values
+                        .values()
+                        .flat_map(|values| values.values()),
+                )
+                .any(|value| {
+                    value.programming_owner()
+                        == Some(light_core::programming::ProgrammingOwner::Position)
+                })
+        {
+            self.aim_at_fixture_number = None;
+        }
         match mode {
             PresetStoreMode::Overwrite => {
                 self.values = incoming.values;

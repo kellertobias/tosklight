@@ -166,6 +166,78 @@ fn derived_aim_link_materializes_current_source_instead_of_recorded_fallback() {
         reopened_snapshot.cue_lists[0].cues[0].changes[0].value,
         updated.cue_lists[0].cues[0].changes[0].value
     );
+    // An explicit modern Record into the same legacy source replaces its relation. The live
+    // Cue identity remains linked, but moving the old target must no longer retarget it.
+    let modern_value = AttributeValue::Position(Arc::new(PositionIntent::target(
+        TargetReference::Origin,
+        [8.0, 1.0, 4.0],
+    )));
+    let mut modern = preset.clone();
+    modern.store(
+        Preset {
+            family: PresetFamily::Position,
+            number: 7,
+            universal_values: [(
+                light_core::AttributeKey("position".into()),
+                modern_value.clone(),
+            )]
+            .into(),
+            ..Default::default()
+        },
+        light_programmer::PresetStoreMode::Overwrite,
+    );
+    assert_eq!(modern.instance_id, Some(identity));
+    assert_eq!(modern.aim_at_fixture_number, None);
+    let mut edit = document.transaction();
+    edit.put("preset", "3.7", serde_json::to_value(&modern).unwrap());
+    let (edit, converted) = super::super::prepare_normalized_show_candidate_incremental(
+        &document,
+        edit,
+        &reopened_snapshot,
+    )
+    .unwrap()
+    .into_parts();
+    assert_eq!(
+        converted.cue_lists[0].cues[0].changes[0].value,
+        Some(modern_value.clone())
+    );
+    reopened.apply_portable_transaction(edit).unwrap();
+    let document = reopened.portable_document().unwrap();
+    let mut old_target = document
+        .object("patched_fixture", &fixture_key)
+        .unwrap()
+        .body()
+        .clone();
+    old_target["location"]["x"] = json!(7000);
+    let mut edit = document.transaction();
+    edit.put("patched_fixture", &fixture_key, old_target);
+    let (edit, moved) =
+        super::super::prepare_normalized_show_candidate_incremental(&document, edit, &converted)
+            .unwrap()
+            .into_parts();
+    assert_eq!(
+        moved.cue_lists[0].cues[0].changes[0].value,
+        Some(modern_value.clone())
+    );
+    reopened.apply_portable_transaction(edit).unwrap();
+    drop(reopened);
+    let reopened = light_show::ShowStore::open(&path).unwrap();
+    let document = reopened.portable_document().unwrap();
+    let persisted: Preset =
+        serde_json::from_value(document.object("preset", "3.7").unwrap().body().clone()).unwrap();
+    assert_eq!(persisted.instance_id, Some(identity));
+    assert_eq!(persisted.aim_at_fixture_number, None);
+    let (_, snapshot) = super::super::prepare_show_candidate(&document, document.transaction())
+        .unwrap()
+        .into_parts();
+    assert_eq!(
+        snapshot.cue_lists[0].cues[0].changes[0].value,
+        Some(modern_value)
+    );
+    assert_eq!(
+        document.object("cue_list", &id.to_string()).unwrap().body()["cues"][0]["changes"][0]["value"],
+        serde_json::to_value(&fallback).unwrap()
+    );
     drop(reopened);
     std::fs::remove_file(path).unwrap();
 }
